@@ -113,7 +113,12 @@ endif()
 option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)
 set(WITH_LZ4_EXT OFF)
 if(ENABLE_LZ4_EXT)
-  set(WITH_LZ4_EXT ON)
+  find_package(LZ4)
+  if(LZ4_FOUND)
+    set(WITH_LZ4_EXT ON)
+  else()
+    message(STATUS "Using bundled LZ4 implementation.")
+  endif()
 endif()
 # }
 

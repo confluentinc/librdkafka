@@ -191,7 +191,6 @@ if(WITH_LIBDL)
 endif()
 
 if(WITH_LZ4_EXT)
-  find_package(LZ4 REQUIRED)
   target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
 endif()
 

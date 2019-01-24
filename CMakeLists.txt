@@ -115,14 +115,6 @@ set(WITH_LZ4_EXT OFF)
 if(ENABLE_LZ4_EXT)
   set(WITH_LZ4_EXT ON)
 endif()
-#if(ENABLE_LZ4_EXT)
-#  find_package(LZ4)
-#  if(LZ4_FOUND)
-#    set(WITH_LZ4_EXT ON)
-#  else()
-#    set(WITH_LZ4_EXT OFF)
-#  endif()
-#endif()
 # }
 
 # }

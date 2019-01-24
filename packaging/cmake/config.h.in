@@ -36,7 +36,6 @@
 #cmakedefine01 WITH_SSL
 #cmakedefine01 WITH_SASL
 #cmakedefine01 WITH_SASL_SCRAM
-#cmakedefine01 WITH_SASL_OAUTHBEARER
 #cmakedefine01 WITH_SASL_CYRUS
 #cmakedefine01 WITH_LZ4_EXT
 #cmakedefine01 HAVE_REGEX

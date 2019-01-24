@@ -240,9 +240,7 @@ struct rd_kafka_conf_s {
                 /* Hash size */
                 size_t         scram_H_size;
 #endif
-#if WITH_SASL_OAUTHBEARER
                 char *oauthbearer_config;
-#endif
         } sasl;
 
 #if WITH_PLUGINS

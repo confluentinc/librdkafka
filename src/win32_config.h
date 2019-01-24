@@ -41,7 +41,6 @@
  * the experimental/advanced API, just as the static builds on *nix */
 #define WITH_ZSTD_STATIC 1
 #define WITH_SASL_SCRAM 1
-#define WITH_SASL_OAUTHBEARER 1
 #define ENABLE_DEVEL 0
 #define WITH_PLUGINS 1
 #define WITH_HDRHISTOGRAM 1

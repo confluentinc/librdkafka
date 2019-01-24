@@ -274,13 +274,11 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 
         } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
                 /* SASL OAUTHBEARER */
-#if WITH_SASL_OAUTHBEARER
                 provider = &rd_kafka_sasl_oauthbearer_provider;
                 rk->rk_oauthbearer = rd_calloc(1, sizeof(*rk->rk_oauthbearer));
                 rwlock_init(&rk->rk_oauthbearer->refresh_lock);
                 cnd_init(&rk->rk_oauthbearer->successful_refresh_change_cnd);
                 mtx_init(&rk->rk_oauthbearer->successful_refresh_change_lock, mtx_plain);
-#endif
 
         } else {
                 /* Unsupported mechanism */
@@ -309,9 +307,7 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 #if WITH_SASL_SCRAM
                             " SASL_SCRAM"
 #endif
-#if WITH_SASL_OAUTHBEARER
                             " OAUTHBEARER"
-#endif
                             ,
                             rk->rk_conf.sasl.mechanisms);
                 return -1;

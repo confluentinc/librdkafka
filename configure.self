@@ -132,9 +132,6 @@ void foo (void) {
         mkl_allvar_set WITH_SASL_SCRAM WITH_SASL_SCRAM y
     fi
 
-    # enable SASL OAUTHBEARER
-    mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
-
     # CRC32C: check for crc32 instruction support.
     #         This is also checked during runtime using cpuid.
     mkl_compile_check crc32chw WITH_CRC32C_HW disable CC "" \

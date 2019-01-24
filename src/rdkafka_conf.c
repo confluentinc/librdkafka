@@ -242,9 +242,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
 #endif         
-#if WITH_SASL_OAUTHBEARER
                 { 0x800, "sasl_oauthbearer" },
-#endif
 		{ 0, NULL }
 		}
 	},
@@ -697,11 +695,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
-#if WITH_SASL_OAUTHBEARER
 	{ _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
 	  _RK(sasl.oauthbearer_config),
 	  "SASL/OAUTHBEARER configuration" },
-#endif
 
 #if WITH_PLUGINS
         /* Plugins */

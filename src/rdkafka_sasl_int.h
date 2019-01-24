@@ -64,9 +64,7 @@ extern const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider;
 #endif
 
-#if WITH_SASL_OAUTHBEARER
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider;
-#endif
 
 void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans);
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,

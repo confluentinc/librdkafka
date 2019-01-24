@@ -199,6 +199,9 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 rd_dassert(!in); /* Not expecting any server-input */
 
                 /* Failure as previosuly communicated by server first message */
+                rd_snprintf(errstr, errstr_size, "SASL OAUTHBEARER authentication failed (principal=%s): %s",
+                        rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->md_principal_name,
+                        state->server_error_msg.ptr);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                         "OAUTHBEARERAUTH",
                         "SASL OAUTHBEARER authentication failed (principal=%s): %s",

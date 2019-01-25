@@ -1799,8 +1799,7 @@ void rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
- * this method uopn failure. The caller remains responsible for the errstr
- * memory as the contents are copied.
+ * this method upon failure.
  */
 RD_EXPORT
 void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,

@@ -713,7 +713,8 @@ int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
         return rd_kafka_broker_cmp(a->rkb, b->rkb);
 }
 
-int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid);
+int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid,
+                                uint64_t base_msgid);
 
 int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
                                          rd_kafka_broker_t *rkb,

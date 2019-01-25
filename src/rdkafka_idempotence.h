@@ -63,7 +63,8 @@ rd_kafka_idemp_get_pid (rd_kafka_t *rk) {
         return pid;
 }
 
-
+void rd_kafka_idemp_set_state (rd_kafka_t *rk,
+                               rd_kafka_idemp_state_t new_state);
 void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
                                         rd_kafka_resp_err_t err);
 void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,

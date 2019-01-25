@@ -1011,7 +1011,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         }
 
 err:
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
+        actions = rd_kafka_err_action(rkb, ErrorCode, request,
                                       RD_KAFKA_ERR_ACTION_IGNORE,
                                       RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
 
@@ -1357,7 +1357,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 err:
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
+        actions = rd_kafka_err_action(rkb, ErrorCode, request,
                                       RD_KAFKA_ERR_ACTION_END);
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);

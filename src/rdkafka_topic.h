@@ -188,4 +188,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
 
 void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);
 
+void rd_ut_kafka_topic_set_topic_exists (rd_kafka_itopic_t *rkt,
+                                         int partition_cnt,
+                                         int32_t leader_id);
+
 #endif /* _RDKAFKA_TOPIC_H_ */

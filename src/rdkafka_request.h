@@ -51,8 +51,7 @@
 
 int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 rd_kafka_resp_err_t err,
-			 rd_kafka_buf_t *rkbuf,
-			 rd_kafka_buf_t *request, ...);
+			 const rd_kafka_buf_t *request, ...);
 
 
 void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
@@ -266,5 +265,8 @@ rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
+
+
+int unittest_request (void);
 
 #endif /* _RDKAFKA_REQUEST_H_ */

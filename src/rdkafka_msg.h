@@ -511,6 +511,8 @@ static RD_INLINE RD_UNUSED int32_t rd_kafka_seq_wrap (int64_t seq) {
 
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq);
 
+rd_kafka_msg_t *ut_rd_kafka_msg_new (void);
+void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq);
 int unittest_msg (void);
 
 #endif /* _RDKAFKA_MSG_H_ */

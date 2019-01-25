@@ -47,9 +47,8 @@ static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
  * @brief Set the producer's idempotence state.
  * @locks rd_kafka_wrlock() MUST be held
  */
-static void
-rd_kafka_idemp_set_state (rd_kafka_t *rk,
-                          rd_kafka_idemp_state_t new_state) {
+void rd_kafka_idemp_set_state (rd_kafka_t *rk,
+                               rd_kafka_idemp_state_t new_state) {
 
         if (rk->rk_eos.idemp_state == new_state)
                 return;
@@ -241,8 +240,6 @@ void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
 void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
                                 const rd_kafka_pid_t pid) {
         rd_kafka_t *rk = rkb->rkb_rk;
-
-        rd_assert(thrd_is_current(rk->rk_thread));
 
         rd_kafka_wrlock(rk);
         if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_PID) {

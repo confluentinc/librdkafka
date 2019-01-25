@@ -1844,7 +1844,7 @@ struct rd_kafka_Produce_err {
         rd_kafka_resp_err_t err;  /**< Error code */
         int actions;              /**< Actions to take */
         int incr_retry;           /**< Increase per-message retry cnt */
-        rd_kafka_msg_status_t status; /**< Messages persistance status */
+        rd_kafka_msg_status_t status; /**< Messages persistence status */
 
         /* Idempotent Producer */
         int32_t next_ack_seq;      /**< Next expected sequence to ack */
@@ -2294,7 +2294,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                                                          perr);
 
 
-        /* Update message persistance status based on action flags.
+        /* Update message persistence status based on action flags.
          * None of these are typically set after an idempotent error,
          * which sets the status explicitly. */
         if (perr->actions & RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED)
@@ -2482,7 +2482,7 @@ rd_kafka_handle_idempotent_Produce_success (rd_kafka_t *rk,
         /* If the last acked msgid is higher than
          * the next message to (re)transmit in the message queue
          * it means a previous series of R1,R2 ProduceRequests
-         * had R1 fail with uncertain persistance status,
+         * had R1 fail with uncertain persistence status,
          * such as timeout or transport error, but R2 succeeded,
          * which means the messages in R1 were in fact persisted.
          * In this case trigger delivery reports for all messages

@@ -96,7 +96,7 @@ typedef struct rd_kafka_msg_s {
 
         rd_kafka_headers_t *rkm_headers; /**< Parsed headers list, if any. */
 
-        rd_kafka_msg_status_t rkm_status; /**< Persistance status. Updated in
+        rd_kafka_msg_status_t rkm_status; /**< Persistence status. Updated in
                                            *   the ProduceResponse handler:
                                            *   this value is always up to date.
                                            */

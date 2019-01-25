@@ -1699,7 +1699,7 @@ public:
  */
 class RD_EXPORT Message {
  public:
-  /** @brief Message persistance status can be used by the application to
+  /** @brief Message persistence status can be used by the application to
    *         find out if a produced message was persisted in the topic log. */
   enum Status {
     /**< Message was never transmitted to the broker, or failed with
@@ -1791,7 +1791,7 @@ class RD_EXPORT Message {
   virtual struct rd_kafka_message_s *c_ptr () = 0;
 
   /**
-   * @brief Returns the message's persistance status in the topic log.
+   * @brief Returns the message's persistence status in the topic log.
    */
   virtual Status status () const = 0;
 

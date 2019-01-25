@@ -669,10 +669,10 @@ the gap-less guarantee (if `enable.gapless.guarantee` is set) by failing all
 queued messages.
 
 
-##### Message persistance status
+##### Message persistence status
 
 To help the application decide what to do in these error cases, a new
-per-message API is introduced, `rd_kafka_message_persistance_status()`,
+per-message API is introduced, `rd_kafka_message_status()`,
 which returns one of the following values:
 
  * `RD_KAFKA_MSG_STATUS_NOT_PERSISTED` - the message has never

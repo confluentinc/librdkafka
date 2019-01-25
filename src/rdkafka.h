@@ -1285,7 +1285,7 @@ RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
 
 /**
  * @enum rd_kafka_msg_status_t
- * @brief Message persistance status can be used by the application to
+ * @brief Message persistence status can be used by the application to
  *        find out if a produced message was persisted in the topic log.
  */
 typedef enum {
@@ -1305,7 +1305,7 @@ typedef enum {
 
 
 /**
- * @brief Returns the message's persistance status in the topic log.
+ * @brief Returns the message's persistence status in the topic log.
  *
  * @remark The message status is not available in on_acknowledgement
  *         interceptors.

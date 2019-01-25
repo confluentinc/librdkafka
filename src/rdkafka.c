@@ -275,7 +275,7 @@ void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
                 const char *md_principal_name, int64_t md_start_time_ms) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
         mtx_lock(&rk->rk_oauthbearer->successful_refresh_change_lock);
-        ++rk->rk_oauthbearer->successful_refresh_count;
+        rk->rk_oauthbearer->successful_refresh_count++;
         if (rk->rk_oauthbearer->md_principal_name) {
                 rd_free(rk->rk_oauthbearer->md_principal_name);
         }
@@ -297,7 +297,7 @@ void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
 void rd_kafka_oauthbearer_token_refresh_failure(rd_kafka_t *rk,
                 const char *errstr) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-        ++rk->rk_oauthbearer->failed_refresh_count;
+        rk->rk_oauthbearer->failed_refresh_count++;
         strncpy(rk->rk_oauthbearer->errstr, errstr,
                 sizeof(rk->rk_oauthbearer->errstr));
         /* Leave any existing token because it may have some life left */

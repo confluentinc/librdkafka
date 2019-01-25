@@ -3493,7 +3493,8 @@ static void rd_kafka_toppar_reset_base_msgid (rd_kafka_toppar_t *rktp,
  *
  * Must only be called when pid is different from the current toppar pid.
  *
- * The epoch base sequence will be set to the first message in the partition
+ * The epoch base sequence will be set to \p base_msgid, which must be the
+ * first message in the partition
  * queue. However, if there are outstanding messages in-flight to the broker
  * we will need to wait for these ProduceRequests to finish (most likely
  * with failure) and have their messages re-enqueued to maintain original order.
@@ -3507,8 +3508,8 @@ static void rd_kafka_toppar_reset_base_msgid (rd_kafka_toppar_t *rktp,
  * @locality toppar handler thread
  * @locks none
  */
-int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
-        const rd_kafka_msg_t *rkm;
+int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid,
+                                uint64_t base_msgid) {
         int inflight = rd_atomic32_get(&rktp->rktp_msgs_inflight);
 
         if (unlikely(inflight > 0)) {
@@ -3525,21 +3526,23 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
                 return 0;
         }
 
-        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
-        rd_assert(rkm && *"BUG: pid_change() must only be called with "
+        rd_assert(base_msgid != 0 &&
+                  *"BUG: pid_change() must only be called with "
                   "non-empty xmitq");
 
         rd_kafka_toppar_lock(rktp);
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
                      TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
-                     "%.*s [%"PRId32"] changed %s -> %s",
+                     "%.*s [%"PRId32"] changed %s -> %s "
+                     "with base MsgId %"PRIu64,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition,
                      rd_kafka_pid2str(rktp->rktp_eos.pid),
-                     rd_kafka_pid2str(pid));
+                     rd_kafka_pid2str(pid),
+                     base_msgid);
 
         rktp->rktp_eos.pid = pid;
-        rd_kafka_toppar_reset_base_msgid(rktp, rkm->rkm_u.producer.msgid);
+        rd_kafka_toppar_reset_base_msgid(rktp, base_msgid);
 
         rd_kafka_toppar_unlock(rktp);
 

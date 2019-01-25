@@ -235,13 +235,20 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
         struct rd_kafka_ApiVersion ret = RD_ZERO_INIT, *retp;
 
         rd_kafka_broker_lock(rkb);
+        if (featuresp)
+                *featuresp = rkb->rkb_features;
+
+        if (rkb->rkb_features & RD_KAFKA_FEATURE_UNITTEST) {
+                /* For unit tests let the broker support everything. */
+                rd_kafka_broker_unlock(rkb);
+                return maxver;
+        }
+
         retp = bsearch(&skel, rkb->rkb_ApiVersions, rkb->rkb_ApiVersions_cnt,
                        sizeof(*rkb->rkb_ApiVersions),
                        rd_kafka_ApiVersion_key_cmp);
         if (retp)
                 ret = *retp;
-        if (featuresp)
-                *featuresp = rkb->rkb_features;
         rd_kafka_broker_unlock(rkb);
 
         if (!retp)
@@ -585,7 +592,8 @@ rd_kafka_broker_bufq_purge_by_toppar (rd_kafka_broker_t *rkb,
         TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
                 if (rkbuf->rkbuf_reqhdr.ApiKey != ApiKey ||
-                    rd_kafka_toppar_s2i(rkbuf->rkbuf_u.Produce.s_rktp) != rktp||
+                    rd_kafka_toppar_s2i(rkbuf->rkbuf_u.Produce.
+                                        batch.s_rktp) != rktp||
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
@@ -905,9 +913,10 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
                                           rkbuf, rkbuf_link);
         }
 
-	(void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
-        (void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
-                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+        rd_atomic32_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
+        if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Produce)
+                rd_atomic32_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
+                                rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq));
 }
 
 
@@ -3333,7 +3342,8 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                         /* Attempt to change the pid, it will fail if there
                          * are outstanding messages in-flight, in which case
                          * we eventually come back here to retry. */
-                        if (!rd_kafka_toppar_pid_change(rktp, pid))
+                        if (!rd_kafka_toppar_pid_change(
+                                    rktp, pid, rkm->rkm_u.producer.msgid))
                                 return 0;
                 }
         }

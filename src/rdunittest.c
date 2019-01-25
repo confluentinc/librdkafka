@@ -42,6 +42,7 @@
 #endif
 #include "rdkafka_int.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_request.h"
 
 #include "rdsysqueue.h"
 
@@ -405,6 +406,7 @@ int rd_unittest (void) {
 #endif
                 { "conf", unittest_conf },
                 { "broker", unittest_broker },
+                { "request", unittest_request },
                 { NULL }
         };
         int i;

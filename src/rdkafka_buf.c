@@ -53,8 +53,7 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
                 break;
 
         case RD_KAFKAP_Produce:
-                if (rkbuf->rkbuf_u.Produce.s_rktp)
-                        rd_kafka_toppar_destroy(rkbuf->rkbuf_u.Produce.s_rktp);
+                rd_kafka_msgbatch_destroy(&rkbuf->rkbuf_batch);
                 break;
         }
 
@@ -110,7 +109,6 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (int segcnt, size_t size, int flags) {
         rkbuf->rkbuf_flags = flags;
 
         rd_buf_init(&rkbuf->rkbuf_buf, segcnt, size);
-        rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
         rd_refcnt_init(&rkbuf->rkbuf_refcnt, 1);
 
         return rkbuf;
@@ -181,8 +179,6 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size,
         /* Initialize reader slice */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
 
-	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
-
         rd_refcnt_init(&rkbuf->rkbuf_refcnt, 1);
 
 	return rkbuf;
@@ -192,17 +188,19 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size,
 
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
-	(void)rd_atomic32_add(&rkbufq->rkbq_cnt, 1);
-        (void)rd_atomic32_add(&rkbufq->rkbq_msg_cnt,
-                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+        rd_atomic32_add(&rkbufq->rkbq_cnt, 1);
+        if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Produce)
+                rd_atomic32_add(&rkbufq->rkbq_msg_cnt,
+                                rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq));
 }
 
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	rd_kafka_assert(NULL, rd_atomic32_get(&rkbufq->rkbq_cnt) > 0);
-	(void)rd_atomic32_sub(&rkbufq->rkbq_cnt, 1);
-        (void)rd_atomic32_sub(&rkbufq->rkbq_msg_cnt,
-                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+	rd_atomic32_sub(&rkbufq->rkbq_cnt, 1);
+        if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Produce)
+                rd_atomic32_sub(&rkbufq->rkbq_msg_cnt,
+                                rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq));
 }
 
 void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq) {

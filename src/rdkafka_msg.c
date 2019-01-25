@@ -1204,6 +1204,96 @@ void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
 }
 
 
+
+
+/**
+ * @brief Destroy resources associated with msgbatch
+ */
+void rd_kafka_msgbatch_destroy (rd_kafka_msgbatch_t *rkmb) {
+        if (rkmb->s_rktp) {
+                rd_kafka_toppar_destroy(rkmb->s_rktp);
+                rkmb->s_rktp = NULL;
+        }
+
+        rd_assert(RD_KAFKA_MSGQ_EMPTY(&rkmb->msgq));
+}
+
+
+/**
+ * @brief Initialize a message batch for the Idempotent Producer.
+ *
+ * @param rkm is the first message in the batch.
+ */
+void rd_kafka_msgbatch_init (rd_kafka_msgbatch_t *rkmb,
+                             rd_kafka_toppar_t *rktp,
+                             rd_kafka_pid_t pid) {
+        memset(rkmb, 0, sizeof(*rkmb));
+
+        rkmb->s_rktp = rd_kafka_toppar_keep(rktp);
+
+        rd_kafka_msgq_init(&rkmb->msgq);
+
+        rkmb->pid = pid;
+        rkmb->first_seq = -1;
+}
+
+
+/**
+ * @brief Set the first message in the batch. which is used to set
+ *        the BaseSequence and keep track of batch reconstruction range.
+ */
+void rd_kafka_msgbatch_set_first_msg (rd_kafka_msgbatch_t *rkmb,
+                                      rd_kafka_msg_t *rkm) {
+        rd_assert(rkmb->first_msgid == 0);
+
+        if (!rd_kafka_pid_valid(rkmb->pid))
+                return;
+
+        rkmb->first_msgid = rkm->rkm_u.producer.msgid;
+
+        /* Our msgid counter is 64-bits, but the
+         * Kafka protocol's sequence is only 31 (signed), so we'll
+         * need to handle wrapping. */
+        rkmb->first_seq =
+                rd_kafka_seq_wrap(rkm->rkm_u.producer.msgid -
+                                  rd_kafka_toppar_s2i(rkmb->s_rktp)->
+                                  rktp_eos.epoch_base_msgid);
+
+        /* Check if there is a stored last message
+         * on the first msg, which means an entire
+         * batch of messages are being retried and
+         * we need to maintain the exact messages
+         * of the original batch.
+         * Simply tracking the last message, on
+         * the first message, is sufficient for now.
+         * Will be 0 if not applicable. */
+        rkmb->last_msgid = rkm->rkm_u.producer.last_msgid;
+}
+
+
+
+/**
+ * @brief Message batch is ready to be transmitted.
+ *
+ * @remark This function assumes the batch will be transmitted and increases
+ *         the toppar's in-flight count.
+ */
+void rd_kafka_msgbatch_ready_produce (rd_kafka_msgbatch_t *rkmb) {
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rkmb->s_rktp);
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+
+        /* Keep track of number of requests in-flight per partition,
+         * and the number of partitions with in-flight requests when
+         * idempotent producer - this is used to drain partitions
+         * before resetting the PID. */
+        if (rd_atomic32_add(&rktp->rktp_msgs_inflight,
+                            rd_kafka_msgq_len(&rkmb->msgq)) ==
+            rd_kafka_msgq_len(&rkmb->msgq) &&
+            rd_kafka_is_idempotent(rk))
+                rd_kafka_idemp_inflight_toppar_add(rk, rktp);
+}
+
+
 /**
  * @brief Verify order (by msgid) in message queue.
  *        For development use only.
@@ -1276,7 +1366,7 @@ void rd_kafka_msgq_verify_order0 (const char *function, int line,
 /**
  * @brief Unittest: message allocator
  */
-static rd_kafka_msg_t *ut_rd_kafka_msg_new (void) {
+rd_kafka_msg_t *ut_rd_kafka_msg_new (void) {
         rd_kafka_msg_t *rkm;
 
         rkm = rd_calloc(1, sizeof(*rkm));
@@ -1292,7 +1382,7 @@ static rd_kafka_msg_t *ut_rd_kafka_msg_new (void) {
 /**
  * @brief Unittest: destroy all messages in queue
  */
-static void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq) {
+void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq) {
         rd_kafka_msg_t *rkm, *tmp;
 
         TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp)

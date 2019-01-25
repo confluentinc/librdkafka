@@ -1409,3 +1409,31 @@ void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
         rd_kafka_rdunlock(rk);
 }
+
+
+/**
+ * @brief Unit test helper to set a topic's state to EXISTS
+ *        with the given number of partitions.
+ */
+void rd_ut_kafka_topic_set_topic_exists (rd_kafka_itopic_t *rkt,
+                                         int partition_cnt,
+                                         int32_t leader_id) {
+        struct rd_kafka_metadata_topic mdt = {
+                .topic = (char *)rkt->rkt_topic->str,
+                .partition_cnt = partition_cnt
+        };
+        int i;
+
+        mdt.partitions = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);
+
+        for (i = 0 ; i < partition_cnt ; i++) {
+                memset(&mdt.partitions[i], 0, sizeof(mdt.partitions[i]));
+                mdt.partitions[i].id = i;
+                mdt.partitions[i].leader = leader_id;
+        }
+
+        rd_kafka_wrlock(rkt->rkt_rk);
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt);
+        rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
+        rd_kafka_wrunlock(rkt->rkt_rk);
+}

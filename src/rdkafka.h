@@ -3990,12 +3990,12 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
 #define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
 #define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x80 /**< SASL/OAUTHBEARER token needs to be refreshed */
 #define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
 #define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 105 /**< SASL/OAUTHBEARER token needs to be refreshed */
 
 /**
  * @returns the event type for the given event.

@@ -2702,10 +2702,18 @@ class Metadata {
   typedef TopicMetadataVector::const_iterator  TopicMetadataIterator;
 
 
-  /** @brief Broker list */
+  /** 
+  * @brief Broker list 
+  * @remark Ownership of the returned pointer is retained by the instance of
+  * Metadata that is called. 
+  */
   virtual const BrokerMetadataVector *brokers() const = 0;
 
-  /** @brief Topic list */
+  /** 
+  * @brief Topic list 
+  * @remark Ownership of the returned pointer is retained by the instance of
+  * Metadata that is called. 
+  */
   virtual const TopicMetadataVector  *topics() const = 0;
 
   /** @brief Broker (id) originating this metadata */

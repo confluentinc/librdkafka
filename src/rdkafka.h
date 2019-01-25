@@ -1781,7 +1781,8 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
  * this method uopn success. The caller remains responsible for the token_value
  * and md_principal_name memory as the contents are copied.  All arguments
- * are mandatory.
+ * are mandatory.  The md_lifetime_ms value is when the token expires, in terms
+ * of the number of milliseconds since the epoch.
  * 
  * NOTE: does not support SASL extensions as I wasn't sure how to accept
  * a list of name-value pairs because rd_list_t and/or rd_strtup_t are not

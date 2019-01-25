@@ -272,7 +272,7 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
 
 void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
-                const char *md_principal_name, int64_t md_start_time_ms) {
+                const char *md_principal_name) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
         mtx_lock(&rk->rk_oauthbearer->successful_refresh_change_lock);
         rk->rk_oauthbearer->successful_refresh_count++;
@@ -284,7 +284,6 @@ void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
                 rd_free(rk->rk_oauthbearer->token_value);
         }
         rk->rk_oauthbearer->token_value = rd_strdup(token_value);
-        rk->rk_oauthbearer->md_start_time_ms = md_start_time_ms;
         rk->rk_oauthbearer->md_lifetime_ms = md_lifetime_ms;
         rd_list_destroy(&rk->rk_oauthbearer->extensions);
         // TODO: support extensions
@@ -313,7 +312,7 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         int64_t start_time_ms = 1546617737;
         int64_t lifetime_ms = 10 * start_time_ms; // way in the future
         rd_kafka_oauthbearer_token_refresh_success(rk, jws_compact_serialization,
-                lifetime_ms, principal_name, start_time_ms);
+                lifetime_ms, principal_name);
 }
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,

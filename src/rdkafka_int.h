@@ -383,10 +383,6 @@ struct rd_kafka_s {
                 int64_t md_lifetime_ms;
                 /**< The name of the principal to which this token applies. */
                 char *md_principal_name;
-                /**< When the token became valid, in terms of the number of
-                 *   milliseconds since the epoch, if known, otherwise 0.
-                 */
-                int64_t md_start_time_ms;
                 /**< The SASL extensions, as per RFC 7628 Section 3.1
                  *   https://tools.ietf.org/html/rfc6749#section-1.4
                  */

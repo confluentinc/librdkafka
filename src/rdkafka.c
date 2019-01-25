@@ -270,7 +270,7 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
-void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
+void rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
                 const char *md_principal_name) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
@@ -293,7 +293,7 @@ void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
         rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
 }
 
-void rd_kafka_oauthbearer_token_refresh_failure(rd_kafka_t *rk,
+void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
         rk->rk_oauthbearer->failed_refresh_count++;
@@ -311,7 +311,7 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                 "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTU0NjYxNzczNywiZXhwIjoxNTQ2NjE3NzM3MH0.";
         int64_t start_time_ms = 1546617737;
         int64_t lifetime_ms = 10 * start_time_ms; // way in the future
-        rd_kafka_oauthbearer_token_refresh_success(rk, jws_compact_serialization,
+        rd_kafka_oauthbearer_set_token(rk, jws_compact_serialization,
                 lifetime_ms, principal_name);
 }
 

@@ -1758,8 +1758,8 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *   - \p rk - Kafka handle
  *   - \p opaque - Application-provided opaque.
  * 
- * The callback must invoke \c rd_kafka_oauthbearer_token_refresh_success()
- * or \c rd_kafka_oauthbearer_token_refresh_failure() to indicate success
+ * The callback must invoke \c rd_kafka_oauthbearer_set_token()
+ * or \c rd_kafka_oauthbearer_set_token_failure() to indicate success
  * or failure, respectively.
  * 
  * The refresh operation is eventable and may be received via
@@ -1791,7 +1791,7 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  * extension_values) is an option.  Thoughts?
  */
 RD_EXPORT
-void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
+void rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
                 const char *md_principal_name);
 
@@ -1803,7 +1803,7 @@ void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
  * memory as the contents are copied.
  */
 RD_EXPORT
-void rd_kafka_oauthbearer_token_refresh_failure(rd_kafka_t *rk,
+void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr);
 
 /**

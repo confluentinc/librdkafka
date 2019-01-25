@@ -148,6 +148,14 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
 }
 
 
+/**
+ * @brief Default SASL/OAUTHBEARER token refresh callback that generates
+ * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
+ *
+ * This method interprets \c sasl.oauthbearer.config as follows:
+ * TODO...
+ */
+void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque);
 
 
 /**

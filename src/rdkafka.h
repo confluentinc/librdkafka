@@ -1807,17 +1807,6 @@ void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr);
 
 /**
- * @brief Default SASL/OAUTHBEARER token refresh callback that generates
- * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
- *
- * This method interprets \c sasl.oauthbearer.config as follows:
- * TODO...
- */
-RD_EXPORT
-void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk,
-                void *opaque);
-
-/**
  * @brief Set socket callback.
  *
  * The socket callback is responsible for opening a socket

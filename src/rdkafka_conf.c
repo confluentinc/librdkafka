@@ -36,6 +36,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_idempotence.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
 #endif
@@ -901,9 +902,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "order. "
           "The following configuration properties are adjusted automatically "
           "(if not modified by the user) when idempotence is enabled: "
-          "`max.in.flight.requests.per.connection=5` (must be less than or "
-          "equal to 5), `retries=INT32_MAX` (must be greater than 0), "
-          "`acks=all`, `queuing.strategy=fifo`. "
+          "`max.in.flight.requests.per.connection="
+          RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "` (must be less than or "
+          "equal to " RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "), `retries=INT32_MAX` "
+          "(must be greater than 0), `acks=all`, `queuing.strategy=fifo`. "
           "Producer instantation will fail if user-supplied configuration "
           "is incompatible.",
           0, 1, 0 },
@@ -2920,13 +2922,17 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                         /* Adjust configuration values for idempotent producer*/
 
                         if (rd_kafka_conf_is_modified(conf, "max.in.flight")) {
-                                if (conf->max_inflight > 5)
+                                if (conf->max_inflight >
+                                    RD_KAFKA_IDEMP_MAX_INFLIGHT)
                                         return "`max.in.flight` must be "
-                                                "set <= 5 when "
-                                                "`enable.idempotence` is true";
+                                                "set <= "
+                                                RD_KAFKA_IDEMP_MAX_INFLIGHT_STR
+                                                " when `enable.idempotence` "
+                                                "is true";
                         } else {
                                 conf->max_inflight =
-                                        RD_MIN(conf->max_inflight, 5);
+                                        RD_MIN(conf->max_inflight,
+                                               RD_KAFKA_IDEMP_MAX_INFLIGHT);
                         }
 
 

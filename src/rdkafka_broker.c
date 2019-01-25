@@ -3155,8 +3155,8 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         int r;
         rd_kafka_msg_t *rkm;
         int move_cnt = 0;
-        unsigned int max_requests;
-        unsigned int reqcnt;
+        int max_requests;
+        int reqcnt;
         int inflight = 0;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
@@ -3298,11 +3298,16 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
                         rktp->rktp_eos.wait_drain = rd_false;
                 }
+
+                /* Limit the number of in-flight requests (per partition)
+                 * to the broker's sequence de-duplication window. */
+                max_requests = RD_MIN(max_requests,
+                                      RD_KAFKA_IDEMP_MAX_INFLIGHT - inflight);
         }
 
 
         /* Check if allowed to create and enqueue a ProduceRequest */
-        if (!max_requests)
+        if (max_requests <= 0)
                 return 0;
 
         r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;

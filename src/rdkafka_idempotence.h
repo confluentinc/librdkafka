@@ -31,6 +31,12 @@
 #define _RD_KAFKA_IDEMPOTENCE_H_
 
 
+/**
+ * @define The broker maintains a window of the 5 last Produce requests
+ *         for a partition to be able to de-deduplicate resends.
+ */
+#define RD_KAFKA_IDEMP_MAX_INFLIGHT      5
+#define RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "5" /* For printouts */
 
 /**
  * @brief Get the current PID if state permits.

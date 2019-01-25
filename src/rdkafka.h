@@ -1765,10 +1765,11 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * The refresh operation is eventable and may be received via
  * rd_kafka_queue_poll() with an event type of
  * RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
- * 
- * Note that the application must call either rd_kafka_poll() or
- * rd_kafka_queue_poll() once before any broker connection is attempted
- * in order to retrieve an initial token.
+ *
+ * Note that before any broker connection is attempted the application must call
+ * rd_kafka_oauthbearer_set_token() once -- either directly or, more typically,
+ * by invoking either rd_kafka_poll() or rd_kafka_queue_poll() -- in order to
+ * cause retrieval of an initial token to occur.
  */
 RD_EXPORT
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,

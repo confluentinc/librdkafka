@@ -192,7 +192,7 @@ write_basic_package_version_file(
 )
 
 install(
-    FILES "${project_config}" "${project_version}"
+    FILES "${project_config}" "${project_version}" "packaging/cmake/Modules/FindLZ4.cmake"
     DESTINATION "${config_install_dir}"
 )
 

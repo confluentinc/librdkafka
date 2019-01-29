@@ -367,17 +367,6 @@ struct rd_kafka_s {
                 /**< The lock protecting the below information */
                 rwlock_t refresh_lock;
 
-                /**< Successful token refresh count, which
-                 * will be zero only when an initial successful retrieval
-                 * has not yet occurred.
-                 */
-                unsigned int successful_refresh_count;
-
-                /* Broadcasting of successful refresh count changes
-                 * to wake up functions waiting for an initial token. */
-                cnd_t successful_refresh_change_cnd;
-                mtx_t successful_refresh_change_lock;
-
                 /**< failed token refresh count */
                 unsigned int failed_refresh_count;
 

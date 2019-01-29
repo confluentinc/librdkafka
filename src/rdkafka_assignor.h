@@ -85,7 +85,8 @@ typedef struct rd_kafka_assignor_s {
 
         rd_kafkap_bytes_t *(*rkas_get_metadata_cb) (
                 struct rd_kafka_assignor_s *rkpas,
-		const rd_list_t *topics);
+                const rd_list_t *topics,
+                const char *member_id);
 
 
         void (*rkas_on_assignment_cb) (const char *member_id,
@@ -98,7 +99,8 @@ typedef struct rd_kafka_assignor_s {
 
 rd_kafkap_bytes_t *
 rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkpas,
-				const rd_list_t *topics);
+				const rd_list_t *topics,
+				const char *member_id);
 
 
 void rd_kafka_assignor_update_subscription (rd_kafka_assignor_t *rkpas,

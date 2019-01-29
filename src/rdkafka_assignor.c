@@ -138,7 +138,8 @@ rd_kafka_consumer_protocol_member_metadata_new (
 
 rd_kafkap_bytes_t *
 rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkas,
-				const rd_list_t *topics) {
+				const rd_list_t *topics,
+				const char *member_id RD_UNUSED) {
         return rd_kafka_consumer_protocol_member_metadata_new(
                 topics, rkas->rkas_userdata,
                 rkas->rkas_userdata_size);

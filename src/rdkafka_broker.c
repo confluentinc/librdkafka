@@ -4342,7 +4342,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         if (rkb->rkb_rk->rk_oauthbearer) {
                                 int has_token = 0;
                                 int est_total_wait_ms = 0;
-                                int max_wait_ms = 5000;
+                                int max_wait_ms = 30000;
                                 while (!has_token && est_total_wait_ms < max_wait_ms) {
                                         rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
                                         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
@@ -4354,10 +4354,12 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                                 if (est_total_wait_ms >= max_wait_ms) {
                                                         initial_token_unavailable = 1;
                                                         rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                                                                "Main broker thread will exit due to no initial token");
+                                                                "Main broker thread will exit due to no initial token after %i ms",
+                                                                max_wait_ms);
                                                 } else {
                                                         rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                                                                "Main broker thread waiting for initial token");
+                                                                "Main broker thread waiting up to %i ms for initial token",
+                                                                max_wait_ms);
                                                         rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
                                                         est_total_wait_ms += rd_kafka_max_block_ms;
                                                         if (est_total_wait_ms >= max_wait_ms) {

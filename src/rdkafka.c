@@ -271,15 +271,61 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
-static int check_extension_key(const char *key,
+static int check_oauthbearer_extension_key(const char *key,
                 char *errstr, size_t errstr_size) {
-        // TODO: implement check_extension_key
+        if (!strcmp(key, "auth")) {
+		rd_snprintf(errstr, errstr_size,
+		        "Cannot explicitly set the reserved `auth` SASL/OAUTHBEARER extension key");
+                return -1;
+        }
+        /*
+         * https://tools.ietf.org/html/rfc7628#section-3.1
+         * key            = 1*(ALPHA)
+         * 
+         * https://tools.ietf.org/html/rfc5234#appendix-B.1
+         * ALPHA          =  %x41-5A / %x61-7A   ; A-Z / a-z
+         */
+        if (*key == '\0') {
+		rd_snprintf(errstr, errstr_size,
+		        "SASL/OAUTHBEARER extension keys must not be empty");
+                return -1;
+        }
+        const char *c = key;
+        while (*c != '\0') {
+                if (!(*c >= 'A' && *c <= 'Z') && !(*c >= 'a' && *c <= 'z')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "SASL/OAUTHBEARER extension keys must only consist of A-Z or a-z characters: %s (%c)",
+                                key, *c);
+                        return -1;
+                }
+                ++c;
+        }
         return 0;
 }
 
-static int check_extension_value(const char *key,
+static int check_oauthbearer_extension_value(const char *value,
                 char *errstr, size_t errstr_size) {
-        // TODO: implement check_extension_value
+        /*
+         * https://tools.ietf.org/html/rfc7628#section-3.1
+         * value          = *(VCHAR / SP / HTAB / CR / LF )
+         * 
+         * https://tools.ietf.org/html/rfc5234#appendix-B.1
+         * VCHAR          =  %x21-7E  ; visible (printing) characters
+         * SP             =  %x20     ; space
+         * HTAB           =  %x09     ; horizontal tab
+         * CR             =  %x0D     ; carriage return
+         * LF             =  %x0A     ; linefeed
+         */
+        const char *c = value;
+        while (*c != '\0') {
+                if (!(*c >= '\x21' && *c <= '\x7E') && *c != '\x20' && *c != '\x09' && *c != '\x0D' && *c != '\x0A') {
+                        rd_snprintf(errstr, errstr_size,
+                                "SASL/OAUTHBEARER extension values must only consist of space, horizontal tab, CR, LF, and visible characters (%%x21-7E): %s (%c)",
+                                value, *c);
+                        return -1;
+                }
+                ++c;
+        }
         return 0;
 }
 
@@ -299,14 +345,14 @@ int rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 return -1;
         }
         char errstr[512];
-        if (check_extension_value(token_value, errstr, sizeof(errstr)) == -1) {
+        if (check_oauthbearer_extension_value(token_value, errstr, sizeof(errstr)) == -1) {
                 rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
                 return -1;
         }
         size_t i;
         for (i = 0; i + 1 < extension_size; i += 2) {
-                if (check_extension_key(extensions[i], errstr, sizeof(errstr)) == -1 ||
-                        check_extension_value(extensions[i + 1], errstr, sizeof(errstr)) == -1) {
+                if (check_oauthbearer_extension_key(extensions[i], errstr, sizeof(errstr)) == -1 ||
+                        check_oauthbearer_extension_value(extensions[i + 1], errstr, sizeof(errstr)) == -1) {
                                 rd_kafka_set_fatal_error(rk,
                                         RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
                                 return -1;
@@ -393,7 +439,7 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         int life_seconds = 0;
         rd_list_t extensions; /* rd_strtup_t list */
         rd_list_init(&extensions, 0, (void (*)(void *))rd_strtup_destroy);
-        
+
         char errstr[512] = "\0";
         if (parse_unsecured_jws_config(rk->rk_conf.sasl.oauthbearer_config,
                 &principal_claim_name, &principal, &scope_claim_name, &scope,
@@ -407,16 +453,16 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                 int64_t start_time_ms = rd_clock() / 1000;
                 int64_t lifetime_ms = start_time_ms + life_seconds * 1000;
                 const char **extensionv = NULL;
-                int extensionc = rd_list_cnt(&extensions);
-                extensionv = rd_malloc(sizeof(*extensionv) * 2 * rd_list_cnt(&extensions));
+                int extension_pair_count = rd_list_cnt(&extensions);
+                extensionv = rd_malloc(sizeof(*extensionv) * 2 * extension_pair_count);
                 int i;
-                for (i = 0; i < extensionc; ++i) {
+                for (i = 0; i < extension_pair_count; ++i) {
                         rd_strtup_t *strtup = (rd_strtup_t *)rd_list_elem(&extensions, i);
                         extensionv[2 * i] = strtup->name;
                         extensionv[2 * i + 1] = strtup->value;
                 }
                 rd_kafka_oauthbearer_set_token(rk, jws_compact_serialization,
-                        lifetime_ms, principal, extensionv, extensionc);
+                        lifetime_ms, principal, extensionv, 2 * extension_pair_count);
                 rd_free(extensionv);
         }
         rd_free(principal_claim_name);

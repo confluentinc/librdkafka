@@ -1756,7 +1756,7 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
  * Function arguments:
  *   - \p rk - Kafka handle
- *   - \p opaque - Application-provided opaque.
+ *   - \p opaque - Application-provided opaque set via rd_kafka_conf_set_opaque()
  * 
  * The callback must invoke \c rd_kafka_oauthbearer_set_token()
  * or \c rd_kafka_oauthbearer_set_token_failure() to indicate success
@@ -1777,24 +1777,27 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
                 void *opaque));
 
 /**
- * @brief SASL/OAUTHBEARER token refresh success indicator.
+ * @brief Set SASL/OAUTHBEARER token and metadata
  *
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
- * this method uopn success. The caller remains responsible for the token_value
- * and md_principal_name memory as the contents are copied.  All arguments
- * are mandatory.  The md_lifetime_ms value is when the token expires, in terms
- * of the number of milliseconds since the epoch.
+ * this method upon success. The md_lifetime_ms value is when the token expires,
+ * in terms of the number of milliseconds since the epoch.  The extension_size
+ * should be a non-negative multiple of 2. The extension keys must not include
+ * the reserved key "auth", and all extension keys and values must conform to the
+ * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+ * key            = 1*(ALPHA)
+ * value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
- * NOTE: does not support SASL extensions as I wasn't sure how to accept
- * a list of name-value pairs because rd_list_t and/or rd_strtup_t are not
- * available here. Maybe they should not be imported since they would become
- * part of the public API. Maybe two 'char **' arguments (extension_names,
- * extension_values) is an option.  Thoughts?
+ * It is a fatal client error for this method to fail (e.g. if extensions are invalid),
+ * and rd_kafka_set_fatal_error() will be invoked if that occurs.
+ * 
+ * @returns -1 on failure (rd_kafka_set_fatal_error invoked), else 0.
  */
 RD_EXPORT
-void rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
+int rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
-                const char *md_principal_name);
+                const char *md_principal_name,
+                const char **extensions, size_t extension_size);
 
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.

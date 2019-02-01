@@ -152,8 +152,18 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
  * @brief Default SASL/OAUTHBEARER token refresh callback that generates
  * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
  *
- * This method interprets \c sasl.oauthbearer.config as follows:
- * TODO...
+ * This method interprets \c sasl.oauthbearer.config as space-separated
+ * name=value pairs with valid names including principalClaimName,
+ * principal, scopeClaimName, scope, and lifeSeconds. The default
+ * value for principalClaimName is sub.  The principal must be specified.
+ * The default value for scopeClaimName is scope, and the default value
+ * for lifeSeconds is 3600.  The scope value is csv format with the
+ * default value being no/empty scope. For example:
+ * "principalClaimName=azp principal=admin scopeClaimName=roles
+ * scope=role1,role2 lifeSeconds=600".  SASL extensions can be
+ * communicated to the broker via extension_<extensionname>=value. For
+ * example: "principal=admin extension_traceId=123". Unrecognized names
+ * are ignored.
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque);
 
@@ -367,9 +377,6 @@ struct rd_kafka_s {
                 /**< The lock protecting the below information */
                 rwlock_t refresh_lock;
 
-                /**< failed token refresh count */
-                unsigned int failed_refresh_count;
-
                 /**< The b64token value as defined in RFC 6750 Section 2.1
                  *   https://tools.ietf.org/html/rfc6750#section-2.1
                  */
@@ -381,7 +388,7 @@ struct rd_kafka_s {
                 /**< The name of the principal to which this token applies. */
                 char *md_principal_name;
                 /**< The SASL extensions, as per RFC 7628 Section 3.1
-                 *   https://tools.ietf.org/html/rfc6749#section-1.4
+                 *   https://tools.ietf.org/html/rfc7628#section-3.1
                  */
                 rd_list_t extensions; /* rd_strtup_t list */
                 /**< Error message for validation and/or token retrieval problems.

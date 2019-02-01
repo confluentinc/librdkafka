@@ -182,13 +182,9 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 /*
                  * https://tools.ietf.org/html/rfc7628#section-3.1
                  * kvsep          = %x01
-                 * key            = 1*(ALPHA)
-                 * value          = *(VCHAR / SP / HTAB / CR / LF )
-                 * kvpair         = key "=" value kvsep
-                 * ;;gs2-header     = See RFC 5801
                  * client-resp    = (gs2-header kvsep *kvpair kvsep) / kvsep
                  *
-                 * Send final CTRL-A character
+                 * Send final kvsep (CTRL-A) character
                  */
                 out.size = 1;
                 out.ptr = rd_malloc(out.size + 1);

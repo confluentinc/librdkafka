@@ -271,48 +271,159 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
-void rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
+static int check_extension_key(const char *key,
+                char *errstr, size_t errstr_size) {
+        // TODO: implement check_extension_key
+        return 0;
+}
+
+static int check_extension_value(const char *key,
+                char *errstr, size_t errstr_size) {
+        // TODO: implement check_extension_value
+        return 0;
+}
+
+int rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
-                const char *md_principal_name) {
+                const char *md_principal_name,
+                const char **extensions, size_t extension_size) {
+        /* Check args for correct format */
+        if (!token_value) {
+		rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+			    "Must supply non-null token value");
+                return -1;
+        }
+        if (!md_principal_name) {
+		rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+			    "Must supply non-null token principal name metadata");
+                return -1;
+        }
+        char errstr[512];
+        if (check_extension_value(token_value, errstr, sizeof(errstr)) == -1) {
+                rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
+                return -1;
+        }
+        size_t i;
+        for (i = 0; i + 1 < extension_size; i += 2) {
+                if (check_extension_key(extensions[i], errstr, sizeof(errstr)) == -1 ||
+                        check_extension_value(extensions[i + 1], errstr, sizeof(errstr)) == -1) {
+                                rd_kafka_set_fatal_error(rk,
+                                        RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
+                                return -1;
+                }
+        }
+
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-        if (rk->rk_oauthbearer->md_principal_name) {
-                rd_free(rk->rk_oauthbearer->md_principal_name);
-        }
+        // rd_free() ends up as a no-op only on initial invocation
+        rd_free(rk->rk_oauthbearer->md_principal_name);
         rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
-        if (rk->rk_oauthbearer->token_value) {
-                rd_free(rk->rk_oauthbearer->token_value);
-        }
+        rd_free(rk->rk_oauthbearer->token_value);
         rk->rk_oauthbearer->token_value = rd_strdup(token_value);
         rk->rk_oauthbearer->md_lifetime_ms = md_lifetime_ms;
         rd_list_destroy(&rk->rk_oauthbearer->extensions);
-        // TODO: support extensions
+        for (i = 0; i + 1 < extension_size; i += 2) {
+                rd_list_add(&rk->rk_oauthbearer->extensions,
+                        rd_strtup_new(extensions[i], extensions[i + 1]));
+        }
         rk->rk_oauthbearer->errstr[0] = '\0';
         rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                 "Waking up waiting brokers after setting token");
         rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+
+        // TODO: schedule next refresh at 80% of tokern liofetime point
+        return 0;
 }
 
 void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-        rk->rk_oauthbearer->failed_refresh_count++;
         strncpy(rk->rk_oauthbearer->errstr, errstr,
                 sizeof(rk->rk_oauthbearer->errstr));
         /* Leave any existing token because it may have some life left */
         rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+
+        // TODO: schedule next refresh attempt in 10 seconds
+}
+
+/*
+ * Parse Unsecured JWS config, allocates strings that must be freed
+ */
+static int parse_unsecured_jws_config(const char *cfg,
+                char **principal_claim_name,
+                char **principal,
+                char **scope_claim_name,
+                char **scope,
+                int *life_seconds,
+                rd_list_t *extensions, /* rd_strtup_t list */
+                char *errstr, size_t errstr_size) {
+        /*
+         * Extensions:
+         * 
+         * https://tools.ietf.org/html/rfc7628#section-3.1
+         * key            = 1*(ALPHA)
+         * value          = *(VCHAR / SP / HTAB / CR / LF )
+         * 
+         * https://tools.ietf.org/html/rfc5234#appendix-B.1
+         * ALPHA          =  %x41-5A / %x61-7A   ; A-Z / a-z
+         * VCHAR          =  %x21-7E  ; visible (printing) characters
+         * SP             =  %x20     ; space
+         * HTAB           =  %x09     ; horizontal tab
+         * CR             =  %x0D     ; carriage return
+         * LF             =  %x0A     ; linefeed
+         */
+
+        char *cfg_copy = rd_strdup(cfg);
+
+        // TODO: hard-code for now; need to parse config instread
+        *life_seconds = 3600;
+        *principal_claim_name = strdup("sub");
+        *principal = strdup("admin");
+
+        rd_free(cfg_copy);
+
+        return 0;
 }
 
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
-        // TODO: parse rk->rk_conf.sasl.oauthbearer_config
-        // just hard-code values for now
-        const char *principal_name = "admin";
-        const char *jws_compact_serialization =
-                "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTU0NjYxNzczNywiZXhwIjoxNTQ2NjE3NzM3MH0.";
-        int64_t start_time_ms = 1546617737;
-        int64_t lifetime_ms = 10 * start_time_ms; // way in the future
-        rd_kafka_oauthbearer_set_token(rk, jws_compact_serialization,
-                lifetime_ms, principal_name);
+        char *principal_claim_name = NULL;
+        char *principal = NULL;
+        char *scope_claim_name = NULL;
+        char *scope = NULL;
+        int life_seconds = 0;
+        rd_list_t extensions; /* rd_strtup_t list */
+        rd_list_init(&extensions, 0, (void (*)(void *))rd_strtup_destroy);
+        
+        char errstr[512] = "\0";
+        if (parse_unsecured_jws_config(rk->rk_conf.sasl.oauthbearer_config,
+                &principal_claim_name, &principal, &scope_claim_name, &scope,
+                &life_seconds, &extensions, errstr, sizeof(errstr)) == -1) {
+                        rd_kafka_set_fatal_error(rk,
+                                RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
+        } else {
+                // just hard-code values for now
+                const char *jws_compact_serialization =
+                        "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTU0NjYxNzczNywiZXhwIjoxNTQ2NjE3NzM3MH0.";
+                int64_t start_time_ms = rd_clock() / 1000;
+                int64_t lifetime_ms = start_time_ms + life_seconds * 1000;
+                const char **extensionv = NULL;
+                int extensionc = rd_list_cnt(&extensions);
+                extensionv = rd_malloc(sizeof(*extensionv) * 2 * rd_list_cnt(&extensions));
+                int i;
+                for (i = 0; i < extensionc; ++i) {
+                        rd_strtup_t *strtup = (rd_strtup_t *)rd_list_elem(&extensions, i);
+                        extensionv[2 * i] = strtup->name;
+                        extensionv[2 * i + 1] = strtup->value;
+                }
+                rd_kafka_oauthbearer_set_token(rk, jws_compact_serialization,
+                        lifetime_ms, principal, extensionv, extensionc);
+                rd_free(extensionv);
+        }
+        rd_free(principal_claim_name);
+        rd_free(principal);
+        rd_free(scope_claim_name);
+        rd_free(scope);
+        rd_list_destroy(&extensions);
 }
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
@@ -890,14 +1001,10 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_broker_by_id);
 
 	if (rk->rk_oauthbearer) {
-                if (rk->rk_oauthbearer->md_principal_name) {
-                        rd_free(rk->rk_oauthbearer->md_principal_name);
-                        rk->rk_oauthbearer->md_principal_name = NULL;
-                }
-                if (rk->rk_oauthbearer->token_value) {
-                        rd_free(rk->rk_oauthbearer->token_value);
-                        rk->rk_oauthbearer->token_value = NULL;
-                }
+                rd_free(rk->rk_oauthbearer->md_principal_name);
+                rk->rk_oauthbearer->md_principal_name = NULL;
+                rd_free(rk->rk_oauthbearer->token_value);
+                rk->rk_oauthbearer->token_value = NULL;
                 rd_list_destroy(&rk->rk_oauthbearer->extensions);
                 rwlock_destroy(&rk->rk_oauthbearer->refresh_lock);
                 rd_free(rk->rk_oauthbearer);

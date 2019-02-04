@@ -67,8 +67,6 @@
  */
 #if WITH_SSL
 #include <openssl/evp.h>
-#else
-#error "WITH_SSL (OpenSSL) is required for SASL OAUTHBEARER unsecured tokens"
 #endif
 
 
@@ -678,7 +676,7 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 }
                         }
                         char *claims_json = rd_malloc(max_json_length + 1);
-                        snprintf(claims_json, max_json_length + 1, "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f%s}",
+                        rd_snprintf(claims_json, max_json_length + 1, "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f%s}",
                                 principal_claim_name, principal, now_sec, now_sec + life_seconds, scope_json);
                         rd_free(scope_json);
                         // convert to base64URL format, first to base64, then to base64URL

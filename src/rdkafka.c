@@ -565,32 +565,83 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char *principal_claim_name = NULL;
         char *principal = NULL;
         char *scope_claim_name = NULL;
-        char *scope = NULL;
+        char *scope_csv = NULL;
         int life_seconds = 0;
         rd_list_t extensions; /* rd_strtup_t list */
         rd_list_init(&extensions, 0, (void (*)(void *))rd_strtup_destroy);
+        rd_list_t scope;
+        rd_list_init(&scope, 0, rd_free);
+        int scope_json_length = 0;
 
         char errstr[512] = "\0";
         if (parse_unsecured_jws_config(rk->rk_conf.sasl.oauthbearer_config,
-                &principal_claim_name, &principal, &scope_claim_name, &scope,
+                &principal_claim_name, &principal, &scope_claim_name, &scope_csv,
                 &life_seconds, &extensions, errstr, sizeof(errstr)) == -1) {
                         rd_kafka_set_fatal_error(rk,
                                 RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
         } else {
-                // make sure we have required info
+                // make sure we have required and valid info
+                if (!principal_claim_name) {
+                        principal_claim_name = strdup("sub");
+                }
+                if (!scope_claim_name) {
+                        scope_claim_name = strdup("scope");
+                }
+                if (!life_seconds) {
+                        life_seconds = 3600;
+                }
                 if (!principal) {
                         rd_kafka_set_fatal_error(rk,
                                 RD_KAFKA_RESP_ERR__INVALID_ARG, "Invalid sasl.oauthbearer.config: no principal=<value>");
+                } else if (strchr(principal, '"')) {
+                        rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Invalid sasl.oauthbearer.config: principal cannot contain a '\"' character: %s", principal);
+                } else if (strchr(principal_claim_name, '"')) {
+                        rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Invalid sasl.oauthbearer.config: principalClaimName cannot contain a '\"' character: %s", principal_claim_name);
+                } else if (strchr(scope_claim_name, '"')) {
+                        rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Invalid sasl.oauthbearer.config: scopeClaimName cannot contain a '\"' character: %s", scope_claim_name);
+                } else if (scope_csv && strchr(scope_csv, '"')) {
+                        rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Invalid sasl.oauthbearer.config: scope cannot contain a '\"' character: %s", scope_csv);
                 } else {
-                        // set up defaults as required
-                        if (!principal_claim_name) {
-                                principal_claim_name = strdup("sub");
-                        }
-                        if (!life_seconds) {
-                                life_seconds = 3600;
-                        }
-                        if (scope && !scope_claim_name) {
-                                scope_claim_name = strdup("scope");
+                        if (scope_csv) {
+                                // convert from csv to rd_list_t and calculate json length
+                                char *start = scope_csv;
+                                char *curr = start;
+                                while(*curr != '\0') {
+                                        // ignore empty elements (e.g. ",,")
+                                        while(*curr != '\0' && *curr == ',') {
+                                                ++curr;
+                                                ++start;
+                                        }
+                                        while(*curr != '\0' && *curr != ',') {
+                                                ++curr;
+                                        }
+                                        if (curr != start) {
+                                                if (*curr == ',') {
+                                                       *curr = '\0';
+                                                       ++curr;
+                                                }
+                                                if (!rd_list_find(&scope, start, (void *)strcmp)) {
+                                                        rd_list_add(&scope, rd_strdup(start));
+                                                }
+                                                if (scope_json_length == 0) {
+                                                        scope_json_length = 2 + // ,"
+                                                                strlen(scope_claim_name) +
+                                                                4 + // ":["
+                                                                strlen(start) +
+                                                                1 + // "
+                                                                1; // trailing ]
+                                                } else {
+                                                        scope_json_length += 2; // ,"
+                                                        scope_json_length += strlen(start);
+                                                        scope_json_length += 1; // "
+                                                }
+                                                start = curr;
+                                        }
+                                }
                         }
                         const char *jose_header_encoded = "eyJhbGciOiJub25lIn0"; // {"alg":"none"}
                         int max_json_length;
@@ -606,18 +657,36 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 14 + // iat NumericDate (e.g. 1549251467.546)
                                 7 + // ,"exp":
                                 14 + // exp NumericDate (e.g. 1549252067.546)
+                                scope_json_length +
                                 1; // }
-                        // TODO: include scope
-                        char *json = rd_malloc(max_json_length + 1);
-                        snprintf(json, max_json_length + 1, "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f}",
-                                principal_claim_name, principal, now_sec, now_sec + life_seconds);
+                        // generate scope portion of json
+                        char *scope_json;
+                        scope_json = rd_malloc(scope_json_length + 1);
+                        *scope_json = '\0';
+                        char *scope_curr = scope_json;
+                        int i;
+                        for (i = 0; i < rd_list_cnt(&scope); i++) {
+                                if (i == 0) {
+                                        scope_curr += sprintf(scope_curr, ",\"%s\":[\"", scope_claim_name);
+                                } else {
+                                        scope_curr += sprintf(scope_curr, "%s", ",\"");
+                                }
+                                scope_curr += sprintf(scope_curr, "%s\"", rd_list_elem(&scope, i));
+                                if (i == rd_list_cnt(&scope) - 1) {
+                                        scope_curr += sprintf(scope_curr, "%s", "]");
+                                }
+                        }
+                        char *claims_json = rd_malloc(max_json_length + 1);
+                        snprintf(claims_json, max_json_length + 1, "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f%s}",
+                                principal_claim_name, principal, now_sec, now_sec + life_seconds, scope_json);
+                        rd_free(scope_json);
                         // convert to base64URL format, first to base64, then to base64URL
                         char *jws = rd_malloc(strlen(jose_header_encoded) + 1 + (((max_json_length + 2) / 3) * 4) + 1 + 1);
                         sprintf(jws, "%s.", jose_header_encoded);
                         char *jws_claims = jws + strlen(jws);
                         size_t encode_len;
-                        encode_len = EVP_EncodeBlock((uint8_t*)jws_claims, (uint8_t*)json, strlen(json));
-                        rd_free(json);
+                        encode_len = EVP_EncodeBlock((uint8_t*)jws_claims, (uint8_t*)claims_json, strlen(claims_json));
+                        rd_free(claims_json);
                         char *jws_last_char = jws_claims + encode_len - 1;
                         // convert from padded base64 to unpadded base64URL
                         // eliminate any padding
@@ -639,7 +708,6 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                         const char **extensionv = NULL;
                         int extension_pair_count = rd_list_cnt(&extensions);
                         extensionv = rd_malloc(sizeof(*extensionv) * 2 * extension_pair_count);
-                        int i;
                         for (i = 0; i < extension_pair_count; ++i) {
                                 rd_strtup_t *strtup = (rd_strtup_t *)rd_list_elem(&extensions, i);
                                 extensionv[2 * i] = strtup->name;
@@ -654,7 +722,8 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         rd_free(principal_claim_name);
         rd_free(principal);
         rd_free(scope_claim_name);
-        rd_free(scope);
+        rd_free(scope_csv);
+        rd_list_destroy(&scope);
         rd_list_destroy(&extensions);
 }
 

@@ -562,6 +562,7 @@ static int parse_unsecured_jws_config(const char *cfg,
 }
 
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
+#if WITH_SSL
         char *principal_claim_name = NULL;
         char *principal = NULL;
         char *scope_claim_name = NULL;
@@ -725,6 +726,10 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         rd_free(scope_csv);
         rd_list_destroy(&scope);
         rd_list_destroy(&extensions);
+#else
+        rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INVALID_ARG, "%s",
+                "WITH_SSL (OpenSSL) is required for default SASL OAUTHBEARER unsecured token implementation");
+#endif
 }
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,

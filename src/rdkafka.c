@@ -60,6 +60,16 @@
 #include <sys/timeb.h>
 #endif
 
+/* The below dependency is required for conversion of
+ * unsecured JWS compact serialization to base64URL.
+ * Not sure if this means we should include a
+ * WITH_SASL_OAUTHBEARER compile-time flag after all?
+ */
+#if WITH_SSL
+#include <openssl/evp.h>
+#else
+#error "WITH_SSL (OpenSSL) is required for SASL OAUTHBEARER unsecured tokens"
+#endif
 
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
@@ -392,6 +402,27 @@ void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
         // TODO: schedule next refresh attempt in 10 seconds
 }
 
+static void parse_unsecured_jws_config_value_for_prefix(char **loc, const char *prefix,
+                const char value_end_char, char **value, char *errstr, size_t errstr_size) {
+        if (*value) {
+                rd_snprintf(errstr, errstr_size,
+                        "Invalid sasl.oauthbearer.config: multiple '%s' entries", prefix);
+                return;
+        }
+        *loc += strlen(prefix);
+        *value = *loc;
+        while (**loc != '\0' && **loc != value_end_char) {
+                ++*loc;
+        }
+        if (**loc == value_end_char) {
+                // end the string and skip the character
+                **loc = '\0';
+                ++*loc;
+        }
+        // return new allocated memory
+        *value = strdup(*value);
+}
+
 /*
  * Parse Unsecured JWS config, allocates strings that must be freed
  */
@@ -399,7 +430,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                 char **principal_claim_name,
                 char **principal,
                 char **scope_claim_name,
-                char **scope,
+                char **scope_csv_text,
                 int *life_seconds,
                 rd_list_t *extensions, /* rd_strtup_t list */
                 char *errstr, size_t errstr_size) {
@@ -419,16 +450,115 @@ static int parse_unsecured_jws_config(const char *cfg,
          * LF             =  %x0A     ; linefeed
          */
 
-        char *cfg_copy = rd_strdup(cfg);
+        const char *prefix_principal_claim_name = "principalClaimName=";
+        const char *prefix_principal = "principal=";
+        const char *prefix_scope_claim_name = "scopeClaimName=";
+        const char *prefix_scope = "scope=";
+        const char *prefix_life_seconds = "lifeSeconds=";
+        const char *prefix_extension = "extension_";
 
-        // TODO: hard-code for now; need to parse config instread
-        *life_seconds = 3600;
-        *principal_claim_name = strdup("sub");
-        *principal = strdup("admin");
+        char *life_seconds_text = NULL;
+
+        char *cfg_copy = rd_strdup(cfg);
+        char *loc = cfg_copy;
+
+        *principal_claim_name = NULL;
+        *principal = NULL;
+        *scope_claim_name = NULL;
+        *scope_csv_text = NULL;
+        *life_seconds = 0;
+
+        while (*loc != '\0' && *errstr == '\0') {
+                if (*loc == ' ') {
+                        ++loc;
+                } else if (!strncmp(prefix_principal_claim_name, loc, strlen(prefix_principal_claim_name))) {
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_principal_claim_name, ' ',
+                                principal_claim_name, errstr, errstr_size);
+                        if (*errstr == '\0' && **principal_claim_name == '\0') {
+                                rd_snprintf(errstr, errstr_size,
+                                        "Invalid sasl.oauthbearer.config: empty '%s'",
+                                        prefix_principal_claim_name);
+                        }
+                } else if (!strncmp(prefix_principal, loc, strlen(prefix_principal))) {
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_principal, ' ',
+                                principal, errstr, errstr_size);
+                        if (*errstr == '\0' && **principal == '\0') {
+                                rd_snprintf(errstr, errstr_size,
+                                        "Invalid sasl.oauthbearer.config: empty '%s'",
+                                        prefix_principal);
+                        }
+                } else if (!strncmp(prefix_scope_claim_name, loc, strlen(prefix_scope_claim_name))) {
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_scope_claim_name, ' ',
+                                scope_claim_name, errstr, errstr_size);
+                        if (*errstr == '\0' && **scope_claim_name == '\0') {
+                                rd_snprintf(errstr, errstr_size,
+                                        "Invalid sasl.oauthbearer.config: empty '%s'",
+                                        prefix_scope_claim_name);
+                        }
+                } else if (!strncmp(prefix_scope, loc, strlen(prefix_scope))) {
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_scope, ' ',
+                                scope_csv_text, errstr, errstr_size);
+                        if (*errstr == '\0' && **scope_csv_text == '\0') {
+                                rd_snprintf(errstr, errstr_size,
+                                        "Invalid sasl.oauthbearer.config: empty '%s'",
+                                        prefix_scope);
+                        }
+                } else if (!strncmp(prefix_life_seconds, loc, strlen(prefix_life_seconds))) {
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_life_seconds, ' ',
+                                &life_seconds_text, errstr, errstr_size);
+                        if (*errstr == '\0') {
+                                if (*life_seconds_text == '\0') {
+                                        rd_snprintf(errstr, errstr_size,
+                                                "Invalid sasl.oauthbearer.config: empty '%s'",
+                                                prefix_life_seconds);
+                                } else {
+                                        long long life_seconds_long;
+                                        char *end_ptr;
+                                        life_seconds_long = strtoll(life_seconds_text, &end_ptr, 10);
+                                        if (*end_ptr != '\0') {
+                                                rd_snprintf(errstr, errstr_size,
+                                                        "Invalid sasl.oauthbearer.config: non-integral '%s': %s",
+                                                        prefix_life_seconds, life_seconds_text);
+                                        } else if (life_seconds_long <= 0 || life_seconds_long > INT_MAX) {
+                                                rd_snprintf(errstr, errstr_size,
+                                                        "Invalid sasl.oauthbearer.config: value out of range of positive int '%s': %s",
+                                                        prefix_life_seconds, life_seconds_text);
+                                        } else {
+                                                *life_seconds = life_seconds_long;
+                                        }
+                                }
+                        }
+                        rd_free(life_seconds_text);
+                } else if (!strncmp(prefix_extension, loc, strlen(prefix_extension))) {
+                        char *extension_key = NULL;
+                        parse_unsecured_jws_config_value_for_prefix(&loc, prefix_extension, '=',
+                                &extension_key, errstr, errstr_size);
+                        if (*errstr == '\0') {
+                                if (*extension_key == '\0') {
+                                        rd_snprintf(errstr, errstr_size,
+                                                "Invalid sasl.oauthbearer.config: empty '%s' key",
+                                                prefix_extension);
+                                } else {
+                                        char *extension_value = NULL;
+                                        parse_unsecured_jws_config_value_for_prefix(&loc, "", ' ',
+                                                &extension_value, errstr, errstr_size);
+                                        if (*errstr == '\0') {
+                                                rd_list_add(extensions,
+                                                        rd_strtup_new(extension_key, extension_value));
+                                                rd_free(extension_value);
+                                        }
+                                }
+                                rd_free(extension_key);
+                        }
+                } else {
+                        rd_snprintf(errstr, errstr_size,
+                                "Unrecognized sasl.oauthbearer.config beginning at: %s", loc);
+                }
+        }
 
         rd_free(cfg_copy);
 
-        return 0;
+        return *errstr == '\0' ? 0 : -1;
 }
 
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
@@ -447,23 +577,79 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                         rd_kafka_set_fatal_error(rk,
                                 RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
         } else {
-                // just hard-code values for now
-                const char *jws_compact_serialization =
-                        "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTU0NjYxNzczNywiZXhwIjoxNTQ2NjE3NzM3MH0.";
-                int64_t start_time_ms = rd_clock() / 1000;
-                int64_t lifetime_ms = start_time_ms + life_seconds * 1000;
-                const char **extensionv = NULL;
-                int extension_pair_count = rd_list_cnt(&extensions);
-                extensionv = rd_malloc(sizeof(*extensionv) * 2 * extension_pair_count);
-                int i;
-                for (i = 0; i < extension_pair_count; ++i) {
-                        rd_strtup_t *strtup = (rd_strtup_t *)rd_list_elem(&extensions, i);
-                        extensionv[2 * i] = strtup->name;
-                        extensionv[2 * i + 1] = strtup->value;
+                // make sure we have required info
+                if (!principal) {
+                        rd_kafka_set_fatal_error(rk,
+                                RD_KAFKA_RESP_ERR__INVALID_ARG, "Invalid sasl.oauthbearer.config: no principal=<value>");
+                } else {
+                        // set up defaults as required
+                        if (!principal_claim_name) {
+                                principal_claim_name = strdup("sub");
+                        }
+                        if (!life_seconds) {
+                                life_seconds = 3600;
+                        }
+                        if (scope && !scope_claim_name) {
+                                scope_claim_name = strdup("scope");
+                        }
+                        const char *jose_header_encoded = "eyJhbGciOiJub25lIn0"; // {"alg":"none"}
+                        int max_json_length;
+                        rd_ts_t now_usec = rd_clock();
+                        rd_ts_t now_ms = now_usec / 1000;
+                        double now_sec = now_ms / 1000.0;
+                        // generate json
+                        max_json_length = 2 + // {"
+                                strlen(principal_claim_name) +
+                                3 + // ":"
+                                strlen(principal) +
+                                8 + // ","iat":
+                                14 + // iat NumericDate (e.g. 1549251467.546)
+                                7 + // ,"exp":
+                                14 + // exp NumericDate (e.g. 1549252067.546)
+                                1; // }
+                        // TODO: include scope
+                        char *json = rd_malloc(max_json_length + 1);
+                        snprintf(json, max_json_length + 1, "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f}",
+                                principal_claim_name, principal, now_sec, now_sec + life_seconds);
+                        // convert to base64URL format, first to base64, then to base64URL
+                        char *jws = rd_malloc(strlen(jose_header_encoded) + 1 + (((max_json_length + 2) / 3) * 4) + 1 + 1);
+                        sprintf(jws, "%s.", jose_header_encoded);
+                        char *jws_claims = jws + strlen(jws);
+                        size_t encode_len;
+                        encode_len = EVP_EncodeBlock((uint8_t*)jws_claims, (uint8_t*)json, strlen(json));
+                        rd_free(json);
+                        char *jws_last_char = jws_claims + encode_len - 1;
+                        // convert from padded base64 to unpadded base64URL
+                        // eliminate any padding
+                        while (*jws_last_char == '=') {
+                                --jws_last_char;
+                        }
+                        *(++jws_last_char) = '.';
+                        *(jws_last_char + 1) = '\0';
+                        // convert the 2 differing encode characters
+                        char *jws_maybe_non_url_char = jws;
+                        while (*jws_maybe_non_url_char != '\0') {
+                                if (*jws_maybe_non_url_char == '+') {
+                                        *jws_maybe_non_url_char = '-';
+                                } else if (*jws_maybe_non_url_char == '/') {
+                                        *jws_maybe_non_url_char = '_';
+                                }
+                                ++jws_maybe_non_url_char;
+                        }
+                        const char **extensionv = NULL;
+                        int extension_pair_count = rd_list_cnt(&extensions);
+                        extensionv = rd_malloc(sizeof(*extensionv) * 2 * extension_pair_count);
+                        int i;
+                        for (i = 0; i < extension_pair_count; ++i) {
+                                rd_strtup_t *strtup = (rd_strtup_t *)rd_list_elem(&extensions, i);
+                                extensionv[2 * i] = strtup->name;
+                                extensionv[2 * i + 1] = strtup->value;
+                        }
+                        rd_kafka_oauthbearer_set_token(rk, jws, now_ms + life_seconds * 1000,
+                                principal, extensionv, 2 * extension_pair_count);
+                        rd_free(jws);
+                        rd_free(extensionv);
                 }
-                rd_kafka_oauthbearer_set_token(rk, jws_compact_serialization,
-                        lifetime_ms, principal, extensionv, 2 * extension_pair_count);
-                rd_free(extensionv);
         }
         rd_free(principal_claim_name);
         rd_free(principal);

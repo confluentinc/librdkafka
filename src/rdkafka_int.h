@@ -305,7 +305,15 @@ struct rd_kafka_s {
         rd_kafka_timers_t rk_timers;
 	thrd_t rk_thread;
 
-        int rk_initialized;
+        int rk_initialized;       /**< Will be > 0 when the rd_kafka_t
+                                   *   instance has been fully initialized. */
+
+        int   rk_init_wait_cnt;   /**< Number of background threads that
+                                   *   need to finish initialization. */
+        cnd_t rk_init_cnd;        /**< Cond-var used to wait for main thread
+                                   *   to finish its initialization before
+                                   *   before rd_kafka_new() returns. */
+        mtx_t rk_init_lock;       /**< Lock for rk_init_wait and _cmd */
 
         /**
          * Background thread and queue,

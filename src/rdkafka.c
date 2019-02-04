@@ -825,6 +825,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         mtx_destroy(&rk->rk_suppress.sparse_connect_lock);
 
+        cnd_destroy(&rk->rk_init_cnd);
+        mtx_destroy(&rk->rk_init_lock);
+
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
@@ -1683,6 +1686,30 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
 
 
 
+/**
+ * @brief Wait for background threads to initialize.
+ *
+ * @returns the number of background threads still not initialized.
+ *
+ * @locality app thread calling rd_kafka_new()
+ * @locks none
+ */
+static int rd_kafka_init_wait (rd_kafka_t *rk, int timeout_ms) {
+        struct timespec tspec;
+        int ret;
+
+        rd_timeout_init_timespec(&tspec, timeout_ms);
+
+        mtx_lock(&rk->rk_init_lock);
+        while (rk->rk_init_wait_cnt > 0 &&
+               cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock,
+                                 &tspec) == thrd_success)
+                ;
+        ret = rk->rk_init_wait_cnt;
+        mtx_unlock(&rk->rk_init_lock);
+
+        return ret;
+}
 
 
 /**
@@ -1722,6 +1749,11 @@ static int rd_kafka_thread_main (void *arg) {
 
         if (rd_kafka_is_idempotent(rk))
                 rd_kafka_idemp_init(rk);
+
+        mtx_lock(&rk->rk_init_lock);
+        rk->rk_init_wait_cnt--;
+        cnd_broadcast(&rk->rk_init_cnd);
+        mtx_unlock(&rk->rk_init_lock);
 
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(rk->rk_ops))) {
@@ -1837,6 +1869,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
         rd_list_init(&rk->rk_broker_state_change_waiters, 8,
                      rd_kafka_enq_once_trigger_destroy);
+
+        cnd_init(&rk->rk_init_cnd);
+        mtx_init(&rk->rk_init_lock, mtx_plain);
 
         rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
@@ -1967,6 +2002,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
+        mtx_lock(&rk->rk_init_lock);
+
         /* Create background thread and queue if background_event_cb()
          * has been configured.
          * Do this before creating the main thread since after
@@ -1978,9 +2015,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
                 rk->rk_background.q = rd_kafka_q_new(rk);
 
+                rk->rk_init_wait_cnt++;
+
                 if ((thrd_create(&rk->rk_background.thread,
                                  rd_kafka_background_thread_main, rk)) !=
                     thrd_success) {
+                        rk->rk_init_wait_cnt--;
                         ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                         ret_errno = errno;
                         if (errstr)
@@ -1989,6 +2029,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                             "thread: %s (%i)",
                                             rd_strerror(errno), errno);
                         rd_kafka_wrunlock(rk);
+                        mtx_unlock(&rk->rk_init_lock);
 
 #ifndef _MSC_VER
                         /* Restore sigmask of caller */
@@ -2007,8 +2048,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	rd_kafka_wrlock(rk);
 
 	/* Create handler thread */
+        rk->rk_init_wait_cnt++;
 	if ((thrd_create(&rk->rk_thread,
 			 rd_kafka_thread_main, rk)) != thrd_success) {
+                rk->rk_init_wait_cnt--;
                 ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 ret_errno = errno;
 		if (errstr)
@@ -2016,6 +2059,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 				    "Failed to create thread: %s (%i)",
 				    rd_strerror(errno), errno);
 		rd_kafka_wrunlock(rk);
+                mtx_unlock(&rk->rk_init_lock);
 #ifndef _MSC_VER
                 /* Restore sigmask of caller */
                 pthread_sigmask(SIG_SETMASK, &oldset, NULL);
@@ -2024,6 +2068,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         rd_kafka_wrunlock(rk);
+        mtx_unlock(&rk->rk_init_lock);
 
         /*
          * @warning `goto fail` is prohibited past this point
@@ -2054,6 +2099,35 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 rd_free(app_conf);
 	rd_kafka_set_last_error(0, 0);
 
+        rd_kafka_conf_warn(rk);
+
+        /* Wait for background threads to fully initialize so that
+         * the client instance is fully functional at the time it is
+         * returned from the constructor. */
+        if (rd_kafka_init_wait(rk, 60*1000) != 0) {
+                /* This should never happen unless there is a bug
+                 * or the OS is not scheduling the background threads.
+                 * Either case there is no point in handling this gracefully
+                 * in the current state since the thread joins are likely
+                 * to hang as well. */
+                mtx_lock(&rk->rk_init_lock);
+                rd_kafka_log(rk, LOG_CRIT, "INIT",
+                             "Failed to initialize %s: "
+                             "%d background thread(s) did not initialize "
+                             "within 60 seconds",
+                             rk->rk_name, rk->rk_init_wait_cnt);
+                if (errstr)
+                        rd_snprintf(errstr, errstr_size,
+                                    "Timed out waiting for "
+                                    "%d background thread(s) to initialize",
+                                    rk->rk_init_wait_cnt);
+                mtx_unlock(&rk->rk_init_lock);
+
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+                                        EDEADLK);
+                return NULL;
+        }
+
         rk->rk_initialized = 1;
 
         rd_kafka_dbg(rk, ALL, "INIT",
@@ -2062,8 +2136,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rd_kafka_version_str(), rd_kafka_version(),
                      rk->rk_name,
                      rk->rk_conf.builtin_features, rk->rk_conf.debug);
-
-        rd_kafka_conf_warn(rk);
 
 	return rk;
 

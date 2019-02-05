@@ -661,7 +661,7 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         if (unlikely(queue_len == 1 &&
                      (wakeup_q = rktp->rktp_msgq_wakeup_q)))
                 rd_kafka_q_keep(wakeup_q);
-
+                
         rd_kafka_toppar_unlock(rktp);
 
         if (wakeup_q) {

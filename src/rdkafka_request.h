@@ -202,8 +202,24 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque);
 
-int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
+int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb,
+                             rd_kafka_toppar_t *rktp,
                              const rd_kafka_pid_t pid);
+
+int rd_kafka_ProduceRequest_init(rd_kafka_produce_ctx_t *rkpc,
+                                 rd_kafka_broker_t *rkb,
+                                 const rd_kafka_pid_t pid,
+                                 int topic_max,
+                                 int partition_max,
+                                 int message_max,
+                                 size_t message_bytes_size,
+                                 int required_acks,
+                                 int request_timeout_ms);
+
+int rd_kafka_ProduceRequest_append(rd_kafka_produce_ctx_t *rkpc,
+                                   rd_kafka_toppar_t *rktp);
+
+int rd_kafka_ProduceRequest_finalize(rd_kafka_produce_ctx_t *rkpc);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,

@@ -594,12 +594,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         mtx_t *decr_lock;
 
                 } Metadata;
-                struct {
-                        shptr_rd_kafka_toppar_t *s_rktp;
-                        rd_kafka_pid_t pid;  /**< Producer Id and Epoch */
-                        int32_t base_seq;    /**< Base sequence */
-                        int64_t base_msgid;  /**< Base msgid */
-                } Produce;
         } rkbuf_u;
 
         const char *rkbuf_uflow_mitigation; /**< Buffer read underflow

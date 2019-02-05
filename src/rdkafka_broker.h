@@ -273,6 +273,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		char msg[512];
 		int  err;  /* errno */
 	} rkb_err;
+
+        /* Track the last valid pid used when generating produce requests. */
+        rd_kafka_pid_t rkb_produce_pid;
 };
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -348,6 +351,18 @@ static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_can_group_query (rd_kafka_broker_t *rkb, void *opaque) {
         return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0 ||
 		!(rkb->rkb_features & RD_KAFKA_FEATURE_BROKER_GROUP_COORD);
+}
+
+/**
+ * @returns the number of requests that may be enqueued before
+ *          queue.backpressure.threshold is reached.
+ */
+
+static RD_INLINE unsigned int
+rd_kafka_broker_outbufs_space (rd_kafka_broker_t *rkb) {
+        int r = rkb->rkb_rk->rk_conf.queue_backpressure_thres -
+                rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt);
+        return r < 0 ? 0 : (unsigned int)r;
 }
 
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,

@@ -167,6 +167,25 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque);
 
+/**
+ * @brief Enqueue a token refresh.
+ * 
+ * A write lock must be acquired prior to calling this method via
+ * \c rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock) so that the
+ * caller can be certain that nobody else is enqueuing a token refresh
+ * operation -- otherwise multiple operations may be enqueued.  The caller
+ * remains responsible for releasing the lock (this method does not release
+ * it).
+ */
+void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk);
+
+/**
+ * @brief Enqueue a token refresh if necessary.
+ * 
+ * The method \c rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
+ * if necessary; all necessary locks are acquired and released.
+ */
+void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk);
 
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
@@ -385,6 +404,15 @@ struct rd_kafka_s {
                  *   milliseconds since the epoch.
                  */
                 int64_t md_lifetime_ms;
+                /**< The point after which this token should be replaced with a
+                 * new one, in terms of the number of milliseconds since the
+                 * epoch.
+                 */
+                int64_t refresh_after_ms;
+                /**< When the last token refresh was equeued (0 = never)
+                 *   in terms of the number of milliseconds since the epoch.
+                 */
+                int64_t enqueued_refresh_ms;
                 /**< The name of the principal to which this token applies. */
                 char *md_principal_name;
                 /**< The SASL extensions, as per RFC 7628 Section 3.1

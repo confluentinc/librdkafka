@@ -261,8 +261,9 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
                 rd_kafka_topic_partition_list_add(parts, topic, partition);
                 err = rd_kafka_committed(rk, parts, 1);
                 rd_kafka_topic_partition_list_destroy(parts);
-                TEST_SAY("Issue #827: committed() returned %s\n",
-                         rd_kafka_err2str(err));
+                if (err)
+                        TEST_SAY("Issue #827: committed() returned %s\n",
+                                 rd_kafka_err2str(err));
         } while (err != RD_KAFKA_RESP_ERR__TIMED_OUT);
 
 	/* Query position */

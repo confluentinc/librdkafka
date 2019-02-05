@@ -235,6 +235,8 @@ typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
+typedef struct rd_kafka_produce_ctx_s rd_kafka_produce_ctx_t;
+typedef struct rd_kafka_produce_calculator_s rd_kafka_produce_calculator_t;
 /* @endcond */
 
 

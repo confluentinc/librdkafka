@@ -916,6 +916,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "the producer. "
           "Requires `enable.idempotence=true`.",
           0, 1, 1 },
+        { _RK_GLOBAL|_RK_PRODUCER, "produce.request.max.partitions", _RK_C_INT,
+          _RK(produce_request_max_partitions),
+          "Maximum number of partitions to include in a single produce request.",
+          1, 10000000, 10 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.messages",
           _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),

@@ -1166,8 +1166,10 @@ static const char *rd_kafka_toppar_needs_query (rd_kafka_t *rk,
 
 /**
  * @brief Scan all topics and partitions for:
+ *  - timed out messages in UA partitions.
  *  - topics that needs to be created on the broker.
  *  - topics who's metadata is too old.
+ *  - partitions with unknown leaders that require leader query.
  *
  * @locality rdkafka main thread
  */
@@ -1183,6 +1185,7 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
                 int query_this = 0;
+                rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
 
 		rd_kafka_topic_wrlock(rkt);
 
@@ -1226,8 +1229,11 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 		for (p = RD_KAFKA_PARTITION_UA ;
 		     p < rkt->rkt_partition_cnt ; p++) {
 
-			if (!(s_rktp = rd_kafka_toppar_get(rkt, p, 0)))
-				continue;
+                        if (!(s_rktp = rd_kafka_toppar_get(
+                                      rkt, p,
+                                      p == RD_KAFKA_PARTITION_UA ?
+                                      rd_true : rd_false)))
+                                continue;
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 			rd_kafka_toppar_lock(rktp);
@@ -1247,6 +1253,16 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                                      leader_reason);
                                            query_this = 1;
                                 }
+                        } else {
+                                if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                                        /* Scan UA partition for message
+                                         * timeouts.
+                                         * Proper partitions are scanned by
+                                         * their toppar broker thread. */
+                                        rd_kafka_msgq_age_scan(rktp,
+                                                               &rktp->rktp_msgq,
+                                                               &timedout, now);
+                                }
                         }
 
 			rd_kafka_toppar_unlock(rktp);
@@ -1254,6 +1270,16 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 		}
 
                 rd_kafka_topic_rdunlock(rkt);
+
+                /* Propagate delivery reports for timed out messages */
+                if (rd_kafka_msgq_len(&timedout) > 0) {
+                        rd_kafka_dbg(rk, MSG, "TIMEOUT",
+                                     "%s: %d message(s) timed out",
+                                     rkt->rkt_topic->str,
+                                     rd_kafka_msgq_len(&timedout));
+                        rd_kafka_dr_msgq(rkt, &timedout,
+                                         RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+                }
 
                 /* Need to re-query this topic's leader. */
                 if (query_this &&

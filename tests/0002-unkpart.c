@@ -65,7 +65,7 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-int main_0002_unkpart (int argc, char **argv) {
+static void do_test_unkpart (void) {
 	int partition = 99; /* non-existent */
 	int r;
 	rd_kafka_t *rk;
@@ -78,7 +78,9 @@ int main_0002_unkpart (int argc, char **argv) {
 	int fails = 0;
         const struct rd_kafka_metadata *metadata;
 
-	test_conf_init(&conf, &topic_conf, 10);
+        TEST_SAY(_C_BLU "%s\n" _C_CLR, __FUNCTION__);
+
+        test_conf_init(&conf, &topic_conf, 10);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -106,7 +108,8 @@ int main_0002_unkpart (int argc, char **argv) {
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
+                rd_snprintf(msg, sizeof(msg), "%s test message #%i",
+                            __FUNCTION__, i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
                 if (r == -1) {
@@ -151,5 +154,79 @@ int main_0002_unkpart (int argc, char **argv) {
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);
 
-	return 0;
+        TEST_SAY(_C_GRN "%s PASSED\n" _C_CLR, __FUNCTION__);
+}
+
+
+/**
+ * @brief Test message timeouts for messages produced to unknown partitions
+ *        when there is no broker connection, which makes the messages end
+ *        up in the UA partition.
+ *        This verifies the UA partitions are properly scanned for timeouts.
+ *
+ *        This test is a copy of confluent-kafka-python's
+ *        test_Producer.test_basic_api() test that surfaced this issue.
+ */
+static void do_test_unkpart_timeout_nobroker (void) {
+        const char *topic = test_mk_topic_name("0002_unkpart_tmout", 0);
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_resp_err_t err;
+        int remains = 0;
+
+        TEST_SAY(_C_BLU "%s\n" _C_CLR, __FUNCTION__);
+
+        test_conf_init(NULL, NULL, 10);
+
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "debug", "topic");
+        test_conf_set(conf, "message.timeout.ms", "10");
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt = rd_kafka_topic_new(rk, topic, NULL);
+
+        err = rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA,
+                               RD_KAFKA_MSG_F_COPY, NULL, 0, NULL, 0,
+                               &remains);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+        remains++;
+
+        err = rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA,
+                               RD_KAFKA_MSG_F_COPY, "hi", 2, "hello", 5,
+                               &remains);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+        remains++;
+
+        err = rd_kafka_produce(rkt, 9/* explicit, but unknown, partition */,
+                               RD_KAFKA_MSG_F_COPY, "three", 5, NULL, 0,
+                               &remains);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+        remains++;
+
+        rd_kafka_poll(rk, 1);
+        rd_kafka_poll(rk, 2);
+        TEST_SAY("%d messages in queue\n", rd_kafka_outq_len(rk));
+        rd_kafka_flush(rk, -1);
+
+        TEST_ASSERT(rd_kafka_outq_len(rk) == 0,
+                    "expected no more messages in queue, got %d",
+                    rd_kafka_outq_len(rk));
+
+        TEST_ASSERT(remains == 0,
+                    "expected no messages remaining, got %d", remains);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "%s PASSED\n" _C_CLR, __FUNCTION__);
+}
+
+
+int main_0002_unkpart (int argc, char **argv) {
+        do_test_unkpart();
+        do_test_unkpart_timeout_nobroker();
+        return 0;
 }

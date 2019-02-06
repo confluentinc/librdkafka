@@ -453,10 +453,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
           .pdef = rd_kafka_log_print },
+#if WITH_SASL_OAUTHBEARER
 	{ _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
 	  _RK(oauthbearer_token_refresh_cb),
 	  "SASL/OAUTHBEARER token refresh callback (set with rd_kafka_conf_set_oauthbearer_token_refresh_cb())",
           .pdef = rd_kafka_oauthbearer_unsecured_token },
+#endif
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -697,6 +699,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+#if WITH_SASL_OAUTHBEARER
 	{ _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
 	  _RK(sasl.oauthbearer_config),
 	  "SASL/OAUTHBEARER configuration. The format is implementation-dependent and must be parsed accordingly. "
@@ -707,6 +710,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600.  In addition, "
           "SASL extensions can be communicated to the broker via extension_<extensionname>=value.  For example: "
           "principal=admin extension_traceId=123" },
+#endif
 
 #if WITH_PLUGINS
         /* Plugins */

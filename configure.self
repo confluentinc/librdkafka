@@ -130,6 +130,9 @@ void foo (void) {
     if [[ "$WITH_SSL" == "y" ]]; then
         # SASL SCRAM requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_SCRAM WITH_SASL_SCRAM y
+        # SASL OAUTHBEARER's default unsecured JWS implementation
+        # requires base64 encoding from OpenSSL
+        mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
     fi
 
     # CRC32C: check for crc32 instruction support.

@@ -48,6 +48,7 @@ typedef int mode_t;
 #include "rdinterval.h"
 #include "rdavg.h"
 #include "rdlist.h"
+#include "rdkafka_sasl_oauthbearer.h"
 
 #if WITH_SSL
 #include <openssl/ssl.h>
@@ -146,46 +147,6 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
         };
         return names[state];
 }
-
-
-/**
- * @brief Default SASL/OAUTHBEARER token refresh callback that generates
- * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
- *
- * This method interprets \c sasl.oauthbearer.config as space-separated
- * name=value pairs with valid names including principalClaimName,
- * principal, scopeClaimName, scope, and lifeSeconds. The default
- * value for principalClaimName is sub.  The principal must be specified.
- * The default value for scopeClaimName is scope, and the default value
- * for lifeSeconds is 3600.  The scope value is csv format with the
- * default value being no/empty scope. For example:
- * "principalClaimName=azp principal=admin scopeClaimName=roles
- * scope=role1,role2 lifeSeconds=600".  SASL extensions can be
- * communicated to the broker via extension_<extensionname>=value. For
- * example: "principal=admin extension_traceId=123". Unrecognized names
- * are ignored.
- */
-void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque);
-
-/**
- * @brief Enqueue a token refresh.
- * 
- * A write lock must be acquired prior to calling this method via
- * \c rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock) so that the
- * caller can be certain that nobody else is enqueuing a token refresh
- * operation -- otherwise multiple operations may be enqueued.  The caller
- * remains responsible for releasing the lock (this method does not release
- * it).
- */
-void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk);
-
-/**
- * @brief Enqueue a token refresh if necessary.
- * 
- * The method \c rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
- * if necessary; all necessary locks are acquired and released.
- */
-void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk);
 
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.

@@ -242,7 +242,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
 #endif         
+#if WITH_SASL_OAUTHBEARER
                 { 0x800, "sasl_oauthbearer" },
+#endif         
 		{ 0, NULL }
 		}
 	},

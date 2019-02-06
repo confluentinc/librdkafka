@@ -126,7 +126,7 @@ static void do_test_consumer_lag (void) {
 
   /* Create consumer */
   RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, 10);
+  Test::conf_init(&conf, NULL, 20);
   StatsCb stats;
   if (conf->set("event_cb", &stats, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("set event_cb failed: " + errstr);
@@ -141,7 +141,6 @@ static void do_test_consumer_lag (void) {
   delete conf;
 
   /* Assign partitions */
-  /* Subscribe */
   std::vector<RdKafka::TopicPartition*> parts;
   parts.push_back(RdKafka::TopicPartition::create(topic, 0));
   if ((err = c->assign(parts)))

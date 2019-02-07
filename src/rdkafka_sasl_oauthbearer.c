@@ -60,7 +60,8 @@ struct rd_kafka_sasl_oauthbearer_state {
  * @brief Close and free authentication state
  */
 static void rd_kafka_sasl_oauthbearer_close (rd_kafka_transport_t *rktrans) {
-        struct rd_kafka_sasl_oauthbearer_state *state = rktrans->rktrans_sasl.state;
+        struct rd_kafka_sasl_oauthbearer_state *state =
+                rktrans->rktrans_sasl.state;
 
         if (!state)
                 return;
@@ -81,7 +82,8 @@ static void
 rd_kafka_sasl_oauthbearer_build_client_first_message (
         rd_kafka_transport_t *rktrans,
         rd_chariov_t *out) {
-        struct rd_kafka_sasl_oauthbearer_state *state = rktrans->rktrans_sasl.state;
+        struct rd_kafka_sasl_oauthbearer_state *state =
+                rktrans->rktrans_sasl.state;
 
         /*
          * https://tools.ietf.org/html/rfc7628#section-3.1
@@ -107,14 +109,15 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
 
         // client-resp    = (gs2-header kvsep *kvpair kvsep) / kvsep
         out->size = strlen(gs2_header) + kvsep_size
-                + strlen("auth=Bearer ") + strlen(state->token_value) + kvsep_size
-                + extension_size + kvsep_size;
+                + strlen("auth=Bearer ") + strlen(state->token_value)
+                + kvsep_size + extension_size + kvsep_size;
         out->ptr = rd_malloc(out->size+1);
 
         char *buf = out->ptr;
         int size_written = 0;
         size_written += rd_snprintf(buf, out->size+1 - size_written,
-                "%s%sauth=Bearer %s%s", gs2_header, kvsep, state->token_value, kvsep);
+                "%s%sauth=Bearer %s%s", gs2_header, kvsep, state->token_value,
+                kvsep);
         buf = out->ptr + size_written;
 
         for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
@@ -144,7 +147,8 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 "server-first-message",
                 "server-failure-message",
         };
-        struct rd_kafka_sasl_oauthbearer_state *state = rktrans->rktrans_sasl.state;
+        struct rd_kafka_sasl_oauthbearer_state *state =
+                rktrans->rktrans_sasl.state;
         rd_chariov_t out = RD_ZERO_INIT;
         int r = -1;
 
@@ -157,7 +161,8 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
         case RD_KAFKA_SASL_OAUTHBEARER_STATE_SEND_CLIENT_FIRST_MESSAGE:
                 rd_dassert(!in); /* Not expecting any server-input */
 
-                rd_kafka_sasl_oauthbearer_build_client_first_message(rktrans, &out);
+                rd_kafka_sasl_oauthbearer_build_client_first_message(rktrans,
+                        &out);
                 state->state = RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_FIRST_MESSAGE;
                 break;
 
@@ -165,7 +170,8 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
         case RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_FIRST_MESSAGE:
                 if (!in || in->ptr[0] == '\0') {
                         /* Success */
-                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
+                        rd_rkb_dbg(rktrans->rktrans_rkb,
+                                SECURITY | RD_KAFKA_DBG_BROKER,
                                 "OAUTHBEARERAUTH",
                                 "SASL OAUTHBEARER authentication successful (principal=%s)",
                                 state->md_principal_name);
@@ -190,14 +196,15 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 out.ptr = rd_malloc(out.size + 1);
                 rd_snprintf(out.ptr, out.size+1, "\x01");
                 state->state = RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_MESSAGE_AFTER_FAILURE;
-                r = 0; // will fail later in next state after sending current response
+                r = 0; // will fail later in next state after sending response
                 break;
 
         case RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_MESSAGE_AFTER_FAILURE:
                 rd_dassert(!in); /* Not expecting any server-input */
 
                 /* Failure as previosuly communicated by server first message */
-                rd_snprintf(errstr, errstr_size, "SASL OAUTHBEARER authentication failed (principal=%s): %s",
+                rd_snprintf(errstr, errstr_size,
+                        "SASL OAUTHBEARER authentication failed (principal=%s): %s",
                         state->md_principal_name,
                         state->server_error_msg.ptr);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
@@ -257,14 +264,19 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
         rwlock_rdlock(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
         if (!rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value) {
                 rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
-                rd_snprintf(errstr, errstr_size, "OUTHBEARER cannot log in because there is no token available");
+                rd_snprintf(errstr, errstr_size,
+                "OUTHBEARER cannot log in because there is no token available");
                 return -1;
         }
-        state->token_value = strdup(rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value);
-        state->md_principal_name = strdup(rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->md_principal_name);
-        rd_list_copy_to(&state->extensions, &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions,
+        state->token_value = strdup(
+                rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value);
+        state->md_principal_name = strdup(
+                rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->md_principal_name);
+        rd_list_copy_to(&state->extensions,
+                &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions,
                 rd_strtup_list_copy, NULL);
-        rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+        rwlock_rdunlock(
+                &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
 
         /* Confirm there is no explicit "auth" extension */
         int i;
@@ -285,7 +297,8 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
 
 
 /**
- * @brief Validate OAUTHBEARER config, which is a no-op (we rely on initial token retrieval)
+ * @brief Validate OAUTHBEARER config, which is a no-op
+ * (we rely on initial token retrieval)
  */
 static int rd_kafka_sasl_oauthbearer_conf_validate (rd_kafka_t *rk,
                                               char *errstr,

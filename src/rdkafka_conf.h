@@ -408,6 +408,7 @@ struct rd_kafka_conf_s {
         void (*background_event_cb) (rd_kafka_t *rk, rd_kafka_event_t *rkev,
                                      void *opaque);
 
+
         /* SASL/OAUTHBEARER token refresh event callback */
 #if WITH_SASL_OAUTHBEARER
         void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,

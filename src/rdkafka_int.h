@@ -367,7 +367,7 @@ struct rd_kafka_s {
                 /**< When the token expires, in terms of the number of
                  *   milliseconds since the epoch.
                  */
-                int64_t md_lifetime_ms;
+                uint64_t md_lifetime_ms;
                 /**< The point after which this token should be replaced with a
                  * new one, in terms of the number of milliseconds since the
                  * epoch.

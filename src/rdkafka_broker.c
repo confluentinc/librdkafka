@@ -4342,25 +4342,27 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 int has_token = 0;
                                 int est_total_wait_ms = 0;
                                 int max_wait_ms = 30000;
+                                int each_wait_ms = max_wait_ms < rd_kafka_max_block_ms
+                                        ? max_wait_ms : rd_kafka_max_block_ms;
                                 while (!has_token && est_total_wait_ms < max_wait_ms) {
                                         rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
                                         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
                                         rwlock_rdunlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
                                         if (has_token) {
                                                 rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                                                        "Main broker thread has a token");
+                                                        "OAUTHBEARER token available");
                                         } else {
                                                 if (est_total_wait_ms >= max_wait_ms) {
                                                         initial_token_unavailable = 1;
                                                         rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                                                                "Main broker thread will exit due to no initial token after %i ms",
+                                                                "Exiting due to no initial OAUTHBEARER token after %i ms",
                                                                 max_wait_ms);
                                                 } else {
                                                         rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                                                                "Main broker thread waiting up to %i ms for initial token",
-                                                                max_wait_ms);
-                                                        rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
-                                                        est_total_wait_ms += rd_kafka_max_block_ms;
+                                                                "Waiting up to %i ms for initial OAUTHBEARER token (%i ms remaining)",
+                                                                max_wait_ms, max_wait_ms - est_total_wait_ms);
+                                                        rd_kafka_broker_serve(rkb, each_wait_ms);
+                                                        est_total_wait_ms += each_wait_ms;
                                                         if (est_total_wait_ms >= max_wait_ms) {
                                                                 // check one last time in case it just appeared
                                                                 rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);

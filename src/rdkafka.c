@@ -372,10 +372,9 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-        // rd_free() ends up as a no-op only on initial invocation
-        rd_free(rk->rk_oauthbearer->md_principal_name);
+        RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
         rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
-        rd_free(rk->rk_oauthbearer->token_value);
+        RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
         rk->rk_oauthbearer->token_value = rd_strdup(token_value);
         rk->rk_oauthbearer->md_lifetime_ms = md_lifetime_ms;
         // Schedule a refresh 80% through its remaining lifetime
@@ -989,9 +988,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_broker_by_id);
 
 	if (rk->rk_oauthbearer) {
-                rd_free(rk->rk_oauthbearer->md_principal_name);
+                RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
                 rk->rk_oauthbearer->md_principal_name = NULL;
-                rd_free(rk->rk_oauthbearer->token_value);
+                RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
                 rk->rk_oauthbearer->token_value = NULL;
                 rd_list_destroy(&rk->rk_oauthbearer->extensions);
                 rwlock_destroy(&rk->rk_oauthbearer->refresh_lock);

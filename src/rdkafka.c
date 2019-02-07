@@ -367,7 +367,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
         if (md_lifetime_ms <= now_ms) {
 		rd_snprintf(errstr, errstr_size,
 			"Must supply an unexpired token: "
-                        "now=%lli ms, exp=%lli ms",
+                        "now=%"PRId64"ms, exp=%"PRId64"ms",
                         now_ms, md_lifetime_ms);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }

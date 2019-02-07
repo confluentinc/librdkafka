@@ -61,6 +61,7 @@
 #endif
 
 
+
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 /**

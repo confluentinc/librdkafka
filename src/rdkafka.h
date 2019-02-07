@@ -3992,6 +3992,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
 #define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 105 /**< SASL/OAUTHBEARER token needs to be refreshed */
 
+
 /**
  * @returns the event type for the given event.
  *

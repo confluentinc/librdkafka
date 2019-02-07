@@ -148,6 +148,9 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
         return names[state];
 }
 
+
+
+
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */

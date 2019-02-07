@@ -1788,25 +1788,28 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  * key            = 1*(ALPHA)
  * value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
- * It is a fatal client error for this method to fail (e.g. if extensions are invalid),
- * and rd_kafka_set_fatal_error() will be invoked if that occurs.
- * 
- * @returns -1 on failure (rd_kafka_set_fatal_error invoked), else 0.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are invalid,
+ *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
  */
 RD_EXPORT
-int rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
                 const char *md_principal_name,
-                const char **extensions, size_t extension_size);
+                const char **extensions, size_t extension_size,
+                char *errstr, size_t errstr_size);
 
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
  * this method upon failure.
+ * 
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
  */
 RD_EXPORT
-void rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr);
 
 /**

@@ -740,18 +740,6 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
         rwlock_rdunlock(
                 &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
 
-        /* Confirm there is no explicit "auth" extension */
-        for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
-                rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
-                if (!strcmp(extension->name, "auth")) {
-                        rd_snprintf(errstr, errstr_size,
-                                "OAUTHBEARER config must not provide explicit "
-                                "\"auth\" extension");
-                        return -1;
-                }
-        }
-
-
         /* Kick off the FSM */
         return rd_kafka_sasl_oauthbearer_fsm(rktrans, NULL, errstr, errstr_size);
 }

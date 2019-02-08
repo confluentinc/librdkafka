@@ -1970,16 +1970,6 @@ static void rd_kafka_term_sig_handler (int sig) {
 	/* nop */
 }
 
-/**
- * @brief Op callback for RD_KAFKA_OP_OAUTHBEARER_REFRESH
- */
-static rd_kafka_op_res_t
-rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
-                                rd_kafka_q_t *rkq,
-                                rd_kafka_op_t *rko) {
-        rk->rk_conf.oauthbearer_token_refresh_cb(rk, rk->rk_conf.opaque);
-        return RD_KAFKA_OP_RES_HANDLED;
-}
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 			  char *errstr, size_t errstr_size) {
@@ -2377,42 +2367,6 @@ fail:
         return NULL;
 }
 
-void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
-        rd_kafka_op_t *rko;
-
-        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
-                rd_kafka_oauthbearer_refresh_op);
-        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
-        rk->rk_oauthbearer->enqueued_refresh_ms = rd_uclock() / 1000;
-        rd_kafka_q_enq(rk->rk_rep, rko);
-}
-
-/* The key question, I think, is where in the code should this method be invoked? */
-void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
-        rd_ts_t now_wallclock_millis;
-        int64_t refresh_after_ms;
-
-        rwlock_rdlock(&rk->rk_oauthbearer->refresh_lock);
-        now_wallclock_millis = rd_uclock() / 1000;
-        refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
-        if (refresh_after_ms < now_wallclock_millis &&
-                rk->rk_oauthbearer->enqueued_refresh_ms <= refresh_after_ms) {
-                /* Refresh required and not yet scheduled.
-                 * Acquire write lock to serialize and confirm.
-                 */
-                rwlock_rdunlock(&rk->rk_oauthbearer->refresh_lock);
-                rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-                now_wallclock_millis = rd_uclock() / 1000;
-                refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
-                if (refresh_after_ms < now_wallclock_millis &&
-                        rk->rk_oauthbearer->enqueued_refresh_ms <=
-                                refresh_after_ms) {
-                        /* Confirmed; refresh it. */
-                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
-                }
-                rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
-        }
-}
 
 
 /**

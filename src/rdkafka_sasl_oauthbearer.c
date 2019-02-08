@@ -70,6 +70,69 @@ struct rd_kafka_sasl_oauthbearer_state {
 };
 
 /**
+ * @brief Op callback for RD_KAFKA_OP_OAUTHBEARER_REFRESH
+ */
+static rd_kafka_op_res_t
+rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
+                                rd_kafka_q_t *rkq,
+                                rd_kafka_op_t *rko) {
+        rk->rk_conf.oauthbearer_token_refresh_cb(rk, rk->rk_conf.opaque);
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+/**
+ * @brief Enqueue a token refresh.
+ * 
+ * A write lock must be acquired prior to calling this method via
+ * \c rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock) so that the
+ * caller can be certain that nobody else is enqueuing a token refresh
+ * operation -- otherwise multiple operations may be enqueued.  The caller
+ * remains responsible for releasing the lock (this method does not release
+ * it).
+ */
+void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
+                rd_kafka_oauthbearer_refresh_op);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
+        rk->rk_oauthbearer->enqueued_refresh_ms = rd_uclock() / 1000;
+        rd_kafka_q_enq(rk->rk_rep, rko);
+}
+
+/**
+ * @brief Enqueue a token refresh if necessary.
+ * 
+ * The method \c rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
+ * if necessary; all necessary locks are acquired and released.
+ */
+void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
+        rd_ts_t now_wallclock_millis;
+        int64_t refresh_after_ms;
+
+        rwlock_rdlock(&rk->rk_oauthbearer->refresh_lock);
+        now_wallclock_millis = rd_uclock() / 1000;
+        refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
+        if (refresh_after_ms < now_wallclock_millis &&
+                rk->rk_oauthbearer->enqueued_refresh_ms <= refresh_after_ms) {
+                /* Refresh required and not yet scheduled.
+                 * Acquire write lock to serialize and confirm.
+                 */
+                rwlock_rdunlock(&rk->rk_oauthbearer->refresh_lock);
+                rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+                now_wallclock_millis = rd_uclock() / 1000;
+                refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
+                if (refresh_after_ms < now_wallclock_millis &&
+                        rk->rk_oauthbearer->enqueued_refresh_ms <=
+                                refresh_after_ms) {
+                        /* Confirmed; refresh it. */
+                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
+                }
+                rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+        }
+}
+
+/**
  * @brief Parse a config value from the string pointed to by \p loc and starting
  * with the given \p prefix and ending with the given \c value_end_char, storing
  * the newly-allocated memory result in the string pointed to by \p value.
@@ -283,6 +346,23 @@ static int parse_unsecured_jws_config(const char *cfg,
         return r;
 }
 
+/**
+ * @brief Default SASL/OAUTHBEARER token refresh callback that generates
+ * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
+ *
+ * This method interprets \c sasl.oauthbearer.config as space-separated
+ * name=value pairs with valid names including principalClaimName,
+ * principal, scopeClaimName, scope, and lifeSeconds. The default
+ * value for principalClaimName is sub.  The principal must be specified.
+ * The default value for scopeClaimName is scope, and the default value
+ * for lifeSeconds is 3600.  The scope value is csv format with the
+ * default value being no/empty scope. For example:
+ * "principalClaimName=azp principal=admin scopeClaimName=roles
+ * scope=role1,role2 lifeSeconds=600".  SASL extensions can be
+ * communicated to the broker via extension_<extensionname>=value. For
+ * example: "principal=admin extension_traceId=123". Unrecognized names
+ * are ignored.
+ */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char *principal_claim_name = NULL;
         char *principal = NULL;
@@ -699,7 +779,6 @@ static int rd_kafka_sasl_oauthbearer_recv (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
                                     const char *hostname,
                                     char *errstr, size_t errstr_size) {
-        int i;
         struct rd_kafka_sasl_oauthbearer_state *state;
 
         state = rd_calloc(1, sizeof(*state));

@@ -388,7 +388,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 rd_list_add(&rk->rk_oauthbearer->extensions,
                         rd_strtup_new(extensions[i], extensions[i + 1]));
         }
-        rk->rk_oauthbearer->errstr[0] = '\0';
+        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+        rk->rk_oauthbearer->errstr = NULL;
         rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                 "Waking up waiting brokers after setting token");
@@ -404,8 +405,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
 #if WITH_SASL_OAUTHBEARER
         rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
-        strncpy(rk->rk_oauthbearer->errstr, errstr,
-                sizeof(rk->rk_oauthbearer->errstr));
+        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+        rk->rk_oauthbearer->errstr = strdup(errstr);
         /* Leave any existing token because it may have some life left */
         /* Schedule a refresh for 10 seconds later */
         rk->rk_oauthbearer->refresh_after_ms = rd_uclock() / 1000 + 10 * 1000;
@@ -996,6 +997,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                 RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
                 rk->rk_oauthbearer->token_value = NULL;
                 rd_list_destroy(&rk->rk_oauthbearer->extensions);
+                RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+                rk->rk_oauthbearer->errstr = NULL;
                 rwlock_destroy(&rk->rk_oauthbearer->refresh_lock);
                 rd_free(rk->rk_oauthbearer);
                 rk->rk_oauthbearer = NULL;

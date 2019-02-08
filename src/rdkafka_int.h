@@ -384,9 +384,8 @@ struct rd_kafka_s {
                  */
                 rd_list_t extensions; /* rd_strtup_t list */
                 /**< Error message for validation and/or token retrieval problems.
-                 * Be sure to use snprintf(..errstr, sizeof(..errstr), ..)
                  */
-                char errstr[512];
+                char *errstr;
         } *rk_oauthbearer;
 };
 

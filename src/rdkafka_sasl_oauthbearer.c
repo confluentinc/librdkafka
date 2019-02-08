@@ -717,12 +717,14 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
         rwlock_rdlock(&rktrans->rktrans_rkb->rkb_rk->
                 rk_oauthbearer->refresh_lock);
         if (!rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value) {
-                rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->
-                        rk_oauthbearer->refresh_lock);
                 rd_snprintf(errstr, errstr_size,
                         "OAUTHBEARER cannot log in because there is no token "
                         "available; last error: %s",
-                        rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr);
+                        rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr ?
+                        rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr :
+                        "not available");
+                rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->
+                        rk_oauthbearer->refresh_lock);
                 return -1;
         }
         state->token_value = strdup(

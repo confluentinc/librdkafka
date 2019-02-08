@@ -58,6 +58,7 @@ struct rd_kafka_sasl_oauthbearer_state {
                 RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL,
         } state;
         rd_chariov_t server_error_msg;
+
         /*
          * A place to store a consistent view of the token and extensions
          * throughout the authentication process -- even if it is refreshed
@@ -616,7 +617,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
 
 
         case RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG:
-                if (!in || in->ptr[0] == '\0') {
+                if (!in->size || !*in->ptr) {
                         /* Success */
                         rd_rkb_dbg(rktrans->rktrans_rkb,
                                 SECURITY | RD_KAFKA_DBG_BROKER,
@@ -650,7 +651,6 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 break;
 
         case RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL:
-                rd_dassert(!in); /* Not expecting any server-input */
 
                 /* Failure as previosuly communicated by server first message */
                 rd_snprintf(errstr, errstr_size,

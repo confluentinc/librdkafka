@@ -733,11 +733,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                         state->md_principal_name,
                         state->server_error_msg.ptr);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
-                        "OAUTHBEARERAUTH",
-                        "SASL OAUTHBEARER authentication failed "
-                        "(principal=%s): %s",
-                        state->md_principal_name,
-                        state->server_error_msg.ptr);
+                        "OAUTHBEARERAUTH", "%s", errstr);
                 r = -1;
                 break;
         }

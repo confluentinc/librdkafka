@@ -53,9 +53,9 @@ struct rd_kafka_sasl_oauthbearer_unsecured_jws {
  */
 struct rd_kafka_sasl_oauthbearer_state {
         enum {
-                RD_KAFKA_SASL_OAUTHBEARER_STATE_SEND_CLIENT_FIRST_MESSAGE,
-                RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_FIRST_MESSAGE,
-                RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_MESSAGE_AFTER_FAILURE,
+                RD_KAFKA_SASL_OAUTHB_STATE_SEND_CLIENT_FIRST_MESSAGE,
+                RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG,
+                RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL,
         } state;
         rd_chariov_t server_error_msg;
         /*
@@ -212,7 +212,8 @@ static int parse_unsecured_jws_config(const char *cfg,
                                 } else {
                                         long long life_seconds_long;
                                         char *end_ptr;
-                                        life_seconds_long = strtoll(life_seconds_text, &end_ptr, 10);
+                                        life_seconds_long = strtoll(
+                                                life_seconds_text, &end_ptr, 10);
                                         if (*end_ptr != '\0') {
                                                 rd_snprintf(errstr, errstr_size,
                                                         "Invalid "
@@ -604,16 +605,17 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
 
         switch (state->state)
         {
-        case RD_KAFKA_SASL_OAUTHBEARER_STATE_SEND_CLIENT_FIRST_MESSAGE:
+        case RD_KAFKA_SASL_OAUTHB_STATE_SEND_CLIENT_FIRST_MESSAGE:
                 rd_dassert(!in); /* Not expecting any server-input */
 
                 rd_kafka_sasl_oauthbearer_build_client_first_message(rktrans,
                         &out);
-                state->state = RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_FIRST_MESSAGE;
+                state->state =
+                        RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG;
                 break;
 
 
-        case RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_FIRST_MESSAGE:
+        case RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG:
                 if (!in || in->ptr[0] == '\0') {
                         /* Success */
                         rd_rkb_dbg(rktrans->rktrans_rkb,
@@ -642,11 +644,12 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 out.size = 1;
                 out.ptr = rd_malloc(out.size + 1);
                 rd_snprintf(out.ptr, out.size+1, "\x01");
-                state->state = RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_MESSAGE_AFTER_FAILURE;
+                state->state =
+                        RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL;
                 r = 0; // will fail later in next state after sending response
                 break;
 
-        case RD_KAFKA_SASL_OAUTHBEARER_STATE_RECEIVE_SERVER_MESSAGE_AFTER_FAILURE:
+        case RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL:
                 rd_dassert(!in); /* Not expecting any server-input */
 
                 /* Failure as previosuly communicated by server first message */
@@ -700,7 +703,7 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
         struct rd_kafka_sasl_oauthbearer_state *state;
 
         state = rd_calloc(1, sizeof(*state));
-        state->state = RD_KAFKA_SASL_OAUTHBEARER_STATE_SEND_CLIENT_FIRST_MESSAGE;
+        state->state = RD_KAFKA_SASL_OAUTHB_STATE_SEND_CLIENT_FIRST_MESSAGE;
 
         /*
          * Save off the state structure now, before any possibility of

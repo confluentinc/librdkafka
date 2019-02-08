@@ -498,11 +498,14 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
          * client-resp    = (gs2-header kvsep *kvpair kvsep) / kvsep
          */
 
-        const char *gs2_header = "n,,";
-        const char *kvsep = "\x01";
+        static const char *gs2_header = "n,,";
+        static const char *kvsep = "\x01";
         const int kvsep_size = strlen(kvsep);
         int extension_size = 0;
         int i;
+        char *buf;
+        int size_written;
+
         for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
                 rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
                 // kvpair         = key "=" value kvsep
@@ -516,8 +519,8 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
                 + kvsep_size + extension_size + kvsep_size;
         out->ptr = rd_malloc(out->size+1);
 
-        char *buf = out->ptr;
-        int size_written = 0;
+        buf = out->ptr;
+        size_written = 0;
         size_written += rd_snprintf(buf, out->size+1 - size_written,
                 "%s%sauth=Bearer %s%s", gs2_header, kvsep, state->token_value,
                 kvsep);

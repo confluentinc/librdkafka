@@ -603,7 +603,8 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                         rd_rkb_dbg(rktrans->rktrans_rkb,
                                 SECURITY | RD_KAFKA_DBG_BROKER,
                                 "OAUTHBEARERAUTH",
-                                "SASL OAUTHBEARER authentication successful (principal=%s)",
+                                "SASL OAUTHBEARER authentication successful "
+                                "(principal=%s)",
                                 state->md_principal_name);
                         rd_kafka_sasl_auth_done(rktrans);
                         r = 0;
@@ -634,12 +635,14 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
 
                 /* Failure as previosuly communicated by server first message */
                 rd_snprintf(errstr, errstr_size,
-                        "SASL OAUTHBEARER authentication failed (principal=%s): %s",
+                        "SASL OAUTHBEARER authentication failed "
+                        "(principal=%s): %s",
                         state->md_principal_name,
                         state->server_error_msg.ptr);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                         "OAUTHBEARERAUTH",
-                        "SASL OAUTHBEARER authentication failed (principal=%s): %s",
+                        "SASL OAUTHBEARER authentication failed "
+                        "(principal=%s): %s",
                         state->md_principal_name,
                         state->server_error_msg.ptr);
                 r = -1;
@@ -695,11 +698,15 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
          * throughout the authentication process -- even if it is refreshed
          * midway through this particular authentication.
          */
-        rwlock_rdlock(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+        rwlock_rdlock(&rktrans->rktrans_rkb->rkb_rk->
+                rk_oauthbearer->refresh_lock);
         if (!rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value) {
-                rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->
+                        rk_oauthbearer->refresh_lock);
                 rd_snprintf(errstr, errstr_size,
-                "OUTHBEARER cannot log in because there is no token available");
+                        "OAUTHBEARER cannot log in because there is no token "
+                        "available; last error: %s",
+                        &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr);
                 return -1;
         }
         state->token_value = strdup(
@@ -717,7 +724,8 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
                 rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
                 if (!strcmp(extension->name, "auth")) {
                         rd_snprintf(errstr, errstr_size,
-                                "OUTHBEARER config must not provide explicit \"auth\" extension");
+                                "OAUTHBEARER config must not provide explicit "
+                                "\"auth\" extension");
                         return -1;
                 }
         }

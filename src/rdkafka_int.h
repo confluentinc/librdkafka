@@ -357,9 +357,6 @@ struct rd_kafka_s {
          * SASL/OAUTHBEARER token value, token metadata, and extensions
          */
         struct {
-                /**< The lock protecting the below information */
-                rwlock_t refresh_lock;
-
                 /**< The b64token value as defined in RFC 6750 Section 2.1
                  *   https://tools.ietf.org/html/rfc6750#section-2.1
                  */

@@ -374,7 +374,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                         now_wallclock_millis, md_lifetime_ms);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
-        rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_wrlock(rk);
         RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
         rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
         RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
@@ -390,7 +390,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
         }
         RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
         rk->rk_oauthbearer->errstr = NULL;
-        rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_wrunlock(rk);
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                 "Waking up waiting brokers after setting token");
         rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
@@ -404,13 +404,13 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
 rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
 #if WITH_SASL_OAUTHBEARER
-        rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_wrlock(rk);
         RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
         rk->rk_oauthbearer->errstr = strdup(errstr);
         /* Leave any existing token because it may have some life left */
         /* Schedule a refresh for 10 seconds later */
         rk->rk_oauthbearer->refresh_after_ms = rd_uclock() / 1000 + 10 * 1000;
-        rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_wrunlock(rk);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 #else
         return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
@@ -999,7 +999,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                 rd_list_destroy(&rk->rk_oauthbearer->extensions);
                 RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
                 rk->rk_oauthbearer->errstr = NULL;
-                rwlock_destroy(&rk->rk_oauthbearer->refresh_lock);
                 rd_free(rk->rk_oauthbearer);
                 rk->rk_oauthbearer = NULL;
         }

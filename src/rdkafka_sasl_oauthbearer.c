@@ -82,13 +82,7 @@ rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
 
 /**
  * @brief Enqueue a token refresh.
- * 
- * A write lock must be acquired prior to calling this method via
- * \c rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock) so that the
- * caller can be certain that nobody else is enqueuing a token refresh
- * operation -- otherwise multiple operations may be enqueued.  The caller
- * remains responsible for releasing the lock (this method does not release
- * it).
+ * @locks rd_kafka_wrlock(rk) MUST be held
  */
 void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
         rd_kafka_op_t *rko;
@@ -110,16 +104,16 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
         rd_ts_t now_wallclock_millis;
         int64_t refresh_after_ms;
 
-        rwlock_rdlock(&rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_rdlock(rk);
         now_wallclock_millis = rd_uclock() / 1000;
         refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
+        rd_kafka_rdunlock(rk);
         if (refresh_after_ms < now_wallclock_millis &&
                 rk->rk_oauthbearer->enqueued_refresh_ms <= refresh_after_ms) {
                 /* Refresh required and not yet scheduled.
                  * Acquire write lock to serialize and confirm.
                  */
-                rwlock_rdunlock(&rk->rk_oauthbearer->refresh_lock);
-                rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+                rd_kafka_wrlock(rk);
                 now_wallclock_millis = rd_uclock() / 1000;
                 refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
                 if (refresh_after_ms < now_wallclock_millis &&
@@ -128,7 +122,7 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
                         /* Confirmed; refresh it. */
                         rd_kafka_oauthbearer_enqueue_token_refresh(rk);
                 }
-                rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+                rd_kafka_wrunlock(rk);
         }
 }
 
@@ -796,8 +790,7 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
          * throughout the authentication process -- even if it is refreshed
          * midway through this particular authentication.
          */
-        rwlock_rdlock(&rktrans->rktrans_rkb->rkb_rk->
-                rk_oauthbearer->refresh_lock);
+        rd_kafka_rdlock(rktrans->rktrans_rkb->rkb_rk);
         if (!rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value) {
                 rd_snprintf(errstr, errstr_size,
                         "OAUTHBEARER cannot log in because there is no token "
@@ -805,8 +798,7 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
                         rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr ?
                         rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->errstr :
                         "not available");
-                rwlock_rdunlock(&rktrans->rktrans_rkb->rkb_rk->
-                        rk_oauthbearer->refresh_lock);
+                rd_kafka_rdunlock(rktrans->rktrans_rkb->rkb_rk);
                 return -1;
         }
         state->token_value = strdup(
@@ -816,8 +808,7 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
         rd_list_copy_to(&state->extensions,
                 &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions,
                 rd_strtup_list_copy, NULL);
-        rwlock_rdunlock(
-                &rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+        rd_kafka_rdunlock(rktrans->rktrans_rkb->rkb_rk);
 
         /* Kick off the FSM */
         return rd_kafka_sasl_oauthbearer_fsm(rktrans, NULL, errstr, errstr_size);

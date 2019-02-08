@@ -4345,9 +4345,9 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 int each_wait_ms = max_wait_ms < rd_kafka_max_block_ms
                                         ? max_wait_ms : rd_kafka_max_block_ms;
                                 while (!has_token && est_total_wait_ms < max_wait_ms) {
-                                        rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                                        rd_kafka_rdlock(rkb->rkb_rk);
                                         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
-                                        rwlock_rdunlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                                        rd_kafka_rdunlock(rkb->rkb_rk);
                                         if (has_token) {
                                                 rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
                                                         "OAUTHBEARER token available");
@@ -4365,9 +4365,9 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                                         est_total_wait_ms += each_wait_ms;
                                                         if (est_total_wait_ms >= max_wait_ms) {
                                                                 // check one last time in case it just appeared
-                                                                rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                                                                rd_kafka_rdlock(rkb->rkb_rk);
                                                                 has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
-                                                                rwlock_rdunlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                                                                rd_kafka_rdunlock(rkb->rkb_rk);
                                                         }
                                                 }
                                         }

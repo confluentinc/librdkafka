@@ -279,7 +279,6 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                 rk->rk_oauthbearer = rd_calloc(1, sizeof(*rk->rk_oauthbearer));
                 rd_list_init(&rk->rk_oauthbearer->extensions, 0,
                      (void (*)(void *))rd_strtup_destroy);
-                rwlock_init(&rk->rk_oauthbearer->refresh_lock);
 #endif
         } else {
                 /* Unsupported mechanism */

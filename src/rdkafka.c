@@ -383,7 +383,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
         // Schedule a refresh 80% through its remaining lifetime
         rk->rk_oauthbearer->refresh_after_ms = now_wallclock_millis + 0.8 *
                 (md_lifetime_ms - now_wallclock_millis);
-        rd_list_destroy(&rk->rk_oauthbearer->extensions);
+        rd_list_clear(&rk->rk_oauthbearer->extensions);
         for (i = 0; i + 1 < extension_size; i += 2) {
                 rd_list_add(&rk->rk_oauthbearer->extensions,
                         rd_strtup_new(extensions[i], extensions[i + 1]));
@@ -1813,6 +1813,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
  */
 static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
+
+        /* Enqueue a token refresh if necessary */
+        rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rk);
 
         /* Scan topic state, message timeouts, etc. */
         rd_kafka_topic_scan_all(rk, rd_clock());

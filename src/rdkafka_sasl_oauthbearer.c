@@ -98,12 +98,16 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
  * @brief Enqueue a token refresh if necessary.
  * 
  * The method \c rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
- * if necessary; all necessary locks are acquired and released.
+ * if necessary; the required lock is acquired and released.  This method
+ * returns immediately when SASL/OAUTHBEARER is not in use by the client.
  */
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
         rd_ts_t now_wallclock_millis;
         int64_t refresh_after_ms;
 
+        if (!rk->rk_oauthbearer) {
+                return;
+        }
         rd_kafka_rdlock(rk);
         now_wallclock_millis = rd_uclock() / 1000;
         refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;

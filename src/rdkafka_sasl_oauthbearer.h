@@ -37,5 +37,20 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk);
 
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk);
 
+int check_oauthbearer_extension_key(const char *key,
+        char *errstr, size_t errstr_size);
+
+int check_oauthbearer_extension_value(const char *value,
+        char *errstr, size_t errstr_size);
+
+rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
+        const char *token_value, int64_t md_lifetime_ms,
+        const char *md_principal_name,
+        const char **extensions, size_t extension_size,
+        char *errstr, size_t errstr_size);
+
+rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
+        const char *errstr);
+
 
 #endif /* _RDKAFKA_SASL_OAUTHBEARER_H_ */

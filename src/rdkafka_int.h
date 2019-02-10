@@ -48,7 +48,6 @@ typedef int mode_t;
 #include "rdinterval.h"
 #include "rdavg.h"
 #include "rdlist.h"
-#include "rdkafka_sasl_oauthbearer.h"
 
 #if WITH_SSL
 #include <openssl/ssl.h>

@@ -131,6 +131,170 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
 }
 
 /**
+ * @brief Verify that the provided \p key is valid.
+ * @returns 0 on success or -1 if \p key is invalid.
+ */
+int check_oauthbearer_extension_key(const char *key,
+                char *errstr, size_t errstr_size) {
+        const char *c;
+        if (!strcmp(key, "auth")) {
+		rd_snprintf(errstr, errstr_size,
+		        "Cannot explicitly set the reserved `auth` "
+                        "SASL/OAUTHBEARER extension key");
+                return -1;
+        }
+        /*
+         * https://tools.ietf.org/html/rfc7628#section-3.1
+         * key            = 1*(ALPHA)
+         * 
+         * https://tools.ietf.org/html/rfc5234#appendix-B.1
+         * ALPHA          =  %x41-5A / %x61-7A   ; A-Z / a-z
+         */
+        if (*key == '\0') {
+		rd_snprintf(errstr, errstr_size,
+		        "SASL/OAUTHBEARER extension keys must not be empty");
+                return -1;
+        }
+        c = key;
+        while (*c != '\0') {
+                if (!(*c >= 'A' && *c <= 'Z') && !(*c >= 'a' && *c <= 'z')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "SASL/OAUTHBEARER extension keys must only "
+                                "consist of A-Z or a-z characters: %s (%c)",
+                                key, *c);
+                        return -1;
+                }
+                c++;
+        }
+        return 0;
+}
+
+/**
+ * @brief Verify that the provided \p value is valid.
+ * @returns 0 on success or -1 if \p value is invalid.
+ */
+int check_oauthbearer_extension_value(const char *value,
+                char *errstr, size_t errstr_size) {
+        const char *c;
+        /*
+         * https://tools.ietf.org/html/rfc7628#section-3.1
+         * value          = *(VCHAR / SP / HTAB / CR / LF )
+         * 
+         * https://tools.ietf.org/html/rfc5234#appendix-B.1
+         * VCHAR          =  %x21-7E  ; visible (printing) characters
+         * SP             =  %x20     ; space
+         * HTAB           =  %x09     ; horizontal tab
+         * CR             =  %x0D     ; carriage return
+         * LF             =  %x0A     ; linefeed
+         */
+        c = value;
+        while (*c != '\0') {
+                if (!(*c >= '\x21' && *c <= '\x7E') && *c != '\x20'
+                        && *c != '\x09' && *c != '\x0D' && *c != '\x0A') {
+                        rd_snprintf(errstr, errstr_size,
+                                "SASL/OAUTHBEARER extension values must only "
+                                "consist of space, horizontal tab, CR, LF, and "
+                                "visible characters (%%x21-7E): %s (%c)",
+                                value, *c);
+                        return -1;
+                }
+                c++;
+        }
+        return 0;
+}
+
+/**
+ * @brief Set SASL/OAUTHBEARER token and metadata
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * this method upon success via rd_kafka_oauthbearer_set_token_failure(). The
+ * md_lifetime_ms value is when the token expires, in terms of the number of
+ * milliseconds since the epoch.  The extension_size should be a non-negative
+ * multiple of 2. The extension keys must not include the reserved key "auth",
+ * and all extension keys and values must conform to the required format as per
+ * https://tools.ietf.org/html/rfc7628#section-3.1:
+ * key            = 1*(ALPHA)
+ * value          = *(VCHAR / SP / HTAB / CR / LF )
+ * 
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are invalid,
+ *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
+ */
+rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
+                const char *token_value, int64_t md_lifetime_ms,
+                const char *md_principal_name,
+                const char **extensions, size_t extension_size,
+                char *errstr, size_t errstr_size) {
+        size_t i;
+        rd_ts_t now_wallclock_millis;
+
+        /* Check args for correct format */
+        if (check_oauthbearer_extension_value(token_value, errstr,
+                errstr_size) == -1) {
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        for (i = 0; i + 1 < extension_size; i += 2) {
+                if (check_oauthbearer_extension_key(extensions[i], errstr,
+                        errstr_size) == -1 ||
+                        check_oauthbearer_extension_value(extensions[i + 1],
+                                errstr, errstr_size) == -1) {
+                                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+        }
+        now_wallclock_millis = rd_uclock() / 1000;
+        if (md_lifetime_ms <= now_wallclock_millis) {
+		rd_snprintf(errstr, errstr_size,
+			"Must supply an unexpired token: "
+                        "now=%"PRId64"ms, exp=%"PRId64"ms",
+                        now_wallclock_millis, md_lifetime_ms);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        rd_kafka_wrlock(rk);
+        RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
+        rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
+        RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
+        rk->rk_oauthbearer->token_value = rd_strdup(token_value);
+        rk->rk_oauthbearer->md_lifetime_ms = md_lifetime_ms;
+        // Schedule a refresh 80% through its remaining lifetime
+        rk->rk_oauthbearer->refresh_after_ms = now_wallclock_millis + 0.8 *
+                (md_lifetime_ms - now_wallclock_millis);
+        rd_list_clear(&rk->rk_oauthbearer->extensions);
+        for (i = 0; i + 1 < extension_size; i += 2) {
+                rd_list_add(&rk->rk_oauthbearer->extensions,
+                        rd_strtup_new(extensions[i], extensions[i + 1]));
+        }
+        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+        rk->rk_oauthbearer->errstr = NULL;
+        rd_kafka_wrunlock(rk);
+        rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
+                "Waking up waiting brokers after setting token");
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh failure indicator.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * this method upon failure via rd_kafka_oauthbearer_set_token_failure()
+ * 
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
+ */
+rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
+                const char *errstr) {
+        rd_kafka_wrlock(rk);
+        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+        rk->rk_oauthbearer->errstr = strdup(errstr);
+        /* Leave any existing token because it may have some life left */
+        /* Schedule a refresh for 10 seconds later */
+        rk->rk_oauthbearer->refresh_after_ms = rd_uclock() / 1000 + 10 * 1000;
+        rd_kafka_wrunlock(rk);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
  * @brief Parse a config value from the string pointed to by \p loc and starting
  * with the given \p prefix and ending with the given \c value_end_char, storing
  * the newly-allocated memory result in the string pointed to by \p value.

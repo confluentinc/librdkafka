@@ -1691,8 +1691,10 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
 
+#if WITH_SASL_OAUTHBEARER
         /* Enqueue a token refresh if necessary */
         rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rk);
+#endif
 
         /* Scan topic state, message timeouts, etc. */
         rd_kafka_topic_scan_all(rk, rd_clock());
@@ -1955,8 +1957,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
         if (rk->rk_conf.error_cb)
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
+#if WITH_SASL_OAUTHBEARER
 	if (rk->rk_conf.oauthbearer_token_refresh_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
+#endif
 
         rk->rk_controllerid = -1;
 
@@ -2015,6 +2019,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                         ret_errno = EINVAL;
                         goto fail;
                 }
+#if WITH_SASL_OAUTHBEARER
                 /* Enqueue OAUTHBEARER REFRESH operation if necessary */
                 if (!strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
                         /* No need to acquire a write lock since nobody is
@@ -2022,6 +2027,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                          */
                         rd_kafka_oauthbearer_enqueue_token_refresh(rk);
                 }
+#endif
         }
 
 #if WITH_SSL
@@ -2245,6 +2251,7 @@ fail:
 
         return NULL;
 }
+
 
 
 

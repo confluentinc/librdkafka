@@ -4247,39 +4247,37 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
                 rd_kafka_broker_consumer_serve(rkb, abs_timeout);
 }
 
+#if WITH_SASL_OAUTHBEARER
 /**
  * @brief Wait if necessary for up to the given \p wait_ms
  * to determine if an initial token is available.
  * 
  * No wait occurs if an initial token is already available.
- * Wait will not exceed rd_kafka_max_block_ms, even if requested.
+ * The given \p wait_ms value must not exceed rd_kafka_max_block_ms.
  * 
  * @returns 1 if an initial token has been retrieved (either already or
  * before the wait time elapses), otherwise 0.
  */
-static unsigned int get_initial_token_available(rd_kafka_broker_t *rkb,
-                                                 unsigned int wait_ms) {
+static int get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
         int has_token;
-        int max_wait_ms;
         rd_kafka_rdlock(rkb->rkb_rk);
         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
         rd_kafka_rdunlock(rkb->rkb_rk);
-        if (has_token) {
+        if (!has_token) {
                 rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                        "OAUTHBEARER token available");
-                return 1;
+                        "Waiting %i ms for initial OAUTHBEARER token", wait_ms);
+                rd_kafka_broker_serve(rkb, wait_ms);
+                rd_kafka_rdlock(rkb->rkb_rk);
+                has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
+                rd_kafka_rdunlock(rkb->rkb_rk);
+                if (has_token) {
+                        rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
+                                "OAUTHBEARER initial token available");
+                }
         }
-        max_wait_ms = wait_ms < rd_kafka_max_block_ms
-                ? wait_ms : rd_kafka_max_block_ms;
-        rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                "Waiting %i ms for initial OAUTHBEARER token",
-                max_wait_ms);
-        rd_kafka_broker_serve(rkb, max_wait_ms);
-        rd_kafka_rdlock(rkb->rkb_rk);
-        has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
-        rd_kafka_rdunlock(rkb->rkb_rk);
         return has_token;
 }
+#endif
 
 
 
@@ -4354,6 +4352,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 break;
                         }
 
+#if WITH_SASL_OAUTHBEARER
                         /*
                         * SASL/OAUTHBEARER is unable to connect unless a valid
                         * token is available, and a valid token CANNOT be
@@ -4382,6 +4381,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 break;
                         }
 
+#endif
                         if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
                                 rd_kafka_broker_serve(rkb, 1000);
 

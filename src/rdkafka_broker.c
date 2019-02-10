@@ -4282,6 +4282,8 @@ static unsigned int get_initial_token_available(rd_kafka_broker_t *rkb,
 }
 
 
+
+
 static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
         unsigned int token_confirmed_available = 0;

@@ -553,7 +553,7 @@ static int parse_unsecured_jws_config(const char *cfg,
  * principal, scopeClaimName, scope, and lifeSeconds. The default
  * value for principalClaimName is sub.  The principal must be specified.
  * The default value for scopeClaimName is scope, and the default value
- * for lifeSeconds is 3600.  The scope value is csv format with the
+ * for lifeSeconds is 3600.  The scope value is CSV format with the
  * default value being no/empty scope. For example:
  * "principalClaimName=azp principal=admin scopeClaimName=roles
  * scope=role1,role2 lifeSeconds=600".  SASL extensions can be

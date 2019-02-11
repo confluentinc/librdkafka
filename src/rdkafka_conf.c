@@ -711,7 +711,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "principalClaimName, principal, scopeClaimName, scope, and "
           "lifeSeconds. The default value for principalClaimName is sub, the "
           "default value for scopeClaimName is scope, and the default value "
-          "for lifeSeconds is 3600. The scope value is csv format with the "
+          "for lifeSeconds is 3600. The scope value is CSV format with the "
           "default value being no/empty scope. For example: "
           "principalClaimName=azp principal=admin scopeClaimName=roles "
           "scope=role1,role2 lifeSeconds=600. In addition, SASL extensions can "

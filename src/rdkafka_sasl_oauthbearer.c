@@ -206,19 +206,37 @@ int check_oauthbearer_extension_value(const char *value,
 /**
  * @brief Set SASL/OAUTHBEARER token and metadata
  *
+ * @param rk the client to mutate.
+ * @param token_value the mandatory token value to set, often (but not
+ *  necessarily) a JWS compact serialization as per
+ *  https://tools.ietf.org/html/rfc7515#section-3.1.
+ * @param md_lifetime_ms when the token expires, in terms of the number of
+ *  milliseconds since the epoch.
+ * @param md_principal_name the mandatory Kafka principal name associated
+ *  with the token.
+ * @param extensions optional SASL extensions key-value array with
+ *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  [i+1] is the key's value, to be communicated to the broker
+ *  as additional key-value pairs during the initial client response as per
+ *  https://tools.ietf.org/html/rfc7628#section-3.1.
+ * @param extension_size the number of SASL extension keys plus values,
+ *  which should be a non-negative multiple of 2.
+
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
- * this method upon success via rd_kafka_oauthbearer_set_token_failure(). The
- * md_lifetime_ms value is when the token expires, in terms of the number of
- * milliseconds since the epoch.  The extension_size should be a non-negative
- * multiple of 2. The extension keys must not include the reserved key "auth",
- * and all extension keys and values must conform to the required format as per
+ * this method upon success. The md_lifetime_ms value is when the token expires,
+ * in terms of the number of milliseconds since the epoch.  The extension keys
+ * must not include the reserved key "auth", and all extension keys and values
+ * must conform to the required format as per
  * https://tools.ietf.org/html/rfc7628#section-3.1:
  * key            = 1*(ALPHA)
  * value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are invalid,
- *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are invalid;
+ *          RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
+ *              the client's authentication mechanism.
+ * 
+ * @sa oauthbearer_set_token_failure()
  */
 rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
@@ -227,6 +245,13 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                 char *errstr, size_t errstr_size) {
         size_t i;
         rd_ts_t now_wallclock_millis;
+
+        /* Check if SASL/OAUTHBEARER is the configured auth mechanism */
+        if (!rk->rk_oauthbearer) {
+                rd_snprintf(errstr, errstr_size, "SASL/OAUTHBEARER is not the "
+                        "configured authentication mechanism");
+                return RD_KAFKA_RESP_ERR__STATE;
+        }
 
         /* Check args for correct format */
         if (check_oauthbearer_extension_value(token_value, errstr,
@@ -276,14 +301,25 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
- * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
- * this method upon failure via rd_kafka_oauthbearer_set_token_failure()
+ * @param rk the client to mutate.
+ * @param errstr the SASL/OAUITHBEARER error message to set on the client.
  * 
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is disabled
+ * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * this method upon failure.
+ * 
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise
+ *          RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is enabled but is not
+ *              configured to be the client's authentication mechanism.
+ * 
+ * @sa oauthbearer_set_token()
  */
 rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
+        /* Check if SASL/OAUTHBEARER is the configured auth mechanism */
+        if (!rk->rk_oauthbearer) {
+                return RD_KAFKA_RESP_ERR__STATE;
+        }
+
         rd_kafka_wrlock(rk);
         RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
         rk->rk_oauthbearer->errstr = strdup(errstr);

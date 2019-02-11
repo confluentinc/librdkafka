@@ -4255,10 +4255,10 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
  * No wait occurs if an initial token is already available.
  * The given \p wait_ms value must not exceed rd_kafka_max_block_ms.
  * 
- * @returns 1 if an initial token has been retrieved (either already or
- * before the wait time elapses), otherwise 0.
+ * @returns rd_true if an initial token has been retrieved (either already or
+ * before the wait time elapses), otherwise rd_false.
  */
-static int get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
+static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
         int has_token;
         rd_kafka_rdlock(rkb->rkb_rk);
         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
@@ -4275,7 +4275,7 @@ static int get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
                                 "OAUTHBEARER initial token available");
                 }
         }
-        return has_token;
+        return has_token ? rd_true : rd_false;
 }
 #endif
 
@@ -4284,8 +4284,8 @@ static int get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
 
 static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
-        unsigned int token_confirmed_available = 0;
-        unsigned int initial_token_unavailable = 0;
+        rd_bool_t token_confirmed_available = rd_false;
+        rd_bool_t initial_token_unavailable = rd_false;
         int token_max_wait_ms = 30000;
         int token_each_wait_ms = token_max_wait_ms < rd_kafka_max_block_ms
                 ? token_max_wait_ms : rd_kafka_max_block_ms;
@@ -4369,7 +4369,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                                 token_each_wait_ms;
                                         if (token_est_total_wait_ms >
                                             token_max_wait_ms) {
-                                                initial_token_unavailable = 1;
+                                                initial_token_unavailable =
+                                                        rd_true;
                                                 rd_rkb_dbg(rkb, BROKER,
                                                         "BRKMAIN",
                                                         "Exiting due to no "

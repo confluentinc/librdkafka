@@ -281,6 +281,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 md_principal_name, extensions, extension_size,
                 errstr, errstr_size);
 #else
+        rd_snprintf(errstr, errstr_size,
+                "librdkafka not built with SASL OAUTHBEARER support");
         return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 #endif
 }
@@ -870,14 +872,10 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 	if (rk->rk_oauthbearer) {
                 RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
-                rk->rk_oauthbearer->md_principal_name = NULL;
                 RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
-                rk->rk_oauthbearer->token_value = NULL;
                 rd_list_destroy(&rk->rk_oauthbearer->extensions);
                 RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
-                rk->rk_oauthbearer->errstr = NULL;
                 rd_free(rk->rk_oauthbearer);
-                rk->rk_oauthbearer = NULL;
         }
 
 	rd_kafkap_bytes_destroy((rd_kafkap_bytes_t *)rk->rk_null_bytes);
@@ -1693,7 +1691,9 @@ static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
 
 #if WITH_SASL_OAUTHBEARER
         /* Enqueue a token refresh if necessary */
-        rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rk);
+        if (rk->rk_oauthbearer) {
+                rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rk);
+        }
 #endif
 
         /* Scan topic state, message timeouts, etc. */

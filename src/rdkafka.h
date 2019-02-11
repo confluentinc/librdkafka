@@ -1798,13 +1798,11 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  *  https://tools.ietf.org/html/rfc7628#section-3.1.
  * @param extension_size the number of SASL extension keys plus values,
  *  which should be a non-negative multiple of 2.
-
+ * 
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
- * this method upon success. The md_lifetime_ms value is when the token expires,
- * in terms of the number of milliseconds since the epoch.  The extension keys
- * must not include the reserved key "auth", and all extension keys and values
- * must conform to the required format as per
- * https://tools.ietf.org/html/rfc7628#section-3.1:
+ * this method upon success. The extension keys must not include the reserved
+ * key "auth", and all extension keys and values must conform to the required
+ * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
  * key            = 1*(ALPHA)
  * value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
@@ -1828,7 +1826,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * @param rk the client to mutate.
- * @param errstr the SASL/OAUITHBEARER error message to set on the client.
+ * @param errstr the SASL/OAUTHBEARER error message to set on the client.
  * 
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
  * this method upon failure.

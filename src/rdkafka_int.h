@@ -368,11 +368,11 @@ struct rd_kafka_s {
                  * new one, in terms of the number of milliseconds since the
                  * epoch.
                  */
-                int64_t refresh_after_ms;
+                uint64_t refresh_after_ms;
                 /**< When the last token refresh was equeued (0 = never)
                  *   in terms of the number of milliseconds since the epoch.
                  */
-                int64_t enqueued_refresh_ms;
+                uint64_t enqueued_refresh_ms;
                 /**< The name of the principal to which this token applies. */
                 char *md_principal_name;
                 /**< The SASL extensions, as per RFC 7628 Section 3.1

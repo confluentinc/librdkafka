@@ -845,7 +845,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
 
         rd_snprintf(buf, out->size+1 - size_written, "%s", kvsep);
 
-        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLOAUTHBEARER",
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "OAUTHBEARER",
                    "Built client first message");
 }
 
@@ -868,7 +868,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
         rd_chariov_t out = RD_ZERO_INIT;
         int r = -1;
 
-        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLOAUTHBEARER",
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "OAUTHBEARER",
                    "SASL OAUTHBEARER client in state %s",
                    state_names[state->state]);
 

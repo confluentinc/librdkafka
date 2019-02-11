@@ -135,7 +135,7 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
  * @brief Verify that the provided \p key is valid.
  * @returns 0 on success or -1 if \p key is invalid.
  */
-int check_oauthbearer_extension_key(const char *key,
+static int check_oauthbearer_extension_key(const char *key,
                 char *errstr, size_t errstr_size) {
         const char *c;
         if (!strcmp(key, "auth")) {
@@ -174,7 +174,7 @@ int check_oauthbearer_extension_key(const char *key,
  * @brief Verify that the provided \p value is valid.
  * @returns 0 on success or -1 if \p value is invalid.
  */
-int check_oauthbearer_extension_value(const char *value,
+static int check_oauthbearer_extension_value(const char *value,
                 char *errstr, size_t errstr_size) {
         const char *c;
         /*

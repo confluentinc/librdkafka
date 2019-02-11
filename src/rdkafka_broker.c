@@ -4249,24 +4249,24 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 
 #if WITH_SASL_OAUTHBEARER
 /**
- * @brief Wait if necessary for up to the given \p wait_ms
+ * @brief Wait if necessary up to rd_kafka_max_block_ms
  * to determine if an initial token is available.
  * 
  * No wait occurs if an initial token is already available.
- * The given \p wait_ms value must not exceed rd_kafka_max_block_ms.
  * 
  * @returns rd_true if an initial token has been retrieved (either already or
  * before the wait time elapses), otherwise rd_false.
  */
-static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms) {
-        int has_token;
+static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb) {
+        rd_bool_t has_token;
         rd_kafka_rdlock(rkb->rkb_rk);
         has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
         rd_kafka_rdunlock(rkb->rkb_rk);
         if (!has_token) {
                 rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
-                        "Waiting %i ms for initial OAUTHBEARER token", wait_ms);
-                rd_kafka_broker_serve(rkb, wait_ms);
+                        "Waiting up to %i ms for initial OAUTHBEARER token",
+                        rd_kafka_max_block_ms);
+                rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
                 rd_kafka_rdlock(rkb->rkb_rk);
                 has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
                 rd_kafka_rdunlock(rkb->rkb_rk);
@@ -4275,7 +4275,7 @@ static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms
                                 "OAUTHBEARER initial token available");
                 }
         }
-        return has_token ? rd_true : rd_false;
+        return has_token;
 }
 #endif
 
@@ -4285,11 +4285,6 @@ static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb, int wait_ms
 static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
         rd_bool_t token_confirmed_available = rd_false;
-        rd_bool_t initial_token_unavailable = rd_false;
-        int token_max_wait_ms = 30000;
-        int token_each_wait_ms = token_max_wait_ms < rd_kafka_max_block_ms
-                ? token_max_wait_ms : rd_kafka_max_block_ms;
-        int token_est_total_wait_ms = 0;
 
         rd_kafka_set_thread_name("%s", rkb->rkb_name);
         rd_kafka_set_thread_sysname("rdk:broker%"PRId32, rkb->rkb_nodeid);
@@ -4307,7 +4302,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
-	while (!rd_kafka_broker_terminating(rkb) && !initial_token_unavailable) {
+	while (!rd_kafka_broker_terminating(rkb)) {
                 int backoff;
                 int r;
 
@@ -4362,23 +4357,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         if (rkb->rkb_rk->rk_oauthbearer &&
                             !token_confirmed_available) {
                                 token_confirmed_available =
-                                        get_initial_token_available(
-                                                rkb, token_each_wait_ms);
-                                if (!token_confirmed_available) {
-                                        token_est_total_wait_ms +=
-                                                token_each_wait_ms;
-                                        if (token_est_total_wait_ms >
-                                            token_max_wait_ms) {
-                                                initial_token_unavailable =
-                                                        rd_true;
-                                                rd_rkb_dbg(rkb, BROKER,
-                                                        "BRKMAIN",
-                                                        "Exiting due to no "
-                                                        "initial OAUTHBEARER "
-                                                        "token after %i ms",
-                                                        token_max_wait_ms);
-                                        }
-                                }
+                                        get_initial_token_available(rkb);
                                 break;
                         }
 

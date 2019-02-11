@@ -211,7 +211,7 @@ int check_oauthbearer_extension_value(const char *value,
  *  necessarily) a JWS compact serialization as per
  *  https://tools.ietf.org/html/rfc7515#section-3.1.
  * @param md_lifetime_ms when the token expires, in terms of the number of
- *  milliseconds since the epoch.
+ *  milliseconds since the epoch. See https://currentmillis.com/.
  * @param md_principal_name the mandatory Kafka principal name associated
  *  with the token.
  * @param extensions optional SASL extensions key-value array with

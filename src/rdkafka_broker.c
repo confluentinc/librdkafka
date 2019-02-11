@@ -4270,10 +4270,9 @@ static rd_bool_t get_initial_token_available(rd_kafka_broker_t *rkb) {
                 rd_kafka_rdlock(rkb->rkb_rk);
                 has_token = rkb->rkb_rk->rk_oauthbearer->token_value != NULL;
                 rd_kafka_rdunlock(rkb->rkb_rk);
-                if (has_token) {
+                if (has_token)
                         rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
                                 "OAUTHBEARER initial token available");
-                }
         }
         return has_token;
 }

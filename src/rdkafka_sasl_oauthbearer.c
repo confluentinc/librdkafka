@@ -206,7 +206,7 @@ int check_oauthbearer_extension_value(const char *value,
 /**
  * @brief Set SASL/OAUTHBEARER token and metadata
  *
- * @param rk the client to mutate.
+ * @param rk Client instance.
  * @param token_value the mandatory token value to set, often (but not
  *  necessarily) a JWS compact serialization as per
  *  https://tools.ietf.org/html/rfc7515#section-3.1.
@@ -300,7 +300,7 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
- * @param rk the client to mutate.
+ * @param rk Client instance.
  * @param errstr the SASL/OAUTHBEARER error message to set on the client.
  * 
  * The SASL/OAUTHBEARER token refresh callback or event handler must cause
@@ -551,8 +551,8 @@ static int parse_unsecured_jws_config(const char *cfg,
  * This method interprets \c sasl.oauthbearer.config as space-separated
  * name=value pairs with valid names including principalClaimName,
  * principal, scopeClaimName, scope, and lifeSeconds. The default
- * value for principalClaimName is sub.  The principal must be specified.
- * The default value for scopeClaimName is scope, and the default value
+ * value for principalClaimName is "sub".  The principal must be specified.
+ * The default value for scopeClaimName is "scope", and the default value
  * for lifeSeconds is 3600.  The scope value is CSV format with the
  * default value being no/empty scope. For example:
  * "principalClaimName=azp principal=admin scopeClaimName=roles

@@ -645,13 +645,13 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 // calculate json length
                                 char *start = scope_csv_text;
                                 char *curr = start;
-                                while(*curr != '\0') {
+                                while (*curr != '\0') {
                                         // ignore empty elements (e.g. ",,")
-                                        while(*curr != '\0' && *curr == ',') {
+                                        while (*curr != '\0' && *curr == ',') {
                                                 ++curr;
                                                 ++start;
                                         }
-                                        while(*curr != '\0' && *curr != ',')
+                                        while (*curr != '\0' && *curr != ',')
                                                 ++curr;
                                         if (curr != start) {
                                                 if (*curr == ',') {

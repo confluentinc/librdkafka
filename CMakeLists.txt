@@ -126,6 +126,7 @@ endif(WIN32)
 # * HAVE_ATOMICS_64_SYNC
 # * HAVE_REGEX
 # * HAVE_STRNDUP
+# * WITH_C11THREADS
 # * LINK_ATOMIC
 include("packaging/cmake/try_compile/rdkafka_setup.cmake")
 

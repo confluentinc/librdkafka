@@ -74,3 +74,12 @@ else()
   endif()
 endif()
 # }
+
+# C11 threads
+try_compile(
+    WITH_C11THREADS
+    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+    "${TRYCOMPILE_SRC_DIR}/c11threads_test.c"
+    LINK_LIBRARIES "-pthread"
+)
+# }

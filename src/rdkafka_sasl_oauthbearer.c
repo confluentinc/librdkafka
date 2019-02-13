@@ -106,15 +106,14 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
         rd_ts_t now_wallclock_millis;
 
-        if (!rk->rk_oauthbearer) {
+        if (!rk->rk_oauthbearer)
                 return;
-        }
         now_wallclock_millis = rd_uclock() / 1000;
         rd_kafka_wrlock(rk);
         if (rk->rk_oauthbearer->refresh_after_ms <
             (uint64_t)now_wallclock_millis &&
             rk->rk_oauthbearer->enqueued_refresh_ms <=
-            rk->rk_oauthbearer->refresh_after_ms) {
+            rk->rk_oauthbearer->refresh_after_ms)
                 /* Refresh required and not yet scheduled; refresh it */
                 rd_kafka_oauthbearer_enqueue_token_refresh(rk);
         rd_kafka_wrunlock(rk);

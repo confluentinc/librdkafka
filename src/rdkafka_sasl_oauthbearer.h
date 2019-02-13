@@ -35,6 +35,8 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk);
 
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk);
 
+rd_bool_t rd_kafka_sasl_oauthbearer_has_token(rd_kafka_t *rk);
+
 rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
         const char *token_value, int64_t md_lifetime_ms,
         const char *md_principal_name,

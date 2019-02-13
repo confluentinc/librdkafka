@@ -132,6 +132,23 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
 }
 
 /**
+ * @brief Return rd_true if SASL/OAUTHBEARER is the configured authentication
+ * mechanism and a token is available, otherwise rd_false.
+ * 
+ * @returns rd_true if SASL/OAUTHBEARER is the configured authentication
+ * mechanism and a token is available, otherwise rd_false.
+ */
+rd_bool_t rd_kafka_sasl_oauthbearer_has_token(rd_kafka_t *rk) {
+        rd_bool_t retval_has_token = rd_false;
+        if (rk->rk_oauthbearer) {
+                rd_kafka_rdlock(rk);
+                retval_has_token = rk->rk_oauthbearer->token_value != NULL;
+                rd_kafka_rdunlock(rk);
+        }
+        return retval_has_token;
+}
+
+/**
  * @brief Verify that the provided \p key is valid.
  * @returns 0 on success or -1 if \p key is invalid.
  */

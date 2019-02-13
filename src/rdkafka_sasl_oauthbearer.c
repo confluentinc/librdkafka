@@ -57,7 +57,7 @@ struct rd_kafka_sasl_oauthbearer_state {
                 RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_FIRST_MSG,
                 RD_KAFKA_SASL_OAUTHB_STATE_RECV_SERVER_MSG_AFTER_FAIL,
         } state;
-        rd_chariov_t server_error_msg;
+        char * server_error_msg;
 
         /*
          * A place to store a consistent view of the token and extensions
@@ -803,7 +803,7 @@ static void rd_kafka_sasl_oauthbearer_close (rd_kafka_transport_t *rktrans) {
         if (!state)
                 return;
 
-        RD_IF_FREE(state->server_error_msg.ptr, rd_free);
+        RD_IF_FREE(state->server_error_msg, rd_free);
         rd_free(state->token_value);
         rd_free(state->md_principal_name);
         rd_list_destroy(&state->extensions);
@@ -929,9 +929,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                 }
 
                 /* Failure; save error message for later */
-                state->server_error_msg.size = in->size;
-                state->server_error_msg.ptr  = rd_memdup(in->ptr,
-                                                state->server_error_msg.size);
+                state->server_error_msg  = rd_strndup(in->ptr, in->size);
 
                 /*
                  * https://tools.ietf.org/html/rfc7628#section-3.1
@@ -955,7 +953,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                         "SASL OAUTHBEARER authentication failed "
                         "(principal=%s): %s",
                         state->md_principal_name,
-                        state->server_error_msg.ptr);
+                        state->server_error_msg);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                         "OAUTHBEARERAUTH", "%s", errstr);
                 r = -1;

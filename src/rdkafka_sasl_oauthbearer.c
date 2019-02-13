@@ -1056,8 +1056,11 @@ static int rd_kafka_sasl_oauthbearer_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
         /*
-         * We will rely on the initial token retrieval as a proxy
-         * for configuration validation.
+         * We must rely on the initial token retrieval as a proxy
+         * for configuration validation because the configuration is
+         * implementation-dependent, and it is not necessarily the case
+         * that the config reflects the default,. unsecured JWS config
+         * that we know how to parse
          */
         return 0;
 }

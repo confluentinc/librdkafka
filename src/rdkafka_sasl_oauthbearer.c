@@ -716,7 +716,10 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                         scope_curr = scope_json;
                         for (i = 0; i < rd_list_cnt(&scope); i++) {
                                 if (i == 0)
-                                        scope_curr += sprintf(scope_curr,
+                                        scope_curr += rd_snprintf(scope_curr,
+                                                (size_t)(scope_json
+                                                        + scope_json_length
+                                                        + 1 - scope_curr),
                                                 ",\"%s\":[\"", scope_claim_name);
                                 else
                                         scope_curr += sprintf(scope_curr, "%s",

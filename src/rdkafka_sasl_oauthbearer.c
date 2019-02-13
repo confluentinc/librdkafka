@@ -773,10 +773,11 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 extensionv[2 * i] = strtup->name;
                                 extensionv[2 * i + 1] = strtup->value;
                         }
-                        rd_kafka_oauthbearer_set_token(rk, jws,
+                        rd_assert(RD_KAFKA_RESP_ERR_NO_ERROR ==
+                                rd_kafka_oauthbearer_set_token(rk, jws,
                                 now_wallclock_millis + life_seconds * 1000,
                                 principal, extensionv, 2 * extension_pair_count,
-                                errstr, sizeof(errstr));
+                                errstr, sizeof(errstr)));
                         rd_free(jws);
                         rd_free(extensionv);
                 }

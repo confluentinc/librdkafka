@@ -48,6 +48,9 @@ mkl_option "Configure tool" "mk:PROGRAM_PREFIX" "--program-prefix=PFX" "Program 
 mkl_option "Compatibility" "mk:DISABL_DEP_TRACK" "--disable-dependency-tracking" "Disable dependency tracking (no-op)"
 mkl_option "Compatibility" "mk:DISABL_SILENT_RULES" "--disable-silent-rules" "Verbose build output (no-op)"
 
+mkl_option "Dependency"  env:MKL_INSTALL_DEPS "--install-deps" "Attempt to install missing dependencies"
+mkl_option "Dependency" env:MKL_SOURCE_DEPS_ONLY "--source-deps-only" "Only perform source builds of dependencies, not using any package managers"
+
 
 function checks {
 

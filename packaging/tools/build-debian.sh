@@ -16,7 +16,7 @@ set -ex
 LRK_DIR=$1
 OUT_TGZ=$2
 
-if [[ ! -f $LRK_DIR/configure.librdkafka || -z $OUT_TGZ ]]; then
+if [[ ! -f $LRK_DIR/configure.self || -z $OUT_TGZ ]]; then
     echo "Usage: $0 <librdkafka-root-direcotry> <output-tgz>"
     exit 1
 fi
@@ -39,7 +39,7 @@ mkdir -p $DEST_DIR
 
 (cd $LRK_DIR ; git archive --format tar HEAD) | tar xf -
 
-./configure --disable-lz4 --prefix $DEST_DIR
+./configure --install-deps --source-deps-only --disable-lz4 --prefix=$DEST_DIR
 make -j
 make install
 

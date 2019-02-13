@@ -49,7 +49,9 @@ using librdkafka.
 %prep
 %setup -q -n %{name}-%{version}
 
-%configure
+# --install-deps will install missing dependencies that are not available
+# through BuildRequires, such as libzstd, which will be linked statically.
+%configure --install-deps --disable-lz4
 
 %build
 make

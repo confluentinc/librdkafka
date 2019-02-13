@@ -18,7 +18,7 @@ apk add bash gcc g++ make musl-dev bsd-compat-headers git python
 git clone /v /librdkafka
 
 cd /librdkafka
-./configure
+./configure --install-deps --disable-lz4
 make
 make -C tests run_local
 cd ..

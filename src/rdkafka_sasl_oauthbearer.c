@@ -259,7 +259,15 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__STATE;
         }
 
-        /* Check args for correct format */
+        /* Check args for correct format/value */
+        now_wallclock_millis = rd_uclock() / 1000;
+        if (md_lifetime_ms <= now_wallclock_millis) {
+		rd_snprintf(errstr, errstr_size,
+			"Must supply an unexpired token: "
+                        "now=%"PRId64"ms, exp=%"PRId64"ms",
+                        now_wallclock_millis, md_lifetime_ms);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
         if (check_oauthbearer_extension_value(token_value, errstr,
                 errstr_size) == -1)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -269,14 +277,6 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                         check_oauthbearer_extension_value(extensions[i + 1],
                                 errstr, errstr_size) == -1)
                                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
-        }
-        now_wallclock_millis = rd_uclock() / 1000;
-        if (md_lifetime_ms <= now_wallclock_millis) {
-		rd_snprintf(errstr, errstr_size,
-			"Must supply an unexpired token: "
-                        "now=%"PRId64"ms, exp=%"PRId64"ms",
-                        now_wallclock_millis, md_lifetime_ms);
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
         rd_kafka_wrlock(rk);
         RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);

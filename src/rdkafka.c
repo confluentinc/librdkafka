@@ -1814,6 +1814,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
+        char builtin_features[128];
+        size_t bflen;
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
@@ -2133,12 +2135,18 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
         rk->rk_initialized = 1;
 
+        bflen = sizeof(builtin_features);
+        if (rd_kafka_conf_get(&rk->rk_conf, "builtin.features",
+                              builtin_features, &bflen) !=
+            RD_KAFKA_CONF_OK)
+                rd_snprintf(builtin_features, sizeof(builtin_features), "?");
         rd_kafka_dbg(rk, ALL, "INIT",
                      "librdkafka v%s (0x%x) %s initialized "
-                     "(builtin.features 0x%x, debug 0x%x)",
+                     "(builtin.features %s, %s, debug 0x%x)",
                      rd_kafka_version_str(), rd_kafka_version(),
                      rk->rk_name,
-                     rk->rk_conf.builtin_features, rk->rk_conf.debug);
+                     builtin_features, BUILT_WITH,
+                     rk->rk_conf.debug);
 
 	return rk;
 

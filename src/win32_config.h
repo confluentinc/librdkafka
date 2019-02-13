@@ -43,4 +43,7 @@
 #endif
 #define SOLIB_EXT ".dll"
 
+/* Notice: Keep up to date */
+#define BUILT_WITH "SSL ZLIB SNAPPY SASL_SCRAM PLUGINS HDRHISTOGRAM"
+
 #endif /* _RD_WIN32_CONFIG_H_ */

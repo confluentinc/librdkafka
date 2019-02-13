@@ -29,9 +29,11 @@ _UNAME_S := $(shell uname -s)
 ifeq ($(_UNAME_S),Darwin)
 	LIBFILENAME=$(LIBNAME).$(LIBVER)$(SOLIB_EXT)
 	LIBFILENAMELINK=$(LIBNAME)$(SOLIB_EXT)
+	LDD_PRINT="otool -L"
 else
 	LIBFILENAME=$(LIBNAME)$(SOLIB_EXT).$(LIBVER)
 	LIBFILENAMELINK=$(LIBNAME)$(SOLIB_EXT)
+	LDD_PRINT="ldd"
 endif
 
 INSTALL?=		install
@@ -215,3 +217,6 @@ lib-clean: generic-clean lib-clean-pkg-config
 
 bin-clean: generic-clean
 	rm -f $(BIN)
+
+deps-clean:
+	rm -rf "$(MKLOVE_DIR)/deps"

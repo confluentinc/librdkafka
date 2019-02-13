@@ -17,8 +17,9 @@ before_script:
 script:
 - rm -rf artifacts dest
 - mkdir dest artifacts
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include
-  -L/usr/local/opt/openssl/lib" ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; else ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; fi
+- ./configure --disable-lz4 --prefix="$PWD/dest"
+#- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include
+#  -L/usr/local/opt/openssl/lib" ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; else ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; fi
 - make -j2 all examples check && make -C tests run_local
 - make install
 - (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)

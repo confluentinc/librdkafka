@@ -1834,7 +1834,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * @param rk Client instance.
- * @param errstr the SASL/OAUTHBEARER error message to set on the client.
+ * @param errstr the mandatory SASL/OAUTHBEARER error message to set on the
+ *  client.
  * 
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
  * this method upon failure.

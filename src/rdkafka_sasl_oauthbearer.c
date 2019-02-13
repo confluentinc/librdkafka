@@ -105,30 +105,19 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
  */
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
         rd_ts_t now_wallclock_millis;
-        uint64_t refresh_after_ms;
 
         if (!rk->rk_oauthbearer) {
                 return;
         }
-        rd_kafka_rdlock(rk);
         now_wallclock_millis = rd_uclock() / 1000;
-        refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
-        rd_kafka_rdunlock(rk);
-        if (refresh_after_ms < (uint64_t)now_wallclock_millis &&
-                rk->rk_oauthbearer->enqueued_refresh_ms <= refresh_after_ms) {
-                /* Refresh required and not yet scheduled.
-                 * Acquire write lock to serialize and confirm.
-                 */
-                rd_kafka_wrlock(rk);
-                now_wallclock_millis = rd_uclock() / 1000;
-                refresh_after_ms = rk->rk_oauthbearer->refresh_after_ms;
-                if (refresh_after_ms < (uint64_t)now_wallclock_millis &&
-                        rk->rk_oauthbearer->enqueued_refresh_ms <=
-                                refresh_after_ms)
-                        /* Confirmed; refresh it. */
-                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
-                rd_kafka_wrunlock(rk);
-        }
+        rd_kafka_wrlock(rk);
+        if (rk->rk_oauthbearer->refresh_after_ms <
+            (uint64_t)now_wallclock_millis &&
+            rk->rk_oauthbearer->enqueued_refresh_ms <=
+            rk->rk_oauthbearer->refresh_after_ms) {
+                /* Refresh required and not yet scheduled; refresh it */
+                rd_kafka_oauthbearer_enqueue_token_refresh(rk);
+        rd_kafka_wrunlock(rk);
 }
 
 /**

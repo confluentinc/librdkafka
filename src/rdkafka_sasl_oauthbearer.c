@@ -644,7 +644,6 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                         static const char *jose_header_encoded =
                                 "eyJhbGciOiJub25lIn0"; // {"alg":"none"}
                         int max_json_length;
-                        rd_ts_t now_wallclock_micros;
                         rd_ts_t now_wallclock_millis;
                         double now_wallclock_seconds;
                         char *scope_json;
@@ -698,8 +697,7 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 }
                         }
 
-                        now_wallclock_micros = rd_uclock();
-                        now_wallclock_millis = now_wallclock_micros / 1000;
+                        now_wallclock_millis = rd_uclock() / 1000;
                         now_wallclock_seconds = now_wallclock_millis / 1000.0;
                         // generate json
                         max_json_length = 2 + // {"

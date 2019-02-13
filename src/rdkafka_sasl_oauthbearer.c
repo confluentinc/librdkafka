@@ -836,6 +836,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
         int i;
         char *buf;
         int size_written;
+        unsigned long r;
 
         for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
                 rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
@@ -852,19 +853,24 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
 
         buf = out->ptr;
         size_written = 0;
-        size_written += rd_snprintf(buf, out->size+1 - size_written,
+        r = rd_snprintf(buf, out->size+1 - size_written,
                 "%s%sauth=Bearer %s%s", gs2_header, kvsep, state->token_value,
                 kvsep);
+        rd_assert(r < out->size+1 - size_written);
+        size_written += r;
         buf = out->ptr + size_written;
 
         for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
                 rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
-                size_written += rd_snprintf(buf, out->size+1 - size_written,
+                r = rd_snprintf(buf, out->size+1 - size_written,
                         "%s=%s%s", extension->name, extension->value, kvsep);
+                rd_assert(r < out->size+1 - size_written);
+                size_written += r;
                 buf = out->ptr + size_written;
         }
 
-        rd_snprintf(buf, out->size+1 - size_written, "%s", kvsep);
+        r = rd_snprintf(buf, out->size+1 - size_written, "%s", kvsep);
+        rd_assert(r < out->size+1 - size_written);
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "OAUTHBEARER",
                    "Built client first message");

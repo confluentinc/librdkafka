@@ -562,8 +562,8 @@ static int parse_unsecured_jws_config(const char *cfg,
 }
 
 /**
- * @brief Default SASL/OAUTHBEARER token refresh callback that generates
- * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
+ * @brief Default SASL/OAUTHBEARER token refresh callback that generates an
+ * unsecured JWS as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
  *
  * This method interprets \c sasl.oauthbearer.config as space-separated
  * name=value pairs with valid names including principalClaimName,
@@ -573,10 +573,25 @@ static int parse_unsecured_jws_config(const char *cfg,
  * for lifeSeconds is 3600.  The scope value is CSV format with the
  * default value being no/empty scope. For example:
  * "principalClaimName=azp principal=admin scopeClaimName=roles
- * scope=role1,role2 lifeSeconds=600".  SASL extensions can be
- * communicated to the broker via extension_<extensionname>=value. For
- * example: "principal=admin extension_traceId=123". Unrecognized names
- * are ignored.
+ * scope=role1,role2 lifeSeconds=600".
+ * 
+ * SASL extensions can be communicated to the broker via
+ * extension_<extensionname>=value. For example:
+ * "principal=admin extension_traceId=123".  Extension names and values
+ * must comnform to the required syntax as per
+ * https://tools.ietf.org/html/rfc7628#section-3.1
+ * 
+ * All values -- whether extensions, claim names, or scope elements -- must not
+ * include a quote (") character.  The parsing rules also imply that names
+ * and values cannot include a space character, and scope elements cannot
+ * include a comma (,) character.
+ * 
+ * The existence of any kind of parsing problem -- an unrecognized name,
+ * a quote character in a value, an empty value, etc. -- is a fatal error.
+ * 
+ * Unsecured tokens are not to be used in production -- they are only good for
+ * testing and development purposess -- so while the inflexibility of the
+ * parsing rules is acknowledged, it is assumed that this is not problematic. 
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char *principal_claim_name = NULL;

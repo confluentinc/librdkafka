@@ -49,7 +49,7 @@ function checks {
 	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-m$MBITS"
 	    mkl_mkvar_append LDFLAGS LDFLAGS "-m$MBITS"
 	fi
-	if [[ -z "$ARFLAGS" && $MBITS == 64 && $MKL_DISTRO == "SunOS" ]]; then
+	if [[ -z "$ARFLAGS" && $MBITS == 64 && $MKL_DISTRO == "sunos" ]]; then
 	    # Turn on 64-bit archives on SunOS
 	    mkl_mkvar_append ARFLAGS ARFLAGS "S"
 	fi
@@ -109,7 +109,7 @@ function checks {
 
     # install
     if [ -z "$INSTALL" ]; then
-	if [[ $MKL_DISTRO == "SunOS" ]]; then
+	if [[ $MKL_DISTRO == "sunos" ]]; then
 	    mkl_meta_set ginstall name "GNU install"
 	    if mkl_command_check ginstall "" ignore "ginstall --version"; then
 		INSTALL=ginstall

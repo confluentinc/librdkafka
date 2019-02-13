@@ -49,7 +49,7 @@ clean:
 	@$(MAKE) -C examples $@
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ ; done)
 
-distclean: clean
+distclean: clean deps-clean
 	./configure --clean
 	rm -f config.log config.log.old
 

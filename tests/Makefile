@@ -49,8 +49,6 @@ run_seq: $(BIN)
 	./run-test.sh -p1 ./$(BIN)
 
 run_local: $(BIN)
-	@echo "Running local broker-less tests"
-	./run-test.sh -p5 -l ./$(BIN)
 	@echo "Running local broker-less tests with idempotent producer"
 	./run-test.sh -p5 -l -P ./$(BIN)
 

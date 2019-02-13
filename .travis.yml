@@ -12,19 +12,16 @@ dist: trusty
 sudo: false
 before_script:
  - ccache -s || echo "CCache is not available."
- - if [[ $TRAVIS_OS_NAME == linux ]]; then sudo apt-get install -y libzstd-dev  || true ; fi
- - if [[ $TRAVIS_OS_NAME == osx ]]; then brew install zstd ; fi
 script:
 - rm -rf artifacts dest
 - mkdir dest artifacts
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include
-  -L/usr/local/opt/openssl/lib" ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; else ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; fi
+- if [[ "${TRAVIS_OS_NAME}_${CC}" == "osx_clang" ]]; then ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static ; else ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" ; fi
 - make -j2 all examples check && make -C tests run_local
 - make install
-- (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then packaging/rpm/mock-on-docker.sh ; fi
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then docker run -it -v $PWD:/v microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz; fi
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_clang" ]]; then packaging/alpine/test-build.sh ; fi
+- (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .)
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh centos ; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh debian ; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_clang" ]]; then packaging/tools/distro-build.sh alpine ; fi
 deploy:
   provider: s3
   access_key_id:
@@ -37,7 +34,6 @@ deploy:
   local-dir: artifacts
   upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}
   on:
-    condition: "$CC = gcc"
     repo: edenhill/librdkafka
     all_branches: true
     tags: true

@@ -14,7 +14,7 @@ if [[ ! -f /.dockerenv ]]; then
     # Running on host, fire up a docker container a run it.
     #
 
-    if [[ ! -f configure.librdkafka ]]; then
+    if [[ ! -f configure.self ]]; then
         echo "$0 must be run from librdkafka top directory"
         exit 1
     fi

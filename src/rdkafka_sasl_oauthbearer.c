@@ -161,8 +161,7 @@ static int check_oauthbearer_extension_key(const char *key,
 		        "SASL/OAUTHBEARER extension keys must not be empty");
                 return -1;
         }
-        c = key;
-        while (*c != '\0') {
+        for (c = key ; *c ; c++)
                 if (!(*c >= 'A' && *c <= 'Z') && !(*c >= 'a' && *c <= 'z')) {
                         rd_snprintf(errstr, errstr_size,
                                 "SASL/OAUTHBEARER extension keys must only "
@@ -170,8 +169,6 @@ static int check_oauthbearer_extension_key(const char *key,
                                 key, *c);
                         return -1;
                 }
-                c++;
-        }
         return 0;
 }
 
@@ -193,8 +190,7 @@ static int check_oauthbearer_extension_value(const char *value,
          * CR             =  %x0D     ; carriage return
          * LF             =  %x0A     ; linefeed
          */
-        c = value;
-        while (*c != '\0') {
+        for (c = value ; *c ; c++)
                 if (!(*c >= '\x21' && *c <= '\x7E') && *c != '\x20'
                         && *c != '\x09' && *c != '\x0D' && *c != '\x0A') {
                         rd_snprintf(errstr, errstr_size,
@@ -204,8 +200,6 @@ static int check_oauthbearer_extension_value(const char *value,
                                 value, *c);
                         return -1;
                 }
-                c++;
-        }
         return 0;
 }
 

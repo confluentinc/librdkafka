@@ -4351,34 +4351,33 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 continue;
                         }
 
-
-                        /* Initiate asynchronous connection attempt.
-                        * Only the host lookup is blocking here. */
+			/* Initiate asynchronous connection attempt.
+			 * Only the host lookup is blocking here. */
                         r = rd_kafka_broker_connect(rkb);
                         if (r == -1) {
-                                /* Immediate failure, most likely host
-                                * resolving failed.
-                                * Try the next resolve result until we've
-                                * tried them all, in which case we sleep a
-                                * short while to avoid busy looping. */
-                                if (!rkb->rkb_rsal ||
-                                rkb->rkb_rsal->rsal_cnt == 0 ||
-                                rkb->rkb_rsal->rsal_curr + 1 ==
-                                rkb->rkb_rsal->rsal_cnt)
+				/* Immediate failure, most likely host
+				 * resolving failed.
+				 * Try the next resolve result until we've
+				 * tried them all, in which case we sleep a
+				 * short while to avoid busy looping. */
+				if (!rkb->rkb_rsal ||
+                                    rkb->rkb_rsal->rsal_cnt == 0 ||
+                                    rkb->rkb_rsal->rsal_curr + 1 ==
+                                    rkb->rkb_rsal->rsal_cnt)
                                         rd_kafka_broker_serve(
                                                 rkb, rd_kafka_max_block_ms);
-                        } else if (r == 0) {
+			} else if (r == 0) {
                                 /* Broker has no hostname yet, wait
-                                * for hostname to be set and connection
-                                * triggered by received OP_CONNECT. */
+                                 * for hostname to be set and connection
+                                 * triggered by received OP_CONNECT. */
                                 rd_kafka_broker_serve(rkb,
-                                                rd_kafka_max_block_ms);
+                                                      rd_kafka_max_block_ms);
                         } else {
                                 /* Connection in progress, state will
-                                * have changed to STATE_CONNECT. */
+                                 * have changed to STATE_CONNECT. */
                         }
 
-                        break;
+			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
 		case RD_KAFKA_BROKER_STATE_AUTH:

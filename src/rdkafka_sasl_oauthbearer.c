@@ -744,14 +744,12 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                         *(++jws_last_char) = '.';
                         *(jws_last_char + 1) = '\0';
                         // convert the 2 differing encode characters
-                        jws_maybe_non_url_char = jws;
-                        while (*jws_maybe_non_url_char != '\0') {
+                        for (jws_maybe_non_url_char = jws;
+                             *jws_maybe_non_url_char; jws_maybe_non_url_char++)
                                 if (*jws_maybe_non_url_char == '+')
                                         *jws_maybe_non_url_char = '-';
                                 else if (*jws_maybe_non_url_char == '/')
                                         *jws_maybe_non_url_char = '_';
-                                ++jws_maybe_non_url_char;
-                        }
                         extension_pair_count = rd_list_cnt(&jws_info.extensions);
                         extensionv = rd_malloc(sizeof(*extensionv) * 2 *
                                 extension_pair_count);

@@ -544,6 +544,142 @@ static int parse_unsecured_jws_config(const char *cfg,
 }
 
 /**
+ * @brief Create unsecured JWS compact serialization
+ * from the given information.
+ * @returns allocated memory that the caller must free.
+ */
+static char *create_jws(
+    const struct rd_kafka_sasl_oauthbearer_unsecured_jws *jws_info,
+    const rd_ts_t now_wallclock_millis) {
+        static const char *jose_header_encoded =
+                "eyJhbGciOiJub25lIn0"; // {"alg":"none"}
+        int scope_json_length = 0;
+        int max_json_length;
+        double now_wallclock_seconds;
+        char *scope_json;
+        char *scope_curr;
+        int i;
+        char *claims_json;
+        char *jws_claims;
+        size_t encode_len;
+        char *jws_last_char;
+        char *jws_maybe_non_url_char;
+        char *retval_jws;
+        rd_list_t scope;
+
+        rd_list_init(&scope, 0, rd_free);
+        if (jws_info->scope_csv_text) {
+                // convert from csv to rd_list_t and
+                // calculate json length
+                char *start = jws_info->scope_csv_text;
+                char *curr = start;
+                while (*curr != '\0') {
+                        // ignore empty elements (e.g. ",,")
+                        while (*curr != '\0' && *curr == ',') {
+                                ++curr;
+                                ++start;
+                        }
+                        while (*curr != '\0' && *curr != ',')
+                                ++curr;
+                        if (curr != start) {
+                                if (*curr == ',') {
+                                        *curr = '\0';
+                                        ++curr;
+                                }
+                                if (!rd_list_find(&scope, start,
+                                        (void *)strcmp))
+                                        rd_list_add(&scope,
+                                                rd_strdup(start));
+                                if (scope_json_length == 0)
+                                        scope_json_length = 2 + // ,"
+                                                strlen(jws_info->
+                                                        scope_claim_name) +
+                                                4 + // ":["
+                                                strlen(start) +
+                                                1 + // "
+                                                1; // trailing ]
+                                else {
+                                        scope_json_length += 2; // ,"
+                                        scope_json_length += strlen(start);
+                                        scope_json_length += 1; // "
+                                }
+                                start = curr;
+                        }
+                }
+        }
+
+        now_wallclock_seconds = now_wallclock_millis / 1000.0;
+        // generate json
+        max_json_length = 2 + // {"
+                strlen(jws_info->principal_claim_name) +
+                3 + // ":"
+                strlen(jws_info->principal) +
+                8 + // ","iat":
+                14 + // iat NumericDate (e.g. 1549251467.546)
+                7 + // ,"exp":
+                14 + // exp NumericDate (e.g. 1549252067.546)
+                scope_json_length +
+                1; // }
+        // generate scope portion of json
+        scope_json = rd_malloc(scope_json_length + 1);
+        *scope_json = '\0';
+        scope_curr = scope_json;
+        for (i = 0; i < rd_list_cnt(&scope); i++) {
+                if (i == 0)
+                        scope_curr += rd_snprintf(scope_curr,
+                                (size_t)(scope_json
+                                        + scope_json_length
+                                        + 1 - scope_curr),
+                                ",\"%s\":[\"",
+                                jws_info->scope_claim_name);
+                else
+                        scope_curr += sprintf(scope_curr, "%s",
+                                ",\"");
+                scope_curr += sprintf(scope_curr, "%s\"",
+                        rd_list_elem(&scope, i));
+                if (i == rd_list_cnt(&scope) - 1)
+                        scope_curr += sprintf(scope_curr, "%s",
+                                "]");
+        }
+        claims_json = rd_malloc(max_json_length + 1);
+        rd_snprintf(claims_json, max_json_length + 1,
+                "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f%s}",
+                jws_info->principal_claim_name,
+                jws_info->principal,
+                now_wallclock_seconds,
+                now_wallclock_seconds + jws_info->life_seconds,
+                scope_json);
+        rd_free(scope_json);
+        // convert to base64URL format, first to base64, then to
+        // base64URL
+        retval_jws = rd_malloc(strlen(jose_header_encoded) + 1 +
+                (((max_json_length + 2) / 3) * 4) + 1 + 1);
+        sprintf(retval_jws, "%s.", jose_header_encoded);
+        jws_claims = retval_jws + strlen(retval_jws);
+        encode_len = EVP_EncodeBlock((uint8_t*)jws_claims,
+                (uint8_t*)claims_json, strlen(claims_json));
+        rd_free(claims_json);
+        jws_last_char = jws_claims + encode_len - 1;
+        // convert from padded base64 to unpadded base64URL
+        // eliminate any padding
+        while (*jws_last_char == '=')
+                --jws_last_char;
+        *(++jws_last_char) = '.';
+        *(jws_last_char + 1) = '\0';
+        // convert the 2 differing encode characters
+        for (jws_maybe_non_url_char = retval_jws;
+                *jws_maybe_non_url_char; jws_maybe_non_url_char++)
+                if (*jws_maybe_non_url_char == '+')
+                        *jws_maybe_non_url_char = '-';
+                else if (*jws_maybe_non_url_char == '/')
+                        *jws_maybe_non_url_char = '_';
+
+        rd_list_destroy(&scope);
+
+        return retval_jws;
+}
+
+/**
  * @brief Default SASL/OAUTHBEARER token refresh callback that generates an
  * unsecured JWS as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
  *
@@ -576,12 +712,10 @@ static int parse_unsecured_jws_config(const char *cfg,
  * parsing rules is acknowledged, it is assumed that this is not problematic. 
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
-        rd_list_t scope;
-        int scope_json_length = 0;
         char errstr[512] = "\0";
         struct rd_kafka_sasl_oauthbearer_unsecured_jws jws_info;
+        int i;
 
-        rd_list_init(&scope, 0, rd_free);
         rd_list_init(&jws_info.extensions, 0,
                 (void (*)(void *))rd_strtup_destroy);
 
@@ -628,128 +762,11 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
                                 "scope cannot contain a '\"' "
                                 "character: %s", jws_info.scope_csv_text);
                 else {
-                        static const char *jose_header_encoded =
-                                "eyJhbGciOiJub25lIn0"; // {"alg":"none"}
-                        int max_json_length;
-                        rd_ts_t now_wallclock_millis;
-                        double now_wallclock_seconds;
-                        char *scope_json;
-                        char *scope_curr;
-                        int i;
-                        char *claims_json;
-                        char *jws;
-                        char *jws_claims;
-                        size_t encode_len;
-                        char *jws_last_char;
-                        char *jws_maybe_non_url_char;
                         const char **extensionv;
                         int extension_pair_count;
+                        rd_ts_t now_wallclock_millis = rd_uclock() / 1000;
+                        char *jws = create_jws(&jws_info, now_wallclock_millis);
 
-                        if (jws_info.scope_csv_text) {
-                                // convert from csv to rd_list_t and
-                                // calculate json length
-                                char *start = jws_info.scope_csv_text;
-                                char *curr = start;
-                                while (*curr != '\0') {
-                                        // ignore empty elements (e.g. ",,")
-                                        while (*curr != '\0' && *curr == ',') {
-                                                ++curr;
-                                                ++start;
-                                        }
-                                        while (*curr != '\0' && *curr != ',')
-                                                ++curr;
-                                        if (curr != start) {
-                                                if (*curr == ',') {
-                                                       *curr = '\0';
-                                                       ++curr;
-                                                }
-                                                if (!rd_list_find(&scope, start,
-                                                        (void *)strcmp))
-                                                        rd_list_add(&scope,
-                                                                rd_strdup(start));
-                                                if (scope_json_length == 0)
-                                                        scope_json_length = 2 + // ,"
-                                                                strlen(jws_info.scope_claim_name) +
-                                                                4 + // ":["
-                                                                strlen(start) +
-                                                                1 + // "
-                                                                1; // trailing ]
-                                                else {
-                                                        scope_json_length += 2; // ,"
-                                                        scope_json_length += strlen(start);
-                                                        scope_json_length += 1; // "
-                                                }
-                                                start = curr;
-                                        }
-                                }
-                        }
-
-                        now_wallclock_millis = rd_uclock() / 1000;
-                        now_wallclock_seconds = now_wallclock_millis / 1000.0;
-                        // generate json
-                        max_json_length = 2 + // {"
-                                strlen(jws_info.principal_claim_name) +
-                                3 + // ":"
-                                strlen(jws_info.principal) +
-                                8 + // ","iat":
-                                14 + // iat NumericDate (e.g. 1549251467.546)
-                                7 + // ,"exp":
-                                14 + // exp NumericDate (e.g. 1549252067.546)
-                                scope_json_length +
-                                1; // }
-                        // generate scope portion of json
-                        scope_json = rd_malloc(scope_json_length + 1);
-                        *scope_json = '\0';
-                        scope_curr = scope_json;
-                        for (i = 0; i < rd_list_cnt(&scope); i++) {
-                                if (i == 0)
-                                        scope_curr += rd_snprintf(scope_curr,
-                                                (size_t)(scope_json
-                                                        + scope_json_length
-                                                        + 1 - scope_curr),
-                                                ",\"%s\":[\"",
-                                                jws_info.scope_claim_name);
-                                else
-                                        scope_curr += sprintf(scope_curr, "%s",
-                                                ",\"");
-                                scope_curr += sprintf(scope_curr, "%s\"",
-                                        rd_list_elem(&scope, i));
-                                if (i == rd_list_cnt(&scope) - 1)
-                                        scope_curr += sprintf(scope_curr, "%s",
-                                                "]");
-                        }
-                        claims_json = rd_malloc(max_json_length + 1);
-                        rd_snprintf(claims_json, max_json_length + 1,
-                                "{\"%s\":\"%s\",\"iat\":%.3f,\"exp\":%.3f%s}",
-                                jws_info.principal_claim_name,
-                                jws_info.principal,
-                                now_wallclock_seconds,
-                                now_wallclock_seconds + jws_info.life_seconds,
-                                scope_json);
-                        rd_free(scope_json);
-                        // convert to base64URL format, first to base64, then to
-                        // base64URL
-                        jws = rd_malloc(strlen(jose_header_encoded) + 1 +
-                                (((max_json_length + 2) / 3) * 4) + 1 + 1);
-                        sprintf(jws, "%s.", jose_header_encoded);
-                        jws_claims = jws + strlen(jws);
-                        encode_len = EVP_EncodeBlock((uint8_t*)jws_claims,
-                                (uint8_t*)claims_json, strlen(claims_json));
-                        rd_free(claims_json);
-                        jws_last_char = jws_claims + encode_len - 1;
-                        // convert from padded base64 to unpadded base64URL
-                        // eliminate any padding
-                        while (*jws_last_char == '=')
-                                --jws_last_char;
-                        *(++jws_last_char) = '.';
-                        *(jws_last_char + 1) = '\0';
-                        // convert the 2 differing encode characters
-                        for (jws_maybe_non_url_char = jws;
-                             *jws_maybe_non_url_char; jws_maybe_non_url_char++)
-                                if (*jws_maybe_non_url_char == '+')
-                                        *jws_maybe_non_url_char = '-';
-                                else if (*jws_maybe_non_url_char == '/')
-                                        *jws_maybe_non_url_char = '_';
                         extension_pair_count = rd_list_cnt(&jws_info.extensions);
                         extensionv = rd_malloc(sizeof(*extensionv) * 2 *
                                 extension_pair_count);
@@ -774,7 +791,6 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         RD_IF_FREE(jws_info.principal, rd_free);
         RD_IF_FREE(jws_info.scope_claim_name, rd_free);
         RD_IF_FREE(jws_info.scope_csv_text, rd_free);
-        rd_list_destroy(&scope);
         rd_list_destroy(&jws_info.extensions);
 }
 

@@ -408,7 +408,9 @@ int rd_unittest (void) {
                 { "conf", unittest_conf },
                 { "broker", unittest_broker },
                 { "request", unittest_request },
+#if WITH_SASL_OAUTHBEARER
                 { "sasl_oauthbearer", unittest_sasl_oauthbearer },
+#endif
                 { NULL }
         };
         int i;

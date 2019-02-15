@@ -1106,6 +1106,57 @@ const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider = {
 };
 
 /**
+ * @brief free memory inside the given token
+ */
+static void rd_kafka_sasl_oauthbearer_token_free(
+    struct rd_kafka_sasl_oauthbearer_token *token) {
+        RD_IF_FREE(token->token_value, rd_free);
+        RD_IF_FREE(token->md_principal_name, rd_free);
+        RD_IF_FREE(token->extensions, rd_free);
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should fail when no principal specified.
+ */
+static int do_unittest_config_defaults(void) {
+        const char *sasl_oauthbearer_config = "principal=fubar";
+
+        // {"alg":"none"}
+        // .
+        // {"sub":"fubar","iat":1.000,"exp":3601.000}
+        //
+        const char *expected_token_value = "eyJhbGciOiJub25lIn0"
+                "."
+                "eyJzdWIiOiJmdWJhciIsImlhdCI6MS4wMDAsImV4cCI6MzYwMS4wMDB9"
+                ".";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        struct rd_kafka_sasl_oauthbearer_token token = {};
+        int r;
+        r = rd_kafka_oauthbearer_unsecured_token_internal(
+                     &token,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr));
+        if (r) {
+                rd_kafka_sasl_oauthbearer_token_free(&token);
+                RD_UT_FAIL("Failed to create a default token: %s",
+                        sasl_oauthbearer_config);
+        }
+
+        r = token.md_lifetime_ms == now_wallclock_millis + 3600 * 1000
+                && !strcmp(token.md_principal_name,
+                            sasl_oauthbearer_config + 10)
+                && !strcmp(token.token_value, expected_token_value);
+        rd_kafka_sasl_oauthbearer_token_free(&token);
+        
+        RD_UT_ASSERT(r, "Incorrect default lifetime/principal/compact "
+                "serialization: %s", token.token_value);
+
+        RD_UT_PASS();
+}
+
+/**
  * @brief `sasl.oauthbearer.config` test:
  * should fail when no principal specified.
  */
@@ -1121,9 +1172,7 @@ static int do_unittest_config_no_principal_should_fail(void) {
                      &token,
                      sasl_oauthbearer_config, now_wallclock_millis,
                      errstr, sizeof(errstr));
-        RD_IF_FREE(token.token_value, rd_free);
-        RD_IF_FREE(token.md_principal_name, rd_free);
-        RD_IF_FREE(token.extensions, rd_free);
+        rd_kafka_sasl_oauthbearer_token_free(&token);
 
         RD_UT_ASSERT(r, "Did not fail without an explicit principal");
 
@@ -1158,9 +1207,7 @@ static int do_unittest_config_empty_value_should_fail(void) {
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,
                              errstr, sizeof(errstr));
-                RD_IF_FREE(token.token_value, rd_free);
-                RD_IF_FREE(token.md_principal_name, rd_free);
-                RD_IF_FREE(token.extensions, rd_free);
+                rd_kafka_sasl_oauthbearer_token_free(&token);
 
                 RD_UT_ASSERT(r, "Did not fail with an empty value: %s)",
                         sasl_oauthbearer_configs[i]);
@@ -1199,9 +1246,7 @@ static int do_unittest_config_value_with_quote_should_fail(void) {
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,
                              errstr, sizeof(errstr));
-                RD_IF_FREE(token.token_value, rd_free);
-                RD_IF_FREE(token.md_principal_name, rd_free);
-                RD_IF_FREE(token.extensions, rd_free);
+                rd_kafka_sasl_oauthbearer_token_free(&token);
 
                 RD_UT_ASSERT(r, "Did not fail with embedded quote: %s)",
                         sasl_oauthbearer_configs[i]);
@@ -1221,6 +1266,7 @@ int unittest_sasl_oauthbearer (void) {
         fails += do_unittest_config_no_principal_should_fail();
         fails += do_unittest_config_empty_value_should_fail();
         fails += do_unittest_config_value_with_quote_should_fail();
+        fails += do_unittest_config_defaults();
 
         return fails;
 }

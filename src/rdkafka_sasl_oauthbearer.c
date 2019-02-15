@@ -680,6 +680,100 @@ static char *create_jws(
 }
 
 /**
+ * @brief Same as rd_kafka_oauthbearer_unsecured_token() except it takes
+ * additional explicit arguments and return a status code to facilitate
+ * unit testing.
+ * @returns -1 on failure (errstr set), else 0.
+ */
+static int rd_kafka_oauthbearer_unsecured_token_internal(
+    rd_kafka_t *rk,
+    void *opaque,
+    const char *sasl_oauthbearer_config,
+    rd_ts_t now_wallclock_millis,
+    char *errstr, size_t errstr_size) {
+
+        struct rd_kafka_sasl_oauthbearer_unsecured_jws jws_info;
+        int r;
+        int i;
+
+        rd_list_init(&jws_info.extensions, 0,
+                (void (*)(void *))rd_strtup_destroy);
+
+        if (!(r = parse_unsecured_jws_config(sasl_oauthbearer_config,
+            &jws_info, errstr, errstr_size))) {
+                // make sure we have required and valid info
+                if (!jws_info.principal_claim_name)
+                        jws_info.principal_claim_name = strdup("sub");
+                if (!jws_info.scope_claim_name)
+                        jws_info.scope_claim_name = strdup("scope");
+                if (!jws_info.life_seconds)
+                        jws_info.life_seconds = 3600;
+                if (!jws_info.principal) {
+                        rd_snprintf(errstr, errstr_size,
+                                "Invalid sasl.oauthbearer.config: "
+                                "no principal=<value>");
+                        r = -1;
+                } else if (strchr(jws_info.principal, '"')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "Invalid sasl.oauthbearer.config: "
+                                "'\"' cannot appear in principal: %s",
+                                jws_info.principal);
+                        r = -1;
+                } else if (strchr(jws_info.principal_claim_name, '"')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "Invalid sasl.oauthbearer.config: "
+                                "'\"' cannot appear in principalClaimName: %s",
+                                jws_info.principal_claim_name);
+                        r = -1;
+                } else if (strchr(jws_info.scope_claim_name, '"')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "Invalid sasl.oauthbearer.config: "
+                                "'\"' cannot appear in scopeClaimName: %s",
+                                jws_info.scope_claim_name);
+                        r = -1;
+                } else if (jws_info.scope_csv_text &&
+                         strchr(jws_info.scope_csv_text, '"')) {
+                        rd_snprintf(errstr, errstr_size,
+                                "Invalid sasl.oauthbearer.config: "
+                                "'\"' cannot appear in scope: %s",
+                                jws_info.scope_csv_text);
+                        r = -1;
+                } else {
+                        const char **extensionv;
+                        int extension_pair_count;
+                        rd_ts_t now_wallclock_millis = rd_uclock() / 1000;
+                        char *jws = create_jws(&jws_info, now_wallclock_millis);
+
+                        extension_pair_count = rd_list_cnt(&jws_info.extensions);
+                        extensionv = rd_malloc(sizeof(*extensionv) * 2 *
+                                extension_pair_count);
+                        for (i = 0; i < extension_pair_count; ++i) {
+                                rd_strtup_t *strtup = (rd_strtup_t *)
+                                        rd_list_elem(&jws_info.extensions, i);
+                                extensionv[2 * i] = strtup->name;
+                                extensionv[2 * i + 1] = strtup->value;
+                        }
+                        rd_assert(RD_KAFKA_RESP_ERR_NO_ERROR ==
+                                rd_kafka_oauthbearer_set_token(rk, jws,
+                                now_wallclock_millis +
+                                jws_info.life_seconds * 1000,
+                                jws_info.principal,
+                                extensionv, 2 * extension_pair_count,
+                                errstr, errstr_size));
+                        rd_free(jws);
+                        rd_free(extensionv);
+                }
+        }
+        RD_IF_FREE(jws_info.principal_claim_name, rd_free);
+        RD_IF_FREE(jws_info.principal, rd_free);
+        RD_IF_FREE(jws_info.scope_claim_name, rd_free);
+        RD_IF_FREE(jws_info.scope_csv_text, rd_free);
+        rd_list_destroy(&jws_info.extensions);
+
+        return r;
+}
+
+/**
  * @brief Default SASL/OAUTHBEARER token refresh callback that generates an
  * unsecured JWS as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
  *
@@ -712,86 +806,15 @@ static char *create_jws(
  * parsing rules is acknowledged, it is assumed that this is not problematic. 
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
-        char errstr[512] = "\0";
-        struct rd_kafka_sasl_oauthbearer_unsecured_jws jws_info;
-        int i;
-
-        rd_list_init(&jws_info.extensions, 0,
-                (void (*)(void *))rd_strtup_destroy);
-
-        if (parse_unsecured_jws_config(rk->rk_conf.sasl.oauthbearer_config,
-                &jws_info, errstr, sizeof(errstr)) == -1)
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
-        else {
-                // make sure we have required and valid info
-                if (!jws_info.principal_claim_name)
-                        jws_info.principal_claim_name = strdup("sub");
-                if (!jws_info.scope_claim_name)
-                        jws_info.scope_claim_name = strdup("scope");
-                if (!jws_info.life_seconds)
-                        jws_info.life_seconds = 3600;
-                if (!jws_info.principal)
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Invalid sasl.oauthbearer.config: "
-                                "no principal=<value>");
-                else if (strchr(jws_info.principal, '"'))
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Invalid sasl.oauthbearer.config: "
-                                "principal cannot contain a '\"' "
-                                "character: %s", jws_info.principal);
-                else if (strchr(jws_info.principal_claim_name, '"'))
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Invalid sasl.oauthbearer.config: "
-                                "principalClaimName cannot contain a '\"' "
-                                "character: %s", jws_info.principal_claim_name);
-                else if (strchr(jws_info.scope_claim_name, '"'))
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Invalid sasl.oauthbearer.config: "
-                                "scopeClaimName cannot contain a '\"' "
-                                "character: %s", jws_info.scope_claim_name);
-                else if (jws_info.scope_csv_text &&
-                         strchr(jws_info.scope_csv_text, '"'))
-                        rd_kafka_set_fatal_error(rk,
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Invalid sasl.oauthbearer.config: "
-                                "scope cannot contain a '\"' "
-                                "character: %s", jws_info.scope_csv_text);
-                else {
-                        const char **extensionv;
-                        int extension_pair_count;
-                        rd_ts_t now_wallclock_millis = rd_uclock() / 1000;
-                        char *jws = create_jws(&jws_info, now_wallclock_millis);
-
-                        extension_pair_count = rd_list_cnt(&jws_info.extensions);
-                        extensionv = rd_malloc(sizeof(*extensionv) * 2 *
-                                extension_pair_count);
-                        for (i = 0; i < extension_pair_count; ++i) {
-                                rd_strtup_t *strtup = (rd_strtup_t *)
-                                        rd_list_elem(&jws_info.extensions, i);
-                                extensionv[2 * i] = strtup->name;
-                                extensionv[2 * i + 1] = strtup->value;
-                        }
-                        rd_assert(RD_KAFKA_RESP_ERR_NO_ERROR ==
-                                rd_kafka_oauthbearer_set_token(rk, jws,
-                                now_wallclock_millis +
-                                jws_info.life_seconds * 1000,
-                                jws_info.principal,
-                                extensionv, 2 * extension_pair_count,
-                                errstr, sizeof(errstr)));
-                        rd_free(jws);
-                        rd_free(extensionv);
-                }
+        char errstr[512];
+        if (rd_kafka_oauthbearer_unsecured_token_internal(
+            rk, opaque,
+            rk->rk_conf.sasl.oauthbearer_config,
+            rd_uclock() / 1000,
+            errstr, sizeof(errstr)) == -1) {
+                rd_kafka_set_fatal_error(rk,
+                        RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
         }
-        RD_IF_FREE(jws_info.principal_claim_name, rd_free);
-        RD_IF_FREE(jws_info.principal, rd_free);
-        RD_IF_FREE(jws_info.scope_claim_name, rd_free);
-        RD_IF_FREE(jws_info.scope_csv_text, rd_free);
-        rd_list_destroy(&jws_info.extensions);
 }
 
 /**
@@ -1062,3 +1085,99 @@ const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider = {
         .close         = rd_kafka_sasl_oauthbearer_close,
         .conf_validate = rd_kafka_sasl_oauthbearer_conf_validate,
 };
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should fail when no principal specified.
+ */
+static int do_unittest_config_no_principal_fails(void) {
+        rd_kafka_t rk;
+        void *opaque = NULL;
+        const char *sasl_oauthbearer_config = "";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        int failed = !rd_kafka_oauthbearer_unsecured_token_internal(
+                &rk, opaque,
+                sasl_oauthbearer_config, now_wallclock_millis,
+                errstr, sizeof(errstr)) ||
+                strcmp(errstr,
+                        "Invalid sasl.oauthbearer.config: "
+                        "no principal=<value>");
+        return failed;
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should fail when empty values are specified.
+ */
+static int do_unittest_config_empty_value_fails(void) {
+        rd_kafka_t rk;
+        void *opaque = NULL;
+        const char *sasl_oauthbearer_configs[] = {
+                "principal=",
+                "principal=fubar principalClaimName=",
+                "principal=fubar scope=",
+                "principal=fubar scopeClaimName=",
+                "principal=fubar lifeSeconds="
+        };
+        const char *expected_prefix = "Invalid sasl.oauthbearer.config: empty";
+        unsigned long i;
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        int failed;
+        for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
+             i++) {
+                failed = !rd_kafka_oauthbearer_unsecured_token_internal(
+                        &rk, opaque,
+                        sasl_oauthbearer_configs[i], now_wallclock_millis,
+                        errstr, sizeof(errstr)) ||
+                        strncmp(expected_prefix,
+                                errstr, strlen(expected_prefix));
+                if (failed)
+                        return failed;
+        }
+        return 0;
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should fail when value with embedded quote is specified.
+ */
+static int do_unittest_config_value_with_quote_fails(void) {
+        rd_kafka_t rk;
+        void *opaque = NULL;
+        const char *sasl_oauthbearer_configs[] = {
+                "principal=\"fu",
+                "principal=fubar principalClaimName=\"bar",
+                "principal=fubar scope=\"a,b,c",
+                "principal=fubar scopeClaimName=\"baz"
+        };
+        const char *expected_prefix = "Invalid sasl.oauthbearer.config: "
+                                "'\"' cannot appear in ";
+        unsigned long i;
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        int failed;
+        for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
+             i++) {
+                failed = !rd_kafka_oauthbearer_unsecured_token_internal(
+                        &rk, opaque,
+                        sasl_oauthbearer_configs[i], now_wallclock_millis,
+                        errstr, sizeof(errstr)) ||
+                        strncmp(expected_prefix,
+                                errstr, strlen(expected_prefix));
+                if (failed)
+                        return failed;
+        }
+        return 0;
+}
+
+int unittest_sasl_oauthbearer (void) {
+        int fails = 0;
+
+        fails += do_unittest_config_no_principal_fails();
+        fails += do_unittest_config_empty_value_fails();
+        fails += do_unittest_config_value_with_quote_fails();
+
+        return fails;
+}

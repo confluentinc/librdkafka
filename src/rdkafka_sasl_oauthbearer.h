@@ -46,5 +46,7 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
 rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
         const char *errstr);
 
+int unittest_sasl_oauthbearer (void);
+
 
 #endif /* _RDKAFKA_SASL_OAUTHBEARER_H_ */

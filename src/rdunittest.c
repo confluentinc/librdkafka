@@ -45,6 +45,7 @@
 #include "rdkafka_request.h"
 
 #include "rdsysqueue.h"
+#include "rdkafka_sasl_oauthbearer.h"
 
 
 int rd_unittest_assert_on_failure = 0;
@@ -407,6 +408,7 @@ int rd_unittest (void) {
                 { "conf", unittest_conf },
                 { "broker", unittest_broker },
                 { "request", unittest_request },
+                { "sasl_oauthbearer", unittest_sasl_oauthbearer },
                 { NULL }
         };
         int i;

@@ -703,7 +703,7 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
     rd_ts_t now_wallclock_millis,
     char *errstr, size_t errstr_size) {
 
-        struct rd_kafka_sasl_oauthbearer_parsed_unsecured_jws parsed = {};
+        struct rd_kafka_sasl_oauthbearer_parsed_unsecured_jws parsed = {0};
         int r;
         int i;
 
@@ -815,7 +815,7 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {};
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
         if (rd_kafka_oauthbearer_unsecured_token_internal(
             &token,
             rk->rk_conf.sasl.oauthbearer_config,
@@ -1132,7 +1132,7 @@ static int do_unittest_config_defaults(void) {
                 ".";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {};
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1166,7 +1166,7 @@ static int do_unittest_config_no_principal_should_fail(void) {
         const char *sasl_oauthbearer_config = "";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {};
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1202,7 +1202,7 @@ static int do_unittest_config_empty_value_should_fail(void) {
 
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                struct rd_kafka_sasl_oauthbearer_token token = {};
+                struct rd_kafka_sasl_oauthbearer_token token = {0};
                 r =rd_kafka_oauthbearer_unsecured_token_internal(
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,
@@ -1241,7 +1241,7 @@ static int do_unittest_config_value_with_quote_should_fail(void) {
 
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                struct rd_kafka_sasl_oauthbearer_token token = {};
+                struct rd_kafka_sasl_oauthbearer_token token = {0};
                 r =rd_kafka_oauthbearer_unsecured_token_internal(
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,

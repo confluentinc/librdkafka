@@ -34,6 +34,7 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_sasl_int.h"
 #include <openssl/evp.h>
+#include "rdunittest.h"
 
 
 /**
@@ -1090,27 +1091,30 @@ const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider = {
  * @brief `sasl.oauthbearer.config` test:
  * should fail when no principal specified.
  */
-static int do_unittest_config_no_principal_fails(void) {
+static int do_unittest_config_no_principal_should_fail(void) {
         rd_kafka_t rk;
         void *opaque = NULL;
+        const char *expected_msg ="Invalid sasl.oauthbearer.config: "
+                "no principal=<value>";
         const char *sasl_oauthbearer_config = "";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        int failed = !rd_kafka_oauthbearer_unsecured_token_internal(
-                &rk, opaque,
-                sasl_oauthbearer_config, now_wallclock_millis,
-                errstr, sizeof(errstr)) ||
-                strcmp(errstr,
-                        "Invalid sasl.oauthbearer.config: "
-                        "no principal=<value>");
-        return failed;
+        RD_UT_ASSERT(rd_kafka_oauthbearer_unsecured_token_internal(
+                     &rk, opaque,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr)),
+                "Did not fail without an explicit principal");
+        RD_UT_ASSERT(!strcmp(errstr, expected_msg),
+                "Incorrect error message when no principal: "
+                "expected=%s received=%s", expected_msg, errstr);
+        RD_UT_PASS();
 }
 
 /**
  * @brief `sasl.oauthbearer.config` test:
  * should fail when empty values are specified.
  */
-static int do_unittest_config_empty_value_fails(void) {
+static int do_unittest_config_empty_value_should_fail(void) {
         rd_kafka_t rk;
         void *opaque = NULL;
         const char *sasl_oauthbearer_configs[] = {
@@ -1124,26 +1128,28 @@ static int do_unittest_config_empty_value_fails(void) {
         unsigned long i;
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        int failed;
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                failed = !rd_kafka_oauthbearer_unsecured_token_internal(
-                        &rk, opaque,
-                        sasl_oauthbearer_configs[i], now_wallclock_millis,
-                        errstr, sizeof(errstr)) ||
-                        strncmp(expected_prefix,
-                                errstr, strlen(expected_prefix));
-                if (failed)
-                        return failed;
+                RD_UT_ASSERT(rd_kafka_oauthbearer_unsecured_token_internal(
+                             &rk, opaque,
+                             sasl_oauthbearer_configs[i], now_wallclock_millis,
+                             errstr, sizeof(errstr)),
+                        "Did not fail with an empty value: %s)",
+                        sasl_oauthbearer_configs[i]);
+                RD_UT_ASSERT(!strncmp(expected_prefix,
+                                     errstr, strlen(expected_prefix)),
+                        "Incorrect error message prefix when empty "
+                        "(%s): expected=%s received=%s",
+                        sasl_oauthbearer_configs[i], expected_prefix, errstr);
         }
-        return 0;
+        RD_UT_PASS();
 }
 
 /**
  * @brief `sasl.oauthbearer.config` test:
  * should fail when value with embedded quote is specified.
  */
-static int do_unittest_config_value_with_quote_fails(void) {
+static int do_unittest_config_value_with_quote_should_fail(void) {
         rd_kafka_t rk;
         void *opaque = NULL;
         const char *sasl_oauthbearer_configs[] = {
@@ -1157,27 +1163,29 @@ static int do_unittest_config_value_with_quote_fails(void) {
         unsigned long i;
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        int failed;
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                failed = !rd_kafka_oauthbearer_unsecured_token_internal(
-                        &rk, opaque,
-                        sasl_oauthbearer_configs[i], now_wallclock_millis,
-                        errstr, sizeof(errstr)) ||
-                        strncmp(expected_prefix,
-                                errstr, strlen(expected_prefix));
-                if (failed)
-                        return failed;
+                RD_UT_ASSERT(rd_kafka_oauthbearer_unsecured_token_internal(
+                             &rk, opaque,
+                             sasl_oauthbearer_configs[i], now_wallclock_millis,
+                             errstr, sizeof(errstr)),
+                        "Did not fail with embedded quote: %s)",
+                        sasl_oauthbearer_configs[i]);
+                RD_UT_ASSERT(!strncmp(expected_prefix,
+                                     errstr, strlen(expected_prefix)),
+                        "Incorrect error message prefix with embedded quote "
+                        "(%s): expected=%s received=%s",
+                        sasl_oauthbearer_configs[i], expected_prefix, errstr);
         }
-        return 0;
+        RD_UT_PASS();
 }
 
 int unittest_sasl_oauthbearer (void) {
         int fails = 0;
 
-        fails += do_unittest_config_no_principal_fails();
-        fails += do_unittest_config_empty_value_fails();
-        fails += do_unittest_config_value_with_quote_fails();
+        fails += do_unittest_config_no_principal_should_fail();
+        fails += do_unittest_config_empty_value_should_fail();
+        fails += do_unittest_config_value_with_quote_should_fail();
 
         return fails;
 }

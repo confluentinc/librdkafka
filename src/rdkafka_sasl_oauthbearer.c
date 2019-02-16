@@ -1375,6 +1375,72 @@ static int do_unittest_config_value_with_quote_should_fail(void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should generate correct extensions.
+ */
+static int do_unittest_config_extensions(void) {
+        const char *sasl_oauthbearer_config = "principal=fubar "
+                "extension_a=b extension_yz=yzval";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        int r;
+        r = rd_kafka_oauthbearer_unsecured_token_internal(
+                     &token,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr));
+        if (r) {
+                rd_kafka_sasl_oauthbearer_token_free(&token);
+                RD_UT_FAIL("Failed to create a token: %s",
+                        sasl_oauthbearer_config);
+        }
+
+        r = token.extension_size == 4;
+        if (!r)
+                RD_UT_SAY("Incorrect extensions: expected 4, received %ld",
+                token.extension_size);
+        else {
+                r = !strcmp(token.extensions[0], "a")
+                        && !strcmp(token.extensions[1], "b")
+                        && !strcmp(token.extensions[2], "yz")
+                        && !strcmp(token.extensions[3], "yzval");
+                if (!r)
+                        RD_UT_SAY("Incorrect extensions: expected a=b and "
+                                "yz=yzval but received %s=%s and %s=%s",
+                                token.extensions[0], token.extensions[1],
+                                token.extensions[2], token.extensions[3]);
+        }
+        rd_kafka_sasl_oauthbearer_token_free(&token);
+        
+        RD_UT_ASSERT(r, "Incorrect extensions");
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief make sure illegal extensions keys are rejected
+ */
+static int do_unittest_illegal_extension_keys_should_fail(void) {
+        const char *illegal_keys[] = {
+                "",
+                "auth",
+                "a1",
+                " a"
+        };
+        unsigned long i;
+        char errstr[512];
+        int r;
+
+        for (i = 0; i < sizeof(illegal_keys) / sizeof(const char *); i++) {
+                r = check_oauthbearer_extension_key(illegal_keys[i],
+                     errstr, sizeof(errstr));
+                RD_UT_ASSERT(r, "Did not recognize illegal extension key: %s",
+                        illegal_keys[i]);
+        }
+        RD_UT_PASS();
+}
+
 int unittest_sasl_oauthbearer (void) {
         int fails = 0;
 
@@ -1385,6 +1451,8 @@ int unittest_sasl_oauthbearer (void) {
         fails += do_unittest_config_defaults();
         fails += do_unittest_config_explicit_scope_and_life();
         fails += do_unittest_config_all_explicit_values();
+        fails += do_unittest_config_extensions();
+        fails += do_unittest_illegal_extension_keys_should_fail();
 
         return fails;
 }

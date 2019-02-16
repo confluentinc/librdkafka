@@ -1117,11 +1117,12 @@ static void rd_kafka_sasl_oauthbearer_token_free(
 
 /**
  * @brief `sasl.oauthbearer.config` test:
- * should fail when no principal specified.
+ * should generate correct default values.
  */
 static int do_unittest_config_defaults(void) {
-        const char *sasl_oauthbearer_config = "principal=fubar";
-
+        const char *sasl_oauthbearer_config = "principal=fubar "
+                "scopeClaimName=whatever";
+        // default scope is empty, default lifetime is 3600 seconds
         // {"alg":"none"}
         // .
         // {"sub":"fubar","iat":1.000,"exp":3601.000}
@@ -1140,18 +1141,106 @@ static int do_unittest_config_defaults(void) {
                      errstr, sizeof(errstr));
         if (r) {
                 rd_kafka_sasl_oauthbearer_token_free(&token);
-                RD_UT_FAIL("Failed to create a default token: %s",
+                RD_UT_FAIL("Failed to create a token: %s",
                         sasl_oauthbearer_config);
         }
 
         r = token.md_lifetime_ms == now_wallclock_millis + 3600 * 1000
-                && !strcmp(token.md_principal_name,
-                            sasl_oauthbearer_config + 10)
+                && !strcmp(token.md_principal_name, "fubar")
                 && !strcmp(token.token_value, expected_token_value);
+        if (!r)
+                RD_UT_SAY("Incorrect default lifetime/principal/compact "
+                        "serialization: %s", token.token_value);
         rd_kafka_sasl_oauthbearer_token_free(&token);
         
-        RD_UT_ASSERT(r, "Incorrect default lifetime/principal/compact "
-                "serialization: %s", token.token_value);
+        RD_UT_ASSERT(r, "Expected: %s", expected_token_value);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should generate correct token for explicit scope and lifeSeconds values.
+ */
+static int do_unittest_config_explicit_scope_and_life(void) {
+        const char *sasl_oauthbearer_config = "principal=fubar "
+                "scope=role1,role2 lifeSeconds=60";
+        // {"alg":"none"}
+        // .
+        // {"sub":"fubar","iat":1.000,"exp":61.000,"scope":["role1","role2"]}
+        //
+        const char *expected_token_value = "eyJhbGciOiJub25lIn0"
+                "."
+                "eyJzdWIiOiJmdWJhciIsImlhdCI6MS4wMDAsImV4cCI6NjEuMDAwLCJzY29wZ"
+                "SI6WyJyb2xlMSIsInJvbGUyIl19"
+                ".";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        int r;
+        r = rd_kafka_oauthbearer_unsecured_token_internal(
+                     &token,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr));
+        if (r) {
+                rd_kafka_sasl_oauthbearer_token_free(&token);
+                RD_UT_FAIL("Failed to create a token: %s",
+                        sasl_oauthbearer_config);
+        }
+
+        r = token.md_lifetime_ms == now_wallclock_millis + 60 * 1000
+                && !strcmp(token.md_principal_name, "fubar")
+                && !strcmp(token.token_value, expected_token_value);
+        if (!r)
+                RD_UT_SAY("Incorrect jws compact serialization for explicit "
+                        "lifeSeconds and scope: %s", token.token_value);
+        rd_kafka_sasl_oauthbearer_token_free(&token);
+        
+        RD_UT_ASSERT(r, "Expected: %s", expected_token_value);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should generate correct token when all values are provided explicitly.
+ */
+static int do_unittest_config_all_explicit_values(void) {
+        const char *sasl_oauthbearer_config = "principal=fubar "
+                "principalClaimName=azp scope=role1,role2 "
+                "scopeClaimName=roles lifeSeconds=60";
+        // {"alg":"none"}
+        // .
+        // {"azp":"fubar","iat":1.000,"exp":61.000,"roles":["role1","role2"]}
+        //
+        const char *expected_token_value = "eyJhbGciOiJub25lIn0"
+                "."
+                "eyJhenAiOiJmdWJhciIsImlhdCI6MS4wMDAsImV4cCI6NjEuMDAwLCJyb2xlc"
+                "yI6WyJyb2xlMSIsInJvbGUyIl19"
+                ".";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        int r;
+        r = rd_kafka_oauthbearer_unsecured_token_internal(
+                     &token,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr));
+        if (r) {
+                rd_kafka_sasl_oauthbearer_token_free(&token);
+                RD_UT_FAIL("Failed to create a token: %s",
+                        sasl_oauthbearer_config);
+        }
+
+        r = token.md_lifetime_ms == now_wallclock_millis + 60 * 1000
+                && !strcmp(token.md_principal_name, "fubar")
+                && !strcmp(token.token_value, expected_token_value);
+        if (!r)
+                RD_UT_SAY("Incorrect jws compact serialization for all "
+                        "explicit values: %s", token.token_value);
+        rd_kafka_sasl_oauthbearer_token_free(&token);
+        
+        RD_UT_ASSERT(r, "Expected: %s", expected_token_value);
 
         RD_UT_PASS();
 }
@@ -1161,7 +1250,7 @@ static int do_unittest_config_defaults(void) {
  * should fail when no principal specified.
  */
 static int do_unittest_config_no_principal_should_fail(void) {
-        const char *expected_msg ="Invalid sasl.oauthbearer.config: "
+        const char *expected_msg = "Invalid sasl.oauthbearer.config: "
                 "no principal=<value>";
         const char *sasl_oauthbearer_config = "";
         rd_ts_t now_wallclock_millis = 1000;
@@ -1178,6 +1267,32 @@ static int do_unittest_config_no_principal_should_fail(void) {
 
         RD_UT_ASSERT(!strcmp(errstr, expected_msg),
                 "Incorrect error message when no principal: "
+                "expected=%s received=%s", expected_msg, errstr);
+        RD_UT_PASS();
+}
+
+/**
+ * @brief `sasl.oauthbearer.config` test:
+ * should fail when something unrecognized is specified.
+ */
+static int do_unittest_config_unrecognized_should_fail(void) {
+        const char *expected_msg = "Unrecognized sasl.oauthbearer.config "
+                "beginning at: unrecognized";
+        const char *sasl_oauthbearer_config = "principal=fubar unrecognized";
+        rd_ts_t now_wallclock_millis = 1000;
+        char errstr[512];
+        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        int r;
+        r = rd_kafka_oauthbearer_unsecured_token_internal(
+                     &token,
+                     sasl_oauthbearer_config, now_wallclock_millis,
+                     errstr, sizeof(errstr));
+        rd_kafka_sasl_oauthbearer_token_free(&token);
+
+        RD_UT_ASSERT(r, "Did not fail with something unrecognized");
+
+        RD_UT_ASSERT(!strcmp(errstr, expected_msg),
+                "Incorrect error message with something unrecognized: "
                 "expected=%s received=%s", expected_msg, errstr);
         RD_UT_PASS();
 }
@@ -1266,7 +1381,10 @@ int unittest_sasl_oauthbearer (void) {
         fails += do_unittest_config_no_principal_should_fail();
         fails += do_unittest_config_empty_value_should_fail();
         fails += do_unittest_config_value_with_quote_should_fail();
+        fails += do_unittest_config_unrecognized_should_fail();
         fails += do_unittest_config_defaults();
+        fails += do_unittest_config_explicit_scope_and_life();
+        fails += do_unittest_config_all_explicit_values();
 
         return fails;
 }

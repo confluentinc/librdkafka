@@ -34,7 +34,7 @@ sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1, "args":"-L"}' --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: broker broker_idempotent non_sparse_connections sasl
+full: broker broker_idempotent sasl
 
 
 #

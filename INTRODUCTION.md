@@ -915,6 +915,45 @@ the logging level will be LOG_WARNING (4), else LOG_INFO (6).
 but it is recommended to instead rely on the above heuristics.
 
 
+### Logging
+
+#### Debug contexts
+
+Extensive debugging of librdkafka can be enabled by setting the
+`debug` configuration property to a CSV string of debug contexts:
+
+Debug context | Type     | Description
+--------------|----------|----------------------
+generic       | *        | General client instance level debugging. Includes initialization and termination debugging.
+broker        | *        | Broker and connection state debugging.
+topic         | *        | Topic and partition state debugging. Includes leader changes.
+metadata      | *        | Cluster and topic metadata retrieval debugging.
+feature       | *        | Kafka protocol feature support as negotiated with the broker.
+queue         | producer | Message queue debugging.
+msg           | *        | Message debugging. Includes information about batching, compression, sizes, etc.
+protocol      | *        | Kafka protocol request/response debugging. Includes latency (rtt) printouts.
+cgrp          | consumer | Low-level consumer group state debugging.
+security      | *        | Security and authentication debugging.
+fetch         | consumer | Consumer message fetch debugging. Includes decision when and why messages are fetched.
+interceptor   | *        | Interceptor interface debugging.
+plugin        | *        | Plugin loading debugging.
+consumer      | consumer | High-level consumer debugging.
+admin         | admin    | Admin API debugging.
+eos           | producer | Idempotent Producer debugging.
+all           | *        | All of the above.
+
+
+Suggested debugging settings for troubleshooting:
+
+Problem space          | Type     | Debug setting
+-----------------------|----------|-------------------
+Producer not delivering messages to broker | producer | `broker,topic,msg`
+Consumer not fetching messages | consumer | Start with `consumer`, or use `cgrp,fetch` for detailed information.
+Consumer starts reading at unexpected offset | consumer | `consumer` or `cgrp,fetch`
+Authentication or connectivity issues | * | `broker,auth`
+Protocol handling or latency | * | `broker,protocol`
+Topic leader and state | * | `topic,metadata`
+
 
 
 

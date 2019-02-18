@@ -448,7 +448,7 @@ size_t rd_buf_write (rd_buf_t *rbuf, const void *payload, size_t size) {
 
         while (remains > 0) {
                 void *p;
-                rd_segment_t *seg;
+                rd_segment_t *seg = NULL;
                 size_t segremains = rd_buf_get_writable0(rbuf, &seg, &p);
                 size_t wlen = RD_MIN(remains, segremains);
 

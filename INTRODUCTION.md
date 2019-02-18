@@ -831,13 +831,8 @@ reliable bootstrap broker.
 
 #### Sparse connections
 
-Maintaining an open connection to each broker in the cluster is problematic
-for clusters with a large number of brokers, as well as for clusters with
-large number of clients.
-
-To alleviate this, the `enable.sparse.connections=true` configuration property
-can be set to `true` (**default**), in which case the client will only connect
-to brokers it needs to communicate with, and only when necessary.
+The client will only connect to brokers it needs to communicate with, and
+only when necessary.
 
 Examples of needed broker connections are:
 

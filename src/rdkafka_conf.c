@@ -401,7 +401,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
-        { _RK_GLOBAL|_RK_MED, "enable.sparse.connections", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_MED|_RK_HIDDEN, "enable.sparse.connections",
+          _RK_C_BOOL,
           _RK(sparse_connections),
           "When enabled the client will only connect to brokers "
           "it needs to communicate with. When disabled the client "

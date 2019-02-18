@@ -2354,7 +2354,8 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
         {
                 const int ival = *_RK_PTR(const int *, conf, prop->offset);
 
-		val_len = rd_kafka_conf_flags2str(dest, *dest_size, ",",
+		val_len = rd_kafka_conf_flags2str(dest,
+                                                  dest ? *dest_size : 0, ",",
 						  prop, ival);
 		if (dest) {
 			val_len = 0;

@@ -35,15 +35,15 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk);
 
 void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk);
 
-rd_bool_t rd_kafka_sasl_oauthbearer_has_token(rd_kafka_t *rk);
+rd_bool_t rd_kafka_oauthbearer_has_token(rd_kafka_t *rk);
 
-rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_int(rd_kafka_t *rk,
         const char *token_value, int64_t md_lifetime_ms,
         const char *md_principal_name,
         const char **extensions, size_t extension_size,
         char *errstr, size_t errstr_size);
 
-rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure_int(rd_kafka_t *rk,
         const char *errstr);
 
 int unittest_sasl_oauthbearer (void);

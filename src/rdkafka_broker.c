@@ -4324,7 +4324,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         * succeeds, so wait for this precondition if necessary.
                         */
                         if (rkb->rkb_rk->rk_oauthbearer &&
-                            !rd_kafka_sasl_oauthbearer_has_token(rkb->rkb_rk)) {
+                            !rd_kafka_oauthbearer_has_token(rkb->rkb_rk)) {
                                 rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_SECURITY,
                                         "OAUTHBEARER",
                                         "Waiting for SASL/OAUTHBEARER token");

@@ -277,8 +277,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
                 const char **extensions, size_t extension_size,
                 char *errstr, size_t errstr_size) {
 #if WITH_SASL_OAUTHBEARER
-        return oauthbearer_set_token(rk, token_value, md_lifetime_ms,
-                md_principal_name, extensions, extension_size,
+        return rd_kafka_oauthbearer_set_token_int(rk, token_value,
+                md_lifetime_ms, md_principal_name, extensions, extension_size,
                 errstr, errstr_size);
 #else
         rd_snprintf(errstr, errstr_size,
@@ -290,7 +290,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
 rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
 #if WITH_SASL_OAUTHBEARER
-        return oauthbearer_set_token_failure(rk, errstr);
+        return rd_kafka_oauthbearer_set_token_failure_int(rk, errstr);
 #else
         return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 #endif

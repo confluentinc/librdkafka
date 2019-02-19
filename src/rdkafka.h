@@ -1838,7 +1838,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  * @param errstr mandatory human readable error reason for failing to acquire
  *  a token.
  * 
- * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
  * this method upon failure.
  * 
  * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>

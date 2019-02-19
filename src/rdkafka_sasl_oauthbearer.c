@@ -135,7 +135,7 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
  * @returns \c rd_true if SASL/OAUTHBEARER is the configured authentication
  * mechanism and a token is available, otherwise \c rd_false.
  */
-rd_bool_t rd_kafka_sasl_oauthbearer_has_token(rd_kafka_t *rk) {
+rd_bool_t rd_kafka_oauthbearer_has_token(rd_kafka_t *rk) {
         rd_bool_t retval_has_token = rd_false;
         if (rk->rk_oauthbearer) {
                 rd_kafka_rdlock(rk);
@@ -246,9 +246,9 @@ static int check_oauthbearer_extension_value(const char *value,
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
  *              the client's authentication mechanism.
  * 
- * @sa oauthbearer_set_token_failure
+ * @sa rd_kafka_oauthbearer_set_token_failure_int
  */
-rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_int(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
                 const char *md_principal_name,
                 const char **extensions, size_t extension_size,
@@ -329,9 +329,9 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is enabled but is
  *              not configured to be the client's authentication mechanism.
  * 
- * @sa oauthbearer_set_token
+ * @sa rd_kafka_oauthbearer_set_token_int
  */
-rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure_int(rd_kafka_t *rk,
                 const char *errstr) {
         /* Check if SASL/OAUTHBEARER is the configured auth mechanism */
         if (!rk->rk_oauthbearer)
@@ -815,7 +815,8 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
  * include a comma (,) character.
  * 
  * The existence of any kind of parsing problem -- an unrecognized name,
- * a quote character in a value, an empty value, etc. -- is a fatal error.
+ * a quote character in a value, an empty value, etc. -- raises the
+ * \c RD_KAFKA_RESP_ERR__AUTHENTICATION event.
  * 
  * Unsecured tokens are not to be used in production -- they are only good for
  * testing and development purposess -- so while the inflexibility of the
@@ -825,19 +826,14 @@ void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char errstr[512];
         struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         if (rd_kafka_oauthbearer_unsecured_token_internal(
-            &token,
-            rk->rk_conf.sasl.oauthbearer_config,
-            rd_uclock() / 1000,
-            errstr, sizeof(errstr)) == -1) {
-                rd_kafka_set_fatal_error(rk,
-                        RD_KAFKA_RESP_ERR__INVALID_ARG, "%s", errstr);
-        } else
-                rd_assert(!rd_kafka_oauthbearer_set_token(
-                        rk, token.token_value,
-                        token.md_lifetime_ms,
-                        token.md_principal_name,
-                        (const char **)token.extensions, token.extension_size,
-                        errstr, sizeof(errstr)));
+                &token, rk->rk_conf.sasl.oauthbearer_config, rd_uclock() / 1000,
+                errstr, sizeof(errstr))
+            || rd_kafka_oauthbearer_set_token(rk, token.token_value,
+                token.md_lifetime_ms, token.md_principal_name,
+                (const char **)token.extensions, token.extension_size,
+                errstr, sizeof(errstr)))
+                        rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__AUTHENTICATION,
+                                "%s", errstr);
 
         RD_IF_FREE(token.token_value, rd_free);
         RD_IF_FREE(token.md_principal_name, rd_free);
@@ -1460,8 +1456,8 @@ static int do_unittest_odd_extension_size_should_fail(void) {
         rd_kafka_t rk = RD_ZERO_INIT;
         rk.rk_oauthbearer = rd_calloc(1, sizeof(*rk.rk_oauthbearer));
 
-        r = oauthbearer_set_token(&rk, "abcd", 1000, "fubar", NULL, 1,
-                                  errstr, sizeof(errstr));
+        r = rd_kafka_oauthbearer_set_token_int(&rk, "abcd", 1000, "fubar",
+                                               NULL, 1, errstr, sizeof(errstr));
         rd_free(rk.rk_oauthbearer);
         if (!r)
                 RD_UT_SAY("Did not recognize illegal extension size");

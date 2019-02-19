@@ -37,6 +37,11 @@
 #include <zstd.h>
 #include <zstd_errors.h>
 
+#if _MSC_VER
+/* Workaround for missing advanced APIs in official zstd windows builds */
+#define ZSTD_getErrorCode(E) ((E) > ZSTD_error_maxCode ? (int)(0 - (E)) : 0)
+#endif
+
 rd_kafka_resp_err_t
 rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
                          char *inbuf, size_t inlen,

@@ -4325,7 +4325,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         */
                         if (rkb->rkb_rk->rk_oauthbearer &&
                             !rd_kafka_sasl_oauthbearer_has_token(rkb->rkb_rk)) {
-                                rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
+                                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_SECURITY,
+                                        "OAUTHBEARER",
                                         "Waiting for SASL/OAUTHBEARER token");
                                 rd_kafka_broker_serve(rkb,
                                         rd_kafka_max_block_ms);

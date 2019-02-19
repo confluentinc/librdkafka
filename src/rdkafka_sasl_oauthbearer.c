@@ -111,7 +111,7 @@ void rd_kafka_oauthbearer_enqueue_token_refresh(rd_kafka_t *rk) {
 /**
  * @brief Enqueue a token refresh if necessary.
  * 
- * The method \c rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
+ * The method rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
  * if necessary; the required lock is acquired and released.  This method
  * returns immediately when SASL/OAUTHBEARER is not in use by the client.
  */
@@ -132,11 +132,8 @@ void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rd_kafka_t *rk) {
 }
 
 /**
- * @brief Return rd_true if SASL/OAUTHBEARER is the configured authentication
- * mechanism and a token is available, otherwise rd_false.
- * 
- * @returns rd_true if SASL/OAUTHBEARER is the configured authentication
- * mechanism and a token is available, otherwise rd_false.
+ * @returns \c rd_true if SASL/OAUTHBEARER is the configured authentication
+ * mechanism and a token is available, otherwise \c rd_false.
  */
 rd_bool_t rd_kafka_sasl_oauthbearer_has_token(rd_kafka_t *rk) {
         rd_bool_t retval_has_token = rd_false;
@@ -168,7 +165,7 @@ static int check_oauthbearer_extension_key(const char *key,
          * https://tools.ietf.org/html/rfc5234#appendix-B.1
          * ALPHA          =  %x41-5A / %x61-7A   ; A-Z / a-z
          */
-        if (*key == '\0') {
+        if (!*key) {
 		rd_snprintf(errstr, errstr_size,
 		        "SASL/OAUTHBEARER extension keys must not be empty");
                 return -1;
@@ -234,20 +231,22 @@ static int check_oauthbearer_extension_value(const char *value,
  * @param extension_size the number of SASL extension keys plus values,
  *  which should be a non-negative multiple of 2.
  * 
- * The SASL/OAUTHBEARER token refresh callback or event handler must cause
+ * The SASL/OAUTHBEARER token refresh callback or event handler should cause
  * this method to be invoked upon success, via
  * rd_kafka_oauthbearer_set_token(). The extension keys must not include the
- * reserved key "auth", and all extension keys and values must conform to the
+ * reserved key "`auth`", and all extension keys and values must conform to the
  * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+ * 
  * key            = 1*(ALPHA)
  * value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are invalid;
- *          RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
+ *              invalid;
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
  *              the client's authentication mechanism.
  * 
- * @sa oauthbearer_set_token_failure()
+ * @sa oauthbearer_set_token_failure
  */
 rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                 const char *token_value, int64_t md_lifetime_ms,
@@ -262,6 +261,14 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size, "SASL/OAUTHBEARER is not the "
                         "configured authentication mechanism");
                 return RD_KAFKA_RESP_ERR__STATE;
+        }
+
+        /* Check if there is an odd number of extension keys + values */
+        if (extension_size & 1) {
+                rd_snprintf(errstr, errstr_size, "Incorrect extension size "
+                        "(must be a non-negative multiple of 2): %lu",
+                        extension_size);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
         /* Check args for correct format/value */
@@ -311,18 +318,18 @@ rd_kafka_resp_err_t oauthbearer_set_token(rd_kafka_t *rk,
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * @param rk Client instance.
- * @param errstr the mandatory SASL/OAUTHBEARER error message to set on the
- *  client.
+ * @param errstr mandatory human readable error reason for failing to acquire
+ *  a token.
  * 
- * The SASL/OAUTHBEARER token refresh callback or event handler must cause
+ * The SASL/OAUTHBEARER token refresh callback or event handler should cause
  * this method to be invoked upon failure, via
  * rd_kafka_oauthbearer_set_token_failure().
  * 
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise
- *          RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is enabled but is not
- *              configured to be the client's authentication mechanism.
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is enabled but is
+ *              not configured to be the client's authentication mechanism.
  * 
- * @sa oauthbearer_set_token()
+ * @sa oauthbearer_set_token
  */
 rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
                 const char *errstr) {
@@ -343,9 +350,9 @@ rd_kafka_resp_err_t oauthbearer_set_token_failure(rd_kafka_t *rk,
 
 /**
  * @brief Parse a config value from the string pointed to by \p loc and starting
- * with the given \p prefix and ending with the given \c value_end_char, storing
+ * with the given \p prefix and ending with the given \p value_end_char, storing
  * the newly-allocated memory result in the string pointed to by \p value.
- * @returns -1 if string pointed to by \p value is non-zero (errstr set, no
+ * @returns -1 if string pointed to by \p value is non-zero (\p errstr set, no
  * memory allocated), else 0 (caller must free allocated memory).
  */
 static int parse_unsecured_jws_config_value_for_prefix(char **loc,
@@ -378,7 +385,7 @@ static int parse_unsecured_jws_config_value_for_prefix(char **loc,
  * @brief Parse Unsecured JWS config, allocates strings that must be freed
  * @param cfg the config to parse (typically from `sasl.oauthbearer.config`)
  * @param parsed holds the parsed output; it must be all zeros to start.
- * @returns -1 on failure (errstr set), else 0.
+ * @returns -1 on failure (\p errstr set), else 0.
  */
 static int parse_unsecured_jws_config(const char *cfg,
                 struct rd_kafka_sasl_oauthbearer_parsed_unsecured_jws *parsed,
@@ -422,7 +429,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                                 prefix_principal_claim_name, ' ',
                                 &parsed->principal_claim_name,
                                 errstr, errstr_size);
-                        if (!r && *parsed->principal_claim_name == '\0') {
+                        if (!r && !*parsed->principal_claim_name) {
                                 rd_snprintf(errstr, errstr_size,
                                         "Invalid sasl.oauthbearer.config: "
                                         "empty '%s'",
@@ -434,7 +441,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                         r = parse_unsecured_jws_config_value_for_prefix(&loc,
                                 prefix_principal, ' ', &parsed->principal,
                                 errstr, errstr_size);
-                        if (!r && *parsed->principal == '\0') {
+                        if (!r && !*parsed->principal) {
                                 rd_snprintf(errstr, errstr_size,
                                         "Invalid sasl.oauthbearer.config: "
                                         "empty '%s'",
@@ -447,7 +454,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                                 prefix_scope_claim_name, ' ',
                                 &parsed->scope_claim_name,
                                 errstr, errstr_size);
-                        if (!r && *parsed->scope_claim_name == '\0') {
+                        if (!r && !*parsed->scope_claim_name) {
                                 rd_snprintf(errstr, errstr_size,
                                         "Invalid sasl.oauthbearer.config: "
                                         "empty '%s'",
@@ -458,7 +465,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                         r = parse_unsecured_jws_config_value_for_prefix(&loc,
                                 prefix_scope, ' ', &parsed->scope_csv_text,
                                 errstr, errstr_size);
-                        if (!r && *parsed->scope_csv_text == '\0') {
+                        if (!r && !*parsed->scope_csv_text) {
                                 rd_snprintf(errstr, errstr_size,
                                         "Invalid sasl.oauthbearer.config: "
                                         "empty '%s'",
@@ -471,7 +478,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                                 prefix_life_seconds, ' ', &life_seconds_text,
                                 errstr, errstr_size);
                         if (!r) {
-                                if (*life_seconds_text == '\0') {
+                                if (!*life_seconds_text) {
                                         rd_snprintf(errstr, errstr_size,
                                                 "Invalid "
                                                 "sasl.oauthbearer.config: "
@@ -515,7 +522,7 @@ static int parse_unsecured_jws_config(const char *cfg,
                                 prefix_extension, '=', &extension_key, errstr,
                                 errstr_size);
                         if (!r) {
-                                if (*extension_key == '\0') {
+                                if (!*extension_key) {
                                         rd_snprintf(errstr, errstr_size,
                                                 "Invalid "
                                                 "sasl.oauthbearer.config: "
@@ -695,7 +702,7 @@ static char *create_jws_compact_serialization(
  * @param cfg the config to parse (typically from `sasl.oauthbearer.config`)
  * @param now_wallclock_millis the valued to be used for the `iat` claim
  *        (and by implication, the `exp` claim)
- * @returns -1 on failure (errstr set), else 0.
+ * @returns -1 on failure (\p errstr set), else 0.
  */
 static int rd_kafka_oauthbearer_unsecured_token_internal(
     struct rd_kafka_sasl_oauthbearer_token *token,
@@ -703,7 +710,8 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
     rd_ts_t now_wallclock_millis,
     char *errstr, size_t errstr_size) {
 
-        struct rd_kafka_sasl_oauthbearer_parsed_unsecured_jws parsed = {0};
+        struct rd_kafka_sasl_oauthbearer_parsed_unsecured_jws parsed =
+                RD_ZERO_INIT;
         int r;
         int i;
 
@@ -785,7 +793,7 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
  * @brief Default SASL/OAUTHBEARER token refresh callback that generates an
  * unsecured JWS as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
  *
- * This method interprets \c sasl.oauthbearer.config as space-separated
+ * This method interprets `sasl.oauthbearer.config` as space-separated
  * name=value pairs with valid names including principalClaimName,
  * principal, scopeClaimName, scope, and lifeSeconds. The default
  * value for principalClaimName is "sub".  The principal must be specified.
@@ -815,7 +823,7 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
  */
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         if (rd_kafka_oauthbearer_unsecured_token_internal(
             &token,
             rk->rk_conf.sasl.oauthbearer_config,
@@ -926,7 +934,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
 
 /**
  * @brief SASL OAUTHBEARER client state machine
- * @returns -1 on failure (errstr set), else 0.
+ * @returns -1 on failure (\p errstr set), else 0.
  */
 static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                                     const rd_chariov_t *in,
@@ -962,7 +970,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                         /* Success */
                         rd_rkb_dbg(rktrans->rktrans_rkb,
                                 SECURITY | RD_KAFKA_DBG_BROKER,
-                                "OAUTHBEARERAUTH",
+                                "OAUTHBEARER",
                                 "SASL OAUTHBEARER authentication successful "
                                 "(principal=%s)",
                                 state->md_principal_name);
@@ -998,7 +1006,7 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                         state->md_principal_name,
                         state->server_error_msg);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
-                        "OAUTHBEARERAUTH", "%s", errstr);
+                        "OAUTHBEARER", "%s", errstr);
                 r = -1;
                 break;
         }
@@ -1088,8 +1096,8 @@ static int rd_kafka_sasl_oauthbearer_conf_validate (rd_kafka_t *rk,
          * We must rely on the initial token retrieval as a proxy
          * for configuration validation because the configuration is
          * implementation-dependent, and it is not necessarily the case
-         * that the config reflects the default,. unsecured JWS config
-         * that we know how to parse
+         * that the config reflects the default unsecured JWS config
+         * that we know how to parse.
          */
         return 0;
 }
@@ -1133,7 +1141,7 @@ static int do_unittest_config_defaults(void) {
                 ".";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1176,7 +1184,7 @@ static int do_unittest_config_explicit_scope_and_life(void) {
                 ".";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1220,7 +1228,7 @@ static int do_unittest_config_all_explicit_values(void) {
                 ".";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1255,7 +1263,7 @@ static int do_unittest_config_no_principal_should_fail(void) {
         const char *sasl_oauthbearer_config = "";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1281,7 +1289,7 @@ static int do_unittest_config_unrecognized_should_fail(void) {
         const char *sasl_oauthbearer_config = "principal=fubar unrecognized";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1317,7 +1325,7 @@ static int do_unittest_config_empty_value_should_fail(void) {
 
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                struct rd_kafka_sasl_oauthbearer_token token = {0};
+                struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
                 r =rd_kafka_oauthbearer_unsecured_token_internal(
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,
@@ -1356,7 +1364,7 @@ static int do_unittest_config_value_with_quote_should_fail(void) {
 
         for (i = 0; i < sizeof(sasl_oauthbearer_configs) / sizeof(const char *);
              i++) {
-                struct rd_kafka_sasl_oauthbearer_token token = {0};
+                struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
                 r =rd_kafka_oauthbearer_unsecured_token_internal(
                              &token,
                              sasl_oauthbearer_configs[i], now_wallclock_millis,
@@ -1384,7 +1392,7 @@ static int do_unittest_config_extensions(void) {
                 "extension_a=b extension_yz=yzval";
         rd_ts_t now_wallclock_millis = 1000;
         char errstr[512];
-        struct rd_kafka_sasl_oauthbearer_token token = {0};
+        struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
         int r;
         r = rd_kafka_oauthbearer_unsecured_token_internal(
                      &token,
@@ -1441,6 +1449,34 @@ static int do_unittest_illegal_extension_keys_should_fail(void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief make sure illegal extensions keys are rejected
+ */
+static int do_unittest_odd_extension_size_should_fail(void) {
+        char errstr[512];
+        const char *expected_errstr = "Incorrect extension size "
+                        "(must be a non-negative multiple of 2): 1";
+        int r;
+        rd_kafka_t rk = RD_ZERO_INIT;
+        rk.rk_oauthbearer = rd_calloc(1, sizeof(*rk.rk_oauthbearer));
+
+        r = oauthbearer_set_token(&rk, "abcd", 1000, "fubar", NULL, 1,
+                                  errstr, sizeof(errstr));
+        rd_free(rk.rk_oauthbearer);
+        if (!r)
+                RD_UT_SAY("Did not recognize illegal extension size");
+        else {
+                r = !strcmp(errstr, expected_errstr);
+                if (!r)
+                        RD_UT_SAY("Incorrect error message for illegal "
+                                "extension size: expected=%s; received=%s",
+                        expected_errstr, errstr);
+        }
+        RD_UT_ASSERT(r, "Illegal extension size");
+
+        RD_UT_PASS();
+}
+
 int unittest_sasl_oauthbearer (void) {
         int fails = 0;
 
@@ -1453,6 +1489,7 @@ int unittest_sasl_oauthbearer (void) {
         fails += do_unittest_config_all_explicit_values();
         fails += do_unittest_config_extensions();
         fails += do_unittest_illegal_extension_keys_should_fail();
+        fails += do_unittest_odd_extension_size_should_fail();
 
         return fails;
 }

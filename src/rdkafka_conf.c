@@ -457,7 +457,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL_OAUTHBEARER
 	{ _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
 	  _RK(oauthbearer_token_refresh_cb),
-	  "SASL/OAUTHBEARER token refresh callback (set with rd_kafka_conf_set_oauthbearer_token_refresh_cb())",
+	  "SASL/OAUTHBEARER token refresh callback (set with "
+          "rd_kafka_conf_set_oauthbearer_token_refresh_cb()); the default will "
+          "generate an unsecured JWS",
           .pdef = rd_kafka_oauthbearer_unsecured_token },
 #endif
         { _RK_GLOBAL, "log_level", _RK_C_INT,

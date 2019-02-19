@@ -1762,13 +1762,13 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
  * 
- * The callback must invoke \c rd_kafka_oauthbearer_set_token()
- * or \c rd_kafka_oauthbearer_set_token_failure() to indicate success
+ * The callback should invoke rd_kafka_oauthbearer_set_token()
+ * or rd_kafka_oauthbearer_set_token_failure() to indicate success
  * or failure, respectively.
  * 
  * The refresh operation is eventable and may be received via
  * rd_kafka_queue_poll() with an event type of
- * `RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH`.
+ * \c RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
  *
  * Note that before any SASL/OAUTHBEARER broker connection can succeed the
  * application must call rd_kafka_oauthbearer_set_token() once -- either
@@ -1796,14 +1796,15 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  *  \p extensions_size elements (number of keys * 2), where [i] is the key and
  *  [i+1] is the key's value, to be communicated to the broker
  *  as additional key-value pairs during the initial client response as per
- *  https://tools.ietf.org/html/rfc7628#section-3.1.
+ *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
+ *  copied.
  * @param extension_size the number of SASL extension keys plus values,
  *  which should be a non-negative multiple of 2.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written to if there is an error.
  * 
- * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
  * this method upon success. The extension keys must not include the reserved
  * key "`auth`", and all extension keys and values must conform to the required
  * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
@@ -1811,16 +1812,16 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  *     key            = 1*(ALPHA)
  *     value          = *(VCHAR / SP / HTAB / CR / LF )
  * 
- * @returns `RD_KAFKA_RESP_ERR_NO_ERROR` on success, otherwise \p errstr set
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise \p errstr set
  *              and:<br>
- *          `RD_KAFKA_RESP_ERR__INVALID_ARG` if any of the arguments are
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
  *              invalid;<br>
- *          `RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED` if SASL/OAUTHBEARER is not
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
  *              supported by this build;<br>
- *          `RD_KAFKA_RESP_ERR__STATE` if SASL/OAUTHBEARER is supported but is
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
  *              not configured as the client's authentication mechanism.<br>
  * 
- * @sa rd_kafka_oauthbearer_set_token_failure()
+ * @sa rd_kafka_oauthbearer_set_token_failure
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
  */
 RD_EXPORT
@@ -1834,19 +1835,19 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
  *
  * @param rk Client instance.
- * @param errstr the mandatory SASL/OAUTHBEARER error message to set on the
- *  client.
+ * @param errstr mandatory human readable error reason for failing to acquire
+ *  a token.
  * 
  * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
  * this method upon failure.
  * 
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
- *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
  *              supported by this build;<br>
- *          RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
  *              not configured as the client's authentication mechanism.
  * 
- * @sa rd_kafka_oauthbearer_set_token()
+ * @sa rd_kafka_oauthbearer_set_token
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
  */
 RD_EXPORT
@@ -4031,7 +4032,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 105 /**< SASL/OAUTHBEARER token needs to be refreshed */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
+                                                             token needs to be
+                                                             refreshed */
 
 
 /**

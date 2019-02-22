@@ -586,7 +586,8 @@ class RD_EXPORT Event {
     EVENT_ERROR,     /**< Event is an error condition */
     EVENT_STATS,     /**< Event is a statistics JSON document */
     EVENT_LOG,       /**< Event is a log message */
-    EVENT_THROTTLE   /**< Event is a throttle level signaling from the broker */
+    EVENT_THROTTLE,  /**< Event is a throttle level signaling from the broker */
+    EVENT_OAUTHBEARER_TOKEN_REFRESH   /**< Event is a token refresh */
   };
 
   /** @brief EVENT_LOG severities (conforms to syslog(3) severities) */

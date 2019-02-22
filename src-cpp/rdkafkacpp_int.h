@@ -69,6 +69,7 @@ void offset_commit_cb_trampoline0 (
         rd_kafka_t *rk,
         rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
+void oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk, void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
@@ -575,7 +576,8 @@ class ConfImpl : public Conf {
         name.compare("socket_cb") == 0 ||
         name.compare("open_cb") == 0 ||
         name.compare("rebalance_cb") == 0 ||
-        name.compare("offset_commit_cb") == 0 ) {
+        name.compare("offset_commit_cb") == 0 ||
+        name.compare("oauthbearer_token_refresh_cb") == 0 ) {
       return Conf::CONF_INVALID;
     }
     rd_kafka_conf_res_t res = RD_KAFKA_CONF_INVALID;

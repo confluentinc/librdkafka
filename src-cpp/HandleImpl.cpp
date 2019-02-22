@@ -132,6 +132,18 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
+void RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
+                                                      void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+  RdKafka::EventImpl event(RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH,
+                           RdKafka::ERR_NO_ERROR,
+                           RdKafka::Event::EVENT_SEVERITY_INFO,
+                           "OAUTHBEARER", NULL);
+
+  handle->event_cb_->event_cb(event);
+}
+
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
                                                   const Topic *only_rkt,
                                                   Metadata **metadatap, 
@@ -228,6 +240,9 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 				  RdKafka::throttle_cb_trampoline);
     rd_kafka_conf_set_stats_cb(confimpl->rk_conf_,
                                RdKafka::stats_cb_trampoline);
+    rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+          confimpl->rk_conf_,
+          RdKafka::oauthbearer_token_refresh_cb_trampoline);
     event_cb_ = confimpl->event_cb_;
   }
 

@@ -2193,6 +2193,13 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "stats_cb", stats_cb);
 }
 
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
+                void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                void *opaque)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                "oauthbearer_token_refresh_cb", oauthbearer_token_refresh_cb);
+}
+
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                   int (*socket_cb) (int domain, int type,
                                                     int protocol,

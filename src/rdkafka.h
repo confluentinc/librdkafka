@@ -1799,7 +1799,7 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
  *  copied.
  * @param extension_size the number of SASL extension keys plus values,
- *  which should be a non-negative multiple of 2.
+ *  which must be a non-negative multiple of 2.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written to if there is an error.

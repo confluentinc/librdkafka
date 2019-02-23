@@ -136,12 +136,17 @@ void RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
                                                       void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
-  RdKafka::EventImpl event(RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH,
-                           RdKafka::ERR_NO_ERROR,
-                           RdKafka::Event::EVENT_SEVERITY_INFO,
-                           "OAUTHBEARER", NULL);
+  /* Send as an event if both an event callback and an explicit token refresh
+   * callback were set. */
+  if (handle->event_cb_) {
+    RdKafka::EventImpl event(RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH,
+                            RdKafka::ERR_NO_ERROR,
+                            RdKafka::Event::EVENT_SEVERITY_INFO,
+                            "OAUTHBEARER", NULL);
 
-  handle->event_cb_->event_cb(event);
+    handle->event_cb_->event_cb(event);
+  } else
+    handle->oauthbearer_token_refresh_cb_->oauthbearer_token_refresh_cb();
 }
 
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
@@ -240,12 +245,19 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 				  RdKafka::throttle_cb_trampoline);
     rd_kafka_conf_set_stats_cb(confimpl->rk_conf_,
                                RdKafka::stats_cb_trampoline);
+    event_cb_ = confimpl->event_cb_;
+  }
+  
+  /* Only override the default OAUTHBEARER unsecure token callback
+   * if we have defined either an event callback or an explicit
+   * token refresh callback instance. */
+  if (confimpl->event_cb_ || confimpl->oauthbearer_token_refresh_cb_) {
     rd_kafka_conf_set_oauthbearer_token_refresh_cb(
           confimpl->rk_conf_,
           RdKafka::oauthbearer_token_refresh_cb_trampoline);
-    event_cb_ = confimpl->event_cb_;
+      oauthbearer_token_refresh_cb_ = confimpl->oauthbearer_token_refresh_cb_;
   }
-
+  
   if (confimpl->socket_cb_) {
     rd_kafka_conf_set_socket_cb(confimpl->rk_conf_,
                                 RdKafka::socket_cb_trampoline);

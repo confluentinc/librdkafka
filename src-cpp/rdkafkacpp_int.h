@@ -822,7 +822,7 @@ class HandleImpl : virtual public Handle {
                              std::string &errstr) {
           char errbuf[512];
           rd_kafka_resp_err_t res;
-          const char *extensions_copy[extensions.size()];
+          const char **extensions_copy = new const char *[extensions.size()];
           int elem = 0;
 
           for (std::list<std::string>::const_iterator it = extensions.begin();
@@ -831,6 +831,7 @@ class HandleImpl : virtual public Handle {
           res = rd_kafka_oauthbearer_set_token(rk_, token_value.c_str(),
                   md_lifetime_ms, md_principal_name.c_str(), extensions_copy,
                   extensions.size(), errbuf, sizeof(errbuf));
+          free(extensions_copy);
 
           if (res != ERR_NO_ERROR)
               errstr = errbuf;

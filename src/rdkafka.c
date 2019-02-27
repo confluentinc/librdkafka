@@ -849,6 +849,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
 #ifndef _MSC_VER
 	int term_sig = rk->rk_conf.term_sig;
 #endif
+        int res;
         char flags_str[256];
         static const char *rd_kafka_destroy_flags_names[] = {
                 "Terminate",
@@ -925,7 +926,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Joining internal main thread");
 
-        if (thrd_join(thrd, NULL) != thrd_success)
+        if (thrd_join(thrd, &res) != thrd_success)
                 rd_kafka_log(rk, LOG_ERR, "DESTROY",
                              "Failed to join internal main thread: %s "
                              "(was process forked?)",
@@ -965,6 +966,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         rd_kafka_brokers_broadcast_state_change(rk);
 
         if (rk->rk_background.thread) {
+                int res;
                 /* Send op to trigger queue/io wake-up.
                  * The op itself is (likely) ignored by the receiver. */
                 rd_kafka_q_enq(rk->rk_background.q,
@@ -973,7 +975,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, ALL, "DESTROY",
                              "Waiting for background queue thread "
                              "to terminate");
-                thrd_join(rk->rk_background.thread, NULL);
+                thrd_join(rk->rk_background.thread, &res);
                 rd_kafka_q_destroy_owner(rk->rk_background.q);
         }
 
@@ -1068,7 +1070,8 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         /* Join broker threads */
         RD_LIST_FOREACH(thrd, &wait_thrds, i) {
-                if (thrd_join(*thrd, NULL) != thrd_success)
+                int res;
+                if (thrd_join(*thrd, &res) != thrd_success)
                         ;
                 free(thrd);
         }
@@ -2150,7 +2153,8 @@ fail:
         rd_atomic32_set(&rk->rk_terminate, RD_KAFKA_DESTROY_F_TERMINATE);
 
         if (rk->rk_background.thread) {
-                thrd_join(rk->rk_background.thread, NULL);
+                int res;
+                thrd_join(rk->rk_background.thread, &res);
                 rd_kafka_q_destroy_owner(rk->rk_background.q);
         }
 

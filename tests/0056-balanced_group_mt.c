@@ -259,8 +259,9 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
 
         TIMING_START(&t_consume, "CONSUME.WAIT");
         for (i = 0; i < MAX_THRD_CNT; ++i) {
+                int res;
                 if (tids[i] != 0)
-                        thrd_join(tids[i], NULL);
+                        thrd_join(tids[i], &res);
         }
         TIMING_STOP(&t_consume);
 

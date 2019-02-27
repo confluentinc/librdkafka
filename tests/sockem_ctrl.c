@@ -130,13 +130,15 @@ void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
 }
 
 void sockem_ctrl_term (sockem_ctrl_t *ctrl) {
+        int res;
+
         /* Join controller thread */
         mtx_lock(&ctrl->lock);
         ctrl->term = 1;
         cnd_broadcast(&ctrl->cnd);
         mtx_unlock(&ctrl->lock);
 
-        thrd_join(ctrl->thrd, NULL);
+        thrd_join(ctrl->thrd, &res);
 
         cnd_destroy(&ctrl->cnd);
         mtx_destroy(&ctrl->lock);

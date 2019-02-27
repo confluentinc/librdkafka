@@ -74,7 +74,7 @@ typedef pthread_t thrd_t;
 #define thrd_create(THRD,START_ROUTINE,ARG) \
   pthread_create(THRD, NULL, START_ROUTINE, ARG)
 #define thrd_join(THRD,RETVAL) \
-  pthread_join(THRD, NULL)
+  pthread_join(THRD, RETVAL)
 
 
 static mtx_t sockem_lock;
@@ -640,7 +640,7 @@ static void sockem_bufs_purge (sockem_t *skm) {
 
 
 void sockem_close (sockem_t *skm) {
-
+        int res;
 
         mtx_lock(&sockem_lock);
         mtx_lock(&skm->lock);
@@ -658,7 +658,7 @@ void sockem_close (sockem_t *skm) {
 
         mtx_unlock(&skm->lock);
 
-        thrd_join(skm->thrd, NULL);
+        thrd_join(skm->thrd, &res);
 
         sockem_bufs_purge(skm);
 

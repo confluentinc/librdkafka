@@ -166,6 +166,7 @@ static void do_test_low_socket_timeout (const char *topic) {
         rd_kafka_topic_t *rkt;
         rd_kafka_resp_err_t err;
         const struct rd_kafka_metadata *md;
+        int res;
 
         mtx_init(&ctrl.lock, mtx_plain);
         cnd_init(&ctrl.cnd);
@@ -228,7 +229,7 @@ static void do_test_low_socket_timeout (const char *topic) {
         mtx_lock(&ctrl.lock);
         ctrl.term = 1;
         mtx_unlock(&ctrl.lock);
-        thrd_join(ctrl.thrd, NULL);
+        thrd_join(ctrl.thrd, &res);
 
         cnd_destroy(&ctrl.cnd);
         mtx_destroy(&ctrl.lock);

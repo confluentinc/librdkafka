@@ -90,7 +90,13 @@ static rd_kafka_op_res_t
 rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
                                 rd_kafka_q_t *rkq,
                                 rd_kafka_op_t *rko) {
-        rk->rk_conf.oauthbearer_token_refresh_cb(rk, rk->rk_conf.opaque);
+        /* The op callback is invoked when the op is destroyed via
+         * rd_kafka_op_destroy() or rd_kafka_event_destroy(), so
+         * make sure we don't refresh upon destruction since
+         * the op has already been handled by this point.
+         */
+        if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
+                rk->rk_conf.oauthbearer_token_refresh_cb(rk, rk->rk_conf.opaque);
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
@@ -825,6 +831,7 @@ static int rd_kafka_oauthbearer_unsecured_token_internal(
 void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
         char errstr[512];
         struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
+        rd_kafka_dbg(rk, SECURITY, "OAUTHBEARER", "Create unsecured token");
         if (rd_kafka_oauthbearer_unsecured_token_internal(
                 &token, rk->rk_conf.sasl.oauthbearer_config, rd_uclock() / 1000,
                 errstr, sizeof(errstr))

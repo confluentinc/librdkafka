@@ -320,6 +320,7 @@ class NugetPackage (Package):
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win-x64/native/librdkafka.dll'],
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win-x64/native/librdkafkacpp.dll'],
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win-x64/native/zlib.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/libzstd.dll', 'runtimes/win-x64/native/libzstd.dll'],
             # matches librdkafka.{VER}.nupkg
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
              'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib'],
@@ -331,6 +332,8 @@ class NugetPackage (Package):
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win-x86/native/librdkafka.dll'],
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win-x86/native/librdkafkacpp.dll'],
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win-x86/native/zlib.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/libzstd.dll', 'runtimes/win-x86/native/libzstd.dll'],
+
             # matches librdkafka.{VER}.nupkg
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
             'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib'],
@@ -411,10 +414,12 @@ class NugetPackage (Package):
             "runtimes/win-x64/native/librdkafkacpp.dll",
             "runtimes/win-x64/native/msvcr120.dll",
             "runtimes/win-x64/native/zlib.dll",
+            "runtimes/win-x64/native/libzstd.dll",
             "runtimes/win-x86/native/librdkafka.dll",
             "runtimes/win-x86/native/librdkafkacpp.dll",
             "runtimes/win-x86/native/msvcr120.dll",
-            "runtimes/win-x86/native/zlib.dll"]
+            "runtimes/win-x86/native/zlib.dll",
+            "runtimes/win-x86/native/libzstd.dll"]
 
         missing = list()
         with zfile.ZFile(path, 'r') as zf:

@@ -14,7 +14,6 @@
 # the latter depending on the former, but from a user perspective it is
 # SSL that is the feature, not crypto.
 
-
 mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
 
 
@@ -71,7 +70,7 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.0.2q
+        local ver=1.0.2r
 
         local conf_args="--openssldir=/usr/lib/ssl zlib shared"
         if [[ $ver == 1.0.* ]]; then

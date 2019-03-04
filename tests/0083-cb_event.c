@@ -95,6 +95,8 @@ int main_0083_cb_event (int argc, char **argv) {
         rd_kafka_event_t *rkev;
         int eventcnt = 0;
 
+        mtx_init(&event_receiver.lock, mtx_plain);
+
         testid = test_id_generate();
         topic = test_mk_topic_name(__FUNCTION__, 1);
 
@@ -205,6 +207,8 @@ int main_0083_cb_event (int argc, char **argv) {
         rd_kafka_queue_destroy(queue);
         rd_kafka_consumer_close(rk_c);
         rd_kafka_destroy(rk_c);
+
+        mtx_destroy(&event_receiver.lock);
 
         return 0;
 }

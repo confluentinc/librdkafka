@@ -43,9 +43,13 @@ function checks {
     # -lrt is needed on linux for clock_gettime: link it if it exists.
     mkl_lib_check "librt" "" cont CC "-lrt"
 
+    # pthreads required (even if C11 threads available) for rwlocks.
+    mkl_lib_check "libpthread" "" fail CC "-lpthread" \
+                  "#include <pthread.h>"
 
-    # Use internal tinycthread if C11 threads not available
-    mkl_lib_check "c11threads" WITH_C11THREADS disable CC "" \
+    # Use internal tinycthread if C11 threads not available.
+    # Requires -lpthread on glibc c11 threads, thus the use of $LIBS.
+    mkl_lib_check "c11threads" WITH_C11THREADS disable CC "$LIBS" \
                   "
 #include <threads.h>
 
@@ -63,10 +67,6 @@ void foo (void) {
     }
 }
 "
-
-    # pthreads required (even if C11 threads available) for rwlocks
-    mkl_lib_check "libpthread" "" fail CC "-lpthread" \
-                  "#include <pthread.h>"
 
     # Check if dlopen() is available
     mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \

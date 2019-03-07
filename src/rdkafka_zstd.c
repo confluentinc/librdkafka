@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2018 Magnus Edenhill
  * All rights reserved.
-* 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -41,7 +41,7 @@ rd_kafka_resp_err_t
 rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
                          char *inbuf, size_t inlen,
                          void **outbuf, size_t *outlenp) {
-        size_t out_bufsize = ZSTD_getFrameContentSize(inbuf, inlen);
+        unsigned long long out_bufsize = ZSTD_getFrameContentSize(inbuf, inlen);
 
         switch (out_bufsize) {
         case ZSTD_CONTENTSIZE_UNKNOWN:
@@ -52,7 +52,7 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
                 /* Error calculating frame content size */
                 rd_rkb_dbg(rkb, MSG, "ZSTD",
                            "Unable to begin ZSTD decompression "
-                           "(out buffer is %"PRIusz" bytes): %s",
+                           "(out buffer is %llu bytes): %s",
                            out_bufsize, "Error in determining frame size");
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         default:
@@ -61,22 +61,23 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
 
         /* Increase output buffer until it can fit the entire result,
          * capped by message.max.bytes */
-        while (out_bufsize <= (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
+        while (out_bufsize <=
+               (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
                 size_t ret;
                 char *decompressed;
 
-                decompressed = rd_malloc(out_bufsize);
+                decompressed = rd_malloc((size_t)out_bufsize);
                 if (!decompressed) {
                         rd_rkb_dbg(rkb, MSG, "ZSTD",
                                    "Unable to allocate output buffer "
-                                   "(%"PRIusz" bytes for %"PRIusz
+                                   "(%llu bytes for %"PRIusz
                                    " compressed bytes): %s",
                                    out_bufsize, inlen, rd_strerror(errno));
                         return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 }
 
 
-                ret = ZSTD_decompress(decompressed, out_bufsize,
+                ret = ZSTD_decompress(decompressed, (size_t)out_bufsize,
                                       inbuf, inlen);
                 if (!ZSTD_isError(ret)) {
                         *outlenp = ret;
@@ -98,7 +99,7 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
                         /* Fail on any other error */
                         rd_rkb_dbg(rkb, MSG, "ZSTD",
                                    "Unable to begin ZSTD decompression "
-                                   "(out buffer is %"PRIusz" bytes): %s",
+                                   "(out buffer is %llu bytes): %s",
                                    out_bufsize, ZSTD_getErrorName(ret));
                         return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 }
@@ -106,7 +107,7 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, MSG, "ZSTD",
                    "Unable to decompress ZSTD "
-                   "(input buffer %"PRIusz", output buffer %"PRIusz"): "
+                   "(input buffer %"PRIusz", output buffer %llu): "
                    "output would exceed receive.message.max.bytes (%d)",
                    inlen, out_bufsize, rkb->rkb_rk->rk_conf.max_msg_size);
 

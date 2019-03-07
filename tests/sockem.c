@@ -73,8 +73,8 @@ typedef pthread_mutex_t mtx_t;
 typedef pthread_t thrd_t;
 #define thrd_create(THRD,START_ROUTINE,ARG) \
   pthread_create(THRD, NULL, START_ROUTINE, ARG)
-#define thrd_join(THRD,RETVAL) \
-  pthread_join(THRD, RETVAL)
+#define thrd_join(THRD,RETVAL)                  \
+        pthread_join(THRD, (void *)RETVAL)
 
 
 static mtx_t sockem_lock;

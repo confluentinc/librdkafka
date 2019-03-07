@@ -109,9 +109,42 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 ## Instructions
 
+### Installing prebuilt packages
+
+On Mac OSX, install librdkafka with homebrew:
+
+```bash
+$ brew install librdkafka
+```
+
+On Debian and Ubuntu, install librdkafka from the Confluent APT repositories,
+see instructions [here](https://docs.confluent.io/current/installation/installing_cp/deb-ubuntu.html#get-the-software) and then install librdkafka:
+
+ ```bash
+ $ apt install librdkafka-dev
+ ```
+
+On RedHat, CentOS, Fedora, install librdkafka from the Confluent YUM repositories,
+instructions [here](https://docs.confluent.io/current/installation/installing_cp/rhel-centos.html#get-the-software) and then install librdkafka:
+
+```bash
+$ yum install librdkafka-devel
+```
+
+On Windows, reference [librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/) NuGet package in your Visual Studio project.
+
+
+For other platforms, follow the source building instructions below.
+
+
 ### Building
 
       ./configure
+      # Or, to automatically install dependencies using the system's package manager:
+      # ./configure --install-deps
+      # Or, build dependencies from source:
+      # ./configure --install-deps --source-deps-only
+
       make
       sudo make install
 

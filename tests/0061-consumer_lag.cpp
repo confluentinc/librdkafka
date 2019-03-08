@@ -103,9 +103,10 @@ class StatsCb : public RdKafka::EventCb {
       Test::Fail("Nothing following consumer_lag");
 
     int64_t lag = strtoull(remain, NULL, 0);
-    if (lag == -1)
-      Test::Say(tostr() << "Consumer lag " << lag << " is invalid, stats:\n" <<
-                json_doc << "\n");
+    if (lag == -1) {
+      Test::Say(tostr() << "Consumer lag " << lag << " is invalid, stats:\n");
+      Test::Say(3, tostr() << json_doc << "\n");
+    }
     return lag;
   }
 };
@@ -126,7 +127,7 @@ static void do_test_consumer_lag (void) {
 
   /* Create consumer */
   RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, 20);
+  Test::conf_init(&conf, NULL, 40);
   StatsCb stats;
   if (conf->set("event_cb", &stats, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("set event_cb failed: " + errstr);

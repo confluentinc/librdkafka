@@ -316,6 +316,7 @@ class NugetPackage (Package):
 
             # Common Win runtime
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x64/native/msvcr120.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcp120.dll', 'runtimes/win-x64/native/msvcp120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win-x64/native/librdkafka.dll'],
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win-x64/native/librdkafkacpp.dll'],
@@ -328,6 +329,7 @@ class NugetPackage (Package):
              'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib'],
 
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x86/native/msvcr120.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcp120.dll', 'runtimes/win-x86/native/msvcp120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win-x86/native/librdkafka.dll'],
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win-x86/native/librdkafkacpp.dll'],
@@ -413,11 +415,13 @@ class NugetPackage (Package):
             "runtimes/win-x64/native/librdkafka.dll",
             "runtimes/win-x64/native/librdkafkacpp.dll",
             "runtimes/win-x64/native/msvcr120.dll",
+            "runtimes/win-x64/native/msvcp120.dll",
             "runtimes/win-x64/native/zlib.dll",
             "runtimes/win-x64/native/libzstd.dll",
             "runtimes/win-x86/native/librdkafka.dll",
             "runtimes/win-x86/native/librdkafkacpp.dll",
             "runtimes/win-x86/native/msvcr120.dll",
+            "runtimes/win-x86/native/msvcp120.dll",
             "runtimes/win-x86/native/zlib.dll",
             "runtimes/win-x86/native/libzstd.dll"]
 

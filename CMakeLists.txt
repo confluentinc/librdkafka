@@ -5,6 +5,8 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/packaging/cmake/Modules/")
+
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
 
 # This option doesn't affect build in fact, only C code
@@ -15,7 +17,6 @@ option(WITHOUT_OPTIMIZATION "Disable optimization" OFF)
 option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
-
 set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 
 # ZLIB {
@@ -108,6 +109,19 @@ if(WITH_SASL)
 endif()
 # }
 
+# LZ4 {
+option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)
+set(WITH_LZ4_EXT OFF)
+if(ENABLE_LZ4_EXT)
+  find_package(LZ4)
+  if(LZ4_FOUND)
+    set(WITH_LZ4_EXT ON)
+  else()
+    message(STATUS "Using bundled LZ4 implementation.")
+  endif()
+endif()
+# }
+
 # }
 
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
@@ -157,6 +171,7 @@ set(config_install_dir "lib/cmake/${PROJECT_NAME}")
 set(generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 set(project_config "${generated_dir}/${PROJECT_NAME}Config.cmake")
+set(project_version "${generated_dir}/${PROJECT_NAME}ConfigVersion.cmake")
 set(targets_export_name "${PROJECT_NAME}Targets")
 set(namespace "${PROJECT_NAME}::")
 
@@ -171,8 +186,14 @@ configure_package_config_file(
     INSTALL_DESTINATION "${config_install_dir}"
 )
 
+write_basic_package_version_file(
+    "${project_version}"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+)
+
 install(
-    FILES "${project_config}"
+    FILES "${project_config}" "${project_version}" "packaging/cmake/Modules/FindLZ4.cmake"
     DESTINATION "${config_install_dir}"
 )
 

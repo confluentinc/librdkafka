@@ -188,7 +188,7 @@ rx_ver_drops | int | | Dropped outdated messages
 msgs_inflight | int gauge | | Current number of messages in-flight to/from broker
 next_ack_seq | int gauge | | Next expected acked sequence (idempotent producer)
 next_err_seq | int gauge | | Next expected errored sequence (idempotent producer)
-acked_msgid | int | Last acked internal message id (idempotent producer)
+acked_msgid | int | | Last acked internal message id (idempotent producer)
 
 ## cgrp
 

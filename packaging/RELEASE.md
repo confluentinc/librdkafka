@@ -15,6 +15,29 @@ Release tag and version format:
 
 
 
+## Write release notes
+
+Go to https://github.com/edenhill/librdkafka/releases and create a new
+release (save as draft), outlining the following sections based on the
+changes since the last release:
+ * What type of release (maintenance or feature release)
+ * A short intro to the release, describing the type of release: maintenance
+   or feature release, as well as fix or feature high-lights.
+ * A section of New features, if any.
+ * A section of Enhancements, if any.
+ * A section of Fixes, if any.
+
+Hint: Use ´git log --oneline vLastReleaseTag..´ to get a list of commits since
+      the last release, filter and sort this list into the above categories,
+      making sure the end result is meaningful to the end-user.
+      Make sure to credit community contributors for their work.
+
+Save this page as Draft until the final tag is created.
+
+The github release asset/artifact checksums will be added later when the
+final tag is pushed.
+
+
 ## Run regression tests
 
 **Build tests:**
@@ -84,7 +107,6 @@ for v0.11.1-RC1, or 0x000b01ff for the final v0.11.1 release.
     $ git push --tags origin v0.11.1-RC1
 
 
-
 ## Creating packages
 
 As soon as a tag is pushed the CI systems (Travis and AppVeyor) will
@@ -93,6 +115,21 @@ Wait until this process is finished by monitoring the two CIs:
 
  * https://travis-ci.org/edenhill/librdkafka
  * https://ci.appveyor.com/project/edenhill/librdkafka
+
+
+## Publish release on github
+
+Open up the release page on github that was created above.
+
+Run the following command to get checksums of the github release assets:
+
+    $ packaging/tools/gh-release-checksums.py <the-tag>
+
+It will take some time for the script to download the files, when done
+paste the output to the end of the release page.
+
+Make sure the release page looks okay, is still correct (check for new commits),
+and has the correct tag, then click Publish release.
 
 
 ### Create NuGet package

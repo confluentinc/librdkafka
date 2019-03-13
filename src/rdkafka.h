@@ -674,6 +674,27 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
 
 
 /**
+ * @brief Trigger a fatal error for testing purposes.
+ *
+ * Since there is no practical way to trigger real fatal errors in the
+ * idempotent producer, this method allows an application to trigger
+ * fabricated fatal errors in tests to check its error handling code.
+ *
+ * @param err The underlying error code.
+ * @param reason A human readable error reason.
+ *               Will be prefixed with "test_fatal_error: " to differentiate
+ *               from real fatal errors.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if a fatal error was triggered, or
+ *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous fatal error
+ *          has already been triggered.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                           const char *reason);
+
+
+/**
  * @brief Topic+Partition place holder
  *
  * Generic place holder for a Topic+Partition and its related information

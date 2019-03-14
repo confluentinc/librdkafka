@@ -1,4 +1,4 @@
-//@file
+# Configuration properties
 ## Global configuration properties
 
 Property                                 | C/P | Range           |       Default | Importance | Description              

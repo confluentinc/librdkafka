@@ -221,7 +221,8 @@ This (prettified) example output is from a short-lived producer using the follow
 
 Note: this output is prettified using `jq .`, the JSON object emitted by librdkafka does not contain line breaks.
 
-```{
+```json
+{
   "name": "rdkafka#producer-1",
   "client_id": "rdkafka",
   "type": "producer",

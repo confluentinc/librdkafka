@@ -331,11 +331,14 @@ int main (int argc, char **argv) {
                 "%% %d message(s) produced, %d delivered, %d failed\n",
                 msgcnt, deliveredcnt, msgerrcnt);
 
+        /* Save fatal error prior for using with exit status below. */
+        err = rd_kafka_fatal_error(rk, NULL, 0);
+
         /* Destroy the producer instance */
         rd_kafka_destroy(rk);
 
         /* Exit application with an error (1) if there was a fatal error. */
-        if (rd_kafka_fatal_error(rk, NULL, 0))
+        if (err)
                 return 1;
         else
                 return 0;

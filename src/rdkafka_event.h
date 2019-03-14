@@ -80,6 +80,7 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
                                 if (rko->rko_u.err.errstr)
                                         rd_free(rko->rko_u.err.errstr);
                                 rko->rko_u.err.errstr = rd_strdup(errstr);
+                                rko->rko_u.err.fatal = 1;
                         }
                 }
                 return 1;
@@ -97,6 +98,5 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 	default:
 		return 0;
-		
 	}
 }

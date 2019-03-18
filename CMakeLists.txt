@@ -19,6 +19,11 @@ option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
 set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 
+# LIBM {
+include(CheckLibraryExists)
+check_library_exists(m pow "" WITH_HDRHISTOGRAM)
+# }
+
 # ZLIB {
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)

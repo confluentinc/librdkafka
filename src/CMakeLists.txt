@@ -56,6 +56,10 @@ set(
     xxhash.c
 )
 
+if(WITH_HDRHISTOGRAM)
+  list(APPEND sources rdhdrhistogram.c)
+endif()
+
 if(WITH_LIBDL OR WIN32)
   list(APPEND sources rddl.c)
 endif()
@@ -147,6 +151,10 @@ endif()
 set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
+
+if(WITH_HDRHISTOGRAM)
+  target_link_libraries(rdkafka PUBLIC m)
+endif()
 
 if(WITH_ZLIB)
   find_package(ZLIB REQUIRED)
@@ -240,6 +248,9 @@ if(RT_LIBRARY)
 endif()
 if(WITH_PLUGINS)
   string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
+endif()
+if(WITH_HDRHISTOGRAM)
+  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
 endif()
 configure_file(
   "../packaging/cmake/rdkafka.pc.in"

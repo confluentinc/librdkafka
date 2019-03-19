@@ -295,7 +295,8 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		 * Dont do this if we're querying for ApiVersion since it
 		 * is bound to fail once on older brokers. */
 		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
-		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) &&
+		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
+                    rd_atomic32_get(&rkb->rkb_rk->rk_broker_addrless_cnt) &&
 		    !rd_kafka_terminating(rkb->rkb_rk))
 			rd_kafka_op_err(rkb->rkb_rk,
 					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
@@ -303,7 +304,9 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 					rd_atomic32_get(&rkb->rkb_rk->
                                                         rk_broker_down_cnt),
 					rd_atomic32_get(&rkb->rkb_rk->
-                                                        rk_broker_cnt));
+                                                        rk_broker_cnt) -
+                                        rd_atomic32_get(&rkb->rkb_rk->
+                                                        rk_broker_addrless_cnt));
 		rkb->rkb_down_reported = 1;
 
         } else if (state >= RD_KAFKA_BROKER_STATE_UP &&
@@ -4753,6 +4756,8 @@ rd_kafka_broker_t *rd_kafka_broker_add_logical (rd_kafka_t *rk,
         rd_assert(rkb && *"failed to create broker thread");
         rd_kafka_wrunlock(rk);
 
+        rd_atomic32_add(&rk->rk_broker_addrless_cnt, 1);
+
         rd_dassert(RD_KAFKA_BROKER_IS_LOGICAL(rkb));
         rd_kafka_broker_keep(rkb);
         return rkb;
@@ -4823,6 +4828,11 @@ void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
 
         if (!changed)
                 return;
+
+        if (*rkb->rkb_nodename)
+                rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
+        else
+                rd_atomic32_add(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
 
         /* Trigger a disconnect & reconnect */
         rd_kafka_broker_schedule_connection(rkb);

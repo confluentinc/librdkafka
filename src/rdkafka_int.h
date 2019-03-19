@@ -166,6 +166,10 @@ struct rd_kafka_s {
         rd_atomic32_t              rk_broker_up_cnt; /**< Number of brokers
                                                       *   in state >= UP */
 	rd_atomic32_t              rk_broker_down_cnt;
+        /**< Logical brokers currently without an address.
+         *   Used for calculating ERR__ALL_BROKERS_DOWN. */
+        rd_atomic32_t              rk_broker_addrless_cnt;
+
         mtx_t                      rk_internal_rkb_lock;
 	rd_kafka_broker_t         *rk_internal_rkb;
 

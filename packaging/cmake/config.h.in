@@ -26,6 +26,7 @@
 #endif
 
 
+#define BUILT_WITH "CMAKE"
 #cmakedefine01 WITH_ZLIB
 #cmakedefine01 WITH_ZSTD
 #cmakedefine01 WITH_LIBDL

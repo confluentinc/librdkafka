@@ -83,3 +83,11 @@ try_compile(
     LINK_LIBRARIES "-pthread"
 )
 # }
+
+# CRC32C {
+try_compile(
+    WITH_CRC32C_HW
+    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+    "${TRYCOMPILE_SRC_DIR}/crc32c_hw_test.c"
+)
+# }

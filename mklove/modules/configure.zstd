@@ -15,9 +15,6 @@ function manual_checks {
     if [[ $WITH_STATIC_LINKING != y ]]; then
         # Homebrew does not provide a static library for zstd
         mkl_meta_set "zstd" "brew" "zstd"
-        # Debian does not provide the experimental/advanced feature set
-        # in its static zstd builds.
-        mkl_meta_set "zstd" "deb" "libzstd-dev"
     fi
     mkl_meta_set "zstd" "apk" "zstd-dev zstd-static"
     mkl_meta_set "zstd" "static" "libzstd.a"

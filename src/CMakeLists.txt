@@ -54,10 +54,11 @@ set(
     tinycthread.c
     tinycthread_extra.c
     xxhash.c
-    lz4.c
-    lz4frame.c
-    lz4hc.c
 )
+
+if(WITH_HDRHISTOGRAM)
+  list(APPEND sources rdhdrhistogram.c)
+endif()
 
 if(WITH_LIBDL OR WIN32)
   list(APPEND sources rddl.c)
@@ -83,6 +84,10 @@ endif()
 
 if(WITH_ZSTD)
   list(APPEND sources rdkafka_zstd.c)
+endif()
+
+if(NOT WITH_LZ4_EXT)
+  list(APPEND sources lz4.c lz4frame.c lz4hc.c)
 endif()
 
 if(NOT HAVE_REGEX)
@@ -147,6 +152,10 @@ set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 
+if(WITH_HDRHISTOGRAM)
+  target_link_libraries(rdkafka PUBLIC m)
+endif()
+
 if(WITH_ZLIB)
   find_package(ZLIB REQUIRED)
   target_link_libraries(rdkafka PUBLIC ZLIB::ZLIB)
@@ -189,6 +198,10 @@ if(WITH_LIBDL)
   target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
+if(WITH_LZ4_EXT)
+  target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
+endif()
+
 # Set up path to these sources for other sub-projects (tests, examples)
 # to be able to reach them.
 #set(rdkafka_SRC_DIR ${PROJECT_SOURCE_DIR}
@@ -217,6 +230,9 @@ endif()
 if(WITH_ZSTD)
     string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
 endif()
+if(WITH_LZ4_EXT)
+    string(APPEND PKG_CONFIG_REQUIRES "liblz4 ")
+endif()
 set(PKG_CONFIG_CFLAGS
     "-I\${includedir}"
 )
@@ -232,6 +248,9 @@ if(RT_LIBRARY)
 endif()
 if(WITH_PLUGINS)
   string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
+endif()
+if(WITH_HDRHISTOGRAM)
+  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
 endif()
 configure_file(
   "../packaging/cmake/rdkafka.pc.in"

@@ -32,7 +32,7 @@
 #include "rdcrc32.h"
 #include "rdlist.h"
 #include "rdbuf.h"
-
+#include "rdkafka_msgbatch.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
@@ -573,8 +573,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_list_t *rkbuf_rktp_vers;    /* Toppar + Op Version map.
 					* Used by FetchRequest. */
 
-	rd_kafka_msgq_t rkbuf_msgq;
-
         rd_kafka_resp_err_t rkbuf_err;      /* Buffer parsing error code */
 
         union {
@@ -595,12 +593,11 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
                 } Metadata;
                 struct {
-                        shptr_rd_kafka_toppar_t *s_rktp;
-                        rd_kafka_pid_t pid;  /**< Producer Id and Epoch */
-                        int32_t base_seq;    /**< Base sequence */
-                        int64_t base_msgid;  /**< Base msgid */
+                        rd_kafka_msgbatch_t batch; /**< MessageSet/batch */
                 } Produce;
         } rkbuf_u;
+
+#define rkbuf_batch rkbuf_u.Produce.batch
 
         const char *rkbuf_uflow_mitigation; /**< Buffer read underflow
                                              *   human readable mitigation

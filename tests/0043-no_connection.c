@@ -54,10 +54,10 @@ static void test_producer_no_connection (void) {
 				       "message.timeout.ms", "5000", NULL);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 100,
-				 NULL, 100, &msgcnt);
+				 NULL, 100, 0, &msgcnt);
 	for (i = 0 ; i < partition_cnt ; i++)
 		test_produce_msgs_nowait(rk, rkt, 0, i,
-					 0, 100, NULL, 100, &msgcnt);
+					 0, 100, NULL, 100, 0, &msgcnt);
 
 	rd_kafka_poll(rk, 1000);
 

@@ -10,7 +10,7 @@ set -e
 #export CXXFLAGS='-std=c++98 -pedantic'
 
 # enable FSAN address, thread, ..
-#FSAN="-fsanitize=address"
+FSAN="-fsanitize=address"
 #FSAN="-fsanitize=thread"
 #FSAN="-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer"
 

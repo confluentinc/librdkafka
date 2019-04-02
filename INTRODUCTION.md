@@ -1,4 +1,3 @@
-//@file INTRODUCTION.md
 # Introduction to librdkafka - the Apache Kafka C/C++ client library
 
 
@@ -418,15 +417,20 @@ There are three types of guarantees that the idempotent producer can satisfy:
                   Does NOT cover the exactly-once consumer case.
  * Ordering - a series of messages are written to the log in the
               order they were produced.
- * Gap-less - a series of messages are written once and in order
-              without risk of skipping messages. The sequence
+ * Gap-less - **EXPERIMENTAL** a series of messages are written once and
+              in order without risk of skipping messages. The sequence
               of messages may be cut short and fail before all
               messages are written, but may not fail individual
               messages in the series.
-              This guarantee is enabled by default, but may be disabled
+              This guarantee is disabled by default, but may be enabled
               by setting `enable.gapless.guarantee` if individual message
-              failure is not a concern.
-
+              failure is a concern.
+              Messages that fail due to exceeded timeout (`message.timeout.ms`),
+              are permitted by the gap-less guarantee and may cause
+              gaps in the message series without raising a fatal error.
+              See **Message timeout considerations** below for more info.
+              **WARNING**: This is an experimental property subject to
+                           change or removal.
 
 All three guarantees are in effect when idempotence is enabled, only
 gap-less may be disabled individually.
@@ -483,6 +487,53 @@ producing to explicit partitions with partitioner-based partitions
 since messages produced for the latter are queued separately until
 a topic's partition count is known, which would insert these messages
 after the partition-explicit messages regardless of produce order.
+
+
+#### Message timeout considerations
+
+If messages time out (due to `message.timeout.ms`) while in the producer queue
+there will be gaps in the series of produced messages.
+
+E.g., Messages 1,2,3,4,5 are produced by the application.
+      While messages 2,3,4 are transmitted to the broker the connection to
+      the broker goes down.
+      While the broker is down the message timeout expires for message 2 and 3.
+      As the connection comes back up messages 4, 5 are transmitted to the
+      broker, resulting in a final written message sequence of 1, 4, 5.
+
+The producer gracefully handles this case by draining the in-flight requests
+for a given partition when one or more of its queued (not transmitted)
+messages are timed out. When all requests are drained the Epoch is bumped and
+the base sequence number is reset to the first message in the queue, effectively
+skipping the timed out messages as if they had never existed from the
+broker's point of view.
+The message status for timed out queued messages will be
+`RD_KAFKA_MSG_STATUS_NOT_PERSISTED`.
+
+If messages time out while in-flight to the broker (also due to
+`message.timeout.ms`), the protocol request will fail, the broker
+connection will be closed by the client, and the timed out messages will be
+removed from the producer queue. In this case the in-flight messages may be
+written to the topic log by the broker, even though
+a delivery report with error `ERR__MSG_TIMED_OUT` will be raised, since
+the producer timed out the request before getting an acknowledgement back
+from the broker.
+The message status for timed out in-flight messages will be
+`RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED`, indicating that the producer
+does not know if the messages were written and acked by the broker,
+or dropped in-flight.
+
+An application may inspect the message status by calling
+`rd_kafka_message_status()` on the message in the delivery report callback,
+to see if the message was (possibly) persisted (written to the topic log) by
+the broker or not.
+
+Despite the graceful handling of timeouts, we recommend to use a
+large `message.timeout.ms` to minimize the risk of timeouts.
+
+**Warning**: `enable.gapless.guarantee` does not apply to timed-out messages.
+
+**Note**: `delivery.timeout.ms` is an alias for `message.timeout.ms`.
 
 
 #### Leader change
@@ -617,10 +668,10 @@ the gap-less guarantee (if `enable.gapless.guarantee` is set) by failing all
 queued messages.
 
 
-##### Message persistance status
+##### Message persistence status
 
 To help the application decide what to do in these error cases, a new
-per-message API is introduced, `rd_kafka_message_persistance_status()`,
+per-message API is introduced, `rd_kafka_message_status()`,
 which returns one of the following values:
 
  * `RD_KAFKA_MSG_STATUS_NOT_PERSISTED` - the message has never
@@ -779,13 +830,8 @@ reliable bootstrap broker.
 
 #### Sparse connections
 
-Maintaining an open connection to each broker in the cluster is problematic
-for clusters with a large number of brokers, as well as for clusters with
-large number of clients.
-
-To alleviate this, the `enable.sparse.connections=true` configuration property
-can be set to `true` (**default**), in which case the client will only connect
-to brokers it needs to communicate with, and only when necessary.
+The client will only connect to brokers it needs to communicate with, and
+only when necessary.
 
 Examples of needed broker connections are:
 
@@ -862,6 +908,45 @@ the logging level will be LOG_WARNING (4), else LOG_INFO (6).
 `log.connection.close=false` may be used to silence all disconnect logs,
 but it is recommended to instead rely on the above heuristics.
 
+
+### Logging
+
+#### Debug contexts
+
+Extensive debugging of librdkafka can be enabled by setting the
+`debug` configuration property to a CSV string of debug contexts:
+
+Debug context | Type     | Description
+--------------|----------|----------------------
+generic       | *        | General client instance level debugging. Includes initialization and termination debugging.
+broker        | *        | Broker and connection state debugging.
+topic         | *        | Topic and partition state debugging. Includes leader changes.
+metadata      | *        | Cluster and topic metadata retrieval debugging.
+feature       | *        | Kafka protocol feature support as negotiated with the broker.
+queue         | producer | Message queue debugging.
+msg           | *        | Message debugging. Includes information about batching, compression, sizes, etc.
+protocol      | *        | Kafka protocol request/response debugging. Includes latency (rtt) printouts.
+cgrp          | consumer | Low-level consumer group state debugging.
+security      | *        | Security and authentication debugging.
+fetch         | consumer | Consumer message fetch debugging. Includes decision when and why messages are fetched.
+interceptor   | *        | Interceptor interface debugging.
+plugin        | *        | Plugin loading debugging.
+consumer      | consumer | High-level consumer debugging.
+admin         | admin    | Admin API debugging.
+eos           | producer | Idempotent Producer debugging.
+all           | *        | All of the above.
+
+
+Suggested debugging settings for troubleshooting:
+
+Problem space          | Type     | Debug setting
+-----------------------|----------|-------------------
+Producer not delivering messages to broker | producer | `broker,topic,msg`
+Consumer not fetching messages | consumer | Start with `consumer`, or use `cgrp,fetch` for detailed information.
+Consumer starts reading at unexpected offset | consumer | `consumer` or `cgrp,fetch`
+Authentication or connectivity issues | * | `broker,auth`
+Protocol handling or latency | * | `broker,protocol`
+Topic leader and state | * | `topic,metadata`
 
 
 

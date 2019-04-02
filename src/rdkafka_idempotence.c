@@ -30,6 +30,8 @@
 #include "rdkafka_int.h"
 #include "rdkafka_request.h"
 
+#include <stdarg.h>
+
 /**
  * @name Idempotent Producer logic
  *
@@ -45,9 +47,8 @@ static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
  * @brief Set the producer's idempotence state.
  * @locks rd_kafka_wrlock() MUST be held
  */
-static void
-rd_kafka_idemp_set_state (rd_kafka_t *rk,
-                          rd_kafka_idemp_state_t new_state) {
+void rd_kafka_idemp_set_state (rd_kafka_t *rk,
+                               rd_kafka_idemp_state_t new_state) {
 
         if (rk->rk_eos.idemp_state == new_state)
                 return;
@@ -240,8 +241,6 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
                                 const rd_kafka_pid_t pid) {
         rd_kafka_t *rk = rkb->rkb_rk;
 
-        rd_assert(thrd_is_current(rk->rk_thread));
-
         rd_kafka_wrlock(rk);
         if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_PID) {
                 rd_rkb_dbg(rkb, EOS, "GETPID",
@@ -285,65 +284,6 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Schedule a reset and re-request of PID when the
- *        local ProduceRequest queues have been fully drained.
- *
- * The PID is not reset until the queues are fully drained.
- *
- * @locality any
- * @locks none
- */
-void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
-        rd_kafka_wrlock(rk);
-        rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for %s reset "
-                     "for %d partition(s) with in-flight requests",
-                     rd_kafka_pid2str(rk->rk_eos.pid),
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_RESET);
-        rd_kafka_wrunlock(rk);
-}
-
-
-/**
- * @brief Schedule an epoch bump when the local ProduceRequest queues
- *        have been fully drained.
- *
- * The PID is not bumped until the queues are fully drained.
- *
- * @locality any
- * @locks none
- */
-void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk) {
-        rd_kafka_wrlock(rk);
-        rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for %s epoch bump "
-                     "for %d partition(s) with in-flight requests",
-                     rd_kafka_pid2str(rk->rk_eos.pid),
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
-        rd_kafka_wrunlock(rk);
-}
-
-/**
- * @brief Mark partition as waiting-to-drain.
- *
- * @locks toppar_lock MUST be held
- * @locality broker thread (leader or not)
- */
-void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp) {
-        if (rktp->rktp_eos.wait_drain)
-                return;
-
-        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, EOS|RD_KAFKA_DBG_TOPIC, "DRAIN",
-                     "%.*s [%"PRId32"] beginning partition drain",
-                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition);
-        rktp->rktp_eos.wait_drain = rd_true;
-}
-
-
-/**
  * @brief Call when all partition request queues
  *        are drained to reset and re-request a new PID.
  *
@@ -382,11 +322,99 @@ static void rd_kafka_idemp_drain_done (rd_kafka_t *rk) {
 
 }
 
+/**
+ * @brief Check if in-flight toppars drain is done, if so transition to
+ *        next state.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE void rd_kafka_idemp_check_drain_done (rd_kafka_t *rk) {
+        if (rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt) == 0)
+                rd_kafka_idemp_drain_done(rk);
+}
+
+
+/**
+ * @brief Schedule a reset and re-request of PID when the
+ *        local ProduceRequest queues have been fully drained.
+ *
+ * The PID is not reset until the queues are fully drained.
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
+        rd_kafka_wrlock(rk);
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for %s reset "
+                     "for %d partition(s) with in-flight requests",
+                     rd_kafka_pid2str(rk->rk_eos.pid),
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_RESET);
+        rd_kafka_wrunlock(rk);
+
+        /* Check right away if the drain could be done. */
+        rd_kafka_idemp_check_drain_done(rk);
+}
+
+
+/**
+ * @brief Schedule an epoch bump when the local ProduceRequest queues
+ *        have been fully drained.
+ *
+ * The PID is not bumped until the queues are fully drained.
+ *
+ * @param fmt is a human-readable reason for the bump
+ *
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...) {
+        va_list ap;
+        char buf[256];
+
+        va_start(ap, fmt);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+        rd_kafka_wrlock(rk);
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for %s epoch bump "
+                     "for %d partition(s) with in-flight requests: %s",
+                     rd_kafka_pid2str(rk->rk_eos.pid),
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt), buf);
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
+        rd_kafka_wrunlock(rk);
+
+        /* Check right away if the drain could be done. */
+        rd_kafka_idemp_check_drain_done(rk);
+}
+
+/**
+ * @brief Mark partition as waiting-to-drain.
+ *
+ * @locks toppar_lock MUST be held
+ * @locality broker thread (leader or not)
+ */
+void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp,
+                                  const char *reason) {
+        if (rktp->rktp_eos.wait_drain)
+                return;
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, EOS|RD_KAFKA_DBG_TOPIC, "DRAIN",
+                     "%.*s [%"PRId32"] beginning partition drain: %s",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition, reason);
+        rktp->rktp_eos.wait_drain = rd_true;
+}
+
 
 /**
  * @brief Mark partition as no longer having a ProduceRequest in-flight.
  *
- * @locality toppar handler thread
+ * @locality any
  * @locks none
  */
 void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,

@@ -73,8 +73,8 @@ typedef pthread_mutex_t mtx_t;
 typedef pthread_t thrd_t;
 #define thrd_create(THRD,START_ROUTINE,ARG) \
   pthread_create(THRD, NULL, START_ROUTINE, ARG)
-#define thrd_join(THRD,RETVAL) \
-  pthread_join(THRD, NULL)
+#define thrd_join0(THRD)                  \
+        pthread_join(THRD, NULL)
 
 
 static mtx_t sockem_lock;
@@ -204,18 +204,25 @@ static void sockem_init (void) {
 
 
 /**
- * @returns the maximum waittime in ms for poll()
+ * @returns the maximum waittime in ms for poll(), at most 1000 ms.
  * @remark lock must be held
  */
 static int sockem_calc_waittime (sockem_t *skm, int64_t now) {
         const sockem_buf_t *sb;
+        int64_t r;
 
         if (!(sb = TAILQ_FIRST(&skm->bufs)))
                 return 1000;
-        else if (now > sb->sb_at)
+        else if (now >= sb->sb_at || skm->use.direct)
                 return 0;
-        else
-                return (sb->sb_at - now) / 1000;
+        else if ((r = (sb->sb_at - now)) < 1000000) {
+                if (r < 1000)
+                        return 1; /* Ceil to 1 to avoid busy-loop during
+                                   * last millisecond. */
+                else
+                        return (int)(r / 1000);
+        } else
+                return 1000;
 }
 
 
@@ -267,17 +274,21 @@ static int sockem_fwd_bufs (sockem_t *skm, int ofd) {
         sockem_buf_t *sb;
         int64_t now = sockem_clock();
         size_t to_write;
-        int64_t elapsed = now - skm->ts_last_fwd;
+        int64_t elapsed;
 
-        if (!elapsed)
+
+        if (skm->use.direct)
+                to_write = 1024*1024*100;
+        else if ((elapsed = now - skm->ts_last_fwd)) {
+                /* Calculate how many bytes to send to adhere to rate-limit */
+                to_write = (size_t)((double)skm->use.tx_thruput *
+                                    ((double)elapsed / 1000000.0));
+        } else
                 return 0;
 
-        /* Calculate how many bytes to send to adhere to rate-limit */
-        to_write = (size_t)((double)skm->use.tx_thruput *
-                            ((double)elapsed / 1000000.0));
-
         while (to_write > 0 &&
-               (sb = TAILQ_FIRST(&skm->bufs)) && sb->sb_at <= now) {
+               (sb = TAILQ_FIRST(&skm->bufs)) &&
+               (skm->use.direct || sb->sb_at <= now)) {
                 ssize_t r;
                 size_t remain = sb->sb_size - sb->sb_of;
                 size_t wr = to_write < remain ? to_write : remain;
@@ -340,7 +351,7 @@ static int sockem_recv_fwd (sockem_t *skm, int ifd, int ofd, int direct) {
         }
 
         if (direct) {
-                /* No delay or rate limit, send right away */
+                /* No delay, rate limit, or buffered data: send right away */
                 wr = send(ofd, skm->recv_buf, r, 0);
                 if (wr < r)
                         return -1;
@@ -385,8 +396,7 @@ static __inline void sockem_conf_use (sockem_t *skm) {
         skm->use = skm->conf;
         /* Figure out if direct forward is to be used */
         skm->use.direct = !(skm->use.delay || skm->use.jitter ||
-                            (skm->use.tx_thruput < (1 << 30)) ||
-                            skm->bufs_size > 0);
+                            (skm->use.tx_thruput < (1 << 30)));
 }
 
 /**
@@ -467,7 +477,9 @@ static void *sockem_run (void *arg) {
                                             /* direct mode for app socket
                                              * without delay, and always for
                                              * peer socket (receive channel) */
-                                            i == 0 || skm->use.direct) == -1) {
+                                            i == 0 ||
+                                            (skm->use.direct &&
+                                             skm->bufs_size == 0)) == -1) {
                                         skm->run = SOCKEM_TERM;
                                         break;
                                 }
@@ -628,8 +640,6 @@ static void sockem_bufs_purge (sockem_t *skm) {
 
 
 void sockem_close (sockem_t *skm) {
-
-
         mtx_lock(&sockem_lock);
         mtx_lock(&skm->lock);
         if (skm->linked)
@@ -646,7 +656,7 @@ void sockem_close (sockem_t *skm) {
 
         mtx_unlock(&skm->lock);
 
-        thrd_join(skm->thrd, NULL);
+        thrd_join0(skm->thrd);
 
         sockem_bufs_purge(skm);
 

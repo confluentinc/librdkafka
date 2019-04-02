@@ -113,9 +113,14 @@ const char *rd_kafka_cgrp_join_state_names[] = {
 };
 
 
-static void rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
+/**
+ * @brief Change the cgrp state.
+ *
+ * @returns 1 if the state was changed, else 0.
+ */
+static int rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
         if ((int)rkcg->rkcg_state == state)
-                return;
+                return 0;
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPSTATE",
                      "Group \"%.*s\" changed state %s -> %s "
@@ -129,6 +134,8 @@ static void rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
         rkcg->rkcg_ts_statechange = rd_clock();
 
 	rd_kafka_brokers_broadcast_state_change(rkcg->rkcg_rk);
+
+        return 1;
 }
 
 
@@ -304,32 +311,44 @@ static void rd_kafka_cgrp_coord_clear_broker (rd_kafka_cgrp_t *rkcg) {
  *
  * Will do nothing if there's been no change.
  *
- * @returns 1 if the coordinator was updated, else 0.
+ * @returns 1 if the coordinator, or state, was updated, else 0.
  */
 static int rd_kafka_cgrp_coord_update (rd_kafka_cgrp_t *rkcg,
                                        int32_t coord_id) {
-        rd_kafka_broker_t *rkb = NULL;
 
         /* Don't do anything while terminating */
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM)
                 return 0;
 
-        /* No coordinator change? */
-        if (rkcg->rkcg_coord_id == coord_id) {
-                /* If a coord query returned the same coordinator,
-                 * advance cgrp to the next state.
-                 * Or re-query if there is still no coordinator known. */
-                if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_WAIT_COORD)
-                        rd_kafka_cgrp_set_state(
-                                rkcg,
-                                coord_id == -1 ?
-                                RD_KAFKA_CGRP_STATE_QUERY_COORD :
-                                RD_KAFKA_CGRP_STATE_WAIT_BROKER);
-                return 0;
+        /* Check if coordinator changed */
+        if (rkcg->rkcg_coord_id != coord_id) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPCOORD",
+                             "Group \"%.*s\" changing coordinator %"PRId32
+                             " -> %"PRId32,
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                             rkcg->rkcg_coord_id, coord_id);
+
+                /* Update coord id */
+                rkcg->rkcg_coord_id = coord_id;
+
+                /* Clear previous broker handle, if any */
+                if (rkcg->rkcg_curr_coord)
+                        rd_kafka_cgrp_coord_clear_broker(rkcg);
         }
 
-        if (coord_id != -1) {
-                /* Try to find the coordinator broker */
+
+        if (rkcg->rkcg_curr_coord) {
+                /* There is already a known coordinator and a
+                 * corresponding broker handle. */
+                if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP)
+                        return rd_kafka_cgrp_set_state(
+                                rkcg,
+                                RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT);
+
+        } else if (rkcg->rkcg_coord_id != -1) {
+                rd_kafka_broker_t *rkb;
+
+                /* Try to find the coordinator broker handle */
                 rd_kafka_rdlock(rkcg->rkcg_rk);
                 rkb = rd_kafka_broker_find_by_nodeid(rkcg->rkcg_rk, coord_id);
                 rd_kafka_rdunlock(rkcg->rkcg_rk);
@@ -339,35 +358,29 @@ static int rd_kafka_cgrp_coord_update (rd_kafka_cgrp_t *rkcg,
                  * about. In this case the client will continue
                  * querying metadata and querying for the coordinator
                  * until a match is found. */
+
+                if (rkb) {
+                        /* Coordinator is known and broker handle exists */
+                        rd_kafka_cgrp_coord_set_broker(rkcg, rkb);
+                        rd_kafka_broker_destroy(rkb); /*from find_by_nodeid()*/
+
+                        return 1;
+                } else {
+                        /* Coordinator is known but no corresponding
+                         * broker handle. */
+                        return rd_kafka_cgrp_set_state(
+                                rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER);
+
+                }
+
+        } else {
+                /* Coordinator still not known, re-query */
+                if (rkcg->rkcg_state >= RD_KAFKA_CGRP_STATE_WAIT_COORD)
+                        return rd_kafka_cgrp_set_state(
+                                rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
         }
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPCOORD",
-                     "Group \"%.*s\" changing coordinator %"PRId32" (%s) "
-                     "-> %"PRId32" (%s)",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                     rkcg->rkcg_coord_id,
-                     rkcg->rkcg_curr_coord ?
-                     rd_kafka_broker_name(rkcg->rkcg_curr_coord) : "none",
-                     coord_id,
-                     rkb ? rd_kafka_broker_name(rkb) : "none");
-
-
-        /*
-         * Update coord id and broker handle
-         */
-        rkcg->rkcg_coord_id = coord_id;
-
-        if (rkcg->rkcg_curr_coord)
-                rd_kafka_cgrp_coord_clear_broker(rkcg);
-
-        rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER);
-
-        if (rkb) {
-                rd_kafka_cgrp_coord_set_broker(rkcg, rkb);
-                rd_kafka_broker_destroy(rkb); /* from find_by_nodeid() */
-        }
-
-        return 1;
+        return 0; /* no change */
 }
 
 
@@ -998,7 +1011,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         }
 
 err:
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
+        actions = rd_kafka_err_action(rkb, ErrorCode, request,
                                       RD_KAFKA_ERR_ACTION_IGNORE,
                                       RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
 
@@ -1344,7 +1357,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 err:
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
+        actions = rd_kafka_err_action(rkb, ErrorCode, request,
                                       RD_KAFKA_ERR_ACTION_END);
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);

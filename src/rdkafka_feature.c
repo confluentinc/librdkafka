@@ -44,7 +44,8 @@ static const char *rd_kafka_feature_names[] = {
         "OffsetTime",
         "MsgVer2",
         "IdempotentProducer",
-	"ZSTD",
+        "ZSTD",
+        "UnitTest",
 	NULL
 };
 

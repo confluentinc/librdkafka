@@ -1,6 +1,7 @@
 EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	rdkafka_consumer_example rdkafka_consumer_example_cpp \
-	kafkatest_verifiable_client rdkafka_simple_producer
+	kafkatest_verifiable_client rdkafka_simple_producer \
+	rdkafka_idempotent_producer
 
 all: $(EXAMPLES)
 
@@ -29,6 +30,10 @@ rdkafka_example: ../src/librdkafka.a rdkafka_example.c
 	@echo "./$@ -h"
 
 rdkafka_simple_producer: ../src/librdkafka.a rdkafka_simple_producer.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+rdkafka_idempotent_producer: ../src/librdkafka.a rdkafka_idempotent_producer.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

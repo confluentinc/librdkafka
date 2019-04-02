@@ -3463,11 +3463,38 @@ int rd_kafka_topic_partition_list_regex_cnt (
 
 
 /**
+ * @brief Reset base sequence for this toppar.
+ *
+ * See rd_kafka_toppar_pid_change() below.
+ *
+ * @warning Toppar must be completely drained.
+ *
+ * @locality toppar handler thread
+ * @locks toppar_lock MUST be held.
+ */
+static void rd_kafka_toppar_reset_base_msgid (rd_kafka_toppar_t *rktp,
+                                              uint64_t new_base_msgid) {
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                     TOPIC|RD_KAFKA_DBG_EOS, "RESETSEQ",
+                     "%.*s [%"PRId32"] "
+                     "resetting epoch base seq from %"PRIu64" to %"PRIu64,
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition,
+                     rktp->rktp_eos.epoch_base_msgid, new_base_msgid);
+
+        rktp->rktp_eos.next_ack_seq = 0;
+        rktp->rktp_eos.next_err_seq = 0;
+        rktp->rktp_eos.epoch_base_msgid = new_base_msgid;
+}
+
+
+/**
  * @brief Update/change the Producer ID for this toppar.
  *
  * Must only be called when pid is different from the current toppar pid.
  *
- * The epoch base sequence will be set to the first message in the partition
+ * The epoch base sequence will be set to \p base_msgid, which must be the
+ * first message in the partition
  * queue. However, if there are outstanding messages in-flight to the broker
  * we will need to wait for these ProduceRequests to finish (most likely
  * with failure) and have their messages re-enqueued to maintain original order.
@@ -3481,9 +3508,8 @@ int rd_kafka_topic_partition_list_regex_cnt (
  * @locality toppar handler thread
  * @locks none
  */
-int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
-        int64_t new_base;
-        const rd_kafka_msg_t *rkm;
+int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid,
+                                uint64_t base_msgid) {
         int inflight = rd_atomic32_get(&rktp->rktp_msgs_inflight);
 
         if (unlikely(inflight > 0)) {
@@ -3500,30 +3526,25 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
                 return 0;
         }
 
-        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
-        rd_assert(rkm && *"BUG: pid_change() must only be called with "
+        rd_assert(base_msgid != 0 &&
+                  *"BUG: pid_change() must only be called with "
                   "non-empty xmitq");
 
-        new_base = rkm->rkm_u.producer.msgid;
-
+        rd_kafka_toppar_lock(rktp);
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
                      TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
-                     "%.*s [%"PRId32"] changed %s -> %s: "
-                     "resetting epoch base seq to %"PRIu64
-                     " (was %"PRIu64")",
+                     "%.*s [%"PRId32"] changed %s -> %s "
+                     "with base MsgId %"PRIu64,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition,
                      rd_kafka_pid2str(rktp->rktp_eos.pid),
                      rd_kafka_pid2str(pid),
-                     new_base, rktp->rktp_eos.epoch_base_msgid);
+                     base_msgid);
 
-        rd_kafka_toppar_lock(rktp);
         rktp->rktp_eos.pid = pid;
-        rktp->rktp_eos.next_ack_seq = 0;
-        rktp->rktp_eos.next_err_seq = 0;
-        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_toppar_reset_base_msgid(rktp, base_msgid);
 
-        rktp->rktp_eos.epoch_base_msgid = new_base;
+        rd_kafka_toppar_unlock(rktp);
 
         return 1;
 }

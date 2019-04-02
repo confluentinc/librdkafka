@@ -674,6 +674,27 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
 
 
 /**
+ * @brief Trigger a fatal error for testing purposes.
+ *
+ * Since there is no practical way to trigger real fatal errors in the
+ * idempotent producer, this method allows an application to trigger
+ * fabricated fatal errors in tests to check its error handling code.
+ *
+ * @param err The underlying error code.
+ * @param reason A human readable error reason.
+ *               Will be prefixed with "test_fatal_error: " to differentiate
+ *               from real fatal errors.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if a fatal error was triggered, or
+ *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous fatal error
+ *          has already been triggered.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                           const char *reason);
+
+
+/**
  * @brief Topic+Partition place holder
  *
  * Generic place holder for a Topic+Partition and its related information
@@ -1285,7 +1306,7 @@ RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
 
 /**
  * @enum rd_kafka_msg_status_t
- * @brief Message persistance status can be used by the application to
+ * @brief Message persistence status can be used by the application to
  *        find out if a produced message was persisted in the topic log.
  */
 typedef enum {
@@ -1305,7 +1326,7 @@ typedef enum {
 
 
 /**
- * @brief Returns the message's persistance status in the topic log.
+ * @brief Returns the message's persistence status in the topic log.
  *
  * @remark The message status is not available in on_acknowledgement
  *         interceptors.
@@ -3280,7 +3301,7 @@ rd_kafka_position (rd_kafka_t *rk,
 				  *            the produce() call when the
 				  *            message queue is full. */
 #define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor
-                                     * per-message partition. */
+                                      * per-message partition. */
 
 
 
@@ -3416,6 +3437,10 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
  *  - err            Will be set according to success or failure.
  *                   Application only needs to check for errors if
  *                   return value != \p message_cnt.
+ *
+ * @remark If \c RD_KAFKA_MSG_F_PARTITION is set in \p msgflags, the
+ *         \c .partition field of the \p rkmessages is used instead of
+ *         \p partition.
  *
  * @returns the number of messages succesfully enqueued for producing.
  *

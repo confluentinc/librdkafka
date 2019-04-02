@@ -38,38 +38,47 @@
 
 static int sockem_ctrl_thrd_main (void *arg) {
         sockem_ctrl_t *ctrl = (sockem_ctrl_t *)arg;
-
+        int64_t next_wakeup = 0;
         mtx_lock(&ctrl->lock);
 
         test_curr = ctrl->test;
 
         while (!ctrl->term) {
                 int64_t now;
+                struct sockem_cmd *cmd;
+                int wait_time = 1000;
 
-                cnd_timedwait_ms(&ctrl->cnd, &ctrl->lock, 10);
+                if (next_wakeup)
+                        wait_time = (int)(next_wakeup - test_clock()) / 1000;
 
-                if (ctrl->cmd.ts_at) {
-                        ctrl->next.ts_at = ctrl->cmd.ts_at;
-                        ctrl->next.delay = ctrl->cmd.delay;
-                        ctrl->cmd.ts_at = 0;
-                        ctrl->cmd.ack = 1;
-                        printf(_C_CYA "## %s: sockem: "
-                               "received command to set delay "
-                               "to %d in %dms\n" _C_CLR,
-                               __FILE__,
-                               ctrl->next.delay,
-                               (int)(ctrl->next.ts_at - test_clock()) / 1000);
+                if (wait_time > 0)
+                        cnd_timedwait_ms(&ctrl->cnd, &ctrl->lock, wait_time);
 
+                /* Ack last command */
+                if (ctrl->cmd_ack != ctrl->cmd_seq) {
+                        ctrl->cmd_ack = ctrl->cmd_seq;
+                        cnd_signal(&ctrl->cnd); /* signal back to caller */
                 }
 
+                /* Serve expired commands */
+                next_wakeup = 0;
                 now = test_clock();
-                if (ctrl->next.ts_at && now > ctrl->next.ts_at) {
-                        printf(_C_CYA "## %s: "
-                               "sockem: setting socket delay to %d\n" _C_CLR,
-                               __FILE__, ctrl->next.delay);
-                        test_socket_sockem_set_all("delay", ctrl->next.delay);
-                        ctrl->next.ts_at = 0;
-                        cnd_signal(&ctrl->cnd); /* signal back to caller */
+                while ((cmd = TAILQ_FIRST(&ctrl->cmds))) {
+                        if (!ctrl->term) {
+                                if (cmd->ts_at > now) {
+                                        next_wakeup = cmd->ts_at;
+                                        break;
+                                }
+
+                                printf(_C_CYA "## %s: "
+                                       "sockem: setting socket delay to %d\n"
+                                       _C_CLR,
+                                       __FILE__, cmd->delay);
+                                test_socket_sockem_set_all("delay",
+                                                           cmd->delay);
+                        }
+                        TAILQ_REMOVE(&ctrl->cmds, cmd, link);
+                        free(cmd);
                 }
         }
         mtx_unlock(&ctrl->lock);
@@ -81,20 +90,24 @@ static int sockem_ctrl_thrd_main (void *arg) {
 
 /**
  * @brief Set socket delay to kick in after \p after ms
- *
- * @remark Must not be used concurrently.
  */
 void sockem_ctrl_set_delay (sockem_ctrl_t *ctrl, int after, int delay) {
+        struct sockem_cmd *cmd;
+        int wait_seq;
+
         TEST_SAY("Set delay to %dms (after %dms)\n", delay, after);
 
+        cmd = calloc(1, sizeof(*cmd));
+        cmd->ts_at = test_clock() + (after*1000);
+        cmd->delay = delay;
+
         mtx_lock(&ctrl->lock);
-        ctrl->cmd.ts_at = test_clock() + (after*1000);
-        ctrl->cmd.delay = delay;
-        ctrl->cmd.ack = 0;
+        wait_seq = ++ctrl->cmd_seq;
+        TAILQ_INSERT_TAIL(&ctrl->cmds, cmd, link);
         cnd_broadcast(&ctrl->cnd);
 
         /* Wait for ack from sockem thread */
-        while (!ctrl->cmd.ack) {
+        while (ctrl->cmd_ack < wait_seq) {
                 TEST_SAY("Waiting for sockem control ack\n");
                 cnd_timedwait_ms(&ctrl->cnd, &ctrl->lock, 1000);
         }
@@ -106,6 +119,7 @@ void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
         memset(ctrl, 0, sizeof(*ctrl));
         mtx_init(&ctrl->lock, mtx_plain);
         cnd_init(&ctrl->cnd);
+        TAILQ_INIT(&ctrl->cmds);
         ctrl->test = test_curr;
 
         mtx_lock(&ctrl->lock);
@@ -116,11 +130,15 @@ void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
 }
 
 void sockem_ctrl_term (sockem_ctrl_t *ctrl) {
+        int res;
+
         /* Join controller thread */
         mtx_lock(&ctrl->lock);
         ctrl->term = 1;
+        cnd_broadcast(&ctrl->cnd);
         mtx_unlock(&ctrl->lock);
-        thrd_join(ctrl->thrd, NULL);
+
+        thrd_join(ctrl->thrd, &res);
 
         cnd_destroy(&ctrl->cnd);
         mtx_destroy(&ctrl->lock);

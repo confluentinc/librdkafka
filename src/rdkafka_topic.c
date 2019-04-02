@@ -1166,17 +1166,17 @@ static const char *rd_kafka_toppar_needs_query (rd_kafka_t *rk,
 
 /**
  * @brief Scan all topics and partitions for:
- *  - timed out messages.
+ *  - timed out messages in UA partitions.
  *  - topics that needs to be created on the broker.
  *  - topics who's metadata is too old.
+ *  - partitions with unknown leaders that require leader query.
  *
  * @locality rdkafka main thread
  */
-int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
+void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_itopic_t *rkt;
 	rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
-	int totcnt = 0;
         rd_list_t query_topics;
 
         rd_list_init(&query_topics, 0, rd_free);
@@ -1184,11 +1184,8 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
-                int cnt = 0, tpcnt = 0;
-                rd_kafka_msgq_t timedout;
                 int query_this = 0;
-
-                rd_kafka_msgq_init(&timedout);
+                rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
 
 		rd_kafka_topic_wrlock(rkt);
 
@@ -1231,10 +1228,12 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
 		for (p = RD_KAFKA_PARTITION_UA ;
 		     p < rkt->rkt_partition_cnt ; p++) {
-			int did_tmout = 0;
 
-			if (!(s_rktp = rd_kafka_toppar_get(rkt, p, 0)))
-				continue;
+                        if (!(s_rktp = rd_kafka_toppar_get(
+                                      rkt, p,
+                                      p == RD_KAFKA_PARTITION_UA ?
+                                      rd_true : rd_false)))
+                                continue;
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 			rd_kafka_toppar_lock(rktp);
@@ -1254,13 +1253,17 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                                      leader_reason);
                                            query_this = 1;
                                 }
+                        } else {
+                                if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                                        /* Scan UA partition for message
+                                         * timeouts.
+                                         * Proper partitions are scanned by
+                                         * their toppar broker thread. */
+                                        rd_kafka_msgq_age_scan(rktp,
+                                                               &rktp->rktp_msgq,
+                                                               &timedout, now);
+                                }
                         }
-
-			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,
-						   &timedout, now) > 0)
-				did_tmout = 1;
-
-			tpcnt += did_tmout;
 
 			rd_kafka_toppar_unlock(rktp);
 			rd_kafka_toppar_destroy(s_rktp);
@@ -1268,12 +1271,12 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
                 rd_kafka_topic_rdunlock(rkt);
 
-                if ((cnt = timedout.rkmq_msg_cnt) > 0) {
-                        totcnt += cnt;
+                /* Propagate delivery reports for timed out messages */
+                if (rd_kafka_msgq_len(&timedout) > 0) {
                         rd_kafka_dbg(rk, MSG, "TIMEOUT",
-                                     "%s: %"PRId32" message(s) "
-                                     "from %i toppar(s) timed out",
-                                     rkt->rkt_topic->str, cnt, tpcnt);
+                                     "%s: %d message(s) timed out",
+                                     rkt->rkt_topic->str,
+                                     rd_kafka_msgq_len(&timedout));
                         rd_kafka_dr_msgq(rkt, &timedout,
                                          RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
                 }
@@ -1294,8 +1297,6 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                                     * info exists*/,
                                                  "refresh unavailable topics");
         rd_list_destroy(&query_topics);
-
-        return totcnt;
 }
 
 
@@ -1433,4 +1434,32 @@ void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
         rd_kafka_rdunlock(rk);
+}
+
+
+/**
+ * @brief Unit test helper to set a topic's state to EXISTS
+ *        with the given number of partitions.
+ */
+void rd_ut_kafka_topic_set_topic_exists (rd_kafka_itopic_t *rkt,
+                                         int partition_cnt,
+                                         int32_t leader_id) {
+        struct rd_kafka_metadata_topic mdt = {
+                .topic = (char *)rkt->rkt_topic->str,
+                .partition_cnt = partition_cnt
+        };
+        int i;
+
+        mdt.partitions = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);
+
+        for (i = 0 ; i < partition_cnt ; i++) {
+                memset(&mdt.partitions[i], 0, sizeof(mdt.partitions[i]));
+                mdt.partitions[i].id = i;
+                mdt.partitions[i].leader = leader_id;
+        }
+
+        rd_kafka_wrlock(rkt->rkt_rk);
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt);
+        rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
+        rd_kafka_wrunlock(rkt->rkt_rk);
 }

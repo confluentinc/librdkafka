@@ -36,6 +36,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_idempotence.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
 #endif
@@ -400,7 +401,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
-        { _RK_GLOBAL|_RK_MED, "enable.sparse.connections", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_MED|_RK_HIDDEN, "enable.sparse.connections",
+          _RK_C_BOOL,
           _RK(sparse_connections),
           "When enabled the client will only connect to brokers "
           "it needs to communicate with. When disabled the client "
@@ -901,21 +903,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "order. "
           "The following configuration properties are adjusted automatically "
           "(if not modified by the user) when idempotence is enabled: "
-          "`max.in.flight.requests.per.connection=5` (must be less than or "
-          "equal to 5), `retries=INT32_MAX` (must be greater than 0), "
-          "`acks=all`, `queuing.strategy=fifo`. "
+          "`max.in.flight.requests.per.connection="
+          RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "` (must be less than or "
+          "equal to " RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "), `retries=INT32_MAX` "
+          "(must be greater than 0), `acks=all`, `queuing.strategy=fifo`. "
           "Producer instantation will fail if user-supplied configuration "
           "is incompatible.",
           0, 1, 0 },
-        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.gapless.guarantee",
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_EXPERIMENTAL, "enable.gapless.guarantee",
           _RK_C_BOOL,
           _RK(eos.gapless),
           "When set to `true`, any error that could result in a gap "
           "in the produced message series when a batch of messages fails, "
           "will raise a fatal error (ERR__GAPLESS_GUARANTEE) and stop "
           "the producer. "
+          "Messages failing due to `message.timeout.ms` are not covered "
+          "by this guarantee. "
           "Requires `enable.idempotence=true`.",
-          0, 1, 1 },
+          0, 1, 0 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.messages",
           _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
@@ -1047,11 +1052,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 900*1000, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
-        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "queuing.strategy", _RK_C_S2I,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,
+          "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
           "Producer queuing strategy. FIFO preserves produce ordering, "
-          "while LIFO prioritizes new messages. "
-          "WARNING: `lifo` is experimental and subject to change or removal.",
+          "while LIFO prioritizes new messages.",
           .vdef = 0,
           .s2i = {
                         { RD_KAFKA_QUEUE_FIFO, "fifo" },
@@ -1077,13 +1082,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
-	{ _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "msg_order_cmp", _RK_C_PTR,
+	{ _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,
+          "msg_order_cmp", _RK_C_PTR,
 	  _RKT(msg_order_cmp),
 	  "Message queue ordering comparator "
 	  "(set with rd_kafka_topic_conf_set_msg_order_cmp()). "
-          "Also see `queuing.strategy`. "
-          "WARNING: this is an experimental interface, subject "
-          "to change or removal." },
+          "Also see `queuing.strategy`." },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
@@ -2351,7 +2355,8 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
         {
                 const int ival = *_RK_PTR(const int *, conf, prop->offset);
 
-		val_len = rd_kafka_conf_flags2str(dest, *dest_size, ",",
+		val_len = rd_kafka_conf_flags2str(dest,
+                                                  dest ? *dest_size : 0, ",",
 						  prop, ival);
 		if (dest) {
 			val_len = 0;
@@ -2635,6 +2640,10 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
                 fprintf(fp, " | %-10s | ", importance);
 
+                if (prop->scope & _RK_EXPERIMENTAL)
+                        fprintf(fp, "**EXPERIMENTAL**: "
+                                "subject to change or removal. ");
+
                 if (prop->scope & _RK_DEPRECATED)
                         fprintf(fp, "**DEPRECATED** ");
 
@@ -2915,13 +2924,17 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                         /* Adjust configuration values for idempotent producer*/
 
                         if (rd_kafka_conf_is_modified(conf, "max.in.flight")) {
-                                if (conf->max_inflight > 5)
+                                if (conf->max_inflight >
+                                    RD_KAFKA_IDEMP_MAX_INFLIGHT)
                                         return "`max.in.flight` must be "
-                                                "set <= 5 when "
-                                                "`enable.idempotence` is true";
+                                                "set <= "
+                                                RD_KAFKA_IDEMP_MAX_INFLIGHT_STR
+                                                " when `enable.idempotence` "
+                                                "is true";
                         } else {
                                 conf->max_inflight =
-                                        RD_MIN(conf->max_inflight, 5);
+                                        RD_MIN(conf->max_inflight,
+                                               RD_KAFKA_IDEMP_MAX_INFLIGHT);
                         }
 
 
@@ -3029,27 +3042,34 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
 /**
- * @brief Log warnings for set deprecated configuration properties
+ * @brief Log warnings for set deprecated or experimental
+ *        configuration properties.
  * @returns the number of warnings logged.
  */
 static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
                                              rd_kafka_conf_scope_t scope,
                                              const void *conf) {
         const struct rd_kafka_property *prop;
+        const int warn_on = _RK_DEPRECATED|_RK_EXPERIMENTAL;
         int cnt = 0;
 
-        scope |= _RK_DEPRECATED;
 
         for (prop = rd_kafka_properties; prop->name ; prop++) {
-                if (likely((prop->scope & scope) != scope))
+                int match = prop->scope & warn_on;
+
+                if (likely(!(prop->scope & scope) || !match))
                         continue;
 
                 if (likely(!rd_kafka_anyconf_is_modified(conf, prop)))
                         continue;
 
-                rd_kafka_log(rk, LOG_WARNING, "DEPRECATED",
-                             "Configuration property %s is deprecated: %s",
-                             prop->name, prop->desc);
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property %s is %s%s%s: %s",
+                             prop->name,
+                             match & _RK_DEPRECATED ? "deprecated" : "",
+                             match == warn_on ? " and " : "",
+                             match & _RK_EXPERIMENTAL ? "experimental" : "",
+                             prop->desc);
                 cnt++;
         }
 

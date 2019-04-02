@@ -155,7 +155,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt);
 int rd_kafka_topic_metadata_update2 (rd_kafka_broker_t *rkb,
                                      const struct rd_kafka_metadata_topic *mdt);
 
-int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
+void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
 
 typedef struct rd_kafka_topic_info_s {
@@ -187,5 +187,9 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
         rd_kafka_metadata_fast_leader_query(rk)
 
 void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);
+
+void rd_ut_kafka_topic_set_topic_exists (rd_kafka_itopic_t *rkt,
+                                         int partition_cnt,
+                                         int32_t leader_id);
 
 #endif /* _RDKAFKA_TOPIC_H_ */

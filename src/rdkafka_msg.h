@@ -96,7 +96,7 @@ typedef struct rd_kafka_msg_s {
 
         rd_kafka_headers_t *rkm_headers; /**< Parsed headers list, if any. */
 
-        rd_kafka_msg_status_t rkm_status; /**< Persistance status. Updated in
+        rd_kafka_msg_status_t rkm_status; /**< Persistence status. Updated in
                                            *   the ProduceResponse handler:
                                            *   this value is always up to date.
                                            */
@@ -225,13 +225,15 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 
 #if ENABLE_DEVEL
 #define rd_kafka_msgq_verify_order(rktp,rkmq,exp_first_msgid,gapless) \
-        rd_kafka_msgq_verify_order0(rktp,rkmq,exp_first_msgid,gapless)
+        rd_kafka_msgq_verify_order0(__FUNCTION__, __LINE__, \
+                                    rktp, rkmq, exp_first_msgid, gapless)
 #else
 #define rd_kafka_msgq_verify_order(rktp,rkmq,exp_first_msgid,gapless) \
         do { } while (0)
 #endif
 
-void rd_kafka_msgq_verify_order0 (const struct rd_kafka_toppar_s *rktp,
+void rd_kafka_msgq_verify_order0 (const char *function, int line,
+                                  const struct rd_kafka_toppar_s *rktp,
                                   const rd_kafka_msgq_t *rkmq,
                                   uint64_t exp_first_msgid,
                                   rd_bool_t gapless);
@@ -351,6 +353,21 @@ rd_kafka_msg_t *rd_kafka_msgq_last (const rd_kafka_msgq_t *rkmq) {
 
 
 /**
+ * @returns the MsgId of the first message in the queue, or 0 if empty.
+ *
+ * @locks caller's responsibility
+ */
+static RD_INLINE RD_UNUSED
+uint64_t rd_kafka_msgq_first_msgid (const rd_kafka_msgq_t *rkmq) {
+        const rd_kafka_msg_t *rkm = TAILQ_FIRST(&rkmq->rkmq_msgs);
+        if (rkm)
+                return rkm->rkm_u.producer.msgid;
+        else
+                return 0;
+}
+
+
+/**
  * @brief Message ordering comparator using the message id
  *        number to order messages in ascending order (FIFO).
  */
@@ -456,9 +473,10 @@ rd_kafka_msgq_overlap (const rd_kafka_msgq_t *a, const rd_kafka_msgq_t *b) {
  * messages.
  * 'timedout' must be initialized.
  */
-int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
-			    rd_kafka_msgq_t *timedout,
-			    rd_ts_t now);
+int rd_kafka_msgq_age_scan (struct rd_kafka_toppar_s *rktp,
+                            rd_kafka_msgq_t *rkmq,
+                            rd_kafka_msgq_t *timedout,
+                            rd_ts_t now);
 
 rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
                                         const rd_kafka_msg_t *rkm,
@@ -493,6 +511,8 @@ static RD_INLINE RD_UNUSED int32_t rd_kafka_seq_wrap (int64_t seq) {
 
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq);
 
+rd_kafka_msg_t *ut_rd_kafka_msg_new (void);
+void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq);
 int unittest_msg (void);
 
 #endif /* _RDKAFKA_MSG_H_ */

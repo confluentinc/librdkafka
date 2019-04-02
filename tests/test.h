@@ -245,8 +245,6 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
 
 
-void test_wait_exit (int timeout);
-
 
 
 
@@ -375,6 +373,9 @@ int test_msgver_add_msg0 (const char *func, int line,
 #define TEST_MSGVER_BY_OFFSET 0x20000 /* Verify by offset (unique in partition)*/
 #define TEST_MSGVER_BY_TIMESTAMP 0x40000 /* Verify by timestamp range */
 
+#define TEST_MSGVER_SUBSET 0x100000  /* verify_compare: allow correct mv to be
+                                      * a subset of mv. */
+
 /* Only test per partition, not across all messages received on all partitions.
  * This is useful when doing incremental verifications with multiple partitions
  * and the total number of messages has not been received yet.
@@ -428,12 +429,16 @@ void test_wait_delivery (rd_kafka_t *rk, int *msgcounterp);
 void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                uint64_t testid, int32_t partition,
                                int msg_base, int cnt,
-                               const char *payload, size_t size,
+                               const char *payload, size_t size, int msgrate,
                                int *msgcounterp);
 void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
+void test_produce_msgs_rate (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                             uint64_t testid, int32_t partition,
+                             int msg_base, int cnt,
+                             const char *payload, size_t size, int msgrate);
 rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                        uint64_t testid, int32_t partition);
 

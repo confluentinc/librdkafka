@@ -572,7 +572,7 @@ rd_kafka_op_new_fetch_msg (rd_kafka_msg_t **rkmp,
 
         rkm->rkm_partition = rktp->rktp_partition;
 
-        /* Persistance status is always PERSISTED for consumed messages
+        /* Persistence status is always PERSISTED for consumed messages
          * since we managed to read the message. */
         rkm->rkm_status = RD_KAFKA_MSG_STATUS_PERSISTED;
 

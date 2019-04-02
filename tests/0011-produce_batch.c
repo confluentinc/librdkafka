@@ -115,7 +115,9 @@ static void test_single_partition (void) {
                 rkmessages[i].payload  = rd_strdup(msg);
                 rkmessages[i].len      = strlen(msg);
                 rkmessages[i]._private = msgidp;
-                rkmessages[i].partition = 2;
+                rkmessages[i].partition = 2; /* Will be ignored since
+                                              * RD_KAFKA_MSG_F_PARTITION
+                                              * is not supplied. */
         }
 
         r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_FREE,

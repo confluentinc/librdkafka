@@ -31,6 +31,12 @@
 #define _RD_KAFKA_IDEMPOTENCE_H_
 
 
+/**
+ * @define The broker maintains a window of the 5 last Produce requests
+ *         for a partition to be able to de-deduplicate resends.
+ */
+#define RD_KAFKA_IDEMP_MAX_INFLIGHT      5
+#define RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "5" /* For printouts */
 
 /**
  * @brief Get the current PID if state permits.
@@ -57,7 +63,8 @@ rd_kafka_idemp_get_pid (rd_kafka_t *rk) {
         return pid;
 }
 
-
+void rd_kafka_idemp_set_state (rd_kafka_t *rk,
+                               rd_kafka_idemp_state_t new_state);
 void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
                                         rd_kafka_resp_err_t err);
 void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
@@ -65,8 +72,9 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
 int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                 const char *reason);
 void rd_kafka_idemp_drain_reset (rd_kafka_t *rk);
-void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk);
-void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp);
+void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...);
+void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp, const char *reason);
+void rd_kafka_idemp_check_drain_done (rd_kafka_t *rk);
 void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,
                                          rd_kafka_toppar_t *rktp);
 void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,

@@ -62,7 +62,7 @@ int main_0021_rkt_destroy (int argc, char **argv) {
 
 
         test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 0, msgcnt, NULL, 0, &remains);
+                                 0, msgcnt, NULL, 0, 0, &remains);
 
         rd_kafka_topic_destroy(rkt);
 

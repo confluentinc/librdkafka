@@ -5,7 +5,7 @@
  *
  * @section intro Introduction
  *
- * For an introduction and manual to librdkafka see INTRODUCTION.md
+ * For an introduction and manual to librdkafka see \ref INTRODUCTION.md
  *
  * @section conf Configuration
  *
@@ -13,8 +13,8 @@
  * It is usually safe to leave most configuration properties to their default
  * values.
  *
- * See CONFIGURATION.md for the full list of supported configuration properties.
- *
+ * See \ref CONFIGURATION.md for the full list of supported configuration properties.
+*
  * @remark Application developers are recommended to provide a non-hardcoded
  *         interface to librdkafka's string based name-value configuration
  *         property interface, allowing users to configure any librdkafka
@@ -22,7 +22,12 @@
  *         This allows for seamless upgrades where linking to a new version
  *         of librdkafka automatically provides new configuration
  *         based features.
-
+ *
+ * @section stats Statistics
+ *
+ * librdkafka provides detailed metrics through its statistics interface.
+ *
+ * See \ref STATISTICS.md and \ref rd_kafka_conf_set_stats_cb.
  *
  * @section c_api C API
  *

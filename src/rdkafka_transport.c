@@ -144,7 +144,7 @@ ssize_t rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
                          rktrans->rktrans_sndbuf_size);
         msg.msg_iovlen = (int)iovlen;
 
-#ifdef sun
+#ifdef __sun
         /* See recvmsg() comment. Setting it here to be safe. */
         socket_errno = EAGAIN;
 #endif
@@ -262,7 +262,7 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
                              rktrans->rktrans_rcvbuf_size);
         msg.msg_iovlen = (int)iovlen;
 
-#ifdef sun
+#ifdef __sun
         /* SunOS doesn't seem to set errno when recvmsg() fails
          * due to no data and MSG_DONTWAIT is set. */
         socket_errno = EAGAIN;
@@ -1501,9 +1501,10 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
 
-        if (rkb->rkb_state > RD_KAFKA_BROKER_STATE_CONNECT &&
-            rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-            rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
+        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_CONNECT ||
+            (rkb->rkb_state > RD_KAFKA_BROKER_STATE_CONNECT &&
+             rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+             rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
                 rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
 	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)

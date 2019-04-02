@@ -188,7 +188,7 @@ rx_ver_drops | int | | Dropped outdated messages
 msgs_inflight | int gauge | | Current number of messages in-flight to/from broker
 next_ack_seq | int gauge | | Next expected acked sequence (idempotent producer)
 next_err_seq | int gauge | | Next expected errored sequence (idempotent producer)
-acked_msgid | int | Last acked internal message id (idempotent producer)
+acked_msgid | int | | Last acked internal message id (idempotent producer)
 
 ## cgrp
 
@@ -221,7 +221,8 @@ This (prettified) example output is from a short-lived producer using the follow
 
 Note: this output is prettified using `jq .`, the JSON object emitted by librdkafka does not contain line breaks.
 
-```{
+```json
+{
   "name": "rdkafka#producer-1",
   "client_id": "rdkafka",
   "type": "producer",

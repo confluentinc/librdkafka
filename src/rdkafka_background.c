@@ -118,6 +118,11 @@ int rd_kafka_background_thread_main (void *arg) {
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
 
+        mtx_lock(&rk->rk_init_lock);
+        rk->rk_init_wait_cnt--;
+        cnd_broadcast(&rk->rk_init_cnd);
+        mtx_unlock(&rk->rk_init_lock);
+
         while (likely(!rd_kafka_terminating(rk))) {
                 rd_kafka_q_serve(rk->rk_background.q, 10*1000, 0,
                                  RD_KAFKA_Q_CB_RETURN,

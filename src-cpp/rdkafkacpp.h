@@ -621,8 +621,7 @@ class RD_EXPORT Event {
     EVENT_ERROR,     /**< Event is an error condition */
     EVENT_STATS,     /**< Event is a statistics JSON document */
     EVENT_LOG,       /**< Event is a log message */
-    EVENT_THROTTLE,  /**< Event is a throttle level signaling from the broker */
-    EVENT_OAUTHBEARER_TOKEN_REFRESH   /**< Event is a token refresh */
+    EVENT_THROTTLE   /**< Event is a throttle level signaling from the broker */
   };
 
   /** @brief EVENT_LOG severities (conforms to syslog(3) severities) */
@@ -1348,8 +1347,8 @@ class RD_EXPORT Handle {
    *  of 2. Any provided keys and values are copied.
    * @param errstr A human readable error string is written here, only if
    *  there is an error.
-   * 
-   * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+   *
+   * The SASL/OAUTHBEARER token refresh callback should invoke
    * this method upon success. The extension keys must not include the reserved
    * key "`auth`", and all extension keys and values must conform to the
    * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
@@ -1369,30 +1368,30 @@ class RD_EXPORT Handle {
    * @sa RdKafka::oauthbearer_set_token_failure
    * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
    */
-  virtual int oauthbearer_set_token (const std::string &token_value,
-                                     int64_t md_lifetime_ms,
-                                     const std::string &md_principal_name,
-                                     const std::list<std::string> &extensions,
-                                     std::string &errstr) = 0;
+  virtual ErrorCode oauthbearer_set_token (const std::string &token_value,
+                                           int64_t md_lifetime_ms,
+                                           const std::string &md_principal_name,
+                                           const std::list<std::string> &extensions,
+                                           std::string &errstr) = 0;
 
     /**
      * @brief SASL/OAUTHBEARER token refresh failure indicator.
      *
      * @param errstr human readable error reason for failing to acquire a token.
-     * 
-     * The SASL/OAUTHBEARER token refresh callback or event handler should
-     * invoke this method upon failure.
-     * 
+     *
+     * The SASL/OAUTHBEARER token refresh callback should
+     * invoke this method upon failure to refresh the token.
+     *
      * @returns \c RdKafka::ERR_NO_ERROR on success, otherwise:<br>
      *          \c RdKafka::ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
      *              supported by this build;<br>
      *          \c RdKafka::ERR__STATE if SASL/OAUTHBEARER is supported but is
      *              not configured as the client's authentication mechanism.
-     * 
+     *
      * @sa RdKafka::oauthbearer_set_token
      * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
      */
-    virtual int oauthbearer_set_token_failure (const std::string &errstr) = 0;
+    virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
 };
 
 

@@ -361,18 +361,19 @@ struct rd_kafka_s {
                  */
                 char *token_value;
                 /**< When the token expires, in terms of the number of
-                 *   milliseconds since the epoch.
+                 *   milliseconds since the epoch. Wall clock time.
                  */
-                uint64_t md_lifetime_ms;
+                rd_ts_t wts_md_lifetime;
                 /**< The point after which this token should be replaced with a
                  * new one, in terms of the number of milliseconds since the
-                 * epoch.
+                 * epoch. Wall clock time.
                  */
-                uint64_t refresh_after_ms;
+                rd_ts_t wts_refresh_after;
                 /**< When the last token refresh was equeued (0 = never)
                  *   in terms of the number of milliseconds since the epoch.
+                 *   Wall clock time.
                  */
-                uint64_t enqueued_refresh_ms;
+                rd_ts_t wts_enqueued_refresh;
                 /**< The name of the principal to which this token applies. */
                 char *md_principal_name;
                 /**< The SASL extensions, as per RFC 7628 Section 3.1

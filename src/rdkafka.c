@@ -271,26 +271,29 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
-rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
-                const char *token_value, int64_t md_lifetime_ms,
-                const char *md_principal_name,
-                const char **extensions, size_t extension_size,
-                char *errstr, size_t errstr_size) {
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size) {
 #if WITH_SASL_OAUTHBEARER
-        return rd_kafka_oauthbearer_set_token_int(rk, token_value,
+        return rd_kafka_oauthbearer_set_token0(
+                rk, token_value,
                 md_lifetime_ms, md_principal_name, extensions, extension_size,
                 errstr, errstr_size);
 #else
         rd_snprintf(errstr, errstr_size,
-                "librdkafka not built with SASL OAUTHBEARER support");
+                    "librdkafka not built with SASL OAUTHBEARER support");
         return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 #endif
 }
 
-rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
-                const char *errstr) {
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr) {
 #if WITH_SASL_OAUTHBEARER
-        return rd_kafka_oauthbearer_set_token_failure_int(rk, errstr);
+        return rd_kafka_oauthbearer_set_token_failure0(rk, errstr);
 #else
         return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 #endif
@@ -1958,8 +1961,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         if (rk->rk_conf.error_cb)
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
 #if WITH_SASL_OAUTHBEARER
-	if (rk->rk_conf.oauthbearer_token_refresh_cb)
-		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
+        if (rk->rk_conf.oauthbearer_token_refresh_cb)
+                rk->rk_conf.enabled_events |=
+                        RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif
 
         rk->rk_controllerid = -1;
@@ -2019,15 +2023,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                         ret_errno = EINVAL;
                         goto fail;
                 }
-#if WITH_SASL_OAUTHBEARER
-                /* Enqueue OAUTHBEARER REFRESH operation if necessary */
-                if (!strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
-                        /* No need to acquire a write lock since nobody is
-                         * using this yet.
-                         */
-                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
-                }
-#endif
         }
 
 #if WITH_SSL
@@ -2141,6 +2136,24 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
          * @warning `goto fail` is prohibited past this point
          */
 
+#if WITH_SASL_OAUTHBEARER
+        /* SASL OAUTHBEARER
+         * Automatically refresh the token if using the builtin
+         * unsecure JWS token refresher, to avoid an initial connection
+         * stall as we wait for the application to call poll().
+         * Otherwise enqueue a refresh callback for the application. */
+        if ((rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
+             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) &&
+            !strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
+                if (rk->rk_conf.oauthbearer_token_refresh_cb ==
+                    rd_kafka_oauthbearer_unsecured_token)
+                        rk->rk_conf.oauthbearer_token_refresh_cb(
+                                rk, rk->rk_conf.opaque);
+                else
+                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
+        }
+#endif
+
         mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
 						  RD_KAFKA_PROTO_PLAINTEXT,
@@ -2209,6 +2222,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rk->rk_name,
                      builtin_features, BUILT_WITH,
                      rk->rk_conf.debug);
+
 
 	return rk;
 

@@ -455,11 +455,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
           .pdef = rd_kafka_log_print },
 #if WITH_SASL_OAUTHBEARER
-	{ _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
-	  _RK(oauthbearer_token_refresh_cb),
-	  "SASL/OAUTHBEARER token refresh callback (set with "
-          "rd_kafka_conf_set_oauthbearer_token_refresh_cb()); the default will "
-          "generate an unsecured JWS",
+        { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
+          _RK(oauthbearer_token_refresh_cb),
+          "SASL/OAUTHBEARER token refresh callback (set with "
+          "rd_kafka_conf_set_oauthbearer_token_refresh_cb()); "
+          "the default will generate an unsecured JWS using "
+          "sasl.oauthbearer.config",
           .pdef = rd_kafka_oauthbearer_unsecured_token },
 #endif
         { _RK_GLOBAL, "log_level", _RK_C_INT,
@@ -703,9 +704,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
 #if WITH_SASL_OAUTHBEARER
-	{ _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
-	  _RK(sasl.oauthbearer_config),
-	  "SASL/OAUTHBEARER configuration. The format is "
+        { _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
+          _RK(sasl.oauthbearer_config),
+          "SASL/OAUTHBEARER configuration. The format is "
           "implementation-dependent and must be parsed accordingly. The "
           "default unsecured token implementation (see "
           "https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes "

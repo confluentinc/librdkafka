@@ -637,7 +637,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult get(
     OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb) const {
       if (!rk_conf_)
-	  return Conf::CONF_INVALID;
+          return Conf::CONF_INVALID;
       oauthbearer_token_refresh_cb = this->oauthbearer_token_refresh_cb_;
       return Conf::CONF_OK;
   }
@@ -815,32 +815,37 @@ class HandleImpl : virtual public Handle {
           return err;
   }
 
-  int oauthbearer_set_token (const std::string &token_value,
-                             int64_t md_lifetime_ms,
-                             const std::string &md_principal_name,
-                             const std::list<std::string> &extensions,
-                             std::string &errstr) {
+  ErrorCode oauthbearer_set_token (const std::string &token_value,
+                                   int64_t md_lifetime_ms,
+                                   const std::string &md_principal_name,
+                                   const std::list<std::string> &extensions,
+                                   std::string &errstr) {
           char errbuf[512];
-          rd_kafka_resp_err_t res;
+          ErrorCode err;
           const char **extensions_copy = new const char *[extensions.size()];
           int elem = 0;
 
           for (std::list<std::string>::const_iterator it = extensions.begin();
               it != extensions.end(); it++)
                   extensions_copy[elem++] = it->c_str();
-          res = rd_kafka_oauthbearer_set_token(rk_, token_value.c_str(),
-                  md_lifetime_ms, md_principal_name.c_str(), extensions_copy,
-                  extensions.size(), errbuf, sizeof(errbuf));
+          err = static_cast<ErrorCode>(rd_kafka_oauthbearer_set_token(
+                                               rk_, token_value.c_str(),
+                                               md_lifetime_ms,
+                                               md_principal_name.c_str(),
+                                               extensions_copy,
+                                               extensions.size(),
+                                               errbuf, sizeof(errbuf)));
           free(extensions_copy);
 
-          if (res != ERR_NO_ERROR)
+          if (err != ERR_NO_ERROR)
               errstr = errbuf;
 
-          return res;
+          return err;
   }
 
-  int oauthbearer_set_token_failure(const std::string &errstr) {
-          return rd_kafka_oauthbearer_set_token_failure(rk_, errstr.c_str());
+  ErrorCode oauthbearer_set_token_failure(const std::string &errstr) {
+          return static_cast<ErrorCode>(rd_kafka_oauthbearer_set_token_failure(
+                                                rk_, errstr.c_str()));
   };
 
 

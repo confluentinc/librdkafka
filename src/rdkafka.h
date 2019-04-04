@@ -1777,9 +1777,9 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * occur.
  */
 RD_EXPORT
-void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
-                void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
-                void *opaque));
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
+        rd_kafka_conf_t *conf,
+        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk, void *opaque));
 
 /**
  * @brief Set SASL/OAUTHBEARER token and metadata
@@ -1825,11 +1825,13 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
-                const char *token_value, int64_t md_lifetime_ms,
-                const char *md_principal_name,
-                const char **extensions, size_t extension_size,
-                char *errstr, size_t errstr_size);
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size);
 
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator.
@@ -1845,14 +1847,15 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token(rd_kafka_t *rk,
  *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
  *              supported by this build;<br>
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
- *              not configured as the client's authentication mechanism.
+ *              not configured as the client's authentication mechanism,<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
  * 
  * @sa rd_kafka_oauthbearer_set_token
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
-                const char *errstr);
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**
  * @brief Set socket callback.

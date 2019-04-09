@@ -45,6 +45,12 @@
 
 #ifndef _MSC_VER
 #include <netinet/tcp.h>
+#else
+
+#ifndef WIN32_MEAN_AND_LEAN
+#define WIN32_MEAN_AND_LEAN
+#endif
+#include <windows.h>
 #endif
 
 struct rd_kafka_property {
@@ -604,44 +610,67 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`SSL_CTX_set1_sigalgs_list(3)`. OpenSSL >= 1.0.2 required."
         },
 #endif
-	{ _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
-	  _RK(ssl.key_location),
-	  "Path to client's private key (PEM) used for authentication."
-	},
-	{ _RK_GLOBAL, "ssl.key.password", _RK_C_STR,
-	  _RK(ssl.key_password),
-	  "Private key passphrase"
-	},
-	{ _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
-	  _RK(ssl.cert_location),
-	  "Path to client's public key (PEM) used for authentication."
-	},
-	{ _RK_GLOBAL|_RK_MED, "ssl.ca.location", _RK_C_STR,
-	  _RK(ssl.ca_location),
-	  "File or directory path to CA certificate(s) for verifying "
-	  "the broker's key."
-	},
-	{ _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
-	  _RK(ssl.crl_location),
-	  "Path to CRL for verifying broker's certificate validity."
-	},
-	{ _RK_GLOBAL, "ssl.keystore.location", _RK_C_STR,
-	_RK(ssl.keystore_location),
-	"Path to client's keystore (PKCS#12) used for authentication."
-	},
-	{ _RK_GLOBAL, "ssl.keystore.password", _RK_C_STR,
-	_RK(ssl.keystore_password),
-	"Client's keystore (PKCS#12) password."
-	},
-    { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
-    _RK(ssl.ssl_cert_verify_cb),
-    "Verify the broker certificate callback."
-    },
-    { _RK_GLOBAL, "ssl.certificate.retrieve_cb", _RK_C_PTR,
-    _RK(ssl.ssl_cert_retrieve_cb),
-    "Retrieve client certificates callback."
-    },
+        { _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
+          _RK(ssl.key_location),
+          "Path to client's private key (PEM) used for authentication."
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.password", _RK_C_STR,
+          _RK(ssl.key_password),
+          "Private key passphrase (for use with ssl.key.location)"
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.pem", _RK_C_STR,
+          _RK(ssl.key_pem),
+          "Client's private key string (PEM format) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl_key", _RK_C_INTERNAL,
+          _RK(ssl.key),
+          "Client's private key as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
+        { _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
+          _RK(ssl.cert_location),
+          "Path to client's public key (PEM) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl.certificate.pem", _RK_C_STR,
+          _RK(ssl.cert_pem),
+          "Client's public key string (PEM format) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl_certificate", _RK_C_INTERNAL,
+          _RK(ssl.key),
+          "Client's public key as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
 
+        { _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
+          _RK(ssl.ca_location),
+          "File or directory path to CA certificate(s) for verifying "
+          "the broker's key."
+        },
+        { _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
+          _RK(ssl.crl_location),
+          "Path to CRL for verifying broker's certificate validity."
+        },
+        { _RK_GLOBAL, "ssl.keystore.location", _RK_C_STR,
+        _RK(ssl.keystore_location),
+        "Path to client's keystore (PKCS#12) used for authentication."
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
+        _RK(ssl.keystore_password),
+        "Client's keystore (PKCS#12) password."
+        },
+        { _RK_GLOBAL, "enable.ssl.certificate.verification", _RK_C_BOOL,
+          _RK(ssl.enable_verify),
+          "Enable OpenSSL's builtin broker (server) certificate verification. "
+          "This verification can be extended by the application by "
+          "implementing a certificate_verify_cb.",
+          0, 1, 1
+        },
+        { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
+          _RK(ssl.cert_verify_cb),
+          "Verify the broker certificate callback."
+        },
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply
@@ -1884,8 +1913,96 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 }
 
 
+/**
+ * @brief Overwrites the contents of \p str up until but not including
+ *        the nul-term.
+ */
+void rd_kafka_desensitize_str (char *str) {
+        size_t len;
+        static const char redacted[] = "(REDACTED)";
+
+#ifdef _MSC_VER
+        len = strlen(str);
+        SecureZeroMemory(str, len);
+#else
+        volatile char *volatile s;
+
+        for (s = str ; *s ; s++)
+                *s = '\0';
+
+        len = (size_t)(s - str);
+#endif
+
+        if (len > sizeof(redacted))
+                memcpy(str, redacted, sizeof(redacted));
+}
+
+
+
+
+/**
+ * @brief Overwrite the value of \p prop, if sensitive.
+ */
+static RD_INLINE void
+rd_kafka_anyconf_prop_desensitize (int scope, void *conf,
+                                   const struct rd_kafka_property *prop) {
+        if (likely(!(prop->scope & _RK_SENSITIVE)))
+                return;
+
+        switch (prop->type)
+        {
+        case _RK_C_STR:
+        {
+                char **str = _RK_PTR(char **, conf, prop->offset);
+                if (*str)
+                        rd_kafka_desensitize_str(*str);
+                break;
+        }
+
+        default:
+                rd_assert(!*"BUG: Don't know how to desensitize prop type");
+                break;
+        }
+}
+
+
+/**
+ * @brief Desensitize all sensitive properties in \p conf
+ */
+static void rd_kafka_anyconf_desensitize (int scope, void *conf) {
+        const struct rd_kafka_property *prop;
+
+        for (prop = rd_kafka_properties; prop->name ; prop++) {
+                if (!(prop->scope & scope))
+                        continue;
+
+                rd_kafka_anyconf_prop_desensitize(scope, conf, prop);
+        }
+}
+
+/**
+ * @brief Overwrite the values of sensitive properties
+ */
+void rd_kafka_conf_desensitize (rd_kafka_conf_t *conf) {
+        if (conf->topic_conf)
+                rd_kafka_anyconf_desensitize(_RK_TOPIC,
+                                             conf->topic_conf);
+        rd_kafka_anyconf_desensitize(_RK_GLOBAL, conf);
+}
+
+/**
+ * @brief Overwrite the values of sensitive properties
+ */
+void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf) {
+        rd_kafka_anyconf_desensitize(_RK_TOPIC, tconf);
+}
+
+
 static void rd_kafka_anyconf_clear (int scope, void *conf,
 				    const struct rd_kafka_property *prop) {
+
+        rd_kafka_anyconf_prop_desensitize(scope, conf, prop);
+
 	switch (prop->type)
 	{
 	case _RK_C_STR:
@@ -2263,31 +2380,28 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 }
 #endif
 
+
 rd_kafka_conf_res_t
-rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
-    int (*ssl_cert_verify_cb) (char *cert, size_t len,
-                               char *errstr, size_t errstr_size,
-                               void *opaque)) {
-#if defined(__mips__) || !WITH_SSL
-    return RD_KAFKA_CONF_UNKNOWN;
+rd_kafka_conf_set_ssl_cert_verify_cb (
+        rd_kafka_conf_t *conf,
+        int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
+                                   const char *broker_name,
+                                   int32_t broker_id,
+                                   int preverify_ok, void *x509_ctx,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   char *errstr, size_t errstr_size,
+                                   void *opaque)) {
+#if !WITH_SSL
+        return RD_KAFKA_CONF_UNKNOWN;
 #else
-    conf->ssl.ssl_cert_verify_cb = ssl_cert_verify_cb;
-    return RD_KAFKA_CONF_OK;
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "ssl.certificate.verify_cb",
+                                      ssl_cert_verify_cb);
+        return RD_KAFKA_CONF_OK;
 #endif
 }
 
-rd_kafka_conf_res_t
-rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
-                                    char *errstr, size_t errstr_size,
-                                    void *opaque)) {
-#if WITH_SSL
-    conf->ssl.ssl_cert_retrieve_cb = ssl_cert_retrieve_cb;
-    return RD_KAFKA_CONF_OK;
-#else
-    return RD_KAFKA_CONF_UNKNOWN;
-#endif
-}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "opaque", opaque);

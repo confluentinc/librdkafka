@@ -177,6 +177,7 @@
     <ClCompile Include="..\..\tests\0093-holb.c" />
     <ClCompile Include="..\..\tests\0094-idempotence_msg_timeout.c" />
     <ClCompile Include="..\..\tests\0095-all_brokers_down.cpp" />
+    <ClCompile Include="..\..\tests\0097-ssl_verify.cpp" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

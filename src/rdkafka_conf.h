@@ -30,6 +30,7 @@
 #define _RDKAFKA_CONF_H_
 
 #include "rdlist.h"
+#include "rdkafka_cert.h"
 
 
 /**
@@ -116,7 +117,9 @@ typedef	enum {
         _RK_HIDDEN = 0x40,
         _RK_HIGH = 0x80, /* High Importance */
         _RK_MED = 0x100, /* Medium Importance */
-        _RK_EXPERIMENTAL = 0x200 /* Experimental (unsupported) property */
+        _RK_EXPERIMENTAL = 0x200, /* Experimental (unsupported) property */
+        _RK_SENSITIVE = 0x400     /* The configuration property's value
+                                   * might contain sensitive information. */
 } rd_kafka_conf_scope_t;
 
 /**< While the client groups is a generic concept, it is currently
@@ -203,23 +206,34 @@ struct rd_kafka_conf_s {
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL
-	struct {
-		SSL_CTX *ctx;
-		char *cipher_suites;
+        struct {
+                SSL_CTX *ctx;
+                char *cipher_suites;
 #if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
-		char *curves_list;
-		char *sigalgs_list;
+                char *curves_list;
+                char *sigalgs_list;
 #endif
-		char *key_location;
-		char *key_password;
-		char *cert_location;
-		char *ca_location;
-		char *crl_location;
-		char *keystore_location;
-		char *keystore_password;
-        int (*ssl_cert_verify_cb) (char *cert, size_t len, char *errstr, size_t errstr_size, void *opaque);
-        ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, char *errstr, size_t errstr_size, void *opaque);
-	} ssl;
+                char *key_location;
+                char *key_pem;
+                rd_kafka_cert_t *key;
+                char *key_password;
+                char *cert_location;
+                char *cert_pem;
+                rd_kafka_cert_t *cert;
+                char *ca_location;
+                char *crl_location;
+                char *keystore_location;
+                char *keystore_password;
+                int   enable_verify;
+                int (*cert_verify_cb) (rd_kafka_t *rk,
+                                       const char *broker_name,
+                                       int32_t broker_id,
+                                       int preverify_ok, void *x509_ctx,
+                                       int depth,
+                                       const char *buf, size_t size,
+                                       char *errstr, size_t errstr_size,
+                                       void *opaque);
+        } ssl;
 #endif
 
         struct {
@@ -493,6 +507,11 @@ struct rd_kafka_topic_conf_s {
 
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
+
+void rd_kafka_desensitize_str (char *str);
+
+void rd_kafka_conf_desensitize (rd_kafka_conf_t *conf);
+void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf);
 
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf);

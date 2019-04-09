@@ -134,6 +134,8 @@
     <ClInclude Include="..\src\rdkafka_timer.h" />
     <ClInclude Include="..\src\rdkafka_topic.h" />
     <ClInclude Include="..\src\rdkafka_transport.h" />
+    <ClInclude Include="..\src\rdkafka_ssl.h" />
+    <ClInclude Include="..\src\rdkafka_cert.h" />
     <ClInclude Include="..\src\rdkafka_metadata.h" />
     <ClInclude Include="..\src\rdkafka_interceptor.h" />
     <ClInclude Include="..\src\rdkafka_plugin.h" />
@@ -192,6 +194,8 @@
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
+    <ClCompile Include="..\src\rdkafka_ssl.c" />
+    <ClCompile Include="..\src\rdkafka_cert.c" />
     <ClCompile Include="..\src\rdkafka_buf.c" />
     <ClCompile Include="..\src\rdkafka_feature.c" />
     <ClCompile Include="..\src\rdkafka_metadata.c" />

@@ -65,15 +65,6 @@ void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event);
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);
 
-#if WITH_SSL
-void rd_kafka_transport_ssl_ctx_term (rd_kafka_t *rk);
-int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
-				     char *errstr, size_t errstr_size);
-
-void rd_kafka_transport_ssl_term (void);
-void rd_kafka_transport_ssl_init (void);
-#endif
-void rd_kafka_transport_term (void);
-void rd_kafka_transport_init(void);
+void rd_kafka_transport_init (void);
 
 #endif /* _RDKAFKA_TRANSPORT_H_ */

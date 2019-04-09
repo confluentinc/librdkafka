@@ -16,6 +16,7 @@ SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
+SRCS_$(WITH_SSL) += rdkafka_ssl.c
 
 SRCS_LZ4 = xxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
@@ -45,7 +46,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_sasl.c rdkafka_sasl_plain.c rdkafka_interceptor.c \
 		rdkafka_msgset_writer.c rdkafka_msgset_reader.c \
 		rdkafka_header.c rdkafka_admin.c rdkafka_aux.c \
-		rdkafka_background.c rdkafka_idempotence.c \
+		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
 		rdvarint.c rdbuf.c rdunittest.c \
 		$(SRCS_y)
 

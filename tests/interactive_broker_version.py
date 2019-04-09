@@ -92,7 +92,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         else:
             security_protocol = 'SSL'
 
-        key, req, pem = ssl.create_key('librdkafka')
+        key, req, pem = ssl.create_key('librdkafka')[:3]
 
         os.write(fd, ('ssl.ca.location=%s\n' % ssl.ca_cert).encode('ascii'))
         os.write(fd, ('ssl.certificate.location=%s\n' % pem).encode('ascii'))

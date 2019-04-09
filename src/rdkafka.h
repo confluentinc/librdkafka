@@ -1894,40 +1894,122 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                                 void *opaque));
 #endif
 
-/**
-* @enum rd_kafka_certificate_type_t
-*
-* @brief Type of certificates
-*
-* @sa rd_kafka_conf_set_ssl_cert_retrieve_cb()
-*/
-typedef enum rd_kafka_certificate_type_t {
-    RD_KAFKA_CERTIFICATE_PUBLIC_KEY,        /**< Client's public key */
-    RD_KAFKA_CERTIFICATE_PRIVATE_KEY,       /**< Client's private key */
-    RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS   /**< Password of private key */
-} rd_kafka_certificate_type_t;
 
 /**
-* @brief Sets the verification callback of the broker certificate
-
-  @remark this is not supported on the MIPS platform
-*
-*/
+ * @brief Sets the verification callback of the broker certificate
+ *
+ * The verification callback is triggered from internal librdkafka threads
+ * upon connecting to a broker. On each connection attempt the callback
+ * will be called for each certificate in the broker's certificate chain,
+ * starting at the root certification, as long as the application callback.
+ * returns 1 (valid certificate).
+ * \c broker_name and \c broker_id correlate to the broker the connection
+ * is being made to.
+ * The \c preverify_ok argument indicates if OpenSSL's verification of
+ * the certificate succeed (1) or failed (0).
+ * The certificate itself is passed in binary DER format in \c buf of
+ * size \c size.
+ * \c depth is the depth of the current certificate in the chain, starting
+ * at the root certificate.
+ * As a convenience the original OpenSSL X509_STORE_CTX object is passed
+ * in the \c x509_ctx object. If an application wishes to access this object
+ * it must ensure that it is using the same build of OpenSSL that librdkafka
+ * is using.
+ *
+ * The callback must return 1 if verification succeeds, or
+ * 0 if verification fails and then write a human-readable error message
+ * to \c errstr (limited to \c errstr_size bytes, including nul-term).
+ *
+ * @returns RD_KAFKA_CONF_OK if SSL support in this build, else
+ *          RD_KAFKA_CONF_UNKNOWN.
+ *
+ * @warning This callback will be called from internal librdkafka threads.
+ */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
-    int (*ssl_cert_verify_cb) (char *cert, size_t len,
-                               char *errstr, size_t errstr_size,
-                               void *opaque));
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
+        rd_kafka_conf_t *conf,
+        int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
+                                   const char *broker_name,
+                                   int32_t broker_id,
+                                   int preverify_ok, void *x509_ctx,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   char *errstr, size_t errstr_size,
+                                   void *opaque));
+
 
 /**
-* @brief Sets the callback to recieve the client certificate
-*
-*/
-RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
-                                    char *errstr, size_t errstr_size,
-                                    void *opaque));
+ * @enum rd_kafka_cert_type_t
+ *
+ * @brief SSL certificate type
+ *
+ * @sa rd_kafka_conf_set_ssl_cert
+ */
+typedef enum rd_kafka_cert_type_t {
+        RD_KAFKA_CERT_PUBLIC_KEY,  /**< Client's public key */
+        RD_KAFKA_CERT_PRIVATE_KEY, /**< Client's private key */
+        RD_KAFKA_CERT__CNT,
+} rd_kafka_cert_type_t;
+
+/**
+ * @enum rd_kafka_cert_enc_t
+ *
+ * @brief SSL certificate encoding
+ *
+ * @sa rd_kafka_conf_set_ssl_cert
+ */
+typedef enum rd_kafka_cert_enc_t {
+        RD_KAFKA_CERT_ENC_PKCS12,  /**< PKCS#12 */
+        RD_KAFKA_CERT_ENC_DER,     /**< DER / binary X.509 ASN1 */
+        RD_KAFKA_CERT_ENC_PEM,     /**< PEM */
+        RD_KAFKA_CERT_ENC__CNT,
+} rd_kafka_cert_enc_t;
+
+
+/**
+ * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
+ *        memory at \p buffer of \p size bytes.
+ *
+ * @param conf Configuration object.
+ * @param cert_type Certificate or key type to configure.
+ * @param cert_enc  Buffer \p encoding type.
+ * @param buffer Memory pointer to encoded certificate or key.
+ *               The memory is not referenced after this function returns.
+ * @param size Size of memory at \p buffer.
+ * @param errstr Memory were a human-readable error string will be written
+ *               on failure.
+ * @param errstr_size Size of \p errstr, including space for nul-terminator.
+ *
+ * Valid combinations:
+ *  RD_KAFKA_CERT_PUBLIC_KEY:  RD_KAFKA_CERT_ENC_PKCS12, RD_KAFKA_CERT_ENC_DER,
+ *                             RD_KAFKA_CERT_ENC_PEM
+ *  RD_KAFKA_CERT_PRIVATE_KEY: RD_KAFKA_CERT_ENC_PKCS12, RD_KAFKA_CERT_ENC_PEM
+ *
+ * @returns RD_KAFKA_CONF_OK on success or RD_KAFKA_CONF_INVALID if the
+ *          \p cert_type / \p cert_enc combination is invalid, or if the
+ *          memory in \p buffer is of incorrect encoding, or if librdkafka
+ *          was not built with SSL support.
+ *
+ * @remark Calling this method multiple times with the same \p cert_type
+ *         will replace the previous value.
+ *
+ * @remark Calling this method with \p buffer set to NULL will clear the
+ *         configuration for \p cert_type.
+ *
+ * @remark The private key may require a password, which must be specified
+ *         with the `ssl.key.password` configuration property prior to
+ *         calling this function.
+ *
+ * @remark Private keys in PEM format may also be set with the
+ *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
+ */
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
+                            rd_kafka_cert_type_t cert_type,
+                            rd_kafka_cert_enc_t cert_enc,
+                            const void *buffer, size_t size,
+                            char *errstr, size_t errstr_size);
+
 
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
@@ -2621,6 +2703,9 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
  *
  * In standard setups it is usually not necessary to use this interface
  * rather than the free(3) functione.
+ *
+ * \p rk must be set for memory returned by APIs that take an \c rk argument,
+ * for other APIs pass NULL for \p rk.
  *
  * @remark rd_kafka_mem_free() must only be used for pointers returned by APIs
  *         that explicitly mention using this function for freeing.
@@ -3977,6 +4062,30 @@ int rd_kafka_wait_destroyed(int timeout_ms);
  */
 RD_EXPORT
 int rd_kafka_unittest (void);
+
+
+/**
+ * @brief Convenience method to convert a DER (X.509) formatted
+ *        certificate or key to PEM format, which can then be passed
+ *        to the ssl.*.pem range of properties.
+ *
+ * @param der_buf DER formatted binary input.
+ * @param der_size Size of \p der_bef.
+ * @param pem_buf Will be set to a newly allocated nul-terminated PEM string
+ *                on success. This pointer MUST be freed with
+ *                rd_kafka_mem_free().
+ * @param pem_size The length of \p pem_buf.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE if librdkafka was built
+ *          without OpenSSL support,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p der_buf can't be parsed
+ *          as X509,
+ *          RD_KAFKA_RESP_ERR__BAD_MSG if the PEM conversion can't be made.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_DER_to_PEM (const void *der_buf, size_t der_size,
+                                         char **pem_buf, size_t *pem_size);
 
 
 /**@}*/

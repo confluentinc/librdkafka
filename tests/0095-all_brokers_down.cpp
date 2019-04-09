@@ -104,6 +104,8 @@ extern "C" {
     if (!c)
       Test::Fail("Failed to create KafkaConsumer: " + errstr);
 
+    delete conf;
+
     /* Wait for all brokers down */
     while (!cEvent.error_seen) {
       RdKafka::Message *m = c->consume(1000);

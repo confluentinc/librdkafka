@@ -188,6 +188,7 @@ _TEST_DECL(0092_mixed_msgver);
 _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
 _TEST_DECL(0095_all_brokers_down);
+_TEST_DECL(0097_ssl_verify);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -313,6 +314,7 @@ struct test tests[] = {
               TEST_BRKVER(0,11,0,0)),
 #endif
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
+        _TEST(0097_ssl_verify, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

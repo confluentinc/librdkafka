@@ -88,9 +88,16 @@ struct rd_kafka_sasl_oauthbearer_state {
  */
 static void rd_kafka_sasl_oauthbearer_token_free (
         struct rd_kafka_sasl_oauthbearer_token *token) {
+        size_t i;
+
         RD_IF_FREE(token->token_value, rd_free);
         RD_IF_FREE(token->md_principal_name, rd_free);
+
+        for (i = 0 ; i < token->extension_size ; i++)
+                rd_free(token->extensions[i]);
+
         RD_IF_FREE(token->extensions, rd_free);
+
         memset(token, 0, sizeof(*token));
 }
 
@@ -282,7 +289,7 @@ check_oauthbearer_extension_value (const char *value,
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
  *              the client's authentication mechanism.
  * 
- * @sa rd_kafka_oauthbearer_set_token_failure_int
+ * @sa rd_kafka_oauthbearer_set_token_failure0
  */
 rd_kafka_resp_err_t
 rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
@@ -1021,7 +1028,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
                         "%s%sauth=Bearer %s%s",
                         gs2_header, kvsep, state->token_value,
                         kvsep);
-        rd_assert(r <= out->size+1 - size_written);
+        rd_assert(r < out->size+1 - size_written);
         size_written += r;
         buf = out->ptr + size_written;
 
@@ -1030,13 +1037,13 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
                 r = rd_snprintf(buf, out->size+1 - size_written,
                                 "%s=%s%s",
                                 extension->name, extension->value, kvsep);
-                rd_assert(r <= out->size+1 - size_written);
+                rd_assert(r < out->size+1 - size_written);
                 size_written += r;
                 buf = out->ptr + size_written;
         }
 
         r = rd_snprintf(buf, out->size+1 - size_written, "%s", kvsep);
-        rd_assert(r <= out->size+1 - size_written);
+        rd_assert(r < out->size+1 - size_written);
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "OAUTHBEARER",
                    "Built client first message");
@@ -1419,7 +1426,7 @@ static int do_unittest_config_empty_should_fail (void) {
         RD_UT_ASSERT(r == -1, "Did not fail despite empty config");
 
         RD_UT_ASSERT(!strcmp(errstr, expected_msg),
-                     "Incorrect error message when no principal: "
+                     "Incorrect error message with empty config: "
                      "expected=%s received=%s", expected_msg, errstr);
         RD_UT_PASS();
 }
@@ -1525,7 +1532,7 @@ static int do_unittest_config_value_with_quote_should_fail(void) {
                 if (r != -1)
                         rd_kafka_sasl_oauthbearer_token_free(&token);
 
-                RD_UT_ASSERT(r == -1, "Did not fail with embedded quote: %s)",
+                RD_UT_ASSERT(r == -1, "Did not fail with embedded quote: %s",
                              sasl_oauthbearer_configs[i]);
 
                 RD_UT_ASSERT(!strncmp(expected_prefix,

@@ -41,6 +41,7 @@ set(
     rdkafka_aux.c
     rdkafka_background.c
     rdkafka_idempotence.c
+    rdkafka_cert.c
     rdlist.c
     rdlog.c
     rdmurmur2.c
@@ -55,6 +56,10 @@ set(
     tinycthread_extra.c
     xxhash.c
 )
+
+if(WITH_SSL)
+  list(APPEND sources rdkafka_ssl.c)
+endif()
 
 if(WITH_HDRHISTOGRAM)
   list(APPEND sources rdhdrhistogram.c)

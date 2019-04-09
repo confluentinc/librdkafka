@@ -38,12 +38,9 @@
 #include <cstdio>
 #include <csignal>
 #include <cstring>
-#include <sstream>
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
-#include <windows.h>
-#include <wincrypt.h>
 #elif _AIX
 #include <unistd.h>
 #else
@@ -186,224 +183,6 @@ class ExampleEventCb : public RdKafka::EventCb {
   }
 };
 
-class ExampleSSLRetrieveCb : public RdKafka::SslCertificateRetrieveCb {
- public:
-  ExampleSSLRetrieveCb(std::string const& subject, std::string const& pass)
-         : m_cert_subject(subject), m_cert_store(NULL), m_cert_ctx(NULL), m_password(pass) {}
-
-  ~ExampleSSLRetrieveCb() {
-      if (m_cert_ctx) {
-#ifdef _MSC_VER
-          CertFreeCertificateContext(m_cert_ctx);
-#endif
-      }
-
-      if (m_cert_store) {
-#ifdef _MSC_VER
-          CertCloseStore(m_cert_store, 0);
-#endif
-      }
-  }
-
-  ssize_t ssl_cert_retrieve_cb(Type type, char **buffer, std::string &errstr) {
-
-      if (load_certificate(errstr)) {
-          switch (type) {
-          case CERTIFICATE_PUBLIC_KEY:
-#ifdef _MSC_VER
-              *buffer = (char*)m_cert_ctx->pbCertEncoded;
-              return m_cert_ctx->cbCertEncoded;
-#else
-              *buffer = NULL;
-              return 0;
-#endif
-
-          case CERTIFICATE_PRIVATE_KEY:
-          {
-              ssize_t ret = 0;
-#ifdef _MSC_VER
-              /*
-               * In order to export the private key the certificate 
-               * must first be marked as exportable.
-               *
-               * Steps to export the certificate
-               * 1) Create an in-memory cert store
-               * 2) Add the certificate to the store
-               * 3) Export the private key from the in-memory store
-               */
-
-              /*Create an in-memory cert store*/
-              HCERTSTORE hMemStore = CertOpenStore(CERT_STORE_PROV_MEMORY,
-                  0,
-                  NULL,
-                  0,
-                  NULL);
-              if (!hMemStore) {
-                  errstr = GetErrorMsg(GetLastError());
-              } else {
-                  /*Add certificate to store*/
-                  if (!CertAddCertificateContextToStore(hMemStore,
-                      m_cert_ctx,
-                      CERT_STORE_ADD_USE_EXISTING,
-                      NULL)) {
-                      errstr = GetErrorMsg(GetLastError());
-                  } else {
-                      /*Export private key from cert*/
-                      CRYPT_DATA_BLOB db = { NULL };
-
-                      if (!PFXExportCertStoreEx(hMemStore,
-                          &db,
-                          std::wstring(m_password.begin(), m_password.end()).c_str(), /*should probally do a better std::string to std::wstring conversion*/
-                          NULL,
-                          EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY | REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY)) {
-                          errstr = GetErrorMsg(GetLastError());
-                      } else {
-                          m_buffer.resize(db.cbData);
-                          db.pbData = &m_buffer[0];
-
-                          if (!PFXExportCertStoreEx(hMemStore,
-                              &db,
-                              std::wstring(m_password.begin(), m_password.end()).c_str(), /*should probally do a better std::string to std::wstring conversion*/
-                              NULL,
-                              EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY | REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY)) {
-                              errstr = GetErrorMsg(GetLastError());
-                          } else {
-                              m_buffer.resize(db.cbData);
-                              *buffer = (char*)&m_buffer[0];
-
-                              ret = m_buffer.size();
-                          }
-                      }
-                  }
-                  CertCloseStore(hMemStore, 0);
-                  return ret;
-              }
-#else
-              *buffer = NULL;
-              return 0;
-#endif
-          }
-
-          break;
-
-          case CERTIFICATE_PRIVATE_KEY_PASS:
-              *buffer = const_cast<char*>(m_password.c_str());
-              return m_password.length();
-          }
-      }
-
-      *buffer = NULL;
-      return 0;
-  }
-
- private:
-     bool load_certificate(std::string& errstr) {
-
-         if (!m_cert_ctx) {
-             if (!m_cert_store) {
-#ifdef _MSC_VER
-                 m_cert_store = CertOpenStore(CERT_STORE_PROV_SYSTEM,
-                     0,
-                     NULL,
-                     CERT_SYSTEM_STORE_CURRENT_USER,
-                     L"My");
-#endif
-                 if (!m_cert_store) {
-#ifdef _MSC_VER
-                     errstr = GetErrorMsg(GetLastError());
-#else
-                     errstr = "not supported";
-#endif
-                     return false;
-                 }
-             }
-#ifdef _MSC_VER
-             m_cert_ctx = CertFindCertificateInStore(m_cert_store,
-                 X509_ASN_ENCODING,
-                 0,
-                 CERT_FIND_SUBJECT_STR,
-                 std::wstring(m_cert_subject.begin(), m_cert_subject.end()).c_str(), /*should probally do a better std::string to std::wstring conversion*/
-                 NULL);
-#endif
-             if (!m_cert_ctx) {
-#ifdef _MSC_VER
-                 errstr = GetErrorMsg(GetLastError());
-#else
-                 errstr = "not supported";
-#endif
-                 return  false;
-             }
-         }
-
-         return true;
-     }
-
-     std::string GetErrorMsg(unsigned long error)
-     {
-         char* message = NULL;
-#ifdef _MSC_VER
-         size_t ret = FormatMessageA(
-             FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-             nullptr,
-             error,
-             0,
-             (char*)&message,
-             0,
-             nullptr);
-#else
-         size_t ret = 0;
-#endif
-         if (ret == 0)
-         {
-             std::stringstream ss;
-
-             ss << std::string("could not format message for ") << error;
-             return ss.str();
-         }
-         else {
-             std::string result(message, ret);
-#ifdef _MSC_VER
-             LocalFree(message);
-#endif
-             return result;
-         }
-     }
-
- private:
-  std::string m_cert_subject;
-  std::vector<uint8_t> m_buffer;
-  std::string m_password;
-#ifdef _MSC_VER
-  PCCERT_CONTEXT m_cert_ctx;
-  HCERTSTORE m_cert_store;
-#else
-  void *m_cert_ctx;
-  void *m_cert_store;
-#endif
-};
-
-class ExampleSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
- public:
-  bool ssl_cert_verify_cb(char *cert, size_t len, std::string &errstr) {
-
-#ifdef _MSC_VER
-      PCCERT_CONTEXT ctx = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-          (uint8_t*)cert, static_cast<unsigned long>(len));
-#else
-      void* ctx = NULL;
-#endif
-      if (ctx) {
-          /*Verify that the broker certificate is valid.  Specific application buisness logic will need to do this*/
-#ifdef _MSC_VER
-          CertFreeCertificateContext(ctx);
-#endif
-          return true;
-      }
-
-      return false;
-  }
-};
-
 
 /* Use of this partitioner is pretty pointless since no key is provided
  * in the produce() call. */
@@ -491,15 +270,12 @@ int main (int argc, char **argv) {
   std::string topic_str;
   std::string mode;
   std::string debug;
-  std::string cert_subject;
-  std::string priv_key_pass;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
   bool do_conf_dump = false;
   int opt;
   MyHashPartitionerCb hash_partitioner;
   int use_ccb = 0;
-  int use_ssl = 0;
 
   /*
    * Create configuration objects
@@ -508,7 +284,7 @@ int main (int argc, char **argv) {
   RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
 
-  while ((opt = getopt(argc, argv, "PCLt:p:b:s:k:z:qd:o:eX:AM:f:")) != -1) {
+  while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:AM:f:")) != -1) {
     switch (opt) {
     case 'P':
     case 'C':
@@ -607,33 +383,12 @@ int main (int argc, char **argv) {
         }
         break;
 
-      case 's':
-      {
-          use_ssl = 1;
-          cert_subject = optarg;
-
-          if (cert_subject.empty()) {
-              std::cerr << "Invalid certificate: " << optarg << std::endl;
-              exit(1);
-          }
-
-          if (conf->set("security.protocol", "ssl", errstr) != RdKafka::Conf::CONF_OK) {
-              std::cerr << errstr << std::endl;
-              exit(1);
-          }
-          break;
-      }
-      
-      case 'k':
-          priv_key_pass = optarg;
-          break;
-
     default:
       goto usage;
     }
   }
 
-  if (mode.empty() || (topic_str.empty() && mode != "L") || (priv_key_pass.empty() && use_ssl) || optind != argc) {
+  if (mode.empty() || (topic_str.empty() && mode != "L") || optind != argc) {
   usage:
 	  std::string features;
 	  conf->get("builtin.features", features);
@@ -651,8 +406,6 @@ int main (int argc, char **argv) {
             "  -p <func>       Use partitioner:\n"
             "                  random (default), hash\n"
             "  -b <brokers>    Broker address (localhost:9092)\n"
-            "  -s <cert>       The subject name of the SSL certificate to use\n"
-            "  -k <pass>       The private key password if -s is specified\n"
             "  -z <codec>      Enable compression:\n"
             "                  none|gzip|snappy\n"
             "  -o <offset>     Start offset (consumer)\n"
@@ -699,20 +452,6 @@ int main (int argc, char **argv) {
 
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
-
-  ExampleSSLRetrieveCb ssl_retrieve_cb(cert_subject, priv_key_pass);
-  ExampleSSLVerifyCb ssl_verify_cb;
-  
-  if (use_ssl) {
-      if (conf->set("ssl_cert_verify_cb", &ssl_verify_cb, errstr) != RdKafka::Conf::CONF_OK) {
-          std::cerr << errstr << std::endl;
-          exit(1);
-      }
-      if (conf->set("ssl_cert_retrieve_cb", &ssl_retrieve_cb, errstr) != RdKafka::Conf::CONF_OK) {
-          std::cerr << errstr << std::endl;
-          exit(1);
-      }
-  }
 
   if (do_conf_dump) {
     int pass;

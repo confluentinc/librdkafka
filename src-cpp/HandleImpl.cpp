@@ -143,38 +143,38 @@ RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
                                              oauthbearer_config : ""));
 }
 
-int RdKafka::ssl_cert_verify_cb_trampoline(char *cert, size_t len, char *errstr, size_t errstr_size, void *opaque) {
-    RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
-#if WITH_SSL
-    std::string errbuf;
-    bool res = handle->ssl_cert_verify_cb_->ssl_cert_verify_cb(cert, len, errbuf);
-    if (!res) {
-        size_t size = errbuf.size() > 0 ? errbuf.size() + 1 : 0;
-        memcpy(errstr, errbuf.c_str(), errbuf.size() > 0 ? (size > errstr_size ? errstr_size : size) : 0);
-    }
-    return res ? 1 : 0;
-#else
-    return 0;
-#endif
+int RdKafka::ssl_cert_verify_cb_trampoline (rd_kafka_t *rk,
+                                            const char *broker_name,
+                                            int32_t broker_id,
+                                            int preverify_ok, void *x509_ctx,
+                                            int depth,
+                                            const char *buf, size_t size,
+                                            char *errstr, size_t errstr_size,
+                                            void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  std::string errbuf;
+
+  bool res = 0 != handle->ssl_cert_verify_cb_->
+    ssl_cert_verify_cb(std::string(broker_name), broker_id,
+                       0 != preverify_ok, x509_ctx,
+                       depth,
+                       buf, size,
+                       errbuf);
+
+  if (res)
+    return (int)res;
+
+  size_t errlen = errbuf.size() > errstr_size - 1 ?
+    errstr_size - 1 : errbuf.size();
+
+  memcpy(errstr, errbuf.c_str(), errlen);
+  if (errstr_size > 0)
+    errstr[errlen] = '\0';
+
+  return (int)res;
 }
 
-ssize_t RdKafka::ssl_cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, char **buffer,
-                                                char *errstr, size_t errstr_size, void *opaque) {
-    RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
-
-#if WITH_SSL
-    std::string errbuf;
-    ssize_t res = handle->ssl_cert_retrieve_cb_->ssl_cert_retrieve_cb(static_cast<RdKafka::SslCertificateRetrieveCb::Type>(type), buffer, errbuf);
-    if (res == -1) {
-        size_t size = errbuf.size() > 0 ? errbuf.size() + 1 : 0;
-        memcpy(errstr, errbuf.c_str(), errbuf.size() > 0 ? (size > errstr_size ? errstr_size : size) : 0);
-    }
-    return res;
-#else
-    return 0;
-#endif
-}
 
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
                                                   const Topic *only_rkt,
@@ -289,17 +289,9 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   }
 
   if (confimpl->ssl_cert_verify_cb_) {
-      rd_kafka_conf_set_ssl_cert_verify_cb(confimpl->rk_conf_,
-          RdKafka::ssl_cert_verify_cb_trampoline);
-
+    rd_kafka_conf_set_ssl_cert_verify_cb(confimpl->rk_conf_,
+                                         RdKafka::ssl_cert_verify_cb_trampoline);
       ssl_cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
-  }
-
-  if (confimpl->ssl_cert_retrieve_cb_) {
-      rd_kafka_conf_set_ssl_cert_retrieve_cb(confimpl->rk_conf_,
-          RdKafka::ssl_cert_retrieve_cb_trampoline);
-
-      ssl_cert_retrieve_cb_ = confimpl->ssl_cert_retrieve_cb_;
   }
 
   if (confimpl->open_cb_) {

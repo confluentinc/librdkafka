@@ -461,6 +461,28 @@ RD_EXPORT
 std::string  err2str(RdKafka::ErrorCode err);
 
 
+
+/**
+ * @enum CertificateType
+ * @brief SSL certificate types
+ */
+enum CertificateType {
+  CERT_PUBLIC_KEY,   /**< Client's public key */
+  CERT_PRIVATE_KEY,  /**< Client's private key */
+  CERT__CNT
+};
+
+/**
+ * @enum CertificateEncoding
+ * @brief SSL certificate encoding
+ */
+enum CertificateEncoding {
+  CERT_ENC_PKCS12,  /**< PKCS#12 */
+  CERT_ENC_DER,     /**< DER / binary X.509 ASN1 */
+  CERT_ENC_PEM,     /**< PEM */
+  CERT_ENC__CNT
+};
+
 /**@} */
 
 
@@ -835,73 +857,55 @@ public:
   virtual ~OffsetCommitCb() { }
 };
 
+
+
 /**
-* @brief SSL certificate verify callback class
-*/
+ * @brief SSL broker certificate verification class.
+ *
+ * @remark Class instance must outlive the RdKafka client instance.
+ */
 class RD_EXPORT SslCertificateVerifyCb {
 public:
-    /**
-    * @brief Set SSL certificate verification callback.
-    *
-    * The verification of the broker certificate will be processed
-    * by this callback.
-    *
-    * @param cert the binary encoded certificate
-    *
-    * @param len the size of cert in bytes
-    *
-    * @param errstr human readable error message which implementer must populate on failure.
-    *
-    * @returns true if the SSL certificate is successfully verified otherwise false
-    *    in which case the implementation must provide a human readable error string in errstr.
-    */
-    virtual bool ssl_cert_verify_cb(char *cert, size_t len, std::string &errstr) = 0;
+  /**
+   * @brief SSL broker certificate verification callback.
+   *
+   * The verification callback is triggered from internal librdkafka threads
+   * upon connecting to a broker. On each connection attempt the callback
+   * will be called for each certificate in the broker's certificate chain,
+   * starting at the root certification, as long as the application callback.
+   * returns 1 (valid certificate).
+   *
+   * \p broker_name and \p broker_id correlate to the broker the connection
+   * is being made to.
+   * The \p preverify_ok argument indicates if OpenSSL's verification of
+   * the certificate succeed (true) or failed (failed).
+   *
+   * The certificate itself is passed in binary DER format in \p buf of
+   * size \p size.
+   * \p depth is the depth of the current certificate in the chain, starting
+   * at the root certificate.
+   * As a convenience the original OpenSSL X509_STORE_CTX object is passed
+   * in the \p x509_ctx object. If an application wishes to access this object
+   * it must ensure that it is using the same build of OpenSSL that librdkafka
+   * is using.
+   *
+   * The callback must 1 if verification succeeds, or 0 if verification fails
+   * and write a human-readable error message
+   * to \p errstr.
+   *
+   * @warning This callback will be called from internal librdkafka threads.
+   */
+  virtual bool ssl_cert_verify_cb (const std::string &broker_name,
+                                   int32_t broker_id,
+                                   bool preverify_ok,
+                                   void *x509_ctx,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   std::string &errstr) = 0;
 
-    virtual ~SslCertificateVerifyCb() {}
+  virtual ~SslCertificateVerifyCb() {}
 };
 
-/**
-* @brief Certificate retrieve callback class
-*/
-class RD_EXPORT SslCertificateRetrieveCb {
-public:
-    /** @brief Type of the retrieve certificate callback */
-    enum Type {
-        CERTIFICATE_PUBLIC_KEY,
-        CERTIFICATE_PRIVATE_KEY,
-        CERTIFICATE_PRIVATE_KEY_PASS
-    };
-
-    /**
-    * @brief Set certificate retrieve callback.
-    *
-    * The retrieval of the cetificate specified by the type will be returned by this callback.
-    * This is used to get the certificates required to create the SSL connection.
-    *
-    * @remark upon compleation the buffer must point to a valid buffer.
-    *
-    * @param buffer must point to valid data upon compleation.  It is the responsibility of the
-    *   implementation to ensure that the data is valid until the class is destructed.  This class
-    *   insance must outlive the RdKafka client instance.
-    *
-    * @param type the type of buffer which will be retrieved by the callback.
-    *   CERTIFICATE_PUBLIC_KEY
-    *   CERTIFICATE_PRIVATE_KEY
-    *   CERTIFICATE_PRIVATE_KEY_PASS
-    *
-    * @parm errstr human readable error message which implementer must populate on failure.
-    *
-    * @remark When type is CERTIFICATE_PUBLIC_KEY or CERTIFICATE_PRIVATE_KEY then upon return the buffer
-    *    must point to the certificate.  When type is For CERTIFICATE_PRIVATE_KEY_PASS then buffer
-    *    must point to a narrow string containing the password of the private key.
-    *
-    * @returns the number of bytes in the returned buffer or -1 on error, in which case the implemention 
-    *    must provide a human readable error string in errstr.
-    */
-    virtual ssize_t ssl_cert_retrieve_cb(Type type, char **buffer, std::string &errstr) = 0;
-
-    virtual ~SslCertificateRetrieveCb() {}
-};
 
 /**
  * @brief \b Portability: SocketCb callback class
@@ -1076,10 +1080,40 @@ class RD_EXPORT Conf {
                                SslCertificateVerifyCb *ssl_cert_verify_cb,
                                std::string &errstr) = 0;
 
-  /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
-  virtual Conf::ConfResult set(const std::string &name,
-                               SslCertificateRetrieveCb *ssl_cert_retrieve_cb,
-                               std::string &errstr) = 0;
+  /**
+   * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
+   *        memory at \p buffer of \p size bytes.
+   *
+   * @param cert_type Certificate or key type to configure.
+   * @param cert_enc  Buffer \p encoding type.
+   * @param buffer Memory pointer to encoded certificate or key.
+   *               The memory is not referenced after this function returns.
+   * @param size Size of memory at \p buffer.
+   * @param errstr A human-readable error string will be written to this string
+   *               on failure.
+   *
+   * @returns CONF_OK on success or CONF_INVALID if the
+   *          \p cert_type / \p cert_enc combination is invalid, or if the
+   *          memory in \p buffer is of incorrect encoding, or if librdkafka
+   *          was not built with SSL support.
+   *
+   * @remark Calling this method multiple times with the same \p cert_type
+   *         will replace the previous value.
+   *
+   * @remark Calling this method with \p buffer set to NULL will clear the
+   *         configuration for \p cert_type.
+   *
+   * @remark The private key may require a password, which must be specified
+   *         with the `ssl.key.password` configuration property prior to
+   *         calling this function.
+   *
+   * @remark Private keys in PEM format may also be set with the
+   *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
+   */
+  virtual Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,
+                                         RdKafka::CertificateEncoding cert_enc,
+                                         const void *buffer, size_t size,
+                                         std::string &errstr) = 0;
 
   /** @brief Query single configuration value
    *
@@ -1143,9 +1177,6 @@ class RD_EXPORT Conf {
 
   /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
   virtual Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
-
-  /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
-  virtual Conf::ConfResult get(SslCertificateRetrieveCb *&ssl_cert_retrieve_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

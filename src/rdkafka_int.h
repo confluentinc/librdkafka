@@ -368,6 +368,7 @@ struct rd_kafka_s {
 #define rd_kafka_rdunlock(rk)    rwlock_rdunlock(&(rk)->rk_lock)
 #define rd_kafka_wrunlock(rk)    rwlock_wrunlock(&(rk)->rk_lock)
 
+
 /**
  * @brief Add \p cnt messages and of total size \p size bytes to the
  *        internal bookkeeping of current message counts.

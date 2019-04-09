@@ -50,6 +50,9 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#if WITH_SSL
+#include "rdkafka_ssl.h"
+#endif
 
 #include "rdtime.h"
 #include "crc32c.h"
@@ -159,7 +162,7 @@ static void rd_kafka_global_cnt_incr (void) {
 	if (rd_kafka_global_cnt == 1) {
 		rd_kafka_transport_init();
 #if WITH_SSL
-		rd_kafka_transport_ssl_init();
+                rd_kafka_ssl_init();
 #endif
                 rd_kafka_sasl_global_init();
 	}
@@ -177,7 +180,7 @@ static void rd_kafka_global_cnt_decr (void) {
 	if (rd_kafka_global_cnt == 0) {
                 rd_kafka_sasl_global_term();
 #if WITH_SSL
-		rd_kafka_transport_ssl_term();
+                rd_kafka_ssl_term();
 #endif
 	}
 	mtx_unlock(&rd_kafka_global_lock);
@@ -850,9 +853,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	rd_kafka_q_destroy_owner(rk->rk_ops);
 
 #if WITH_SSL
-	if (rk->rk_conf.ssl.ctx) {
+        if (rk->rk_conf.ssl.ctx) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
-                rd_kafka_transport_ssl_ctx_term(rk);
+                rd_kafka_ssl_ctx_term(rk);
         }
 #endif
 
@@ -2044,11 +2047,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
 #if WITH_SSL
-	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
-	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {
-		/* Create SSL context */
-		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
-						    errstr_size) == -1) {
+        if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
+            rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {
+                /* Create SSL context */
+                if (rd_kafka_ssl_ctx_init(rk, errstr, errstr_size) == -1) {
                         ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         ret_errno = EINVAL;
                         goto fail;
@@ -2223,6 +2225,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      builtin_features, BUILT_WITH,
                      rk->rk_conf.debug);
 
+        /* Log warnings for deprecated configuration */
+        rd_kafka_conf_warn(rk);
 
 	return rk;
 

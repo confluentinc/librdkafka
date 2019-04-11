@@ -351,6 +351,39 @@ struct rd_kafka_s {
                 /**< Lock for sparse_connect_random */
                 mtx_t         sparse_connect_lock;
         } rk_suppress;
+
+        /**
+         * SASL/OAUTHBEARER token value, token metadata, and extensions
+         */
+        struct {
+                /**< The b64token value as defined in RFC 6750 Section 2.1
+                 *   https://tools.ietf.org/html/rfc6750#section-2.1
+                 */
+                char *token_value;
+                /**< When the token expires, in terms of the number of
+                 *   milliseconds since the epoch. Wall clock time.
+                 */
+                rd_ts_t wts_md_lifetime;
+                /**< The point after which this token should be replaced with a
+                 * new one, in terms of the number of milliseconds since the
+                 * epoch. Wall clock time.
+                 */
+                rd_ts_t wts_refresh_after;
+                /**< When the last token refresh was equeued (0 = never)
+                 *   in terms of the number of milliseconds since the epoch.
+                 *   Wall clock time.
+                 */
+                rd_ts_t wts_enqueued_refresh;
+                /**< The name of the principal to which this token applies. */
+                char *md_principal_name;
+                /**< The SASL extensions, as per RFC 7628 Section 3.1
+                 *   https://tools.ietf.org/html/rfc7628#section-3.1
+                 */
+                rd_list_t extensions; /* rd_strtup_t list */
+                /**< Error message for validation and/or token retrieval problems.
+                 */
+                char *errstr;
+        } *rk_oauthbearer;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)

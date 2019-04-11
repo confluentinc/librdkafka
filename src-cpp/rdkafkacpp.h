@@ -498,6 +498,41 @@ class RD_EXPORT DeliveryReportCb {
 
 
 /**
+ * @brief SASL/OAUTHBEARER token refresh callback class
+ *
+ * The SASL/OAUTHBEARER token refresh callback is triggered via RdKafka::poll()
+ * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
+ * typically based on the configuration defined in \c sasl.oauthbearer.config.
+ * 
+ * The callback should invoke RdKafka::oauthbearer_set_token() or
+ * RdKafka::oauthbearer_set_token_failure() to indicate success or failure,
+ * respectively.
+ * 
+ * The refresh operation is eventable and may be received when an event
+ * callback handler is set with an event type of
+ * \c RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH.
+ *
+ * Note that before any SASL/OAUTHBEARER broker connection can succeed the
+ * application must call RdKafka::oauthbearer_set_token() once -- either
+ * directly or, more typically, by invoking RdKafka::poll() -- in order to
+ * cause retrieval of an initial token to occur.
+ *
+ * An application must call RdKafka::poll() at regular intervals to
+ * serve queued SASL/OAUTHBEARER token refresh callbacks (when
+ * OAUTHBEARER is the SASL mechanism).
+ */
+class RD_EXPORT OAuthBearerTokenRefreshCb {
+ public:
+  /**
+   * @brief SASL/OAUTHBEARER token refresh callback class.
+   */
+  virtual void oauthbearer_token_refresh_cb () = 0;
+
+  virtual ~OAuthBearerTokenRefreshCb() { }
+};
+
+
+/**
  * @brief Partitioner callback class
  *
  * Generic partitioner callback class for implementing custom partitioners.
@@ -895,6 +930,11 @@ class RD_EXPORT Conf {
                                 DeliveryReportCb *dr_cb,
                                 std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"oauthbearer_token_refresh_cb\" */
+  virtual Conf::ConfResult set (const std::string &name,
+                        OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb,
+                        std::string &errstr) = 0;
+
   /** @brief Use with \p name = \c \"event_cb\" */
   virtual Conf::ConfResult set (const std::string &name,
                                 EventCb *event_cb,
@@ -957,6 +997,12 @@ class RD_EXPORT Conf {
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p dr_cb. */
   virtual Conf::ConfResult get(DeliveryReportCb *&dr_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p oauthbearer_token_refresh_cb. */
+  virtual Conf::ConfResult get(
+          OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb) const = 0;
 
   /** @brief Query single configuration value
    *  @returns CONF_OK if the property was set previously set and
@@ -1282,6 +1328,70 @@ class RD_EXPORT Handle {
    *          any other error code.
    */
   virtual ErrorCode fatal_error (std::string &errstr) = 0;
+
+  /**
+   * @brief Set SASL/OAUTHBEARER token and metadata
+   *
+   * @param token_value the mandatory token value to set, often (but not
+   *  necessarily) a JWS compact serialization as per
+   *  https://tools.ietf.org/html/rfc7515#section-3.1.
+   * @param md_lifetime_ms when the token expires, in terms of the number of
+   *  milliseconds since the epoch.
+   * @param md_principal_name the Kafka principal name associated with the
+   *  token.
+   * @param extensions potentially empty SASL extension keys and values where
+   *  element [i] is the key and [i+1] is the key's value, to be communicated
+   *  to the broker as additional key-value pairs during the initial client
+   *  response as per https://tools.ietf.org/html/rfc7628#section-3.1.  The
+   *  number of SASL extension keys plus values must be a non-negative multiple
+   *  of 2. Any provided keys and values are copied.
+   * @param errstr A human readable error string is written here, only if
+   *  there is an error.
+   *
+   * The SASL/OAUTHBEARER token refresh callback should invoke
+   * this method upon success. The extension keys must not include the reserved
+   * key "`auth`", and all extension keys and values must conform to the
+   * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+   * 
+   *     key            = 1*(ALPHA)
+   *     value          = *(VCHAR / SP / HTAB / CR / LF )
+   * 
+   * @returns \c RdKafka::ERR_NO_ERROR on success, otherwise \p errstr set
+   *              and:<br>
+   *          \c RdKafka::ERR__INVALID_ARG if any of the arguments are
+   *              invalid;<br>
+   *          \c RdKafka::ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+   *              supported by this build;<br>
+   *          \c RdKafka::ERR__STATE if SASL/OAUTHBEARER is supported but is
+   *              not configured as the client's authentication mechanism.<br>
+   * 
+   * @sa RdKafka::oauthbearer_set_token_failure
+   * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
+   */
+  virtual ErrorCode oauthbearer_set_token (const std::string &token_value,
+                                           int64_t md_lifetime_ms,
+                                           const std::string &md_principal_name,
+                                           const std::list<std::string> &extensions,
+                                           std::string &errstr) = 0;
+
+    /**
+     * @brief SASL/OAUTHBEARER token refresh failure indicator.
+     *
+     * @param errstr human readable error reason for failing to acquire a token.
+     *
+     * The SASL/OAUTHBEARER token refresh callback should
+     * invoke this method upon failure to refresh the token.
+     *
+     * @returns \c RdKafka::ERR_NO_ERROR on success, otherwise:<br>
+     *          \c RdKafka::ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+     *              supported by this build;<br>
+     *          \c RdKafka::ERR__STATE if SASL/OAUTHBEARER is supported but is
+     *              not configured as the client's authentication mechanism.
+     *
+     * @sa RdKafka::oauthbearer_set_token
+     * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
+     */
+    virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
 };
 
 

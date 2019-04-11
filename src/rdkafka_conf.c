@@ -37,6 +37,7 @@
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_sasl_oauthbearer.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
 #endif
@@ -241,6 +242,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
+#endif         
+#if WITH_SASL_OAUTHBEARER
+                { 0x800, "sasl_oauthbearer" },
 #endif         
 		{ 0, NULL }
 		}
@@ -450,6 +454,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
           .pdef = rd_kafka_log_print },
+#if WITH_SASL_OAUTHBEARER
+        { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
+          _RK(oauthbearer_token_refresh_cb),
+          "SASL/OAUTHBEARER token refresh callback (set with "
+          "rd_kafka_conf_set_oauthbearer_token_refresh_cb()); "
+          "the default will generate an unsecured JWS using "
+          "sasl.oauthbearer.config",
+          .pdef = rd_kafka_oauthbearer_unsecured_token },
+#endif
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -649,7 +662,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{_RK_GLOBAL|_RK_HIGH, "sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
-	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
+	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
@@ -690,6 +703,25 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+#if WITH_SASL_OAUTHBEARER
+        { _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
+          _RK(sasl.oauthbearer_config),
+          "SASL/OAUTHBEARER configuration. The format is "
+          "implementation-dependent and must be parsed accordingly. The "
+          "default unsecured token implementation (see "
+          "https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes "
+          "space-separated name=value pairs with valid names including "
+          "principalClaimName, principal, scopeClaimName, scope, and "
+          "lifeSeconds. The default value for principalClaimName is \"sub\", "
+          "the default value for scopeClaimName is \"scope\", and the default "
+          "value for lifeSeconds is 3600. The scope value is CSV format with "
+          "the default value being no/empty scope. For example: "
+          "`principalClaimName=azp principal=admin scopeClaimName=roles "
+          "scope=role1,role2 lifeSeconds=600`. In addition, SASL extensions "
+          "can be communicated to the broker via "
+          "`extension_<extensionname>=value`. For example: "
+          "`principal=admin extension_traceId=123`" },
+#endif
 
 #if WITH_PLUGINS
         /* Plugins */
@@ -2160,6 +2192,15 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 						  size_t json_len,
 						  void *opaque)) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "stats_cb", stats_cb);
+}
+
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
+                void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                void *opaque)) {
+#if WITH_SASL_OAUTHBEARER
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                "oauthbearer_token_refresh_cb", oauthbearer_token_refresh_cb);
+#endif
 }
 
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,

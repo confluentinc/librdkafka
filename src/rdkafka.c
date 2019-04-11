@@ -49,6 +49,7 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_sasl_oauthbearer.h"
 
 #include "rdtime.h"
 #include "crc32c.h"
@@ -270,7 +271,33 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size) {
+#if WITH_SASL_OAUTHBEARER
+        return rd_kafka_oauthbearer_set_token0(
+                rk, token_value,
+                md_lifetime_ms, md_principal_name, extensions, extension_size,
+                errstr, errstr_size);
+#else
+        rd_snprintf(errstr, errstr_size,
+                    "librdkafka not built with SASL OAUTHBEARER support");
+        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+#endif
+}
 
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr) {
+#if WITH_SASL_OAUTHBEARER
+        return rd_kafka_oauthbearer_set_token_failure0(rk, errstr);
+#else
+        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+#endif
+}
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
@@ -845,6 +872,14 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
+
+	if (rk->rk_oauthbearer) {
+                RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
+                RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
+                rd_list_destroy(&rk->rk_oauthbearer->extensions);
+                RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
+                rd_free(rk->rk_oauthbearer);
+        }
 
 	rd_kafkap_bytes_destroy((rd_kafkap_bytes_t *)rk->rk_null_bytes);
 	rwlock_destroy(&rk->rk_lock);
@@ -1657,6 +1692,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
 
+#if WITH_SASL_OAUTHBEARER
+        /* Enqueue a token refresh if necessary */
+        if (rk->rk_oauthbearer) {
+                rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(rk);
+        }
+#endif
+
         /* Scan topic state, message timeouts, etc. */
         rd_kafka_topic_scan_all(rk, rd_clock());
 
@@ -1918,6 +1960,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
         if (rk->rk_conf.error_cb)
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
+#if WITH_SASL_OAUTHBEARER
+        if (rk->rk_conf.oauthbearer_token_refresh_cb)
+                rk->rk_conf.enabled_events |=
+                        RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
+#endif
 
         rk->rk_controllerid = -1;
 
@@ -2089,6 +2136,24 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
          * @warning `goto fail` is prohibited past this point
          */
 
+#if WITH_SASL_OAUTHBEARER
+        /* SASL OAUTHBEARER
+         * Automatically refresh the token if using the builtin
+         * unsecure JWS token refresher, to avoid an initial connection
+         * stall as we wait for the application to call poll().
+         * Otherwise enqueue a refresh callback for the application. */
+        if ((rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
+             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) &&
+            !strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
+                if (rk->rk_conf.oauthbearer_token_refresh_cb ==
+                    rd_kafka_oauthbearer_unsecured_token)
+                        rk->rk_conf.oauthbearer_token_refresh_cb(
+                                rk, rk->rk_conf.opaque);
+                else
+                        rd_kafka_oauthbearer_enqueue_token_refresh(rk);
+        }
+#endif
+
         mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
 						  RD_KAFKA_PROTO_PLAINTEXT,
@@ -2157,6 +2222,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rk->rk_name,
                      builtin_features, BUILT_WITH,
                      rk->rk_conf.debug);
+
 
 	return rk;
 

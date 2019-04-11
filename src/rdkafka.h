@@ -1748,7 +1748,114 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
 						  size_t json_len,
 						  void *opaque));
 
+/**
+ * @brief Set SASL/OAUTHBEARER token refresh callback in provided conf object.
+ *
+ * @param conf the configuration to mutate.
+ * @param oauthbearer_token_refresh_cb the callback to set; callback function
+ *  arguments:<br>
+ *   \p rk - Kafka handle<br>
+ *   \p opaque - Application-provided opaque set via
+ *   rd_kafka_conf_set_opaque()
+ * 
+ * The SASL/OAUTHBEARER token refresh callback is triggered via rd_kafka_poll()
+ * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
+ * typically based on the configuration defined in \c sasl.oauthbearer.config.
+ * 
+ * The callback should invoke rd_kafka_oauthbearer_set_token()
+ * or rd_kafka_oauthbearer_set_token_failure() to indicate success
+ * or failure, respectively.
+ * 
+ * The refresh operation is eventable and may be received via
+ * rd_kafka_queue_poll() with an event type of
+ * \c RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
+ *
+ * Note that before any SASL/OAUTHBEARER broker connection can succeed the
+ * application must call rd_kafka_oauthbearer_set_token() once -- either
+ * directly or, more typically, by invoking either rd_kafka_poll() or
+ * rd_kafka_queue_poll() -- in order to cause retrieval of an initial token to
+ * occur.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
+        rd_kafka_conf_t *conf,
+        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk, void *opaque));
 
+/**
+ * @brief Set SASL/OAUTHBEARER token and metadata
+ *
+ * @param rk Client instance.
+ * @param token_value the mandatory token value to set, often (but not
+ *  necessarily) a JWS compact serialization as per
+ *  https://tools.ietf.org/html/rfc7515#section-3.1.
+ * @param md_lifetime_ms when the token expires, in terms of the number of
+ *  milliseconds since the epoch.
+ * @param md_principal_name the mandatory Kafka principal name associated
+ *  with the token.
+ * @param extensions optional SASL extensions key-value array with
+ *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  [i+1] is the key's value, to be communicated to the broker
+ *  as additional key-value pairs during the initial client response as per
+ *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
+ *  copied.
+ * @param extension_size the number of SASL extension keys plus values,
+ *  which must be a non-negative multiple of 2.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is an error.
+ * 
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon success. The extension keys must not include the reserved
+ * key "`auth`", and all extension keys and values must conform to the required
+ * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+ * 
+ *     key            = 1*(ALPHA)
+ *     value          = *(VCHAR / SP / HTAB / CR / LF )
+ * 
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise \p errstr set
+ *              and:<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
+ *              invalid;<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism.<br>
+ * 
+ * @sa rd_kafka_oauthbearer_set_token_failure
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size);
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh failure indicator.
+ *
+ * @param rk Client instance.
+ * @param errstr mandatory human readable error reason for failing to acquire
+ *  a token.
+ * 
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon failure.
+ * 
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism,<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
+ * 
+ * @sa rd_kafka_oauthbearer_set_token
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**
  * @brief Set socket callback.
@@ -2393,6 +2500,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
+ *   - OAUTHBEARER token refresh callbacks (rd_kafka_conf_set_oauthbearer_token_refresh_cb()) [all]
  *
  * @returns the number of events served.
  */
@@ -3927,6 +4035,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
+                                                             token needs to be
+                                                             refreshed */
 
 
 /**

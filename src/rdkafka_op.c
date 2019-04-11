@@ -79,7 +79,8 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_DESCRIBECONFIGS] = "REPLY:DESCRIBECONFIGS",
                 [RD_KAFKA_OP_ADMIN_RESULT] = "REPLY:ADMIN_RESULT",
                 [RD_KAFKA_OP_PURGE] = "REPLY:PURGE",
-                [RD_KAFKA_OP_CONNECT] = "REPLY:CONNECT"
+                [RD_KAFKA_OP_CONNECT] = "REPLY:CONNECT",
+                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = "REPLY:OAUTHBEARER_REFRESH"
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -201,6 +202,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
                 [RD_KAFKA_OP_PURGE] = sizeof(rko->rko_u.purge),
                 [RD_KAFKA_OP_CONNECT] = 0,
+                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = 0,
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

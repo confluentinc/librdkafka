@@ -1487,7 +1487,7 @@ static int do_unittest_config_empty_value_should_fail(void) {
                         &token,
                         sasl_oauthbearer_configs[i], now_wallclock_ms,
                         errstr, sizeof(errstr));
-                if (r == -1)
+                if (r != -1)
                         rd_kafka_sasl_oauthbearer_token_free(&token);
 
                 RD_UT_ASSERT(r == -1, "Did not fail with an empty value: %s",

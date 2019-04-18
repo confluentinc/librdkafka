@@ -521,8 +521,22 @@ typedef enum {
         RD_KAFKA_RESP_ERR_LISTENER_NOT_FOUND = 72,
         /** Topic deletion is disabled */
         RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED = 73,
+        /** Leader epoch is older than broker epoch */
+        RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH = 74,
+        /** Leader epoch is newer than broker epoch */
+        RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH = 75,
         /** Unsupported compression type */
-        RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE = 74,
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE = 76,
+        /** Broker epoch has changed */
+        RD_KAFKA_RESP_ERR_STALE_BROKER_EPOCH = 77,
+        /** Leader high watermark is not caught up */
+        RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE = 78,
+        /** Group member needs a valid member ID */
+        RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED = 79,
+        /** Preferred leader was not available */
+        RD_KAFKA_RESP_ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
+        /** Consumer group has reached maximum size */
+        RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED = 81,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

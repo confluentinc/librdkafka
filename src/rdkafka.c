@@ -621,8 +621,22 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "No matching listener"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED,
                   "Topic deletion is disabled"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH,
+                  "Leader epoch is older than broker epoch"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH,
+                  "Leader epoch is newer than broker epoch"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE,
                   "Unsupported compression type"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_BROKER_EPOCH,
+                  "Broker epoch has changed"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE,
+                  "Leader high watermark is not caught up"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED,
+                  "Group member needs a valid member ID"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_PREFERRED_LEADER_NOT_AVAILABLE,
+                  "Preferred leader was not available"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED,
+                  "Consumer group has reached maximum size"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

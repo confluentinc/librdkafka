@@ -682,9 +682,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
 	  _RK(sasl.kinit_cmd),
 	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
-	  "by corresponding config object value, %{broker.name} returns the "
-	  "broker's hostname.",
-	  .sdef = "kinit -S \"%{sasl.kerberos.service.name}/%{broker.name}\" "
+	  "by corresponding config object value.",
+	  .sdef = "kinit "
 	  "-k -t \"%{sasl.kerberos.keytab}\" %{sasl.kerberos.principal}" },
 	{ _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
 	  _RK(sasl.keytab),

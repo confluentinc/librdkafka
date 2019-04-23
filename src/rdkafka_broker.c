@@ -70,7 +70,6 @@
 #endif
 #include "rdendian.h"
 #include "rdunittest.h"
-#include "rdkafka_sasl_oauthbearer.h"
 
 
 static const int rd_kafka_max_block_ms = 1000;
@@ -4324,28 +4323,17 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 break;
                         }
 
-#if WITH_SASL_OAUTHBEARER
-                        /*
-                        * SASL/OAUTHBEARER is unable to connect unless a valid
-                        * token is available, and a valid token CANNOT be
-                        * available unless/until an initial token retrieval
-                        * succeeds, so wait for this precondition if necessary.
-                        */
-                        if (rkb->rkb_rk->rk_oauthbearer &&
-                            !rd_kafka_oauthbearer_has_token(rkb->rkb_rk)) {
-                                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_SECURITY,
-                                        "OAUTHBEARER",
-                                        "Waiting for SASL/OAUTHBEARER token");
+                        if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
+                                rd_kafka_broker_serve(rkb, 1000);
+
+                        if (!rd_kafka_sasl_ready(rkb->rkb_rk)) {
+                                /* SASL provider not yet ready. */
                                 rd_kafka_broker_serve(rkb,
-                                        rd_kafka_max_block_ms);
+                                                      rd_kafka_max_block_ms);
                                 /* Continue while loop to try again (as long as
                                  * we are not terminating). */
                                 continue;
                         }
-
-#endif
-                        if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
-                                rd_kafka_broker_serve(rkb, 1000);
 
                         /* Throttle & jitter reconnects to avoid
                          * thundering horde of reconnecting clients after

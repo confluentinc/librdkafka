@@ -37,6 +37,56 @@
 #include "rdunittest.h"
 
 
+
+/**
+ * @struct Per-client-instance SASL/OAUTHBEARER handle.
+ */
+typedef struct rd_kafka_sasl_oauthbearer_handle_s {
+        /**< Read-write lock for fields in the handle. */
+        rwlock_t lock;
+
+        /**< The b64token value as defined in RFC 6750 Section 2.1
+         *   https://tools.ietf.org/html/rfc6750#section-2.1
+         */
+        char *token_value;
+
+        /**< When the token expires, in terms of the number of
+         *   milliseconds since the epoch. Wall clock time.
+         */
+        rd_ts_t wts_md_lifetime;
+
+        /**< The point after which this token should be replaced with a
+         * new one, in terms of the number of milliseconds since the
+         * epoch. Wall clock time.
+         */
+        rd_ts_t wts_refresh_after;
+
+        /**< When the last token refresh was equeued (0 = never)
+         *   in terms of the number of milliseconds since the epoch.
+         *   Wall clock time.
+         */
+        rd_ts_t wts_enqueued_refresh;
+
+        /**< The name of the principal to which this token applies. */
+        char *md_principal_name;
+
+        /**< The SASL extensions, as per RFC 7628 Section 3.1
+         *   https://tools.ietf.org/html/rfc7628#section-3.1
+         */
+        rd_list_t extensions; /* rd_strtup_t list */
+
+        /**< Error message for validation and/or token retrieval problems. */
+        char *errstr;
+
+        /**< Back-pointer to client instance. */
+        rd_kafka_t *rk;
+
+        /**< Token refresh timer */
+        rd_kafka_timer_t token_refresh_tmr;
+
+} rd_kafka_sasl_oauthbearer_handle_t;
+
+
 /**
  * @struct Unsecured JWS info populated when sasl.oauthbearer.config is parsed
  */
@@ -124,16 +174,17 @@ rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
 
 /**
  * @brief Enqueue a token refresh.
- * @locks rd_kafka_wrlock(rk) MUST be held
+ * @locks rwlock_wrlock(&handle->lock) MUST be held
  */
-void rd_kafka_oauthbearer_enqueue_token_refresh (rd_kafka_t *rk) {
+static void rd_kafka_oauthbearer_enqueue_token_refresh (
+        rd_kafka_sasl_oauthbearer_handle_t *handle) {
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
+        rko = rd_kafka_op_new_cb(handle->rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
                                  rd_kafka_oauthbearer_refresh_op);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
-        rk->rk_oauthbearer->wts_enqueued_refresh = rd_uclock();
-        rd_kafka_q_enq(rk->rk_rep, rko);
+        handle->wts_enqueued_refresh = rd_uclock();
+        rd_kafka_q_enq(handle->rk->rk_rep, rko);
 }
 
 /**
@@ -143,34 +194,36 @@ void rd_kafka_oauthbearer_enqueue_token_refresh (rd_kafka_t *rk) {
  * if necessary; the required lock is acquired and released.  This method
  * returns immediately when SASL/OAUTHBEARER is not in use by the client.
  */
-void rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary (rd_kafka_t *rk) {
+static void
+rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary (
+        rd_kafka_sasl_oauthbearer_handle_t *handle) {
         rd_ts_t now_wallclock;
-
-        if (!rk->rk_oauthbearer)
-                return;
 
         now_wallclock = rd_uclock();
 
-        rd_kafka_wrlock(rk);
-        if (rk->rk_oauthbearer->wts_refresh_after < now_wallclock &&
-            rk->rk_oauthbearer->wts_enqueued_refresh <=
-            rk->rk_oauthbearer->wts_refresh_after)
+        rwlock_wrlock(&handle->lock);
+        if (handle->wts_refresh_after < now_wallclock &&
+            handle->wts_enqueued_refresh <= handle->wts_refresh_after)
                 /* Refresh required and not yet scheduled; refresh it */
-                rd_kafka_oauthbearer_enqueue_token_refresh(rk);
-        rd_kafka_wrunlock(rk);
+                rd_kafka_oauthbearer_enqueue_token_refresh(handle);
+        rwlock_wrunlock(&handle->lock);
 }
 
 /**
  * @returns \c rd_true if SASL/OAUTHBEARER is the configured authentication
- * mechanism and a token is available, otherwise \c rd_false.
+ *           mechanism and a token is available, otherwise \c rd_false.
+ *
+ * @locks none
+ * @locality any
  */
-rd_bool_t rd_kafka_oauthbearer_has_token (rd_kafka_t *rk) {
-        rd_bool_t retval_has_token = rd_false;
-        if (rk->rk_oauthbearer) {
-                rd_kafka_rdlock(rk);
-                retval_has_token = rk->rk_oauthbearer->token_value != NULL;
-                rd_kafka_rdunlock(rk);
-        }
+static rd_bool_t
+rd_kafka_oauthbearer_has_token (rd_kafka_sasl_oauthbearer_handle_t *handle) {
+        rd_bool_t retval_has_token;
+
+        rwlock_rdlock(&handle->lock);
+        retval_has_token = handle->token_value != NULL;
+        rwlock_rdunlock(&handle->lock);
+
         return retval_has_token;
 }
 
@@ -299,12 +352,14 @@ rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
                                  const char **extensions,
                                  size_t extension_size,
                                  char *errstr, size_t errstr_size) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle = rk->rk_sasl.handle;
         size_t i;
         rd_ts_t now_wallclock;
         rd_ts_t wts_md_lifetime = md_lifetime_ms * 1000;
 
         /* Check if SASL/OAUTHBEARER is the configured auth mechanism */
-        if (!rk->rk_oauthbearer) {
+        if (rk->rk_conf.sasl.provider != &rd_kafka_sasl_oauthbearer_provider ||
+            !handle) {
                 rd_snprintf(errstr, errstr_size, "SASL/OAUTHBEARER is not the "
                             "configured authentication mechanism");
                 return RD_KAFKA_RESP_ERR__STATE;
@@ -341,32 +396,32 @@ rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
                         return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
-        rd_kafka_wrlock(rk);
+        rwlock_wrlock(&handle->lock);
 
-        RD_IF_FREE(rk->rk_oauthbearer->md_principal_name, rd_free);
-        rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
+        RD_IF_FREE(handle->md_principal_name, rd_free);
+        handle->md_principal_name = rd_strdup(md_principal_name);
 
-        RD_IF_FREE(rk->rk_oauthbearer->token_value, rd_free);
-        rk->rk_oauthbearer->token_value = rd_strdup(token_value);
+        RD_IF_FREE(handle->token_value, rd_free);
+        handle->token_value = rd_strdup(token_value);
 
-        rk->rk_oauthbearer->wts_md_lifetime = wts_md_lifetime;
+        handle->wts_md_lifetime = wts_md_lifetime;
 
         /* Schedule a refresh 80% through its remaining lifetime */
-        rk->rk_oauthbearer->wts_refresh_after = now_wallclock + 0.8 *
+        handle->wts_refresh_after = now_wallclock + 0.8 *
                 (wts_md_lifetime - now_wallclock);
 
-        rd_list_clear(&rk->rk_oauthbearer->extensions);
+        rd_list_clear(&handle->extensions);
         for (i = 0; i + 1 < extension_size; i += 2)
-                rd_list_add(&rk->rk_oauthbearer->extensions,
+                rd_list_add(&handle->extensions,
                             rd_strtup_new(extensions[i], extensions[i + 1]));
 
-        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
-        rk->rk_oauthbearer->errstr = NULL;
+        RD_IF_FREE(handle->errstr, rd_free);
+        handle->errstr = NULL;
 
-        rd_kafka_wrunlock(rk);
+        rwlock_wrunlock(&handle->lock);
 
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
-                     "Waking up waiting brokers after "
+                     "Waking up waiting broker threads after "
                      "setting OAUTHBEARER token");
         rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
 
@@ -393,24 +448,26 @@ rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
  */
 rd_kafka_resp_err_t
 rd_kafka_oauthbearer_set_token_failure0 (rd_kafka_t *rk, const char *errstr) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle = rk->rk_sasl.handle;
         rd_bool_t error_changed;
 
         /* Check if SASL/OAUTHBEARER is the configured auth mechanism */
-        if (!rk->rk_oauthbearer)
+        if (rk->rk_conf.sasl.provider != &rd_kafka_sasl_oauthbearer_provider ||
+            !handle)
                 return RD_KAFKA_RESP_ERR__STATE;
 
         if (!errstr || !*errstr)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        rd_kafka_wrlock(rk);
-        error_changed = !rk->rk_oauthbearer->errstr ||
-                strcmp(rk->rk_oauthbearer->errstr, errstr);
-        RD_IF_FREE(rk->rk_oauthbearer->errstr, rd_free);
-        rk->rk_oauthbearer->errstr = rd_strdup(errstr);
+        rwlock_wrlock(&handle->lock);
+        error_changed = !handle->errstr ||
+                strcmp(handle->errstr, errstr);
+        RD_IF_FREE(handle->errstr, rd_free);
+        handle->errstr = rd_strdup(errstr);
         /* Leave any existing token because it may have some life left,
          * schedule a refresh for 10 seconds later. */
-        rk->rk_oauthbearer->wts_refresh_after = rd_uclock() + (10*1000*1000);
-        rd_kafka_wrunlock(rk);
+        handle->wts_refresh_after = rd_uclock() + (10*1000*1000);
+        rwlock_wrunlock(&handle->lock);
 
         /* Trigger an ERR__AUTHENTICATION error if the error changed. */
         if (error_changed)
@@ -1162,6 +1219,8 @@ static int
 rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
                                       const char *hostname,
                                       char *errstr, size_t errstr_size) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle =
+                rktrans->rktrans_rkb->rkb_rk->rk_sasl.handle;
         struct rd_kafka_sasl_oauthbearer_state *state;
 
         state = rd_calloc(1, sizeof(*state));
@@ -1179,35 +1238,122 @@ rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
          * throughout the authentication process -- even if it is refreshed
          * midway through this particular authentication.
          */
-        rd_kafka_rdlock(rktrans->rktrans_rkb->rkb_rk);
-        if (!rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value) {
+        rwlock_rdlock(&handle->lock);
+        if (!handle->token_value) {
                 rd_snprintf(errstr, errstr_size,
                             "OAUTHBEARER cannot log in because there "
                             "is no token available; last error: %s",
-                            rktrans->rktrans_rkb->rkb_rk->
-                            rk_oauthbearer->errstr ?
-                            rktrans->rktrans_rkb->rkb_rk->
-                            rk_oauthbearer->errstr :
-                            "not available");
-                rd_kafka_rdunlock(rktrans->rktrans_rkb->rkb_rk);
+                            handle->errstr ?
+                            handle->errstr : "(not available)");
+                rwlock_rdunlock(&handle->lock);
                 return -1;
         }
 
-        state->token_value = rd_strdup(rktrans->rktrans_rkb->rkb_rk->
-                                       rk_oauthbearer->token_value);
-        state->md_principal_name = rd_strdup(rktrans->rktrans_rkb->rkb_rk->
-                                             rk_oauthbearer->md_principal_name);
-        rd_list_copy_to(&state->extensions,
-                        &rktrans->rktrans_rkb->rkb_rk->
-                        rk_oauthbearer->extensions,
+        state->token_value = rd_strdup(handle->token_value);
+        state->md_principal_name = rd_strdup(handle->md_principal_name);
+        rd_list_copy_to(&state->extensions, &handle->extensions,
                         rd_strtup_list_copy, NULL);
-        rd_kafka_rdunlock(rktrans->rktrans_rkb->rkb_rk);
+
+        rwlock_rdunlock(&handle->lock);
 
         /* Kick off the FSM */
         return rd_kafka_sasl_oauthbearer_fsm(rktrans, NULL,
                                              errstr, errstr_size);
 }
 
+
+/**
+ * @brief Token refresh timer callback.
+ *
+ * @locality rdkafka main thread
+ */
+static void
+rd_kafka_sasl_oauthbearer_token_refresh_tmr_cb (rd_kafka_timers_t *rkts,
+                                                void *arg) {
+        rd_kafka_t *rk = arg;
+        rd_kafka_sasl_oauthbearer_handle_t *handle = rk->rk_sasl.handle;
+
+        /* Enqueue a token refresh if necessary */
+        rd_kafka_oauthbearer_enqueue_token_refresh_if_necessary(handle);
+}
+
+
+/**
+ * @brief Per-client-instance initializer
+ */
+static int rd_kafka_sasl_oauthbearer_init (rd_kafka_t *rk,
+                                           char *errstr, size_t errstr_size) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle;
+
+        handle = rd_calloc(1, sizeof(*handle));
+        rk->rk_sasl.handle = handle;
+
+        rwlock_init(&handle->lock);
+
+        handle->rk = rk;
+
+        rd_list_init(&handle->extensions, 0,
+                     (void (*)(void *))rd_strtup_destroy);
+
+        rd_kafka_timer_start(&rk->rk_timers, &handle->token_refresh_tmr,
+                             1 * 1000 * 1000,
+                             rd_kafka_sasl_oauthbearer_token_refresh_tmr_cb,
+                             rk);
+
+        /* Automatically refresh the token if using the builtin
+         * unsecure JWS token refresher, to avoid an initial connection
+         * stall as we wait for the application to call poll().
+         * Otherwise enqueue a refresh callback for the application. */
+        if (rk->rk_conf.oauthbearer_token_refresh_cb ==
+            rd_kafka_oauthbearer_unsecured_token)
+                rk->rk_conf.oauthbearer_token_refresh_cb(
+                        rk, rk->rk_conf.opaque);
+        else
+                rd_kafka_oauthbearer_enqueue_token_refresh(handle);
+
+        return 0;
+}
+
+
+/**
+ * @brief Per-client-instance destructor
+ */
+static void rd_kafka_sasl_oauthbearer_term (rd_kafka_t *rk) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle = rk->rk_sasl.handle;
+
+        if (!handle)
+                return;
+
+        rk->rk_sasl.handle = NULL;
+
+        rd_kafka_timer_stop(&rk->rk_timers, &handle->token_refresh_tmr, 1);
+
+        RD_IF_FREE(handle->md_principal_name, rd_free);
+        RD_IF_FREE(handle->token_value, rd_free);
+        rd_list_destroy(&handle->extensions);
+        RD_IF_FREE(handle->errstr, rd_free);
+
+        rwlock_destroy(&handle->lock);
+
+        rd_free(handle);
+
+}
+
+
+/**
+ * @brief SASL/OAUTHBEARER is unable to connect unless a valid
+ *        token is available, and a valid token CANNOT be
+ *        available unless/until an initial token retrieval
+ *        succeeds, so wait for this precondition if necessary.
+ */
+static rd_bool_t rd_kafka_sasl_oauthbearer_ready (rd_kafka_t *rk) {
+        rd_kafka_sasl_oauthbearer_handle_t *handle = rk->rk_sasl.handle;
+
+        if (!handle)
+                return rd_false;
+
+        return rd_kafka_oauthbearer_has_token(handle);
+}
 
 
 /**
@@ -1232,6 +1378,9 @@ static int rd_kafka_sasl_oauthbearer_conf_validate (rd_kafka_t *rk,
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider = {
         .name          = "OAUTHBEARER (builtin)",
+        .init          = rd_kafka_sasl_oauthbearer_init,
+        .term          = rd_kafka_sasl_oauthbearer_term,
+        .ready         = rd_kafka_sasl_oauthbearer_ready,
         .client_new    = rd_kafka_sasl_oauthbearer_client_new,
         .recv          = rd_kafka_sasl_oauthbearer_recv,
         .close         = rd_kafka_sasl_oauthbearer_close,
@@ -1617,12 +1766,17 @@ static int do_unittest_odd_extension_size_should_fail(void) {
         char errstr[512];
         rd_kafka_resp_err_t err;
         rd_kafka_t rk = RD_ZERO_INIT;
+        rd_kafka_sasl_oauthbearer_handle_t handle = RD_ZERO_INIT;
 
-        rk.rk_oauthbearer = rd_calloc(1, sizeof(*rk.rk_oauthbearer));
+        rk.rk_conf.sasl.provider = &rd_kafka_sasl_oauthbearer_provider;
+        rk.rk_sasl.handle = &handle;
+
+        rwlock_init(&handle.lock);
 
         err = rd_kafka_oauthbearer_set_token0(&rk, "abcd", 1000, "fubar",
                                               NULL, 1, errstr, sizeof(errstr));
-        rd_free(rk.rk_oauthbearer);
+
+        rwlock_destroy(&handle.lock);
 
         RD_UT_ASSERT(err, "Did not recognize illegal extension size");
         RD_UT_ASSERT(!strcmp(errstr, expected_errstr),

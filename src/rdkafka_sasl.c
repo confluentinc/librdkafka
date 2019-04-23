@@ -244,6 +244,55 @@ void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
 }
 
 
+/**
+ * @brief Per-instance initializer using the selected provider
+ *
+ * @returns 0 on success or -1 on error.
+ *
+ * @locality app thread (from rd_kafka_new())
+ */
+int rd_kafka_sasl_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+        const struct rd_kafka_sasl_provider *provider =
+                rk->rk_conf.sasl.provider;
+
+        if (provider && provider->init)
+                return provider->init(rk, errstr, errstr_size);
+
+        return 0;
+}
+
+
+/**
+ * @brief Per-instance destructor for the selected provider
+ *
+ * @locality app thread (from rd_kafka_new()) or rdkafka main thread
+ */
+void rd_kafka_sasl_term (rd_kafka_t *rk) {
+        const struct rd_kafka_sasl_provider *provider =
+                rk->rk_conf.sasl.provider;
+
+        if (provider && provider->term)
+                provider->term(rk);
+}
+
+
+/**
+ * @returns rd_true if provider is ready to be used or SASL not configured,
+ *          else rd_false.
+ *
+ * @locks none
+ * @locality any thread
+ */
+rd_bool_t rd_kafka_sasl_ready (rd_kafka_t *rk) {
+        const struct rd_kafka_sasl_provider *provider =
+                rk->rk_conf.sasl.provider;
+
+        if (provider && provider->ready)
+                return provider->ready(rk);
+
+        return rd_true;
+}
+
 
 /**
  * @brief Select SASL provider for configured mechanism (singularis)
@@ -276,9 +325,6 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                 /* SASL OAUTHBEARER */
 #if WITH_SASL_OAUTHBEARER
                 provider = &rd_kafka_sasl_oauthbearer_provider;
-                rk->rk_oauthbearer = rd_calloc(1, sizeof(*rk->rk_oauthbearer));
-                rd_list_init(&rk->rk_oauthbearer->extensions, 0,
-                     (void (*)(void *))rd_strtup_destroy);
 #endif
         } else {
                 /* Unsupported mechanism */

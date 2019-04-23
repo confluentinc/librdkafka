@@ -32,6 +32,15 @@
 struct rd_kafka_sasl_provider {
         const char *name;
 
+        /**< Per client-instance (rk) initializer */
+        int  (*init) (rd_kafka_t *rk, char *errstr, size_t errstr_size);
+
+        /**< Per client-instance (rk) destructor */
+        void (*term) (rd_kafka_t *rk);
+
+        /**< Returns rd_true if provider is ready to be used, else rd_false */
+        rd_bool_t (*ready) (rd_kafka_t *rk);
+
         int (*client_new) (rd_kafka_transport_t *rktrans,
                            const char *hostname,
                            char *errstr, size_t errstr_size);

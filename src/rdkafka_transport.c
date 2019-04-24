@@ -271,7 +271,8 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
         if (unlikely(r <= 0)) {
                 if (r == -1 && socket_errno == EAGAIN)
                         return 0;
-                else if (r == 0) {
+                else if (r == 0 ||
+                         (r == -1 && socket_errno == ECONNRESET)) {
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size, "Disconnected");

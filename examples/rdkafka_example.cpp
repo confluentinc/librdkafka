@@ -535,7 +535,7 @@ int main (int argc, char **argv) {
                           /* Timestamp (defaults to now) */
                           0,
                           /* Message headers, if any */
-                          headers,
+                          headers, true,
                           /* Per-message opaque value passed to
                            * delivery report */
                           NULL);

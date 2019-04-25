@@ -2520,7 +2520,7 @@ class RD_EXPORT Producer : public virtual Handle {
                              void *payload, size_t len,
                              const void *key, size_t key_len,
                              int64_t timestamp,
-                             RdKafka::Headers *headers,
+                             RdKafka::Headers *headers, bool trusted,
                              void *msg_opaque) = 0;
 
 

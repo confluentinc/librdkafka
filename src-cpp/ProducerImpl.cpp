@@ -170,7 +170,7 @@ RdKafka::ProducerImpl::produce (const std::string topic_name,
                                 void *payload, size_t len,
                                 const void *key, size_t key_len,
                                 int64_t timestamp,
-                                RdKafka::Headers *headers,
+                                RdKafka::Headers *headers, bool trusted,
                                 void *msg_opaque) {
   rd_kafka_headers_t *hdrs = NULL;
   RdKafka::HeadersImpl *headersimpl = NULL;
@@ -192,7 +192,7 @@ RdKafka::ProducerImpl::produce (const std::string topic_name,
                           RD_KAFKA_V_HEADERS(hdrs),
                           RD_KAFKA_V_END);
 
-  if (!err && headersimpl) {
+  if (!err && headersimpl && trusted) {
     /* A successful producev() call will destroy the C headers. */
     headersimpl->c_headers_destroyed();
     delete headers;

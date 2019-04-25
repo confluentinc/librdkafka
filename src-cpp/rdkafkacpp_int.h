@@ -1080,7 +1080,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      void *payload, size_t len,
                      const void *key, size_t key_len,
                      int64_t timestamp,
-                     RdKafka::Headers *headers,
+                     RdKafka::Headers *headers, bool trusted,
                      void *msg_opaque);
 
   ErrorCode flush (int timeout_ms) {

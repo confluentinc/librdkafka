@@ -312,6 +312,54 @@ static void do_test_idempotence_conf (void) {
 }
 
 
+/**
+ * @brief Verify that configuration properties can be extract
+ *        from the instance config object.
+ */
+static void do_test_instance_conf (void) {
+        rd_kafka_conf_t *conf;
+        const rd_kafka_conf_t *iconf;
+        rd_kafka_t *rk;
+        rd_kafka_conf_res_t res;
+        static const char *props[] = {
+                "linger.ms", "123",
+                "group.id", "test1",
+                "enable.auto.commit", "false",
+                NULL,
+        };
+        const char **p;
+
+        conf = rd_kafka_conf_new();
+
+        for (p = props ; *p ; p += 2) {
+                res = rd_kafka_conf_set(conf, *p, *(p+1), NULL, 0);
+                TEST_ASSERT(res == RD_KAFKA_CONF_OK, "failed to set %s", *p);
+        }
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, NULL, 0);
+        TEST_ASSERT(rk, "failed to create consumer");
+
+        iconf = rd_kafka_conf(rk);
+        TEST_ASSERT(conf, "failed to get instance config");
+
+        for (p = props ; *p ; p += 2) {
+                char dest[512];
+                size_t destsz = sizeof(dest);
+
+                res = rd_kafka_conf_get(iconf, *p, dest, &destsz);
+                TEST_ASSERT(res == RD_KAFKA_CONF_OK,
+                            "failed to get %s: result %d", *p, res);
+
+                TEST_SAY("Instance config %s=%s\n", *p, dest);
+                TEST_ASSERT(!strcmp(*(p+1), dest),
+                            "Expected %s=%s, not %s",
+                            *p, *(p+1), dest);
+        }
+
+        rd_kafka_destroy(rk);
+}
+
+
 int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
@@ -590,6 +638,8 @@ int main_0004_conf (int argc, char **argv) {
         do_test_special_invalid_conf();
 
         do_test_idempotence_conf();
+
+        do_test_instance_conf();
 
 	return 0;
 }

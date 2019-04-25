@@ -3154,6 +3154,11 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
 }
 
 
+const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk) {
+        return &rk->rk_conf;
+}
+
+
 /**
  * @brief Unittests
  */

@@ -1419,6 +1419,18 @@ rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
 
 
 /**
+ * @returns the configuration object used by an rd_kafka_t instance.
+ *          For use with rd_kafka_conf_get(), et.al., to extract configuration
+ *          properties from a running client.
+ *
+ * @remark the returned object is read-only and its lifetime is the same
+ *         as the rd_kafka_t object.
+ */
+RD_EXPORT
+const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
+
+
+/**
  * @brief Sets a configuration property.
  *
  * \p conf must have been previously created with rd_kafka_conf_new().

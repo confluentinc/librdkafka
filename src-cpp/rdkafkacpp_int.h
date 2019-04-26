@@ -69,7 +69,9 @@ void offset_commit_cb_trampoline0 (
         rd_kafka_t *rk,
         rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
-void oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk, void *opaque);
+void oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
+                                              const char *oauthbearer_config,
+                                              void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);

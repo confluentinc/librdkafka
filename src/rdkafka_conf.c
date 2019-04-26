@@ -2194,8 +2194,10 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 }
 
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
-                void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
-                void *opaque)) {
+                void (*oauthbearer_token_refresh_cb) (
+                        rd_kafka_t *rk,
+                        const char *oauthbearer_config,
+                        void *opaque)) {
 #if WITH_SASL_OAUTHBEARER
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
                 "oauthbearer_token_refresh_cb", oauthbearer_token_refresh_cb);

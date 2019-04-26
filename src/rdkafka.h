@@ -1781,6 +1781,8 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * @param oauthbearer_token_refresh_cb the callback to set; callback function
  *  arguments:<br>
  *   \p rk - Kafka handle<br>
+ *   \p oauthbearer_config - Value of configuration property
+ *                           sasl.oauthbearer.config.
  *   \p opaque - Application-provided opaque set via
  *   rd_kafka_conf_set_opaque()
  * 
@@ -1805,7 +1807,9 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
 RD_EXPORT
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
         rd_kafka_conf_t *conf,
-        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk, void *opaque));
+        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                                              const char *oauthbearer_config,
+                                              void *opaque));
 
 /**
  * @brief Set SASL/OAUTHBEARER token and metadata
@@ -4145,6 +4149,21 @@ size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
  */
 RD_EXPORT
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
+
+
+/**
+ * @returns the associated configuration string for the event, or NULL
+ *          if the configuration property is not set or if
+ *          not applicable for the given event type.
+ *
+ * The returned memory is read-only and its lifetime is the same as the
+ * event object.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH: value of sasl.oauthbearer.config
+ */
+RD_EXPORT
+const char *rd_kafka_event_config_string (rd_kafka_event_t *rkev);
 
 
 /**

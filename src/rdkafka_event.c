@@ -155,6 +155,18 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev) {
 }
 
 
+const char *rd_kafka_event_config_string (rd_kafka_event_t *rkev) {
+        switch (rkev->rko_evtype)
+        {
+#if WITH_SASL_OAUTHBEARER
+        case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
+                return rkev->rko_rk->rk_conf.sasl.oauthbearer_config;
+#endif
+        default:
+                return NULL;
+        }
+}
+
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev) {
 	return rkev->rko_err;
 }

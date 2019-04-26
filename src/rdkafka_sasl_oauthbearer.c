@@ -167,8 +167,9 @@ rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
          * the op has already been handled by this point.
          */
         if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
-                rk->rk_conf.oauthbearer_token_refresh_cb(rk,
-                                                         rk->rk_conf.opaque);
+                rk->rk_conf.oauthbearer_token_refresh_cb(
+                        rk, rk->rk_conf.sasl.oauthbearer_config,
+                        rk->rk_conf.opaque);
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
@@ -998,14 +999,17 @@ rd_kafka_oauthbearer_unsecured_token0 (
  * testing and development purposess -- so while the inflexibility of the
  * parsing rules is acknowledged, it is assumed that this is not problematic. 
  */
-void rd_kafka_oauthbearer_unsecured_token (rd_kafka_t *rk, void *opaque) {
+void
+rd_kafka_oauthbearer_unsecured_token (rd_kafka_t *rk,
+                                      const char *oauthbearer_config,
+                                      void *opaque) {
         char errstr[512];
         struct rd_kafka_sasl_oauthbearer_token token = RD_ZERO_INIT;
 
         rd_kafka_dbg(rk, SECURITY, "OAUTHBEARER", "Creating unsecured token");
 
         if (rd_kafka_oauthbearer_unsecured_token0(
-                    &token, rk->rk_conf.sasl.oauthbearer_config,
+                    &token, oauthbearer_config,
                     rd_uclock() / 1000, errstr, sizeof(errstr)) == -1 ||
             rd_kafka_oauthbearer_set_token(
                     rk, token.token_value,
@@ -1307,7 +1311,8 @@ static int rd_kafka_sasl_oauthbearer_init (rd_kafka_t *rk,
         if (rk->rk_conf.oauthbearer_token_refresh_cb ==
             rd_kafka_oauthbearer_unsecured_token)
                 rk->rk_conf.oauthbearer_token_refresh_cb(
-                        rk, rk->rk_conf.opaque);
+                        rk, rk->rk_conf.sasl.oauthbearer_config,
+                        rk->rk_conf.opaque);
         else
                 rd_kafka_oauthbearer_enqueue_token_refresh(handle);
 

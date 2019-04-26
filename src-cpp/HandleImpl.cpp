@@ -132,11 +132,15 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
-void RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
-                                                      void *opaque) {
+void
+RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
+                                                  const char *oauthbearer_config,
+                                                  void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
-  handle->oauthbearer_token_refresh_cb_->oauthbearer_token_refresh_cb();
+  handle->oauthbearer_token_refresh_cb_->
+    oauthbearer_token_refresh_cb(std::string(oauthbearer_config ?
+                                             oauthbearer_config : ""));
 }
 
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,

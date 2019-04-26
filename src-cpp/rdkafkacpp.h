@@ -517,7 +517,10 @@ class RD_EXPORT DeliveryReportCb {
  * The SASL/OAUTHBEARER token refresh callback is triggered via RdKafka::poll()
  * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
- * 
+ *
+ * The \c oauthbearer_config argument is the value of the
+ * sasl.oauthbearer.config configuration property.
+ *
  * The callback should invoke RdKafka::oauthbearer_set_token() or
  * RdKafka::oauthbearer_set_token_failure() to indicate success or failure,
  * respectively.
@@ -540,7 +543,7 @@ class RD_EXPORT OAuthBearerTokenRefreshCb {
   /**
    * @brief SASL/OAUTHBEARER token refresh callback class.
    */
-  virtual void oauthbearer_token_refresh_cb () = 0;
+  virtual void oauthbearer_token_refresh_cb (const std::string &oauthbearer_config) = 0;
 
   virtual ~OAuthBearerTokenRefreshCb() { }
 };

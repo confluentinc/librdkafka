@@ -9,8 +9,12 @@
 #   mkl_check libzstd [<action>]
 #
 
+mkl_toggle_option "Feature" ENABLE_ZSTD "--enable-zstd" "Enable support for ZSTD compression" "y"
+
 function manual_checks {
-    local action=$1
+    local action=${1:-disable}
+
+    [[ $ENABLE_ZSTD == y ]] || return 0
 
     mkl_meta_set "libzstd" "brew" "zstd"
     mkl_meta_set "libzstd" "apk" "zstd-dev zstd-static"

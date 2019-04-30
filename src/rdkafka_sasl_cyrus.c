@@ -176,6 +176,7 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
         int r;
         char *cmd;
         char errstr[128];
+        rd_ts_t ts_start;
 
         /* Build kinit refresh command line using string rendering and config */
         cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
@@ -191,27 +192,34 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
 
         /* Execute kinit */
         rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
-                     "Refreshing SASL keys with command: %s", cmd);
+                     "Refreshing Kerberos ticket with command: %s", cmd);
 
+        ts_start = rd_clock();
+
+        /* Prevent multiple simultaneous refreshes by the same process to
+         * avoid Kerberos credential cache corruption. */
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
         r = system(cmd);
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
 
         if (r == -1) {
                 rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "SASL key refresh failed: Failed to execute %s",
+                             "Kerberos ticket refresh failed: "
+                             "Failed to execute %s",
                              cmd);
                 rd_free(cmd);
                 return -1;
         } else if (WIFSIGNALED(r)) {
                 rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "SASL key refresh failed: %s: received signal %d",
+                             "Kerberos ticket refresh failed: %s: "
+                             "received signal %d",
                              cmd, WTERMSIG(r));
                 rd_free(cmd);
                 return -1;
         } else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
                 rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "SASL key refresh failed: %s: exited with code %d",
+                             "Kerberos ticket refresh failed: %s: "
+                             "exited with code %d",
                              cmd, WEXITSTATUS(r));
                 rd_free(cmd);
                 return -1;
@@ -219,7 +227,9 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
 
         rd_free(cmd);
 
-        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH", "SASL key refreshed");
+        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
+                     "Kerberos ticket refreshed in %"PRId64"ms",
+                     (rd_clock() - ts_start) / 1000);
         return 0;
 }
 

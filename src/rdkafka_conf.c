@@ -679,18 +679,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "(Not supported on Windows, will use the logon user's principal).",
 	  .sdef = "kafkaclient" },
 #ifndef _MSC_VER
-	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
-	  _RK(sasl.kinit_cmd),
-	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
-	  "by corresponding config object value.",
-	  .sdef = "kinit "
-	  "-k -t \"%{sasl.kerberos.keytab}\" %{sasl.kerberos.principal}" },
+        { _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
+          _RK(sasl.kinit_cmd),
+          "Shell command to refresh or acquire the client's Kerberos ticket. "
+          "This command is executed on client creation and every "
+          "sasl.kerberos.min.time.before.relogin. "
+          "%{config.prop.name} is replaced by corresponding config "
+          "object value.",
+          .sdef =
+          /* First attempt to refresh, else acquire. */
+          "kinit -R -k %{sasl.kerberos.principal} || "
+          "kinit -k %{sasl.kerberos.principal}"
+        },
 	{ _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
 	  _RK(sasl.keytab),
 	  "Path to Kerberos keytab file. Uses system default if not set."
 	  "**NOTE**: This is not automatically used but must be added to the "
 	  "template in sasl.kerberos.kinit.cmd as "
-	  "` ... -t %{sasl.kerberos.keytab}`." },
+	  "` ... -t \"%{sasl.kerberos.keytab}\"`." },
 	{ _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",

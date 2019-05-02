@@ -1,4 +1,3 @@
-# https://github.com/facebook/folly/blob/master/CMake/FindZstd.cmake
 #
 # - Try to find Facebook zstd library
 # This will define

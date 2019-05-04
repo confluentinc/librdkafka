@@ -347,6 +347,9 @@ struct rd_kafka_conf_s {
                                   void *opaque);
 
         rd_kafka_offset_method_t offset_store_method;
+
+        rd_kafka_isolation_level_t isolation_level;
+        
 	int enable_partition_eof;
 
 	/*

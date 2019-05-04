@@ -97,6 +97,21 @@ namespace Test {
   }
 
   /**
+  * @brief Create topic using Topic Admin API
+  */
+  static RD_UNUSED void create_topic (const char *topicname, int partition_cnt,
+                                      int replication_factor) {
+    test_create_topic(topicname, partition_cnt, replication_factor);
+  }
+
+  /**
+  * @brief Create topic using Topic Admin API
+  */
+  static RD_UNUSED void delete_topic (const char *topicname) {
+    test_delete_topic(topicname);
+  }
+
+  /**
    * @brief Get new configuration objects
    */
   void conf_init (RdKafka::Conf **conf,

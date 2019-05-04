@@ -982,6 +982,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
                 }
         },
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "isolation.level",
+          _RK_C_S2I,
+          _RK(isolation_level),
+          "Controls how to read messages written transactionally: "
+          "`read_committed` - only return transactional messages which have "
+          "been committed. `read_uncommitted` - return all messages, even "
+          "messages for aborted and non-committed transactions.",
+          .vdef = RD_KAFKA_READ_UNCOMMITTED,
+          .s2i = {
+                        { RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted" },
+                        { RD_KAFKA_READ_COMMITTED, "read_committed" }
+                }
+        },
         { _RK_GLOBAL|_RK_CONSUMER, "consume_cb", _RK_C_PTR,
 	  _RK(consume_cb),
 	  "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},

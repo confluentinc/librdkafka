@@ -189,6 +189,7 @@ _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
+_TEST_DECL(0098_consumer_txn);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -315,6 +316,7 @@ struct test tests[] = {
 #endif
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
+        _TEST(0098_consumer_txn, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -3615,6 +3617,92 @@ void test_create_topic (const char *topicname, int partition_cnt,
                                         replication_factor);
 }
 
+
+static void test_delete_topic_sh (const char *topicname) {
+	test_kafka_topics("--delete --topic \"%s\" ", topicname);
+}
+
+
+/**
+ * @brief Delete topic using Topic Admin API
+ */
+static void test_admin_delete_topic (rd_kafka_t *use_rk,
+                                     const char *topicname) {
+        rd_kafka_t *rk;
+        rd_kafka_DeleteTopic_t *delt[1];
+        const size_t delt_cnt = 1;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *rkqu;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DeleteTopics_result_t *res;
+        const rd_kafka_topic_result_t **terr;
+        int timeout_ms = tmout_multip(10000);
+        size_t res_cnt;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        test_timing_t t_create;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        rkqu = rd_kafka_queue_new(rk);
+
+        delt[0] = rd_kafka_DeleteTopic_new(topicname);
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
+        err = rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms,
+                                                          errstr,
+                                                          sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        TEST_SAY("Deleting topic \"%s\" "
+                 "(timeout=%d)\n",
+                 topicname, timeout_ms);
+
+        TIMING_START(&t_create, "DeleteTopics");
+        rd_kafka_DeleteTopics(rk, delt, delt_cnt, options, rkqu);
+
+        /* Wait for result */
+        rkev = rd_kafka_queue_poll(rkqu, timeout_ms + 2000);
+        TEST_ASSERT(rkev, "Timed out waiting for DeleteTopics result");
+
+        TIMING_STOP(&t_create);
+
+        res = rd_kafka_event_DeleteTopics_result(rkev);
+        TEST_ASSERT(res, "Expected DeleteTopics_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        terr = rd_kafka_DeleteTopics_result_topics(res, &res_cnt);
+        TEST_ASSERT(terr, "DeleteTopics_result_topics returned NULL");
+        TEST_ASSERT(res_cnt == delt_cnt,
+                    "DeleteTopics_result_topics returned %"PRIusz" topics, "
+                    "not the expected %"PRIusz,
+                    res_cnt, delt_cnt);
+
+        TEST_ASSERT(!rd_kafka_topic_result_error(terr[0]),
+                    "Topic %s result error: %s",
+                    rd_kafka_topic_result_name(terr[0]),
+                    rd_kafka_topic_result_error_string(terr[0]));
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_queue_destroy(rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_DeleteTopic_destroy(delt[0]);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+}
+
+
+void test_delete_topic (const char *topicname) {
+        if (test_broker_version < TEST_BRKVER(0,10,2,0))
+                test_delete_topic_sh(topicname);
+        else
+                test_admin_delete_topic(NULL, topicname);
+}
 
 int test_get_partition_count (rd_kafka_t *rk, const char *topicname,
                               int timeout_ms) {

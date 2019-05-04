@@ -192,6 +192,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_offset_fp = NULL;
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets);
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
+        rktp->rktp_ls_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_hi_offset = RD_KAFKA_OFFSET_INVALID;
 	rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_query_offset = RD_KAFKA_OFFSET_INVALID;

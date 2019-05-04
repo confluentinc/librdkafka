@@ -6,5 +6,6 @@ if [[ -z $KAFKA_PATH ]]; then
     exit 1
 fi
 
-CLASSPATH=. ${KAFKA_PATH}/bin/kafka-run-class.sh "$@"
+JAVA_TESTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+CLASSPATH=$JAVA_TESTS_DIR $KAFKA_PATH/bin/kafka-run-class.sh "$@"

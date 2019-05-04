@@ -1240,6 +1240,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                                                   rd_kafka_toppar_t *rktp,
                                                   int first) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        int64_t end_offset;
         int64_t consumer_lag = -1;
         struct offset_stats offs;
         int32_t leader_nodeid = -1;
@@ -1255,6 +1256,10 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         /* Grab a copy of the latest finalized offset stats */
         offs = rktp->rktp_offsets_fin;
 
+        end_offset = (rk->rk_conf.isolation_level == RD_KAFKA_READ_COMMITTED)
+                ? rktp->rktp_ls_offset
+                : rktp->rktp_hi_offset;
+
         /* Calculate consumer_lag by using the highest offset
          * of app_offset (the last message passed to application + 1)
          * or the committed_offset (the last message committed by this or
@@ -1262,9 +1267,9 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
          * Using app_offset allows consumer_lag to be up to date even if
          * offsets are not (yet) committed.
          */
-        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID &&
+        if (end_offset != RD_KAFKA_OFFSET_INVALID &&
             (rktp->rktp_app_offset >= 0 || rktp->rktp_committed_offset >= 0)) {
-                consumer_lag = rktp->rktp_hi_offset -
+                consumer_lag = end_offset -
                         RD_MAX(rktp->rktp_app_offset,
                                rktp->rktp_committed_offset);
                 if (unlikely(consumer_lag) < 0)
@@ -1292,6 +1297,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   "\"eof_offset\":%"PRId64", "
 		   "\"lo_offset\":%"PRId64", "
 		   "\"hi_offset\":%"PRId64", "
+                   "\"ls_offset\":%"PRId64", "
                    "\"consumer_lag\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
 		   "\"txbytes\":%"PRIu64", "
@@ -1327,6 +1333,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    offs.eof_offset,
 		   rktp->rktp_lo_offset,
 		   rktp->rktp_hi_offset,
+                   rktp->rktp_ls_offset,
                    consumer_lag,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
                    rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes),

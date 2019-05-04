@@ -9,7 +9,7 @@ CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
-KAFKA_VERSION?=2.0.0
+KAFKA_VERSION?=2.2.0
 
 -include ../Makefile.config
 

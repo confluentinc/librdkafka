@@ -29,6 +29,13 @@
 #ifndef _RDKAFKA_MSGSET_H_
 #define _RDKAFKA_MSGSET_H_
 
+typedef struct rd_kafka_aborted_txn_start_offsets_s {
+        rd_avl_node_t avl_node;
+        int64_t pid;
+        int32_t offsets_idx;
+        rd_list_t offsets;
+} rd_kafka_aborted_txn_start_offsets_t;
+
 
 /**
  * @name MessageSet writers
@@ -47,6 +54,7 @@ rd_kafka_resp_err_t
 rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
                        rd_kafka_buf_t *request,
                        rd_kafka_toppar_t *rktp,
+                       rd_avl_t *aborted_txn_offsets,
                        const struct rd_kafka_toppar_ver *tver);
 
 #endif /* _RDKAFKA_MSGSET_H_ */

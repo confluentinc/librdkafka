@@ -59,6 +59,11 @@ extern int test_on_ci;
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
+void test_delete_topic (const char *topicname);
+
+void test_create_topic (const char *topicname, int partition_cnt,
+                              int replication_factor);
+
 uint64_t
 test_produce_msgs_easy_size (const char *topic, uint64_t testid,
                              int32_t partition, int msgcnt, size_t size);

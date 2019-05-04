@@ -88,6 +88,7 @@ set(
     0094-idempotence_msg_timeout.c
     0095-all_brokers_down.cpp
     0097-ssl_verify.cpp
+    0098_consumer_txn.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

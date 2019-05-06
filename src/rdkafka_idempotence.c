@@ -143,7 +143,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         } else {
                 /* Increase passed broker's refcount so we don't
                  * have to check if rkb should be destroyed or not below
-                 * (broker_any_usable() returns a new reference). */
+                 * (broker_any() returns a new reference). */
                 rd_kafka_broker_keep(rkb);
         }
 

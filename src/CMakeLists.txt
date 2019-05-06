@@ -169,8 +169,6 @@ if(WITH_ZLIB)
 endif()
 
 if(WITH_ZSTD)
-  find_library (ZSTD_LIBRARY zstd)
-  find_path (ZSTD_INCLUDE_DIR NAMES zstd.h)
   target_link_libraries(rdkafka PUBLIC ${ZSTD_LIBRARY})
   target_include_directories(rdkafka PUBLIC ${ZSTD_INCLUDE_DIR})
   message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")

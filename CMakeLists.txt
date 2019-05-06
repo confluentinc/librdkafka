@@ -55,8 +55,8 @@ endif()
 # }
 
 # ZSTD {
-find_library (ZSTD zstd)
-if(ZSTD)
+find_package(Zstd QUIET)
+if(ZSTD_FOUND)
   set(with_zstd_default ON)
 else()
   set(with_zstd_default OFF)

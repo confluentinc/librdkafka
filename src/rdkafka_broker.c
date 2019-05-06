@@ -318,11 +318,19 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 if (rd_kafka_broker_state_is_up(state) &&
-                    !rd_kafka_broker_state_is_up(rkb->rkb_state))
+                    !rd_kafka_broker_state_is_up(rkb->rkb_state)) {
                         rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt, 1);
-                else if (rd_kafka_broker_state_is_up(rkb->rkb_state) &&
-                         !rd_kafka_broker_state_is_up(state))
+                        if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                rd_atomic32_add(&rkb->rkb_rk->
+                                                rk_logical_broker_up_cnt, 1);
+
+                } else if (rd_kafka_broker_state_is_up(rkb->rkb_state) &&
+                           !rd_kafka_broker_state_is_up(state)) {
                         rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt, 1);
+                        if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                rd_atomic32_sub(&rkb->rkb_rk->
+                                                rk_logical_broker_up_cnt, 1);
+                }
         }
 
 	rkb->rkb_state = state;
@@ -5255,7 +5263,12 @@ void rd_kafka_connect_any (rd_kafka_t *rk, const char *reason) {
         rd_kafka_broker_t *rkb;
         rd_ts_t suppr;
 
-        if (rd_atomic32_get(&rk->rk_broker_up_cnt) > 0 ||
+        /* Don't count connections to logical brokers since they serve
+         * a specific purpose (group coordinator) and their connections
+         * should not be reused for other purposes.
+         * rd_kafka_broker_random() will not return LOGICAL brokers. */
+        if (rd_atomic32_get(&rk->rk_broker_up_cnt) -
+            rd_atomic32_get(&rk->rk_logical_broker_up_cnt) > 0 ||
             rd_atomic32_get(&rk->rk_broker_cnt) == 0)
                 return;
 

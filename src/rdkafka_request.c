@@ -3208,6 +3208,7 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
         if (rd_list_cnt(configs) == 0) {
                 rd_snprintf(errstr, errstr_size,
                             "No config resources specified");
+		rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -3217,6 +3218,7 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "DescribeConfigs (KIP-133) not supported "
                             "by broker, requires broker version >= 0.11.0");
+		rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 

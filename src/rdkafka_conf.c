@@ -679,15 +679,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "object value.",
           .sdef =
           /* First attempt to refresh, else acquire. */
-          "kinit -R -k %{sasl.kerberos.principal} || "
-          "kinit -k %{sasl.kerberos.principal}"
+          "kinit -R -t \"%{sasl.kerberos.keytab}\" "
+          "-k %{sasl.kerberos.principal} || "
+          "kinit -t \"%{sasl.kerberos.keytab}\" -k %{sasl.kerberos.principal}"
         },
-	{ _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
-	  _RK(sasl.keytab),
-	  "Path to Kerberos keytab file. Uses system default if not set."
-	  "**NOTE**: This is not automatically used but must be added to the "
-	  "template in sasl.kerberos.kinit.cmd as "
-	  "` ... -t \"%{sasl.kerberos.keytab}\"`." },
+        { _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
+          _RK(sasl.keytab),
+          "Path to Kerberos keytab file. "
+          "This configuration property is only used as a variable in "
+          "`sasl.kerberos.kinit.cmd` as "
+          "` ... -t \"%{sasl.kerberos.keytab}\"`." },
 	{ _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",

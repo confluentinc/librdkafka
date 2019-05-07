@@ -187,7 +187,8 @@ static void msg_delivered (rd_kafka_t *rk,
 	static rd_ts_t last;
 	rd_ts_t now = rd_clock();
 	static int msgs;
-
+	double error_percent = 0;
+	
 	msgs++;
 
 	msgs_wait_cnt--;
@@ -236,8 +237,12 @@ static void msg_delivered (rd_kafka_t *rk,
         cnt.last_offset = rkmessage->offset;
 
 	if (msgs_wait_produce_cnt == 0 && msgs_wait_cnt == 0 && !forever) {
+		if (cnt.msgs > 0) {
+			error_percent = (cnt.msgs - cnt.msgs_dr_ok)/cnt.msgs * 100;
+		}
 		if (verbosity >= 2)
-			printf("All messages delivered!\n");
+			printf("Messages delivered with failure percentage of %.5f!\n",
+				error_percent);
 		t_end = rd_clock();
 		run = 0;
 	}
@@ -1462,6 +1467,7 @@ int main (int argc, char **argv) {
 		outq = rd_kafka_outq_len(rk);
                 if (verbosity >= 2)
                         printf("%% %i messages in outq\n", outq);
+		cnt.msgs -= outq;
 		cnt.t_end = t_end;
 
 		if (cnt.tx_err > 0)

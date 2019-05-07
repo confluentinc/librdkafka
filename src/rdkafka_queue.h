@@ -649,7 +649,7 @@ rd_kafka_set_replyq (rd_kafka_replyq_t *replyq,
 	replyq->q = rkq ? rd_kafka_q_keep(rkq) : NULL;
 	replyq->version = version;
 #if ENABLE_DEVEL
-	replyq->_id = strdup(__FUNCTION__);
+	replyq->_id = rd_strdup(__FUNCTION__);
 #endif
 }
 

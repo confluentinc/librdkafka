@@ -154,7 +154,7 @@ static void rd_kafka_sasl_oauthbearer_token_free (
 
 /**
  * @brief Op callback for RD_KAFKA_OP_OAUTHBEARER_REFRESH
- * 
+ *
  * @locality Application thread
  */
 static rd_kafka_op_res_t
@@ -166,8 +166,9 @@ rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
          * make sure we don't refresh upon destruction since
          * the op has already been handled by this point.
          */
-        if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
-                rk->rk_conf.oauthbearer_token_refresh_cb(
+        if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY &&
+            rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
+                rk->rk_conf.sasl.oauthbearer_token_refresh_cb(
                         rk, rk->rk_conf.sasl.oauthbearer_config,
                         rk->rk_conf.opaque);
         return RD_KAFKA_OP_RES_HANDLED;
@@ -190,7 +191,7 @@ static void rd_kafka_oauthbearer_enqueue_token_refresh (
 
 /**
  * @brief Enqueue a token refresh if necessary.
- * 
+ *
  * The method rd_kafka_oauthbearer_enqueue_token_refresh() is invoked
  * if necessary; the required lock is acquired and released.  This method
  * returns immediately when SASL/OAUTHBEARER is not in use by the client.
@@ -327,22 +328,22 @@ check_oauthbearer_extension_value (const char *value,
  *  https://tools.ietf.org/html/rfc7628#section-3.1.
  * @param extension_size the number of SASL extension keys plus values,
  *  which should be a non-negative multiple of 2.
- * 
+ *
  * The SASL/OAUTHBEARER token refresh callback or event handler should cause
  * this method to be invoked upon success, via
  * rd_kafka_oauthbearer_set_token(). The extension keys must not include the
  * reserved key "`auth`", and all extension keys and values must conform to the
  * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
- * 
+ *
  * key            = 1*(ALPHA)
  * value          = *(VCHAR / SP / HTAB / CR / LF )
- * 
+ *
  * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise errstr set and:
  *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
  *              invalid;
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is not configured as
  *              the client's authentication mechanism.
- * 
+ *
  * @sa rd_kafka_oauthbearer_set_token_failure0
  */
 rd_kafka_resp_err_t
@@ -408,8 +409,9 @@ rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
         handle->wts_md_lifetime = wts_md_lifetime;
 
         /* Schedule a refresh 80% through its remaining lifetime */
-        handle->wts_refresh_after = now_wallclock + 0.8 *
-                (wts_md_lifetime - now_wallclock);
+        handle->wts_refresh_after =
+                (rd_ts_t)(now_wallclock + 0.8 *
+                          (wts_md_lifetime - now_wallclock));
 
         rd_list_clear(&handle->extensions);
         for (i = 0; i + 1 < extension_size; i += 2)
@@ -435,11 +437,11 @@ rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
  * @param rk Client instance.
  * @param errstr mandatory human readable error reason for failing to acquire
  *  a token.
- * 
+ *
  * The SASL/OAUTHBEARER token refresh callback or event handler should cause
  * this method to be invoked upon failure, via
  * rd_kafka_oauthbearer_set_token_failure().
- * 
+ *
  * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise
  *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is enabled but is
  *              not configured to be the client's authentication mechanism,
@@ -659,7 +661,7 @@ parse_ujws_config (const char *cfg,
                                         r = -1;
                                 } else {
                                         parsed->life_seconds =
-                                                life_seconds_long;
+                                                (int)life_seconds_long;
                                 }
                         }
 
@@ -767,14 +769,14 @@ static char *create_jws_compact_serialization (
 
                         if (scope_json_length == 0) {
                                 scope_json_length = 2 + // ,"
-                                        strlen(parsed->scope_claim_name) +
+                                        (int)strlen(parsed->scope_claim_name) +
                                         4 +             // ":["
-                                        strlen(start) +
+                                        (int)strlen(start) +
                                         1 +             // "
                                         1;              // ]
                         } else {
                                 scope_json_length += 2; // ,"
-                                scope_json_length += strlen(start);
+                                scope_json_length += (int)strlen(start);
                                 scope_json_length += 1; // "
                         }
 
@@ -786,9 +788,9 @@ static char *create_jws_compact_serialization (
 
         /* Generate json */
         max_json_length = 2 + // {"
-                strlen(parsed->principal_claim_name) +
+                (int)strlen(parsed->principal_claim_name) +
                 3 +   // ":"
-                strlen(parsed->principal) +
+                (int)strlen(parsed->principal) +
                 8 +   // ","iat":
                 14 +  // iat NumericDate (e.g. 1549251467.546)
                 7 +   // ,"exp":
@@ -835,7 +837,7 @@ static char *create_jws_compact_serialization (
         jws_claims = retval_jws + strlen(retval_jws);
         encode_len = EVP_EncodeBlock((uint8_t *)jws_claims,
                                      (uint8_t *)claims_json,
-                                     strlen(claims_json));
+                                     (int)strlen(claims_json));
         rd_free(claims_json);
         jws_last_char = jws_claims + encode_len - 1;
 
@@ -979,25 +981,25 @@ rd_kafka_oauthbearer_unsecured_token0 (
  * default value being no/empty scope. For example:
  * "principalClaimName=azp principal=admin scopeClaimName=roles
  * scope=role1,role2 lifeSeconds=600".
- * 
+ *
  * SASL extensions can be communicated to the broker via
  * extension_<extensionname>=value. For example:
  * "principal=admin extension_traceId=123".  Extension names and values
  * must comnform to the required syntax as per
  * https://tools.ietf.org/html/rfc7628#section-3.1
- * 
+ *
  * All values -- whether extensions, claim names, or scope elements -- must not
  * include a quote (") character.  The parsing rules also imply that names
  * and values cannot include a space character, and scope elements cannot
  * include a comma (,) character.
- * 
+ *
  * The existence of any kind of parsing problem -- an unrecognized name,
  * a quote character in a value, an empty value, etc. -- raises the
  * \c RD_KAFKA_RESP_ERR__AUTHENTICATION event.
- * 
+ *
  * Unsecured tokens are not to be used in production -- they are only good for
  * testing and development purposess -- so while the inflexibility of the
- * parsing rules is acknowledged, it is assumed that this is not problematic. 
+ * parsing rules is acknowledged, it is assumed that this is not problematic.
  */
 void
 rd_kafka_oauthbearer_unsecured_token (rd_kafka_t *rk,
@@ -1063,7 +1065,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
 
         static const char *gs2_header = "n,,";
         static const char *kvsep = "\x01";
-        const int kvsep_size = strlen(kvsep);
+        const int kvsep_size = (int)strlen(kvsep);
         int extension_size = 0;
         int i;
         char *buf;
@@ -1073,8 +1075,8 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
         for (i = 0 ; i < rd_list_cnt(&state->extensions) ; i++) {
                 rd_strtup_t *extension = rd_list_elem(&state->extensions, i);
                 // kvpair         = key "=" value kvsep
-                extension_size += strlen(extension->name) + 1 // "="
-                        + strlen(extension->value) + kvsep_size;
+                extension_size += (int)strlen(extension->name) + 1 // "="
+                        + (int)strlen(extension->value) + kvsep_size;
         }
 
         // client-resp    = (gs2-header kvsep *kvpair kvsep) / kvsep
@@ -1308,9 +1310,9 @@ static int rd_kafka_sasl_oauthbearer_init (rd_kafka_t *rk,
          * unsecure JWS token refresher, to avoid an initial connection
          * stall as we wait for the application to call poll().
          * Otherwise enqueue a refresh callback for the application. */
-        if (rk->rk_conf.oauthbearer_token_refresh_cb ==
+        if (rk->rk_conf.sasl.oauthbearer_token_refresh_cb ==
             rd_kafka_oauthbearer_unsecured_token)
-                rk->rk_conf.oauthbearer_token_refresh_cb(
+                rk->rk_conf.sasl.oauthbearer_token_refresh_cb(
                         rk, rk->rk_conf.sasl.oauthbearer_config,
                         rk->rk_conf.opaque);
         else

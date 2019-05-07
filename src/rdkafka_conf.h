@@ -242,6 +242,13 @@ struct rd_kafka_conf_s {
 #endif
 #if WITH_SASL_OAUTHBEARER
                 char *oauthbearer_config;
+                int   enable_oauthbearer_unsecure_jwt;
+
+                /* SASL/OAUTHBEARER token refresh event callback */
+                void (*oauthbearer_token_refresh_cb) (
+                        rd_kafka_t *rk,
+                        const char *oauthbearer_config,
+                        void *opaque);
 #endif
         } sasl;
 
@@ -409,12 +416,6 @@ struct rd_kafka_conf_s {
                                      void *opaque);
 
 
-        /* SASL/OAUTHBEARER token refresh event callback */
-#if WITH_SASL_OAUTHBEARER
-        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
-                                              const char *oauthbearer_config,
-                                              void *opaque);
-#endif
 	/* Opaque passed to callbacks. */
 	void  *opaque;
 

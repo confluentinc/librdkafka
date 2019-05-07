@@ -1803,6 +1803,11 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * directly or, more typically, by invoking either rd_kafka_poll() or
  * rd_kafka_queue_poll() -- in order to cause retrieval of an initial token to
  * occur.
+ *
+ * An unsecured JWT refresh handler is provided by librdkafka for development
+ * and testing purposes, it is enabled by setting
+ * the \c enable.sasl.oauthbearer.unsecure.jwt property to true and is
+ * mutually exclusive to using a refresh callback.
  */
 RD_EXPORT
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
@@ -1810,82 +1815,6 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
         void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
                                               const char *oauthbearer_config,
                                               void *opaque));
-
-/**
- * @brief Set SASL/OAUTHBEARER token and metadata
- *
- * @param rk Client instance.
- * @param token_value the mandatory token value to set, often (but not
- *  necessarily) a JWS compact serialization as per
- *  https://tools.ietf.org/html/rfc7515#section-3.1.
- * @param md_lifetime_ms when the token expires, in terms of the number of
- *  milliseconds since the epoch.
- * @param md_principal_name the mandatory Kafka principal name associated
- *  with the token.
- * @param extensions optional SASL extensions key-value array with
- *  \p extensions_size elements (number of keys * 2), where [i] is the key and
- *  [i+1] is the key's value, to be communicated to the broker
- *  as additional key-value pairs during the initial client response as per
- *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
- *  copied.
- * @param extension_size the number of SASL extension keys plus values,
- *  which must be a non-negative multiple of 2.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is an error.
- * 
- * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
- * this method upon success. The extension keys must not include the reserved
- * key "`auth`", and all extension keys and values must conform to the required
- * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
- * 
- *     key            = 1*(ALPHA)
- *     value          = *(VCHAR / SP / HTAB / CR / LF )
- * 
- * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise \p errstr set
- *              and:<br>
- *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
- *              invalid;<br>
- *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
- *              supported by this build;<br>
- *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
- *              not configured as the client's authentication mechanism.<br>
- * 
- * @sa rd_kafka_oauthbearer_set_token_failure
- * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
- */
-RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
-                                const char *token_value,
-                                int64_t md_lifetime_ms,
-                                const char *md_principal_name,
-                                const char **extensions, size_t extension_size,
-                                char *errstr, size_t errstr_size);
-
-/**
- * @brief SASL/OAUTHBEARER token refresh failure indicator.
- *
- * @param rk Client instance.
- * @param errstr mandatory human readable error reason for failing to acquire
- *  a token.
- * 
- * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
- * this method upon failure.
- * 
- * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
- *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
- *              supported by this build;<br>
- *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
- *              not configured as the client's authentication mechanism,<br>
- *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
- * 
- * @sa rd_kafka_oauthbearer_set_token
- * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
- */
-RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**
  * @brief Set socket callback.
@@ -5799,6 +5728,92 @@ RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_DescribeConfigs_result_resources (
         const rd_kafka_DescribeConfigs_result_t *result,
         size_t *cntp);
+
+/**@}*/
+
+
+
+/**
+ * @name Security APIs
+ * @{
+ *
+ */
+
+/**
+ * @brief Set SASL/OAUTHBEARER token and metadata
+ *
+ * @param rk Client instance.
+ * @param token_value the mandatory token value to set, often (but not
+ *  necessarily) a JWS compact serialization as per
+ *  https://tools.ietf.org/html/rfc7515#section-3.1.
+ * @param md_lifetime_ms when the token expires, in terms of the number of
+ *  milliseconds since the epoch.
+ * @param md_principal_name the mandatory Kafka principal name associated
+ *  with the token.
+ * @param extensions optional SASL extensions key-value array with
+ *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  [i+1] is the key's value, to be communicated to the broker
+ *  as additional key-value pairs during the initial client response as per
+ *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
+ *  copied.
+ * @param extension_size the number of SASL extension keys plus values,
+ *  which must be a non-negative multiple of 2.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is an error.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon success. The extension keys must not include the reserved
+ * key "`auth`", and all extension keys and values must conform to the required
+ * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+ *
+ *     key            = 1*(ALPHA)
+ *     value          = *(VCHAR / SP / HTAB / CR / LF )
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise \p errstr set
+ *              and:<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
+ *              invalid;<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism.<br>
+ *
+ * @sa rd_kafka_oauthbearer_set_token_failure
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size);
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh failure indicator.
+ *
+ * @param rk Client instance.
+ * @param errstr mandatory human readable error reason for failing to acquire
+ *  a token.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon failure.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism,<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
+ *
+ * @sa rd_kafka_oauthbearer_set_token
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**@}*/
 

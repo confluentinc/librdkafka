@@ -454,15 +454,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
           .pdef = rd_kafka_log_print },
-#if WITH_SASL_OAUTHBEARER
-        { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
-          _RK(oauthbearer_token_refresh_cb),
-          "SASL/OAUTHBEARER token refresh callback (set with "
-          "rd_kafka_conf_set_oauthbearer_token_refresh_cb()); "
-          "the default will generate an unsecured JWS using "
-          "sasl.oauthbearer.config",
-          .pdef = rd_kafka_oauthbearer_unsecured_token },
-#endif
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -726,6 +717,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "can be communicated to the broker via "
           "`extension_<extensionname>=value`. For example: "
           "`principal=admin extension_traceId=123`" },
+        { _RK_GLOBAL, "enable.sasl.oauthbearer.unsecure.jwt", _RK_C_BOOL,
+          _RK(sasl.enable_oauthbearer_unsecure_jwt),
+          "Enable the builtin unsecure JWT OAUTHBEARER token handler "
+          "if no oauthbearer_refresh_cb has been set. "
+          "This builtin handler should only be used for development "
+          "or testing, and not in production.",
+          0, 1, 0 },
+        { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
+          _RK(sasl.oauthbearer_token_refresh_cb),
+          "SASL/OAUTHBEARER token refresh callback (set with "
+          "rd_kafka_conf_set_oauthbearer_token_refresh_cb(), triggered by "
+          "rd_kafka_poll(), et.al. "
+          "This callback will be triggered when it is time to refresh "
+          "the client's OAUTHBEARER token." },
 #endif
 
 #if WITH_PLUGINS
@@ -2929,6 +2934,13 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (conf->ssl.keystore_location && !conf->ssl.keystore_password)
                 return "`ssl.keystore.password` is mandatory when "
                         "`ssl.keystore.location` is set";
+#endif
+
+#if WITH_SASL_OAUTHBEARER
+        if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
+            conf->sasl.oauthbearer_token_refresh_cb)
+                return "`enable.sasl.oauthbearer.unsecure.jwt` and "
+                        "`oauthbearer_token_refresh_cb` are mutually exclusive";
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {

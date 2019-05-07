@@ -63,6 +63,7 @@ class LibrdkafkaTestApp(App):
 
             elif mech == 'OAUTHBEARER':
                 security_protocol='SASL_PLAINTEXT'
+                conf_blob.append('enable.sasl.oauthbearer.unsecure.jwt=true\n')
                 conf_blob.append('sasl.oauthbearer.config=%s\n' % self.conf.get('sasl_oauthbearer_config'))
 
             elif mech == 'GSSAPI':

@@ -2785,6 +2785,7 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
 
         if (rd_list_cnt(new_topics) == 0) {
                 rd_snprintf(errstr, errstr_size, "No topics to create");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -2794,6 +2795,7 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
                             "by broker, requires broker version >= 0.10.2.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -2802,6 +2804,7 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "CreateTopics.validate_only=true not "
                             "supported by broker");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -2927,6 +2930,7 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
 
         if (rd_list_cnt(del_topics) == 0) {
                 rd_snprintf(errstr, errstr_size, "No topics to delete");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -2936,6 +2940,7 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
                             "by broker, requires broker version >= 0.10.2.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -2995,6 +3000,7 @@ rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
 
         if (rd_list_cnt(new_parts) == 0) {
                 rd_snprintf(errstr, errstr_size, "No partitions to create");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -3004,6 +3010,7 @@ rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "CreatePartitions (KIP-195) not supported "
                             "by broker, requires broker version >= 1.0.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -3100,6 +3107,7 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
         if (rd_list_cnt(configs) == 0) {
                 rd_snprintf(errstr, errstr_size,
                             "No config resources specified");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -3109,6 +3117,7 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
                             "by broker, requires broker version >= 0.11.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -3119,6 +3128,7 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                             "AlterConfigs.incremental=true (KIP-248) "
                             "not supported by broker, "
                             "requires broker version >= 2.0.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -3157,6 +3167,7 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                                             "entries: only set supported "
                                             "by this broker");
                                 rd_kafka_buf_destroy(rkbuf);
+                                rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
                         }
                 }
@@ -3208,6 +3219,7 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
         if (rd_list_cnt(configs) == 0) {
                 rd_snprintf(errstr, errstr_size,
                             "No config resources specified");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -3217,6 +3229,7 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
                 rd_snprintf(errstr, errstr_size,
                             "DescribeConfigs (KIP-133) not supported "
                             "by broker, requires broker version >= 0.11.0");
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 

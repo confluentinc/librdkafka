@@ -3167,6 +3167,7 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                                             "entries: only set supported "
                                             "by this broker");
                                 rd_kafka_buf_destroy(rkbuf);
+                                rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
                         }
                 }

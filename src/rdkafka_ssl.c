@@ -385,6 +385,74 @@ rd_kafka_transport_ssl_cert_verify_cb (int preverify_ok,
         return 1; /* verification successful */
 }
 
+/**
+ * @brief Set TLSEXT hostname for SNI and optionally enable
+ *        SSL endpoint identification verification.
+ *
+ * @returns 0 on success or -1 on error.
+ */
+static int
+rd_kafka_transport_ssl_set_endpoint_id (rd_kafka_transport_t *rktrans,
+                                        char *errstr, size_t errstr_size) {
+        char name[RD_KAFKA_NODENAME_SIZE];
+        char *t;
+
+        rd_kafka_broker_lock(rktrans->rktrans_rkb);
+        rd_snprintf(name, sizeof(name), "%s",
+                    rktrans->rktrans_rkb->rkb_nodename);
+        rd_kafka_broker_unlock(rktrans->rktrans_rkb);
+
+        /* Remove ":9092" port suffix from nodename */
+        if ((t = strrchr(name, ':')))
+                *t = '\0';
+
+#if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
+        /* If non-numerical hostname, send it for SNI */
+        if (!(/*ipv6*/(strchr(name, ':') &&
+                       strspn(name, "0123456789abcdefABCDEF:.[]%") ==
+                       strlen(name)) ||
+              /*ipv4*/strspn(name, "0123456789.") == strlen(name)) &&
+            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+                goto fail;
+#endif
+
+        if (rktrans->rktrans_rkb->rkb_rk->rk_conf.
+            ssl.endpoint_identification == RD_KAFKA_SSL_ENDPOINT_ID_NONE)
+                return 0;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        if (!SSL_set1_host(rktrans->rktrans_ssl,
+                           rktrans->rktrans_rkb->rkb_nodename))
+                goto fail;
+#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+        {
+                X509_VERIFY_PARAM *param;
+
+                param = SSL_get0_param(rktrans->rktrans_ssl);
+
+                if (!X509_VERIFY_PARAM_set1_host(param, name, 0))
+                        goto fail;
+        }
+#else
+        rd_snprintf(errstr, errstr_size,
+                    "Endpoint identification not supported on this "
+                    "OpenSSL version (0x%x)",
+                    (unsigned int)OPENSSL_VERSION_NUMBER);
+        return -1;
+#endif
+
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
+                   "Enabled endpoint identification using hostname %s",
+                   name);
+
+        return 0;
+
+ fail:
+        rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
+                           errstr, errstr_size);
+        return -1;
+}
+
 
 /**
  * @brief Set up SSL for a newly connected connection
@@ -395,8 +463,6 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
                                     rd_kafka_transport_t *rktrans,
                                     char *errstr, size_t errstr_size) {
         int r;
-        char name[RD_KAFKA_NODENAME_SIZE];
-        char *t;
 
         rktrans->rktrans_ssl = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
         if (!rktrans->rktrans_ssl)
@@ -405,17 +471,9 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         if (!SSL_set_fd(rktrans->rktrans_ssl, rktrans->rktrans_s))
                 goto fail;
 
-#if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
-        /* If non-numerical hostname, send it for SNI */
-        rd_snprintf(name, sizeof(name), "%s", rkb->rkb_nodename);
-        if ((t = strrchr(name, ':')))
-                *t = '\0';
-        if (!(/*ipv6*/(strchr(name, ':') &&
-                       strspn(name, "0123456789abcdefABCDEF:.[]%") == strlen(name)) ||
-              /*ipv4*/strspn(name, "0123456789.") == strlen(name)) &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
-                goto fail;
-#endif
+        if (rd_kafka_transport_ssl_set_endpoint_id(rktrans, errstr,
+                                                   sizeof(errstr)) == -1)
+                return -1;
 
         rd_kafka_transport_ssl_clear_error(rktrans);
 
@@ -466,7 +524,7 @@ rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans, int events) {
 
 
 /**
- * Verify SSL handshake was valid.
+ * @brief Verify SSL handshake was valid.
  */
 static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
         long int rl;

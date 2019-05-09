@@ -141,6 +141,10 @@ typedef enum {
 } rd_kafka_offset_method_t;
 
 
+typedef enum {
+        RD_KAFKA_SSL_ENDPOINT_ID_NONE,
+        RD_KAFKA_SSL_ENDPOINT_ID_HTTPS,  /**< RFC2818 */
+} rd_kafka_ssl_endpoint_id_t;
 
 /* Increase in steps of 64 as needed. */
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64*24)
@@ -224,6 +228,7 @@ struct rd_kafka_conf_s {
                 char *crl_location;
                 char *keystore_location;
                 char *keystore_password;
+                int   endpoint_identification;
                 int   enable_verify;
                 int (*cert_verify_cb) (rd_kafka_t *rk,
                                        const char *broker_name,

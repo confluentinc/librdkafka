@@ -34,8 +34,18 @@ endif()
 # }
 
 # LIBM {
-include(CheckLibraryExists)
-check_library_exists(m pow "" WITH_HDRHISTOGRAM)
+if(MSVC)
+    set(WITH_HDRHISTOGRAM ON)
+    set(HAVE_LIBM OFF)
+else()
+    include(CheckLibraryExists)
+    check_library_exists(m pow "" HAVE_LIBM)
+    set(WITH_HDRHISTOGRAM ${HAVE_LIBM})
+    if(NOT WITH_HDRHISTOGRAM)
+        include(CheckFunctionExists)
+        check_function_exists(pow WITH_HDRHISTOGRAM)
+    endif()
+endif()
 if(WITH_HDRHISTOGRAM)
     list(APPEND BUILT_WITH "HDRHISTOGRAM")
 endif()
@@ -80,7 +90,7 @@ endif()
 # }
 
 # WITH_PLUGINS {
-if(WITH_LIBDL)
+if(WITH_LIBDL OR MSVC)
   set(with_plugins_default ON)
 else()
   set(with_plugins_default OFF)
@@ -163,9 +173,6 @@ endif()
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
-if(WIN32)
-    option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds" ON)
-endif(WIN32)
 
 # In:
 # * TRYCOMPILE_SRC_DIR
@@ -199,12 +206,18 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # * HAVE_ATOMICS_64
 # * HAVE_ATOMICS_64_SYNC
 # * WITH_ZLIB
+# * WITH_SOCKEM
 # * WITH_SSL
 # * WITH_SASL
 # * HAVE_REGEX
 # * HAVE_STRNDUP
 list(APPEND BUILT_WITH "SNAPPY")
-list(APPEND BUILT_WITH "SOCKEM")
+if(WIN32)
+    set(WITH_SOCKEM OFF)
+else()
+    set(WITH_SOCKEM ON)
+    list(APPEND BUILT_WITH "SOCKEM")
+endif()
 string(REPLACE ";" " " BUILT_WITH "${BUILT_WITH}")
 configure_file("packaging/cmake/config.h.in" "${GENERATED_DIR}/config.h")
 

@@ -51,7 +51,8 @@
 #include "tinycthread.h"
 #include "rdsysqueue.h"
 
-#ifdef _MSC_VER
+/* WITHOUT_WIN32_CONFIG is defined when configuring with CMake */
+#if defined(_MSC_VER) && !defined(WITHOUT_WIN32_CONFIG)
 /* Visual Studio */
 #include "win32_config.h"
 #else

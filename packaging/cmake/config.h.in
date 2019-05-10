@@ -32,7 +32,7 @@
 #cmakedefine01 WITH_LIBDL
 #cmakedefine01 WITH_PLUGINS
 #define WITH_SNAPPY 1
-#define WITH_SOCKEM 1
+#cmakedefine01 WITH_SOCKEM
 #cmakedefine01 WITH_SSL
 #cmakedefine01 WITH_SASL
 #cmakedefine01 WITH_SASL_SCRAM

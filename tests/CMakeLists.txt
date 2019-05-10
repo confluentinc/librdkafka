@@ -100,6 +100,9 @@ else()
 endif()
 
 add_executable(rdkafka_test ${sources})
+if(MSVC)
+    target_compile_definitions(rdkafka_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 target_link_libraries(rdkafka_test PUBLIC rdkafka++)
 
 add_test(NAME RdKafkaTestInParallel COMMAND rdkafka_test -p5)

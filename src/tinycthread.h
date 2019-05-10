@@ -25,8 +25,8 @@ freely, subject to the following restrictions:
 #ifndef _TINYCTHREAD_H_
 #define _TINYCTHREAD_H_
 
-/* Include config to know if C11 threads are available */
-#ifdef _MSC_VER
+/* WITHOUT_WIN32_CONFIG is defined when configuring with CMake */
+#if defined(_MSC_VER) && !defined(WITHOUT_WIN32_CONFIG)
 #include "win32_config.h"
 #else
 #include "../config.h"

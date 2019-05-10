@@ -24,6 +24,7 @@ if(@WITH_SSL@)
 endif()
 
 if(@WITH_LZ4_EXT@)
+  include("${CMAKE_CURRENT_LIST_DIR}/FindLZ4.cmake")
   find_dependency(LZ4)
 endif()
 

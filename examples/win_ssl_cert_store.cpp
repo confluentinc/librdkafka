@@ -312,6 +312,12 @@ int main (int argc, char **argv) {
 
                         case 'p':
                                 priv_key_pass = optarg;
+                                if (conf->set("ssl.key.password", optarg, errstr) !=
+                                    RdKafka::Conf::CONF_OK) {
+                                        std::cerr << errstr << std::endl;
+                                        exit(1);
+                                }
+
                                 break;
 
                         default:

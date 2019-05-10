@@ -482,6 +482,7 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);
 
+void rd_kafka_global_init (void);
 
 /**
  * @returns true if \p rk handle is terminating.

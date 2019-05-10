@@ -100,14 +100,13 @@ const char *rd_kafka_ssl_last_error_str (void) {
                 return "";
 
         rd_snprintf(errstr, sizeof(errstr),
-                    "%lu:%s:%s:%s:%d: %s (%p, %d, fl 0x%x)",
+                    "%lu:%s:%s:%s:%d: %s",
                     l,
                     ERR_lib_error_string(l),
                     ERR_func_error_string(l),
                     file, line,
-                    (flags & ERR_TXT_STRING) && data && *data ?
-                    data : ERR_reason_error_string(l), data, (int)strlen(data),
-                    flags & ERR_TXT_STRING);
+                    ((flags & ERR_TXT_STRING) && data && *data) ?
+                    data : ERR_reason_error_string(l));
 
         return errstr;
 }
@@ -436,8 +435,8 @@ rd_kafka_transport_ssl_set_endpoint_id (rd_kafka_transport_t *rktrans,
 #else
         rd_snprintf(errstr, errstr_size,
                     "Endpoint identification not supported on this "
-                    "OpenSSL version (0x%x)",
-                    (unsigned int)OPENSSL_VERSION_NUMBER);
+                    "OpenSSL version (0x%lx)",
+                    OPENSSL_VERSION_NUMBER);
         return -1;
 #endif
 

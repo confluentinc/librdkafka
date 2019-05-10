@@ -350,6 +350,9 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
                 return RD_KAFKA_CONF_INVALID;
         }
 
+        /* Make sure OpenSSL is loaded */
+        rd_kafka_global_init();
+
         certp = cert_map[cert_type];
 
         if (!buffer) {

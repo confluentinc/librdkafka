@@ -127,7 +127,7 @@ void rd_kafka_set_thread_sysname (const char *fmt, ...) {
         thrd_setname(rd_kafka_thread_sysname);
 }
 
-static void rd_kafka_global_init (void) {
+static void rd_kafka_global_init0 (void) {
 #if ENABLE_SHAREDPTR_DEBUG
         LIST_INIT(&rd_shared_ptr_debug_list);
         mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
@@ -138,6 +138,19 @@ static void rd_kafka_global_init (void) {
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
         crc32c_global_init();
+#if WITH_SSL
+        /* The configuration interface might need to use
+         * OpenSSL to parse keys, prior to any rd_kafka_t
+         * object has been created. */
+        rd_kafka_ssl_init();
+#endif
+}
+
+/**
+ * @brief Initialize once per process
+ */
+void rd_kafka_global_init (void) {
+        call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
 }
 
 /**
@@ -1875,7 +1888,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         char builtin_features[128];
         size_t bflen;
 
-	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
+        rd_kafka_global_init();
 
         /* rd_kafka_new() takes ownership of the provided \p app_conf
          * object if rd_kafka_new() succeeds.

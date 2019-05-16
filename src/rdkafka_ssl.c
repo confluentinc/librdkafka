@@ -325,6 +325,7 @@ rd_kafka_transport_ssl_cert_verify_cb (int preverify_ok,
         char *buf = NULL;
         int   buf_size;
         int   depth;
+        int   x509_orig_error, x509_error;
         char  errstr[512];
         int   ok;
 
@@ -341,6 +342,8 @@ rd_kafka_transport_ssl_cert_verify_cb (int preverify_ok,
 
         depth = X509_STORE_CTX_get_error_depth(x509_ctx);
 
+        x509_orig_error = x509_error = X509_STORE_CTX_get_error(x509_ctx);
+
         buf_size = i2d_X509(cert, (unsigned char **)&buf);
         if (buf_size < 0 || !buf) {
                 rd_rkb_log(rkb, LOG_ERR, "SSLCERTVRFY",
@@ -354,8 +357,7 @@ rd_kafka_transport_ssl_cert_verify_cb (int preverify_ok,
         ok = rk->rk_conf.ssl.cert_verify_cb(rk,
                                             rkb->rkb_nodename,
                                             rkb->rkb_nodeid,
-                                            preverify_ok,
-                                            (void *)x509_ctx,
+                                            &x509_error,
                                             depth,
                                             buf, (size_t)buf_size,
                                             errstr, sizeof(errstr),
@@ -376,10 +378,14 @@ rd_kafka_transport_ssl_cert_verify_cb (int preverify_ok,
                            "callback failed: %s",
                            subject, issuer, errstr);
 
-                X509_STORE_CTX_set_error(x509_ctx, X509_V_ERR_CERT_UNTRUSTED);
+                X509_STORE_CTX_set_error(x509_ctx, x509_error);
 
                 return 0; /* verification failed */
         }
+
+        /* Clear error */
+        if (x509_orig_error != 0 && x509_error == 0)
+                X509_STORE_CTX_set_error(x509_ctx, 0);
 
         return 1; /* verification successful */
 }

@@ -53,8 +53,8 @@
 class ExampleStoreRetriever {
 public:
         ExampleStoreRetriever (std::string const &subject, std::string const &pass)
-                : m_cert_subject(subject), m_cert_store(NULL),
-                m_cert_ctx(NULL), m_password(pass) {
+                : m_cert_subject(subject), m_password(pass),
+                m_cert_store(NULL), m_cert_ctx(NULL) {
                 load_certificate();
         }
 

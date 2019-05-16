@@ -30,7 +30,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     """
 
     print('## Test version %s' % version)
-    
+
     cluster = Cluster('LibrdkafkaTestCluster', root_path, debug=debug)
 
     # Enable SSL if desired
@@ -53,6 +53,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     brokers = []
     for n in range(0, broker_cnt):
         brokers.append(KafkaBrokerApp(cluster, defconf))
+
+    cmd_env = os.environ.copy()
 
     # Generate test config file
     security_protocol='PLAINTEXT'
@@ -92,12 +94,24 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         else:
             security_protocol = 'SSL'
 
-        key, req, pem = ssl.create_key('librdkafka')[:3]
+        key = ssl.create_cert('librdkafka')
 
-        os.write(fd, ('ssl.ca.location=%s\n' % ssl.ca_cert).encode('ascii'))
-        os.write(fd, ('ssl.certificate.location=%s\n' % pem).encode('ascii'))
-        os.write(fd, ('ssl.key.location=%s\n' % key).encode('ascii'))
-        os.write(fd, ('ssl.key.password=%s\n' % ssl.conf.get('ssl_key_pass')).encode('ascii'))
+        os.write(fd, ('ssl.ca.location=%s\n' % ssl.ca['pem']).encode('ascii'))
+        os.write(fd, ('ssl.certificate.location=%s\n' % key['pub']['pem']).encode('ascii'))
+        os.write(fd, ('ssl.key.location=%s\n' % key['priv']['pem']).encode('ascii'))
+        os.write(fd, ('ssl.key.password=%s\n' % key['password']).encode('ascii'))
+
+        for k, v in ssl.ca.iteritems():
+            cmd_env['RDK_SSL_ca_{}'.format(k)] = v
+
+        # Set envs for all generated keys so tests can find them.
+        for k, v in key.iteritems():
+            if type(v) is dict:
+                for k2, v2 in v.iteritems():
+                    # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
+                    cmd_env['RDK_SSL_{}_{}'.format(k, k2)] = v2
+            else:
+                cmd_env['RDK_SSL_{}'.format(k)] = v
 
 
     # Define bootstrap brokers based on selected security protocol
@@ -126,7 +140,6 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = os.environ.copy()
     cmd_env['KAFKA_PATH'] = brokers[0].conf.get('destdir')
     cmd_env['RDKAFKA_TEST_CONF'] = test_conf_file
     cmd_env['ZK_ADDRESS'] = zk_address
@@ -138,7 +151,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
 
     if not cmd:
-        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
+        cmd_env['PS1'] = '[TRIVUP:%s@%s] \\u@\\h:\w$ ' % (cluster.name, version)
+        cmd = 'bash --rcfile <(cat ~/.bashrc)'
 
     ret = True
 

@@ -1285,6 +1285,7 @@ function mkl_check_done {
 
 # Perform configure check by compiling source snippet
 # Arguments:
+#  [--sub]             (run checker as a sub-check, not doing begin/fail/ok)
 #  [--ldflags="..." ]  (appended after "compiler arguments" below)
 #  config name
 #  define name

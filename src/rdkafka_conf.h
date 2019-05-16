@@ -225,6 +225,7 @@ struct rd_kafka_conf_s {
                 char *cert_pem;
                 rd_kafka_cert_t *cert;
                 char *ca_location;
+                rd_kafka_cert_t *ca;
                 char *crl_location;
                 char *keystore_location;
                 char *keystore_password;

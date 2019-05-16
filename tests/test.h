@@ -529,8 +529,6 @@ int test_check_auto_create_topic (void);
 int test_get_partition_count (rd_kafka_t *rk, const char *topicname,
                               int timeout_ms);
 
-int test_check_builtin (const char *feature);
-
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 void test_report_add (struct test *test, const char *fmt, ...);

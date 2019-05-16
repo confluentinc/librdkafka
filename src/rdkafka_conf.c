@@ -616,7 +616,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.password", _RK_C_STR,
           _RK(ssl.key_password),
-          "Private key passphrase (for use with ssl.key.location)"
+          "Private key passphrase (for use with `ssl.key.location` "
+          "and `set_ssl_cert()`)"
         },
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.pem", _RK_C_STR,
           _RK(ssl.key_pem),
@@ -648,17 +649,23 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "File or directory path to CA certificate(s) for verifying "
           "the broker's key."
         },
+        { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
+          _RK(ssl.ca),
+          "CA certificate as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
         { _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
           _RK(ssl.crl_location),
           "Path to CRL for verifying broker's certificate validity."
         },
         { _RK_GLOBAL, "ssl.keystore.location", _RK_C_STR,
-        _RK(ssl.keystore_location),
-        "Path to client's keystore (PKCS#12) used for authentication."
+          _RK(ssl.keystore_location),
+          "Path to client's keystore (PKCS#12) used for authentication."
         },
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
-        _RK(ssl.keystore_password),
-        "Client's keystore (PKCS#12) password."
+          _RK(ssl.keystore_password),
+          "Client's keystore (PKCS#12) password."
         },
         { _RK_GLOBAL, "enable.ssl.certificate.verification", _RK_C_BOOL,
           _RK(ssl.enable_verify),
@@ -2406,7 +2413,7 @@ rd_kafka_conf_set_ssl_cert_verify_cb (
                                    char *errstr, size_t errstr_size,
                                    void *opaque)) {
 #if !WITH_SSL
-        return RD_KAFKA_CONF_UNKNOWN;
+        return RD_KAFKA_CONF_INVALID;
 #else
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
                                       "ssl.certificate.verify_cb",
@@ -3097,6 +3104,9 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (conf->ssl.keystore_location && !conf->ssl.keystore_password)
                 return "`ssl.keystore.password` is mandatory when "
                         "`ssl.keystore.location` is set";
+        if (conf->ssl.ca && conf->ssl.ca_location)
+                return "`ssl.ca.location`, and memory-based "
+                       "set_ssl_cert(CERT_CA) are mutually exclusive.";
 #endif
 
 #if WITH_SASL_OAUTHBEARER

@@ -79,6 +79,8 @@ void test_msg_parse00 (const char *func, int line,
                        const char *key, size_t key_size);
 
 
+int test_check_builtin (const char *feature);
+
 /**
  * @returns the current test's name (thread-local)
  */

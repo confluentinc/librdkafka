@@ -1905,25 +1905,33 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
  * returns 1 (valid certificate).
  * \c broker_name and \c broker_id correlate to the broker the connection
  * is being made to.
- * The \c preverify_ok argument indicates if OpenSSL's verification of
- * the certificate succeed (1) or failed (0).
- * The certificate itself is passed in binary DER format in \c buf of
- * size \c size.
+ * The \c x509_error argument indicates if OpenSSL's verification of
+ * the certificate succeed (0) or failed (an OpenSSL error code).
+ * The application may set the SSL context error code by returning 0
+ * from the verify callback and providing a non-zero SSL context error code
+ * in \p x509_error.
+ * If the verify callback sets \x509_error to 0, returns 1, and the
+ * original \p x509_error was non-zero, the error on the SSL context will
+ * be cleared.
+ * \p x509_error is always a valid pointer to an int.
+ *
  * \c depth is the depth of the current certificate in the chain, starting
  * at the root certificate.
- * As a convenience the original OpenSSL X509_STORE_CTX object is passed
- * in the \c x509_ctx object. If an application wishes to access this object
- * it must ensure that it is using the same build of OpenSSL that librdkafka
- * is using.
+ *
+ * The certificate itself is passed in binary DER format in \c buf of
+ * size \c size.
  *
  * The callback must return 1 if verification succeeds, or
  * 0 if verification fails and then write a human-readable error message
  * to \c errstr (limited to \c errstr_size bytes, including nul-term).
  *
- * @returns RD_KAFKA_CONF_OK if SSL support in this build, else
+ * @returns RD_KAFKA_CONF_OK if SSL is supported in this build, else
  *          RD_KAFKA_CONF_UNKNOWN.
  *
  * @warning This callback will be called from internal librdkafka threads.
+ *
+ * @remark See <openssl/x509_vfy.h> in the OpenSSL source distribution
+ *         for a list of \p x509_error codes.
  */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
@@ -1931,7 +1939,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
         int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
                                    const char *broker_name,
                                    int32_t broker_id,
-                                   int preverify_ok, void *x509_ctx,
+                                   int *x509_error,
                                    int depth,
                                    const char *buf, size_t size,
                                    char *errstr, size_t errstr_size,

@@ -714,9 +714,20 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
         int r;
 
         /*
-         * ssl.ca.location, or Windows cert root store, or default paths
+         * ssl_ca, ssl.ca.location, or Windows cert root store,
+         * or default paths.
          */
-        if (rk->rk_conf.ssl.ca_location) {
+        if (rk->rk_conf.ssl.ca) {
+                /* CA certificate chain set with conf_set_ssl_cert() */
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loading CA certificate(s) from memory");
+
+                SSL_CTX_set_cert_store(ctx, rk->rk_conf.ssl.ca->store);
+
+                /* OpenSSL takes ownership of the store */
+                rk->rk_conf.ssl.ca->store = NULL;
+
+        } else if (rk->rk_conf.ssl.ca_location) {
                 /* CA certificate location, either file or directory. */
                 int is_dir = rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
 
@@ -742,7 +753,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
         } else {
 #if _MSC_VER
                 /* Attempt to load CA root certificates from the
-                 * Windows crypto ROOT store. */
+                 * Windows crypto Root cert store. */
                 r = rd_kafka_ssl_win_load_root_certs(rk, ctx);
 #else
                 r = -1;
@@ -751,9 +762,10 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                         /* Use default CA certificate paths: ignore failures */
                         r = SSL_CTX_set_default_verify_paths(ctx);
                         if (r != 1)
-                                rd_kafka_dbg(rk, SECURITY, "SSL",
-                                             "SSL_CTX_set_default_verify_paths() "
-                                             "failed: ignoring");
+                                rd_kafka_dbg(
+                                        rk, SECURITY, "SSL",
+                                        "SSL_CTX_set_default_verify_paths() "
+                                        "failed: ignoring");
                 }
         }
 

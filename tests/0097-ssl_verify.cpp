@@ -109,58 +109,57 @@ static void conf_location_to_pem (RdKafka::Conf *conf,
     Test::Fail("Failed to set " + pem_prop);
 }
 
-static std::string trim_extension (const std::string &fname) {
-    size_t last = fname.find_last_of(".");
-    if (last == std::string::npos)
-      return fname;
-    return fname.substr(0, last);
-}
-
+/**
+ * @brief Set SSL cert/key using set_ssl_cert() rather than
+ *        config string property \p loc_prop (which will be cleared)
+ *
+ * @remark Requires a bunch of RDK_SSL_.. env vars to point out where
+ *         certs are found. These are set up by trivup.
+ */
 static void conf_location_to_setter (RdKafka::Conf *conf,
                                      std::string loc_prop,
                                      RdKafka::CertificateType cert_type,
                                      RdKafka::CertificateEncoding encoding) {
   std::string loc;
+  static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
+    /* [RdKafka::CERT_PUBLIC_KEY] = */ {
+      "RDK_SSL_pkcs",
+      "RDK_SSL_pub_der",
+      "RDK_SSL_pub_pem",
+    },
+    /* [RdKafka::CERT_PRIVATE_KEY] = */ {
+      "RDK_SSL_pkcs",
+      "RDK_SSL_priv_der",
+      "RDK_SSL_priv_pem",
+    },
+    /* [RdKafka::CERT_CA] = */ {
+      "RDK_SSL_pkcs",
+      "RDK_SSL_ca_der",
+      "RDK_SSL_ca_pem",
+    }
+  };
+  static const std::string encnames[] = {
+    "PKCS#12",
+    "DER",
+    "PEM",
+  };
 
-  if (conf->get(loc_prop, loc) != RdKafka::Conf::CONF_OK)
-    Test::Fail("Failed to get " + loc_prop);
-
+  /* Clear the config property (e.g., ssl.key.location) */
   std::string errstr;
   if (conf->set(loc_prop, "", errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to reset " + loc_prop);
 
-  /* The ssl.*.location file will be in PEM format, use the \p encoding
-   * variant if different.
-   * We rely on trivup to have created the various formats for us with the
-   * following extensions:
-   *   {ssl.*.location}     = PEM
-   *   {ssl.*.location}.der = DER
-   *   {ssl.*.location}^H^H^H^H.pfx = private & public key PKCS#12, but with
-   *                                  original extension removed.
-   *
-   * NOTE: If these files are not generated you will probably need to
-   *       upgrade your version of trivup.
-   */
+  const char *p;
+  p = test_getenv(envname[cert_type][encoding].c_str(), NULL);
+  if (!p)
+    Test::Fail("Invalid test environment: "
+               "Missing " + envname[cert_type][encoding] +
+               " env variable: make sure trivup is up to date");
 
-  switch (encoding)
-  {
-    case RdKafka::CERT_ENC_PKCS12:
-      /* Replace current extension with .pfx */
-      loc = trim_extension(loc) + ".pfx";
-      break;
-
-    case RdKafka::CERT_ENC_DER:
-      /* Append .der */
-      loc += ".der";
-      break;
-
-    default:
-      /* Use original .location file as-is */
-      break;
-  }
+  loc = p;
 
   Test::Say(tostr() << "Reading " << loc_prop << " file " << loc <<
-            " as " << encoding << "\n");
+            " as " << encnames[encoding] << "\n");
 
   /* Read file */
   std::ifstream ifs(loc.c_str(), std::ios::binary | std::ios::ate);
@@ -176,7 +175,7 @@ static void conf_location_to_setter (RdKafka::Conf *conf,
   if (conf->set_ssl_cert(cert_type, encoding, buffer.data(), size, errstr) !=
       RdKafka::Conf::CONF_OK)
     Test::Fail(tostr() << "Failed to set cert from " << loc <<
-               "as cert type " << cert_type << " with encoding " << encoding <<
+               " as cert type " << cert_type << " with encoding " << encoding <<
                ": " << errstr << "\n");
 }
 
@@ -184,21 +183,33 @@ static void conf_location_to_setter (RdKafka::Conf *conf,
 typedef enum {
   USE_LOCATION,  /* use ssl.key.location */
   USE_CONF,      /* use ssl.key.pem */
-  USE_SETTER     /* use conf->set_ssl_cert(), this supports multiple formats */
+  USE_SETTER,    /* use conf->set_ssl_cert(), this supports multiple formats */
 } cert_load_t;
 
-static void do_test_verify (bool verify_ok,
+static const std::string load_names[] = {
+  "location",
+  "conf",
+  "setter",
+};
+
+
+static void do_test_verify (const int line, bool verify_ok,
                             cert_load_t load_key,
                             RdKafka::CertificateEncoding key_enc,
                             cert_load_t load_pub,
-                            RdKafka::CertificateEncoding pub_enc) {
+                            RdKafka::CertificateEncoding pub_enc,
+                            cert_load_t load_ca,
+                            RdKafka::CertificateEncoding ca_enc) {
   /*
    * Create any type of client
    */
+  std::string teststr = tostr() << line << ": " <<
+                        "SSL cert verify: verify_ok=" << verify_ok <<
+                        ", load_key=" << load_names[load_key] <<
+                        ", load_pub=" << load_names[load_pub] <<
+                        ", load_ca=" << load_names[load_ca];
 
-  Test::Say(tostr() << "SSL cert verify: verify_ok=" << verify_ok <<
-            ", load_key=" << (int)load_key << ", load_pub=" << load_pub <<
-            "\n");
+  Test::Say(_C_BLU "[ " + teststr + " ]\n" _C_CLR);
 
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 10);
@@ -225,6 +236,11 @@ static void do_test_verify (bool verify_ok,
   else if (load_pub == USE_SETTER)
     conf_location_to_setter(conf, "ssl.certificate.location",
                             RdKafka::CERT_PUBLIC_KEY, pub_enc);
+
+  if (load_ca == USE_SETTER)
+    conf_location_to_setter(conf, "ssl.ca.location",
+                            RdKafka::CERT_CA, ca_enc);
+
 
   std::string errstr;
   conf->set("debug", "security", errstr);
@@ -255,31 +271,61 @@ static void do_test_verify (bool verify_ok,
       Test::Fail("Expected at least one verifyCb invocation");
   mtx_unlock(&verifyCb.lock);
 
+  /* Retrieving the clusterid allows us to easily check if a
+   * connection could be made. Match this to the expected outcome of
+   * this test. */
+  std::string cluster = p->clusterid(1000);
+
+  if (verify_ok == cluster.empty())
+    Test::Fail("Expected connection to " +
+               (std::string)(verify_ok ? "succeed" : "fail") +
+               ", but got clusterid '" + cluster + "'");
+
   delete p;
+
+    Test::Say(_C_GRN "[ PASSED: " + teststr + " ]\n" _C_CLR);
 }
 
 extern "C" {
   int main_0097_ssl_verify (int argc, char **argv) {
-    do_test_verify(true,
+
+    if (!test_check_builtin("ssl")) {
+      Test::Skip("Test requires SSL support\n");
+      return 0;
+    }
+
+    if (!test_getenv("RDK_SSL_pkcs", NULL)) {
+      Test::Skip("Test requires RDK_SSL_* env-vars set up by trivup\n");
+      return 0;
+    }
+
+    do_test_verify(__LINE__, true,
+                   USE_LOCATION, RdKafka::CERT_ENC_PEM,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM);
-    do_test_verify(false,
+    do_test_verify(__LINE__, false,
+                   USE_LOCATION, RdKafka::CERT_ENC_PEM,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM);
 
-    /* Verify various priv and pub key input formats */
-    do_test_verify(true,
+    /* Verify various priv and pub key and CA input formats */
+    do_test_verify(__LINE__, true,
                    USE_CONF, RdKafka::CERT_ENC_PEM,
-                   USE_CONF, RdKafka::CERT_ENC_PEM);
-    do_test_verify(true,
+                   USE_CONF, RdKafka::CERT_ENC_PEM,
+                   USE_LOCATION, RdKafka::CERT_ENC_PEM);
+    do_test_verify(__LINE__, true,
                    USE_SETTER, RdKafka::CERT_ENC_PEM,
-                   USE_SETTER, RdKafka::CERT_ENC_PEM);
-    do_test_verify(true,
+                   USE_SETTER, RdKafka::CERT_ENC_PEM,
+                   USE_SETTER, RdKafka::CERT_ENC_PKCS12);
+    do_test_verify(__LINE__, true,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                   USE_SETTER, RdKafka::CERT_ENC_DER,
                    USE_SETTER, RdKafka::CERT_ENC_DER);
-    do_test_verify(true,
+    do_test_verify(__LINE__, true,
+                   USE_SETTER, RdKafka::CERT_ENC_PKCS12,
                    USE_SETTER, RdKafka::CERT_ENC_PKCS12,
                    USE_SETTER, RdKafka::CERT_ENC_PKCS12);
+
     return 0;
   }
 }

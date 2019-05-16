@@ -469,6 +469,7 @@ std::string  err2str(RdKafka::ErrorCode err);
 enum CertificateType {
   CERT_PUBLIC_KEY,   /**< Client's public key */
   CERT_PRIVATE_KEY,  /**< Client's private key */
+  CERT_CA,           /**< CA certificate */
   CERT__CNT
 };
 
@@ -1079,8 +1080,9 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
-  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\"
-      @remark this is not supported on the MIPS platform
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\".
+   *  @returns CONF_OK on success or CONF_INVALID if SSL is
+   *           not supported in this build.
   */
   virtual Conf::ConfResult set(const std::string &name,
                                SslCertificateVerifyCb *ssl_cert_verify_cb,
@@ -1098,9 +1100,8 @@ class RD_EXPORT Conf {
    * @param errstr A human-readable error string will be written to this string
    *               on failure.
    *
-   * @returns CONF_OK on success or CONF_INVALID if the
-   *          \p cert_type / \p cert_enc combination is invalid, or if the
-   *          memory in \p buffer is of incorrect encoding, or if librdkafka
+   * @returns CONF_OK on success or CONF_INVALID if the memory in
+   *          \p buffer is of incorrect encoding, or if librdkafka
    *          was not built with SSL support.
    *
    * @remark Calling this method multiple times with the same \p cert_type
@@ -1113,7 +1114,7 @@ class RD_EXPORT Conf {
    *         with the `ssl.key.password` configuration property prior to
    *         calling this function.
    *
-   * @remark Private keys in PEM format may also be set with the
+   * @remark Private and public keys in PEM format may also be set with the
    *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
    */
   virtual Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,

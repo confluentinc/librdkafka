@@ -1926,7 +1926,7 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
  * to \c errstr (limited to \c errstr_size bytes, including nul-term).
  *
  * @returns RD_KAFKA_CONF_OK if SSL is supported in this build, else
- *          RD_KAFKA_CONF_UNKNOWN.
+ *          RD_KAFKA_CONF_INVALID.
  *
  * @warning This callback will be called from internal librdkafka threads.
  *
@@ -1956,6 +1956,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
 typedef enum rd_kafka_cert_type_t {
         RD_KAFKA_CERT_PUBLIC_KEY,  /**< Client's public key */
         RD_KAFKA_CERT_PRIVATE_KEY, /**< Client's private key */
+        RD_KAFKA_CERT_CA,          /**< CA certificate */
         RD_KAFKA_CERT__CNT,
 } rd_kafka_cert_type_t;
 
@@ -1988,13 +1989,7 @@ typedef enum rd_kafka_cert_enc_t {
  *               on failure.
  * @param errstr_size Size of \p errstr, including space for nul-terminator.
  *
- * Valid combinations:
- *  RD_KAFKA_CERT_PUBLIC_KEY:  RD_KAFKA_CERT_ENC_PKCS12, RD_KAFKA_CERT_ENC_DER,
- *                             RD_KAFKA_CERT_ENC_PEM
- *  RD_KAFKA_CERT_PRIVATE_KEY: RD_KAFKA_CERT_ENC_PKCS12, RD_KAFKA_CERT_ENC_PEM
- *
  * @returns RD_KAFKA_CONF_OK on success or RD_KAFKA_CONF_INVALID if the
- *          \p cert_type / \p cert_enc combination is invalid, or if the
  *          memory in \p buffer is of incorrect encoding, or if librdkafka
  *          was not built with SSL support.
  *
@@ -2008,7 +2003,7 @@ typedef enum rd_kafka_cert_enc_t {
  *         with the `ssl.key.password` configuration property prior to
  *         calling this function.
  *
- * @remark Private keys in PEM format may also be set with the
+ * @remark Private and public keys in PEM format may also be set with the
  *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
  */
 RD_EXPORT rd_kafka_conf_res_t
@@ -4070,30 +4065,6 @@ int rd_kafka_wait_destroyed(int timeout_ms);
  */
 RD_EXPORT
 int rd_kafka_unittest (void);
-
-
-/**
- * @brief Convenience method to convert a DER (X.509) formatted
- *        certificate or key to PEM format, which can then be passed
- *        to the ssl.*.pem range of properties.
- *
- * @param der_buf DER formatted binary input.
- * @param der_size Size of \p der_bef.
- * @param pem_buf Will be set to a newly allocated nul-terminated PEM string
- *                on success. This pointer MUST be freed with
- *                rd_kafka_mem_free().
- * @param pem_size The length of \p pem_buf.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE if librdkafka was built
- *          without OpenSSL support,
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p der_buf can't be parsed
- *          as X509,
- *          RD_KAFKA_RESP_ERR__BAD_MSG if the PEM conversion can't be made.
- */
-RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_DER_to_PEM (const void *der_buf, size_t der_size,
-                                         char **pem_buf, size_t *pem_size);
 
 
 /**@}*/

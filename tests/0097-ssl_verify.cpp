@@ -56,8 +56,7 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
 
   bool ssl_cert_verify_cb (const std::string &broker_name,
                            int32_t broker_id,
-                           bool preverify_ok,
-                           void *x509_ctx,
+                           int *x509_error,
                            int depth,
                            const char *buf, size_t size,
                            std::string &errstr) {
@@ -67,8 +66,8 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
     Test::Say(tostr() << "ssl_cert_verify_cb #" << cnt <<
               ": broker_name=" << broker_name <<
               ", broker_id=" << broker_id <<
-              ", preverify_ok=" << preverify_ok <<
-              ", x509_ctx=" << x509_ctx << ", depth=" << depth <<
+              ", x509_error=" << *x509_error <<
+              ", depth=" << depth <<
               ", buf size=" << size << ", verify_ok=" << verify_ok << "\n");
 
     cnt++;
@@ -78,6 +77,8 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
       return true;
 
     errstr = "This test triggered a verification failure";
+    *x509_error = 26; /*X509_V_ERR_INVALID_PURPOSE*/
+
     return false;
   }
 };

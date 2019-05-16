@@ -147,7 +147,7 @@ RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
 int RdKafka::ssl_cert_verify_cb_trampoline (rd_kafka_t *rk,
                                             const char *broker_name,
                                             int32_t broker_id,
-                                            int preverify_ok, void *x509_ctx,
+                                            int *x509_error,
                                             int depth,
                                             const char *buf, size_t size,
                                             char *errstr, size_t errstr_size,
@@ -157,7 +157,7 @@ int RdKafka::ssl_cert_verify_cb_trampoline (rd_kafka_t *rk,
 
   bool res = 0 != handle->ssl_cert_verify_cb_->
     ssl_cert_verify_cb(std::string(broker_name), broker_id,
-                       0 != preverify_ok, x509_ctx,
+                       x509_error,
                        depth,
                        buf, size,
                        errbuf);

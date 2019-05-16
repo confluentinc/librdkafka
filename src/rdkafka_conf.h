@@ -233,7 +233,7 @@ struct rd_kafka_conf_s {
                 int (*cert_verify_cb) (rd_kafka_t *rk,
                                        const char *broker_name,
                                        int32_t broker_id,
-                                       int preverify_ok, void *x509_ctx,
+                                       int *x509_error,
                                        int depth,
                                        const char *buf, size_t size,
                                        char *errstr, size_t errstr_size,

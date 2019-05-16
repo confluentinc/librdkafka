@@ -682,7 +682,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
           _RK(ssl.cert_verify_cb),
-          "Verify the broker certificate callback."
+          "Callback to verify the broker certificate chain."
         },
 #endif /* WITH_SSL */
 
@@ -2400,7 +2400,7 @@ rd_kafka_conf_set_ssl_cert_verify_cb (
         int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
                                    const char *broker_name,
                                    int32_t broker_id,
-                                   int preverify_ok, void *x509_ctx,
+                                   int *x509_set_error,
                                    int depth,
                                    const char *buf, size_t size,
                                    char *errstr, size_t errstr_size,

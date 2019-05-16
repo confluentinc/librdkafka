@@ -202,12 +202,12 @@ public:
 
 class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
         /* This SSL cert verification callback simply prints the certificates
-         * in the certificate chain. It provides no validatio, everything is ok. */
+         * in the certificate chain.
+         * It provides no validation, everything is ok. */
 public:
         bool ssl_cert_verify_cb (const std::string &broker_name,
                                  int32_t broker_id,
-                                 bool preverify_ok,
-                                 void *x509_ctx,
+                                 int *x509_error,
                                  int depth,
                                  const char *buf, size_t size,
                                  std::string &errstr) {
@@ -232,7 +232,7 @@ public:
                 std::cerr << "Broker " << broker_name <<
                         " (" << broker_id << "): " <<
                         "certificate depth " << depth <<
-                        ", preverify " << (preverify_ok ? "ok" : "failed") <<
+                        ", X509 error " << *x509_error <<
                         ", subject " << subject <<
                         ", issuer " << issuer << std::endl;
 

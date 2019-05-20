@@ -32,6 +32,17 @@
  * C variables and functions shared with C++ tests
  */
 
+
+/* ANSI color codes */
+#define _C_CLR "\033[0m"
+#define _C_RED "\033[31m"
+#define _C_GRN "\033[32m"
+#define _C_YEL "\033[33m"
+#define _C_BLU "\033[34m"
+#define _C_MAG "\033[35m"
+#define _C_CYA "\033[36m"
+
+
 /** @returns the \p msecs timeout multiplied by the test timeout multiplier */
 extern int tmout_multip (int msecs);
 

@@ -76,14 +76,6 @@ extern mtx_t test_mtx;
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
 
-#define _C_CLR "\033[0m"
-#define _C_RED "\033[31m"
-#define _C_GRN "\033[32m"
-#define _C_YEL "\033[33m"
-#define _C_BLU "\033[34m"
-#define _C_MAG "\033[35m"
-#define _C_CYA "\033[36m"
-
 typedef enum {
         TEST_NOT_STARTED,
         TEST_SKIPPED,

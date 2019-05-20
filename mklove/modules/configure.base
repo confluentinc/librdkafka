@@ -1294,13 +1294,22 @@ function mkl_check_done {
 #  compiler arguments (optional "", example: "-lzookeeper")
 #  source snippet
 function mkl_compile_check {
-    local ldf=
-    if [[ $1 == --ldflags=* ]]; then
-	ldf=${1#*=}
-	shift
+
+    local sub=0
+    if [[ $1 == --sub ]]; then
+        sub=1
+        shift
     fi
 
-    mkl_check_begin "$1" "$2" "$3" "$1 (by compile)" && return $?
+    local ldf=
+    if [[ $1 == --ldflags=* ]]; then
+        ldf=${1#*=}
+        shift
+    fi
+
+    if [[ $sub -eq 0 ]]; then
+        mkl_check_begin "$1" "$2" "$3" "$1 (by compile)" && return $?
+    fi
 
     local cflags=
 
@@ -1321,14 +1330,14 @@ int main () { return 0; }
 " >> $srcfile
 
     local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $srcfile -o ${srcfile}.o $ldf $(mkl_mkvar_get LDFLAGS) $5";
-    mkl_dbg "Compile check $1 ($2): $cmd"
+    mkl_dbg "Compile check $1 ($2) (sub=$sub): $cmd"
 
     local output
     output=$($cmd 2>&1)
 
     if [[ $? != 0 ]] ; then
         mkl_dbg "compile check for $1 ($2) failed: $cmd: $output"
-        mkl_check_failed "$1" "$2" "$3" "compile check failed:
+        [[ $sub -eq 0 ]] &&  mkl_check_failed "$1" "$2" "$3" "compile check failed:
 CC: $4
 flags: $5
 $cmd:
@@ -1336,7 +1345,7 @@ $output
 source: $6"
         local ret=1
     else
-        mkl_check_done "$1" "$2" "$3" "ok"
+        [[ $sub -eq 0 ]] && mkl_check_done "$1" "$2" "$3" "ok"
         local ret=0
     fi
 
@@ -1523,24 +1532,21 @@ function mkl_lib_check0 {
     local pkg_conf_failed=1
     if [[ $WITH_PKGCONFIG == "y" ]]; then
         # Let pkg-config populate CFLAGS, et.al.
-        mkl_pkg_config_check $libnameopt "$1" "$2" cont
-        pkg_conf_failed=$?
+        # Return on success.
+        mkl_pkg_config_check $libnameopt "$1" "$2" cont "$4" "$6" && return $?
     fi
 
-    local libs=""
-    if [[ $pkg_conf_failed ]]; then
-        libs="$5"
-        local stlibs=$(mkl_lib_check_static $1 "$libs")
-        if [[ -n $stlibs ]]; then
-            libs=$stlibs
-        fi
+    local libs="$5"
+    local stlibs=$(mkl_lib_check_static $1 "$libs")
+    if [[ -n $stlibs ]]; then
+        libs=$stlibs
     fi
 
     if ! mkl_compile_check "$1" "$2" "$action" "$4" "$libs" "$6"; then
         return 1
     fi
 
-    if [[ $pkg_conf_failed == 1 ]]; then
+    if [[ -n $libs ]]; then
         # Add libraries in reverse order to make sure inter-dependencies
         # are resolved in the correct order.
         # E.g., check for crypto and then ssl should result in -lssl -lcrypto
@@ -1618,6 +1624,8 @@ function mkl_lib_check {
 #  config name
 #  define name
 #  action (fail|disable|ignore|cont)
+#  compiler (CC|CXX)
+#  source snippet
 function mkl_pkg_config_check {
 
     local libname=$1
@@ -1663,6 +1671,17 @@ $cflags"
     fi
 
     mkl_dbg "$1: from pkg-config: CFLAGS '$CFLAGS', LIBS '$LIBS'"
+
+    local snippet="$5"
+    if [[ -n $snippet ]]; then
+        mkl_dbg "$1: performing compile check using pkg-config info"
+
+        if ! mkl_compile_check --sub "$1" "$2" "no-cache" "$4" "$cflags $libs" "$snippet"; then
+            mkl_check_failed "$cname" "" "$3" "compile check failed"
+            return 1
+        fi
+    fi
+
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
     local stlibs=$(mkl_lib_check_static $1 "$libs")
@@ -1673,8 +1692,7 @@ $cflags"
     mkl_dbg "$1: from pkg-config: LIBS: prepend $libs"
     mkl_mkvar_prepend "$1" LIBS "$libs"
 
-    # Clear define name ($2): caller may have additional checks
-    mkl_check_done "$1" "" "$3" "ok"
+    mkl_check_done "$1" "$2" "$3" "ok"
 
     return 0
 }

@@ -1,36 +1,38 @@
 librdkafka - the Apache Kafka C/C++ client library
 ==================================================
 
-Copyright (c) 2012-2018, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2019, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
-[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka) [![Build status](https://doozer.io/badge/edenhill/librdkafka/buildstatus/master)](https://doozer.io/user/edenhill/librdkafka)
-
-
 **librdkafka** is a C library implementation of the
-[Apache Kafka](http://kafka.apache.org/) protocol, containing both
-Producer and Consumer support. It was designed with message delivery reliability
+[Apache Kafka](http://kafka.apache.org/) protocol, providing Producer, Consumer
+and Admin clients. It was designed with message delivery reliability
 and high performance in mind, current figures exceed 1 million msgs/second for
 the producer and 3 million msgs/second for the consumer.
 
 **librdkafka** is licensed under the 2-clause BSD license.
 
-For an introduction to the performance and usage of librdkafka, see
-[INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
+# Documentation
 
-See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
+ * Public API in [C header](src/rdkafka.h) and [C++ header](src-cpp/rdkafkacpp.h).
+ * Introduction and manual in [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md).
+ * Configuration properties in
+[CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
+ * Statistics metrics in [STATISTICS.md](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md).
+ * [Frequently asked questions](https://github.com/edenhill/librdkafka/wiki).
 
-**NOTE**: The `master` branch is actively developed, use latest release for production use.
+**NOTE**: The `master` branch is actively developed, use latest [release](https://github.com/edenhill/librdkafka/releases) for production use.
 
 
 # Overview #
   * High-level producer
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
   * Simple (legacy) consumer
+  * Admin client
   * Compression: snappy, gzip, lz4, zstd
   * [SSL](https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka) support
-  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos/SSPI, PLAIN, SCRAM) support
+  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos/SSPI, PLAIN, SCRAM, OAUTHBEARER) support
   * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))
   * Stable C & C++ APIs (ABI safety guaranteed for C)
   * [Statistics](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md) metrics
@@ -38,6 +40,97 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * RPM package: librdkafka and librdkafka-devel
   * Gentoo package: dev-libs/librdkafka
   * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, AIX, ...
+
+
+# Installation
+
+## Installing prebuilt packages
+
+On Mac OSX, install librdkafka with homebrew:
+
+```bash
+$ brew install librdkafka
+```
+
+On Debian and Ubuntu, install librdkafka from the Confluent APT repositories,
+see instructions [here](https://docs.confluent.io/current/installation/installing_cp/deb-ubuntu.html#get-the-software) and then install librdkafka:
+
+ ```bash
+ $ apt install librdkafka-dev
+ ```
+
+On RedHat, CentOS, Fedora, install librdkafka from the Confluent YUM repositories,
+instructions [here](https://docs.confluent.io/current/installation/installing_cp/rhel-centos.html#get-the-software) and then install librdkafka:
+
+```bash
+$ yum install librdkafka-devel
+```
+
+On Windows, reference [librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/) NuGet package in your Visual Studio project.
+
+
+For other platforms, follow the source building instructions below.
+
+
+## Build from source
+
+### Requirements
+	The GNU toolchain
+	GNU make
+   	pthreads
+	zlib-dev (optional, for gzip compression support)
+	libssl-dev (optional, for SSL and SASL SCRAM support)
+	libsasl2-dev (optional, for SASL GSSAPI support)
+	libzstd-dev (optional, for ZStd compression support)
+
+**NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
+          enables encoding the original size in the compression frame header,
+          which will speed up the consumer.
+          Use `STATIC_LIB_zstd=/path/to/libzstd.a ./configure --enable-static`
+          to enable static ZStd linking.
+          MacOSX example:
+          `STATIC_LIB_zstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
+
+
+### Building
+
+      ./configure
+      # Or, to automatically install dependencies using the system's package manager:
+      # ./configure --install-deps
+      # Or, build dependencies from source:
+      # ./configure --install-deps --source-deps-only
+
+      make
+      sudo make install
+
+
+**NOTE**: See [README.win32](README.win32) for instructions how to build
+          on Windows with Microsoft Visual Studio.
+
+**NOTE**: See [CMake instructions](packaging/cmake/README.md) for experimental
+          CMake build (unsupported).
+
+
+## Usage in code
+
+See the [examples directory](examples/) for an example producer and consumer.
+
+Link your program with `-lrdkafka` (C) or `-lrdkafka++` (C++).
+
+
+### Commercial support
+
+Commercial support is available from [Confluent Inc](https://www.confluent.io/)
+
+
+## Community support
+
+**Only the [last official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
+
+File bug reports, feature requests and questions using
+[GitHub Issues](https://github.com/edenhill/librdkafka/issues)
+
+Questions and discussions are also welcome on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel, or irc.freenode.org #apache-kafka channel. 
 
 
 # Language bindings #
@@ -85,122 +178,3 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * large unnamed financial institutions
   * and many more..
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
-
-
-
-# Usage
-
-## Requirements
-	The GNU toolchain
-	GNU make
-   	pthreads
-	zlib-dev (optional, for gzip compression support)
-	libssl-dev (optional, for SSL and SASL SCRAM support)
-	libsasl2-dev (optional, for SASL GSSAPI support)
-	libzstd-dev (optional, for ZStd compression support)
-
-**NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
-          enables encoding the original size in the compression frame header,
-          which will speed up the consumer.
-          Use `STATIC_LIB_zstd=/path/to/libzstd.a ./configure --enable-static`
-          to enable static ZStd linking.
-          MacOSX example:
-          `STATIC_LIB_zstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
-
-## Instructions
-
-### Installing prebuilt packages
-
-On Mac OSX, install librdkafka with homebrew:
-
-```bash
-$ brew install librdkafka
-```
-
-On Debian and Ubuntu, install librdkafka from the Confluent APT repositories,
-see instructions [here](https://docs.confluent.io/current/installation/installing_cp/deb-ubuntu.html#get-the-software) and then install librdkafka:
-
- ```bash
- $ apt install librdkafka-dev
- ```
-
-On RedHat, CentOS, Fedora, install librdkafka from the Confluent YUM repositories,
-instructions [here](https://docs.confluent.io/current/installation/installing_cp/rhel-centos.html#get-the-software) and then install librdkafka:
-
-```bash
-$ yum install librdkafka-devel
-```
-
-On Windows, reference [librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/) NuGet package in your Visual Studio project.
-
-
-For other platforms, follow the source building instructions below.
-
-
-### Building
-
-      ./configure
-      # Or, to automatically install dependencies using the system's package manager:
-      # ./configure --install-deps
-      # Or, build dependencies from source:
-      # ./configure --install-deps --source-deps-only
-
-      make
-      sudo make install
-
-
-**NOTE**: See [README.win32](README.win32) for instructions how to build
-          on Windows with Microsoft Visual Studio.
-
-**NOTE**: See [CMake instructions](packaging/cmake/README.md) for experimental
-          CMake build (unsupported).
-
-
-### Usage in code
-
-See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/master/examples/rdkafka_example.c) for an example producer and consumer.
-
-Link your program with `-lrdkafka -lz -lpthread -lrt`.
-
-
-## Documentation
-
-The public APIs are documented in their respective header files:
- * The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
- * The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
-
-To generate Doxygen documents for the API, type:
-
-    make docs
-
-
-Configuration properties are documented in
-[CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
-
-For a librdkafka introduction, see
-[INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
-
-
-## Examples
-
-See the `examples/`sub-directory.
-
-
-## Tests
-
-See the `tests/`sub-directory.
-
-
-## Support
-
-File bug reports, feature requests and questions using
-[GitHub Issues](https://github.com/edenhill/librdkafka/issues)
-
-
-Questions and discussions are also welcome on irc.freenode.org, #apache-kafka,
-nickname Snaps.
-
-
-### Commercial support
-
-Commercial support is available from [Edenhill services](http://www.edenhill.se)

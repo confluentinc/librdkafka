@@ -13,19 +13,7 @@ the producer and 3 million msgs/second for the consumer.
 
 **librdkafka** is licensed under the 2-clause BSD license.
 
-# Documentation
-
- * Public API in [C header](src/rdkafka.h) and [C++ header](src-cpp/rdkafkacpp.h).
- * Introduction and manual in [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md).
- * Configuration properties in
-[CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
- * Statistics metrics in [STATISTICS.md](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md).
- * [Frequently asked questions](https://github.com/edenhill/librdkafka/wiki).
-
-**NOTE**: The `master` branch is actively developed, use latest [release](https://github.com/edenhill/librdkafka/releases) for production use.
-
-
-# Overview #
+# Features #
   * High-level producer
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
   * Simple (legacy) consumer
@@ -40,6 +28,17 @@ the producer and 3 million msgs/second for the consumer.
   * RPM package: librdkafka and librdkafka-devel
   * Gentoo package: dev-libs/librdkafka
   * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, AIX, ...
+
+# Documentation
+
+ * Public API in [C header](src/rdkafka.h) and [C++ header](src-cpp/rdkafkacpp.h).
+ * Introduction and manual in [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md).
+ * Configuration properties in
+[CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
+ * Statistics metrics in [STATISTICS.md](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md).
+ * [Frequently asked questions](https://github.com/edenhill/librdkafka/wiki).
+
+**NOTE**: The `master` branch is actively developed, use latest [release](https://github.com/edenhill/librdkafka/releases) for production use.
 
 
 # Installation
@@ -118,7 +117,7 @@ See the [examples directory](examples/) for an example producer and consumer.
 Link your program with `-lrdkafka` (C) or `-lrdkafka++` (C++).
 
 
-### Commercial support
+## Commercial support
 
 Commercial support is available from [Confluent Inc](https://www.confluent.io/)
 

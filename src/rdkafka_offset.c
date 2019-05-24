@@ -714,7 +714,7 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
                 }
 
                 rd_kafka_offset_store0(rd_kafka_toppar_s2i(s_rktp),
-                                       rktpar->offset, 1/*lock*/);
+                                       rktpar->offset+1, 1/*lock*/);
                 rd_kafka_toppar_destroy(s_rktp);
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;

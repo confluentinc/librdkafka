@@ -183,7 +183,7 @@ void foo (void) {
     mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
 
     # Required on SunOS
-    if [[ $MKL_DISTRO == "SunOS" ]]; then
+    if [[ $MKL_DISTRO == "sunos" ]]; then
 	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
 	# Source defines _POSIX_C_SOURCE to 200809L for Solaris, and this is
 	# incompatible on that platform with compilers < c99.
@@ -223,7 +223,7 @@ void foo (void) {
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then
 	# nm by future mk var
-	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "AIX" ]]; then
+	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "aix" ]]; then
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -g'
 	else
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'

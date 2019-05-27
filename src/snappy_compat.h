@@ -44,23 +44,65 @@ struct iovec {
 };
 #endif
 
-#define get_unaligned_memcpy(x) ({ \
-		typeof(*(x)) _ret; \
-		memcpy(&_ret, (x), sizeof(*(x))); \
-		_ret; })
-#define put_unaligned_memcpy(v,x) ({ \
-		typeof((v)) _v = (v); \
-		memcpy((x), &_v, sizeof(*(x))); })
+#ifdef _MSC_VER
+#define inline __inline
+#endif
+
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned u32;
+typedef unsigned long long u64;
+
+
+static inline u16 get_unaligned16_memcpy(const void *p)
+{
+	u16 t;
+	memcpy(&t, p, sizeof t);
+	return t;
+}
+
+static inline u32 get_unaligned32_memcpy(const void *p)
+{
+	u32 t;
+	memcpy(&t, p, sizeof t);
+	return t;
+}
+
+static inline u64 get_unaligned64_memcpy(const void *p)
+{
+	u64 t;
+	memcpy(&t, p, sizeof t);
+	return t;
+}
+
+static inline void put_unaligned16_memcpy(u16 v, void *p)
+{
+	memcpy(p, &v, sizeof v);
+}
+
+static inline void put_unaligned32_memcpy(u32 v, void *p)
+{
+	memcpy(p, &v, sizeof v);
+}
+
+static inline void put_unaligned64_memcpy(u64 v, void *p)
+{
+	memcpy(p, &v, sizeof v);
+}
 
 #define get_unaligned_direct(x) (*(x))
 #define put_unaligned_direct(v,x) (*(x) = (v))
 
 // Potentially unaligned loads and stores.
-// x86 and PowerPC can simply do these loads and stores native.
-#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64)
+// x86, PowerPC, and ARM64 can simply do these loads and stores native.
+#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || \
+	defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || \
+	defined(__aarch64__)
 
-#define get_unaligned get_unaligned_direct
-#define put_unaligned put_unaligned_direct
+#define get_unaligned16 get_unaligned_direct
+#define put_unaligned16 put_unaligned_direct
+#define get_unaligned32 get_unaligned_direct
+#define put_unaligned32 put_unaligned_direct
 #define get_unaligned64 get_unaligned_direct
 #define put_unaligned64 put_unaligned_direct
 
@@ -86,29 +128,29 @@ struct iovec {
 	!defined(__ARM_ARCH_6ZK__) &&		\
 	!defined(__ARM_ARCH_6T2__)
 
-#define get_unaligned get_unaligned_direct
-#define put_unaligned put_unaligned_direct
-#define get_unaligned64 get_unaligned_memcpy
-#define put_unaligned64 put_unaligned_memcpy
+#define get_unaligned16 get_unaligned_direct
+#define put_unaligned16 put_unaligned_direct
+#define get_unaligned32 get_unaligned_direct
+#define put_unaligned32 put_unaligned_direct
+#define get_unaligned64 get_unaligned64_memcpy
+#define put_unaligned64 put_unaligned64_memcpy
 
 // These macroses are provided for architectures that don't support
 // unaligned loads and stores.
 #else
 
-#define get_unaligned get_unaligned_memcpy
-#define put_unaligned put_unaligned_memcpy
-#define get_unaligned64 get_unaligned_memcpy
-#define put_unaligned64 put_unaligned_memcpy
+#define get_unaligned16 get_unaligned16_memcpy
+#define put_unaligned16 put_unaligned16_memcpy
+#define get_unaligned32 get_unaligned32_memcpy
+#define put_unaligned32 put_unaligned32_memcpy
+#define get_unaligned64 get_unaligned64_memcpy
+#define put_unaligned64 put_unaligned64_memcpy
 
 #endif
 
-#define get_unaligned_le32(x) (le32toh(get_unaligned((u32 *)(x))))
-#define put_unaligned_le16(v,x) (put_unaligned(htole16(v), (u16 *)(x)))
+#define get_unaligned_le32(x) (le32toh(get_unaligned32((u32 *)(x))))
+#define put_unaligned_le16(v,x) (put_unaligned16(htole16(v), (u16 *)(x)))
 
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned u32;
-typedef unsigned long long u64;
 
 #ifdef _MSC_VER
 #define BUG_ON(x) do { if (unlikely((x))) abort(); } while (0)

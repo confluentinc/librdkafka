@@ -56,8 +56,10 @@ struct iovec {
 #define put_unaligned_direct(v,x) (*(x) = (v))
 
 // Potentially unaligned loads and stores.
-// x86 and PowerPC can simply do these loads and stores native.
-#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64)
+// x86, PowerPC, and ARM64 can simply do these loads and stores native.
+#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || \
+	defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || \
+	defined(__aarch64__)
 
 #define get_unaligned get_unaligned_direct
 #define put_unaligned put_unaligned_direct

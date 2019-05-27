@@ -9,6 +9,7 @@ environment:
   - platform: win32
 install:
 - ps: "& .\\win32\\install-openssl.ps1"
+- ps: "& .\\win32\\install-coapp.ps1"
 cache:
 - c:\OpenSSL-Win32
 - c:\OpenSSL-Win64

@@ -1,3 +1,6 @@
+/**
+ * Copyright: public domain
+ */
 #pragma once
 
 /**

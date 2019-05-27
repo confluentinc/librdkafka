@@ -22,6 +22,7 @@ script:
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh centos ; fi
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh debian ; fi
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_clang" ]]; then packaging/tools/distro-build.sh alpine ; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then make copyright-check ; fi
 deploy:
   provider: s3
   access_key_id:

@@ -167,6 +167,20 @@ file-check:
 	done ; \
 	$$RET
 
+copyright-check:
+	@(_exit=0 ; \
+	  for f in $$(git ls-tree -r --name-only HEAD | \
+			egrep '\.(c|h|cpp|sh|py|pl)$$' ) ; do \
+		if [ -n "$(MKL_COPYRIGHT_SKIP)" ] && echo "$$f" | egrep -q "$(MKL_COPYRIGHT_SKIP)" ; then \
+			continue ; \
+		fi ; \
+		if ! head -40 $$f | grep -qi copyright $$f ; then \
+			echo error: Copyright missing in $$f ; \
+			_exit=1 ; \
+		fi; \
+	done ; \
+	exit $$_exit)
+
 
 lib-install:
 	@printf "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"

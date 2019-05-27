@@ -10,6 +10,10 @@ VERSION?=	$(shell python packaging/get_version.py src/rdkafka.h)
 # Jenkins CI integration
 BUILD_NUMBER ?= 1
 
+# Skip copyright check in the following paths
+MKL_COPYRIGHT_SKIP?=^(tests|packaging)
+
+
 .PHONY:
 
 all: mklove-check libs CONFIGURATION.md check

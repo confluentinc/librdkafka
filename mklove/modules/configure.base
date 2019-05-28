@@ -1238,7 +1238,7 @@ function mkl_check {
 
     local func="${modname}_manual_checks"
     if ! mkl_func_exists "$func" ; then
-        mkl_fail "Check function for module $modname not found: missing mkl_requre $modname ?"
+        mkl_fail "Check function for module $modname not found: missing mkl_require $modname ?"
         return 1
     fi
 

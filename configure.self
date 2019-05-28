@@ -16,7 +16,7 @@ mkl_require pic
 mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
-mkl_require zstd
+mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
 
@@ -93,7 +93,7 @@ void foo (void) {
                   "#include <zlib.h>"
     mkl_check "libssl" disable
     mkl_check "libsasl2" disable
-    mkl_check "zstd" disable
+    mkl_check "libzstd" disable
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then

@@ -1060,7 +1060,13 @@ static void rd_kafka_msgset_reader_postproc (rd_kafka_msgset_reader_t *msetr,
                                              int64_t *last_offsetp) {
         rd_kafka_op_t *rko;
 
-        if (msetr->msetr_relative_offsets) {
+        rko = rd_kafka_q_last(&msetr->msetr_rkq,
+                              RD_KAFKA_OP_FETCH,
+                              0 /* no error ops */);
+        if (rko) {
+            *last_offsetp = rko->rko_u.fetch.rkm.rkm_offset;
+
+            if (*last_offsetp != -1 && msetr->msetr_relative_offsets) {
                 /* Update messages to absolute offsets
                  * and purge any messages older than the current
                  * fetch offset. */
@@ -1068,14 +1074,9 @@ static void rd_kafka_msgset_reader_postproc (rd_kafka_msgset_reader_t *msetr,
                                        msetr->msetr_rktp->rktp_offsets.
                                        fetch_offset,
                                        msetr->msetr_outer.offset -
-                                       msetr->msetr_msgcnt + 1);
+                                       *last_offsetp);
+            }
         }
-
-        rko = rd_kafka_q_last(&msetr->msetr_rkq,
-                              RD_KAFKA_OP_FETCH,
-                              0 /* no error ops */);
-        if (rko)
-                *last_offsetp = rko->rko_u.fetch.rkm.rkm_offset;
 }
 
 

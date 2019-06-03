@@ -65,14 +65,6 @@ function manual_checks {
 #if OPENSSL_VERSION_NUMBER < 0x1000200fL
 #error \"Requires OpenSSL version >= v1.0.2\"
 #endif"
-
-    return
-    # mkl_meta_set "libsslver" "name" "OpenSSL version >=v1.0.2"
-    mkl_compile_check "libsslver" "WITH_SSL" disable CC "" \
-         "#include <openssl/ssl.h>
-#if OPENSSL_VERSION_NUMBER < 0x2000200fL
-#error \"Requires OpenSSL version >= v1.0.2\"
-#endif"
 }
 
 

@@ -1,4 +1,4 @@
-src/xxhash.[ch] src/lz4*.[ch]: git@github.com:lz4/lz4.git e2827775ee80d2ef985858727575df31fc60f1f3
+src/rdxxhash.[ch] src/lz4*.[ch]: git@github.com:lz4/lz4.git e2827775ee80d2ef985858727575df31fc60f1f3
 
 LZ4 Library
 Copyright (c) 2011-2016, Yann Collet

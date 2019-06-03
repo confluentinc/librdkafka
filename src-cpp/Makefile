@@ -15,7 +15,7 @@ OBJS=		$(CXXSRCS:%.cpp=%.o)
 
 all: lib check
 
-
+MKL_NO_SELFCONTAINED_STATIC_LIB=y
 include ../mklove/Makefile.base
 
 # No linker script/symbol hiding for C++ library

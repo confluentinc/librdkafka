@@ -33,7 +33,7 @@
 #else
 #include "lz4frame.h"
 #endif
-#include "xxhash.h"
+#include "rdxxhash.h"
 
 #include "rdbuf.h"
 

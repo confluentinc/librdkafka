@@ -222,7 +222,7 @@
     <ClCompile Include="..\src\regexp.c" />
     <ClCompile Include="..\src\rdports.c" />
     <ClCompile Include="..\src\rdavl.c" />
-    <ClCompile Include="..\src\xxhash.c" />
+    <ClCompile Include="..\src\rdxxhash.c" />
     <ClCompile Include="..\src\lz4.c" />
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />

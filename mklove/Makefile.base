@@ -82,7 +82,7 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
-lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
+lib: $(LIBFILENAME) $(LIBNAME).a $(LIBNAME)-static.a $(LIBFILENAMELINK) lib-gen-pkg-config
 
 $(LIBNAME).lds: #overridable
 
@@ -93,6 +93,35 @@ $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
+
+ifeq ($(MKL_NO_SELFCONTAINED_STATIC_LIB),y)
+$(LIBNAME)-static.a:
+else
+$(LIBNAME)-static.a: $(LIBNAME).a
+ifneq ($(MKL_STATIC_LIBS),)
+	@printf "$(MKL_YELLOW)Creating self-contained static library $@$(MKL_CLR_RESET)\n"
+ifeq ($(HAS_LIBTOOL_STATIC),y)
+	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(MKL_STATIC_LIBS)
+else
+	(_tmp=$$(mktemp arstaticXXXXXX) ; \
+	echo "CREATE $@" > $$_tmp ; \
+	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
+		echo "ADDLIB $$_f" >> $$_tmp ; \
+	done ; \
+	echo "SAVE" >> $$_tmp ; \
+	echo "END" >> $$_tmp ; \
+	cat $$_tmp ; \
+	ar -M < $$_tmp || exit 1 ; \
+	rm $$_tmp)
+endif
+ifneq ($(MKL_DYNAMIC_LIBS),)
+	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: The following libraries were not available as static libraries and need to be linked dynamically: $(MKL_DYNAMIC_LIBS)$(MKL_CLR_RESET)\n"
+endif
+else
+	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: Not creating self-contained static library $@: no static libraries available/enabled$(MKL_CLR_RESET)\n"
+endif
+endif
+
 
 $(LIBFILENAMELINK): $(LIBFILENAME)
 	@printf "$(MKL_YELLOW)Creating $@ symlink$(MKL_CLR_RESET)\n"
@@ -125,7 +154,7 @@ Name: $(LIBNAME)-static
 Description: $(MKL_APP_DESC_ONELINE) (static)
 Version: $(MKL_APP_VERSION)
 Cflags: -I$${includedir}
-Libs: -L$${libdir} $${libdir}/$(LIBNAME).a $(LIBS)
+Libs: -L$${libdir} $${libdir}/$(LIBNAME)-static.a $(MKL_DYNAMIC_LIBS)
 endef
 
 export _PKG_CONFIG_STATIC_DEF
@@ -134,7 +163,7 @@ $(LIBNAME0).pc: $(TOPDIR)/Makefile.config
 	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
 	@echo "$$_PKG_CONFIG_DEF" > $@
 
-$(LIBNAME0)-static.pc: $(TOPDIR)/Makefile.config
+$(LIBNAME0)-static.pc: $(TOPDIR)/Makefile.config $(LIBNAME)-static.a
 	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
 	@echo "$$_PKG_CONFIG_STATIC_DEF" > $@
 
@@ -184,19 +213,20 @@ copyright-check:
 
 lib-install:
 	@printf "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
-	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME) && \
-	$(INSTALL) -d $$DESTDIR$(libdir) && \
-	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) && \
-	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) && \
-	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) && \
+	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME)
+	$(INSTALL) -d $$DESTDIR$(libdir)
+	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME)
+	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir)
+	[ ! -f $(LIBNAME)-static.a ] || $(INSTALL) $(LIBNAME)-static.a $$DESTDIR$(libdir)
+	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir)
 	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
-	) && \
+	)
 	[ -f "$(LIBNAME0)-static.pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0)-static.pc $$DESTDIR$(pkgconfigdir) \
-	) && \
+	)
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:
@@ -204,6 +234,7 @@ lib-uninstall:
 	for hdr in $(HDRS) ; do \
 		rm -f $$DESTDIR$(includedir)/$(PKGNAME)/$$hdr ; done
 	rm -f $$DESTDIR$(libdir)/$(LIBNAME).a
+	rm -f $$DESTDIR$(libdir)/$(LIBNAME)-static.a
 	rm -f $$DESTDIR$(libdir)/$(LIBFILENAME)
 	rm -f $$DESTDIR$(libdir)/$(LIBFILENAMELINK)
 	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true

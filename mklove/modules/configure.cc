@@ -57,7 +57,7 @@ function checks {
 
     # Provide prefix and checks for various other build tools.
     local t=
-    for t in LD:ld NM:nm OBJDUMP:objdump STRIP:strip ; do
+    for t in LD:ld NM:nm OBJDUMP:objdump STRIP:strip LIBTOOL:libtool ; do
         local tenv=${t%:*}
         t=${t#*:}
 	local tval="${!tenv}"

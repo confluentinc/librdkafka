@@ -796,6 +796,19 @@ function mkl_generate_late_vars {
 # Generate output files.
 # Must be called following a succesful configure run.
 function mkl_generate {
+
+    # Generate MKL_STATIC_LIBS and MKL_DYNAMIC_LIBS from LIBS
+    local arg=
+    for arg in $LIBS ; do
+        if [[ $arg == -l* ]]; then
+            mkl_mkvar_append "" MKL_DYNAMIC_LIBS $arg
+        elif [[ $arg == *.a ]]; then
+            mkl_mkvar_append "" MKL_STATIC_LIBS $arg
+        else
+            mkl_dbg "Ignoring arg $arg from LIBS while building STATIC and DYNAMIC lists"
+        fi
+    done
+
     local mf=
     for mf in $MKL_GENERATORS ; do
         MKL_MODULE=${mf%:*}

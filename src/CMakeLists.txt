@@ -61,7 +61,7 @@ set(
     snappy.c
     tinycthread.c
     tinycthread_extra.c
-    xxhash.c
+    rdxxhash.c
 )
 
 if(WITH_SSL)

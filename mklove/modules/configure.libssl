@@ -100,7 +100,7 @@ if [[ $MKL_DISTRO != osx ]]; then
         fi
 
         echo "### Building"
-        make -j
+        make
 
         echo "### Installing to $destdir"
         make INSTALL_PREFIX="$destdir" install_sw

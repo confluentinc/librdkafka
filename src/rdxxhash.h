@@ -315,7 +315,7 @@ struct XXH64_state_s {
 
 
 #if defined(XXH_INLINE_ALL) || defined(XXH_PRIVATE_API)
-#  include "xxhash.c"   /* include xxhash function bodies as `static`, for inlining */
+#  include "rdxxhash.c"   /* include xxhash function bodies as `static`, for inlining */
 #endif
 
 #endif /* XXH_STATIC_LINKING_ONLY */

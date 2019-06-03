@@ -18,7 +18,7 @@ SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
 
-SRCS_LZ4 = xxhash.c
+SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
 # Use built-in liblz4
 SRCS_LZ4 += lz4.c lz4frame.c lz4hc.c

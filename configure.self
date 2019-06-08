@@ -87,6 +87,7 @@ void foo (void) {
 
     # optional libs
     mkl_meta_set "zlib" "deb" "zlib1g-dev"
+    mkl_meta_set "zlib" "rpm" "zlib-devel"
     mkl_meta_set "zlib" "apk" "zlib-dev"
     mkl_meta_set "zlib" "static" "libz.a"
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # libssl and libcrypto (OpenSSL or derivate) support, with installer.
-# Requires OpenSSL version v1.0.2 or later.
+# Requires OpenSSL version v1.0.1 or later.
 #
 # Usage:
 #   mkl_require libssl
@@ -42,8 +42,8 @@ function manual_checks {
     if ! mkl_lib_check "libcrypto" "" $action CC "-lcrypto" "
 #include <openssl/ssl.h>
 #include <openssl/evp.h>
-#if OPENSSL_VERSION_NUMBER < 0x1000200fL
-#error \"Requires OpenSSL version >= v1.0.2\"
+#if OPENSSL_VERSION_NUMBER < 0x1000100fL
+#error \"Requires OpenSSL version >= v1.0.1\"
 #endif"; then
         return
     fi
@@ -62,8 +62,8 @@ function manual_checks {
 
     mkl_lib_check "libssl" "WITH_SSL" $action CC "-lssl -lcrypto" \
                   "#include <openssl/ssl.h>
-#if OPENSSL_VERSION_NUMBER < 0x1000200fL
-#error \"Requires OpenSSL version >= v1.0.2\"
+#if OPENSSL_VERSION_NUMBER < 0x1000100fL
+#error \"Requires OpenSSL version >= v1.0.1\"
 #endif"
 }
 

@@ -674,19 +674,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "implementing a certificate_verify_cb.",
           0, 1, 1
         },
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
         { _RK_GLOBAL, "ssl.endpoint.identification.algorithm", _RK_C_S2I,
           _RK(ssl.endpoint_identification),
           "Endpoint identification algorithm to validate broker "
           "hostname using broker certificate. "
           "https - Server (broker) hostname verification as "
           "specified in RFC2818. "
-          "none - No endpoint verification.",
+          "none - No endpoint verification. "
+          "OpenSSL >= 1.0.2 required.",
           .vdef = RD_KAFKA_SSL_ENDPOINT_ID_NONE,
           .s2i = {
                         { RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none" },
                         { RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https" }
                 }
         },
+#endif
         { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
           _RK(ssl.cert_verify_cb),
           "Callback to verify the broker certificate chain."

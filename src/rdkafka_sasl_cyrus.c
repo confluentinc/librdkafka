@@ -511,7 +511,8 @@ static int rd_kafka_sasl_cyrus_init (rd_kafka_t *rk,
                                      char *errstr, size_t errstr_size) {
         rd_kafka_sasl_cyrus_handle_t *handle;
 
-        if (!rk->rk_conf.sasl.kinit_cmd ||
+        if (!rk->rk_conf.sasl.relogin_min_time ||
+            !rk->rk_conf.sasl.kinit_cmd ||
             strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
                 return 0; /* kinit not configured, no need to start timer */
 
@@ -550,7 +551,8 @@ static int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
         if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
                 return 0;
 
-        if (rk->rk_conf.sasl.kinit_cmd) {
+        if (rk->rk_conf.sasl.relogin_min_time &&
+            rk->rk_conf.sasl.kinit_cmd) {
                 char *cmd;
                 char tmperr[128];
 

@@ -732,7 +732,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(sasl.kinit_cmd),
           "Shell command to refresh or acquire the client's Kerberos ticket. "
           "This command is executed on client creation and every "
-          "sasl.kerberos.min.time.before.relogin. "
+          "sasl.kerberos.min.time.before.relogin (0=disable). "
           "%{config.prop.name} is replaced by corresponding config "
           "object value.",
           .sdef =
@@ -747,10 +747,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "This configuration property is only used as a variable in "
           "`sasl.kerberos.kinit.cmd` as "
           "` ... -t \"%{sasl.kerberos.keytab}\"`." },
-	{ _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
-	  _RK(sasl.relogin_min_time),
-	  "Minimum time in milliseconds between key refresh attempts.",
-	  1, 86400*1000, 60*1000 },
+        { _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
+          _RK(sasl.relogin_min_time),
+          "Minimum time in milliseconds between key refresh attempts. "
+          "Disable automatic key refresh by setting this property to 0.",
+          0, 86400*1000, 60*1000 },
 #endif
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),

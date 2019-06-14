@@ -1151,7 +1151,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This is the maximum time librdkafka may use to deliver a message "
 	  "(including retries). Delivery error occurs when either the retry "
 	  "count or the message timeout are exceeded.",
-	  0, 900*1000, 300*1000 },
+	  0, INT32_MAX, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
         { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,

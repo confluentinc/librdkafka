@@ -6,7 +6,7 @@ Copyright (c) 2012-2019, [Magnus Edenhill](http://www.edenhill.se/).
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
 **librdkafka** is a C library implementation of the
-[Apache Kafka](http://kafka.apache.org/) protocol, providing Producer, Consumer
+[Apache Kafka](https://kafka.apache.org/) protocol, providing Producer, Consumer
 and Admin clients. It was designed with message delivery reliability
 and high performance in mind, current figures exceed 1 million msgs/second for
 the producer and 3 million msgs/second for the consumer.
@@ -129,7 +129,7 @@ Commercial support is available from [Confluent Inc](https://www.confluent.io/)
 File bug reports, feature requests and questions using
 [GitHub Issues](https://github.com/edenhill/librdkafka/issues)
 
-Questions and discussions are also welcome on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel, or irc.freenode.org #apache-kafka channel. 
+Questions and discussions are also welcome on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel, or irc.freenode.org #apache-kafka channel.
 
 
 # Language bindings #
@@ -160,21 +160,21 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
   * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
   * [Wikimedia's kafkatee](https://github.com/wikimedia/analytics-kafkatee) - Kafka multi consumer with filtering and fanout
-  * [rsyslog](http://www.rsyslog.com)
+  * [rsyslog](https://www.rsyslog.com)
   * [syslog-ng](http://syslog-ng.org)
-  * [collectd](http://collectd.org)
+  * [collectd](https://collectd.org)
   * [logkafka](https://github.com/Qihoo360/logkafka) - Collect logs and send to Kafka
-  * [redBorder](http://www.redborder.net)
+  * [redBorder](https://redborder.com)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
   * [fuse_kafka](https://github.com/yazgoo/fuse_kafka) - FUSE file system layer
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
-  * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
-  * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
+  * [OVH](https://ovh.com) - [AntiDDOS](https://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
+  * [otto.de](https://www.otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
   * [Microwish](https://github.com/microwish) has a range of Kafka utilites for log aggregation, HDFS integration, etc.
   * [aidp](https://github.com/weiboad/aidp) - kafka consumer embedded Lua scripting language in data process framework
   * [Yandex ClickHouse](https://github.com/yandex/ClickHouse)
-  * [NXLog](http://nxlog.co/) - Enterprise logging system, Kafka input/output plugin.
+  * [NXLog](https://nxlog.co/) - Enterprise logging system, Kafka input/output plugin.
   * large unnamed financial institutions
   * and many more..
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*

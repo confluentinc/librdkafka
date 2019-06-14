@@ -161,7 +161,7 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
   * [Wikimedia's kafkatee](https://github.com/wikimedia/analytics-kafkatee) - Kafka multi consumer with filtering and fanout
   * [rsyslog](https://www.rsyslog.com)
-  * [syslog-ng](http://syslog-ng.org)
+  * [syslog-ng](https://www.syslog-ng.com)
   * [collectd](https://collectd.org)
   * [logkafka](https://github.com/Qihoo360/logkafka) - Collect logs and send to Kafka
   * [redBorder](https://redborder.com)

@@ -216,7 +216,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {
 		rkm->rkm_ts_timeout = now +
-			rkt->rkt_conf.message_timeout_ms * 1000;
+			(int64_t) rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
         /* Call interceptor chain for on_send */

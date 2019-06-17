@@ -2987,6 +2987,8 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 break;
 
         case RD_KAFKA_OP_SUBSCRIBE:
+                rd_kafka_app_polled(rk);
+
                 /* New atomic subscription (may be NULL) */
                 err = rd_kafka_cgrp_subscribe(
                         rkcg, rko->rko_u.subscribe.topics);

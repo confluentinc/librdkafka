@@ -657,13 +657,39 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
  */
 static RD_INLINE RD_UNUSED int
 rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
-        int exceeded =
-                (int)((rd_clock() -
-                       rd_atomic64_get(&rk->rk_ts_last_poll)) / 1000ll) -
+        rd_ts_t last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
+        int exceeded;
+
+        /* Application is blocked in librdkafka function, see
+         * rd_kafka_app_poll_blocking(). */
+        if (last_poll == INT64_MAX)
+                return 0;
+
+        exceeded = (int)((rd_clock() - last_poll) / 1000ll) -
                 rk->rk_conf.max_poll_interval_ms;
+
         if (unlikely(exceeded > 0))
                 return exceeded;
+
         return 0;
+}
+
+/**
+ * @brief Call on entry to blocking polling function to indicate
+ *        that the application is blocked waiting for librdkafka
+ *        and that max.poll.interval.ms should not be enforced.
+ *
+ *        Call app_polled() Upon return from the function calling
+ *        this function to register the application's last time of poll.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_app_poll_blocking (rd_kafka_t *rk) {
+        rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
 }
 
 /**

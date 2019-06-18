@@ -818,7 +818,7 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
         /* Internal latency calculation base.
          * Uses rkm_ts_timeout which is enqueue time + timeout */
         int_latency_base = now +
-                (rktp->rktp_rkt->rkt_conf.message_timeout_ms * 1000);
+                ((rd_ts_t) rktp->rktp_rkt->rkt_conf.message_timeout_ms * 1000);
 
         /* Acquire BaseTimestamp from first message. */
         rkm = TAILQ_FIRST(&rkmq->rkmq_msgs);

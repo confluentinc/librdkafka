@@ -322,6 +322,13 @@ int main_0077_compaction (int argc, char **argv) {
                 return 0;
 
         do_test_compaction(10, NULL);
+
+        if (test_quick) {
+                TEST_SAY("Skipping further compaction tests "
+                         "due to quick mode\n");
+                return 0;
+        }
+
         do_test_compaction(1000, NULL);
 #if WITH_SNAPPY
         do_test_compaction(10, "snappy");

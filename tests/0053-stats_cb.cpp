@@ -368,7 +368,7 @@ static void test_stats () {
   std::string topic = Test::mk_topic_name("0053_stats", 1);
 
   const int partcnt = 2;
-  int msgcnt = 100 * partcnt;
+  int msgcnt = (test_quick ? 10 : 100) * partcnt;
   const int msgsize = 6*1024;
 
   /*

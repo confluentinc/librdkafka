@@ -169,7 +169,7 @@ static void do_test_non_exist_and_partchange (void) {
 	await_no_rebalance("#1: empty", rk, queue, 10000);
 
 	TEST_SAY("#1: creating topic %s\n", topic_a);
-	test_create_topic(topic_a, 2, 1);
+	test_create_topic(NULL, topic_a, 2, 1);
 
 	await_assignment("#1: proper", rk, queue, 1,
 			 topic_a, 2);
@@ -228,7 +228,7 @@ static void do_test_regex (void) {
 	queue = rd_kafka_queue_get_consumer(rk);
 
 	TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
-	test_create_topic(topic_b, 2, 1);
+	test_create_topic(NULL, topic_b, 2, 1);
 	rd_sleep(1); // FIXME: do check&wait loop instead
 
 	TEST_SAY("Regex: Subscribing to %s & %s & %s\n",
@@ -239,13 +239,13 @@ static void do_test_regex (void) {
 			 topic_b, 2);
 
 	TEST_SAY("Regex: creating topic %s (not subscribed)\n", topic_c);
-	test_create_topic(topic_c, 4, 1);
+	test_create_topic(NULL, topic_c, 4, 1);
 
 	/* Should not see a rebalance since no topics are matched. */
 	await_no_rebalance("Regex: empty", rk, queue, 10000);
 
 	TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
-	test_create_topic(topic_d, 1, 1);
+	test_create_topic(NULL, topic_d, 1, 1);
 
 	await_revoke("Regex: rebalance after topic creation", rk, queue);
 
@@ -306,10 +306,10 @@ static void do_test_topic_remove (void) {
 	queue = rd_kafka_queue_get_consumer(rk);
 
 	TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-	test_create_topic(topic_f, parts_f, 1);
+	test_create_topic(NULL, topic_f, parts_f, 1);
 
 	TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-	test_create_topic(topic_g, parts_g, 1);
+	test_create_topic(NULL, topic_g, parts_g, 1);
 
 	rd_sleep(1); // FIXME: do check&wait loop instead
 
@@ -354,8 +354,10 @@ static void do_test_topic_remove (void) {
 
 int main_0045_subscribe_update (int argc, char **argv) {
 
-        if (!test_can_create_topics(1))
+        if (!test_can_create_topics(1)) {
+                TEST_SKIP("Can't create topics\n");
                 return 0;
+        }
 
         do_test_regex();
 

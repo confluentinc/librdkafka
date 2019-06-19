@@ -212,6 +212,12 @@ int main_0094_idempotence_msg_timeout (int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
         do_test_produce_timeout(topic, 10);
+
+        if (test_quick) {
+                TEST_SAY("Skipping further tests due to quick mode\n");
+                return 0;
+        }
+
         do_test_produce_timeout(topic, 100);
 
         return 0;

@@ -90,9 +90,9 @@ static void test_log (std::string what, bool main_queue) {
         RdKafka::Queue *queue = NULL;
         if (!main_queue) {
                 queue = RdKafka::Queue::create(p);
-                queue->poll(4000);
+                queue->poll(1000);
         } else {
-                p->poll(4000);
+                p->poll(1000);
         }
 
         Test::Say(what + "Setting log queue\n");

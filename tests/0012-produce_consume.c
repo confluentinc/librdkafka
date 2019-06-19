@@ -468,7 +468,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
  * Consume with queue interface from both, simultanously.
  */
 static void test_produce_consume (void) {
-	int msgcnt = 1000;
+        int msgcnt = test_quick ? 100 : 1000;
 	int partition_cnt = 2;
 	int i;
 	uint64_t testid;

@@ -204,6 +204,11 @@ int main_0055_producer_latency (int argc, char **argv) {
         const char *topic = test_mk_topic_name("0055_producer_latency", 0);
         int fails = 0;
 
+        if (test_on_ci) {
+                TEST_SKIP("Latency measurements not reliable on CI\n");
+                return 0;
+        }
+
         /* Create topic */
         test_produce_msgs_easy(topic, 0, 0, 1);
 

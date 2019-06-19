@@ -81,7 +81,7 @@ int main_0008_reqacks (int argc, char **argv) {
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	char msg[128];
-	int msgcnt = 100;
+	int msgcnt = test_quick ? 20 : 100;
 	int i;
         int reqacks;
         int idbase = 0;

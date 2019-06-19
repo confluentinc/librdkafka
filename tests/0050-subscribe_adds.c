@@ -52,7 +52,7 @@ int main_0050_subscribe_adds (int argc, char **argv) {
                 rd_strdup(test_mk_topic_name("0050_subscribe_adds_3", 1)),
         };
         uint64_t testid;
-        int msgcnt = test_on_ci ? 1000 : 10000;
+        int msgcnt = test_quick ? 100 : 10000;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;

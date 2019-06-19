@@ -51,7 +51,7 @@ static int nonexist_part (void) {
 	rd_kafka_topic_partition_list_t *parts;
 	rd_kafka_resp_err_t err;
         test_timing_t t_pos;
-        const int msgcnt = 1000;
+        const int msgcnt = 100;
         uint64_t testid;
         int i;
 	int it, iterations = 5;

@@ -100,10 +100,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
 
         testid = test_id_generate();
 
-        /* Create topic with single partition, for simplicity. */
-        test_create_topic(topic, 1, 1);
-
-        test_conf_init(&conf, NULL, 15*60*2); // msgcnt * 2);
+        test_conf_init(&conf, NULL, 15*60*2);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
         test_conf_set(conf, "metadata.max.age.ms", "10000");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");
@@ -115,6 +112,10 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
         test_curr->is_fatal_cb = is_fatal_cb;
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Create topic with single partition, for simplicity. */
+        test_create_topic(rk, topic, 1, 1);
+
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
         /* Produce first set of messages and wait for delivery */

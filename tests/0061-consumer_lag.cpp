@@ -113,7 +113,7 @@ class StatsCb : public RdKafka::EventCb {
 
 
 static void do_test_consumer_lag (void) {
-  const int msgcnt = 10;
+  int msgcnt = test_quick ? 5 : 10;
   std::string errstr;
   RdKafka::ErrorCode err;
 

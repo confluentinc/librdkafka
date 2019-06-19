@@ -128,7 +128,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 #define _CONS_CNT 2
 	rd_kafka_t *rk_p, *rk_c[_CONS_CNT];
         rd_kafka_topic_t *rkt_p;
-	int msg_cnt = 1000;
+        int msg_cnt = test_quick ? 100 : 1000;
 	int msg_base = 0;
         int partition_cnt = 2;
         int partition;

@@ -113,7 +113,7 @@ static void conf_location_to_pem (RdKafka::Conf *conf,
  * @brief Set SSL cert/key using set_ssl_cert() rather than
  *        config string property \p loc_prop (which will be cleared)
  *
- * @remark Requires a bunch of RDK_SSL_.. env vars to point out where
+ * @remark Requires a bunch of SSL_.. env vars to point out where
  *         certs are found. These are set up by trivup.
  */
 static void conf_location_to_setter (RdKafka::Conf *conf,
@@ -123,19 +123,19 @@ static void conf_location_to_setter (RdKafka::Conf *conf,
   std::string loc;
   static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
     /* [RdKafka::CERT_PUBLIC_KEY] = */ {
-      "RDK_SSL_pkcs",
-      "RDK_SSL_pub_der",
-      "RDK_SSL_pub_pem",
+      "SSL_pkcs",
+      "SSL_pub_der",
+      "SSL_pub_pem",
     },
     /* [RdKafka::CERT_PRIVATE_KEY] = */ {
-      "RDK_SSL_pkcs",
-      "RDK_SSL_priv_der",
-      "RDK_SSL_priv_pem",
+      "SSL_pkcs",
+      "SSL_priv_der",
+      "SSL_priv_pem",
     },
     /* [RdKafka::CERT_CA] = */ {
-      "RDK_SSL_pkcs",
-      "RDK_SSL_ca_der",
-      "RDK_SSL_ca_pem",
+      "SSL_pkcs",
+      "SSL_ca_der",
+      "SSL_ca_pem",
     }
   };
   static const std::string encnames[] = {
@@ -294,8 +294,8 @@ extern "C" {
       return 0;
     }
 
-    if (!test_getenv("RDK_SSL_pkcs", NULL)) {
-      Test::Skip("Test requires RDK_SSL_* env-vars set up by trivup\n");
+    if (!test_getenv("SSL_pkcs", NULL)) {
+      Test::Skip("Test requires SSL_* env-vars set up by trivup\n");
       return 0;
     }
 

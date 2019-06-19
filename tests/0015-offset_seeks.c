@@ -39,7 +39,7 @@ int main_0015_offsets_seek (int argc, char **argv) {
 	const char *topic = test_mk_topic_name("0015", 1);
 	rd_kafka_t *rk_p, *rk_c;
 	rd_kafka_topic_t *rkt_p, *rkt_c;
-	int msg_cnt = 1000;
+        int msg_cnt = test_quick ? 100 : 1000;
 	int msg_base = 0;
 	int32_t partition = 0;
 	int i;

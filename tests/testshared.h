@@ -46,6 +46,8 @@
 /** @returns the \p msecs timeout multiplied by the test timeout multiplier */
 extern int tmout_multip (int msecs);
 
+/** @brief true if tests should run in quick-mode (faster, less data) */
+extern int test_quick;
 
 /** @brief Broker version to int */
 #define TEST_BRKVER(A,B,C,D) \

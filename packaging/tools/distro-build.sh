@@ -18,8 +18,11 @@ case $distro in
     alpine)
         packaging/alpine/build-alpine.sh
         ;;
+    alpine-static)
+        packaging/alpine/build-alpine.sh --enable-static --source-deps-only
+        ;;
     *)
-        echo "Usage: $0 <centos|debian|alpine|travis>"
+        echo "Usage: $0 <centos|debian|alpine|alpine-static>"
         exit 1
         ;;
 esac

@@ -3,29 +3,38 @@ dist: trusty
 sudo: false
 cache: ccache
 env:
-- ARCH=x64
+ global:
+  - ARCH=x64
 matrix:
  include:
  - name: "Linux GCC: +centos +debian"
    os: linux
    compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian"
+   env: ADDITIONAL_BUILDS="centos debian" LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "Linux clang: +alpine"
    os: linux
    compiler: clang
-   env: ADDITIONAL_BUILDS="alpine"
+   env: ADDITIONAL_BUILDS="alpine" LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "Linux clang: +static +alpine-static"
+   os: linux
+   compiler: clang
+   env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
+   before_script:
+    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest"
  - name: "OSX GCC"
    os: osx
    compiler: gcc
+   env: LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "OSX clang: +static"
    os: osx
    compiler: clang
+   env: LINKAGE=static
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
  - name: "Linux GCC: +integration-tests +copyright-check"
@@ -61,7 +70,7 @@ deploy:
   region: us-west-1
   skip_cleanup: true
   local-dir: artifacts
-  upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}
+  upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}__lnk-${LINKAGE}
   on:
     repo: edenhill/librdkafka
     all_branches: true

@@ -136,7 +136,7 @@ class Artifacts (object):
 
         # The folder contains the tokens needed to perform
         # matching of project, gitref, etc.
-        rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)__', folder)
+        rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)(?:__|$)', folder)
         if rinfo is None or len(rinfo) == 0:
             print('Incorrect folder/file name format for %s' % folder)
             return None
@@ -176,8 +176,27 @@ class Artifacts (object):
         self.s3 = boto3.resource('s3')
         self.s3_bucket = self.s3.Bucket(s3_bucket)
         self.s3_client = boto3.client('s3')
-        for item in self.s3_client.list_objects(Bucket=s3_bucket, Prefix='librdkafka/').get('Contents'):
-            self.collect_single(item.get('Key'))
+
+        # note: list_objects will return at most 1000 objects per call,
+        #       use continuation token to read full list.
+        cont_token = None
+        more = True
+        while more:
+            if cont_token is not None:
+                res = self.s3_client.list_objects_v2(Bucket=s3_bucket,
+                                                     Prefix='librdkafka/',
+                                                     ContinuationToken=cont_token)
+            else:
+                res = self.s3_client.list_objects_v2(Bucket=s3_bucket,
+                                                     Prefix='librdkafka/')
+
+            if res.get('IsTruncated') == True:
+                cont_token = res.get('NextContinuationToken')
+            else:
+                more = False
+
+            for item in res.get('Contents'):
+                self.collect_single(item.get('Key'))
 
         for a in self.artifacts:
             a.download()

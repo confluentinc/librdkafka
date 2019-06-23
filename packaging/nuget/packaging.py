@@ -136,7 +136,7 @@ class Artifacts (object):
 
         # The folder contains the tokens needed to perform
         # matching of project, gitref, etc.
-        rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)__', folder)
+        rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)(?:__|$)', folder)
         if rinfo is None or len(rinfo) == 0:
             print('Incorrect folder/file name format for %s' % folder)
             return None

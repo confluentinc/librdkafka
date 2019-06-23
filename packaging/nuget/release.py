@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_argument("--sha", help="Also match on this git sha1", default=None)
     parser.add_argument("--nuget-version", help="The nuget package version (defaults to same as tag)", default=None)
     parser.add_argument("--upload", help="Upload package to after building, using provided NuGet API key", default=None, type=str)
+    parser.add_argument("--class", help="Packaging class (see packaging.py)", default="NugetPackage", dest="pkgclass")
     parser.add_argument("tag", help="Git tag to collect")
 
     args = parser.parse_args()
@@ -38,6 +39,13 @@ if __name__ == '__main__':
     match = {'tag': args.tag}
     if args.sha is not None:
         match['sha'] = args.sha
+
+    pkgclass = getattr(packaging, args.pkgclass)
+
+    try:
+        match.update(getattr(pkgclass, 'match'))
+    except:
+        pass
 
     arts = packaging.Artifacts(match, args.directory)
 
@@ -52,7 +60,7 @@ if __name__ == '__main__':
     if len(arts.artifacts) == 0:
         raise ValueError('No artifacts found for %s' % match)
 
-    print('Collected artifacts:')
+    print('Collected artifacts (%s):' % (arts.dlpath))
     for a in arts.artifacts:
         print(' %s' % a.lpath)
     print('')
@@ -68,7 +76,7 @@ if __name__ == '__main__':
 
     print('Building packages:')
 
-    p = packaging.NugetPackage(package_version, arts)
+    p = pkgclass(package_version, arts)
     pkgfile = p.build(buildtype='release')
 
     if not args.no_cleanup:

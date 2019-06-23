@@ -4,7 +4,7 @@
 mkl_meta_set "description" "name"      "librdkafka"
 mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
 mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
-mkl_meta_set "description" "copyright" "Copyright (c) 2012-2015 Magnus Edenhill"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2019 Magnus Edenhill"
 
 # Enable generation of pkg-config .pc file
 mkl_mkvar_set "" GEN_PKG_CONFIG y
@@ -16,6 +16,7 @@ mkl_require pic
 mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
+mkl_require zlib
 mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
@@ -86,11 +87,7 @@ void foo (void) {
     fi
 
     # optional libs
-    mkl_meta_set "zlib" "deb" "zlib1g-dev"
-    mkl_meta_set "zlib" "rpm" "zlib-devel"
-    mkl_meta_set "zlib" "apk" "zlib-dev"
-    mkl_lib_check --no-static "zlib" "WITH_ZLIB" disable CC "-lz" \
-                  "#include <zlib.h>"
+    mkl_check "zlib" disable
     mkl_check "libssl" disable
     mkl_check "libsasl2" disable
     mkl_check "libzstd" disable
@@ -100,7 +97,7 @@ void foo (void) {
         mkl_allvar_set WITH_HDRHISTOGRAM WITH_HDRHISTOGRAM y
     fi
 
-    # Use builtin lz4 if linking statically or if --disable-lz4 is used.
+    # Use builtin lz4 if linking statically or if --disable-lz4-ext is used.
     if [[ $MKL_SOURCE_DEPS_ONLY != y ]] && [[ $WITH_STATIC_LINKING != y ]] && [[ $ENABLE_LZ4_EXT == y ]]; then
         mkl_meta_set "liblz4" "static" "liblz4.a"
         mkl_lib_check "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \

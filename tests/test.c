@@ -3624,7 +3624,7 @@ static void test_delete_topic_sh (const char *topicname) {
 
 
 /**
- * @brief Delete topic using Topic Admin API
+ * @brief Delete topic using topic Admin API
  */
 static void test_admin_delete_topic (rd_kafka_t *use_rk,
                                      const char *topicname) {

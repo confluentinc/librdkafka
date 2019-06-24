@@ -308,10 +308,14 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
 
                 if (unlikely(r == SOCKET_ERROR)) {
 #ifdef _MSC_VER
-                        if (WSAGetLastError() == WSAEWOULDBLOCK)
+                        int errno_save = WSAGetLastError();
+                        if (errno_save == WSAEWOULDBLOCK)
                                 return sum;
-                        rd_snprintf(errstr, errstr_size, "%s",
-                                    socket_strerror(WSAGetLastError()));
+                        else {
+                                rd_snprintf(errstr, errstr_size, "%s",
+                                    socket_strerror(errno_save));
+                                return -1;
+                        }
 #else
                         if (socket_errno == EAGAIN)
                                 return sum;

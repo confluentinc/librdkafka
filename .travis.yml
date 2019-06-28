@@ -2,9 +2,17 @@ language: c
 dist: trusty
 sudo: false
 cache: ccache
+
 env:
  global:
   - ARCH=x64
+
+addons:
+  apt:
+    packages:
+    # required by openssl installer
+    - perl
+
 matrix:
  include:
  - name: "Linux GCC: +centos +debian"

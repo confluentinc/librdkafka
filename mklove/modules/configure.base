@@ -500,7 +500,8 @@ function mkl_dep_install_source {
         mkl_dbg "Source install of $name failed"
         mkl_check_failed "$iname" "" disable "source installer failed (see $ilog)"
         mkl_err "$name source build failed, see $ilog for details. Last 50 lines:"
-        tail -50 "$ilog"
+        #tail -50 "$ilog"
+        cat "$ilog"
     fi
 
     return $retcode

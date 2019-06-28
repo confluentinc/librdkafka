@@ -81,7 +81,7 @@ if [[ $MKL_DISTRO != osx ]]; then
         local destdir=$2
         local ver=1.0.2s
 
-        local conf_args="--openssldir=/usr/lib/ssl zlib shared"
+        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
         if [[ $ver == 1.0.* ]]; then
             extra_conf_args="${extra_conf_args} no-krb5"
         fi
@@ -93,11 +93,8 @@ if [[ $MKL_DISTRO != osx ]]; then
                 tar xzf - --strip-components 1
         fi
 
-        if [[ ! -f config.log ]]; then
-            echo "### Configuring"
-            ./config --prefix="/usr" $conf_args || return $?
-            make -j clean
-        fi
+        echo "### Configuring"
+        ./config --prefix="/usr" $conf_args || return $?
 
         echo "### Building"
         make

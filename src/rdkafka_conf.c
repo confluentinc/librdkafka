@@ -3268,7 +3268,8 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
         if (cltype == RD_KAFKA_PRODUCER) {
-                if (tconf->message_timeout_ms <= conf->buffering_max_ms)
+                if (tconf->message_timeout_ms != 0 &&
+                    tconf->message_timeout_ms <= conf->buffering_max_ms)
                         return "`message.timeout.ms` must be greater than "
                                 "`linger.ms`";
         }

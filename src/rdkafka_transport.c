@@ -307,26 +307,21 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          0);
 
                 if (unlikely(r == SOCKET_ERROR)) {
+                        int errno_save = socket_errno;
+                        if (errno_save == EAGAIN
 #ifdef _MSC_VER
-                        int errno_save = WSAGetLastError();
-                        if (errno_save == WSAEWOULDBLOCK)
+                           || errno_save == WSAEWOULDBLOCK
+#endif 
+                           )
                                 return sum;
                         else {
                                 rd_snprintf(errstr, errstr_size, "%s",
                                     socket_strerror(errno_save));
-                                return -1;
-                        }
-#else
-                        if (socket_errno == EAGAIN)
-                                return sum;
-                        else {
-                                int errno_save = errno;
-                                rd_snprintf(errstr, errstr_size, "%s",
-                                            rd_strerror(errno));
+#ifndef _MSC_VER
                                 errno = errno_save;
+#endif
                                 return -1;
                         }
-#endif
                 } else if (unlikely(r == 0)) {
                         /* Receive 0 after POLLIN event means
                          * connection closed. */

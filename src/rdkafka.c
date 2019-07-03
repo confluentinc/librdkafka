@@ -327,21 +327,27 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 		fac, rk ? rk->rk_name : "", buf);
 }
 
-#ifndef _MSC_VER
 void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
 			  const char *fac, const char *buf) {
+#if WITH_SYSLOG
 	static int initialized = 0;
 
 	if (!initialized)
 		openlog("rdkafka", LOG_PID|LOG_CONS, LOG_USER);
 
 	syslog(level, "%s: %s: %s", fac, rk ? rk->rk_name : "", buf);
-}
+#else
+        rd_assert(!*"syslog support not enabled in this build");
 #endif
+}
 
 void rd_kafka_set_logger (rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf)) {
+#if !WITH_SYSLOG
+        if (func == rd_kafka_log_syslog)
+                rd_assert(!*"syslog support not enabled in this build");
+#endif
 	rk->rk_conf.log_cb = func;
 }
 

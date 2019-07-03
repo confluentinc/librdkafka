@@ -3993,6 +3993,8 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 
 /**
  * @brief Builtin log sink: print to syslog.
+ * @remark This logger is only available if librdkafka was built
+ *         with syslog support.
  */
 RD_EXPORT
 void rd_kafka_log_syslog(const rd_kafka_t *rk, int level,

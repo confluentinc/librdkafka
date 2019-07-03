@@ -41,10 +41,13 @@ matrix:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "OSX clang: +static"
    os: osx
+   # Use an older image to and disable syslog for broader compatibility
+   # with old and new osx versions.
+   osx_image: xcode9.2
    compiler: clang
    env: LINKAGE=static
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog
  - name: "Linux GCC: +integration-tests +copyright-check"
    os: linux
    compiler: gcc

@@ -73,8 +73,11 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka.so.%{soname}
 %{_libdir}/librdkafka++.so.%{soname}
 %defattr(-,root,root)
-%doc README.md CONFIGURATION.md INTRODUCTION.md STATISTICS.md
-%doc LICENSE LICENSES.txt
+%doc %{_docdir}/librdkafka/README.md
+%doc %{_docdir}/librdkafka/CONFIGURATION.md
+%doc %{_docdir}/librdkafka/INTRODUCTION.md
+%doc %{_docdir}/librdkafka/STATISTICS.md
+%doc %{_docdir}/librdkafka/LICENSES.txt
 
 %defattr(-,root,root)
 #%{_bindir}/rdkafka_example

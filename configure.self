@@ -43,6 +43,8 @@ mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for
 # use the builtin tinycthread alternative.
 mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "y"
 
+mkl_toggle_option "Feature" ENABLE_SYSLOG "--enable-syslog" "Enable logging to syslog" "y"
+
 
 function checks {
 
@@ -109,6 +111,15 @@ void foo (void) {
         mkl_meta_set "liblz4" "static" "liblz4.a"
         mkl_lib_check "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
                       "#include <lz4frame.h>"
+    fi
+
+    if [[ $ENABLE_SYSLOG == y ]]; then
+        mkl_compile_check "syslog" "WITH_SYSLOG" disable CC "" \
+                          '
+#include <syslog.h>
+void foo (void) {
+    syslog(LOG_INFO, "test");
+}'
     fi
 
     # rapidjson (>=1.1.0) is used in tests to verify statistics data, not used

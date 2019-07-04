@@ -3386,6 +3386,8 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
  * @brief Update \p dst with info from \p src.
  *
  * Fields updated:
+ *  - metadata
+ *  - metadata_size
  *  - offset
  *  - err
  *
@@ -3408,6 +3410,13 @@ rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
 
                 d->offset = s->offset;
                 d->err    = s->err;
+                if (s->metadata_size > 0) {
+                        d->metadata =
+                                rd_malloc(s->metadata_size);
+                        d->metadata_size = s->metadata_size;
+                        memcpy((void *)d->metadata, s->metadata,
+                                s->metadata_size);
+                }
         }
 }
 

@@ -480,9 +480,11 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
 				rktpar->offset = offset;
                         rktpar->err = err2;
 
-			rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
-				   "OffsetFetchResponse: %s [%"PRId32"] offset %"PRId64,
-				   topic_name, partition, offset);
+                        rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
+                                   "OffsetFetchResponse: %s [%"PRId32"] "
+                                   "offset %"PRId64", metadata %d byte(s)",
+                                   topic_name, partition, offset,
+                                   RD_KAFKAP_STR_LEN(&metadata));
 
 			if (update_toppar && !err2 && s_rktp) {
 				rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);

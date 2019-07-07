@@ -3573,7 +3573,9 @@ static void test_admin_create_topic (rd_kafka_t *use_rk,
                     "not the expected %"PRIusz,
                     res_cnt, newt_cnt);
 
-        TEST_ASSERT(!rd_kafka_topic_result_error(terr[0]),
+        TEST_ASSERT(!rd_kafka_topic_result_error(terr[0]) ||
+                    rd_kafka_topic_result_error(terr[0]) ==
+                    RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS,
                     "Topic %s result error: %s",
                     rd_kafka_topic_result_name(terr[0]),
                     rd_kafka_topic_result_error_string(terr[0]));

@@ -189,6 +189,7 @@ _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
+_TEST_DECL(0099_commit_metadata);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -315,6 +316,7 @@ struct test tests[] = {
 #endif
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
+        _TEST(0099_commit_metadata, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

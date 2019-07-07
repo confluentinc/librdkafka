@@ -3410,6 +3410,11 @@ rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
 
                 d->offset = s->offset;
                 d->err    = s->err;
+                if (d->metadata) {
+                        rd_free(d->metadata);
+                        d->metadata = NULL;
+                        d->metadata_size = 0;
+                }
                 if (s->metadata_size > 0) {
                         d->metadata =
                                 rd_malloc(s->metadata_size);

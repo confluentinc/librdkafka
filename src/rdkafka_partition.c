@@ -2513,9 +2513,6 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
 
         rktparlist = rd_calloc(1, sizeof(*rktparlist));
 
-        rktparlist->size = size;
-        rktparlist->cnt = 0;
-
         if (size > 0)
                 rd_kafka_topic_partition_list_grow(rktparlist, size);
 

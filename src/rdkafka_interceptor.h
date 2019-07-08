@@ -69,6 +69,10 @@ void rd_kafka_interceptors_on_request_sent (rd_kafka_t *rk,
                                             int32_t CorrId,
                                             size_t  size);
 
+void rd_kafka_interceptors_on_thread_start (rd_kafka_t *rk,
+                                            rd_kafka_thread_type_t thread_type);
+void rd_kafka_interceptors_on_thread_exit (rd_kafka_t *rk,
+                                           rd_kafka_thread_type_t thread_type);
 
 void rd_kafka_conf_interceptor_ctor (int scope, void *pconf);
 void rd_kafka_conf_interceptor_dtor (int scope, void *pconf);

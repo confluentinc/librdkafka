@@ -190,6 +190,7 @@ _TEST_DECL(0094_idempotence_msg_timeout);
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
 _TEST_DECL(0099_commit_metadata);
+_TEST_DECL(0100_thread_interceptors);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -317,6 +318,7 @@ struct test tests[] = {
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
         _TEST(0099_commit_metadata, 0),
+        _TEST(0100_thread_interceptors, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

@@ -89,6 +89,7 @@ set(
     0095-all_brokers_down.cpp
     0097-ssl_verify.cpp
     0099-commit_metadata.c
+    0100-thread_interceptors.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

@@ -223,7 +223,7 @@ void test_fail0 (const char *file, int line, const char *function,
         } while (0)
 
 static RD_INLINE RD_UNUSED void rtrim (char *str) {
-        int len = strlen(str);
+        size_t len = strlen(str);
         char *s;
 
         if (len == 0)

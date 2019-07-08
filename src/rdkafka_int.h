@@ -633,6 +633,7 @@ rd_kafka_fatal_error_code (rd_kafka_t *rk) {
 
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
+extern char RD_TLS rd_kafka_thread_name[64];
 
 void rd_kafka_set_thread_name (const char *fmt, ...);
 void rd_kafka_set_thread_sysname (const char *fmt, ...);

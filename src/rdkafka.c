@@ -97,7 +97,7 @@ int rd_kafka_thread_cnt (void) {
 /**
  * Current thread's log name (TLS)
  */
-static char RD_TLS rd_kafka_thread_name[64] = "app";
+char RD_TLS rd_kafka_thread_name[64] = "app";
 
 void rd_kafka_set_thread_name (const char *fmt, ...) {
         va_list ap;
@@ -1798,6 +1798,8 @@ static int rd_kafka_thread_main (void *arg) {
         rd_kafka_set_thread_name("main");
         rd_kafka_set_thread_sysname("rdk:main");
 
+        rd_kafka_interceptors_on_thread_start(rk, RD_KAFKA_THREAD_MAIN);
+
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 
 	/* Acquire lock (which was held by thread creator during creation)
@@ -1857,6 +1859,8 @@ static int rd_kafka_thread_main (void *arg) {
         /* Synchronise state */
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
+
+        rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_MAIN);
 
         rd_kafka_destroy_internal(rk);
 

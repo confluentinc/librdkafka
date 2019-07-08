@@ -4047,6 +4047,20 @@ int rd_kafka_thread_cnt(void);
 
 
 /**
+ * @enum rd_kafka_thread_type_t
+ *
+ * @brief librdkafka internal thread type.
+ *
+ * @sa rd_kafka_interceptor_add_on_thread_start()
+ */
+typedef enum rd_kafka_thread_type_t {
+        RD_KAFKA_THREAD_MAIN,       /**< librdkafka's internal main thread */
+        RD_KAFKA_THREAD_BACKGROUND, /**< Background thread (if enabled) */
+        RD_KAFKA_THREAD_BROKER      /**< Per-broker thread */
+} rd_kafka_thread_type_t;
+
+
+/**
  * @brief Wait for all rd_kafka_t objects to be destroyed.
  *
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
@@ -4749,6 +4763,57 @@ typedef rd_kafka_resp_err_t
         void *ic_opaque);
 
 
+/**
+ * @brief on_thread_start() is called from a newly created librdkafka-managed
+ *        thread.
+
+ * @param rk The client instance.
+ * @param thread_type Thread type.
+ * @param thread_name Human-readable thread name, may not be unique.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @warning The on_thread_start() interceptor is called from internal
+ *          librdkafka threads. An on_thread_start() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_thread_start_t) (
+        rd_kafka_t *rk,
+        rd_kafka_thread_type_t thread_type,
+        const char *thread_name,
+        void *ic_opaque);
+
+
+/**
+ * @brief on_thread_exit() is called just prior to a librdkafka-managed
+ *        thread exiting from the exiting thread itself.
+ *
+ * @param rk The client instance.
+ * @param thread_type Thread type.n
+ * @param thread_name Human-readable thread name, may not be unique.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark Depending on the thread type, librdkafka may execute additional
+ *         code on the thread after on_thread_exit() returns.
+ *
+ * @warning The on_thread_exit() interceptor is called from internal
+ *          librdkafka threads. An on_thread_exit() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_thread_exit_t) (
+        rd_kafka_t *rk,
+        rd_kafka_thread_type_t thread_type,
+        const char *thread_name,
+        void *ic_opaque);
+
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -4948,6 +5013,43 @@ rd_kafka_interceptor_add_on_request_sent (
         rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
         void *ic_opaque);
 
+
+/**
+ * @brief Append an on_thread_start() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_thread_start() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_thread_start (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_thread_start_t *on_thread_start,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_thread_exit() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_thread_exit() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_thread_exit (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
+        void *ic_opaque);
 
 
 

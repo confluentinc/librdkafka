@@ -785,14 +785,15 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 /**
  * @brief Poll and serve IOs
  *
- * @returns 1 if at least one IO event was triggered, else 0.
+ * @returns 1 if at least one IO event was triggered, else 0, or -1 on error.
  *
  * @locality broker thread
  */
 int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
                                   int timeout_ms) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
-	int events;
+        int events;
+        int r;
 
         rd_kafka_curr_transport = rktrans;
 
@@ -802,12 +803,17 @@ int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
              rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
                 rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
-	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
-                return 0;
+        if ((r = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
+                return r;
 
-        rd_kafka_transport_poll_clear(rktrans, POLLOUT);
+        /* Only handle events on the broker socket, the wakeup
+         * socket is just for waking up the blocking boll. */
+        events = rktrans->rktrans_pfd[0].revents;
+        if (events) {
+                rd_kafka_transport_poll_clear(rktrans, POLLOUT);
 
-	rd_kafka_transport_io_event(rktrans, events);
+                rd_kafka_transport_io_event(rktrans, events);
+        }
 
         return 1;
 }
@@ -942,7 +948,7 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 /**
  * @brief Poll transport fds.
  *
- * @returns the raised events (e.g., POLLIN), or -1 on error.
+ * @returns 1 if an event was raised, else 0, or -1 on error.
  */
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         int r;
@@ -989,7 +995,7 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
                         ; /* Read all buffered signalling bytes */
         }
 
-        return rktrans->rktrans_pfd[0].revents;
+        return 1;
 }
 
 

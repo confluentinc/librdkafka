@@ -360,7 +360,8 @@ struct rd_kafka_conf_s {
         } eos;
 	int    queue_buffering_max_msgs;
 	int    queue_buffering_max_kbytes;
-	int    buffering_max_ms;
+        double buffering_max_ms_dbl; /**< This is the configured value */
+	rd_ts_t buffering_max_us;    /**< This is the value used in the code */
         int    queue_backpressure_thres;
 	int    max_retries;
 	int    retry_backoff_ms;
@@ -525,7 +526,7 @@ void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf);
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf);
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf);
 
 

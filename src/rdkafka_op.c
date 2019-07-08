@@ -466,7 +466,7 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                 return NULL;
 
         /* Wait for reply */
-        reply = rd_kafka_q_pop(recvq, timeout_ms, 0);
+        reply = rd_kafka_q_pop(recvq, rd_timeout_us(timeout_ms), 0);
 
         /* May be NULL for timeout */
         return reply;

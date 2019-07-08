@@ -754,12 +754,12 @@ rd_kafka_replyq_enq (rd_kafka_replyq_t *replyq, rd_kafka_op_t *rko,
 
 
 
-rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
+rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, rd_ts_t timeout_us,
 				     int32_t version,
                                      rd_kafka_q_cb_type_t cb_type,
                                      rd_kafka_q_serve_cb_t *callback,
 				     void *opaque);
-rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
+rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, rd_ts_t timeout_us,
                                int32_t version);
 int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms, int max_cnt,
                       rd_kafka_q_cb_type_t cb_type,

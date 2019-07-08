@@ -59,6 +59,7 @@ struct rd_kafka_property {
 	enum {
 		_RK_C_STR,
 		_RK_C_INT,
+                _RK_C_DBL,  /* Double */
 		_RK_C_S2I,  /* String to Integer mapping.
 			     * Supports limited canonical str->int mappings
 			     * using s2i[] */
@@ -79,6 +80,9 @@ struct rd_kafka_property {
 	int   vdef;        /* Default value (int) */
 	const char *sdef;  /* Default value (string) */
         void  *pdef;       /* Default value (pointer) */
+        double ddef;       /* Default value (double) */
+        double dmin;
+        double dmax;
 	struct {
 		int val;
 		const char *str;
@@ -1474,6 +1478,20 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		}
                 break;
 	}
+        case _RK_C_DBL:
+        {
+                double *val = _RK_PTR(double *, conf, prop->offset);
+                if (istr) {
+                        char *endptr;
+                        double new_val = strtod(istr, &endptr);
+                        /* This is verified in set_prop() */
+                        rd_assert(endptr != istr);
+                        *val = new_val;
+                } else
+                        *val = prop->ddef;
+                break;
+        }
+
         case _RK_C_PATLIST:
         {
                 /* Split comma-separated list into individual regex expressions
@@ -1667,6 +1685,45 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 
+        case _RK_C_DBL:
+        {
+                const char *end;
+                double dval;
+
+                if (!value) {
+                        rd_snprintf(errstr, errstr_size,
+                                 "Float configuration "
+                                 "property \"%s\" cannot be set "
+                                 "to empty value", prop->name);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                dval = strtod(value, (char **)&end);
+                if (end == value) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value for "
+                                    "configuration property \"%s\"",
+                                    prop->name);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                if (dval < prop->dmin ||
+                    dval > prop->dmax) {
+                        rd_snprintf(errstr, errstr_size,
+                                 "Configuration property \"%s\" value "
+                                 "%g is outside allowed range %g..%g\n",
+                                 prop->name, dval,
+                                 prop->dmin,
+                                 prop->dmax);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
+                                           _RK_CONF_PROP_SET_REPLACE,
+                                           errstr, errstr_size);
+                return RD_KAFKA_CONF_OK;
+        }
+
 	case _RK_C_S2I:
 	case _RK_C_S2F:
 	{
@@ -1798,7 +1855,7 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
                 if (prop->ctor)
                         prop->ctor(scope, conf);
 
-		if (prop->sdef || prop->vdef || prop->pdef)
+		if (prop->sdef || prop->vdef || prop->pdef || prop->ddef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
                                                    prop->sdef : prop->pdef,
@@ -2189,6 +2246,14 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                         rd_kafka_anyconf_get0(src, prop, valstr, &valsz);
                         val = valstr;
 			break;
+                case _RK_C_DBL:
+                        /* Get string representation of configuration value. */
+                        valsz = 0;
+                        rd_kafka_anyconf_get0(src, prop, NULL, &valsz);
+                        valstr = rd_alloca(valsz);
+                        rd_kafka_anyconf_get0(src, prop, valstr, &valsz);
+                        val = valstr;
+                        break;
                 case _RK_C_PATLIST:
                 {
                         const rd_kafka_pattern_list_t **plist;
@@ -2568,6 +2633,12 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
                 val = tmp;
                 break;
 
+        case _RK_C_DBL:
+                rd_snprintf(tmp, sizeof(tmp), "%g",
+                            *_RK_PTR(double *, conf, prop->offset));
+                val = tmp;
+                break;
+
         case _RK_C_S2I:
                 for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
                         if (prop->s2i[j].val ==
@@ -2819,6 +2890,12 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 				    "%d .. %d", prop->vmin, prop->vmax);
 			fprintf(fp, "%-15s | %13i", tmp, prop->vdef);
 			break;
+                case _RK_C_DBL:
+                        typeinfo = "float"; /* more user-friendly than double */
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "%g .. %g", prop->dmin, prop->dmax);
+                        fprintf(fp, "%-15s | %13g", tmp, prop->ddef);
+                        break;
 		case _RK_C_S2I:
 			typeinfo = "enum value";
 			rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
@@ -3420,6 +3497,11 @@ int unittest_conf (void) {
 
                         case _RK_C_INT:
                                 rd_snprintf(tmp, sizeof(tmp), "%d", prop->vdef);
+                                val = tmp;
+                                break;
+
+                        case _RK_C_DBL:
+                                rd_snprintf(tmp, sizeof(tmp), "%g", prop->ddef);
                                 val = tmp;
                                 break;
 

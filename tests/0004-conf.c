@@ -548,7 +548,7 @@ int main_0004_conf (int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
         }
 
-	/* Canonical int values, aliases, s2i-verified strings */
+	/* Canonical int values, aliases, s2i-verified strings, doubles */
 	{
 		static const struct {
 			const char *prop;
@@ -571,6 +571,9 @@ int main_0004_conf (int argc, char **argv) {
 			{ "sasl.mechanisms", "GSSAPI,PLAIN", NULL, 1  },
 			{ "sasl.mechanisms", "", NULL, 1  },
 #endif
+                        { "linger.ms", "12555.3", "12555.3", 1 },
+                        { "linger.ms", "1500.000", "1500", 1 },
+                        { "linger.ms", "0.0001", "0.0001", 1 },
 			{ NULL }
 		};
 

@@ -80,7 +80,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(rkq, rd_timeout_remains(ts_end), 0);
+        rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
 
         rd_kafka_q_destroy_owner(rkq);
 

@@ -38,8 +38,8 @@
 
 typedef struct rd_kafka_transport_s rd_kafka_transport_t;
 
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
-                                  int timeout_ms);
+int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+                                 int timeout_ms);
 
 ssize_t rd_kafka_transport_send (rd_kafka_transport_t *rktrans,
                                  rd_slice_t *slice,

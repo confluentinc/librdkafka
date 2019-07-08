@@ -2976,13 +2976,14 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
  * @brief Serve broker ops.
  * @returns the number of ops served
  */
-static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
+static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb,
+                                      rd_ts_t timeout_us) {
         rd_kafka_op_t *rko;
         int cnt = 0;
 
-        while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_ms, 0)) &&
+        while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_us, 0)) &&
                (cnt++, rd_kafka_broker_op_serve(rkb, rko)))
-                timeout_ms = RD_POLL_NOWAIT;
+                timeout_us = RD_POLL_NOWAIT;
 
         return cnt;
 }
@@ -3006,35 +3007,32 @@ static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
                                           rd_ts_t abs_timeout) {
         rd_ts_t now;
-        rd_ts_t remains_us;
-        int remains_ms;
 
         if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
-                remains_ms = 1;
+                abs_timeout = rd_clock() + 1000;
         else if (unlikely(rd_kafka_broker_needs_connection(rkb)))
-                remains_ms = RD_POLL_NOWAIT;
+                abs_timeout = RD_POLL_NOWAIT;
         else if (unlikely(abs_timeout == RD_POLL_INFINITE))
-                remains_ms = rd_kafka_max_block_ms;
-        else if ((remains_us = abs_timeout - (now = rd_clock())) < 0)
-                remains_ms = RD_POLL_NOWAIT;
-        else
-                /* + 999: Round up to millisecond to
-                 * avoid busy-looping during the last
-                 * millisecond. */
-                remains_ms = (int)((remains_us + 999) / 1000);
-
+                abs_timeout = rd_clock() +
+                        ((rd_ts_t)rd_kafka_max_block_ms * 1000);
 
         if (likely(rkb->rkb_transport != NULL)) {
-                /* Serve IO events */
-                rd_kafka_transport_io_serve(rkb->rkb_transport, remains_ms);
-
-                remains_ms = RD_POLL_NOWAIT;
+                /* Serve IO events.
+                 *
+                 * If there are IO events, cut out the queue ops_serve
+                 * timeout (below) since we'll probably have to perform more
+                 * duties based on the IO.
+                 * IO polling granularity is milliseconds while
+                 * queue granularity is microseconds. */
+                if (rd_kafka_transport_io_serve(
+                            rkb->rkb_transport,
+                            rd_timeout_remains(abs_timeout)))
+                        abs_timeout = RD_POLL_NOWAIT;
         }
 
 
         /* Serve broker ops */
-        rd_kafka_broker_ops_serve(rkb, remains_ms);
-
+        rd_kafka_broker_ops_serve(rkb, rd_timeout_remains_us(abs_timeout));
 
         /* An op might have triggered the need for a connection, if so
          * transition to TRY_CONNECT state. */
@@ -3380,7 +3378,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 /* Calculate maximum wait-time to honour
                  * queue.buffering.max.ms contract. */
                 wait_max = rd_kafka_msg_enq_time(rkm) +
-                        (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
+                        rkb->rkb_rk->rk_conf.buffering_max_us;
 
                 if (wait_max > now) {
                         /* Wait for more messages or queue.buffering.max.ms

@@ -1044,15 +1044,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This property has higher priority than queue.buffering.max.messages.",
 	  1, INT_MAX/1024, 0x100000/*1GB*/ },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.ms",
-          _RK_C_INT,
-	  _RK(buffering_max_ms),
+          _RK_C_DBL,
+	  _RK(buffering_max_ms_dbl),
 	  "Delay in milliseconds to wait for messages in the producer queue "
           "to accumulate before constructing message batches (MessageSets) to "
           "transmit to brokers. "
 	  "A higher value allows larger and more effective "
           "(less overhead, improved compression) batches of messages to "
           "accumulate at the expense of increased message delivery latency.",
-	  0, 900*1000, 0 },
+	  .dmin = 0, .dmax = 900.0*1000.0, .ddef = 0.5 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "message.send.max.retries",
@@ -3318,7 +3318,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
  * @returns an error string if configuration is incorrect, else NULL.
  */
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf) {
 
         if (conf->eos.idempotence) {
@@ -3345,8 +3345,13 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
         if (cltype == RD_KAFKA_PRODUCER) {
+                /* Convert double linger.ms to internal int microseconds */
+                conf->buffering_max_us = (rd_ts_t)(conf->buffering_max_ms_dbl *
+                                                   1000);
+
                 if (tconf->message_timeout_ms != 0 &&
-                    tconf->message_timeout_ms <= conf->buffering_max_ms)
+                    (rd_ts_t)tconf->message_timeout_ms * 1000 <=
+                    conf->buffering_max_us)
                         return "`message.timeout.ms` must be greater than "
                                 "`linger.ms`";
         }

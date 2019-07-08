@@ -2696,7 +2696,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 
 	rd_kafka_yield_thread = 0;
         while ((rko = rd_kafka_q_pop(rkq,
-                                     rd_timeout_remains(abs_timeout), 0))) {
+                                     rd_timeout_remains_us(abs_timeout), 0))) {
                 rd_kafka_op_res_t res;
 
                 res = rd_kafka_poll_cb(rk, rkq, rko,
@@ -2912,7 +2912,8 @@ rd_kafka_committed (rd_kafka_t *rk,
                         break;
                 }
 
-                rko = rd_kafka_q_pop(rkq, rd_timeout_remains(abs_timeout), 0);
+                rko = rd_kafka_q_pop(rkq,
+                                     rd_timeout_remains_us(abs_timeout), 0);
                 if (rko) {
                         if (!(err = rko->rko_err))
                                 rd_kafka_topic_partition_list_update(
@@ -3508,7 +3509,7 @@ rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
         if (timeout_ms)
                 rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
-        rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, timeout_ms, 0,
+        rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
 
         rd_kafka_app_polled(rkqu->rkqu_rk);

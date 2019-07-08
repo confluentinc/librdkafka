@@ -783,11 +783,13 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 
 /**
- * Poll and serve IOs
+ * @brief Poll and serve IOs
  *
- * Locality: broker thread 
+ * @returns 1 if at least one IO event was triggered, else 0.
+ *
+ * @locality broker thread
  */
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
                                   int timeout_ms) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
@@ -801,11 +803,13 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
                 rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
 	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
-                return;
+                return 0;
 
         rd_kafka_transport_poll_clear(rktrans, POLLOUT);
 
 	rd_kafka_transport_io_event(rktrans, events);
+
+        return 1;
 }
 
 
@@ -935,7 +939,11 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 	rktrans->rktrans_pfd[0].events &= ~event;
 }
 
-
+/**
+ * @brief Poll transport fds.
+ *
+ * @returns the raised events (e.g., POLLIN), or -1 on error.
+ */
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         int r;
 #ifndef _MSC_VER

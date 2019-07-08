@@ -83,6 +83,8 @@ extern "C" {
         struct rd_kafka_s;
         struct rd_kafka_topic_s;
         struct rd_kafka_message_s;
+        struct rd_kafka_conf_s;
+        struct rd_kafka_topic_conf_s;
 }
 
 namespace RdKafka {
@@ -1191,7 +1193,44 @@ class RD_EXPORT Conf {
 
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
-				std::string &errstr) = 0;
+                                std::string &errstr) = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_conf_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++
+   *          does not provide the proper functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Conf
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_conf_t* if this is a CONF_GLOBAL object, else NULL.
+   */
+  virtual struct rd_kafka_conf_s *c_ptr_global () = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_topic_conf_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++
+   *          does not provide the proper functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Conf
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_topic_conf_t* if this is a CONF_TOPIC object,
+   *          else NULL.
+   */
+  virtual struct rd_kafka_topic_conf_s *c_ptr_topic () = 0;
 };
 
 /**@}*/

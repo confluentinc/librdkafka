@@ -782,6 +782,19 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  struct rd_kafka_conf_s *c_ptr_global () {
+    if (conf_type_ == CONF_GLOBAL)
+      return rk_conf_;
+    else
+      return NULL;
+  }
+
+  struct rd_kafka_topic_conf_s *c_ptr_topic () {
+    if (conf_type_ == CONF_TOPIC)
+      return rkt_conf_;
+    else
+      return NULL;
+  }
 
   ConsumeCb *consume_cb_;
   DeliveryReportCb *dr_cb_;

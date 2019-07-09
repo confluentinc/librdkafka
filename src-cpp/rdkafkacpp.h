@@ -187,7 +187,9 @@ enum ErrorCode {
 	/** Produced message timed out*/
 	ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. */
+	 * the broker. Not really an error. 
+	 * This code is not sent by default since v1.0.0
+	 * via "enable.partition.eof" in the configuration. */
 	ERR__PARTITION_EOF = -191,
 	/** Permanent: Partition does not exist in cluster. */
 	ERR__UNKNOWN_PARTITION = -190,

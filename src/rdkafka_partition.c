@@ -1292,9 +1292,9 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 	}
 
         if (err != RD_KAFKA_RESP_ERR__OUTDATED) {
-            /* Parse and return Offset */
-            err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-                                         rkbuf, request, offsets);
+                /* Parse and return Offset */
+                err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
+                                             rkbuf, request, offsets);
         }
 
         if (!err &&

@@ -28,6 +28,7 @@
 
 #include "rdkafka_int.h"
 #include "rd.h"
+#include "rdfloat.h"
 
 #include <stdlib.h>
 #include <ctype.h>
@@ -1855,7 +1856,8 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
                 if (prop->ctor)
                         prop->ctor(scope, conf);
 
-		if (prop->sdef || prop->vdef || prop->pdef || prop->ddef)
+                if (prop->sdef || prop->vdef || prop->pdef ||
+                    !rd_dbl_zero(prop->ddef))
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
                                                    prop->sdef : prop->pdef,

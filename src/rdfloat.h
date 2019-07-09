@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <math.h>
 
 /**
  * rd_dbl_eq0(a,b,prec)

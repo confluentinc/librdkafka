@@ -66,7 +66,7 @@ size_t rd_uvarint_enc_u64 (char *dst, size_t dstsize, uint64_t num) {
  */
 static RD_INLINE RD_UNUSED
 size_t rd_uvarint_enc_i64 (char *dst, size_t dstsize, int64_t num) {
-        return rd_uvarint_enc_u64(dst, dstsize, (num << 1) ^ (num >> 63));
+        return rd_uvarint_enc_u64(dst, dstsize, ((uint64_t)num << 1) ^ (num >> 63));
 }
 
 

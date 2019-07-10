@@ -29,12 +29,73 @@
 #ifndef _RDKAFKA_MSGSET_H_
 #define _RDKAFKA_MSGSET_H_
 
-typedef struct rd_kafka_aborted_txn_start_offsets_s {
-        rd_avl_node_t avl_node;
-        int64_t pid;
-        int32_t offsets_idx;
-        rd_list_t offsets;
-} rd_kafka_aborted_txn_start_offsets_t;
+
+
+/** 
+ * @struct rd_kafka_aborted_txns_t
+ * 
+ * @brief A collection of aborted transactions.
+ */
+typedef struct rd_kafka_aborted_txns_s {
+    rd_avl_t *avl;
+    /* Note: A list of nodes is maintained alongside
+     * the AVL tree to facilitate traversal.
+     */
+    rd_list_t *list;
+    int32_t cnt;
+} rd_kafka_aborted_txns_t;
+
+
+/**
+ * @brief Allocate memory for, and initialize a new
+ * rd_kafka_aborted_txns_t struct. 
+ */
+rd_kafka_aborted_txns_t *rd_kafka_aborted_txns_new (int32_t txn_cnt);
+
+
+/**
+ * @brief Free all resources associated with a
+ * rd_kafka_aborted_txns_t struct.
+ */
+void
+rd_kafka_aborted_txns_destroy (rd_kafka_aborted_txns_t *aborted_txns);
+
+
+/** 
+ * @brief Get the next aborted transaction start
+ * offset for the specified pid. Returns -1 if
+ * there is none.
+ */
+int64_t
+rd_kafka_aborted_txns_next_aborted_txn_offset_for_pid (rd_kafka_aborted_txns_t *aborted_txns,
+                                                         int64_t pid);
+
+
+/** 
+ * @brief Move to the next aborted transaction start
+ * offset for the specified pid.
+ */
+void
+rd_kafka_aborted_txns_move_to_next(rd_kafka_aborted_txns_t *aborted_txns,
+                                   int64_t pid);
+
+
+/** 
+ * @brief Sort each of the abort transaction start
+ * offset lists for each pid.
+ */
+void
+rd_kafka_aborted_txns_sort(rd_kafka_aborted_txns_t *aborted_txns);
+
+
+/** 
+ * @brief Add a transaction start offset corresponding
+ * to the specified pid to the aborted_txns collection.
+ */
+void
+rd_kafka_aborted_txns_add(rd_kafka_aborted_txns_t *aborted_txns,
+                          int64_t pid,
+                          int64_t first_offset);
 
 
 /**
@@ -54,7 +115,13 @@ rd_kafka_resp_err_t
 rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
                        rd_kafka_buf_t *request,
                        rd_kafka_toppar_t *rktp,
-                       rd_avl_t *aborted_txn_offsets,
+                       rd_kafka_aborted_txns_t *aborted_txns,
                        const struct rd_kafka_toppar_ver *tver);
+
+/**
+ * @brief Unit tests for all functions that operate on
+ * rd_kafka_aborted_txns_t
+ */
+int unittest_aborted_txns (void);
 
 #endif /* _RDKAFKA_MSGSET_H_ */

@@ -2990,13 +2990,13 @@ void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
  */
 
 
-#define RD_KAFKA_OFFSET_BEGINNING -2   /**< Start consuming from beginning of
-					*   kafka partition queue: oldest msg */
-#define RD_KAFKA_OFFSET_END       -1   /**< Start consuming from end of kafka
-					*   partition queue: next msg */
-#define RD_KAFKA_OFFSET_STORED -1000   /**< Start consuming from offset retrieved
-					*   from offset store */
-#define RD_KAFKA_OFFSET_INVALID -1001  /**< Invalid offset */
+#define RD_KAFKA_OFFSET_BEGINNING -2  /**< Start consuming from beginning of
+				       *   kafka partition queue: oldest msg */
+#define RD_KAFKA_OFFSET_END       -1  /**< Start consuming from end of kafka
+				       *   partition queue: next msg */
+#define RD_KAFKA_OFFSET_STORED -1000  /**< Start consuming from offset retrieved
+				       *   from offset store */
+#define RD_KAFKA_OFFSET_INVALID -1001 /**< Invalid offset */
 
 
 /** @cond NO_DOC */

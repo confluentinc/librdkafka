@@ -136,6 +136,9 @@ static RdKafka::KafkaConsumer *create_consumer(
 
 static void do_test_consumer_txn_test (void) {
   std::string errstr;
+  std::string topic_name;
+  RdKafka::KafkaConsumer *c;
+  std::vector<RdKafka::Message *> msgs;
 
   std::string bootstrap_servers = get_bootstrap_servers();
   Test::Say("bootstrap.servers: " + bootstrap_servers);
@@ -143,13 +146,13 @@ static void do_test_consumer_txn_test (void) {
 
   // Test 0
 
-  std::string topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "0");
 
-  RdKafka::KafkaConsumer *c = create_consumer(topic_name, "READ_COMMITTED");
-  std::vector<RdKafka::Message *> msgs = consume_messages(c, topic_name, 0);
+  msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5, tostr() << "Consumed unexpected number of messages. Expected 5, got: " << msgs.size());
   test_assert(0 == msgs[0]->key()->c_str()[0], "Unexpected key");
   test_assert(4 == msgs[4]->key()->c_str()[0], "Unexpected key");
@@ -165,20 +168,22 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x10 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x14 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
 
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 0.1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0.1", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "0.1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5, tostr() << "Consumed unexpected number of messages. Expected 5, got: " << msgs.size());
   test_assert(0 == msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -195,20 +200,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x10 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x14 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 0.2
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0.2", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "0.2");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5, tostr() << "Consumed unexpected number of messages. Expected 5, got: " << msgs.size());
   test_assert(0x30 == msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -225,20 +231,22 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x30 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x34 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
 
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 10, tostr() << "Consumed unexpected number of messages. Expected 10, got: " << msgs.size());
   test_assert(0x10 == msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -246,20 +254,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x50 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x54 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 1.1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1.1", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "1.1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 10, tostr() << "Consumed unexpected number of messages. Expected 10, got: " << msgs.size());
   test_assert(0x40 == msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -267,20 +276,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x60 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x64 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 1.2
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1.2", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "1.2");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 10, tostr() << "Consumed unexpected number of messages. Expected 10, got: " << msgs.size());
   test_assert(0x10 == msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -288,20 +298,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x30 == msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x34 == msgs[9]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+  
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 2
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-2", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "2");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   test_assert(0x20 == (unsigned char)msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -312,20 +323,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0xb0 == (unsigned char)msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0xc0 == (unsigned char)msgs[6]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 2.1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-2.1", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "2.1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   test_assert(0x20 == (unsigned char)msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -350,20 +362,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(0x60 == (unsigned char)msgs[5]->key()->c_str()[0], "Unexpected key");
   test_assert(0x70 == (unsigned char)msgs[6]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 3
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-3", 1);
-  Test::create_topic(topic_name.c_str(), 2, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 2, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "3");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 6, tostr() << "Consumed unexpected number of messages. Expected 6, got: " << msgs.size());
   delete_messages(msgs);
@@ -380,20 +393,21 @@ static void do_test_consumer_txn_test (void) {
   msgs = consume_messages(c, topic_name, 1);
   test_assert(msgs.size() == 3, tostr() << "Consumed unexpected number of messages. Expected 3, got: " << msgs.size());
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 3.1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-3.1", 1);
-  Test::create_topic(topic_name.c_str(), 2, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 2, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "3.1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 2, tostr() << "Consumed unexpected number of messages. Expected 2, got: " << msgs.size());
   test_assert(0x55 == (unsigned char)msgs[0]->key()->c_str()[0], "Unexpected key");
@@ -403,20 +417,21 @@ static void do_test_consumer_txn_test (void) {
   test_assert(msgs.size() == 1, tostr() << "Consumed unexpected number of messages. Expected 1, got: " << msgs.size());
   test_assert(0x44 == (unsigned char)msgs[0]->key()->c_str()[0], "Unexpected key");
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 4
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "4");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   delete_messages(msgs);
@@ -427,20 +442,21 @@ static void do_test_consumer_txn_test (void) {
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13, tostr() << "Consumed unexpected number of messages. Expected 13, got: " << msgs.size());
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 4.1
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.1", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "4.1");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   delete_messages(msgs);
@@ -451,20 +467,21 @@ static void do_test_consumer_txn_test (void) {
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13, tostr() << "Consumed unexpected number of messages. Expected 13, got: " << msgs.size());
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 4.2
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.2", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "4.2");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   delete_messages(msgs);
@@ -475,20 +492,21 @@ static void do_test_consumer_txn_test (void) {
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13, tostr() << "Consumed unexpected number of messages. Expected 13, got: " << msgs.size());
   delete_messages(msgs);
+  
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 4.3
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-4.3", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "4.3");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 1, tostr() << "Consumed unexpected number of messages. Expected 7, got: " << msgs.size());
   delete_messages(msgs);
@@ -499,27 +517,29 @@ static void do_test_consumer_txn_test (void) {
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13, tostr() << "Consumed unexpected number of messages. Expected 13, got: " << msgs.size());
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 
 
   // Test 5
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-5", 1);
-  Test::create_topic(topic_name.c_str(), 1, 3);
+  c = create_consumer(topic_name, "READ_COMMITTED");
+  Test::create_topic(c, topic_name.c_str(), 1, 3);
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "5");
 
-  c = create_consumer(topic_name, "READ_COMMITTED");
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 9, tostr() << "Consumed unexpected number of messages. Expected 9, got: " << msgs.size());
   delete_messages(msgs);
+
+  Test::delete_topic(c, topic_name.c_str());
+
   c->close();
   delete c;
-
-  Test::delete_topic(topic_name.c_str());
 }
 
 extern "C" {

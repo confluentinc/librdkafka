@@ -3559,39 +3559,6 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
 }
 
 
-/**
- * @brief offset comparator
- */
-static int rd_kafka_offset_cmp (const void *_a, const void *_b) {
-        const int64_t *a = _a, *b = _b;
-        return *a - *b;
-}
-
-/**
- * @brief pid comparator for rd_kafka_aborted_txn_start_offsets_t
- */
-static int rd_kafka_aborted_txn_cmp_by_pid (const void *_a, const void *_b) {
-        const rd_kafka_aborted_txn_start_offsets_t *a = _a, *b = _b;
-        return a->pid - b->pid;
-}
-
-
-/**
- * @brief destroy rd_avl_t of rd_kafka_aborted_txn_start_offsets_t
- */
-static void rd_kafka_aborted_txn_offsets_destroy (rd_avl_t *aborted_txn_offsets,
-                                                  rd_list_t *aborted_txn_list) {
-        int i;
-
-        for (i=0; i<rd_list_cnt(aborted_txn_list); i++) {
-                rd_kafka_aborted_txn_start_offsets_t *el = rd_list_elem(aborted_txn_list, i);
-                rd_list_destroy(&el->offsets);
-        }
-
-        rd_list_destroy(aborted_txn_list);
-        rd_avl_destroy(aborted_txn_offsets);
-        rd_free(aborted_txn_offsets);
-}
 
 /**
  * Parses and handles a Fetch reply.
@@ -3624,7 +3591,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		rd_kafkap_str_t topic;
 		int32_t fetch_version;
 		int32_t PartitionArrayCnt;
-		int j, k;
+		int j;
 
 		rd_kafka_buf_read_str(rkbuf, &topic);
 		rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
@@ -3635,8 +3602,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			struct rd_kafka_toppar_ver *tver, tver_skel;
                         rd_kafka_toppar_t *rktp;
                         shptr_rd_kafka_toppar_t *s_rktp = NULL;
-                        rd_avl_t *aborted_txn_offsets = NULL;
-                        rd_list_t aborted_txn_list;
+                        rd_kafka_aborted_txns_t *aborted_txns = NULL;
                         rd_slice_t save_slice;
                         struct {
                                 int32_t Partition;
@@ -3666,19 +3632,8 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                         end_offset = hdr.LastStableOffset;
 
                                 if (AbortedTxnCnt > 0) {
-                                        size_t aborted_txn_list_idx;
-
-                                        if (unlikely(rkb->rkb_rk->rk_conf.isolation_level ==
-                                            RD_KAFKA_READ_UNCOMMITTED))
-                                                rd_rkb_log(rkb, LOG_WARNING, "FETCH",
-                                                        "%.*s [%"PRId32"]: "
-                                                        "%"PRId32" aborted transaction(s) "
-                                                        "encountered in READ_UNCOMMITTED "
-                                                        "fetch response: ignoring",
-                                                        RD_KAFKAP_STR_PR(&topic),
-                                                        hdr.Partition,
-                                                        AbortedTxnCnt);
-
+                                        int k;
+                                        
                                         if (unlikely(AbortedTxnCnt > 1000000))
                                                 rd_kafka_buf_parse_fail(
                                                         rkbuf,
@@ -3688,82 +3643,30 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                         hdr.Partition,
                                                         AbortedTxnCnt);
 
-                                        aborted_txn_offsets = rd_malloc(sizeof(*aborted_txn_offsets));
-                                        rd_avl_init(aborted_txn_offsets, rd_kafka_aborted_txn_cmp_by_pid, 0);
-
-                                        /*
-                                         * The logic for skipping messages in aborted transactions is different
-                                         * from the Java implementation.
-                                         * 
-                                         * Aborted transaction start offsets are arranged in a map
-                                         * (ABORTED_TXN_OFFSETS), with PID as the key and value as follows:
-                                         *  - OFFSETS:  sorted list of aborted transaction start offsets (ascending)
-                                         *  - IDX:      an index into OFFSETS list, initialized to 0.
-                                         *
-                                         * The logic for processing fetched data is as follows:
-                                         * 
-                                         * 1. If the message is a transaction control message and the status is ABORT
-                                         *   then increment ABORTED_TXN_OFFSETS(PID).IDX. note: sanity check that
-                                         *   OFFSETS[ABORTED_TXN_OFFSETS(PID).IDX] is less than the current offset
-                                         *   before incrementing. If the status is COMMIT, do nothing.
-                                         * 
-                                         * 2. If the message is a normal message, find the corresponding OFFSETS list
-                                         *   in ABORTED_TXN_OFFSETS. If it doesn't exist, then keep the message. If
-                                         *   the PID does exist, compare ABORTED_TXN_OFFSETS(PID).IDX with
-                                         *   len(OFFSETS). If it's >= then the message should be kept. If not,
-                                         *   compare the message offset with OFFSETS[ABORTED_TXN_OFFSETS(PID).IDX].
-                                         *   If it's greater than or equal to this value, then the message should be
-                                         *   ignored. If it's less than, then the message should be kept.
-                                         * 
-                                         * Note: A MessageSet comprises messages from at most one transaction, so the
-                                         * logic in step 2 is done at the message set level.
-                                         */
-
+                                        aborted_txns = rd_kafka_aborted_txns_new(AbortedTxnCnt);
                                         for (k = 0 ; k < AbortedTxnCnt; k++) {
-                                                int64_t pid;
-                                                int64_t first_offset;
-                                                int64_t *v;
-                                                rd_kafka_aborted_txn_start_offsets_t node, *node_ptr;
+                                                int64_t Pid;
+                                                int64_t FirstOffset;
+                                                rd_kafka_buf_read_i64(rkbuf, &Pid);
+                                                rd_kafka_buf_read_i64(rkbuf, &FirstOffset);
+                                                rd_kafka_aborted_txns_add(aborted_txns, Pid, FirstOffset);
+                                        }
+                                        rd_kafka_aborted_txns_sort(aborted_txns);
 
-                                                rd_kafka_buf_read_i64(rkbuf, &pid);
-                                                rd_kafka_buf_read_i64(rkbuf, &first_offset);
-
-                                                node.pid = pid;
-                                                node_ptr = RD_AVL_FIND(aborted_txn_offsets, &node);
-                                                if (!node_ptr) {
-                                                        node_ptr = rd_malloc(sizeof(*node_ptr));
-                                                        node_ptr->pid = pid;
-                                                        node_ptr->offsets_idx = 0;
-                                                        rd_list_init(&node_ptr->offsets, 0, NULL);
-                                                        rd_list_prealloc_elems(&node_ptr->offsets,
-                                                                sizeof(int64_t), 
-                                                                AbortedTxnCnt, 0);
-                                                        RD_AVL_INSERT(aborted_txn_offsets, node_ptr, avl_node);
-                                                }
-
-                                                v = rd_list_add(&node_ptr->offsets, NULL);
-                                                *v = first_offset;
+                                        if (unlikely(rkb->rkb_rk->rk_conf.isolation_level ==
+                                            RD_KAFKA_READ_UNCOMMITTED)) {
+                                                rd_rkb_log(rkb, LOG_ERR, "FETCH",
+                                                        "%.*s [%"PRId32"]: "
+                                                        "%"PRId32" aborted transaction(s) "
+                                                        "encountered in READ_UNCOMMITTED "
+                                                        "fetch response - ignoring.",
+                                                        RD_KAFKAP_STR_PR(&topic),
+                                                        hdr.Partition,
+                                                        AbortedTxnCnt);
+                                                rd_kafka_aborted_txns_destroy(aborted_txns);
+                                                aborted_txns = NULL;
                                         }
 
-                                        /* 
-                                         * sort each PID txn list
-                                         *
-                                         * note: aborted_txn_list is used as a queue to traverse the avl tree.
-                                         * it's also retained to facilitate destroying it.
-                                         */
-                                        aborted_txn_list_idx = 0;
-                                        rd_list_init(&aborted_txn_list, 0, NULL);
-                                        rd_list_add(&aborted_txn_list, aborted_txn_offsets->ravl_root);
-                                        while (rd_list_cnt(&aborted_txn_list) > (int)aborted_txn_list_idx) {
-                                                rd_kafka_aborted_txn_start_offsets_t *el =
-                                                        rd_list_elem(&aborted_txn_list, aborted_txn_list_idx);
-                                                rd_list_sort(&el->offsets, rd_kafka_offset_cmp);
-                                                aborted_txn_list_idx += 1; /* "remove" from queue */
-                                                if (el->avl_node.ran_p[0] != NULL)
-                                                        rd_list_add(&aborted_txn_list, el->avl_node.ran_p[0]);
-                                                if (el->avl_node.ran_p[1] != NULL)
-                                                        rd_list_add(&aborted_txn_list, el->avl_node.ran_p[1]);
-                                        }
                                 }
                         } else
                                 hdr.LastStableOffset = -1;
@@ -3798,9 +3701,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					   RD_KAFKAP_STR_PR(&topic),
 					   hdr.Partition);
 				rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                                if (aborted_txn_offsets)
-                                        rd_kafka_aborted_txn_offsets_destroy(
-                                                aborted_txn_offsets, &aborted_txn_list);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
@@ -3819,9 +3722,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                            hdr.Partition);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                                if (aborted_txn_offsets)
-                                        rd_kafka_aborted_txn_offsets_destroy(
-                                                aborted_txn_offsets, &aborted_txn_list);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
                                 continue;
                         }
 			fetch_version = rktp->rktp_fetch_version;
@@ -3849,9 +3752,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                                if (aborted_txn_offsets)
-                                        rd_kafka_aborted_txn_offsets_destroy(
-                                                aborted_txn_offsets, &aborted_txn_list);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
                                 continue;
                         }
 
@@ -3949,17 +3852,17 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 
-                                if (aborted_txn_offsets)
-                                        rd_kafka_aborted_txn_offsets_destroy(
-                                                aborted_txn_offsets, &aborted_txn_list);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
 			if (unlikely(hdr.MessageSetSize <= 0)) {
 				rd_kafka_toppar_destroy(s_rktp); /*from get()*/
-                                if (aborted_txn_offsets)
-                                        rd_kafka_aborted_txn_offsets_destroy(
-                                                aborted_txn_offsets, &aborted_txn_list);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
@@ -3975,11 +3878,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
                         /* Parse messages */
                         err = rd_kafka_msgset_parse(
-                                rkbuf, request, rktp, aborted_txn_offsets, tver);
+                                rkbuf, request, rktp, aborted_txns, tver);
 
-                        if (aborted_txn_offsets)
-                                rd_kafka_aborted_txn_offsets_destroy(
-                                        aborted_txn_offsets, &aborted_txn_list);
+                        if (aborted_txns)
+                                rd_kafka_aborted_txns_destroy(
+                                        aborted_txns);
 
                         rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                         /* Continue with next partition regardless of

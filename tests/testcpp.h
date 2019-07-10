@@ -97,18 +97,24 @@ namespace Test {
   }
 
   /**
-  * @brief Create topic using Topic Admin API
+  * @brief Create a topic using the Admin API
   */
-  static RD_UNUSED void create_topic (const char *topicname, int partition_cnt,
-                                      int replication_factor) {
-    test_create_topic(topicname, partition_cnt, replication_factor);
+  static RD_UNUSED void create_topic (RdKafka::Handle *use_handle, const char *topicname,
+                                      int partition_cnt, int replication_factor) {
+    rd_kafka_t *use_rk = NULL;
+    if (use_handle != NULL)
+      use_rk = use_handle->c_ptr();
+    test_create_topic(use_rk, topicname, partition_cnt, replication_factor);
   }
 
   /**
-  * @brief Create topic using Topic Admin API
+  * @brief Delete a topic using the Admin API
   */
-  static RD_UNUSED void delete_topic (const char *topicname) {
-    test_delete_topic(topicname);
+  static RD_UNUSED void delete_topic (RdKafka::Handle *use_handle, const char *topicname) {
+    rd_kafka_t *use_rk = NULL;
+    if (use_handle != NULL)
+      use_rk = use_handle->c_ptr();
+    test_delete_topic(use_rk, topicname);
   }
 
   /**

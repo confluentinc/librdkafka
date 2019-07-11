@@ -246,6 +246,10 @@ int rd_list_cmp_trampoline (const void *_a, const void *_b) {
 }
 
 void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *)) {
+	if (rl->rl_elems == NULL) {
+		return;
+	}
+
 	rd_list_cmp_curr = cmp;
         qsort(rl->rl_elems, rl->rl_cnt, sizeof(*rl->rl_elems),
 	      rd_list_cmp_trampoline);

@@ -544,6 +544,9 @@ static void do_test_consumer_txn_test (void) {
 
 extern "C" {
   int main_0098_consumer_txn (int argc, char **argv) {
+    if (test_quick)
+      return 0;
+    
     do_test_consumer_txn_test();
     return 0;
   }

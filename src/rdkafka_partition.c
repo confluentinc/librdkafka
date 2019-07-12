@@ -1277,10 +1277,6 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
         offsets = rd_kafka_topic_partition_list_new(1);
 
-        /* Parse and return Offset */
-        err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-                                     rkbuf, request, offsets);
-
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 		   "Offset reply for "
 		   "topic %.*s [%"PRId32"] (v%d vs v%d)",
@@ -1294,6 +1290,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 		/* Outdated request response, ignore. */
 		    err = RD_KAFKA_RESP_ERR__OUTDATED;
 	}
+
+        if (err != RD_KAFKA_RESP_ERR__OUTDATED) {
+                /* Parse and return Offset */
+                err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
+                                             rkbuf, request, offsets);
+        }
 
         if (!err &&
             (!(rktpar = rd_kafka_topic_partition_list_find(

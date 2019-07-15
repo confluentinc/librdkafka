@@ -97,8 +97,8 @@ namespace Test {
   }
 
   /**
-  * @brief Create a topic using the Admin API
-  */
+   * @brief Create a topic
+   */
   static RD_UNUSED void create_topic (RdKafka::Handle *use_handle, const char *topicname,
                                       int partition_cnt, int replication_factor) {
     rd_kafka_t *use_rk = NULL;
@@ -108,8 +108,8 @@ namespace Test {
   }
 
   /**
-  * @brief Delete a topic using the Admin API
-  */
+   * @brief Delete a topic
+   */
   static RD_UNUSED void delete_topic (RdKafka::Handle *use_handle, const char *topicname) {
     rd_kafka_t *use_rk = NULL;
     if (use_handle != NULL)

@@ -3559,7 +3559,6 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
 }
 
 
-
 /**
  * Parses and handles a Fetch reply.
  * Returns 0 on success or an error code on failure.
@@ -3628,12 +3627,27 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                       &AbortedTxnCnt);
 
                                 if (rkb->rkb_rk->rk_conf.isolation_level ==
-                                    RD_KAFKA_READ_COMMITTED)
+                                        RD_KAFKA_READ_UNCOMMITTED) {
+
+                                        if (unlikely(AbortedTxnCnt > 0)) {
+                                                rd_rkb_log(rkb, LOG_ERR, "FETCH",
+                                                        "%.*s [%"PRId32"]: "
+                                                        "%"PRId32" aborted transaction(s) "
+                                                        "encountered in READ_UNCOMMITTED "
+                                                        "fetch response - ignoring.",
+                                                        RD_KAFKAP_STR_PR(&topic),
+                                                        hdr.Partition,
+                                                        AbortedTxnCnt);
+                                                        
+                                                rd_kafka_buf_skip(rkbuf,
+                                                          AbortedTxnCnt * (8+8));
+                                        }
+                                }
+                                else if (AbortedTxnCnt > 0) {
+                                        int k;
+
                                         end_offset = hdr.LastStableOffset;
 
-                                if (AbortedTxnCnt > 0) {
-                                        int k;
-                                        
                                         if (unlikely(AbortedTxnCnt > 1000000))
                                                 rd_kafka_buf_parse_fail(
                                                         rkbuf,
@@ -3652,21 +3666,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 rd_kafka_aborted_txns_add(aborted_txns, Pid, FirstOffset);
                                         }
                                         rd_kafka_aborted_txns_sort(aborted_txns);
-
-                                        if (unlikely(rkb->rkb_rk->rk_conf.isolation_level ==
-                                            RD_KAFKA_READ_UNCOMMITTED)) {
-                                                rd_rkb_log(rkb, LOG_ERR, "FETCH",
-                                                        "%.*s [%"PRId32"]: "
-                                                        "%"PRId32" aborted transaction(s) "
-                                                        "encountered in READ_UNCOMMITTED "
-                                                        "fetch response - ignoring.",
-                                                        RD_KAFKAP_STR_PR(&topic),
-                                                        hdr.Partition,
-                                                        AbortedTxnCnt);
-                                                rd_kafka_aborted_txns_destroy(aborted_txns);
-                                                aborted_txns = NULL;
-                                        }
-
                                 }
                         } else
                                 hdr.LastStableOffset = -1;

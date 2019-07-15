@@ -39,8 +39,8 @@
 typedef struct rd_kafka_aborted_txns_s {
         rd_avl_t avl;
         /* Note: A list of nodes is maintained alongside
-        * the AVL tree to facilitate traversal.
-        */
+         * the AVL tree to facilitate traversal.
+         */
         rd_list_t list;
         int32_t cnt;
 } rd_kafka_aborted_txns_t;

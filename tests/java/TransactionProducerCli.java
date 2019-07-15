@@ -212,8 +212,14 @@ public class TransactionProducerCli {
                 makeTestMessages(producer3, topic, 0, 0x70, 1, TransactionType.None, FlushType.Yes);
                 break;
 
+            // transaction left open
+            case "6":
+                makeTestMessages(producer3, topic, 0, 0x10, 1, TransactionType.None, FlushType.Yes);
+                makeTestMessages(producer1, topic, 0, 0x20, 3, TransactionType.BeginOpen, FlushType.Yes);
+                break;
+
             default:
-                throw new Exception("not implemented");        
+                throw new Exception("not implemented");
         }
 
         producer1.close();

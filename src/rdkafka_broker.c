@@ -3634,7 +3634,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                         "%.*s [%"PRId32"]: "
                                                         "%"PRId32" aborted transaction(s) "
                                                         "encountered in READ_UNCOMMITTED "
-                                                        "fetch response - ignoring.",
+                                                        "fetch response: ignoring.",
                                                         RD_KAFKAP_STR_PR(&topic),
                                                         hdr.Partition,
                                                         AbortedTxnCnt);
@@ -3642,30 +3642,31 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 rd_kafka_buf_skip(rkbuf,
                                                           AbortedTxnCnt * (8+8));
                                         }
-                                }
-                                else if (AbortedTxnCnt > 0) {
-                                        int k;
-
+                                } else {
                                         end_offset = hdr.LastStableOffset;
 
-                                        if (unlikely(AbortedTxnCnt > 1000000))
-                                                rd_kafka_buf_parse_fail(
-                                                        rkbuf,
-                                                        "%.*s [%"PRId32"]: "
-                                                        "invalid AbortedTxnCnt %"PRId32,
-                                                        RD_KAFKAP_STR_PR(&topic),
-                                                        hdr.Partition,
-                                                        AbortedTxnCnt);
+                                        if (AbortedTxnCnt > 0) {
+                                                int k;
 
-                                        aborted_txns = rd_kafka_aborted_txns_new(AbortedTxnCnt);
-                                        for (k = 0 ; k < AbortedTxnCnt; k++) {
-                                                int64_t Pid;
-                                                int64_t FirstOffset;
-                                                rd_kafka_buf_read_i64(rkbuf, &Pid);
-                                                rd_kafka_buf_read_i64(rkbuf, &FirstOffset);
-                                                rd_kafka_aborted_txns_add(aborted_txns, Pid, FirstOffset);
+                                                if (unlikely(AbortedTxnCnt > 1000000))
+                                                        rd_kafka_buf_parse_fail(
+                                                                rkbuf,
+                                                                "%.*s [%"PRId32"]: "
+                                                                "invalid AbortedTxnCnt %"PRId32,
+                                                                RD_KAFKAP_STR_PR(&topic),
+                                                                hdr.Partition,
+                                                                AbortedTxnCnt);
+
+                                                aborted_txns = rd_kafka_aborted_txns_new(AbortedTxnCnt);
+                                                for (k = 0 ; k < AbortedTxnCnt; k++) {
+                                                        int64_t PID;
+                                                        int64_t FirstOffset;
+                                                        rd_kafka_buf_read_i64(rkbuf, &PID);
+                                                        rd_kafka_buf_read_i64(rkbuf, &FirstOffset);
+                                                        rd_kafka_aborted_txns_add(aborted_txns, PID, FirstOffset);
+                                                }
+                                                rd_kafka_aborted_txns_sort(aborted_txns);
                                         }
-                                        rd_kafka_aborted_txns_sort(aborted_txns);
                                 }
                         } else
                                 hdr.LastStableOffset = -1;

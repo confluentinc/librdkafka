@@ -819,7 +819,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                                         "at offset %"PRId64". Expected "
                                         "before or at %"PRId64". Messages "
                                         "in aborted transactions may be "
-                                        " delivered to the application.",
+                                        " delivered to the application",
                                         rktp->rktp_rkt->rkt_topic->str,
                                         rktp->rktp_partition,
                                         hdr.Offset, aborted_txn_start_offset);
@@ -831,7 +831,7 @@ unexpected_abort_txn:
                                 "%s [%"PRId32"]: "
                                 "Received abort txn ctrl msg for "
                                 "unknown txn PID %"PRId64" at "
-                                "offset %"PRId64". Ignoring",
+                                "offset %"PRId64": ignoring",
                                 rktp->rktp_rkt->rkt_topic->str,
                                 rktp->rktp_partition,
                                 msetr->msetr_v2_hdr->PID, hdr.Offset);
@@ -842,7 +842,7 @@ unexpected_abort_txn:
                                 "%s [%"PRId32"]: "
                                 "Unsupported ctrl message "
                                 "type %"PRId16" at offset"
-                                " %"PRId64". Ignoring",
+                                " %"PRId64": ignoring",
                                 rktp->rktp_rkt->rkt_topic->str,
                                 rktp->rktp_partition,
                                 ctrl_data.Type, hdr.Offset);
@@ -1012,9 +1012,6 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_buf_read_i32(rkbuf, &hdr.BaseSequence);
         rd_kafka_buf_read_i32(rkbuf, &hdr.RecordCount);
 
-        if (hdr.Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL)
-                msetr->msetr_ctrl_cnt++;
-
         /* Payload size is hdr.Length - MessageSet headers */
         payload_size = hdr.Length - (rd_slice_offset(&rkbuf->rkbuf_reader) -
                                      len_start);
@@ -1033,6 +1030,9 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                 rd_kafka_buf_skip(rkbuf, payload_size);
                 goto done;
         }
+
+        if (hdr.Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL)
+                msetr->msetr_ctrl_cnt++;
 
         msetr->msetr_v2_hdr = &hdr;
 
@@ -1082,7 +1082,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
                                         "%s [%"PRId32"]: "
                                         "Skipping %"PRId32" message(s) "
-                                        "in aborted transaction.",
+                                        "in aborted transaction",
                                         rktp->rktp_rkt->rkt_topic->str,
                                         rktp->rktp_partition,
                                         msetr->msetr_v2_hdr->RecordCount);
@@ -1471,7 +1471,7 @@ rd_kafka_aborted_txns_destroy (rd_kafka_aborted_txns_t *aborted_txns) {
  * @brief Get the abort txn start offsets corresponding to
  * the specified pid.
  */
-rd_kafka_aborted_txn_start_offsets_t *
+static rd_kafka_aborted_txn_start_offsets_t *
 rd_kafka_aborted_txns_offsets_for_pid (rd_kafka_aborted_txns_t *aborted_txns,
                                       int64_t pid) {
         rd_kafka_aborted_txn_start_offsets_t node;
@@ -1484,11 +1484,11 @@ rd_kafka_aborted_txns_offsets_for_pid (rd_kafka_aborted_txns_t *aborted_txns,
  * @brief Get the next aborted transaction start
  * offset for the specified pid.
  * 
- * @param increment_idx it true, the offset index will be incremented.
+ * @param increment_idx if true, the offset index will be incremented.
  * 
  * @returns the start offset or -1 if there is none.
  */
-int64_t
+static int64_t
 rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
                                    int64_t pid, rd_bool_t increment_idx) {
         int64_t abort_start_offset;

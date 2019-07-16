@@ -22,7 +22,6 @@ matrix:
    os: osx
    compiler: gcc
    before_script:
-    - brew install rapidjson
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "OSX clang: +static"
    os: osx
@@ -34,6 +33,7 @@ matrix:
    compiler: gcc
    env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y
    before_script:
+    - sudo apt install -y rapidjson-dev
     - sudo pip install -r tests/requirements.txt
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
 

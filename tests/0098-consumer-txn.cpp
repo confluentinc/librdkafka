@@ -26,13 +26,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "testcpp.h"
+
+#if WITH_RAPIDJSON
+
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
-#include "testcpp.h"
 #include <assert.h>
 #include <sstream>
 #include <string>
+
+#include <rapidjson/document.h>
+#include <rapidjson/schema.h>
+#include <rapidjson/filereadstream.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/error/en.h>
+#include <rapidjson/prettywriter.h>
 
 
 /**
@@ -45,60 +55,58 @@
  */
 
 
-/**
- * @brief extract a single value from a json file immediately following the
- * specified nested field sequence.
- *
- * @returns -1 if no such value exists.
- */
-static int64_t extract_json_value(std::string json, std::vector<std::string> &fields) {
-  size_t i, pos1, pos2;
-  for (i=0, pos1=0; i < fields.size() && pos1 != std::string::npos; i++)
-    pos1 = json.find(fields[i] + ":", pos1);
-  if (pos1 == std::string::npos)
-    return -1;
-  pos1 += fields[fields.size()-1].length() + 1;
-  pos2 = pos1;
-  while (pos2 < json.length() && json[pos2] != ',' && json[pos2] != '}')
-    pos2++;
-  if (pos2 == json.length())
-    return -1;
-  try {
-    return std::stol(json.substr(pos1, pos2-pos1));
-  }
-  catch (...) {
-    return -1;
-  }
+static void test_assert(bool cond, std::string msg) {
+  if (!cond)
+    Test::Say(msg);
+  assert(cond);
 }
 
 
-static bool _should_capture_stats;
-static bool _has_captured_stats;
-static int64_t partition_0_hi_offset;
-static int64_t partition_0_ls_offset;
-
 class TestEventCb : public RdKafka::EventCb {
  public:
+
+  static bool should_capture_stats;
+  static bool has_captured_stats;
+  static int64_t partition_0_hi_offset;
+  static int64_t partition_0_ls_offset;
+  static std::string topic;
+
   void event_cb (RdKafka::Event &event) {
 
     switch (event.type())
     {
       case RdKafka::Event::EVENT_STATS:
-        if (_should_capture_stats) {
-          _has_captured_stats = true;
-          _should_capture_stats = false;
+        if (should_capture_stats) {
+          partition_0_hi_offset = -1;
+          partition_0_ls_offset = -1;
 
-          std::vector<std::string> hi_path;
-          hi_path.push_back("\"partitions\"");
-          hi_path.push_back("\"0\"");
-          hi_path.push_back("\"hi_offset\"");
-          partition_0_hi_offset = extract_json_value(event.str(), hi_path);
+          has_captured_stats = true;
+          should_capture_stats = false;
+          char path[256];
 
-          std::vector<std::string> ls_path;
-          ls_path.push_back("\"partitions\"");
-          ls_path.push_back("\"0\"");
-          ls_path.push_back("\"ls_offset\"");
-          partition_0_ls_offset = extract_json_value(event.str(), ls_path);
+          /* Parse JSON to validate */
+          rapidjson::Document d;
+          if (d.Parse(event.str().c_str()).HasParseError())
+            Test::Fail(tostr() << "Failed to parse stats JSON: " <<
+                       rapidjson::GetParseError_En(d.GetParseError()) <<
+                       " at " << d.GetErrorOffset());
+
+          rd_snprintf(path, sizeof(path),
+                      "/topics/%s/partitions/0",
+                      topic.c_str());
+
+          rapidjson::Pointer jpath((const char *)path);
+          rapidjson::Value *pp = rapidjson::GetValueByPointer(d, jpath);
+          if (pp == NULL)
+            return;
+
+          test_assert(pp->HasMember("hi_offset"),
+                      "hi_offset not found in stats");
+          test_assert(pp->HasMember("ls_offset"),
+                      "ls_offset not found in stats");
+
+          partition_0_hi_offset = (*pp)["hi_offset"].GetInt();
+          partition_0_ls_offset = (*pp)["ls_offset"].GetInt();
         }
         break;
 
@@ -108,14 +116,13 @@ class TestEventCb : public RdKafka::EventCb {
   }
 };
 
+bool TestEventCb::should_capture_stats;
+bool TestEventCb::has_captured_stats;
+int64_t TestEventCb::partition_0_hi_offset;
+int64_t TestEventCb::partition_0_ls_offset;
+std::string TestEventCb::topic;
+
 static TestEventCb ex_event_cb;
-
-
-static void test_assert(bool cond, std::string msg) {
-  if (!cond)
-    Test::Say(msg);
-  assert(cond);
-}
 
 
 static void execute_java_produce_cli(std::string &bootstrapServers,
@@ -135,7 +142,6 @@ static std::vector<RdKafka::Message *> consume_messages(
                                           std::string topic,
                                           int partition) {
   RdKafka::ErrorCode err;
-  int32_t limit_count;
 
   /* Assign partitions */
   std::vector<RdKafka::TopicPartition*> parts;
@@ -168,16 +174,16 @@ static std::vector<RdKafka::Message *> consume_messages(
 
   Test::Say("Read all messages from topic: " + topic + "\n");
 
-  _should_capture_stats = true;
-  limit_count = 0;
-  while (limit_count++ < 20) {
+  TestEventCb::should_capture_stats = true;
+
+  /* rely on the test timeout to prevent an infinite loop in
+   * the (unlikely) event that the statistics callback isn't
+   * called. */
+  while (true) {
     c->consume(tmout_multip(500));
-    if (_has_captured_stats)
+    if (TestEventCb::has_captured_stats)
       break;
   }
-
-  if (limit_count == 20)
-    Test::Fail("Error acquiring consumer statistics");
 
   Test::Say("Captured consumer statistics event\n");
 
@@ -213,10 +219,10 @@ static RdKafka::KafkaConsumer *create_consumer(
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "enable.partition.eof", "true");
   Test::conf_set(conf, "isolation.level", isolation_level);
-  Test::conf_set(conf, "statistics.interval.ms", "500");
+  Test::conf_set(conf, "statistics.interval.ms", "1000");
   conf->set("event_cb", &ex_event_cb, errstr);
-  _should_capture_stats = false;
-  _has_captured_stats = false;
+  TestEventCb::should_capture_stats = false;
+  TestEventCb::has_captured_stats = false;
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
@@ -226,7 +232,6 @@ static RdKafka::KafkaConsumer *create_consumer(
 
   return c;
 }
-
 
 static void do_test_consumer_txn_test (void) {
   std::string errstr;
@@ -280,7 +285,6 @@ static void do_test_consumer_txn_test (void) {
 
   c->close();
   delete c;
-
 
 
   // Test 0.1
@@ -369,24 +373,24 @@ static void do_test_consumer_txn_test (void) {
   delete c;
 
 
-
   // Test 1 - mixed with non-transactional.
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-1", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
+  TestEventCb::topic = topic_name;
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "1");
 
   msgs = consume_messages(c, topic_name, 0);
 
-  test_assert(partition_0_ls_offset != -1 &&
-              partition_0_ls_offset == partition_0_hi_offset,
+  test_assert(TestEventCb::partition_0_ls_offset != -1 &&
+              TestEventCb::partition_0_ls_offset == TestEventCb::partition_0_hi_offset,
               tostr() << "Expected hi_offset to equal ls_offset "
                          "but got hi_offset: "
-                      << partition_0_hi_offset
+                      << TestEventCb::partition_0_hi_offset
                       << ", ls_offset: "
-                      << partition_0_ls_offset);
+                      << TestEventCb::partition_0_ls_offset);
 
   test_assert(msgs.size() == 10,
               tostr() << "Consumed unexpected number of messages. "
@@ -788,6 +792,7 @@ static void do_test_consumer_txn_test (void) {
   delete c;
 
 
+
   // Test 5 - split transaction across message set.
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-5", 1);
@@ -814,6 +819,7 @@ static void do_test_consumer_txn_test (void) {
   topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
+  TestEventCb::topic = topic_name;
 
   execute_java_produce_cli(bootstrap_servers, topic_name, "6");
 
@@ -823,12 +829,13 @@ static void do_test_consumer_txn_test (void) {
                          "Expected 1, got: "
                       << msgs.size());
 
-  test_assert(partition_0_ls_offset + 3 == partition_0_hi_offset,
+  test_assert(TestEventCb::partition_0_ls_offset + 3 == 
+              TestEventCb::partition_0_hi_offset,
               tostr() << "Expected hi_offset to be 3 greater than ls_offset "
                          "but got hi_offset: "
-                      << partition_0_hi_offset
+                      << TestEventCb::partition_0_hi_offset
                       << ", ls_offset: "
-                      << partition_0_ls_offset);
+                      << TestEventCb::partition_0_ls_offset);
 
   delete_messages(msgs);
 
@@ -837,15 +844,20 @@ static void do_test_consumer_txn_test (void) {
   c->close();
   delete c;
 }
+#endif
+
 
 extern "C" {
   int main_0098_consumer_txn (int argc, char **argv) {
-    if (test_quick) {
-      Test::Skip("Test skipped due to quick mode\n");
-      return 0;
-    }
-    
+  if (test_quick) {
+    Test::Say("Skipping consumer_txn tests due to quick mode\n");
+    return 0;
+  }
+#if WITH_RAPIDJSON
     do_test_consumer_txn_test();
+#else
+    Test::Skip("RapidJSON >=1.1.0 not available\n");
+#endif
     return 0;
   }
 }

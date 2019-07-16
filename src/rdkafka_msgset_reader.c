@@ -1415,8 +1415,7 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
  */
 static int rd_kafka_offset_cmp (const void *_a, const void *_b) {
         const int64_t *a = _a, *b = _b;
-        const int64_t diff = *a - *b;
-        return diff < 0 ? -1 : (diff > 0 ? 1 : 0);
+        return (*a > *b) - (*a < *b);
 }
 
 
@@ -1425,8 +1424,7 @@ static int rd_kafka_offset_cmp (const void *_a, const void *_b) {
  */
 static int rd_kafka_aborted_txn_cmp_by_pid (const void *_a, const void *_b) {
         const rd_kafka_aborted_txn_start_offsets_t *a = _a, *b = _b;
-        const int64_t diff = a->pid - b->pid;
-        return diff < 0 ? -1 : (diff > 0 ? 1 : 0);
+        return (a->pid > b->pid) - (a->pid < b->pid);
 }
 
 

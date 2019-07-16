@@ -22,6 +22,7 @@ matrix:
    os: osx
    compiler: gcc
    before_script:
+    - brew install rapidjson
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "OSX clang: +static"
    os: osx

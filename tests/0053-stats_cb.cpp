@@ -56,7 +56,7 @@ class TestSchemaValidator {
     /* Read schema from file */
     schema_path_ = schema_path;
 
-    std::ifstream f(schema_path);
+    std::ifstream f(schema_path.c_str());
     if (!f.is_open())
             Test::Fail(tostr() << "Failed to open schema " << schema_path <<
                        ": " << strerror(errno));

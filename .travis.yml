@@ -30,10 +30,12 @@ matrix:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
  - name: "Linux GCC: +integration-tests +copyright-check"
    os: linux
+   dist: xenial
    compiler: gcc
    env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y
    before_script:
-    - sudo apt install -y rapidjson-dev
+    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+    - sudo dpkg -i rapidjson-dev.deb
     - sudo pip install -r tests/requirements.txt
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
 

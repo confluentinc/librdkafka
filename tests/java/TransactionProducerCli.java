@@ -206,9 +206,9 @@ public class TransactionProducerCli {
                 makeTestMessages(producer1, topic, 0, 0x50, 2, TransactionType.BeginOpen, FlushType.No);
                 Thread.sleep(200);
                 makeTestMessages(producer1, topic, 0, 0x60, 2, TransactionType.ContinueAbort, FlushType.No);
-                makeTestMessages(producer1, topic, 0, 0x30, 2, TransactionType.BeginOpen, FlushType.No);
+                makeTestMessages(producer1, topic, 0, 0xa0, 2, TransactionType.BeginOpen, FlushType.No);
                 Thread.sleep(200);
-                makeTestMessages(producer1, topic, 0, 0x40, 2, TransactionType.ContinueCommit, FlushType.No);
+                makeTestMessages(producer1, topic, 0, 0xb0, 2, TransactionType.ContinueCommit, FlushType.No);
                 makeTestMessages(producer3, topic, 0, 0x70, 1, TransactionType.None, FlushType.Yes);
                 break;
 

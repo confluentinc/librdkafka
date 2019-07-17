@@ -127,14 +127,15 @@ static TestEventCb ex_event_cb;
 
 static void execute_java_produce_cli(std::string &bootstrapServers,
                                      std::string &topic, std::string cmd) {
-  std::stringstream ss;
-  ss << "./java/run-class.sh TransactionProducerCli " + 
-        bootstrapServers + " " + topic + " " + cmd;
-  int status = system(ss.str().c_str());
-  test_assert(!status, 
-              tostr() << "./java/run-class.sh TransactionProducerCli failed "
-                         "with error code: "
-                      << status);
+  const char *argv[] = {
+    bootstrapServers.c_str(),
+    topic.c_str(),
+    cmd.c_str(),
+    NULL
+  };
+
+  int pid = test_run_java("TransactionProducerCli", argv);
+  test_waitpid(pid);
 }
 
 static std::vector<RdKafka::Message *> consume_messages(
@@ -242,6 +243,10 @@ static void do_test_consumer_txn_test (void) {
   std::string bootstrap_servers = get_bootstrap_servers();
   Test::Say("bootstrap.servers: " + bootstrap_servers);
 
+  if (test_quick) {
+    Test::Say("Skipping consumer_txn tests 0->4 due to quick mode\n");
+    goto test5;
+  }
 
   // Test 0 - basic commit + abort.
   // Note: Refer to TransactionProducerCli for further details.
@@ -487,7 +492,7 @@ static void do_test_consumer_txn_test (void) {
               tostr() << "Consumed unexpected number of messages. "
                          "Expected 7, got: "
                       << msgs.size());
-  test_assert(msgs[0]->key_len() >= 1 && 
+  test_assert(msgs[0]->key_len() >= 1 &&
               0x20 == (unsigned char)msgs[0]->key()->c_str()[0],
               "Unexpected key");
   test_assert(msgs[1]->key_len() >= 1 &&
@@ -795,6 +800,7 @@ static void do_test_consumer_txn_test (void) {
 
   // Test 5 - split transaction across message set.
 
+test5:
   topic_name = Test::mk_topic_name("0098-consumer_txn-5", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
@@ -806,6 +812,33 @@ static void do_test_consumer_txn_test (void) {
               tostr() << "Consumed unexpected number of messages. "
                          "Expected 9, got: "
                       << msgs.size());
+  test_assert(msgs[0]->key_len() >= 1 &&
+              0x30 == (unsigned char)msgs[0]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[1]->key_len() >= 1 &&
+              0x31 == (unsigned char)msgs[1]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[2]->key_len() >= 1 &&
+              0x40 == (unsigned char)msgs[2]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[3]->key_len() >= 1 &&
+              0x41 == (unsigned char)msgs[3]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[4]->key_len() >= 1 &&
+              0xa0 == (unsigned char)msgs[4]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[5]->key_len() >= 1 &&
+              0xa1 == (unsigned char)msgs[5]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[6]->key_len() >= 1 &&
+              0xb0 == (unsigned char)msgs[6]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[7]->key_len() >= 1 &&
+              0xb1 == (unsigned char)msgs[7]->key()->c_str()[0],
+              "Unexpected key");
+  test_assert(msgs[8]->key_len() >= 1 &&
+              0x70 == (unsigned char)msgs[8]->key()->c_str()[0],
+              "Unexpected key");
   delete_messages(msgs);
 
   Test::delete_topic(c, topic_name.c_str());
@@ -849,10 +882,6 @@ static void do_test_consumer_txn_test (void) {
 
 extern "C" {
   int main_0098_consumer_txn (int argc, char **argv) {
-  if (test_quick) {
-    Test::Say("Skipping consumer_txn tests due to quick mode\n");
-    return 0;
-  }
 #if WITH_RAPIDJSON
     do_test_consumer_txn_test();
 #else

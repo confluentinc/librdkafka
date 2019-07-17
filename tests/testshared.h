@@ -237,4 +237,8 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
  #define __SANITIZE_ADDRESS__ 1
  #endif
 #endif
+
+
+int test_run_java (const char *cls, const char **argv);
+int test_waitpid (int pid);
 #endif /* _TESTSHARED_H_ */

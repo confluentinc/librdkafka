@@ -108,5 +108,8 @@ clean-output:
 realclean: clean clean-output
 	rm -f test_report_*.json
 
-00%:
+0%:
 	TESTS=$@ ./run-test.sh ./$(BIN)
+
+java: .PHONY
+	make -C java

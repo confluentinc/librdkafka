@@ -36,6 +36,8 @@
 
 #ifdef _MSC_VER
 #include <direct.h> /* _getcwd */
+#else
+#include <sys/wait.h> /* waitpid */
 #endif
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
@@ -3866,6 +3868,123 @@ int test_check_auto_create_topic (void) {
 
         return err ? 0 : 1;
 }
+
+
+/**
+ * @brief Builds and runs a Java application from the java/ directory.
+ *
+ *        The application is started in the background, use
+ *        test_waitpid() to await its demise.
+ *
+ * @param cls The app class to run using java/run-class.sh
+ *
+ * @returns -1 if the application could not be started, else the pid.
+ */
+int test_run_java (const char *cls, const char **argv) {
+#ifdef _MSC_VER
+        TEST_WARN("%s(%s) not supported Windows, yet",
+                  __FUNCTION__, cls);
+        return -1;
+#else
+        int r;
+        const char *kpath;
+        pid_t pid;
+        const char **full_argv, **p;
+        int cnt;
+        extern char **environ;
+
+        kpath = test_getenv("KAFKA_PATH", NULL);
+
+        if (!kpath) {
+                TEST_WARN("%s(%s): KAFKA_PATH must be set\n",
+                          __FUNCTION__, cls);
+                return -1;
+        }
+
+        /* Build */
+        r = system("make java");
+
+        if (r == -1 || WIFSIGNALED(r) || WEXITSTATUS(r)) {
+                TEST_WARN("%s(%s): failed to build java class (code %d)\n",
+                          __FUNCTION__, cls, r);
+                return -1;
+        }
+
+        /* For child process and run cls */
+        pid = fork();
+        if (pid == -1) {
+                TEST_WARN("%s(%s): failed to fork: %s\n",
+                          __FUNCTION__, cls, strerror(errno));
+                return -1;
+        }
+
+        if (pid > 0)
+                return (int)pid; /* In parent process */
+
+        /* In child process */
+
+        /* Reconstruct argv to contain run-class.sh and the cls */
+        for (cnt = 0 ; argv[cnt] ; cnt++)
+                ;
+
+        cnt += 3; /* run-class.sh, cls, .., NULL */
+        full_argv = malloc(sizeof(*full_argv) * cnt);
+        full_argv[0] = "java/run-class.sh";
+        full_argv[1] = (const char *)cls;
+
+        /* Copy arguments */
+        for (p = &full_argv[2] ; *argv ; p++, argv++)
+                *p = *argv;
+        *p = NULL;
+
+        /* Run */
+        r = execve(full_argv[0], (char *const*)full_argv, environ);
+
+        TEST_WARN("%s(%s): failed to execute run-class.sh: %s\n",
+                  __FUNCTION__, cls, strerror(errno));
+        exit(2);
+
+        return -1; /* NOTREACHED */
+#endif
+}
+
+
+/**
+ * @brief Wait for child-process \p pid to exit.
+ *
+ * @returns -1 if the child process exited successfully, else -1.
+ */
+int test_waitpid (int pid) {
+#ifdef _MSC_VER
+        TEST_WARN("%s() not supported Windows, yet",
+                  __FUNCTION__);
+        return -1;
+#else
+        pid_t r;
+        int status = 0;
+
+        r = waitpid((pid_t)pid, &status, 0);
+
+        if (r == -1) {
+                TEST_WARN("waitpid(%d) failed: %s\n",
+                          pid, strerror(errno));
+                return -1;
+        }
+
+        if (WIFSIGNALED(status)) {
+                TEST_WARN("Process %d terminated by signal %d\n", pid,
+                          WTERMSIG(status));
+                return -1;
+        } else if (WEXITSTATUS(status)) {
+                TEST_WARN("Process %d exit with status %d\n",
+                          pid, WEXITSTATUS(status));
+                return -1;
+        }
+
+        return 0;
+#endif
+}
+
 
 /**
  * @brief Check if \p feature is builtin to librdkafka.

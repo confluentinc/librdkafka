@@ -426,8 +426,7 @@ rd_kafka_transport_ssl_set_endpoint_id (rd_kafka_transport_t *rktrans,
                 return 0;
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-        if (!SSL_set1_host(rktrans->rktrans_ssl,
-                           rktrans->rktrans_rkb->rkb_nodename))
+        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
                 goto fail;
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {

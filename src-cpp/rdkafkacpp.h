@@ -188,8 +188,8 @@ enum ErrorCode {
 	ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
 	 * the broker. Not really an error. 
-	 * This code is not sent by default since v1.0.0
-	 * via "enable.partition.eof" in the configuration. */
+	 * This event is disabled by default,
+	 * see the `enable.partition.eof` configuration property. */
 	ERR__PARTITION_EOF = -191,
 	/** Permanent: Partition does not exist in cluster. */
 	ERR__UNKNOWN_PARTITION = -190,

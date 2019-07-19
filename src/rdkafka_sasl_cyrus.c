@@ -203,7 +203,13 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
 
         if (r == -1) {
-                if (errno != ECHILD) {
+                if (errno == ECHILD) {
+                        rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
+                                     "Kerberos ticket refresh command returned ECHILD errno which means ",
+                                     "success is unknown, but probably okay so continuing as such: %s", 
+                                     cmd);
+                }
+                else {
                         rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
                                      "Kerberos ticket refresh failed, errno=%d: "
                                      "Failed to execute %s",

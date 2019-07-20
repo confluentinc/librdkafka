@@ -120,12 +120,21 @@ A short guide to how to write good commit messages.
 
 Example:
 
-    cgrp: restart query timer on all heartbeat failures (#10023)
+    cgrp: Restart query timer on all heartbeat failures (#10023)
     
     If unhandled errors were received in HeartbeatResponse
     the cgrp could get stuck in a state where it would not
     refresh its coordinator.
 
+
+**Important**: Rebase your PR branch on top of master (`git rebase -i master`)
+               and squash interim commits (to make a clean and readable git history)
+               before pushing. Use force push to keep your history clean even after
+               the initial PR push.
+
+**Note**: Good PRs with bad commit messages or messy commit history
+          such as "fixed review comment", will be squashed up in
+          to a single commit with a proper commit message.
 
 
 # librdkafka C style guide

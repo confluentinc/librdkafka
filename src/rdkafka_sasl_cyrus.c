@@ -211,9 +211,8 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
                                      cmd);
                 } else {
                         rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                                     "Kerberos ticket refresh failed, "
-                                     "errno=%d: Failed to execute %s",
-                                     errno, cmd);
+                                     "Kerberos ticket refresh failed: %s: %s",
+                                     cmd, rd_strerror(errno));
                         rd_free(cmd);
                         return -1;
                 }

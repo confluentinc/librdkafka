@@ -209,8 +209,7 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
                                      "returned ECHILD: %s: exit status "
                                      "unknown, assuming success",
                                      cmd);
-                }
-                else {
+                } else {
                         rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
                                      "Kerberos ticket refresh failed, "
                                      "errno=%d: Failed to execute %s",

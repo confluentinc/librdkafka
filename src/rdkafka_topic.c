@@ -476,63 +476,88 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
 }
 
 
-
-
-
 /**
- * @brief Update the leader for a topic+partition.
- * @returns 1 if the leader was changed, else 0, or -1 if leader is unknown.
- *
- * @locks rd_kafka_topic_wrlock(rkt) and rd_kafka_toppar_lock(rktp)
+ * @brief Update the broker for a topic+partition.
+ * 
+ * @param broker_id The id of the broker to associate the toppar with.
+ * @param rkb A reference to the broker to delegate to (must match
+ *        broker_id) or NULL if the toppar should be undelegated for
+ *        any reason.
+ * @param is_leader rd_true if broker_id is the leader, else rd_false.
+ * 
+ * @returns 1 if the broker delegation was changed, -1 if the broker
+ *          delegation was changed and is now undelegated, else 0.
+ * 
+ * @locks caller must have rd_kafka_toppar_lock(rktp)
  * @locality any
  */
-int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
-                                   int32_t leader_id, rd_kafka_broker_t *rkb) {
+int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
+                                   int32_t broker_id,
+                                   rd_kafka_broker_t *rkb,
+                                   rd_bool_t is_leader) {
 
-        rktp->rktp_leader_id = leader_id;
-        if (rktp->rktp_leader_id != leader_id) {
+        rktp->rktp_broker_id = broker_id;
+        if (is_leader) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-                             "Topic %s [%"PRId32"] migrated from "
-                             "leader %"PRId32" to %"PRId32,
+                             "Topic %s [%"PRId32"] migrating leader: "
+                             "%"PRId32" to %"PRId32,
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition,
-                             rktp->rktp_leader_id, leader_id);
-                rktp->rktp_leader_id = leader_id;
+                             rktp->rktp_leader_id, broker_id);
+                rktp->rktp_leader_id = broker_id;
         }
 
 	if (!rkb) {
-		int had_leader = rktp->rktp_leader ? 1 : 0;
-
-		rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
-
-		return had_leader ? -1 : 0;
+		int had_broker = rktp->rktp_broker ? 1 : 0;
+		rd_kafka_toppar_broker_delegate(rktp, NULL);
+		return had_broker ? -1 : 0;
 	}
 
-
-	if (rktp->rktp_leader) {
-		if (rktp->rktp_leader == rkb) {
+	if (rktp->rktp_broker) {
+		if (rktp->rktp_broker == rkb) {
 			/* No change in broker */
 			return 0;
 		}
 
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-			     "Topic %s [%"PRId32"] migrated from "
-			     "broker %"PRId32" to %"PRId32,
-			     rktp->rktp_rkt->rkt_topic->str,
-			     rktp->rktp_partition,
-			     rktp->rktp_leader->rkb_nodeid, rkb->rkb_nodeid);
+                             "Topic %s [%"PRId32"]: migrating from "
+                             "broker %"PRId32" to %"PRId32" (leader is "
+                             "%"PRId32")",
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition,
+                             rktp->rktp_broker->rkb_nodeid,
+                             rkb->rkb_nodeid,
+                             rktp->rktp_leader_id);
 	}
 
-	rd_kafka_toppar_broker_delegate(rktp, rkb, 0);
+	rd_kafka_toppar_broker_delegate(rktp, rkb);
 
 	return 1;
 }
 
 
-static int rd_kafka_toppar_leader_update2 (rd_kafka_itopic_t *rkt,
-					   int32_t partition,
-                                           int32_t leader_id,
-					   rd_kafka_broker_t *rkb) {
+/**
+ * @brief Update the leader for a topic+partition.
+ * 
+ * @remark If a toppar is currently delegated to a preferred replica,
+ *         it will not be delegated to the leader broker unless there
+ *         has been a leader change.
+ * 
+ * @param leader_id The id of the new leader broker.
+ * @param leader A reference to the leader broker or NULL if the 
+ *        toppar should be undelegated for any reason.
+ * 
+ * @returns 1 if the broker delegation was changed, -1 if the broker
+ *        delegation was changed and is now undelegated, else 0.
+ * 
+ * @locks caller must have rd_kafka_topic_wrlock(rkt) 
+ *        AND NOT rd_kafka_toppar_lock(rktp)
+ * @locality any
+ */
+static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
+                                          int32_t partition,
+                                          int32_t leader_id,
+                                          rd_kafka_broker_t *leader) {
 	rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
 	int r;
@@ -541,7 +566,7 @@ static int rd_kafka_toppar_leader_update2 (rd_kafka_itopic_t *rkt,
         if (unlikely(!s_rktp)) {
                 /* Have only seen this in issue #132.
                  * Probably caused by corrupt broker state. */
-                rd_kafka_log(rkt->rkt_rk, LOG_WARNING, "LEADER",
+                rd_kafka_log(rkt->rkt_rk, LOG_WARNING, "BROKER",
                              "%s [%"PRId32"] is unknown "
                              "(partition_cnt %i)",
                              rkt->rkt_topic->str, partition,
@@ -552,12 +577,59 @@ static int rd_kafka_toppar_leader_update2 (rd_kafka_itopic_t *rkt,
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
         rd_kafka_toppar_lock(rktp);
-        r = rd_kafka_toppar_leader_update(rktp, leader_id, rkb);
+
+        if (leader != NULL &&
+            rktp->rktp_broker != leader &&
+            rktp->rktp_leader_id == leader_id) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
+                        "Topic %s [%"PRId32"]: leader %"PRId32" unchanged, "
+                        "not migrating away from preferred replica %"PRId32,
+                        rktp->rktp_rkt->rkt_topic->str,
+                        rktp->rktp_partition,
+                        leader_id, rktp->rktp_broker_id);
+                r = 0;
+        } else
+                r = rd_kafka_toppar_broker_update(rktp, leader_id, 
+                                                  leader, rd_true);
+
         rd_kafka_toppar_unlock(rktp);
 
-	rd_kafka_toppar_destroy(s_rktp); /* from get() */
+        rd_kafka_toppar_destroy(s_rktp);  /* from get() */
 
 	return r;
+}
+
+
+/**
+ * @brief Revert the topic+partition delegation to the leader.
+ * @returns 1 if the broker delegation was changed, -1 if the broker
+ *          delegation was changed and is now undelegated, else 0.
+ *
+ * @locks caller must have rd_kafka_toppar_lock(rktp)
+ * @locality any
+ */
+int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
+        rd_kafka_broker_t *leader;
+        int r;
+
+        rd_assert(rktp->rktp_leader_id != rktp->rktp_broker_id);
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
+                "Topic %s [%"PRId32"]: Reverting from preferred "
+                "replica %"PRId32" to leader %"PRId32,
+                rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                rktp->rktp_broker_id, rktp->rktp_leader_id);
+
+        leader = rd_kafka_broker_find_by_nodeid(rktp->rktp_rkt->rkt_rk,
+                                                rktp->rktp_leader_id);
+
+        r = rd_kafka_toppar_broker_update(
+                rktp, rktp->rktp_leader_id, leader, rd_true);
+
+        if (leader)
+                rd_kafka_broker_destroy(leader);
+
+        return r;
 }
 
 
@@ -680,7 +752,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
                                         "desired partition no longer exists");
 
-			rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+			rd_kafka_toppar_broker_delegate(rktp, NULL);
 
 		} else {
 			/* Tell handling broker to let go of the toppar */
@@ -933,7 +1005,7 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 		partbrokers[j] = NULL;
 
 		/* Update leader for partition */
-		r = rd_kafka_toppar_leader_update2(rkt,
+		r = rd_kafka_toppar_leader_update(rkt,
 						   mdt->partitions[j].id,
                                                    mdt->partitions[j].leader,
 						   leader);
@@ -963,7 +1035,7 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 
                         rktp = rd_kafka_toppar_s2i(rkt->rkt_p[j]);
                         rd_kafka_toppar_lock(rktp);
-                        rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+                        rd_kafka_toppar_broker_delegate(rktp, NULL);
                         rd_kafka_toppar_unlock(rktp);
                 }
         }
@@ -1126,24 +1198,24 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
 
 /**
- * @returns the state of the leader (as a human readable string) if the
- *          partition leader needs to be queried, else NULL.
+ * @returns the broker state (as a human readable string) if a query
+ *          for the partition leader is necessary, else NULL.
  * @locality any
  * @locks rd_kafka_toppar_lock MUST be held
  */
 static const char *rd_kafka_toppar_needs_query (rd_kafka_t *rk,
                                                 rd_kafka_toppar_t *rktp) {
-        int leader_state;
+        int broker_state;
 
-        if (!rktp->rktp_leader)
-                return "not assigned";
+        if (!rktp->rktp_broker)
+                return "not delegated";
 
-        if (rktp->rktp_leader->rkb_source == RD_KAFKA_INTERNAL)
+        if (rktp->rktp_broker->rkb_source == RD_KAFKA_INTERNAL)
                 return "internal";
 
-        leader_state = rd_kafka_broker_get_state(rktp->rktp_leader);
+        broker_state = rd_kafka_broker_get_state(rktp->rktp_broker);
 
-        if (leader_state >= RD_KAFKA_BROKER_STATE_UP)
+        if (broker_state >= RD_KAFKA_BROKER_STATE_UP)
                 return NULL;
 
         if (!rk->rk_conf.sparse_connections)
@@ -1153,7 +1225,7 @@ static const char *rd_kafka_toppar_needs_query (rd_kafka_t *rk,
          * need a persistent connection, this typically means
          * the partition is not being fetched or not being produced to,
          * so there is no need to re-query the leader. */
-        if (leader_state == RD_KAFKA_BROKER_STATE_INIT)
+        if (broker_state == RD_KAFKA_BROKER_STATE_INIT)
                 return NULL;
 
         /* This is most likely a persistent broker,
@@ -1317,7 +1389,7 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 		return 0;
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        rkb = rd_kafka_toppar_leader(rktp, 1/*proper broker*/);
+        rkb = rd_kafka_toppar_broker(rktp, 1/*proper broker*/);
         avail = rkb ? 1 : 0;
         if (rkb)
                 rd_kafka_broker_destroy(rkb);

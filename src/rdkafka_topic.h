@@ -172,8 +172,11 @@ void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
 int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 			  const char *topic);
 
-int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
-                                   int32_t leader_id, rd_kafka_broker_t *rkb);
+int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
+                                   int32_t broker_id, rd_kafka_broker_t *rkb,
+                                   rd_bool_t is_leader);
+
+int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp);
 
 rd_kafka_resp_err_t
 rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,

@@ -128,7 +128,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
 
-        rkb = rd_kafka_toppar_leader(rktp, 1/*proper brokers only*/);
+        rkb = rd_kafka_toppar_broker(rktp, 1/*proper brokers only*/);
         if (!rkb)
 		return;
 
@@ -182,6 +182,10 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
         rktp->rktp_leader_id = -1;
+        rktp->rktp_broker_id = -1;
+        rd_interval_init(&rktp->rktp_lease_intvl);
+        rd_interval_init(&rktp->rktp_new_lease_intvl);
+        rd_interval_init(&rktp->rktp_metadata_intvl);
         /* Mark partition as unknown (does not exist) until we see the
          * partition in topic metadata. */
         if (partition != RD_KAFKA_PARTITION_UA)
@@ -954,21 +958,21 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
                                             rd_kafka_broker_t *new_rkb) {
         rd_kafka_op_t *rko;
         rd_kafka_broker_t *dest_rkb;
-        int had_next_leader = rktp->rktp_next_leader ? 1 : 0;
+        int had_next_broker = rktp->rktp_next_broker ? 1 : 0;
 
         rd_assert(old_rkb || new_rkb);
 
-        /* Update next leader */
+        /* Update next broker */
         if (new_rkb)
                 rd_kafka_broker_keep(new_rkb);
-        if (rktp->rktp_next_leader)
-                rd_kafka_broker_destroy(rktp->rktp_next_leader);
-        rktp->rktp_next_leader = new_rkb;
+        if (rktp->rktp_next_broker)
+                rd_kafka_broker_destroy(rktp->rktp_next_broker);
+        rktp->rktp_next_broker = new_rkb;
 
-        /* If next_leader is set it means there is already an async
+        /* If next_broker is set it means there is already an async
          * migration op going on and we should not send a new one
-         * but simply change the next_leader (which we did above). */
-        if (had_next_leader)
+         * but simply change the next_broker (which we did above). */
+        if (had_next_broker)
                 return;
 
         /* Revert from offset-wait state back to offset-query
@@ -978,16 +982,16 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
          * to time out..slowly) */
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
                 rd_kafka_toppar_offset_retry(rktp, 500,
-                                             "migrating to new leader");
+                                             "migrating to new broker");
 
         if (old_rkb) {
                 /* If there is an existing broker for this toppar we let it
                  * first handle its own leave and then trigger the join for
-                 * the next leader, if any. */
+                 * the next broker, if any. */
                 rko = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_LEAVE);
                 dest_rkb = old_rkb;
         } else {
-                /* No existing broker, send join op directly to new leader. */
+                /* No existing broker, send join op directly to new broker. */
                 rko = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_JOIN);
                 dest_rkb = new_rkb;
         }
@@ -1020,10 +1024,10 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
 
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
 
-	if (rktp->rktp_next_leader)
-		dest_rkb = rktp->rktp_next_leader;
-	else if (rktp->rktp_leader)
-		dest_rkb = rktp->rktp_leader;
+	if (rktp->rktp_next_broker)
+		dest_rkb = rktp->rktp_next_broker;
+	else if (rktp->rktp_broker)
+		dest_rkb = rktp->rktp_broker;
 	else {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARDEL",
 			     "%.*s [%"PRId32"] %p not handled by any broker: "
@@ -1056,37 +1060,33 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
 }
 
 
-
 /**
- * Delegates broker 'rkb' as leader for toppar 'rktp'.
- * 'rkb' may be NULL to undelegate leader.
+ * @brief Delegates toppar 'rktp' to broker 'rkb'. 'rkb' may be NULL to
+ *        undelegate broker.
  *
- * Locks: Caller must have rd_kafka_topic_wrlock(rktp->rktp_rkt) 
- *        AND rd_kafka_toppar_lock(rktp) held.
+ * @locks Caller must have rd_kafka_toppar_lock(rktp) held.
  */
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb,
-				      int for_removal) {
+				      rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int internal_fallback = 0;
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 		     "%s [%"PRId32"]: delegate to broker %s "
-		     "(rktp %p, term %d, ref %d, remove %d)",
+		     "(rktp %p, term %d, ref %d)",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
 		     rkb ? rkb->rkb_name : "(none)",
 		     rktp, rd_kafka_terminating(rk),
-		     rd_refcnt_get(&rktp->rktp_refcnt),
-		     for_removal);
+		     rd_refcnt_get(&rktp->rktp_refcnt));
 
-        /* Delegate toppars with no leader to the
-         * internal broker for bookkeeping. */
-        if (!rkb && !for_removal && !rd_kafka_terminating(rk)) {
+        /* Undelegated toppars are delgated to the internal
+         * broker for bookkeeping. */
+        if (!rkb && !rd_kafka_terminating(rk)) {
                 rkb = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
 
-	if (rktp->rktp_leader == rkb && !rktp->rktp_next_leader) {
+	if (rktp->rktp_broker == rkb && !rktp->rktp_next_broker) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "%.*s [%"PRId32"]: not updating broker: "
                              "already on correct broker %s",
@@ -1099,17 +1099,18 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 		return;
         }
 
-	if (rktp->rktp_leader)
+	if (rktp->rktp_broker)
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "%.*s [%"PRId32"]: broker %s no longer leader",
+			     "%.*s [%"PRId32"]: no longer delegated to "
+			     "broker %s",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
-			     rd_kafka_broker_name(rktp->rktp_leader));
+			     rd_kafka_broker_name(rktp->rktp_broker));
 
 
 	if (rkb) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "%.*s [%"PRId32"]: broker %s is now leader "
+			     "%.*s [%"PRId32"]: delegating to broker %s "
 			     "for partition with %i messages "
 			     "(%"PRIu64" bytes) queued",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
@@ -1121,13 +1122,13 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 	} else {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "%.*s [%"PRId32"]: no leader broker",
+			     "%.*s [%"PRId32"]: no broker delegated",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
 	}
 
-        if (rktp->rktp_leader || rkb)
-                rd_kafka_toppar_broker_migrate(rktp, rktp->rktp_leader, rkb);
+        if (rktp->rktp_broker || rkb)
+                rd_kafka_toppar_broker_migrate(rktp, rktp->rktp_broker, rkb);
 
         if (internal_fallback)
                 rd_kafka_broker_destroy(rkb);
@@ -1226,8 +1227,8 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 
         /* Wake-up broker thread which might be idling on IO */
-        if (rktp->rktp_leader)
-                rd_kafka_broker_wakeup(rktp->rktp_leader);
+        if (rktp->rktp_broker)
+                rd_kafka_broker_wakeup(rktp->rktp_broker);
 
 }
 
@@ -1289,7 +1290,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
 	rd_kafka_toppar_lock(rktp);
 	/* Drop reply from previous partition leader */
-	if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_leader != rkb)
+	if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_broker != rkb)
 		err = RD_KAFKA_RESP_ERR__OUTDATED;
 	rd_kafka_toppar_unlock(rktp);
 
@@ -1457,7 +1458,7 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 	rd_kafka_assert(NULL,
 			thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
 
-        rkb = rktp->rktp_leader;
+        rkb = rktp->rktp_broker;
 
         if (!backoff_ms && (!rkb || rkb->rkb_source == RD_KAFKA_INTERNAL))
                 backoff_ms = 500;
@@ -1588,8 +1589,8 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 
                 /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_leader)
-                        rd_kafka_broker_wakeup(rktp->rktp_leader);
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker);
 
 	}
 
@@ -1742,8 +1743,8 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 
                 /* Wake-up broker thread which might be idling on IO */
-                if (rktp->rktp_leader)
-                        rd_kafka_broker_wakeup(rktp->rktp_leader);
+                if (rktp->rktp_broker)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker);
 	}
 
         /* Signal back to caller thread that seek has commenced, or err */
@@ -1899,6 +1900,16 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 		goto done;
 	}
 
+        /* Check for preferred replica lease expiry */
+        if (rktp->rktp_leader_id != rktp->rktp_broker_id &&
+            rd_interval(&rktp->rktp_lease_intvl,
+                        5*60*1000*1000/*5 minutes*/, 0) > 0) {
+                rd_kafka_toppar_delegate_to_leader(rktp);
+                reason = "preferred replica lease expired";
+                should_fetch = 0;
+                goto done;
+        }
+
 	/* Skip toppars not in active fetch state */
 	if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
                 reason = "not in active fetch state";
@@ -1973,7 +1984,7 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                            "Topic %s [%"PRId32"] in state %s at offset %s "
                            "(%d/%d msgs, %"PRId64"/%d kb queued, "
-			   "opv %"PRId32") is %sfetchable: %s",
+			   "opv %"PRId32") is %s %s",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
 			   rd_kafka_fetch_states[rktp->rktp_fetch_state],
@@ -1983,7 +1994,8 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                            rd_kafka_q_size(rktp->rktp_fetchq) / 1024,
                            rkb->rkb_rk->rk_conf.queued_max_msg_kbytes,
 			   rktp->rktp_fetch_version,
-                           should_fetch ? "" : "not ", reason);
+                           should_fetch ? "fetchable" : "not fetchable: ",
+                           reason);
 
                 if (should_fetch) {
 			rd_dassert(rktp->rktp_fetch_version > 0);
@@ -2456,7 +2468,7 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
 
 
 /**
- * Returns the local leader broker for this toppar.
+ * Returns the currently delegated broker for this toppar.
  * If \p proper_broker is set NULL will be returned if current handler
  * is not a proper broker (INTERNAL broker).
  *
@@ -2464,11 +2476,11 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
  *
  * Locks: none
  */
-rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
+rd_kafka_broker_t *rd_kafka_toppar_broker (rd_kafka_toppar_t *rktp,
                                            int proper_broker) {
         rd_kafka_broker_t *rkb;
         rd_kafka_toppar_lock(rktp);
-        rkb = rktp->rktp_leader;
+        rkb = rktp->rktp_broker;
         if (rkb) {
                 if (proper_broker && rkb->rkb_source == RD_KAFKA_INTERNAL)
                         rkb = NULL;
@@ -2482,8 +2494,8 @@ rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
 
 
 /**
- * @brief Take action when partition leader becomes unavailable.
- *        This should be called when leader-specific requests fail with
+ * @brief Take action when partition broker becomes unavailable.
+ *        This should be called when requests fail with
  *        NOT_LEADER_FOR.. or similar error codes, e.g. ProduceRequest.
  *
  * @locks none
@@ -2494,8 +2506,8 @@ void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
                                          rd_kafka_resp_err_t err) {
         rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
 
-        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "LEADERUA",
-                     "%s [%"PRId32"]: leader unavailable: %s: %s",
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "BROKERUA",
+                     "%s [%"PRId32"]: broker unavailable: %s: %s",
                      rkt->rkt_topic->str, rktp->rktp_partition, reason,
                      rd_kafka_err2str(err));
 

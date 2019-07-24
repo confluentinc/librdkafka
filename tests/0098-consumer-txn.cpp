@@ -159,8 +159,10 @@ static std::vector<RdKafka::Message *> consume_messages(
     switch (msg->err())
     {
       case RdKafka::ERR__TIMED_OUT:
+        delete msg;
         continue;
       case RdKafka::ERR__PARTITION_EOF:
+        delete msg;
         break;
       case RdKafka::ERR_NO_ERROR:
         result.push_back(msg);
@@ -168,6 +170,7 @@ static std::vector<RdKafka::Message *> consume_messages(
       default:
         Test::Fail("Error consuming from topic " + 
                    topic + ": " + msg->errstr());
+        delete msg;
         break;
     }
     break;
@@ -180,10 +183,9 @@ static std::vector<RdKafka::Message *> consume_messages(
   /* rely on the test timeout to prevent an infinite loop in
    * the (unlikely) event that the statistics callback isn't
    * called. */
-  while (true) {
-    c->consume(tmout_multip(500));
-    if (TestEventCb::has_captured_stats)
-      break;
+  while (!TestEventCb::has_captured_stats) {
+    RdKafka::Message *msg = c->consume(tmout_multip(500));
+    delete msg;
   }
 
   Test::Say("Captured consumer statistics event\n");

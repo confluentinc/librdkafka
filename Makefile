@@ -27,6 +27,7 @@ CONFIGURATION.md: src/rdkafka.h examples
 	@printf "$(MKL_YELLOW)Updating$(MKL_CLR_RESET)\n"
 	@echo "# Configuration properties" > CONFIGURATION.md.tmp
 	@(examples/rdkafka_performance -X list >> CONFIGURATION.md.tmp; \
+		sed -i 's/||/\\|\\|/g' CONFIGURATION.md.tmp; \
 		cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
 		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
 		rm -f CONFIGURATION.md.tmp)

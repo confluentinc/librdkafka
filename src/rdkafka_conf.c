@@ -746,7 +746,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .sdef =
           /* First attempt to refresh, else acquire. */
           "kinit -R -t \"%{sasl.kerberos.keytab}\" "
-          "-k %{sasl.kerberos.principal} \\|\\| "
+          "-k %{sasl.kerberos.principal} || "
           "kinit -t \"%{sasl.kerberos.keytab}\" -k %{sasl.kerberos.principal}"
         },
         { _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,

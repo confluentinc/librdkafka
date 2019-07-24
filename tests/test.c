@@ -203,6 +203,7 @@ _TEST_DECL(0097_ssl_verify);
 _TEST_DECL(0098_consumer_txn);
 _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
+_TEST_DECL(0101_fetch_from_follower);
 _TEST_DECL(0102_static_group_rebalance);
 
 /* Manual tests */
@@ -369,6 +370,7 @@ struct test tests[] = {
         _TEST(0098_consumer_txn, 0),
         _TEST(0099_commit_metadata, 0),
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
+        _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
 
         /* Manual tests */

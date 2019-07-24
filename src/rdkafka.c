@@ -474,6 +474,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
         _ERR_DESC(RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED,
                   "Local: Maximum application poll interval "
                   "(max.poll.interval.ms) exceeded"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__UNKNOWN_BROKER,
+                  "Local: Unknown broker"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1246,14 +1248,14 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         int64_t end_offset;
         int64_t consumer_lag = -1;
         struct offset_stats offs;
-        int32_t leader_nodeid = -1;
+        int32_t broker_id = -1;
 
         rd_kafka_toppar_lock(rktp);
 
-        if (rktp->rktp_leader) {
-                rd_kafka_broker_lock(rktp->rktp_leader);
-                leader_nodeid = rktp->rktp_leader->rkb_nodeid;
-                rd_kafka_broker_unlock(rktp->rktp_leader);
+        if (rktp->rktp_broker) {
+                rd_kafka_broker_lock(rktp->rktp_broker);
+                broker_id = rktp->rktp_broker->rkb_nodeid;
+                rd_kafka_broker_unlock(rktp->rktp_broker);
         }
 
         /* Grab a copy of the latest finalized offset stats */
@@ -1281,6 +1283,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 
 	_st_printf("%s\"%"PRId32"\": { "
 		   "\"partition\":%"PRId32", "
+		   "\"broker\":%"PRId32", "
 		   "\"leader\":%"PRId32", "
 		   "\"desired\":%s, "
 		   "\"unknown\":%s, "
@@ -1316,7 +1319,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
 		   rktp->rktp_partition,
-                   leader_nodeid,
+                   broker_id,
+                   rktp->rktp_leader_id,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_UNKNOWN)?"true":"false",
                    rd_kafka_msgq_len(&rktp->rktp_msgq),
@@ -3595,12 +3599,12 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms) {
 static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 				  rd_kafka_toppar_t *rktp) {
 
-	fprintf(fp, "%s%.*s [%"PRId32"] leader %s\n",
+	fprintf(fp, "%s%.*s [%"PRId32"] broker %s\n",
 		indent,
 		RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 		rktp->rktp_partition,
-		rktp->rktp_leader ?
-		rktp->rktp_leader->rkb_name : "none");
+		rktp->rktp_broker ?
+		rktp->rktp_broker->rkb_name : "none");
 	fprintf(fp,
 		"%s refcnt %i\n"
 		"%s msgq:      %i messages\n"

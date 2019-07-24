@@ -361,6 +361,8 @@ struct rd_kafka_conf_s {
 
 	int enable_partition_eof;
 
+	rd_kafkap_str_t *client_rack;
+
 	/*
 	 * Producer configuration
 	 */

@@ -966,7 +966,7 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
 /**
  * @brief Query timer callback to trigger refresh for topics
- *        that are missing their leaders.
+ *        that have partitions missing their leaders.
  *
  * @locks none
  * @locality rdkafka main thread
@@ -982,7 +982,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
         rd_list_init(&topics, rk->rk_topic_cnt, rd_free);
 
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                int i, no_leader = 0;
+                int i, require_metadata;
                 rd_kafka_topic_rdlock(rkt);
 
                 if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS) {
@@ -991,19 +991,19 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                         continue;
                 }
 
-                no_leader = rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
+                require_metadata = rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
-                /* Check if any partitions are missing their leaders. */
-                for (i = 0 ; !no_leader && i < rkt->rkt_partition_cnt ; i++) {
+                /* Check if any partitions are missing brokers. */
+                for (i = 0 ; !require_metadata && i < rkt->rkt_partition_cnt ; i++) {
                         rd_kafka_toppar_t *rktp =
                                 rd_kafka_toppar_s2i(rkt->rkt_p[i]);
                         rd_kafka_toppar_lock(rktp);
-                        no_leader = !rktp->rktp_leader &&
-                                !rktp->rktp_next_leader;
+                        require_metadata = !rktp->rktp_broker &&
+                                !rktp->rktp_next_broker;
                         rd_kafka_toppar_unlock(rktp);
                 }
 
-                if (no_leader || rkt->rkt_partition_cnt == 0)
+                if (require_metadata || rkt->rkt_partition_cnt == 0)
                         rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
 
                 rd_kafka_topic_rdunlock(rkt);

@@ -80,16 +80,18 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int32_t            rktp_partition;
         //LOCK: toppar_lock() + topic_wrlock()
         //LOCK: .. in partition_available()
-        int32_t            rktp_leader_id;   /**< Current leader broker id.
+        int32_t            rktp_leader_id;   /**< Current leader id.
                                               *   This is updated directly
                                               *   from metadata. */
-	rd_kafka_broker_t *rktp_leader;      /**< Current leader broker
+        int32_t            rktp_broker_id;   /**< Current broker id. */
+        rd_kafka_broker_t *rktp_broker;      /**< Current preferred broker
+                                              *   (usually the leader).
                                               *   This updated asynchronously
                                               *   by issuing JOIN op to
                                               *   broker thread, so be careful
                                               *   in using this since it
                                               *   may lag. */
-        rd_kafka_broker_t *rktp_next_leader; /**< Next leader broker after
+        rd_kafka_broker_t *rktp_next_broker; /**< Next preferred broker after
                                               *   async migration op. */
 	rd_refcnt_t        rktp_refcnt;
 	mtx_t              rktp_lock;
@@ -325,6 +327,19 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         rd_kafka_timer_t rktp_consumer_lag_tmr;  /* Consumer lag monitoring
 						  * timer */
 
+        rd_interval_t      rktp_lease_intvl;     /**< Preferred replica lease
+                                                  *   period */
+        rd_interval_t      rktp_new_lease_intvl; /**< Controls max frequency
+                                                  *   at which a new preferred
+                                                  *   replica lease can be
+                                                  *   created for a toppar.
+                                                  */
+        rd_interval_t      rktp_metadata_intvl;  /**< Controls max frequency
+                                                  *   of metadata requests
+                                                  *   in preferred replica
+                                                  *   handler.
+                                                  */
+
         int rktp_wait_consumer_lag_resp;         /* Waiting for consumer lag
                                                   * response. */
 
@@ -453,8 +468,7 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
                                          int64_t Offset);
 
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb,
-				      int for_removal);
+				      rd_kafka_broker_t *rkb);
 
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
@@ -498,7 +512,7 @@ rd_kafka_assignor_t *
 rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 
 
-rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
+rd_kafka_broker_t *rd_kafka_toppar_broker (rd_kafka_toppar_t *rktp,
                                            int proper_broker);
 void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
                                          const char *reason,

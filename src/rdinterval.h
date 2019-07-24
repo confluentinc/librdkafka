@@ -47,17 +47,18 @@ static RD_INLINE RD_UNUSED void rd_interval_init (rd_interval_t *ri) {
 /**
  * Returns the number of microseconds the interval has been over-shot.
  * If the return value is >0 (i.e., time for next intervalled something) then
- * the time interval is updated for the next inteval.
+ * the time interval is updated to the current time.
  *
- * A current time can be provided in 'now', if set to 0 the time will be
- * gathered automatically.
+ * The current time can be provided in 'now', or if this is set to 0 the time
+ * will be gathered automatically.
  *
  * If 'interval_us' is set to 0 the fixed interval will be used, see
  * 'rd_interval_fixed()'.
  *
  * If this is the first time rd_interval() is called after an _init() or
- * _reset() and the \p immediate parameter is true, then a positive value
- * will be returned immediately even though the initial interval has not passed.
+ * _reset() or the \p immediate parameter is true, then a positive value
+ * will be returned immediately even though the initial interval has not
+ * passed.
  */
 #define rd_interval(ri,interval_us,now) rd_interval0(ri,interval_us,now,0)
 #define rd_interval_immediate(ri,interval_us,now) \
@@ -92,6 +93,19 @@ static RD_INLINE RD_UNUSED rd_ts_t rd_interval0 (rd_interval_t *ri,
  */
 static RD_INLINE RD_UNUSED void rd_interval_reset (rd_interval_t *ri) {
         ri->ri_ts_last = 0;
+        ri->ri_backoff = 0;
+}
+
+/**
+ * Reset the interval to 'now'. If now is 0, the time will be gathered
+ * automatically.
+ */
+static RD_INLINE RD_UNUSED void rd_interval_reset_to_now (rd_interval_t *ri,
+                                                          rd_ts_t now) {
+        if (!now)
+                now = rd_clock();
+
+        ri->ri_ts_last = now;
         ri->ri_backoff = 0;
 }
 

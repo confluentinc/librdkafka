@@ -21,6 +21,11 @@ import sys
 import argparse
 import json
 
+def version_as_number (version):
+    if version == 'trunk':
+        return sys.maxint
+    tokens = version.split('.')
+    return float('%s.%s' % (tokens[0], tokens[1]))
 
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
                   root_path='tmp', broker_cnt=3):
@@ -52,6 +57,9 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     brokers = []
     for n in range(0, broker_cnt):
+        # Configure rack & replica selector if broker supports fetch-from-follower
+        if version_as_number(version) >= 2.4:
+            defconf.update({'conf': ['broker.rack=RACK${appid}', 'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()

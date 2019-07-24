@@ -1045,6 +1045,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "on-disk corruption to the messages occurred. This check comes "
           "at slightly increased CPU usage.",
           0, 1, 0 },
+        { _RK_GLOBAL, "client.rack", _RK_C_KSTR,
+          _RK(client_rack),
+          "A rack identifier for this client. This can be any string value "
+          "which indicates where this client is physically located. It "
+          "corresponds with the broker config `broker.rack`.",
+          .sdef =  "" },
 
         /* Global producer properties */
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.idempotence", _RK_C_BOOL,

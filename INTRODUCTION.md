@@ -1031,6 +1031,16 @@ the logging level will be LOG_WARNING (4), else LOG_INFO (6).
 but it is recommended to instead rely on the above heuristics.
 
 
+#### Fetch From Follower
+
+librdkafka supports consuming messages from follower replicas
+([KIP-392](https://cwiki.apache.org/confluence/display/KAFKA/KIP-392%3A+Allow+consumers+to+fetch+from+closest+replica)).
+This is enabled by setting the `client.rack` configuration property which
+corresponds to `broker.rack` on the broker. The actual assignment of
+consumers to replicas is determined by the configured `replica.selector.class`
+on the broker.
+
+
 ### Logging
 
 #### Debug contexts

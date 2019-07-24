@@ -2422,7 +2422,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
          * check once if we're the leader (which allows relaxed
          * locking), and cache the current rktp's eos state vars. */
         rd_kafka_toppar_lock(rktp);
-        is_leader = rktp->rktp_leader == rkb;
+        is_leader = rktp->rktp_broker == rkb;
         perr->rktp_pid = rktp->rktp_eos.pid;
         perr->next_ack_seq = rktp->rktp_eos.next_ack_seq;
         perr->next_err_seq = rktp->rktp_eos.next_err_seq;

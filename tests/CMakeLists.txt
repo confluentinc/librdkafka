@@ -92,6 +92,7 @@ set(
     0098-consumer-txn.cpp
     0099-commit_metadata.c
     0100-thread_interceptors.cpp
+    0101-fetch-from-follower.cpp
     0102-static_group_rebalance.c
     8000-idle.cpp
     test.c

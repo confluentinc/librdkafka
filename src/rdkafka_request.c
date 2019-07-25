@@ -734,8 +734,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
         int i;
 	int actions;
 
-        if (err)
-		goto err;
+        if (err) {
+		if ((rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) && err == RD_KAFKA_RESP_ERR__TRANSPORT)
+			goto done;
+		else
+			goto err;
+	}
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         for (i = 0 ; i < TopicArrayCnt ; i++) {

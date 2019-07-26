@@ -125,8 +125,8 @@ rd_tmpabuf_write0 (const char *func, int line,
 		   rd_tmpabuf_t *tab, const void *buf, size_t size) {
 	void *ptr = rd_tmpabuf_alloc0(func, line, tab, size);
 
-	if (ptr && buf)
-		memcpy(ptr, buf, size);
+        if (likely(ptr && size))
+                memcpy(ptr, buf, size);
 
 	return ptr;
 }

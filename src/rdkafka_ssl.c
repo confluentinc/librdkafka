@@ -534,6 +534,9 @@ static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
         long int rl;
         X509 *cert;
 
+        if (!rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.enable_verify)
+                return 0;
+
         cert = SSL_get_peer_certificate(rktrans->rktrans_ssl);
         X509_free(cert);
         if (!cert) {
@@ -1069,7 +1072,8 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         /* Set up broker certificate verification. */
         SSL_CTX_set_verify(ctx,
-                           rk->rk_conf.ssl.enable_verify ? SSL_VERIFY_PEER : 0,
+                           rk->rk_conf.ssl.enable_verify ?
+                           SSL_VERIFY_PEER : SSL_VERIFY_NONE,
                            rk->rk_conf.ssl.cert_verify_cb ?
                            rd_kafka_transport_ssl_cert_verify_cb : NULL);
 

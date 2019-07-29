@@ -1073,7 +1073,8 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         /* Set up broker certificate verification. */
         SSL_CTX_set_verify(ctx,
-                           rk->rk_conf.ssl.enable_verify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE,
+                           rk->rk_conf.ssl.enable_verify ?
+                           SSL_VERIFY_PEER : SSL_VERIFY_NONE,
                            rk->rk_conf.ssl.cert_verify_cb ?
                            rd_kafka_transport_ssl_cert_verify_cb : NULL);
 

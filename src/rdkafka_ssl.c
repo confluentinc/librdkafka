@@ -532,6 +532,9 @@ rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans, int events) {
  * @brief Verify SSL handshake was valid.
  */
 static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
+        if (!rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.enable_verify) {
+                return 0;
+        }
         long int rl;
         X509 *cert;
 
@@ -544,7 +547,7 @@ static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
                 return -1;
         }
 
-        if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.enable_verify && (rl = SSL_get_verify_result(rktrans->rktrans_ssl)) != X509_V_OK) {
+        if ((rl = SSL_get_verify_result(rktrans->rktrans_ssl)) != X509_V_OK) {
                 rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
                                      RD_KAFKA_RESP_ERR__SSL,
                                      "Failed to verify broker certificate: %s",

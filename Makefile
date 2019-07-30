@@ -70,3 +70,8 @@ LICENSES.txt: .PHONY
 	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
 	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
 
+BUILT_LICENSES.txt: .PHONY
+	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d built-licenses.txt ; done)
+	@((for d in $(LIBSUBDIRS); do cat $$d/built-licenses.txt ; done) > $@.tmp)
+	@[ -f $@ ] && cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
+

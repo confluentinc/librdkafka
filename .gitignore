@@ -26,3 +26,5 @@ staging-docs
 tmp
 stats*.json
 test_report*.json
+BUILT_LICENSES.txt
+built-licenses.txt

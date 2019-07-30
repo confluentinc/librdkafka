@@ -17,11 +17,14 @@ if [ "$1" = "--in-docker" ]; then
     make -j
     examples/rdkafka_example -X builtin.features
     make -C tests run_local
+    make BUILT_LICENSES.txt
+    cp BUILT_LICENSES.txt src/
 
     # Create a tarball in artifacts/
     cd src
     ldd librdkafka.so.1
-    tar cvzf /v/artifacts/alpine-librdkafka.tgz librdkafka.so.1
+    tar cvzf /v/artifacts/alpine-librdkafka.tgz \
+        librdkafka.so.1 BUILT_LICENSES.txt
     cd ../..
 
 else

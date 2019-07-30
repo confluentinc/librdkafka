@@ -68,6 +68,8 @@ man7dir?=	$(mandir)/man7
 man8dir?=	$(mandir)/man8
 
 
+.PHONY:
+
 # Checks that mklove is set up and ready for building
 mklove-check:
 	@if [ ! -f "$(TOPDIR)/Makefile.config" ]; then \
@@ -234,3 +236,7 @@ bin-clean: generic-clean
 
 deps-clean:
 	rm -rf "$(MKLOVE_DIR)/deps"
+
+built-licenses.txt: .PHONY
+	@printf "$(MKL_YELLOW)Generating $@ for $(LIBNAME) $(MKL_CLR_RESET)\n"
+	@($(MKLOVE_DIR)/license_gen.py $(SRCS) $(CXXSRCS) > $@)

@@ -1,5 +1,5 @@
 /*
- * librdkafka - Apache Kafka C/C++ library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2014 Magnus Edenhill
  * All rights reserved.

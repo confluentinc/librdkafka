@@ -44,6 +44,8 @@ mkdir -p $DEST_DIR
 make -j
 examples/rdkafka_example -X builtin.features
 make -C tests run_local
+make BUILT_LICENSES.txt
+cp BUILT_LICENSES.txt $DEST_DIR/
 make install
 
 # Tar up the output directory

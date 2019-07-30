@@ -47,6 +47,7 @@ install:
 before_script:
 script:
 - make -j2 all examples check && make -j2 -C tests build
+- make BUILT_LICENSES.txt && cp BUILT_LICENSES.txt artifacts/
 - if [[ $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local ; fi
 - make install
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi

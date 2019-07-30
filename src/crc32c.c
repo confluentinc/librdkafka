@@ -13,9 +13,7 @@
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
  * Copyright (C) 2013 Mark Adler
  * Version 1.1  1 Aug 2013  Mark Adler
- */
 
-/*
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the author be held liable for any damages
   arising from the use of this software.

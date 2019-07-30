@@ -29,7 +29,7 @@
 */
 
 /*
- * librdkafka - Apache Kafka C library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2018, Magnus Edenhill
  * All rights reserved.

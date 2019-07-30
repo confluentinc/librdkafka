@@ -1902,7 +1902,10 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
         else if (err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP ||
-                 err == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE) {
+                 err == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE ||
+                 err == RD_KAFKA_RESP_ERR__TRANSPORT) {
+                /* The coordinator is not available, defer the offset commit
+                 * to when the coordinator is back up again. */
 
                 /* future-proofing, see timeout_scan(). */
                 rd_kafka_assert(NULL, err != RD_KAFKA_RESP_ERR__WAIT_COORD);

@@ -329,6 +329,25 @@ static void test_failed_produce () {
   delete headers;
 }
 
+static void test_assignment_op () {
+  Test::Say("Test Header assignment operator\n");
+
+  RdKafka::Headers *headers = RdKafka::Headers::create();
+
+  headers->add("abc", "123");
+  headers->add("def", "456");
+
+  RdKafka::Headers::Header h = headers->get_last("abc");
+  h = headers->get_last("def");
+  RdKafka::Headers::Header h2 = h;
+  h = headers->get_last("nope");
+  RdKafka::Headers::Header h3 = h;
+  h = headers->get_last("def");
+
+  delete headers;
+}
+
+
 extern "C" {
   int main_0085_headers (int argc, char **argv) {
     topic = Test::mk_topic_name("0085-headers", 1);
@@ -371,6 +390,7 @@ extern "C" {
     test_get_last_gives_last_added_val();
     test_get_of_key_returns_all();
     test_failed_produce();
+    test_assignment_op();
 
     c->close();
     delete c;

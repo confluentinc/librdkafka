@@ -89,14 +89,15 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		RD_KAFKA_BROKER_STATE_DOWN,
                 RD_KAFKA_BROKER_STATE_TRY_CONNECT,
 		RD_KAFKA_BROKER_STATE_CONNECT,
-		RD_KAFKA_BROKER_STATE_AUTH,
+		RD_KAFKA_BROKER_STATE_AUTH_LEGACY,
 
 		/* Any state >= STATE_UP means the Kafka protocol layer
 		 * is operational (to some degree). */
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
 		RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
-		RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE
+		RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
+                RD_KAFKA_BROKER_STATE_AUTH_REQ,
 	} rkb_state;
 
         rd_ts_t             rkb_ts_state;        /* Timestamp of last

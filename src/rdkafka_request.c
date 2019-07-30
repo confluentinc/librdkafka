@@ -37,6 +37,7 @@
 #include "rdkafka_metadata.h"
 #include "rdkafka_msgset.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_sasl.h"
 
 #include "rdrand.h"
 #include "rdstring.h"
@@ -1744,6 +1745,8 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    void *opaque) {
         rd_kafka_buf_t *rkbuf;
 	int mechlen = (int)strlen(mechanism);
+        int16_t ApiVersion;
+        int features;
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslHandshake,
                                          1, RD_KAFKAP_STR_SIZE0(mechlen));
@@ -1766,11 +1769,120 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
             rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
                 rd_kafka_buf_set_abs_timeout(rkbuf, 10*1000 /*10s*/, 0);
 
+        /* ApiVersion 1 / RD_KAFKA_FEATURE_SASL_REQ enables
+         * the SaslAuthenticateRequest */
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_SaslHandshake, 0, 1, &features);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
 	if (replyq.q)
 		rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq,
                                                resp_cb, opaque);
 	else /* in broker thread */
 		rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
+}
+
+
+/**
+ * @brief Parses and handles an SaslAuthenticate reply.
+ *
+ * @returns 0 on success, else an error.
+ *
+ * @locality broker thread
+ * @locks none
+ */
+void
+rd_kafka_handle_SaslAuthenticate (rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_buf_t *rkbuf,
+                                  rd_kafka_buf_t *request,
+                                  void *opaque) {
+        const int log_decode_errors = LOG_ERR;
+        int16_t error_code;
+        rd_kafkap_str_t error_str;
+        rd_kafkap_bytes_t auth_data;
+        char errstr[512];
+
+        if (err) {
+                rd_snprintf(errstr, sizeof(errstr),
+                            "SaslAuthenticateRequest failed: %s",
+                            rd_kafka_err2str(err));
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &error_code);
+        rd_kafka_buf_read_str(rkbuf, &error_str);
+
+        if (error_code) {
+                /* Authentication failed */
+
+                /* For backwards compatibility translate the
+                 * new broker-side auth error code to our local error code. */
+                if (error_code == RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED)
+                        err = RD_KAFKA_RESP_ERR__AUTHENTICATION;
+                else
+                        err = error_code;
+
+                rd_snprintf(errstr, sizeof(errstr), "%.*s",
+                            RD_KAFKAP_STR_PR(&error_str));
+                goto err;
+        }
+
+        rd_kafka_buf_read_bytes(rkbuf, &auth_data);
+
+        /* Pass SASL auth frame to SASL handler */
+        if (rd_kafka_sasl_recv(rkb->rkb_transport,
+                               auth_data.data,
+                               (size_t)RD_KAFKAP_BYTES_LEN(&auth_data),
+                               errstr, sizeof(errstr)) == -1) {
+                err = RD_KAFKA_RESP_ERR__AUTHENTICATION;
+                goto err;
+        }
+
+        return;
+
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+        rd_snprintf(errstr, sizeof(errstr),
+                    "SaslAuthenticateResponse parsing failed: %s",
+                    rd_kafka_err2str(err));
+
+ err:
+        rd_kafka_broker_fail(rkb, LOG_ERR, err,
+                             "SASL authentication error: %s", errstr);
+}
+
+
+/**
+ * @brief Send SaslAuthenticateRequest (KIP-152)
+ */
+void rd_kafka_SaslAuthenticateRequest (rd_kafka_broker_t *rkb,
+                                       const void *buf, size_t size,
+                                       rd_kafka_replyq_t replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
+
+        /* Should be sent before any other requests since it is part of
+         * the initial connection handshake. */
+        rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
+
+        rd_kafka_buf_write_bytes(rkbuf, buf, size);
+
+        /* There are no errors that can be retried, instead
+         * close down the connection and reconnect on failure. */
+        rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
+
+        if (replyq.q)
+                rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq,
+                                               resp_cb, opaque);
+        else /* in broker thread */
+                rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
 }
 
 

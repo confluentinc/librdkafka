@@ -31,6 +31,9 @@
 
 
 
+int rd_kafka_sasl_recv (rd_kafka_transport_t *rktrans,
+                        const void *buf, size_t len,
+                        char *errstr, size_t errstr_size);
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 			    char *errstr, size_t errstr_size);
 void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans);

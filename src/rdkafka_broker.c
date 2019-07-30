@@ -79,11 +79,12 @@ const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
         "TRY_CONNECT",
 	"CONNECT",
-	"AUTH",
+	"AUTH_LEGACY",
 	"UP",
         "UPDATE",
 	"APIVERSION_QUERY",
-	"AUTH_HANDSHAKE"
+	"AUTH_HANDSHAKE",
+        "AUTH_REQ"
 };
 
 const char *rd_kafka_secproto_names[] = {
@@ -1990,8 +1991,12 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 			char sasl_errstr[512];
 
 			rd_kafka_broker_lock(rkb);
-			rd_kafka_broker_set_state(rkb,
-						  RD_KAFKA_BROKER_STATE_AUTH);
+                        rd_kafka_broker_set_state(
+                                rkb,
+                                (rkb->rkb_features &
+                                 RD_KAFKA_FEATURE_SASL_AUTH_REQ) ?
+                                RD_KAFKA_BROKER_STATE_AUTH_REQ :
+                                RD_KAFKA_BROKER_STATE_AUTH_LEGACY);
 			rd_kafka_broker_unlock(rkb);
 
 			if (rd_kafka_sasl_client_new(
@@ -2006,13 +2011,6 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 					sasl_errstr);
 				return;
 			}
-
-			/* Enter non-Kafka-protocol-framed SASL communication
-			 * state handled in rdkafka_sasl.c */
-			rd_kafka_broker_lock(rkb);
-			rd_kafka_broker_set_state(rkb,
-						  RD_KAFKA_BROKER_STATE_AUTH);
-			rd_kafka_broker_unlock(rkb);
 		}
 
 		return;
@@ -4378,7 +4376,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
-		case RD_KAFKA_BROKER_STATE_AUTH:
+		case RD_KAFKA_BROKER_STATE_AUTH_LEGACY:
+                case RD_KAFKA_BROKER_STATE_AUTH_REQ:
 		case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
 		case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
                         /* Asynchronous connect in progress. */

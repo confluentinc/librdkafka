@@ -723,31 +723,37 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 		break;
 
-	case RD_KAFKA_BROKER_STATE_AUTH:
-		/* SASL handshake */
-		if (rd_kafka_sasl_io_event(rktrans, events,
-					   errstr, sizeof(errstr)) == -1) {
-			errno = EINVAL;
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
-					     "SASL authentication failure: %s",
-					     errstr);
-			return;
-		}
+        case RD_KAFKA_BROKER_STATE_AUTH_LEGACY:
+                /* SASL authentication.
+                 * Prior to broker version v1.0.0 this is performed
+                 * directly on the socket without Kafka framing. */
+                if (rd_kafka_sasl_io_event(rktrans, events,
+                                           errstr,
+                                           sizeof(errstr)) == -1) {
+                        errno = EINVAL;
+                        rd_kafka_broker_fail(
+                                rkb, LOG_ERR,
+                                RD_KAFKA_RESP_ERR__AUTHENTICATION,
+                                "SASL authentication failure: %s",
+                                errstr);
+                        return;
+                }
 
-		if (events & POLLHUP) {
-			errno = EINVAL;
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
-					     "Disconnected");
+                if (events & POLLHUP) {
+                        errno = EINVAL;
+                        rd_kafka_broker_fail(
+                                rkb, LOG_ERR,
+                                RD_KAFKA_RESP_ERR__AUTHENTICATION,
+                                "Disconnected");
 
-			return;
-		}
+                        return;
+                }
 
-		break;
+                break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
 	case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
+                case RD_KAFKA_BROKER_STATE_AUTH_REQ:
 	case RD_KAFKA_BROKER_STATE_UP:
 	case RD_KAFKA_BROKER_STATE_UPDATE:
 

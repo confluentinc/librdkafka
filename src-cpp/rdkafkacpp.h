@@ -1800,13 +1800,15 @@ public:
      *
      * @remark The error code is used for when the Header is constructed
      *         internally by using RdKafka::Headers::get_last which constructs
-     *         a Header encapsulating the ErrorCode in the process
+     *         a Header encapsulating the ErrorCode in the process.
+     *         If err is set, the value and value_size fields will be undefined.
      */
     Header(const std::string &key,
            const void *value,
            size_t value_size,
            const RdKafka::ErrorCode err):
-    key_(key), err_(err), value_size_(value_size) {
+    key_(key), err_(err), value_(NULL), value_size_(value_size) {
+      if (err == ERR_NO_ERROR)
         value_ = copy_value(value, value_size);
     }
 
@@ -1829,6 +1831,9 @@ public:
       key_ = other.key_;
       err_ = other.err_;
       value_size_ = other.value_size_;
+
+      if (value_ != NULL)
+        free(value_);
 
       value_ = copy_value(other.value_, value_size_);
 

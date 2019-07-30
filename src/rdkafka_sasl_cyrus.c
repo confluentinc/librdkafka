@@ -203,12 +203,19 @@ static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
 
         if (r == -1) {
-                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "Kerberos ticket refresh failed: "
-                             "Failed to execute %s",
-                             cmd);
-                rd_free(cmd);
-                return -1;
+                if (errno == ECHILD) {
+                        rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
+                                     "Kerberos ticket refresh command "
+                                     "returned ECHILD: %s: exit status "
+                                     "unknown, assuming success",
+                                     cmd);
+                } else {
+                        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                                     "Kerberos ticket refresh failed: %s: %s",
+                                     cmd, rd_strerror(errno));
+                        rd_free(cmd);
+                        return -1;
+                }
         } else if (WIFSIGNALED(r)) {
                 rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
                              "Kerberos ticket refresh failed: %s: "

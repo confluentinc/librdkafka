@@ -190,10 +190,10 @@ struct rd_kafka_ApiVersion {
 /**
  * @brief ApiVersion.ApiKey comparator.
  */
-static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
-	const struct rd_kafka_ApiVersion *a = _a, *b = _b;
-
-	return a->ApiKey - b->ApiKey;
+static RD_UNUSED
+int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
+        const struct rd_kafka_ApiVersion *a = _a, *b = _b;
+        return RD_CMP(a->ApiKey, b->ApiKey);
 }
 
 
@@ -310,7 +310,7 @@ static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 	if (r)
 		return r;
 	else
-		return a->len - b->len;
+                return RD_CMP(a->len, b->len);
 }
 
 static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
@@ -321,7 +321,7 @@ static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
 	if (r)
 		return r;
 	else
-		return a->len - len;
+                return RD_CMP(a->len, len);
 }
 
 static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str2 (const char *str,
@@ -332,7 +332,7 @@ static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str2 (const char *str,
 	if (r)
 		return r;
 	else
-		return len - b->len;
+                return RD_CMP(len, b->len);
 }
 
 
@@ -434,7 +434,7 @@ static RD_INLINE RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 	if (r)
 		return r;
 	else
-		return a->len - b->len;
+                return RD_CMP(a->len, b->len);
 }
 
 static RD_INLINE RD_UNUSED
@@ -445,7 +445,7 @@ int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
 	if (r)
 		return r;
 	else
-		return a->len - len;
+                return RD_CMP(a->len, len);
 }
 
 

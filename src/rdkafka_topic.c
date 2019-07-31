@@ -1336,7 +1336,7 @@ int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 	if ((r = strcmp(a->topic, b->topic)))
 		return r;
 
-	return a->partition_cnt - b->partition_cnt;
+        return RD_CMP(a->partition_cnt, b->partition_cnt);
 }
 
 

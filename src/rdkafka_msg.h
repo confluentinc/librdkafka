@@ -377,12 +377,7 @@ int rd_kafka_msg_cmp_msgid (const void *_a, const void *_b) {
 
         rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
-                return 1;
-        else if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
-                return -1;
-        else
-                return 0;
+        return RD_CMP(a->rkm_u.producer.msgid, b->rkm_u.producer.msgid);
 }
 
 /**
@@ -395,12 +390,7 @@ int rd_kafka_msg_cmp_msgid_lifo (const void *_a, const void *_b) {
 
         rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
-                return 1;
-        else if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
-                return -1;
-        else
-                return 0;
+        return RD_CMP(b->rkm_u.producer.msgid, a->rkm_u.producer.msgid);
 }
 
 

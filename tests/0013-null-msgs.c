@@ -166,7 +166,7 @@ static void verify_consumed_msg_reset (int msgcnt) {
 static int int_cmp (const void *_a, const void *_b) {
 	int a = *(int *)_a;
 	int b = *(int *)_b;
-	return a - b;
+	return RD_CMP(a, b);
 }
 
 static void verify_consumed_msg_check0 (const char *func, int line) {

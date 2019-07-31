@@ -312,7 +312,7 @@ static RD_INLINE RD_UNUSED
 int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
         const rd_kafka_op_t *a = _a, *b = _b;
 
-        return b->rko_prio - a->rko_prio;
+        return RD_CMP(b->rko_prio, a->rko_prio);
 }
 
 

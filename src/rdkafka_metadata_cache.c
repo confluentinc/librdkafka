@@ -181,7 +181,7 @@ rd_kafka_metadata_cache_find (rd_kafka_t *rk, const char *topic, int valid) {
 int rd_kafka_metadata_partition_id_cmp (const void *_a,
                                         const void *_b) {
         const rd_kafka_metadata_partition_t *a = _a, *b = _b;
-        return a->id - b->id;
+        return RD_CMP(a->id, b->id);
 }
 
 

@@ -2727,13 +2727,13 @@ static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
 static int test_mv_m_cmp_offset (const void *_a, const void *_b) {
 	const struct test_mv_m *a = _a, *b = _b;
 
-	return (int)(a->offset - b->offset);
+        return RD_CMP(a->offset, b->offset);
 }
 
 static int test_mv_m_cmp_msgid (const void *_a, const void *_b) {
 	const struct test_mv_m *a = _a, *b = _b;
 
-	return a->msgid - b->msgid;
+        return RD_CMP(a->msgid, b->msgid);
 }
 
 

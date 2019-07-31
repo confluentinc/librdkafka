@@ -2565,7 +2565,7 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
  */
 static int rd_kafka_broker_cmp_by_id (const void *_a, const void *_b) {
         const rd_kafka_broker_t *a = _a, *b = _b;
-        return a->rkb_nodeid - b->rkb_nodeid;
+        return RD_CMP(a->rkb_nodeid, b->rkb_nodeid);
 }
 
 

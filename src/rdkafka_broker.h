@@ -293,7 +293,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 static RD_UNUSED RD_INLINE int rd_kafka_broker_cmp (const void *_a,
                                                     const void *_b) {
         const rd_kafka_broker_t *a = _a, *b = _b;
-        return (int)(a - b);
+        return RD_CMP(a, b);
 }
 
 

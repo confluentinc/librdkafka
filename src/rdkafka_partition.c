@@ -2720,7 +2720,7 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
         if (r)
                 return r;
         else
-                return a->partition - b->partition;
+                return RD_CMP(a->partition, b->partition);
 }
 
 

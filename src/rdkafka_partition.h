@@ -645,7 +645,7 @@ int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
 				   rktp_b->rktp_rkt->rkt_topic)))
 		return r;
 
-	return rktp_a->rktp_partition - rktp_b->rktp_partition;
+        return RD_CMP(rktp_a->rktp_partition, rktp_b->rktp_partition);
 }
 
 /**

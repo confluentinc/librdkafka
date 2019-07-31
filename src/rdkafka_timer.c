@@ -53,7 +53,7 @@ static RD_INLINE int rd_kafka_timer_scheduled (const rd_kafka_timer_t *rtmr) {
 
 static int rd_kafka_timer_cmp (const void *_a, const void *_b) {
 	const rd_kafka_timer_t *a = _a, *b = _b;
-	return (int)(a->rtmr_next - b->rtmr_next);
+        return RD_CMP(a->rtmr_next, b->rtmr_next);
 }
 
 static void rd_kafka_timer_unschedule (rd_kafka_timers_t *rkts,

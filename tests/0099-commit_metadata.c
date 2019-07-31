@@ -67,25 +67,28 @@ static void compare_toppar_lists (
                 if (a->offset != b->offset ||
                     a->metadata_size != b->metadata_size ||
                     memcmp(a->metadata, b->metadata, a->metadata_size))
-                        TEST_FAIL("Lists did not match at element %d/%d:\n"
-                                  " a: %s [%"PRId32"] @ %"PRId64": "
-                                  "(%"PRIusz") \"%*s\"\n"
-                                  " b: %s [%"PRId32"] @ %"PRId64": "
-                                  "(%"PRIusz") \"%*s\"",
-                                  i, lista->cnt,
-                                  a->topic,
-                                  a->partition,
-                                  a->offset,
-                                  a->metadata_size,
-                                  (int)a->metadata_size,
-                                  (const char *)a->metadata,
-                                  b->topic,
-                                  b->partition,
-                                  b->offset,
-                                  b->metadata_size,
-                                  (int)b->metadata_size,
-                                  (const char *)b->metadata);
+                        TEST_FAIL_LATER(
+                                "Lists did not match at element %d/%d:\n"
+                                " a: %s [%"PRId32"] @ %"PRId64": "
+                                "(%"PRIusz") \"%*s\"\n"
+                                " b: %s [%"PRId32"] @ %"PRId64": "
+                                "(%"PRIusz") \"%*s\"",
+                                i, lista->cnt,
+                                a->topic,
+                                a->partition,
+                                a->offset,
+                                a->metadata_size,
+                                (int)a->metadata_size,
+                                (const char *)a->metadata,
+                                b->topic,
+                                b->partition,
+                                b->offset,
+                                b->metadata_size,
+                                (int)b->metadata_size,
+                                (const char *)b->metadata);
         }
+
+        TEST_LATER_CHECK();
 }
 
 
@@ -161,9 +164,11 @@ int main_0099_commit_metadata (int argc, char **argv) {
         rd_kafka_topic_partition_list_t *origin_toppar;
         rd_kafka_topic_partition_list_t *expected_toppar;
         const char *topic = test_mk_topic_name("0099-commit_metadata", 0);
-        const char *group_id = topic;
+        char group_id[16];
 
         test_conf_init(NULL, NULL, 20/*timeout*/);
+
+        test_str_id_generate(group_id, sizeof(group_id));
 
         test_create_topic(NULL, topic, 1, 1);
 

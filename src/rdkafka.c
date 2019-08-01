@@ -2025,18 +2025,25 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	if (rd_kafka_ApiVersion_is_queryable(rk->rk_conf.broker_version_fallback))
 		rk->rk_conf.api_version_request = 1;
 
-	if (rk->rk_type == RD_KAFKA_PRODUCER) {
-		mtx_init(&rk->rk_curr_msgs.lock, mtx_plain);
-		cnd_init(&rk->rk_curr_msgs.cnd);
-		rk->rk_curr_msgs.max_cnt =
-			rk->rk_conf.queue_buffering_max_msgs;
-                if ((unsigned long long)rk->rk_conf.queue_buffering_max_kbytes * 1024 >
-                    (unsigned long long)SIZE_MAX)
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                mtx_init(&rk->rk_curr_msgs.lock, mtx_plain);
+                cnd_init(&rk->rk_curr_msgs.cnd);
+                rk->rk_curr_msgs.max_cnt =
+                        rk->rk_conf.queue_buffering_max_msgs;
+                if ((unsigned long long)rk->rk_conf.
+                    queue_buffering_max_kbytes * 1024 >
+                    (unsigned long long)SIZE_MAX) {
                         rk->rk_curr_msgs.max_size = SIZE_MAX;
-                else
+                        rd_kafka_log(rk, LOG_WARNING, "QUEUESIZE",
+                                     "queue.buffering.max.kbytes adjusted "
+                                     "to system SIZE_MAX limit %"PRIusz" bytes",
+                                     rk->rk_curr_msgs.max_size);
+                } else {
                         rk->rk_curr_msgs.max_size =
-                        (size_t)rk->rk_conf.queue_buffering_max_kbytes * 1024;
-	}
+                                (size_t)rk->rk_conf.
+                                queue_buffering_max_kbytes * 1024;
+                }
+        }
 
         if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
                 ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;

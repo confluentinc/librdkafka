@@ -1043,7 +1043,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum total message size sum allowed on the producer queue. "
 	  "This queue is shared by all topics and partitions. "
 	  "This property has higher priority than queue.buffering.max.messages.",
-	  1, INT_MAX/1024, 0x100000/*1GB*/ },
+	  1, INT_MAX, 0x100000/*1GB*/ },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.ms",
           _RK_C_DBL,
 	  _RK(buffering_max_ms_dbl),

@@ -77,6 +77,7 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                                      char *errstr, size_t errstr_size) {
         rd_kafka_sasl_cyrus_state_t *state = rktrans->rktrans_sasl.state;
         int r;
+        int sendcnt = 0;
 
         if (rktrans->rktrans_sasl.complete && size == 0)
                 goto auth_successful;
@@ -96,6 +97,7 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                         if (rd_kafka_sasl_send(rktrans, out, outlen,
                                                errstr, errstr_size) == -1)
                                 return -1;
+                        sendcnt++;
                 }
 
                 if (r == SASL_INTERACT)
@@ -116,6 +118,28 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                             "SASL handshake failed (step): %s",
                             sasl_errdetail(state->conn));
                 return -1;
+        }
+
+        if (!rktrans->rktrans_sasl.complete && sendcnt > 0) {
+                /* With SaslAuthenticateRequest Kafka protocol framing
+                 * we'll get a Response back after authentication is done,
+                 * which should not be processed by Cyrus, but we still
+                 * need to wait for the response to propgate its error,
+                 * if any, before authentication is considered done.
+                 *
+                 * The legacy framing does not have a final broker->client
+                 * response. */
+                rktrans->rktrans_sasl.complete = 1;
+
+                if (rktrans->rktrans_rkb->rkb_features &
+                    RD_KAFKA_FEATURE_SASL_AUTH_REQ) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
+                                   "%s authentication complete but awaiting "
+                                   "final response from broker",
+                                   rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                                   sasl.mechanisms);
+                        return 0;
+                }
         }
 
         /* Authentication successful */

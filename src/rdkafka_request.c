@@ -1872,7 +1872,8 @@ void rd_kafka_SaslAuthenticateRequest (rd_kafka_broker_t *rkb,
          * the initial connection handshake. */
         rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
 
-        rd_kafka_buf_write_bytes(rkbuf, buf, size);
+        /* Broker does not support -1 (Null) for this field */
+        rd_kafka_buf_write_bytes(rkbuf, buf ? buf : "", size);
 
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */

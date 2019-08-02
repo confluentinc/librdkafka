@@ -338,31 +338,6 @@ rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp) {
 }
 
 
-/**
- * Enqueue offset_commit_cb op, if configured.
- *
- */
-void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
-				   rd_kafka_resp_err_t err,
-				   const rd_kafka_topic_partition_list_t *offsets) {
-	rd_kafka_op_t *rko;
-
-        if (!(rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT))
-		return;
-
-	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
-        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_HIGH);
-	rko->rko_err = err;
-	rko->rko_u.offset_commit.cb = rk->rk_conf.offset_commit_cb;/*maybe NULL*/
-	rko->rko_u.offset_commit.opaque = rk->rk_conf.opaque;
-	if (offsets)
-		rko->rko_u.offset_commit.partitions =
-			rd_kafka_topic_partition_list_copy(offsets);
-	rd_kafka_q_enq(rk->rk_rep, rko);
-}
-
-
-
 
 /**
  * Commit a list of offsets asynchronously. Response will be queued on 'replyq'.

@@ -1038,7 +1038,7 @@ for a given partition by calling `rd_kafka_consume_start()`.
     	  `rd_kafka_topic_new()`.
   * `partition` - partition to consume from.
   * `offset` - message offset to start consuming from. This may either be an
-    	     absolute message offset or one of the two special offsets:
+    	     absolute message offset or one of the three special offsets:
 	     `RD_KAFKA_OFFSET_BEGINNING` to start consuming from the beginning
 	     of the partition's queue (oldest message), or
 	     `RD_KAFKA_OFFSET_END` to start consuming at the next message to be

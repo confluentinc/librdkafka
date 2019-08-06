@@ -217,6 +217,14 @@ const char *foo (void) {
 void foo (void) {
   pthread_setname_np(pthread_self(), "abc");
 }
+' || \
+    mkl_compile_check "pthread_setname_darwin" "HAVE_PTHREAD_SETNAME_DARWIN" disable CC "-D_DARWIN_C_SOURCE -lpthread" \
+'
+#include <pthread.h>
+
+void foo (void) {
+  pthread_setname_np("abc");
+}
 '
 
     # Figure out what tool to use for dumping public symbols.

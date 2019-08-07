@@ -112,9 +112,15 @@ For other platforms, follow the source building instructions below.
 
 ## Usage in code
 
-See the [examples directory](examples/) for an example producer and consumer.
+1. Refer to the [examples directory](examples/) for code using:
 
-Link your program with `-lrdkafka` (C) or `-lrdkafka++` (C++).
+* Producers: basic producers, idempotent producers
+* Consumers: basic consumers, reading batches of messages
+* Performance tester
+
+2. Refer to the [examples GitHub repo](https://github.com/confluentinc/examples/tree/master/clients/cloud/c) for code connecting to a cloud streaming data service based on Apache Kafka
+
+3. Link your program with `-lrdkafka` (C) or `-lrdkafka++` (C++).
 
 
 ## Commercial support

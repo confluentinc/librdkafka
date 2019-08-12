@@ -452,9 +452,6 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
                                          int64_t Offset);
 
-void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
-				    const char *metadata);
-
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb,
 				      int for_removal);

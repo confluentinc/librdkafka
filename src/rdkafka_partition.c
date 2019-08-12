@@ -1104,47 +1104,6 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
 }
 
 
-/**
- * Commit toppar's offset on broker.
- * This is an asynch operation, this function simply enqueues an op
- * on the cgrp's queue.
- *
- * Locality: rktp's broker thread
- */
-void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
-				    const char *metadata) {
-        rd_kafka_topic_partition_list_t *offsets;
-        rd_kafka_topic_partition_t *rktpar;
-
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_cgrp != NULL);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
-                        rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE);
-
-        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "OFFSETCMT",
-                     "%.*s [%"PRId32"]: committing offset %"PRId64,
-                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition, offset);
-
-        offsets = rd_kafka_topic_partition_list_new(1);
-        rktpar = rd_kafka_topic_partition_list_add(
-                offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        rktpar->offset = offset;
-        if (metadata) {
-                rktpar->metadata = rd_strdup(metadata);
-                rktpar->metadata_size = strlen(metadata);
-        }
-
-        rktp->rktp_committing_offset = offset;
-
-        rd_kafka_commit(rktp->rktp_rkt->rkt_rk, offsets, 1/*async*/);
-
-        rd_kafka_topic_partition_list_destroy(offsets);
-}
-
-
-
-
-
 
 
 

@@ -658,8 +658,13 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
  */
 static RD_INLINE RD_UNUSED int
 rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
-        rd_ts_t last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
+        rd_ts_t last_poll;
         int exceeded;
+
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+                return 0;
+
+        last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
 
         /* Application is blocked in librdkafka function, see
          * rd_kafka_app_poll_blocking(). */
@@ -690,7 +695,8 @@ rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void
 rd_kafka_app_poll_blocking (rd_kafka_t *rk) {
-        rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+        if (rk->rk_type == RD_KAFKA_CONSUMER)
+                rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
 }
 
 /**
@@ -703,7 +709,8 @@ rd_kafka_app_poll_blocking (rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void
 rd_kafka_app_polled (rd_kafka_t *rk) {
-        rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+        if (rk->rk_type == RD_KAFKA_CONSUMER)
+                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
 }
 
 

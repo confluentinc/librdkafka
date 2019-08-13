@@ -466,7 +466,8 @@ rd_kafka_msgq_overlap (const rd_kafka_msgq_t *a, const rd_kafka_msgq_t *b) {
 int rd_kafka_msgq_age_scan (struct rd_kafka_toppar_s *rktp,
                             rd_kafka_msgq_t *rkmq,
                             rd_kafka_msgq_t *timedout,
-                            rd_ts_t now);
+                            rd_ts_t now,
+                            rd_ts_t *abs_next_timeout);
 
 rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
                                         const rd_kafka_msg_t *rkm,

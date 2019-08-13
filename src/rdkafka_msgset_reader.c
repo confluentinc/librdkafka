@@ -98,8 +98,8 @@ struct msgset_v2_hdr {
 
 /**
  * @struct rd_kafka_aborted_txn_start_offsets_t
- * 
- * @brief A sorted list of aborted transaction start offsets 
+ *
+ * @brief A sorted list of aborted transaction start offsets
  * (ascending) for a PID, and an offset into that list.
  */
 typedef struct rd_kafka_aborted_txn_start_offsets_s {
@@ -127,20 +127,20 @@ typedef struct rd_kafka_msgset_reader_s {
 
         struct msgset_v2_hdr   *msetr_v2_hdr;    /**< MessageSet v2 header */
 
-        /* 
+        /*
          * Aborted Transaction Start Offsets. These are arranged in a map
          * (ABORTED_TXN_OFFSETS), with PID as the key and value as follows:
          *  - OFFSETS:  sorted list of aborted transaction start offsets (ascending)
          *  - IDX:      an index into OFFSETS list, initialized to 0.
          *
-         * The logic for processing fetched data is as follows (note: this is 
+         * The logic for processing fetched data is as follows (note: this is
          * different from the Java client):
-         * 
+         *
          * 1. If the message is a transaction control message and the status is ABORT
          *   then increment ABORTED_TXN_OFFSETS(PID).IDX. note: sanity check that
          *   OFFSETS[ABORTED_TXN_OFFSETS(PID).IDX] is less than the current offset
          *   before incrementing. If the status is COMMIT, do nothing.
-         * 
+         *
          * 2. If the message is a normal message, find the corresponding OFFSETS list
          *   in ABORTED_TXN_OFFSETS. If it doesn't exist, then keep the message. If
          *   the PID does exist, compare ABORTED_TXN_OFFSETS(PID).IDX with
@@ -148,10 +148,10 @@ typedef struct rd_kafka_msgset_reader_s {
          *   compare the message offset with OFFSETS[ABORTED_TXN_OFFSETS(PID).IDX].
          *   If it's greater than or equal to this value, then the message should be
          *   ignored. If it's less than, then the message should be kept.
-         * 
+         *
          * Note: A MessageSet comprises messages from at most one transaction, so the
          * logic in step 2 is done at the message set level.
-         */                             
+         */
         rd_kafka_aborted_txns_t *msetr_aborted_txns;
 
         const struct rd_kafka_toppar_ver *msetr_tver; /**< Toppar op version of
@@ -449,7 +449,7 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                                             rkbufz,
                                             msetr->msetr_rktp,
                                             msetr->msetr_tver,
-                                            /* there is no aborted transaction 
+                                            /* there is no aborted transaction
                                              * support for MsgVersion < 2 */
                                             NULL,
                                             &msetr->msetr_rkq);
@@ -788,7 +788,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                 rd_kafka_buf_read_i16(rkbuf, &ctrl_data.Type);
 
                 /* Client is uninterested in value of commit marker */
-                rd_kafka_buf_skip(rkbuf, (int32_t)(message_end 
+                rd_kafka_buf_skip(rkbuf, (int32_t)(message_end
                         - rd_slice_offset(&rkbuf->rkbuf_reader)));
 
                 switch (ctrl_data.Type) {
@@ -1075,7 +1075,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
 
                         int64_t txn_start_offset = rd_kafka_aborted_txns_get_offset(
                                 msetr->msetr_aborted_txns, msetr->msetr_v2_hdr->PID);
-                        
+
                         if (txn_start_offset != -1 &&
                             msetr->msetr_v2_hdr->BaseOffset >= txn_start_offset) {
                                 /* MessageSet is part of an aborted transaction */
@@ -1439,7 +1439,7 @@ void rd_kafka_aborted_txn_node_destroy (void *_node_ptr) {
 
 /**
  * @brief Allocate memory for, and initialize a new
- * rd_kafka_aborted_txns_t struct. 
+ * rd_kafka_aborted_txns_t struct.
  */
 rd_kafka_aborted_txns_t *
 rd_kafka_aborted_txns_new (int32_t txn_cnt) {
@@ -1478,12 +1478,12 @@ rd_kafka_aborted_txns_offsets_for_pid (rd_kafka_aborted_txns_t *aborted_txns,
 }
 
 
-/** 
+/**
  * @brief Get the next aborted transaction start
  * offset for the specified pid.
- * 
+ *
  * @param increment_idx if true, the offset index will be incremented.
- * 
+ *
  * @returns the start offset or -1 if there is none.
  */
 static int64_t
@@ -1492,14 +1492,14 @@ rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
         int64_t abort_start_offset;
         rd_kafka_aborted_txn_start_offsets_t* node_ptr
                 = rd_kafka_aborted_txns_offsets_for_pid(aborted_txns, pid);
-        
+
         if (node_ptr == NULL)
                 return -1;
 
         if (unlikely(node_ptr->offsets_idx >= rd_list_cnt(&node_ptr->offsets)))
                 return -1;
 
-        abort_start_offset = 
+        abort_start_offset =
                 *((int64_t *)rd_list_elem(&node_ptr->offsets, node_ptr->offsets_idx));
 
         if (increment_idx)
@@ -1509,11 +1509,11 @@ rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
 }
 
 
-/** 
+/**
  * @brief Get the next aborted transaction start
  * offset for the specified pid and progress the
  * current index to the next one.
- * 
+ *
  * @returns the start offset or -1 if there is none.
  */
 int64_t
@@ -1523,10 +1523,10 @@ rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
 }
 
 
-/** 
+/**
  * @brief Get the next aborted transaction start
  * offset for the specified pid.
- * 
+ *
  * @returns the start offset or -1 if there is none.
  */
 int64_t
@@ -1537,7 +1537,7 @@ rd_kafka_aborted_txns_get_offset (const rd_kafka_aborted_txns_t *aborted_txns,
 }
 
 
-/** 
+/**
  * @brief Add a transaction start offset corresponding
  * to the specified pid to the aborted_txns collection.
  */
@@ -1556,7 +1556,7 @@ rd_kafka_aborted_txns_add (rd_kafka_aborted_txns_t *aborted_txns,
                 rd_list_init(&node_ptr->offsets, 0, NULL);
                 /* Each PID list has no more than AbortedTxnCnt elements */
                 rd_list_prealloc_elems(&node_ptr->offsets,
-                        sizeof(int64_t), 
+                        sizeof(int64_t),
                         aborted_txns->cnt, 0);
                 RD_AVL_INSERT(&aborted_txns->avl, node_ptr, avl_node);
                 rd_list_add(&aborted_txns->list, node_ptr);
@@ -1567,7 +1567,7 @@ rd_kafka_aborted_txns_add (rd_kafka_aborted_txns_t *aborted_txns,
 }
 
 
-/** 
+/**
  * @brief Sort each of the abort transaction start
  * offset lists for each pid.
  */

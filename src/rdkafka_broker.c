@@ -3638,7 +3638,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                         RD_KAFKAP_STR_PR(&topic),
                                                         hdr.Partition,
                                                         AbortedTxnCnt);
-                                                        
+
                                                 rd_kafka_buf_skip(rkbuf,
                                                           AbortedTxnCnt * (8+8));
                                         }
@@ -3770,12 +3770,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   hdr.HighwaterMarkOffset,
                                    hdr.LastStableOffset,
                                    tver->version, fetch_version);
-
-
-                        /* Update hi offset to be able to compute
-                         * consumer lag. */
-                        rktp->rktp_offsets.hi_offset = end_offset;
-
 
 			/* High offset for get_watermark_offsets() */
 			rd_kafka_toppar_lock(rktp);

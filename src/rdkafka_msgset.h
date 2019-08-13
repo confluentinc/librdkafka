@@ -31,9 +31,9 @@
 
 
 
-/** 
+/**
  * @struct rd_kafka_aborted_txns_t
- * 
+ *
  * @brief A collection of aborted transactions.
  */
 typedef struct rd_kafka_aborted_txns_s {

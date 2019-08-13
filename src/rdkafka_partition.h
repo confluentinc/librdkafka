@@ -41,7 +41,6 @@ extern const char *rd_kafka_fetch_states[];
 struct offset_stats {
         int64_t fetch_offset; /**< Next offset to fetch */
         int64_t eof_offset;   /**< Last offset we reported EOF for */
-        int64_t hi_offset;    /**< Current broker hi offset */
 };
 
 /**
@@ -50,7 +49,6 @@ struct offset_stats {
 static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
         offs->fetch_offset = 0;
         offs->eof_offset = RD_KAFKA_OFFSET_INVALID;
-        offs->hi_offset = RD_KAFKA_OFFSET_INVALID;
 }
 
 

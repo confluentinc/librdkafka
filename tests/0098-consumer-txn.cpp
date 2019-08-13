@@ -50,7 +50,7 @@
  *
  * - Uses the TransactionProducerCli Java application to produce messages
  *   that are part of abort and commit transactions in various combinations
- *   and tests that librdkafka consumes them as expected. Refer to 
+ *   and tests that librdkafka consumes them as expected. Refer to
  *   TransactionProducerCli.java for scenarios covered.
  */
 
@@ -139,7 +139,7 @@ static void execute_java_produce_cli(std::string &bootstrapServers,
 }
 
 static std::vector<RdKafka::Message *> consume_messages(
-                                          RdKafka::KafkaConsumer *c, 
+                                          RdKafka::KafkaConsumer *c,
                                           std::string topic,
                                           int partition) {
   RdKafka::ErrorCode err;
@@ -151,7 +151,7 @@ static std::vector<RdKafka::Message *> consume_messages(
     Test::Fail("assign failed: " + RdKafka::err2str(err));
   RdKafka::TopicPartition::destroy(parts);
 
-  Test::Say("Consuming from topic " + topic + "\n");  
+  Test::Say("Consuming from topic " + topic + "\n");
   std::vector<RdKafka::Message *> result = std::vector<RdKafka::Message *>();
 
   while (true) {
@@ -168,7 +168,7 @@ static std::vector<RdKafka::Message *> consume_messages(
         result.push_back(msg);
         continue;
       default:
-        Test::Fail("Error consuming from topic " + 
+        Test::Fail("Error consuming from topic " +
                    topic + ": " + msg->errstr());
         delete msg;
         break;
@@ -260,7 +260,7 @@ static void do_test_consumer_txn_test (void) {
   execute_java_produce_cli(bootstrap_servers, topic_name, "0");
 
   msgs = consume_messages(c, topic_name, 0);
-  test_assert(msgs.size() == 5, 
+  test_assert(msgs.size() == 5,
               tostr() << "Consumed unexpected number of messages. "
                          "Expected 5, got: "
                       << msgs.size());
@@ -474,7 +474,7 @@ static void do_test_consumer_txn_test (void) {
   test_assert(msgs[9]->key_len() >= 1 && 0x34 == msgs[9]->key()->c_str()[0],
               "Unexpected key");
   delete_messages(msgs);
-  
+
   Test::delete_topic(c, topic_name.c_str());
 
   c->close();
@@ -761,7 +761,7 @@ static void do_test_consumer_txn_test (void) {
                          "Expected 13, got: "
                       << msgs.size());
   delete_messages(msgs);
-  
+
   Test::delete_topic(c, topic_name.c_str());
 
   c->close();

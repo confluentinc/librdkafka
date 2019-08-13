@@ -46,9 +46,9 @@ public class TransactionProducerCli {
     }
 
     static void makeTestMessages(
-            Producer<byte[], byte[]> producer, 
+            Producer<byte[], byte[]> producer,
             String topic, int partition,
-            int idStart, int count, 
+            int idStart, int count,
             TransactionType tt,
             FlushType flush) throws InterruptedException {
         byte[] payload = { 0x10, 0x20, 0x30, 0x40 };
@@ -216,6 +216,7 @@ public class TransactionProducerCli {
             case "6":
                 makeTestMessages(producer3, topic, 0, 0x10, 1, TransactionType.None, FlushType.Yes);
                 makeTestMessages(producer1, topic, 0, 0x20, 3, TransactionType.BeginOpen, FlushType.Yes);
+                System.exit(0);
                 break;
 
             default:

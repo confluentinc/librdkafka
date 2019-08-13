@@ -637,7 +637,8 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code (rd_kafka_t *rk) {
-        return rd_atomic32_get(&rk->rk_fatal.err);
+        return rk->rk_conf.eos.idempotence &&
+                rd_atomic32_get(&rk->rk_fatal.err);
 }
 
 

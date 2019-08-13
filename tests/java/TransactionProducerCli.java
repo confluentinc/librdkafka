@@ -216,6 +216,7 @@ public class TransactionProducerCli {
             case "6":
                 makeTestMessages(producer3, topic, 0, 0x10, 1, TransactionType.None, FlushType.Yes);
                 makeTestMessages(producer1, topic, 0, 0x20, 3, TransactionType.BeginOpen, FlushType.Yes);
+                // prevent abort control message from being written.
                 System.exit(0);
                 break;
 

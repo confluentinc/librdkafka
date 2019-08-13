@@ -3050,14 +3050,14 @@ static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Serve the toppar's assigned to this broker.
+ * @brief Consumer: Serve the toppars assigned to this broker.
  *
  * @returns the minimum Fetch backoff time (abs timestamp) for the
  *          partitions to fetch.
  *
  * @locality broker thread
  */
-static rd_ts_t rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
+static rd_ts_t rd_kafka_broker_consumer_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *rktp_tmp;
         rd_ts_t min_backoff = RD_TS_MAX;
 
@@ -3075,24 +3075,11 @@ static rd_ts_t rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
 
 
 /**
- * @brief Idle function for the internal broker handle.
- */
-static void rd_kafka_broker_internal_serve (rd_kafka_broker_t *rkb,
-                                     rd_ts_t abs_timeout) {
-        int initial_state = rkb->rkb_state;
-
-        do {
-                rd_kafka_broker_toppars_serve(rkb);
-                rd_kafka_broker_ops_io_serve(rkb, abs_timeout);
-        } while (!rd_kafka_broker_terminating(rkb) &&
-                 (int)rkb->rkb_state == initial_state &&
-                 !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
-}
-
-
-/**
  * @brief Scan toppar's xmit and producer queue for message timeouts and
  *        enqueue delivery reports for timed out messages.
+ *
+ * @param abs_next_timeout will be set to the next message timeout, or 0
+ *                         if no timeout.
  *
  * @returns the number of messages timed out.
  *
@@ -3101,16 +3088,25 @@ static void rd_kafka_broker_internal_serve (rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
                                              rd_kafka_toppar_t *rktp,
-                                             rd_ts_t now) {
+                                             rd_ts_t now,
+                                             rd_ts_t *abs_next_timeout) {
         rd_kafka_msgq_t xtimedout = RD_KAFKA_MSGQ_INITIALIZER(xtimedout);
         rd_kafka_msgq_t qtimedout = RD_KAFKA_MSGQ_INITIALIZER(qtimedout);
         int xcnt, qcnt, cnt;
         uint64_t first, last;
+        rd_ts_t next;
+
+        *abs_next_timeout = 0;
 
         xcnt = rd_kafka_msgq_age_scan(rktp, &rktp->rktp_xmit_msgq,
-                                      &xtimedout, now);
+                                      &xtimedout, now, &next);
+        if (next && next < *abs_next_timeout)
+                *abs_next_timeout = next;
+
         qcnt = rd_kafka_msgq_age_scan(rktp, &rktp->rktp_msgq,
-                                      &qtimedout, now);
+                                      &qtimedout, now, &next);
+        if (next && (!*abs_next_timeout || next < *abs_next_timeout))
+                *abs_next_timeout = next;
 
         cnt = xcnt + qcnt;
         if (likely(cnt == 0))
@@ -3134,6 +3130,84 @@ static int rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
                          RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
 
         return cnt;
+}
+
+
+/**
+ * @brief Producer: Check this broker's toppars for message timeouts.
+ *
+ * This is only used by the internal broker to enforce message timeouts.
+ *
+ * @returns the next absolute scan time.
+ *
+ * @locality internal broker thread.
+ */
+static rd_ts_t
+rd_kafka_broker_toppars_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
+        rd_kafka_toppar_t *rktp;
+        rd_ts_t next = now + (1000*1000);
+
+        TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+                rd_ts_t this_next;
+
+                rd_kafka_toppar_lock(rktp);
+
+                if (unlikely(rktp->rktp_leader != rkb)) {
+                        /* Currently migrating away from this
+                         * broker. */
+                        rd_kafka_toppar_unlock(rktp);
+                        continue;
+                }
+
+                /* Scan queues for msg timeouts */
+                rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now, &this_next);
+
+                rd_kafka_toppar_unlock(rktp);
+
+                if (this_next && this_next < next)
+                        next = this_next;
+        }
+
+        return next;
+}
+
+
+/**
+ * @brief Idle function for the internal broker handle.
+ */
+static void rd_kafka_broker_internal_serve (rd_kafka_broker_t *rkb,
+                                            rd_ts_t abs_timeout) {
+        int initial_state = rkb->rkb_state;
+
+        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+                /* Consumer */
+                do {
+                        rd_kafka_broker_consumer_toppars_serve(rkb);
+
+                        rd_kafka_broker_ops_io_serve(rkb, abs_timeout);
+
+                } while (!rd_kafka_broker_terminating(rkb) &&
+                         (int)rkb->rkb_state == initial_state &&
+                         !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
+        } else {
+                /* Producer */
+                rd_ts_t next_timeout_scan = 0;
+
+                do {
+                        rd_ts_t now = rd_clock();
+
+                        if (now >= next_timeout_scan)
+                                next_timeout_scan =
+                                        rd_kafka_broker_toppars_timeout_scan(
+                                        rkb, now);
+
+                        rd_kafka_broker_ops_io_serve(
+                                rkb, RD_MIN(abs_timeout, next_timeout_scan));
+
+                } while (!rd_kafka_broker_terminating(rkb) &&
+                         (int)rkb->rkb_state == initial_state &&
+                         !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
+        }
 }
 
 
@@ -3194,9 +3268,14 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
         if (unlikely(do_timeout_scan)) {
                 int timeoutcnt;
+                rd_ts_t next;
 
                 /* Scan queues for msg timeouts */
-                timeoutcnt = rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now);
+                timeoutcnt = rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now,
+                                                              &next);
+
+                if (next && next < *next_wakeup)
+                        *next_wakeup = next;
 
                 if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                         if (!rd_kafka_pid_valid(pid)) {
@@ -4168,7 +4247,7 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb,
 		rd_kafka_broker_unlock(rkb);
 
                 /* Serve toppars */
-                min_backoff = rd_kafka_broker_toppars_serve(rkb);
+                min_backoff = rd_kafka_broker_consumer_toppars_serve(rkb);
                 if (rkb->rkb_ts_fetch_backoff > now &&
                     rkb->rkb_ts_fetch_backoff < min_backoff)
                         min_backoff = rkb->rkb_ts_fetch_backoff;

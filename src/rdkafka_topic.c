@@ -1261,7 +1261,8 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                          * their toppar broker thread. */
                                         rd_kafka_msgq_age_scan(rktp,
                                                                &rktp->rktp_msgq,
-                                                               &timedout, now);
+                                                               &timedout, now,
+                                                               NULL);
                                 }
                         }
 

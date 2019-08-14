@@ -505,8 +505,9 @@ void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
                                          rd_kafka_resp_err_t err);
 
 rd_kafka_resp_err_t
-rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
-			       rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
+                               rd_bool_t pause, rd_async_t async, int flag,
+                               rd_kafka_topic_partition_list_t *partitions);
 
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,

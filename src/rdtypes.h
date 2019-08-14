@@ -51,6 +51,15 @@ typedef uint8_t rd_bool_t;
 #define rd_false  0
 
 
+/**
+ * @enum Denotes an async or sync operation
+ */
+typedef enum {
+        RD_SYNC = 0, /**< Synchronous/blocking */
+        RD_ASYNC,    /**< Asynchronous/non-blocking */
+} rd_async_t;
+
+
 /*
  * Helpers
  */

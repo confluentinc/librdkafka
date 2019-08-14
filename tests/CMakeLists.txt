@@ -88,6 +88,7 @@ set(
     0094-idempotence_msg_timeout.c
     0095-all_brokers_down.cpp
     0097-ssl_verify.cpp
+    0098-consumer-txn.cpp
     0099-commit_metadata.c
     0100-thread_interceptors.cpp
     8000-idle.cpp

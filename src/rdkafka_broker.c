@@ -3601,6 +3601,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			struct rd_kafka_toppar_ver *tver, tver_skel;
                         rd_kafka_toppar_t *rktp;
                         shptr_rd_kafka_toppar_t *s_rktp = NULL;
+                        rd_kafka_aborted_txns_t *aborted_txns = NULL;
                         rd_slice_t save_slice;
                         struct {
                                 int32_t Partition;
@@ -3610,20 +3611,63 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 int32_t MessageSetSize;
                         } hdr;
                         rd_kafka_resp_err_t err;
+                        int64_t end_offset;
 
 			rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
 			rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
 			rd_kafka_buf_read_i64(rkbuf, &hdr.HighwaterMarkOffset);
 
+                        end_offset = hdr.HighwaterMarkOffset;
+
                         if (rd_kafka_buf_ApiVersion(request) == 4) {
-                                int32_t AbortedTxCnt;
+                                int32_t AbortedTxnCnt;
                                 rd_kafka_buf_read_i64(rkbuf,
                                                       &hdr.LastStableOffset);
-                                rd_kafka_buf_read_i32(rkbuf, &AbortedTxCnt);
-                                /* Ignore aborted transactions for now */
-                                if (AbortedTxCnt > 0)
-                                        rd_kafka_buf_skip(rkbuf,
-                                                          AbortedTxCnt * (8+8));
+                                rd_kafka_buf_read_i32(rkbuf,
+                                                      &AbortedTxnCnt);
+
+                                if (rkb->rkb_rk->rk_conf.isolation_level ==
+                                        RD_KAFKA_READ_UNCOMMITTED) {
+
+                                        if (unlikely(AbortedTxnCnt > 0)) {
+                                                rd_rkb_log(rkb, LOG_ERR, "FETCH",
+                                                        "%.*s [%"PRId32"]: "
+                                                        "%"PRId32" aborted transaction(s) "
+                                                        "encountered in READ_UNCOMMITTED "
+                                                        "fetch response: ignoring.",
+                                                        RD_KAFKAP_STR_PR(&topic),
+                                                        hdr.Partition,
+                                                        AbortedTxnCnt);
+
+                                                rd_kafka_buf_skip(rkbuf,
+                                                          AbortedTxnCnt * (8+8));
+                                        }
+                                } else {
+                                        end_offset = hdr.LastStableOffset;
+
+                                        if (AbortedTxnCnt > 0) {
+                                                int k;
+
+                                                if (unlikely(AbortedTxnCnt > 1000000))
+                                                        rd_kafka_buf_parse_fail(
+                                                                rkbuf,
+                                                                "%.*s [%"PRId32"]: "
+                                                                "invalid AbortedTxnCnt %"PRId32,
+                                                                RD_KAFKAP_STR_PR(&topic),
+                                                                hdr.Partition,
+                                                                AbortedTxnCnt);
+
+                                                aborted_txns = rd_kafka_aborted_txns_new(AbortedTxnCnt);
+                                                for (k = 0 ; k < AbortedTxnCnt; k++) {
+                                                        int64_t PID;
+                                                        int64_t FirstOffset;
+                                                        rd_kafka_buf_read_i64(rkbuf, &PID);
+                                                        rd_kafka_buf_read_i64(rkbuf, &FirstOffset);
+                                                        rd_kafka_aborted_txns_add(aborted_txns, PID, FirstOffset);
+                                                }
+                                                rd_kafka_aborted_txns_sort(aborted_txns);
+                                        }
+                                }
                         } else
                                 hdr.LastStableOffset = -1;
 
@@ -3657,6 +3701,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					   RD_KAFKAP_STR_PR(&topic),
 					   hdr.Partition);
 				rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
@@ -3675,6 +3722,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                            hdr.Partition);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
                                 continue;
                         }
 			fetch_version = rktp->rktp_fetch_version;
@@ -3702,6 +3752,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
                                 continue;
                         }
 
@@ -3709,29 +3762,24 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   "Topic %.*s [%"PRId32"] MessageSet "
 				   "size %"PRId32", error \"%s\", "
 				   "MaxOffset %"PRId64", "
+                                   "LSO %"PRId64", "
                                    "Ver %"PRId32"/%"PRId32,
 				   RD_KAFKAP_STR_PR(&topic), hdr.Partition,
 				   hdr.MessageSetSize,
 				   rd_kafka_err2str(hdr.ErrorCode),
 				   hdr.HighwaterMarkOffset,
+                                   hdr.LastStableOffset,
                                    tver->version, fetch_version);
-
-
-                        /* Update hi offset to be able to compute
-                         * consumer lag. */
-                        /* FIXME: if IsolationLevel==READ_COMMITTED,
-                         *        use hdr.LastStableOffset */
-                        rktp->rktp_offsets.hi_offset = hdr.HighwaterMarkOffset;
-
 
 			/* High offset for get_watermark_offsets() */
 			rd_kafka_toppar_lock(rktp);
 			rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
+                        rktp->rktp_ls_offset = hdr.LastStableOffset;
 			rd_kafka_toppar_unlock(rktp);
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */
-			if (hdr.HighwaterMarkOffset ==
+			if (end_offset ==
                             rktp->rktp_offsets.fetch_offset
 			    &&
 			    rktp->rktp_offsets.eof_offset !=
@@ -3797,11 +3845,18 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				rd_kafka_toppar_destroy(s_rktp);/* from get()*/
 
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
 			if (unlikely(hdr.MessageSetSize <= 0)) {
 				rd_kafka_toppar_destroy(s_rktp); /*from get()*/
+                                if (aborted_txns)
+                                        rd_kafka_aborted_txns_destroy(
+                                                aborted_txns);
 				continue;
 			}
 
@@ -3816,7 +3871,12 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                        hdr.MessageSetSize);
 
                         /* Parse messages */
-                        err = rd_kafka_msgset_parse(rkbuf, request, rktp, tver);
+                        err = rd_kafka_msgset_parse(
+                                rkbuf, request, rktp, aborted_txns, tver);
+
+                        if (aborted_txns)
+                                rd_kafka_aborted_txns_destroy(
+                                        aborted_txns);
 
                         rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                         /* Continue with next partition regardless of
@@ -3978,7 +4038,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 rd_kafka_buf_write_i32(rkbuf,
                                        rkb->rkb_rk->rk_conf.fetch_max_bytes);
                 /* IsolationLevel */
-                rd_kafka_buf_write_i8(rkbuf, RD_KAFKAP_READ_UNCOMMITTED);
+                rd_kafka_buf_write_i8(rkbuf, rkb->rkb_rk->rk_conf.isolation_level);
         }
 
 	/* Write zero TopicArrayCnt but store pointer for later update */

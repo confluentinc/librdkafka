@@ -32,6 +32,7 @@
  * C variables and functions shared with C++ tests
  */
 
+typedef struct rd_kafka_s rd_kafka_t;
 
 /* ANSI color codes */
 #define _C_CLR "\033[0m"
@@ -60,6 +61,11 @@ extern int test_broker_version;
 extern int test_on_ci;
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
+
+void test_delete_topic (rd_kafka_t *use_rk, const char *topicname);
+
+void test_create_topic (rd_kafka_t *use_rk, const char *topicname,
+                        int partition_cnt, int replication_factor);
 
 uint64_t
 test_produce_msgs_easy_size (const char *topic, uint64_t testid,

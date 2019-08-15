@@ -355,6 +355,15 @@ struct rd_kafka_s {
                 rd_interval_t sparse_connect_random;
                 /**< Lock for sparse_connect_random */
                 mtx_t         sparse_connect_lock;
+
+                /**< Broker metadata refresh interval:
+                 *   this is rate-limiting the number of topic-less
+                 *   broker/cluster metadata refreshes when there are no
+                 *   topics to refresh.
+                 *   Will be refreshed every topic.metadata.refresh.interval.ms
+                 *   but no more often than every 10s.
+                 *   No locks: only accessed by rdkafka main thread. */
+                rd_interval_t broker_metadata_refresh;
         } rk_suppress;
 
         struct {

@@ -583,8 +583,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         }
 
         /* Check if cgrp effective subscription is affected by
-         * new metadata. */
-        if (rkb->rkb_rk->rk_cgrp)
+         * new topic metadata.
+         * Ignore if this was a broker-only refresh (no topics) */
+        if ((requested_topics || all_topics) && rkb->rkb_rk->rk_cgrp)
                 rd_kafka_cgrp_metadata_update_check(
                         rkb->rkb_rk->rk_cgrp, 1/*do join*/);
 

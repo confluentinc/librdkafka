@@ -1758,10 +1758,23 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
             rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 sparse = 0;
 
-        if (sparse)
-                rd_kafka_metadata_refresh_known_topics(
-                        rk, NULL, 1/*force*/, "periodic refresh");
-        else
+        if (sparse) {
+                if (rd_kafka_metadata_refresh_known_topics(
+                            rk, NULL, 1/*force*/,
+                            "periodic topic and broker list refresh") ==
+                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC &&
+                    rd_interval(&rk->rk_suppress.broker_metadata_refresh,
+                                10*1000*1000 /*10s*/, 0) > 0) {
+                        /* If there are no (locally referenced) topics
+                         * to query, refresh the broker list.
+                         * This avoids getting idle-disconnected for clients
+                         * that have not yet referenced a topic and makes
+                         * sure such a client has an up to date broker list. */
+                        rd_kafka_metadata_refresh_brokers(
+                                rk, NULL,
+                                "periodic broker list refresh");
+                }
+        } else
                 rd_kafka_metadata_refresh_all(rk, NULL, "periodic refresh");
 }
 
@@ -1961,6 +1974,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         mtx_init(&rk->rk_init_lock, mtx_plain);
 
         rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
+        rd_interval_init(&rk->rk_suppress.broker_metadata_refresh);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 

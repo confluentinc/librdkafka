@@ -304,12 +304,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Non-topic request timeout in milliseconds. "
 	  "This is for metadata requests, etc.",
 	  10, 900*1000, 60*1000},
-	{ _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
-	  _RK(metadata_refresh_interval_ms),
-	  "Topic metadata refresh interval in milliseconds. "
-	  "The metadata is automatically refreshed on error and connect. "
-	  "Use -1 to disable the intervalled refresh.",
-	  -1, 3600*1000, 5*60*1000 },
+        { _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
+          _RK(metadata_refresh_interval_ms),
+          "Period of time in milliseconds at which topic and broker "
+          "metadata is refreshed in order to proactively discover any new "
+          "brokers, topics, partitions or partition leader changes. "
+          "Use -1 to disable the intervalled refresh (not recommended). "
+          "If there are no locally referenced topics "
+          "(no topic objects created, no messages produced, "
+          "no subscription or no assignment) then only the broker list will "
+          "be refreshed every interval but no more often than every 10s.",
+          -1, 3600*1000, 5*60*1000 },
 	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
           _RK(metadata_max_age_ms),
           "Metadata cache max age. "

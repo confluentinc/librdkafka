@@ -4088,8 +4088,8 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
 	rkbuf = rd_kafka_buf_new_request(
                 rkb, RD_KAFKAP_Fetch, 1,
-                /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
-                4+4+4+4+
+                /* ReplicaId+MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+TopicCnt */
+                4+4+4+4+1+4+
                 /* N x PartCnt+Partition+FetchOffset+MaxBytes+?TopicNameLen?*/
                 (rkb->rkb_active_toppar_cnt * (4+4+8+4+40)));
 

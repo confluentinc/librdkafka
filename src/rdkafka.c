@@ -2219,15 +2219,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
 
-        /* Free user supplied conf's base pointer on success,
-         * but not the actual allocated fields since the struct
-         * will have been copied in its entirety above. */
-        if (app_conf)
-                rd_free(app_conf);
-	rd_kafka_set_last_error(0, 0);
-
-        rd_kafka_conf_warn(rk);
-
         /* Wait for background threads to fully initialize so that
          * the client instance is fully functional at the time it is
          * returned from the constructor. */
@@ -2273,7 +2264,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         /* Log warnings for deprecated configuration */
         rd_kafka_conf_warn(rk);
 
-	return rk;
+        /* Free user supplied conf's base pointer on success,
+         * but not the actual allocated fields since the struct
+         * will have been copied in its entirety above. */
+        if (app_conf)
+                rd_free(app_conf);
+        rd_kafka_set_last_error(0, 0);
+
+        return rk;
 
 fail:
         /*

@@ -69,7 +69,7 @@ idempotent: idempotent_par
 delete_topics:
 	TESTS=none ./run-test.sh -D ./$(BIN) bare
 
-.PHONY: interceptor_test
+.PHONY:
 
 build: $(BIN) interceptor_test
 
@@ -80,9 +80,9 @@ test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 include ../mklove/Makefile.base
 
 ifeq ($(_UNAME_S),Darwin)
-interceptor_test:
+interceptor_test: .PHONY
 else
-interceptor_test:
+interceptor_test: .PHONY
 	$(MAKE) -C $@
 endif
 

@@ -884,6 +884,12 @@ test5:
 
 extern "C" {
   int main_0098_consumer_txn (int argc, char **argv) {
+    if (test_needs_auth()) {
+      Test::Skip("Authentication or security configuration "
+                 "required on client: not supported in "
+                 "Java transactional producer: skipping tests\n");
+      return 0;
+    }
 #if WITH_RAPIDJSON
     do_test_consumer_txn_test();
 #else

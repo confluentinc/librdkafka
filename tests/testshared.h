@@ -82,6 +82,8 @@ int test_set_special_conf (const char *name, const char *val, int *timeoutp);
 const char *test_conf_get_path (void);
 const char *test_getenv (const char *env, const char *def);
 
+int test_needs_auth (void);
+
 uint64_t test_id_generate (void);
 char *test_str_id_generate (char *dest, size_t dest_size);
 const char *test_str_id_generate_tmp (void);

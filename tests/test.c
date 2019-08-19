@@ -4016,7 +4016,7 @@ int test_run_java (const char *cls, const char **argv) {
         }
 
         /* Build */
-        r = system("make java");
+        r = system("make -s java");
 
         if (r == -1 || WIFSIGNALED(r) || WEXITSTATUS(r)) {
                 TEST_WARN("%s(%s): failed to build java class (code %d)\n",

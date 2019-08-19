@@ -3486,6 +3486,25 @@ void test_any_conf_set (rd_kafka_conf_t *conf,
                           name, val, errstr);
 }
 
+
+/**
+ * @returns true if test clients need to be configured for authentication
+ *          or other security measures (SSL), else false for unauthed plaintext.
+ */
+int test_needs_auth (void) {
+        rd_kafka_conf_t *conf;
+        const char *sec;
+
+        test_conf_init(&conf, NULL, 0);
+
+        sec = test_conf_get(conf, "security.protocol");
+
+        rd_kafka_conf_destroy(conf);
+
+        return strcmp(sec, "plaintext");
+}
+
+
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions) {
         int i;

@@ -51,14 +51,6 @@ rd_kafka_aborted_txns_t *rd_kafka_aborted_txns_new (int32_t txn_cnt);
 void
 rd_kafka_aborted_txns_destroy (rd_kafka_aborted_txns_t *aborted_txns);
 
-int64_t
-rd_kafka_aborted_txns_get_offset (const rd_kafka_aborted_txns_t *aborted_txns,
-                                  int64_t pid);
-
-int64_t
-rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
-                                  int64_t pid);
-
 void
 rd_kafka_aborted_txns_sort (rd_kafka_aborted_txns_t *aborted_txns);
 

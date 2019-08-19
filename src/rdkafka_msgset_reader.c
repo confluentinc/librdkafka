@@ -79,6 +79,14 @@
 #endif
 
 
+static RD_INLINE int64_t
+rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
+                                  int64_t pid);
+static RD_INLINE int64_t
+rd_kafka_aborted_txns_get_offset (const rd_kafka_aborted_txns_t *aborted_txns,
+                                  int64_t pid);
+
+
 struct msgset_v2_hdr {
         int64_t BaseOffset;
         int32_t Length;
@@ -1431,7 +1439,7 @@ static int rd_kafka_aborted_txn_cmp_by_pid (const void *_a, const void *_b) {
 /**
  * @brief Free resources associated with an AVL tree node.
  */
-void rd_kafka_aborted_txn_node_destroy (void *_node_ptr) {
+static void rd_kafka_aborted_txn_node_destroy (void *_node_ptr) {
         rd_kafka_aborted_txn_start_offsets_t *node_ptr = _node_ptr;
         rd_list_destroy(&node_ptr->offsets);
 }
@@ -1447,7 +1455,7 @@ rd_kafka_aborted_txns_new (int32_t txn_cnt) {
         aborted_txns = rd_malloc(sizeof(*aborted_txns));
         rd_avl_init(&aborted_txns->avl, rd_kafka_aborted_txn_cmp_by_pid, 0);
         rd_list_init(&aborted_txns->list, txn_cnt,
-                rd_kafka_aborted_txn_node_destroy);
+                     rd_kafka_aborted_txn_node_destroy);
         aborted_txns->cnt = txn_cnt;
         return aborted_txns;
 }
@@ -1469,7 +1477,7 @@ rd_kafka_aborted_txns_destroy (rd_kafka_aborted_txns_t *aborted_txns) {
  * @brief Get the abort txn start offsets corresponding to
  * the specified pid.
  */
-static rd_kafka_aborted_txn_start_offsets_t *
+static RD_INLINE rd_kafka_aborted_txn_start_offsets_t *
 rd_kafka_aborted_txns_offsets_for_pid (rd_kafka_aborted_txns_t *aborted_txns,
                                       int64_t pid) {
         rd_kafka_aborted_txn_start_offsets_t node;
@@ -1490,7 +1498,7 @@ static int64_t
 rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
                                    int64_t pid, rd_bool_t increment_idx) {
         int64_t abort_start_offset;
-        rd_kafka_aborted_txn_start_offsets_t* node_ptr
+        rd_kafka_aborted_txn_start_offsets_t *node_ptr
                 = rd_kafka_aborted_txns_offsets_for_pid(aborted_txns, pid);
 
         if (node_ptr == NULL)
@@ -1500,7 +1508,8 @@ rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
                 return -1;
 
         abort_start_offset =
-                *((int64_t *)rd_list_elem(&node_ptr->offsets, node_ptr->offsets_idx));
+                *((int64_t *)rd_list_elem(&node_ptr->offsets,
+                                          node_ptr->offsets_idx));
 
         if (increment_idx)
                 node_ptr->offsets_idx++;
@@ -1516,7 +1525,7 @@ rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
  *
  * @returns the start offset or -1 if there is none.
  */
-int64_t
+static RD_INLINE int64_t
 rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
                                   int64_t pid) {
         return rd_kafka_aborted_txns_next_offset(aborted_txns, pid, true);
@@ -1529,7 +1538,7 @@ rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
  *
  * @returns the start offset or -1 if there is none.
  */
-int64_t
+static RD_INLINE int64_t
 rd_kafka_aborted_txns_get_offset (const rd_kafka_aborted_txns_t *aborted_txns,
                                   int64_t pid) {
         return rd_kafka_aborted_txns_next_offset(

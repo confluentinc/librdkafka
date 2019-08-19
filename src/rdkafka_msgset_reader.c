@@ -1442,6 +1442,7 @@ static int rd_kafka_aborted_txn_cmp_by_pid (const void *_a, const void *_b) {
 static void rd_kafka_aborted_txn_node_destroy (void *_node_ptr) {
         rd_kafka_aborted_txn_start_offsets_t *node_ptr = _node_ptr;
         rd_list_destroy(&node_ptr->offsets);
+        rd_free(node_ptr);
 }
 
 

@@ -112,9 +112,9 @@ size_t rd_uvarint_enc_i32 (char *dst, size_t dstsize, int32_t num) {
  * @returns the number of bytes read from \p src.
  */
 static RD_INLINE RD_UNUSED
-size_t rd_uvarint_dec (const char *src, size_t srcsize, size_t *nump) {
+size_t rd_uvarint_dec (const char *src, size_t srcsize, uint64_t *nump) {
         size_t of = 0;
-        size_t num = 0;
+        uint64_t num = 0;
         int shift = 0;
 
         do {
@@ -130,7 +130,7 @@ size_t rd_uvarint_dec (const char *src, size_t srcsize, size_t *nump) {
 
 static RD_INLINE RD_UNUSED
 size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
-        size_t n;
+        uint64_t n;
         size_t r;
 
         r = rd_uvarint_dec(src, srcsize, &n);
@@ -139,14 +139,6 @@ size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
 
         return r;
 }
-
-
-/**
- * @brief Read a varint-encoded signed integer from \p slice.
- *
- * @sa rd_uvarint_dec()
- */
-size_t rd_varint_dec_slice (rd_slice_t *slice, int64_t *nump);
 
 
 /**

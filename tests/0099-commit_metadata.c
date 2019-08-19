@@ -157,6 +157,8 @@ get_committed_metadata (const char *group_id,
 
         compare_toppar_lists(committed_toppar, expected_toppar);
 
+        rd_kafka_topic_partition_list_destroy(committed_toppar);
+
         rd_kafka_destroy(rk);
 }
 

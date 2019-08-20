@@ -2079,8 +2079,9 @@ void rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
  */
 static int rd_kafka_ConfigResource_cmp (const void *_a, const void *_b) {
         const rd_kafka_ConfigResource_t *a = _a, *b = _b;
-        if (a->restype != b->restype)
-                return a->restype - b->restype;
+        int r = RD_CMP(a->restype, b->restype);
+        if (r)
+                return r;
         return strcmp(a->name, b->name);
 }
 

@@ -132,6 +132,50 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
+void
+RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
+                                                  const char *oauthbearer_config,
+                                                  void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+  handle->oauthbearer_token_refresh_cb_->
+    oauthbearer_token_refresh_cb(std::string(oauthbearer_config ?
+                                             oauthbearer_config : ""));
+}
+
+
+int RdKafka::ssl_cert_verify_cb_trampoline (rd_kafka_t *rk,
+                                            const char *broker_name,
+                                            int32_t broker_id,
+                                            int *x509_error,
+                                            int depth,
+                                            const char *buf, size_t size,
+                                            char *errstr, size_t errstr_size,
+                                            void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  std::string errbuf;
+
+  bool res = 0 != handle->ssl_cert_verify_cb_->
+    ssl_cert_verify_cb(std::string(broker_name), broker_id,
+                       x509_error,
+                       depth,
+                       buf, size,
+                       errbuf);
+
+  if (res)
+    return (int)res;
+
+  size_t errlen = errbuf.size() > errstr_size - 1 ?
+    errstr_size - 1 : errbuf.size();
+
+  memcpy(errstr, errbuf.c_str(), errlen);
+  if (errstr_size > 0)
+    errstr[errlen] = '\0';
+
+  return (int)res;
+}
+
+
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
                                                   const Topic *only_rkt,
                                                   Metadata **metadatap, 
@@ -231,10 +275,23 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
     event_cb_ = confimpl->event_cb_;
   }
 
+  if (confimpl->oauthbearer_token_refresh_cb_) {
+    rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+          confimpl->rk_conf_,
+          RdKafka::oauthbearer_token_refresh_cb_trampoline);
+      oauthbearer_token_refresh_cb_ = confimpl->oauthbearer_token_refresh_cb_;
+  }
+
   if (confimpl->socket_cb_) {
     rd_kafka_conf_set_socket_cb(confimpl->rk_conf_,
                                 RdKafka::socket_cb_trampoline);
     socket_cb_ = confimpl->socket_cb_;
+  }
+
+  if (confimpl->ssl_cert_verify_cb_) {
+    rd_kafka_conf_set_ssl_cert_verify_cb(confimpl->rk_conf_,
+                                         RdKafka::ssl_cert_verify_cb_trampoline);
+      ssl_cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
   }
 
   if (confimpl->open_cb_) {

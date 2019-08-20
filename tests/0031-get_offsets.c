@@ -41,7 +41,7 @@
 
 int main_0031_get_offsets (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-        const int msgcnt = 100;
+        const int msgcnt = test_quick ? 10 : 100;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	int64_t qry_low = -1234, qry_high = -1235;

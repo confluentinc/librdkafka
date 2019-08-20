@@ -57,7 +57,7 @@ int main_0089_max_poll_interval (int argc, char **argv) {
 
         testid = test_id_generate();
 
-        test_create_topic(topic, 1, 1);
+        test_create_topic(NULL, topic, 1, 1);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 

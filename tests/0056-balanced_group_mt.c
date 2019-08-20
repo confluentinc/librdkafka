@@ -199,7 +199,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_t *rk_p, *rk_c;
         rd_kafka_topic_t *rkt_p;
-        int msg_cnt = 1000;
+        int msg_cnt = test_quick ? 100 : 1000;
         int msg_base = 0;
         int partition_cnt = 2;
         int partition;

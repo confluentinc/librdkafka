@@ -61,6 +61,11 @@ class LibrdkafkaTestApp(App):
                     conf_blob.append('sasl.password=%s' % p)
                     break
 
+            elif mech == 'OAUTHBEARER':
+                security_protocol='SASL_PLAINTEXT'
+                conf_blob.append('enable.sasl.oauthbearer.unsecure.jwt=true\n')
+                conf_blob.append('sasl.oauthbearer.config=%s\n' % self.conf.get('sasl_oauthbearer_config'))
+
             elif mech == 'GSSAPI':
                 security_protocol='SASL_PLAINTEXT'
                 kdc = cluster.find_app(KerberosKdcApp)
@@ -83,12 +88,27 @@ class LibrdkafkaTestApp(App):
         if getattr(cluster, 'ssl', None) is not None:
             ssl = cluster.ssl
 
-            key, req, pem = ssl.create_key('librdkafka%s' % self.appid)
+            key = ssl.create_cert('librdkafka%s' % self.appid)
 
-            conf_blob.append('ssl.ca.location=%s' % ssl.ca_cert)
-            conf_blob.append('ssl.certificate.location=%s' % pem)
-            conf_blob.append('ssl.key.location=%s' % key)
-            conf_blob.append('ssl.key.password=%s' % ssl.conf.get('ssl_key_pass'))
+            conf_blob.append('ssl.ca.location=%s' % ssl.ca['pem'])
+            conf_blob.append('ssl.certificate.location=%s' % key['pub']['pem'])
+            conf_blob.append('ssl.key.location=%s' % key['priv']['pem'])
+            conf_blob.append('ssl.key.password=%s' % key['password'])
+
+            # Some tests need fine-grained access to various cert files,
+            # set up the env vars accordingly.
+            for k, v in ssl.ca.iteritems():
+                self.env_add('RDK_SSL_ca_{}'.format(k), v)
+
+            # Set envs for all generated keys so tests can find them.
+            for k, v in key.iteritems():
+                if type(v) is dict:
+                    for k2, v2 in v.iteritems():
+                        # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
+                        self.env_add('RDK_SSL_{}_{}'.format(k, k2), v2)
+                else:
+                    self.env_add('RDK_SSL_{}'.format(k), v)
+
 
             if 'SASL' in security_protocol:
                 security_protocol = 'SASL_SSL'

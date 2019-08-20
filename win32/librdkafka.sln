@@ -42,6 +42,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "interceptor_test", "interce
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "win_ssl_cert_store", "win_ssl_cert_store\win_ssl_cert_store.vcxproj", "{1A64A271-4840-4686-9F6F-F5AF0F7C385A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E9641737-EE62-4EC8-88C8-792D2E3CE32D} = {E9641737-EE62-4EC8-88C8-792D2E3CE32D}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -166,6 +171,24 @@ Global
 		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Win32.ActiveCfg = Release|Win32
 		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x64.ActiveCfg = Release|x64
 		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x86.ActiveCfg = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|Win32.Build.0 = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|x64.ActiveCfg = Debug|x64
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|x64.Build.0 = Debug|x64
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|x86.ActiveCfg = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Debug|x86.Build.0 = Debug|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|Any CPU.ActiveCfg = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|Win32.ActiveCfg = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|Win32.Build.0 = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|x64.ActiveCfg = Release|x64
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|x64.Build.0 = Release|x64
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|x86.ActiveCfg = Release|Win32
+		{1A64A271-4840-4686-9F6F-F5AF0F7C385A}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

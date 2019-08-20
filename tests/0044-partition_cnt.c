@@ -52,17 +52,16 @@ static void test_producer_partition_cnt_change (void) {
 	rd_kafka_topic_t *rkt;
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	const int partition_cnt = 4;
-	int msgcnt = test_on_ci ? 5000 : 100000;
+	int msgcnt = test_quick ? 500 : 100000;
 	test_timing_t t_destroy;
 	int produced = 0;
-
-	test_kafka_topics("--create --topic %s --replication-factor 1 "
-			  "--partitions %d",
-			  topic, partition_cnt/2);
 
 	test_conf_init(&conf, NULL, 20);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        test_create_topic(rk, topic, partition_cnt/2, 1);
+
 	rkt = test_create_topic_object(rk, __FUNCTION__,
 				       "message.timeout.ms",
                                        tsprintf("%d", tmout_multip(10000)),
@@ -71,8 +70,7 @@ static void test_producer_partition_cnt_change (void) {
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt/2,
 				 NULL, 100, 0, &produced);
 
-	test_kafka_topics("--alter --topic %s --partitions %d",
-			  topic, partition_cnt);
+        test_create_partitions(rk, topic, partition_cnt);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA,
 				 msgcnt/2, msgcnt/2,

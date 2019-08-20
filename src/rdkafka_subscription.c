@@ -171,16 +171,22 @@ rd_kafka_subscription (rd_kafka_t *rk,
 
 rd_kafka_resp_err_t
 rd_kafka_pause_partitions (rd_kafka_t *rk,
-			   rd_kafka_topic_partition_list_t *partitions) {
-	return rd_kafka_toppars_pause_resume(rk, 1, RD_KAFKA_TOPPAR_F_APP_PAUSE,
-					     partitions);
+                           rd_kafka_topic_partition_list_t *partitions) {
+        return rd_kafka_toppars_pause_resume(rk,
+                                             rd_true/*pause*/,
+                                             RD_SYNC,
+                                             RD_KAFKA_TOPPAR_F_APP_PAUSE,
+                                             partitions);
 }
 
 
 rd_kafka_resp_err_t
 rd_kafka_resume_partitions (rd_kafka_t *rk,
-			   rd_kafka_topic_partition_list_t *partitions) {
-	return rd_kafka_toppars_pause_resume(rk, 0, RD_KAFKA_TOPPAR_F_APP_PAUSE,
-					     partitions);
+                           rd_kafka_topic_partition_list_t *partitions) {
+        return rd_kafka_toppars_pause_resume(rk,
+                                             rd_false/*resume*/,
+                                             RD_SYNC,
+                                             RD_KAFKA_TOPPAR_F_APP_PAUSE,
+                                             partitions);
 }
 

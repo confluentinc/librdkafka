@@ -80,7 +80,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(rkq, rd_timeout_remains(ts_end), 0);
+        rko = rd_kafka_q_pop(rkq, rd_timeout_remains_us(ts_end), 0);
 
         rd_kafka_q_destroy_owner(rkq);
 
@@ -583,8 +583,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         }
 
         /* Check if cgrp effective subscription is affected by
-         * new metadata. */
-        if (rkb->rkb_rk->rk_cgrp)
+         * new topic metadata.
+         * Ignore if this was a broker-only refresh (no topics) */
+        if ((requested_topics || all_topics) && rkb->rkb_rk->rk_cgrp)
                 rd_kafka_cgrp_metadata_update_check(
                         rkb->rkb_rk->rk_cgrp, 1/*do join*/);
 

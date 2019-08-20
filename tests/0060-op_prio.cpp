@@ -76,7 +76,7 @@ class MyCbs : public RdKafka::OffsetCommitCb, public RdKafka::EventCb {
 
 
 static void do_test_commit_cb (void) {
-  const int msgcnt = 1000;
+  const int msgcnt = test_quick ? 100 : 1000;
   std::string errstr;
   RdKafka::ErrorCode err;
   std::string topic = Test::mk_topic_name("0060-op_prio", 1);

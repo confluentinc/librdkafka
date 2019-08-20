@@ -53,8 +53,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifdef _MSC_VER
+#ifndef ssize_t
+#ifndef _BASETSD_H_
+#include <basetsd.h>
+#endif
+typedef SSIZE_T ssize_t;
+#endif
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -76,6 +83,8 @@ extern "C" {
         struct rd_kafka_s;
         struct rd_kafka_topic_s;
         struct rd_kafka_message_s;
+        struct rd_kafka_conf_s;
+        struct rd_kafka_topic_conf_s;
 }
 
 namespace RdKafka {
@@ -99,7 +108,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x010000ff
+#define RD_KAFKA_VERSION  0x010200ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -178,7 +187,9 @@ enum ErrorCode {
 	/** Produced message timed out*/
 	ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. */
+	 * the broker. Not really an error. 
+	 * This event is disabled by default,
+	 * see the `enable.partition.eof` configuration property. */
 	ERR__PARTITION_EOF = -191,
 	/** Permanent: Partition does not exist in cluster. */
 	ERR__UNKNOWN_PARTITION = -190,
@@ -428,8 +439,22 @@ enum ErrorCode {
         ERR_LISTENER_NOT_FOUND = 72,
         /** Topic deletion is disabled */
         ERR_TOPIC_DELETION_DISABLED = 73,
+        /** Leader epoch is older than broker epoch */
+        ERR_FENCED_LEADER_EPOCH = 74,
+        /** Leader epoch is newer than broker epoch */
+        ERR_UNKNOWN_LEADER_EPOCH = 75,
         /** Unsupported compression type */
-        ERR_UNSUPPORTED_COMPRESSION_TYPE = 74
+        ERR_UNSUPPORTED_COMPRESSION_TYPE = 76,
+        /** Broker epoch has changed */
+        ERR_STALE_BROKER_EPOCH = 77,
+        /** Leader high watermark is not caught up */
+        ERR_OFFSET_NOT_AVAILABLE = 78,
+        /** Group member needs a valid member ID */
+        ERR_MEMBER_ID_REQUIRED = 79,
+        /** Preferred leader was not available */
+        ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
+        /** Consumer group has reached maximum size */
+        ERR_GROUP_MAX_SIZE_REACHED = 81,
 };
 
 
@@ -439,6 +464,29 @@ enum ErrorCode {
 RD_EXPORT
 std::string  err2str(RdKafka::ErrorCode err);
 
+
+
+/**
+ * @enum CertificateType
+ * @brief SSL certificate types
+ */
+enum CertificateType {
+  CERT_PUBLIC_KEY,   /**< Client's public key */
+  CERT_PRIVATE_KEY,  /**< Client's private key */
+  CERT_CA,           /**< CA certificate */
+  CERT__CNT
+};
+
+/**
+ * @enum CertificateEncoding
+ * @brief SSL certificate encoding
+ */
+enum CertificateEncoding {
+  CERT_ENC_PKCS12,  /**< PKCS#12 */
+  CERT_ENC_DER,     /**< DER / binary X.509 ASN1 */
+  CERT_ENC_PEM,     /**< PEM */
+  CERT_ENC__CNT
+};
 
 /**@} */
 
@@ -494,6 +542,44 @@ class RD_EXPORT DeliveryReportCb {
   virtual void dr_cb (Message &message) = 0;
 
   virtual ~DeliveryReportCb() { }
+};
+
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh callback class
+ *
+ * The SASL/OAUTHBEARER token refresh callback is triggered via RdKafka::poll()
+ * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
+ * typically based on the configuration defined in \c sasl.oauthbearer.config.
+ *
+ * The \c oauthbearer_config argument is the value of the
+ * sasl.oauthbearer.config configuration property.
+ *
+ * The callback should invoke RdKafka::oauthbearer_set_token() or
+ * RdKafka::oauthbearer_set_token_failure() to indicate success or failure,
+ * respectively.
+ * 
+ * The refresh operation is eventable and may be received when an event
+ * callback handler is set with an event type of
+ * \c RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH.
+ *
+ * Note that before any SASL/OAUTHBEARER broker connection can succeed the
+ * application must call RdKafka::oauthbearer_set_token() once -- either
+ * directly or, more typically, by invoking RdKafka::poll() -- in order to
+ * cause retrieval of an initial token to occur.
+ *
+ * An application must call RdKafka::poll() at regular intervals to
+ * serve queued SASL/OAUTHBEARER token refresh callbacks (when
+ * OAUTHBEARER is the SASL mechanism).
+ */
+class RD_EXPORT OAuthBearerTokenRefreshCb {
+ public:
+  /**
+   * @brief SASL/OAUTHBEARER token refresh callback class.
+   */
+  virtual void oauthbearer_token_refresh_cb (const std::string &oauthbearer_config) = 0;
+
+  virtual ~OAuthBearerTokenRefreshCb() { }
 };
 
 
@@ -779,6 +865,60 @@ public:
 
 
 /**
+ * @brief SSL broker certificate verification class.
+ *
+ * @remark Class instance must outlive the RdKafka client instance.
+ */
+class RD_EXPORT SslCertificateVerifyCb {
+public:
+  /**
+   * @brief SSL broker certificate verification callback.
+   *
+   * The verification callback is triggered from internal librdkafka threads
+   * upon connecting to a broker. On each connection attempt the callback
+   * will be called for each certificate in the broker's certificate chain,
+   * starting at the root certification, as long as the application callback
+   * returns 1 (valid certificate).
+   *
+   * \p broker_name and \p broker_id correspond to the broker the connection
+   * is being made to.
+   * The \c x509_error argument indicates if OpenSSL's verification of
+   * the certificate succeed (0) or failed (an OpenSSL error code).
+   * The application may set the SSL context error code by returning 0
+   * from the verify callback and providing a non-zero SSL context error code
+   * in \p x509_error.
+   * If the verify callback sets \x509_error to 0, returns 1, and the
+   * original \p x509_error was non-zero, the error on the SSL context will
+   * be cleared.
+   * \p x509_error is always a valid pointer to an int.
+   *
+   * \p depth is the depth of the current certificate in the chain, starting
+   * at the root certificate.
+   *
+   * The certificate itself is passed in binary DER format in \p buf of
+   * size \p size.
+   *
+   * The callback must 1 if verification succeeds, or 0 if verification fails
+   * and write a human-readable error message
+   * to \p errstr.
+   *
+   * @warning This callback will be called from internal librdkafka threads.
+   *
+   * @remark See <openssl/x509_vfy.h> in the OpenSSL source distribution
+   *         for a list of \p x509_error codes.
+   */
+  virtual bool ssl_cert_verify_cb (const std::string &broker_name,
+                                   int32_t broker_id,
+                                   int *x509_error,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   std::string &errstr) = 0;
+
+  virtual ~SslCertificateVerifyCb() {}
+};
+
+
+/**
  * @brief \b Portability: SocketCb callback class
  *
  */
@@ -895,6 +1035,11 @@ class RD_EXPORT Conf {
                                 DeliveryReportCb *dr_cb,
                                 std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"oauthbearer_token_refresh_cb\" */
+  virtual Conf::ConfResult set (const std::string &name,
+                        OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb,
+                        std::string &errstr) = 0;
+
   /** @brief Use with \p name = \c \"event_cb\" */
   virtual Conf::ConfResult set (const std::string &name,
                                 EventCb *event_cb,
@@ -939,6 +1084,48 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\".
+   *  @returns CONF_OK on success or CONF_INVALID if SSL is
+   *           not supported in this build.
+  */
+  virtual Conf::ConfResult set(const std::string &name,
+                               SslCertificateVerifyCb *ssl_cert_verify_cb,
+                               std::string &errstr) = 0;
+
+  /**
+   * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
+   *        memory at \p buffer of \p size bytes.
+   *
+   * @param cert_type Certificate or key type to configure.
+   * @param cert_enc  Buffer \p encoding type.
+   * @param buffer Memory pointer to encoded certificate or key.
+   *               The memory is not referenced after this function returns.
+   * @param size Size of memory at \p buffer.
+   * @param errstr A human-readable error string will be written to this string
+   *               on failure.
+   *
+   * @returns CONF_OK on success or CONF_INVALID if the memory in
+   *          \p buffer is of incorrect encoding, or if librdkafka
+   *          was not built with SSL support.
+   *
+   * @remark Calling this method multiple times with the same \p cert_type
+   *         will replace the previous value.
+   *
+   * @remark Calling this method with \p buffer set to NULL will clear the
+   *         configuration for \p cert_type.
+   *
+   * @remark The private key may require a password, which must be specified
+   *         with the `ssl.key.password` configuration property prior to
+   *         calling this function.
+   *
+   * @remark Private and public keys in PEM format may also be set with the
+   *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
+   */
+  virtual Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,
+                                         RdKafka::CertificateEncoding cert_enc,
+                                         const void *buffer, size_t size,
+                                         std::string &errstr) = 0;
+
   /** @brief Query single configuration value
    *
    * Do not use this method to get callbacks registered by the configuration file.
@@ -957,6 +1144,12 @@ class RD_EXPORT Conf {
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p dr_cb. */
   virtual Conf::ConfResult get(DeliveryReportCb *&dr_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p oauthbearer_token_refresh_cb. */
+  virtual Conf::ConfResult get(
+          OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb) const = 0;
 
   /** @brief Query single configuration value
    *  @returns CONF_OK if the property was set previously set and
@@ -993,13 +1186,53 @@ class RD_EXPORT Conf {
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
+  virtual Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
+
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */
   virtual std::list<std::string> *dump () = 0;
 
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
-				std::string &errstr) = 0;
+                                std::string &errstr) = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_conf_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++
+   *          does not provide the proper functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Conf
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_conf_t* if this is a CONF_GLOBAL object, else NULL.
+   */
+  virtual struct rd_kafka_conf_s *c_ptr_global () = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_topic_conf_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++
+   *          does not provide the proper functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Conf
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_topic_conf_t* if this is a CONF_TOPIC object,
+   *          else NULL.
+   */
+  virtual struct rd_kafka_topic_conf_s *c_ptr_topic () = 0;
 };
 
 /**@}*/
@@ -1282,6 +1515,70 @@ class RD_EXPORT Handle {
    *          any other error code.
    */
   virtual ErrorCode fatal_error (std::string &errstr) = 0;
+
+  /**
+   * @brief Set SASL/OAUTHBEARER token and metadata
+   *
+   * @param token_value the mandatory token value to set, often (but not
+   *  necessarily) a JWS compact serialization as per
+   *  https://tools.ietf.org/html/rfc7515#section-3.1.
+   * @param md_lifetime_ms when the token expires, in terms of the number of
+   *  milliseconds since the epoch.
+   * @param md_principal_name the Kafka principal name associated with the
+   *  token.
+   * @param extensions potentially empty SASL extension keys and values where
+   *  element [i] is the key and [i+1] is the key's value, to be communicated
+   *  to the broker as additional key-value pairs during the initial client
+   *  response as per https://tools.ietf.org/html/rfc7628#section-3.1.  The
+   *  number of SASL extension keys plus values must be a non-negative multiple
+   *  of 2. Any provided keys and values are copied.
+   * @param errstr A human readable error string is written here, only if
+   *  there is an error.
+   *
+   * The SASL/OAUTHBEARER token refresh callback should invoke
+   * this method upon success. The extension keys must not include the reserved
+   * key "`auth`", and all extension keys and values must conform to the
+   * required format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+   * 
+   *     key            = 1*(ALPHA)
+   *     value          = *(VCHAR / SP / HTAB / CR / LF )
+   * 
+   * @returns \c RdKafka::ERR_NO_ERROR on success, otherwise \p errstr set
+   *              and:<br>
+   *          \c RdKafka::ERR__INVALID_ARG if any of the arguments are
+   *              invalid;<br>
+   *          \c RdKafka::ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+   *              supported by this build;<br>
+   *          \c RdKafka::ERR__STATE if SASL/OAUTHBEARER is supported but is
+   *              not configured as the client's authentication mechanism.<br>
+   * 
+   * @sa RdKafka::oauthbearer_set_token_failure
+   * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
+   */
+  virtual ErrorCode oauthbearer_set_token (const std::string &token_value,
+                                           int64_t md_lifetime_ms,
+                                           const std::string &md_principal_name,
+                                           const std::list<std::string> &extensions,
+                                           std::string &errstr) = 0;
+
+    /**
+     * @brief SASL/OAUTHBEARER token refresh failure indicator.
+     *
+     * @param errstr human readable error reason for failing to acquire a token.
+     *
+     * The SASL/OAUTHBEARER token refresh callback should
+     * invoke this method upon failure to refresh the token.
+     *
+     * @returns \c RdKafka::ERR_NO_ERROR on success, otherwise:<br>
+     *          \c RdKafka::ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+     *              supported by this build;<br>
+     *          \c RdKafka::ERR__STATE if SASL/OAUTHBEARER is supported but is
+     *              not configured as the client's authentication mechanism.
+     *
+     * @sa RdKafka::oauthbearer_set_token
+     * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
+     */
+    virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
 };
 
 
@@ -1503,13 +1800,15 @@ public:
      *
      * @remark The error code is used for when the Header is constructed
      *         internally by using RdKafka::Headers::get_last which constructs
-     *         a Header encapsulating the ErrorCode in the process
+     *         a Header encapsulating the ErrorCode in the process.
+     *         If err is set, the value and value_size fields will be undefined.
      */
     Header(const std::string &key,
            const void *value,
            size_t value_size,
            const RdKafka::ErrorCode err):
-    key_(key), err_(err), value_size_(value_size) {
+    key_(key), err_(err), value_(NULL), value_size_(value_size) {
+      if (err == ERR_NO_ERROR)
         value_ = copy_value(value, value_size);
     }
 
@@ -1532,6 +1831,9 @@ public:
       key_ = other.key_;
       err_ = other.err_;
       value_size_ = other.value_size_;
+
+      if (value_ != NULL)
+        free(value_);
 
       value_ = copy_value(other.value_, value_size_);
 

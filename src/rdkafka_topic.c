@@ -1261,7 +1261,8 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                          * their toppar broker thread. */
                                         rd_kafka_msgq_age_scan(rktp,
                                                                &rktp->rktp_msgq,
-                                                               &timedout, now);
+                                                               &timedout, now,
+                                                               NULL);
                                 }
                         }
 
@@ -1336,7 +1337,7 @@ int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 	if ((r = strcmp(a->topic, b->topic)))
 		return r;
 
-	return a->partition_cnt - b->partition_cnt;
+        return RD_CMP(a->partition_cnt, b->partition_cnt);
 }
 
 

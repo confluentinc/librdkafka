@@ -9,7 +9,7 @@ CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
-KAFKA_VERSION?=2.0.0
+KAFKA_VERSION?=2.2.0
 
 -include ../Makefile.config
 
@@ -21,17 +21,17 @@ all: $(BIN) run_par
 #
 
 broker: $(BIN)
-	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1, "args":"-Q"}' $(KAFKA_VERSION)
 
 broker_idempotent: $(BIN)
-	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L"}' $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L -Q"}' $(KAFKA_VERSION)
 
 non_sparse_connections: $(BIN)
 	./broker_version_tests.py --brokers 5 \
-		--conf '{"parallel":1, "args": "-L", "sparse_connections": "false"}' $(KAFKA_VERSION)
+		--conf '{"parallel":1, "args": "-L -Q", "sparse_connections": "false"}' $(KAFKA_VERSION)
 
 sasl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1, "args":"-L"}' --debug $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
 full: broker broker_idempotent sasl
@@ -40,6 +40,10 @@ full: broker broker_idempotent sasl
 #
 # The following targets require an existing cluster running (test.conf)
 #
+quick:
+	@echo "Running quick(er) test suite (without sockem)"
+	./run-test.sh -p5 -Q -E ./$(BIN)
+
 run_par: $(BIN)
 	@echo "Running tests in parallel"
 	./run-test.sh -p5 ./$(BIN)
@@ -65,7 +69,7 @@ idempotent: idempotent_par
 delete_topics:
 	TESTS=none ./run-test.sh -D ./$(BIN) bare
 
-.PHONY: interceptor_test
+.PHONY:
 
 build: $(BIN) interceptor_test
 
@@ -76,9 +80,9 @@ test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 include ../mklove/Makefile.base
 
 ifeq ($(_UNAME_S),Darwin)
-interceptor_test:
+interceptor_test: .PHONY
 else
-interceptor_test:
+interceptor_test: .PHONY
 	$(MAKE) -C $@
 endif
 
@@ -104,5 +108,8 @@ clean-output:
 realclean: clean clean-output
 	rm -f test_report_*.json
 
-00%:
+0%:
 	TESTS=$@ ./run-test.sh ./$(BIN)
+
+java: .PHONY
+	make -C java

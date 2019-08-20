@@ -67,15 +67,16 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 int main_0069_consumer_add_parts (int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__ + 5, 1);
         int64_t ts_start;
+        int wait_sec;
 
         test_conf_init(NULL, NULL, 60);
-
-        TEST_SAY("Creating topic %s with 2 partitions\n", topic);
-        test_kafka_topics("--create --topic %s --replication-factor 1 --partitions 2", topic);
 
         TEST_SAY("Creating 2 consumers\n");
         c1 = test_create_consumer(topic, rebalance_cb, NULL, NULL);
         c2 = test_create_consumer(topic, rebalance_cb, NULL, NULL);
+
+        TEST_SAY("Creating topic %s with 2 partitions\n", topic);
+        test_create_topic(c1, topic, 2, 1);
 
         TEST_SAY("Subscribing\n");
         test_consumer_subscribe(c1, topic);
@@ -91,17 +92,18 @@ int main_0069_consumer_add_parts (int argc, char **argv) {
 
 
         TEST_SAY("Changing partition count for topic %s\n", topic);
-        test_kafka_topics("--alter --topic %s --partitions 4", topic);
+        test_create_partitions(NULL, topic, 4);
 
         TEST_SAY("Closing consumer 1 (to quickly trigger rebalance with new partitions)\n");
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
 
         TEST_SAY("Wait 10 seconds for consumer 2 not to crash\n");
+        wait_sec = test_quick ? 5 : 10;
         ts_start = test_clock();
         do {
                 test_consumer_poll_no_msgs("wait-stable", c2, 0, 1000);
-        } while (test_clock() < ts_start + (10 * 1000000));
+        } while (test_clock() < ts_start + (wait_sec * 1000000));
 
         TEST_ASSERT(state2 == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                     "Expected consumer 2 to have assignment, not in state %s",

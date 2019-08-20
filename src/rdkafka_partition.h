@@ -41,7 +41,6 @@ extern const char *rd_kafka_fetch_states[];
 struct offset_stats {
         int64_t fetch_offset; /**< Next offset to fetch */
         int64_t eof_offset;   /**< Last offset we reported EOF for */
-        int64_t hi_offset;    /**< Current broker hi offset */
 };
 
 /**
@@ -50,7 +49,6 @@ struct offset_stats {
 static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
         offs->fetch_offset = 0;
         offs->eof_offset = RD_KAFKA_OFFSET_INVALID;
-        offs->hi_offset = RD_KAFKA_OFFSET_INVALID;
 }
 
 
@@ -269,7 +267,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                * by broker thread.
                                                * Locks: toppar_lock */
 
-	int64_t rktp_hi_offset;              /* Current high offset.
+        int64_t rktp_ls_offset;              /**< Current last stable offset
+                                              *   Locks: toppar_lock */
+	int64_t rktp_hi_offset;              /* Current high watermark offset.
 					      * Locks: toppar_lock */
         int64_t rktp_lo_offset;              /* Current broker low offset.
                                               * This is outside of the stats
@@ -452,9 +452,6 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
                                          int64_t Offset);
 
-void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
-				    const char *metadata);
-
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb,
 				      int for_removal);
@@ -508,8 +505,9 @@ void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
                                          rd_kafka_resp_err_t err);
 
 rd_kafka_resp_err_t
-rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
-			       rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
+                               rd_bool_t pause, rd_async_t async, int flag,
+                               rd_kafka_topic_partition_list_t *partitions);
 
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
@@ -645,7 +643,7 @@ int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
 				   rktp_b->rktp_rkt->rkt_topic)))
 		return r;
 
-	return rktp_a->rktp_partition - rktp_b->rktp_partition;
+        return RD_CMP(rktp_a->rktp_partition, rktp_b->rktp_partition);
 }
 
 /**

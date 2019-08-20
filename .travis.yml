@@ -1,27 +1,60 @@
 language: c
-cache: ccache
-env:
-- ARCH=x64
-compiler:
-- gcc
-- clang
-os:
-- linux
-- osx
 dist: trusty
 sudo: false
-before_script:
+cache: ccache
+env:
+ global:
+  - ARCH=x64
+matrix:
+ include:
+ - name: "Linux GCC: +centos +debian"
+   os: linux
+   compiler: gcc
+   env: ADDITIONAL_BUILDS="centos debian"
+   before_script:
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "Linux clang: +alpine"
+   os: linux
+   compiler: clang
+   env: ADDITIONAL_BUILDS="alpine"
+   before_script:
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "OSX GCC"
+   os: osx
+   compiler: gcc
+   before_script:
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "OSX clang: +static"
+   os: osx
+   compiler: clang
+   before_script:
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
+ - name: "Linux GCC: +integration-tests +copyright-check"
+   os: linux
+   dist: xenial
+   compiler: gcc
+   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y
+   before_script:
+    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+    - sudo dpkg -i rapidjson-dev.deb
+    - sudo pip install -r tests/requirements.txt
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+
+install:
  - ccache -s || echo "CCache is not available."
+ - rm -rf artifacts dest
+ - mkdir dest artifacts
+
+before_script:
 script:
-- rm -rf artifacts dest
-- mkdir dest artifacts
-- if [[ "${TRAVIS_OS_NAME}_${CC}" == "osx_clang" ]]; then ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static ; else ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" ; fi
-- make -j2 all examples check && make -C tests run_local
+- make -j2 all examples check && make -j2 -C tests build
+- if [[ $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local ; fi
 - make install
-- (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .)
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh centos ; fi
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]];   then packaging/tools/distro-build.sh debian ; fi
-- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_clang" ]]; then packaging/tools/distro-build.sh alpine ; fi
+- if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
+- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
+- if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
+- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.2.0) ; fi
+
 deploy:
   provider: s3
   access_key_id:
@@ -37,3 +70,4 @@ deploy:
     repo: edenhill/librdkafka
     all_branches: true
     tags: true
+    on: $NO_ARTIFACTS != y

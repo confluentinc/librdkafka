@@ -31,6 +31,10 @@
  * @brief Extra methods added to tinycthread/c11threads
  */
 
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE  /* for pthread_setname_np() on macOS */
+#endif
+
 #include "rd.h"
 #include "rdtime.h"
 #include "tinycthread.h"
@@ -40,6 +44,9 @@ int thrd_setname (const char *name) {
 #if HAVE_PTHREAD_SETNAME_GNU
         if (!pthread_setname_np(pthread_self(), name))
                 return thrd_success;
+#elif HAVE_PTHREAD_SETNAME_DARWIN
+        pthread_setname_np(name);
+        return thrd_success;
 #endif
         return thrd_error;
 }

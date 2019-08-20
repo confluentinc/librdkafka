@@ -116,7 +116,7 @@ static void do_test_reset (const char *topic, int partition,
 int main_0034_offset_reset (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	const int partition = 0;
-	const int msgcnt = 100;
+        const int msgcnt = test_quick ? 20 : 100;
 
 	/* Produce messages */
 	test_produce_msgs_easy(topic, 0, partition, msgcnt);

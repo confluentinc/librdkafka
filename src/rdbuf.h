@@ -286,7 +286,7 @@ size_t rd_slice_read (rd_slice_t *slice, void *dst, size_t size);
 size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
                       void *dst, size_t size);
 
-size_t rd_slice_read_varint (rd_slice_t *slice, size_t *nump);
+size_t rd_slice_read_varint (rd_slice_t *slice, int64_t *nump);
 
 const void *rd_slice_ensure_contig (rd_slice_t *slice, size_t size);
 

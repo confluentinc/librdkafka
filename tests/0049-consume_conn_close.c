@@ -79,7 +79,7 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         rd_kafka_t *rk;
         const char *topic = test_mk_topic_name("0049_consume_conn_close", 1);
         uint64_t testid;
-        int msgcnt = test_on_ci ? 1000 : 10000;
+        int msgcnt = test_quick ? 100 : 10000;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;

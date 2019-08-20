@@ -216,7 +216,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {
 		rkm->rkm_ts_timeout = now +
-			rkt->rkt_conf.message_timeout_ms * 1000;
+			(int64_t) rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
         /* Call interceptor chain for on_send */
@@ -595,6 +595,9 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
  * @brief Scan \p rkmq for messages that have timed out and remove them from
  *        \p rkmq and add to \p timedout queue.
  *
+ * @param abs_next_timeout will be set to the next message timeout, or 0
+ *                         if no timeout. Optional, may be NULL.
+ *
  * @returns the number of messages timed out.
  *
  * @locality any
@@ -603,16 +606,23 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 int rd_kafka_msgq_age_scan (rd_kafka_toppar_t *rktp,
                             rd_kafka_msgq_t *rkmq,
                             rd_kafka_msgq_t *timedout,
-                            rd_ts_t now) {
+                            rd_ts_t now,
+                            rd_ts_t *abs_next_timeout) {
         rd_kafka_msg_t *rkm, *tmp, *first = NULL;
         int cnt = timedout->rkmq_msg_cnt;
+
+        if (abs_next_timeout)
+                *abs_next_timeout = 0;
 
         /* Assume messages are added in time sequencial order */
         TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
                 /* NOTE: this is not true for the deprecated (and soon removed)
                  *       LIFO queuing strategy. */
-                if (likely(rkm->rkm_ts_timeout > now))
+                if (likely(rkm->rkm_ts_timeout > now)) {
+                        if (abs_next_timeout)
+                                *abs_next_timeout = rkm->rkm_ts_timeout;
                         break;
+                }
 
                 if (!first)
                         first = rkm;

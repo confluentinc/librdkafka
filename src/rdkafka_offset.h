@@ -67,8 +67,4 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
 void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg);
 
-void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
-				   rd_kafka_resp_err_t err,
-				   const rd_kafka_topic_partition_list_t *offsets);
-
 #endif /* _RDKAFKA_OFFSET_H_ */

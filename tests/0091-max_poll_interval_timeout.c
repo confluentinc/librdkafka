@@ -126,7 +126,7 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
         test_conf_init(&conf, NULL,
                        10 + (int)(processing_time/1000000) * msgcnt);
 
-        test_create_topic(topic, 2, 1);
+        test_create_topic(NULL, topic, 2, 1);
 
         /* Produce extra messages since we can't fully rely on the
          * random partitioner to provide exact distribution. */

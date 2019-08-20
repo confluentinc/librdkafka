@@ -46,7 +46,8 @@ static const char *rd_kafka_feature_names[] = {
         "IdempotentProducer",
         "ZSTD",
         "UnitTest",
-	NULL
+        "SaslAuthReq",
+        NULL
 };
 
 
@@ -189,6 +190,15 @@ static const struct rd_kafka_feature_map {
                 .depends = {
                         { RD_KAFKAP_Produce, 7, 7 },
                         { RD_KAFKAP_Fetch, 10, 10 },
+                        { -1 },
+                },
+        },
+        {
+                /* @brief >=1.0.0: SaslAuthenticateRequest */
+                .feature = RD_KAFKA_FEATURE_SASL_AUTH_REQ,
+                .depends = {
+                        { RD_KAFKAP_SaslHandshake, 1, 1 },
+                        { RD_KAFKAP_SaslAuthenticate, 0, 0 },
                         { -1 },
                 },
         },

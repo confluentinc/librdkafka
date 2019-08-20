@@ -3,7 +3,8 @@ dist: trusty
 sudo: false
 cache: ccache
 env:
-- ARCH=x64
+ global:
+  - ARCH=x64
 matrix:
  include:
  - name: "Linux GCC: +centos +debian"

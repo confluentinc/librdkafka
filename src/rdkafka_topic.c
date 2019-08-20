@@ -490,20 +490,19 @@ int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
                                    int32_t leader_id, rd_kafka_broker_t *rkb) {
 
         rktp->rktp_leader_id = leader_id;
-        if (rktp->rktp_leader_id != leader_id) {
-                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-                             "Topic %s [%"PRId32"] migrated from "
-                             "leader %"PRId32" to %"PRId32,
-                             rktp->rktp_rkt->rkt_topic->str,
-                             rktp->rktp_partition,
-                             rktp->rktp_leader_id, leader_id);
-                rktp->rktp_leader_id = leader_id;
-        }
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
 
-		rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+                if (had_leader)
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
+			     "Topic %s [%"PRId32"] migrated from "
+			     "broker %"PRId32" to internal broker",
+			     rktp->rktp_rkt->rkt_topic->str,
+			     rktp->rktp_partition,
+			     rktp->rktp_leader->rkb_nodeid);
+
+	        rd_kafka_toppar_broker_delegate(rktp, NULL);
 
 		return had_leader ? -1 : 0;
 	}
@@ -523,7 +522,7 @@ int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
 			     rktp->rktp_leader->rkb_nodeid, rkb->rkb_nodeid);
 	}
 
-	rd_kafka_toppar_broker_delegate(rktp, rkb, 0);
+	rd_kafka_toppar_broker_delegate(rktp, rkb);
 
 	return 1;
 }
@@ -680,7 +679,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
                                         "desired partition no longer exists");
 
-			rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+			rd_kafka_toppar_broker_delegate(rktp, NULL);
 
 		} else {
 			/* Tell handling broker to let go of the toppar */
@@ -963,7 +962,7 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 
                         rktp = rd_kafka_toppar_s2i(rkt->rkt_p[j]);
                         rd_kafka_toppar_lock(rktp);
-                        rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+                        rd_kafka_toppar_broker_delegate(rktp, NULL);
                         rd_kafka_toppar_unlock(rktp);
                 }
         }

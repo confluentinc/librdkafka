@@ -1007,23 +1007,21 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
  *        AND rd_kafka_toppar_lock(rktp) held.
  */
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb,
-				      int for_removal) {
+				      rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int internal_fallback = 0;
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 		     "%s [%"PRId32"]: delegate to broker %s "
-		     "(rktp %p, term %d, ref %d, remove %d)",
+		     "(rktp %p, term %d, ref %d)",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
 		     rkb ? rkb->rkb_name : "(none)",
 		     rktp, rd_kafka_terminating(rk),
-		     rd_refcnt_get(&rktp->rktp_refcnt),
-		     for_removal);
+		     rd_refcnt_get(&rktp->rktp_refcnt));
 
         /* Delegate toppars with no leader to the
          * internal broker for bookkeeping. */
-        if (!rkb && !for_removal && !rd_kafka_terminating(rk)) {
+        if (!rkb && !rd_kafka_terminating(rk)) {
                 rkb = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }

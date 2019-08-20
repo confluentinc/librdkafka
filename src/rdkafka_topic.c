@@ -489,18 +489,18 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
 int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
                                    int32_t leader_id, rd_kafka_broker_t *rkb) {
 
-        rktp->rktp_leader_id = leader_id;
+        if (rktp->rktp_leader_id != leader_id) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
+                             "Topic %s [%"PRId32"] migrated from "
+                             "leader %"PRId32" to %"PRId32,
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition,
+                             rktp->rktp_leader_id, leader_id);
+                rktp->rktp_leader_id = leader_id;
+        }
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
-
-                if (had_leader)
-                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-			     "Topic %s [%"PRId32"] migrated from "
-			     "broker %"PRId32" to internal broker",
-			     rktp->rktp_rkt->rkt_topic->str,
-			     rktp->rktp_partition,
-			     rktp->rktp_leader->rkb_nodeid);
 
 	        rd_kafka_toppar_broker_delegate(rktp, NULL);
 

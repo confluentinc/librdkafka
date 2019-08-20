@@ -5,39 +5,16 @@ cache: ccache
 env:
  global:
   - ARCH=x64
+  # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+  #   via the "travis encrypt" command using the project repo's public key
+  - secure: "tPKKZA6ftcQskn9H0iN2aQP0IluQ9kmwf8CQJ+CB9hPfMq0ItZQptQ9ZrSLEJ+lZfr/BpdJ//v439eJFYf7ejejQ3HACdpJlcNR6i7sAjFV45tCogHhs40wsUP/v0FRaMElutNX4uiMSiNCA7olgqJCfNExv8BECkKwM1Nb5dhgENO40j+Q+e3kqeN5GnXoHoK0kb+hLMYbHDigkwwmWXNjbiw/tsg5Luxt4rvbwth9OxqSVY2HH3FC/1wEREBOm/KditH/CjtQ39df9cBKPL8WZn2i9CPEtWbhCcPmW97aUl6c2P7os2qWFAkQzspEvSBnbyqDtMEqJdrsdFZy9DkQOOKLx2QNLbJJuxZBsMoo3FS6KsNz7o3zZteQAhboRb0tc/R4gWmMS3bK6ewZRrOOcH2jtRKpVhwWwFQUMZlMfF8dMSiRQ1pMnHiy+8MwENWgAGbgZQ8wfkwLw8SJiTjhvpudIFezikMp6VzKkcK1Z8lQINe0UDYtxh4+C4pfL9xTdstM+XWbFLvYEZAPObu44XlGAE/uRfBz+OWnKZYQ0pjnDwdYa5v+YsH8MNThA8eD1E4Fcoh0EkCW40+g+TR2gF8ThO05SHr7VQvHlDSJRFb3ZDFnNVowDwRztPkzU08n5MP7i46yEETw9Wo974bxEHkwAI7GdCCY9jzs60xQ="
+
 matrix:
  include:
- - name: "Linux GCC: +centos +debian"
+ - name: "Linux GCC"
    os: linux
    compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian"
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "Linux clang: +alpine"
-   os: linux
-   compiler: clang
-   env: ADDITIONAL_BUILDS="alpine"
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX GCC"
-   os: osx
-   compiler: gcc
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX clang: +static"
-   os: osx
-   compiler: clang
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
- - name: "Linux GCC: +integration-tests +copyright-check"
-   os: linux
-   dist: xenial
-   compiler: gcc
-   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y
-   before_script:
-    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-    - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip install -r tests/requirements.txt
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
 
 install:
@@ -71,3 +48,13 @@ deploy:
     all_branches: true
     tags: true
     on: $NO_ARTIFACTS != y
+
+addons:
+  coverity_scan:
+    project:
+      name: "edenhill/librdkafka"
+      description: "librdkafka"
+    notification_email: rdkafka+coverity@edenhill.se
+    build_command_prepend: "./configure"
+    build_command: "make -j2"
+    branch_pattern: coverity_scan

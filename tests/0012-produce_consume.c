@@ -203,7 +203,7 @@ static void verify_consumed_msg_reset (int msgcnt) {
 static int int_cmp (const void *_a, const void *_b) {
 	int a = *(int *)_a;
 	int b = *(int *)_b;
-	return a - b;
+	return RD_CMP(a, b);
 }
 
 static void verify_consumed_msg_check0 (const char *func, int line) {
@@ -468,7 +468,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
  * Consume with queue interface from both, simultanously.
  */
 static void test_produce_consume (void) {
-	int msgcnt = 1000;
+        int msgcnt = test_quick ? 100 : 1000;
 	int partition_cnt = 2;
 	int i;
 	uint64_t testid;

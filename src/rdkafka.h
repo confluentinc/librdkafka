@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010000ff
+#define RD_KAFKA_VERSION  0x010200ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -271,7 +271,9 @@ typedef enum {
 	/** Produced message timed out*/
 	RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. */
+	 * the broker. Not really an error. 
+	 * This event is disabled by default,
+	 * see the `enable.partition.eof` configuration property. */
 	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191,
 	/** Permanent: Partition does not exist in cluster. */
 	RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190,
@@ -521,8 +523,22 @@ typedef enum {
         RD_KAFKA_RESP_ERR_LISTENER_NOT_FOUND = 72,
         /** Topic deletion is disabled */
         RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED = 73,
+        /** Leader epoch is older than broker epoch */
+        RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH = 74,
+        /** Leader epoch is newer than broker epoch */
+        RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH = 75,
         /** Unsupported compression type */
-        RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE = 74,
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE = 76,
+        /** Broker epoch has changed */
+        RD_KAFKA_RESP_ERR_STALE_BROKER_EPOCH = 77,
+        /** Leader high watermark is not caught up */
+        RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE = 78,
+        /** Group member needs a valid member ID */
+        RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED = 79,
+        /** Preferred leader was not available */
+        RD_KAFKA_RESP_ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
+        /** Consumer group has reached maximum size */
+        RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED = 81,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -715,7 +731,7 @@ typedef struct rd_kafka_topic_partition_s {
 	int64_t      offset;            /**< Offset */
         void        *metadata;          /**< Metadata */
         size_t       metadata_size;     /**< Metadata size */
-        void        *opaque;            /**< Application opaque */
+        void        *opaque;            /**< Opaque value for application use */
         rd_kafka_resp_err_t err;        /**< Error code, depending on use. */
         void       *_private;           /**< INTERNAL USE ONLY,
                                          *   INITIALIZE TO ZERO, DO NOT TOUCH */
@@ -874,12 +890,14 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
  * If \p cmp is NULL the default comparator will be used that
  * sorts by ascending topic name and partition.
  *
+ * \p cmp_opaque is provided as the \p cmp_opaque argument to \p cmp.
+ *
  */
 RD_EXPORT void
 rd_kafka_topic_partition_list_sort (rd_kafka_topic_partition_list_t *rktparlist,
                                     int (*cmp) (const void *a, const void *b,
-                                                void *opaque),
-                                    void *opaque);
+                                                void *cmp_opaque),
+                                    void *cmp_opaque);
 
 
 /**@}*/
@@ -906,7 +924,11 @@ typedef enum rd_kafka_vtype_t {
         RD_KAFKA_VTYPE_PARTITION, /**< (int32_t) Partition */
         RD_KAFKA_VTYPE_VALUE,     /**< (void *, size_t) Message value (payload)*/
         RD_KAFKA_VTYPE_KEY,       /**< (void *, size_t) Message key */
-        RD_KAFKA_VTYPE_OPAQUE,    /**< (void *) Application opaque */
+        RD_KAFKA_VTYPE_OPAQUE,    /**< (void *) Per-message application opaque
+                                   *            value. This is the same as
+                                   *            the _private field in
+                                   *            rd_kafka_message_t, also known
+                                   *            as the msg_opaque. */
         RD_KAFKA_VTYPE_MSGFLAGS,  /**< (int) RD_KAFKA_MSG_F_.. flags */
         RD_KAFKA_VTYPE_TIMESTAMP, /**< (int64_t) Milliseconds since epoch UTC */
         RD_KAFKA_VTYPE_HEADER,    /**< (const char *, const void *, ssize_t)
@@ -957,11 +979,12 @@ typedef enum rd_kafka_vtype_t {
         (void *)KEY, (size_t)LEN
 /*!
  * Message opaque pointer (void *)
- * Same as \c produce(.., msg_opaque), and \c rkmessage->_private .
+ * Same as \c msg_opaque, \c produce(.., msg_opaque),
+ * and \c rkmessage->_private .
  */
-#define RD_KAFKA_V_OPAQUE(opaque)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque),    \
-        (void *)opaque
+#define RD_KAFKA_V_OPAQUE(msg_opaque)                                   \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, msg_opaque),      \
+        (void *)msg_opaque
 /*!
  * Message flags (int)
  * @sa RD_KAFKA_MSG_F_COPY, et.al.
@@ -1181,10 +1204,12 @@ typedef struct rd_kafka_message_s {
                                     *   May be RD_KAFKA_OFFSET_INVALID
                                     *   for retried messages when
                                     *   idempotence is enabled. */
-	void  *_private;           /**< Consume:
-				    *  - rdkafka private pointer: DO NOT MODIFY
-				    *  - dr_msg_cb:
-                                    *    msg_opaque from produce() call */
+        void  *_private;           /**< Consumer:
+                                    *  - rdkafka private pointer: DO NOT MODIFY
+                                    *  Producer:
+                                    *  - dr_msg_cb:
+                                    *    msg_opaque from produce() call or
+                                    *    RD_KAFKA_V_OPAQUE from producev(). */
 } rd_kafka_message_t;
 
 
@@ -1419,6 +1444,18 @@ rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
 
 
 /**
+ * @returns the configuration object used by an rd_kafka_t instance.
+ *          For use with rd_kafka_conf_get(), et.al., to extract configuration
+ *          properties from a running client.
+ *
+ * @remark the returned object is read-only and its lifetime is the same
+ *         as the rd_kafka_t object.
+ */
+RD_EXPORT
+const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
+
+
+/**
  * @brief Sets a configuration property.
  *
  * \p conf must have been previously created with rd_kafka_conf_new().
@@ -1521,6 +1558,11 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * The broker-assigned offset can be retrieved with \c rkmessage->offset
  * and the timestamp can be retrieved using rd_kafka_message_timestamp().
  *
+ * The \p dr_msg_cb \c opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ * The per-message msg_opaque value is available in
+ * \c rd_kafka_message_t._private.
+ *
  * @remark The Idempotent Producer may return invalid timestamp
  *         (RD_KAFKA_TIMESTAMP_NOT_AVAILABLE), and
  *         and offset (RD_KAFKA_OFFSET_INVALID) for retried messages
@@ -1536,8 +1578,11 @@ void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
 
 
 /**
- * @brief \b Consumer: Set consume callback for use with rd_kafka_consumer_poll()
+ * @brief \b Consumer: Set consume callback for use with
+ *        rd_kafka_consumer_poll()
  *
+ * The \p consume_cb \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  */
 RD_EXPORT
 void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
@@ -1569,6 +1614,9 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * in performing other operations along with the assigning/revocation,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  *
  * @remark The \p partitions list is destroyed by librdkafka on return
  *         return from the rebalance_cb and must not be freed or
@@ -1639,6 +1687,9 @@ void rd_kafka_conf_set_rebalance_cb (
  * The \p offsets list contains per-partition information:
  *   - \c offset: committed offset (attempted)
  *   - \c err:    commit error
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  */
 RD_EXPORT
 void rd_kafka_conf_set_offset_commit_cb (
@@ -1667,6 +1718,9 @@ void rd_kafka_conf_set_offset_commit_cb (
  *
  * If no \p error_cb is registered, or RD_KAFKA_EVENT_ERROR has not been set
  * with rd_kafka_conf_set_events, then the errors will be logged instead.
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  */
 RD_EXPORT
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
@@ -1685,6 +1739,9 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  *
  * An application must call rd_kafka_poll() or rd_kafka_consumer_poll() at
  * regular intervals to serve queued callbacks.
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  *
  * @remark Requires broker version 0.9.0 or later.
  */
@@ -1729,7 +1786,8 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  *   - \p rk - Kafka handle
  *   - \p json - String containing the statistics data in JSON format
  *   - \p json_len - Length of \p json string.
- *   - \p opaque - Application-provided opaque.
+ *   - \p opaque - Application-provided opaque as set by
+ *                 rd_kafka_conf_set_opaque().
  *
  * For more information on the format of \p json, see
  * https://github.com/edenhill/librdkafka/wiki/Statistics
@@ -1748,7 +1806,47 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
 						  size_t json_len,
 						  void *opaque));
 
-
+/**
+ * @brief Set SASL/OAUTHBEARER token refresh callback in provided conf object.
+ *
+ * @param conf the configuration to mutate.
+ * @param oauthbearer_token_refresh_cb the callback to set; callback function
+ *  arguments:<br>
+ *   \p rk - Kafka handle<br>
+ *   \p oauthbearer_config - Value of configuration property
+ *                           sasl.oauthbearer.config.
+ *   \p opaque - Application-provided opaque set via
+ *               rd_kafka_conf_set_opaque()
+ * 
+ * The SASL/OAUTHBEARER token refresh callback is triggered via rd_kafka_poll()
+ * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
+ * typically based on the configuration defined in \c sasl.oauthbearer.config.
+ * 
+ * The callback should invoke rd_kafka_oauthbearer_set_token()
+ * or rd_kafka_oauthbearer_set_token_failure() to indicate success
+ * or failure, respectively.
+ * 
+ * The refresh operation is eventable and may be received via
+ * rd_kafka_queue_poll() with an event type of
+ * \c RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
+ *
+ * Note that before any SASL/OAUTHBEARER broker connection can succeed the
+ * application must call rd_kafka_oauthbearer_set_token() once -- either
+ * directly or, more typically, by invoking either rd_kafka_poll() or
+ * rd_kafka_queue_poll() -- in order to cause retrieval of an initial token to
+ * occur.
+ *
+ * An unsecured JWT refresh handler is provided by librdkafka for development
+ * and testing purposes, it is enabled by setting
+ * the \c enable.sasl.oauthbearer.unsecure.jwt property to true and is
+ * mutually exclusive to using a refresh callback.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
+        rd_kafka_conf_t *conf,
+        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                                              const char *oauthbearer_config,
+                                              void *opaque));
 
 /**
  * @brief Set socket callback.
@@ -1757,6 +1855,9 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * according to the supplied \p domain, \p type and \p protocol.
  * The socket shall be created with \c CLOEXEC set in a racefree fashion, if
  * possible.
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  *
  * Default:
  *  - on linux: racefree CLOEXEC
@@ -1782,6 +1883,9 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
  * \p connect_cb shall return 0 on success (socket connected) or an error
  * number (errno) on error.
  *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
 RD_EXPORT void
@@ -1796,6 +1900,9 @@ rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
  * @brief Set close socket callback.
  *
  * Close a socket (optionally opened with socket_cb()).
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
@@ -1819,6 +1926,9 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
  *  - on linux: racefree CLOEXEC
  *  - others  : non-racefree CLOEXEC
  *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
 RD_EXPORT
@@ -1828,14 +1938,140 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                                 void *opaque));
 #endif
 
+
+/**
+ * @brief Sets the verification callback of the broker certificate
+ *
+ * The verification callback is triggered from internal librdkafka threads
+ * upon connecting to a broker. On each connection attempt the callback
+ * will be called for each certificate in the broker's certificate chain,
+ * starting at the root certification, as long as the application callback
+ * returns 1 (valid certificate).
+ * \c broker_name and \c broker_id correspond to the broker the connection
+ * is being made to.
+ * The \c x509_error argument indicates if OpenSSL's verification of
+ * the certificate succeed (0) or failed (an OpenSSL error code).
+ * The application may set the SSL context error code by returning 0
+ * from the verify callback and providing a non-zero SSL context error code
+ * in \p x509_error.
+ * If the verify callback sets \x509_error to 0, returns 1, and the
+ * original \p x509_error was non-zero, the error on the SSL context will
+ * be cleared.
+ * \p x509_error is always a valid pointer to an int.
+ *
+ * \c depth is the depth of the current certificate in the chain, starting
+ * at the root certificate.
+ *
+ * The certificate itself is passed in binary DER format in \c buf of
+ * size \c size.
+ *
+ * The callback must return 1 if verification succeeds, or
+ * 0 if verification fails and then write a human-readable error message
+ * to \c errstr (limited to \c errstr_size bytes, including nul-term).
+ *
+ * The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * @returns RD_KAFKA_CONF_OK if SSL is supported in this build, else
+ *          RD_KAFKA_CONF_INVALID.
+ *
+ * @warning This callback will be called from internal librdkafka threads.
+ *
+ * @remark See <openssl/x509_vfy.h> in the OpenSSL source distribution
+ *         for a list of \p x509_error codes.
+ */
+RD_EXPORT
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb (
+        rd_kafka_conf_t *conf,
+        int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
+                                   const char *broker_name,
+                                   int32_t broker_id,
+                                   int *x509_error,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   char *errstr, size_t errstr_size,
+                                   void *opaque));
+
+
+/**
+ * @enum rd_kafka_cert_type_t
+ *
+ * @brief SSL certificate type
+ *
+ * @sa rd_kafka_conf_set_ssl_cert
+ */
+typedef enum rd_kafka_cert_type_t {
+        RD_KAFKA_CERT_PUBLIC_KEY,  /**< Client's public key */
+        RD_KAFKA_CERT_PRIVATE_KEY, /**< Client's private key */
+        RD_KAFKA_CERT_CA,          /**< CA certificate */
+        RD_KAFKA_CERT__CNT,
+} rd_kafka_cert_type_t;
+
+/**
+ * @enum rd_kafka_cert_enc_t
+ *
+ * @brief SSL certificate encoding
+ *
+ * @sa rd_kafka_conf_set_ssl_cert
+ */
+typedef enum rd_kafka_cert_enc_t {
+        RD_KAFKA_CERT_ENC_PKCS12,  /**< PKCS#12 */
+        RD_KAFKA_CERT_ENC_DER,     /**< DER / binary X.509 ASN1 */
+        RD_KAFKA_CERT_ENC_PEM,     /**< PEM */
+        RD_KAFKA_CERT_ENC__CNT,
+} rd_kafka_cert_enc_t;
+
+
+/**
+ * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
+ *        memory at \p buffer of \p size bytes.
+ *
+ * @param conf Configuration object.
+ * @param cert_type Certificate or key type to configure.
+ * @param cert_enc  Buffer \p encoding type.
+ * @param buffer Memory pointer to encoded certificate or key.
+ *               The memory is not referenced after this function returns.
+ * @param size Size of memory at \p buffer.
+ * @param errstr Memory were a human-readable error string will be written
+ *               on failure.
+ * @param errstr_size Size of \p errstr, including space for nul-terminator.
+ *
+ * @returns RD_KAFKA_CONF_OK on success or RD_KAFKA_CONF_INVALID if the
+ *          memory in \p buffer is of incorrect encoding, or if librdkafka
+ *          was not built with SSL support.
+ *
+ * @remark Calling this method multiple times with the same \p cert_type
+ *         will replace the previous value.
+ *
+ * @remark Calling this method with \p buffer set to NULL will clear the
+ *         configuration for \p cert_type.
+ *
+ * @remark The private key may require a password, which must be specified
+ *         with the `ssl.key.password` configuration property prior to
+ *         calling this function.
+ *
+ * @remark Private and public keys in PEM format may also be set with the
+ *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
+ */
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
+                            rd_kafka_cert_type_t cert_type,
+                            rd_kafka_cert_enc_t cert_enc,
+                            const void *buffer, size_t size,
+                            char *errstr, size_t errstr_size);
+
+
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
+ *
+ * @sa rd_kafka_opaque()
  */
 RD_EXPORT
 void rd_kafka_conf_set_opaque(rd_kafka_conf_t *conf, void *opaque);
 
 /**
- * @brief Retrieves the opaque pointer previously set with rd_kafka_conf_set_opaque()
+ * @brief Retrieves the opaque pointer previously set
+ *        with rd_kafka_conf_set_opaque()
  */
 RD_EXPORT
 void *rd_kafka_opaque(const rd_kafka_t *rk);
@@ -1995,9 +2231,12 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set(rd_kafka_topic_conf_t *conf,
 /**
  * @brief Sets the application's opaque pointer that will be passed to all topic
  * callbacks as the \c rkt_opaque argument.
+ *
+ * @sa rd_kafka_topic_opaque()
  */
 RD_EXPORT
-void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf, void *opaque);
+void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf,
+                                    void *rkt_opaque);
 
 
 /**
@@ -2005,6 +2244,11 @@ void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf, void *opaque);
  *
  * The partitioner may be called in any thread at any time,
  * it may be called multiple times for the same message/key.
+ *
+ * The callback's \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The callback's \p msg_opaque argument is the per-message opaque
+ * passed to produce().
  *
  * Partitioner function constraints:
  *   - MUST NOT call any rd_kafka_*() functions except:
@@ -2081,6 +2325,11 @@ int rd_kafka_topic_partition_available(const rd_kafka_topic_t *rkt,
  *
  * Will try not to return unavailable partitions.
  *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
  * @returns a random partition between 0 and \p partition_cnt - 1.
  *
  */
@@ -2088,12 +2337,17 @@ RD_EXPORT
 int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
 					 int32_t partition_cnt,
-					 void *opaque, void *msg_opaque);
+					 void *rkt_opaque, void *msg_opaque);
 
 /**
  * @brief Consistent partitioner.
  *
  * Uses consistent hashing to map identical keys onto identical partitions.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
  *
  * @returns a \"random\" partition between 0 and \p partition_cnt - 1 based on
  *          the CRC value of the key
@@ -2102,7 +2356,7 @@ RD_EXPORT
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
 					 int32_t partition_cnt,
-					 void *opaque, void *msg_opaque);
+					 void *rkt_opaque, void *msg_opaque);
 
 /**
  * @brief Consistent-Random partitioner.
@@ -2111,6 +2365,11 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
  * Uses consistent hashing to map identical keys onto identical partitions, and
  * messages without keys will be assigned via the random partitioner.
  *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
  * @returns a \"random\" partition between 0 and \p partition_cnt - 1 based on
  *          the CRC value of the key (if provided)
  */
@@ -2118,7 +2377,7 @@ RD_EXPORT
 int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
            const void *key, size_t keylen,
            int32_t partition_cnt,
-           void *opaque, void *msg_opaque);
+           void *rkt_opaque, void *msg_opaque);
 
 
 /**
@@ -2126,6 +2385,11 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
  *
  * Uses consistent hashing to map identical keys onto identical partitions
  * using Java-compatible Murmur2 hashing.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
  *
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
@@ -2142,6 +2406,11 @@ int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
  * Uses consistent hashing to map identical keys onto identical partitions
  * using Java-compatible Murmur2 hashing.
  * Messages without keys will be assigned via the random partitioner.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
  *
  * @returns a partition between 0 and \p partition_cnt - 1.
  */
@@ -2356,7 +2625,8 @@ const char *rd_kafka_topic_name(const rd_kafka_topic_t *rkt);
 
 
 /**
- * @brief Get the \p rkt_opaque pointer that was set in the topic configuration.
+ * @brief Get the \p rkt_opaque pointer that was set in the topic configuration
+ *        with rd_kafka_topic_conf_set_opaque().
  */
 RD_EXPORT
 void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
@@ -2393,6 +2663,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
+ *   - OAUTHBEARER token refresh callbacks (rd_kafka_conf_set_oauthbearer_token_refresh_cb()) [all]
  *
  * @returns the number of events served.
  */
@@ -2519,6 +2790,9 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
  *
  * In standard setups it is usually not necessary to use this interface
  * rather than the free(3) functione.
+ *
+ * \p rk must be set for memory returned by APIs that take an \c rk argument,
+ * for other APIs pass NULL for \p rk.
  *
  * @remark rd_kafka_mem_free() must only be used for pointers returned by APIs
  *         that explicitly mention using this function for freeing.
@@ -2692,6 +2966,8 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
  *
  * To remove event triggering call with \p event_cb = NULL.
  *
+ * The \p qev_opaque is passed to the callback's \p qev_opaque argument.
+ *
  * @remark IO and callback event triggering are mutually exclusive.
  * @remark Since the callback may be triggered from internal librdkafka
  *         threads, the application must not perform any pro-longed work in
@@ -2701,8 +2977,8 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 RD_EXPORT
 void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
                                      void (*event_cb) (rd_kafka_t *rk,
-                                                       void *opaque),
-                                     void *opaque);
+                                                       void *qev_opaque),
+                                     void *qev_opaque);
 
 /**@}*/
 
@@ -2905,7 +3181,8 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  * the application \b MUST \b NOT call `rd_kafka_message_destroy()` on the
  * provided \p rkmessage.
  *
- * The \p opaque argument is passed to the 'consume_cb' as \p opaque.
+ * The \p commit_opaque argument is passed to the \p consume_cb
+ * as \p commit_opaque.
  *
  * @returns the number of messages processed or -1 on error.
  *
@@ -2916,11 +3193,11 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
-			       int timeout_ms,
-			       void (*consume_cb) (rd_kafka_message_t
-						   *rkmessage,
-						   void *opaque),
-			       void *opaque);
+                              int timeout_ms,
+                              void (*consume_cb) (rd_kafka_message_t
+                                                  *rkmessage,
+                                                  void *commit_opaque),
+                              void *commit_opaque);
 
 
 /**
@@ -2941,7 +3218,7 @@ int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consume_queue(rd_kafka_queue_t *rkqu,
-					    int timeout_ms);
+                                           int timeout_ms);
 
 /**
  * @brief Consume batch of messages from queue
@@ -2960,12 +3237,12 @@ ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
  * @sa rd_kafka_consume_callback()
  */
 RD_EXPORT
-int rd_kafka_consume_callback_queue(rd_kafka_queue_t *rkqu,
-				     int timeout_ms,
-				     void (*consume_cb) (rd_kafka_message_t
-							 *rkmessage,
-							 void *opaque),
-				     void *opaque);
+int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
+                                     int timeout_ms,
+                                     void (*consume_cb) (rd_kafka_message_t
+                                                         *rkmessage,
+                                                         void *commit_opaque),
+                                     void *commit_opaque);
 
 
 /**@}*/
@@ -3209,11 +3486,12 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  *
  * If the application uses one of the poll APIs (rd_kafka_poll(),
  * rd_kafka_consumer_poll(), rd_kafka_queue_poll(), ..) to serve the queue
- * the \p cb callback is required. \p opaque is passed to the callback.
+ * the \p cb callback is required.
  *
- * If using the event API the callback is ignored and the offset commit result
- * will be returned as an RD_KAFKA_EVENT_COMMIT event. The \p opaque
- * value will be available with rd_kafka_event_opaque()
+ * The \p commit_opaque argument is passed to the callback as \p commit_opaque,
+ * or if using the event API the callback is ignored and the offset commit
+ * result will be returned as an RD_KAFKA_EVENT_COMMIT event and the
+ * \p commit_opaque value will be available with rd_kafka_event_opaque().
  *
  * If \p rkqu is NULL a temporary queue will be created and the callback will
  * be served by this call.
@@ -3228,8 +3506,8 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 		       void (*cb) (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
 				   rd_kafka_topic_partition_list_t *offsets,
-				   void *opaque),
-		       void *opaque);
+                                   void *commit_opaque),
+		       void *commit_opaque);
 
 
 /**
@@ -3372,8 +3650,8 @@ rd_kafka_position (rd_kafka_t *rk,
  * message to the broker and passed on to the consumer.
  *
  * \p msg_opaque is an optional application-provided per-message opaque
- * pointer that will provided in the delivery report callback (`dr_cb`) for
- * referencing this message.
+ * pointer that will provided in the message's delivery report callback
+ * (\c dr_msg_cb or \c dr_cb) and the \c rd_kafka_message_t \c _private field.
  *
  * @remark on_send() and on_acknowledgement() interceptors may be called
  *         from this function. on_acknowledgement() will only be called if the
@@ -3857,6 +4135,20 @@ int rd_kafka_thread_cnt(void);
 
 
 /**
+ * @enum rd_kafka_thread_type_t
+ *
+ * @brief librdkafka internal thread type.
+ *
+ * @sa rd_kafka_interceptor_add_on_thread_start()
+ */
+typedef enum rd_kafka_thread_type_t {
+        RD_KAFKA_THREAD_MAIN,       /**< librdkafka's internal main thread */
+        RD_KAFKA_THREAD_BACKGROUND, /**< Background thread (if enabled) */
+        RD_KAFKA_THREAD_BROKER      /**< Per-broker thread */
+} rd_kafka_thread_type_t;
+
+
+/**
  * @brief Wait for all rd_kafka_t objects to be destroyed.
  *
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
@@ -3927,6 +4219,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
+                                                             token needs to be
+                                                             refreshed */
 
 
 /**
@@ -4011,6 +4306,21 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
 
 
 /**
+ * @returns the associated configuration string for the event, or NULL
+ *          if the configuration property is not set or if
+ *          not applicable for the given event type.
+ *
+ * The returned memory is read-only and its lifetime is the same as the
+ * event object.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH: value of sasl.oauthbearer.config
+ */
+RD_EXPORT
+const char *rd_kafka_event_config_string (rd_kafka_event_t *rkev);
+
+
+/**
  * @returns the error code for the event.
  *
  * Use rd_kafka_event_error_is_fatal() to detect if this is a fatal error.
@@ -4047,7 +4357,8 @@ int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
 
 
 /**
- * @returns the user opaque (if any)
+ * @returns the event opaque (if any) as passed to rd_kafka_commit() (et.al) or
+ *          rd_kafka_AdminOptions_set_opaque(), depending on event type.
  *
  * Event types:
  *  - RD_KAFKA_EVENT_OFFSET_COMMIT
@@ -4541,6 +4852,57 @@ typedef rd_kafka_resp_err_t
         void *ic_opaque);
 
 
+/**
+ * @brief on_thread_start() is called from a newly created librdkafka-managed
+ *        thread.
+
+ * @param rk The client instance.
+ * @param thread_type Thread type.
+ * @param thread_name Human-readable thread name, may not be unique.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @warning The on_thread_start() interceptor is called from internal
+ *          librdkafka threads. An on_thread_start() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_thread_start_t) (
+        rd_kafka_t *rk,
+        rd_kafka_thread_type_t thread_type,
+        const char *thread_name,
+        void *ic_opaque);
+
+
+/**
+ * @brief on_thread_exit() is called just prior to a librdkafka-managed
+ *        thread exiting from the exiting thread itself.
+ *
+ * @param rk The client instance.
+ * @param thread_type Thread type.n
+ * @param thread_name Human-readable thread name, may not be unique.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark Depending on the thread type, librdkafka may execute additional
+ *         code on the thread after on_thread_exit() returns.
+ *
+ * @warning The on_thread_exit() interceptor is called from internal
+ *          librdkafka threads. An on_thread_exit() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_thread_exit_t) (
+        rd_kafka_t *rk,
+        rd_kafka_thread_type_t thread_type,
+        const char *thread_name,
+        void *ic_opaque);
+
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -4740,6 +5102,43 @@ rd_kafka_interceptor_add_on_request_sent (
         rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
         void *ic_opaque);
 
+
+/**
+ * @brief Append an on_thread_start() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_thread_start() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_thread_start (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_thread_start_t *on_thread_start,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_thread_exit() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_thread_exit() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_thread_exit (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
+        void *ic_opaque);
 
 
 
@@ -4983,7 +5382,7 @@ rd_kafka_AdminOptions_set_broker (rd_kafka_AdminOptions_t *options,
  */
 RD_EXPORT void
 rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
-                                  void *opaque);
+                                  void *ev_opaque);
 
 
 
@@ -5643,6 +6042,92 @@ RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_DescribeConfigs_result_resources (
         const rd_kafka_DescribeConfigs_result_t *result,
         size_t *cntp);
+
+/**@}*/
+
+
+
+/**
+ * @name Security APIs
+ * @{
+ *
+ */
+
+/**
+ * @brief Set SASL/OAUTHBEARER token and metadata
+ *
+ * @param rk Client instance.
+ * @param token_value the mandatory token value to set, often (but not
+ *  necessarily) a JWS compact serialization as per
+ *  https://tools.ietf.org/html/rfc7515#section-3.1.
+ * @param md_lifetime_ms when the token expires, in terms of the number of
+ *  milliseconds since the epoch.
+ * @param md_principal_name the mandatory Kafka principal name associated
+ *  with the token.
+ * @param extensions optional SASL extensions key-value array with
+ *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  [i+1] is the key's value, to be communicated to the broker
+ *  as additional key-value pairs during the initial client response as per
+ *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are
+ *  copied.
+ * @param extension_size the number of SASL extension keys plus values,
+ *  which must be a non-negative multiple of 2.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is an error.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon success. The extension keys must not include the reserved
+ * key "`auth`", and all extension keys and values must conform to the required
+ * format as per https://tools.ietf.org/html/rfc7628#section-3.1:
+ *
+ *     key            = 1*(ALPHA)
+ *     value          = *(VCHAR / SP / HTAB / CR / LF )
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise \p errstr set
+ *              and:<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if any of the arguments are
+ *              invalid;<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism.<br>
+ *
+ * @sa rd_kafka_oauthbearer_set_token_failure
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions, size_t extension_size,
+                                char *errstr, size_t errstr_size);
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh failure indicator.
+ *
+ * @param rk Client instance.
+ * @param errstr mandatory human readable error reason for failing to acquire
+ *  a token.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
+ * this method upon failure.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, otherwise:<br>
+ *          \c RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if SASL/OAUTHBEARER is not
+ *              supported by this build;<br>
+ *          \c RD_KAFKA_RESP_ERR__STATE if SASL/OAUTHBEARER is supported but is
+ *              not configured as the client's authentication mechanism,<br>
+ *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
+ *
+ * @sa rd_kafka_oauthbearer_set_token
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**@}*/
 

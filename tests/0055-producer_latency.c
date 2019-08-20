@@ -40,6 +40,8 @@ struct latconf {
         float rtt;  /* Network+broker latency */
 
 
+        char        linger_ms_conf[32]; /**< Read back to show actual value */
+
         /* Result vector */
         float latency[_MSG_COUNT];
         float sum;
@@ -117,23 +119,24 @@ static int test_producer_latency (const char *topic,
                                   struct latconf *latconf) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
-        rd_kafka_topic_conf_t *topic_conf;
         rd_kafka_resp_err_t err;
         int i;
+        size_t sz;
 
-        test_conf_init(&conf, &topic_conf, 60);
+        test_conf_init(&conf, NULL, 60);
 
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
         rd_kafka_conf_set_opaque(conf, latconf);
 
-        TEST_SAY("%s: begin\n", latconf->name);
+        TEST_SAY(_C_BLU "[%s: begin]\n" _C_CLR, latconf->name);
         for (i = 0 ; latconf->conf[i] ; i += 2) {
                 TEST_SAY("%s:  set conf %s = %s\n",
                          latconf->name, latconf->conf[i], latconf->conf[i+1]);
-                test_any_conf_set(conf, topic_conf,
-                                  latconf->conf[i], latconf->conf[i+1]);
+                test_conf_set(conf, latconf->conf[i], latconf->conf[i+1]);
         }
-        rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
+
+        sz = sizeof(latconf->linger_ms_conf);
+        rd_kafka_conf_get(conf, "linger.ms", latconf->linger_ms_conf, &sz);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
@@ -184,12 +187,35 @@ static int test_producer_latency (const char *topic,
 }
 
 
+static float find_min (const struct latconf *latconf) {
+        int i;
+        float v = 1000000;
+
+        for (i = 0 ; i < latconf->cnt ; i++)
+                if (latconf->latency[i] < v)
+                        v = latconf->latency[i];
+
+        return v;
+}
+
+static float find_max (const struct latconf *latconf) {
+        int i;
+        float v = 0;
+
+        for (i = 0 ; i < latconf->cnt ; i++)
+                if (latconf->latency[i] > v)
+                        v = latconf->latency[i];
+
+        return v;
+}
 
 int main_0055_producer_latency (int argc, char **argv) {
         struct latconf latconfs[] = {
                 { "standard settings", {NULL}, 0, 0 }, /* default is now 0ms */
                 { "low queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
+                { "microsecond queue.buffering.max.ms",
+                  {"queue.buffering.max.ms", "0.001", NULL}, 0, 1 },
                 { "high queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "3000", NULL}, 3000, 3100},
                 { "queue.buffering.max.ms < 1000", /* internal block_max_ms */
@@ -204,6 +230,11 @@ int main_0055_producer_latency (int argc, char **argv) {
         const char *topic = test_mk_topic_name("0055_producer_latency", 0);
         int fails = 0;
 
+        if (test_on_ci) {
+                TEST_SKIP("Latency measurements not reliable on CI\n");
+                return 0;
+        }
+
         /* Create topic */
         test_produce_msgs_easy(topic, 0, 0, 1);
 
@@ -212,6 +243,20 @@ int main_0055_producer_latency (int argc, char **argv) {
 
         if (fails)
                 TEST_FAIL("See %d previous failure(s)", fails);
+
+        TEST_SAY(_C_YEL "Latency tests summary:\n" _C_CLR);
+        TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s\n",
+                 "Name", "linger.ms",
+                 "MinExp", "MaxExp", "RTT", "Min", "Average", "Max");
+
+        for (latconf = latconfs ; latconf->name ; latconf++)
+                TEST_SAY("%-40s %9s  %6d..%-6d  %7g  %9g %9g %9g\n",
+                         latconf->name, latconf->linger_ms_conf,
+                         latconf->min, latconf->max,
+                         latconf->rtt,
+                         find_min(latconf),
+                         latconf->sum / latconf->cnt,
+                         find_max(latconf));
 
         return 0;
 }

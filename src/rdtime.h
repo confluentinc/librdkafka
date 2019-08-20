@@ -136,6 +136,32 @@ static RD_INLINE const char *rd_ctime (const time_t *t) {
 
 
 /**
+ * @brief Convert a relative millisecond timeout to microseconds,
+ *        properly handling RD_POLL_NOWAIT, et.al.
+ */
+static RD_INLINE rd_ts_t rd_timeout_us (int timeout_ms) {
+        if (timeout_ms <= 0)
+                return (rd_ts_t)timeout_ms;
+        else
+                return (rd_ts_t)timeout_ms * 1000;
+}
+
+/**
+ * @brief Convert a relative microsecond timeout to milliseconds,
+ *        properly handling RD_POLL_NOWAIT, et.al.
+ */
+static RD_INLINE int rd_timeout_ms (rd_ts_t timeout_us) {
+        if (timeout_us <= 0)
+                return (int)timeout_us;
+        else
+                /* + 999: Round up to millisecond to
+                 * avoid busy-looping during the last
+                 * millisecond. */
+                return (int)((timeout_us + 999) / 1000);
+}
+
+
+/**
  * @brief Initialize an absolute timeout based on the provided \p timeout_ms
  *
  * To be used with rd_timeout_adjust().
@@ -153,6 +179,31 @@ static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
 	return rd_clock() + (timeout_ms * 1000);
 }
 
+
+/**
+ * @brief Initialize an absolute timespec timeout based on the provided
+ *        relative \p timeout_us.
+ *
+ * To be used with cnd_timedwait_abs().
+ *
+ * Honours RD_POLL_INFITE and RD_POLL_NOWAIT (reflected in tspec.tv_sec).
+ */
+static RD_INLINE void rd_timeout_init_timespec_us (struct timespec *tspec,
+                                                   rd_ts_t timeout_us) {
+        if (timeout_us == RD_POLL_INFINITE ||
+            timeout_us == RD_POLL_NOWAIT) {
+                tspec->tv_sec = timeout_us;
+                tspec->tv_nsec = 0;
+        } else {
+                timespec_get(tspec, TIME_UTC);
+                tspec->tv_sec  += timeout_us / 1000000;
+                tspec->tv_nsec += (timeout_us % 1000000) * 1000;
+                if (tspec->tv_nsec >= 1000000000) {
+                        tspec->tv_nsec -= 1000000000;
+                        tspec->tv_sec++;
+                }
+        }
+}
 
 /**
  * @brief Initialize an absolute timespec timeout based on the provided
@@ -210,16 +261,7 @@ static RD_INLINE rd_ts_t rd_timeout_remains_us (rd_ts_t abs_timeout) {
  *         in a bool fashion.
  */
 static RD_INLINE int rd_timeout_remains (rd_ts_t abs_timeout) {
-        rd_ts_t timeout_us = rd_timeout_remains_us(abs_timeout);
-
-        if (timeout_us == RD_POLL_INFINITE ||
-            timeout_us == RD_POLL_NOWAIT)
-                return (int)timeout_us;
-
-        /* + 999: Round up to millisecond to
-         * avoid busy-looping during the last
-         * millisecond. */
-        return (int)((timeout_us + 999) / 1000);
+        return rd_timeout_ms(rd_timeout_remains_us(abs_timeout));
 }
 
 /**

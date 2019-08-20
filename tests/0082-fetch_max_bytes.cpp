@@ -122,7 +122,13 @@ static void do_test_fetch_max_bytes (void) {
 
 extern "C" {
   int main_0082_fetch_max_bytes (int argc, char **argv) {
+    if (test_quick) {
+      Test::Skip("Test skipped due to quick mode\n");
+      return 0;
+    }
+
     do_test_fetch_max_bytes();
+
     return 0;
   }
 }

@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <time.h>
+#include <ctype.h>
 
 #include "rdkafka.h"
 #include "tinycthread.h"
@@ -75,14 +76,6 @@ extern mtx_t test_mtx;
 #define TEST_LOCK()   mtx_lock(&test_mtx)
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
-
-#define _C_CLR "\033[0m"
-#define _C_RED "\033[31m"
-#define _C_GRN "\033[32m"
-#define _C_YEL "\033[33m"
-#define _C_BLU "\033[34m"
-#define _C_MAG "\033[35m"
-#define _C_CYA "\033[36m"
 
 typedef enum {
         TEST_NOT_STARTED,
@@ -229,14 +222,30 @@ void test_fail0 (const char *file, int line, const char *function,
                 }                                                       \
         } while (0)
 
+static RD_INLINE RD_UNUSED void rtrim (char *str) {
+        size_t len = strlen(str);
+        char *s;
+
+        if (len == 0)
+                return;
+
+        s = str + len - 1;
+        while (isspace((int)*s)) {
+                *s = '\0';
+                s--;
+        }
+}
+
 /* Skip the current test. Argument is textual reason (printf format) */
 #define TEST_SKIP(...) do {                                             \
                 TEST_WARN("SKIPPING TEST: " __VA_ARGS__);               \
                 TEST_LOCK();                                            \
                 test_curr->state = TEST_SKIPPED;                        \
-                if (!*test_curr->failstr)                               \
+                if (!*test_curr->failstr) {                             \
                         rd_snprintf(test_curr->failstr,                 \
                                     sizeof(test_curr->failstr), __VA_ARGS__); \
+                        rtrim(test_curr->failstr);                      \
+                }                                                       \
                 TEST_UNLOCK();                                          \
         } while (0)
 
@@ -517,8 +526,9 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
 
 void test_kafka_topics (const char *fmt, ...);
-void test_create_topic (const char *topicname, int partition_cnt,
-			int replication_factor);
+void test_create_topic (rd_kafka_t *use_rk,
+                        const char *topicname, int partition_cnt,
+                        int replication_factor);
 rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                                                 rd_kafka_topic_t *rkt,
                                                 int timeout_ms);
@@ -526,10 +536,11 @@ rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name,
                                             int timeout_ms);
 int test_check_auto_create_topic (void);
 
+void test_create_partitions (rd_kafka_t *use_rk,
+                             const char *topicname, int new_partition_cnt);
+
 int test_get_partition_count (rd_kafka_t *rk, const char *topicname,
                               int timeout_ms);
-
-int test_check_builtin (const char *feature);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 

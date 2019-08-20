@@ -681,23 +681,24 @@ test_print_ConfigEntry_array (const rd_kafka_ConfigEntry_t **entries,
                 syns = rd_kafka_ConfigEntry_synonyms(e, &syn_cnt);
 
 #define YN(v) ((v) ? "y" : "n")
-                TEST_SAY("%s#%"PRIusz"/%"PRIusz
-                         ": Source %s (%d): \"%s\"=\"%s\" "
-                         "[is read-only=%s, default=%s, sensitive=%s, "
-                         "synonym=%s] with %"PRIusz" synonym(s)\n",
-                         indent,
-                         ei, entry_cnt,
-                         rd_kafka_ConfigSource_name(
-                                 rd_kafka_ConfigEntry_source(e)),
-                         rd_kafka_ConfigEntry_source(e),
-                         rd_kafka_ConfigEntry_name(e),
-                         rd_kafka_ConfigEntry_value(e) ?
-                         rd_kafka_ConfigEntry_value(e) : "(NULL)",
-                         YN(rd_kafka_ConfigEntry_is_read_only(e)),
-                         YN(rd_kafka_ConfigEntry_is_default(e)),
-                         YN(rd_kafka_ConfigEntry_is_sensitive(e)),
-                         YN(rd_kafka_ConfigEntry_is_synonym(e)),
-                         syn_cnt);
+                TEST_SAYL(3,
+                          "%s#%"PRIusz"/%"PRIusz
+                          ": Source %s (%d): \"%s\"=\"%s\" "
+                          "[is read-only=%s, default=%s, sensitive=%s, "
+                          "synonym=%s] with %"PRIusz" synonym(s)\n",
+                          indent,
+                          ei, entry_cnt,
+                          rd_kafka_ConfigSource_name(
+                                  rd_kafka_ConfigEntry_source(e)),
+                          rd_kafka_ConfigEntry_source(e),
+                          rd_kafka_ConfigEntry_name(e),
+                          rd_kafka_ConfigEntry_value(e) ?
+                          rd_kafka_ConfigEntry_value(e) : "(NULL)",
+                          YN(rd_kafka_ConfigEntry_is_read_only(e)),
+                          YN(rd_kafka_ConfigEntry_is_default(e)),
+                          YN(rd_kafka_ConfigEntry_is_sensitive(e)),
+                          YN(rd_kafka_ConfigEntry_is_synonym(e)),
+                          syn_cnt);
 #undef YN
 
                 if (syn_cnt > 0)
@@ -916,6 +917,7 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         int ci = 0;
         int i;
         int fails = 0;
+        int max_retry_describe = 3;
 
         /*
          * Only create one topic, the others will be non-existent.
@@ -961,6 +963,7 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         ci++;
 
 
+ retry_describe:
         /*
          * Timeout options
          */
@@ -1046,6 +1049,23 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
 
                 if (err != exp_err[i]) {
+                        if (err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART &&
+                            max_retry_describe-- > 0) {
+                                TEST_WARN("ConfigResource #%d: "
+                                          "expected %s (%d), got %s (%s): "
+                                          "this is typically a temporary "
+                                          "error while the new resource "
+                                          "is propagating: retrying",
+                                          i,
+                                          rd_kafka_err2name(exp_err[i]),
+                                          exp_err[i],
+                                          rd_kafka_err2name(err),
+                                          errstr2 ? errstr2 : "");
+                                rd_kafka_event_destroy(rkev);
+                                rd_sleep(1);
+                                goto retry_describe;
+                        }
+
                         TEST_FAIL_LATER("ConfigResource #%d: "
                                         "expected %s (%d), got %s (%s)",
                                         i,
@@ -1168,8 +1188,16 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
 
 int main_0081_admin (int argc, char **argv) {
+
         do_test_apis(RD_KAFKA_PRODUCER);
+
+        if (test_quick) {
+                TEST_SAY("Skipping further 0081 tests due to quick mode\n");
+                return 0;
+        }
+
         do_test_apis(RD_KAFKA_CONSUMER);
+
         return 0;
 }
 

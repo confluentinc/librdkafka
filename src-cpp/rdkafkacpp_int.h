@@ -41,6 +41,14 @@ extern "C" {
 }
 
 #ifdef _MSC_VER
+/* Visual Studio */
+#include "../src/win32_config.h"
+#else
+/* POSIX / UNIX based systems */
+#include "../config.h" /* mklove output */
+#endif
+
+#ifdef _MSC_VER
 typedef int mode_t;
 #pragma warning(disable : 4250)
 #endif
@@ -69,6 +77,19 @@ void offset_commit_cb_trampoline0 (
         rd_kafka_t *rk,
         rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
+void oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
+                                              const char *oauthbearer_config,
+                                              void *opaque);
+
+ int ssl_cert_verify_cb_trampoline (
+         rd_kafka_t *rk,
+         const char *broker_name,
+         int32_t broker_id,
+         int *x509_error,
+         int depth,
+         const char *buf, size_t size,
+         char *errstr, size_t errstr_size,
+         void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
@@ -398,6 +419,8 @@ class ConfImpl : public Conf {
       partitioner_kp_cb_(NULL),
       rebalance_cb_(NULL),
       offset_commit_cb_(NULL),
+      oauthbearer_token_refresh_cb_(NULL),
+      ssl_cert_verify_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -424,6 +447,23 @@ class ConfImpl : public Conf {
     }
 
     dr_cb_ = dr_cb;
+    return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult set (const std::string &name,
+                        OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb,
+                        std::string &errstr) {
+    if (name != "oauthbearer_token_refresh_cb") {
+      errstr = "Invalid value type, expected RdKafka::OAuthBearerTokenRefreshCb";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    oauthbearer_token_refresh_cb_ = oauthbearer_token_refresh_cb;
     return Conf::CONF_OK;
   }
 
@@ -567,6 +607,49 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+
+  Conf::ConfResult set (const std::string &name,
+                        SslCertificateVerifyCb *ssl_cert_verify_cb,
+                        std::string &errstr) {
+    if (name != "ssl_cert_verify_cb") {
+      errstr = "Invalid value type, expected RdKafka::SslCertificateVerifyCb";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    ssl_cert_verify_cb_ = ssl_cert_verify_cb;
+    return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,
+                                 RdKafka::CertificateEncoding cert_enc,
+                                 const void *buffer, size_t size,
+                                 std::string &errstr) {
+    rd_kafka_conf_res_t res;
+    char errbuf[512];
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    res = rd_kafka_conf_set_ssl_cert(
+        rk_conf_,
+        static_cast<rd_kafka_cert_type_t>(cert_type),
+        static_cast<rd_kafka_cert_enc_t>(cert_enc),
+        buffer, size, errbuf, sizeof(errbuf));
+
+    if (res != RD_KAFKA_CONF_OK)
+      errstr = errbuf;
+
+    return static_cast<Conf::ConfResult>(res);
+  }
+
+
   Conf::ConfResult get(const std::string &name, std::string &value) const {
     if (name.compare("dr_cb") == 0 ||
         name.compare("event_cb") == 0 ||
@@ -575,7 +658,9 @@ class ConfImpl : public Conf {
         name.compare("socket_cb") == 0 ||
         name.compare("open_cb") == 0 ||
         name.compare("rebalance_cb") == 0 ||
-        name.compare("offset_commit_cb") == 0 ) {
+        name.compare("offset_commit_cb") == 0 ||
+        name.compare("oauthbearer_token_refresh_cb") == 0 ||
+        name.compare("ssl_cert_verify_cb") == 0) {
       return Conf::CONF_INVALID;
     }
     rd_kafka_conf_res_t res = RD_KAFKA_CONF_INVALID;
@@ -611,6 +696,14 @@ class ConfImpl : public Conf {
       if (!rk_conf_)
 	  return Conf::CONF_INVALID;
       dr_cb = this->dr_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(
+    OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb) const {
+      if (!rk_conf_)
+          return Conf::CONF_INVALID;
+      oauthbearer_token_refresh_cb = this->oauthbearer_token_refresh_cb_;
       return Conf::CONF_OK;
   }
 
@@ -663,7 +756,12 @@ class ConfImpl : public Conf {
       return Conf::CONF_OK;
     }
 
-
+  Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const {
+      if (!rk_conf_)
+              return Conf::CONF_INVALID;
+      ssl_cert_verify_cb = this->ssl_cert_verify_cb_;
+      return Conf::CONF_OK;
+  }
 
   std::list<std::string> *dump ();
 
@@ -684,6 +782,19 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  struct rd_kafka_conf_s *c_ptr_global () {
+    if (conf_type_ == CONF_GLOBAL)
+      return rk_conf_;
+    else
+      return NULL;
+  }
+
+  struct rd_kafka_topic_conf_s *c_ptr_topic () {
+    if (conf_type_ == CONF_TOPIC)
+      return rkt_conf_;
+    else
+      return NULL;
+  }
 
   ConsumeCb *consume_cb_;
   DeliveryReportCb *dr_cb_;
@@ -694,6 +805,8 @@ class ConfImpl : public Conf {
   PartitionerKeyPointerCb *partitioner_kp_cb_;
   RebalanceCb *rebalance_cb_;
   OffsetCommitCb *offset_commit_cb_;
+  OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb_;
+  SslCertificateVerifyCb *ssl_cert_verify_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -784,6 +897,39 @@ class HandleImpl : virtual public Handle {
           if (err)
                   errstr = errbuf;
           return err;
+  }
+
+  ErrorCode oauthbearer_set_token (const std::string &token_value,
+                                   int64_t md_lifetime_ms,
+                                   const std::string &md_principal_name,
+                                   const std::list<std::string> &extensions,
+                                   std::string &errstr) {
+          char errbuf[512];
+          ErrorCode err;
+          const char **extensions_copy = new const char *[extensions.size()];
+          int elem = 0;
+
+          for (std::list<std::string>::const_iterator it = extensions.begin();
+              it != extensions.end(); it++)
+                  extensions_copy[elem++] = it->c_str();
+          err = static_cast<ErrorCode>(rd_kafka_oauthbearer_set_token(
+                                               rk_, token_value.c_str(),
+                                               md_lifetime_ms,
+                                               md_principal_name.c_str(),
+                                               extensions_copy,
+                                               extensions.size(),
+                                               errbuf, sizeof(errbuf)));
+          free(extensions_copy);
+
+          if (err != ERR_NO_ERROR)
+              errstr = errbuf;
+
+          return err;
+  }
+
+  ErrorCode oauthbearer_set_token_failure(const std::string &errstr) {
+          return static_cast<ErrorCode>(rd_kafka_oauthbearer_set_token_failure(
+                                                rk_, errstr.c_str()));
   };
 
 
@@ -801,6 +947,8 @@ class HandleImpl : virtual public Handle {
   PartitionerKeyPointerCb *partitioner_kp_cb_;
   RebalanceCb *rebalance_cb_;
   OffsetCommitCb *offset_commit_cb_;
+  OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb_;
+  SslCertificateVerifyCb *ssl_cert_verify_cb_;
 };
 
 

@@ -221,10 +221,11 @@ static void assign_consume_many (char **topics, int topic_cnt, uint64_t testid){
 
 int main_0042_many_topics (int argc, char **argv) {
 	char **topics;
-	const int topic_cnt = 20; /* up this as needed, topic creation
-				   * takes time so unless hunting a bug
-				   * we keep this low to keep the
-				   * test suite run time down. */
+        int topic_cnt = test_quick ? 4 : 20; /* up this as needed,
+                                              * topic creation takes time so
+                                              * unless hunting a bug
+                                              * we keep this low to keep the
+                                              * test suite run time down. */
 	uint64_t testid;
 	int i;
 

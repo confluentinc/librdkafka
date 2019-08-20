@@ -55,8 +55,8 @@ endif()
 # }
 
 # ZSTD {
-find_library (ZSTD zstd)
-if(ZSTD)
+find_package(Zstd QUIET)
+if(ZSTD_FOUND)
   set(with_zstd_default ON)
 else()
   set(with_zstd_default OFF)
@@ -136,7 +136,8 @@ option(WITH_SASL "With SASL" ${with_sasl_default})
 if(WITH_SASL)
   if(WITH_SSL)
     set(WITH_SASL_SCRAM ON)
-    list(APPEND BUILT_WITH "SASL_SCRAM")
+    set(WITH_SASL_OAUTHBEARER ON)
+    list(APPEND BUILT_WITH "SASL_SCRAM SASL_OAUTHBEARER")
   endif()
   if(NOT WIN32)
     set(WITH_SASL_CYRUS ON)
@@ -175,6 +176,8 @@ endif(WIN32)
 # * HAVE_ATOMICS_64_SYNC
 # * HAVE_REGEX
 # * HAVE_STRNDUP
+# * HAVE_PTHREAD_SETNAME_GNU
+# * HAVE_PTHREAD_SETNAME_DARWIN
 # * WITH_C11THREADS
 # * WITH_CRC32C_HW
 # * LINK_ATOMIC
@@ -202,6 +205,8 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # * WITH_SASL
 # * HAVE_REGEX
 # * HAVE_STRNDUP
+# * HAVE_PTHREAD_SETNAME_GNU
+# * HAVE_PTHREAD_SETNAME_DARWIN
 list(APPEND BUILT_WITH "SNAPPY")
 list(APPEND BUILT_WITH "SOCKEM")
 string(REPLACE ";" " " BUILT_WITH "${BUILT_WITH}")

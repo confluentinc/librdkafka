@@ -201,6 +201,19 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque);
 
+void
+rd_kafka_handle_SaslAuthenticate (rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_buf_t *rkbuf,
+                                  rd_kafka_buf_t *request,
+                                  void *opaque);
+void rd_kafka_SaslAuthenticateRequest (rd_kafka_broker_t *rkb,
+                                       const void *buf, size_t size,
+                                       rd_kafka_replyq_t replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque);
+
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
                              const rd_kafka_pid_t pid);
 

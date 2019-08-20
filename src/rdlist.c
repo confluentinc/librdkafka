@@ -246,6 +246,9 @@ int rd_list_cmp_trampoline (const void *_a, const void *_b) {
 }
 
 void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *)) {
+        if (unlikely(rl->rl_elems == NULL))
+                return;
+
 	rd_list_cmp_curr = cmp;
         qsort(rl->rl_elems, rl->rl_cnt, sizeof(*rl->rl_elems),
 	      rd_list_cmp_trampoline);
@@ -326,7 +329,7 @@ int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
 		 int (*cmp) (const void *, const void *)) {
 	int i;
 
-	i = a->rl_cnt - b->rl_cnt;
+	i = RD_CMP(a->rl_cnt, b->rl_cnt);
 	if (i)
 		return i;
 
@@ -344,11 +347,7 @@ int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
  * @brief Simple element pointer comparator
  */
 int rd_list_cmp_ptr (const void *a, const void *b) {
-        if (a < b)
-                return -1;
-        else if (a > b)
-                return 1;
-        return 0;
+        return RD_CMP(a, b);
 }
 
 

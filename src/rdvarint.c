@@ -31,32 +31,6 @@
 #include "rdunittest.h"
 
 
-/**
- * @brief Read a varint-encoded signed integer from \p slice.
- */
-size_t rd_varint_dec_slice (rd_slice_t *slice, int64_t *nump) {
-        size_t num = 0;
-        int shift = 0;
-        unsigned char oct;
-
-        /* FIXME: Optimize to use something better than read() */
-        do {
-                size_t r = rd_slice_read(slice, &oct, sizeof(oct));
-                if (unlikely(r == 0))
-                        return 0; /* Underflow */
-                num |= (uint64_t)(oct & 0x7f) << shift;
-                shift += 7;
-        } while (oct & 0x80);
-
-        *nump = (int64_t)((num >> 1) ^ -(int64_t)(num & 1));
-
-        return shift / 7;
-}
-
-
-
-
-
 static int do_test_rd_uvarint_enc_i64 (const char *file, int line,
                                        int64_t num, const char *exp,
                                        size_t exp_size) {
@@ -86,27 +60,43 @@ static int do_test_rd_uvarint_enc_i64 (const char *file, int line,
 
         /* Verify with slice decoder */
         rd_buf_init(&b, 1, 0);
-        rd_buf_push(&b, buf, sz, NULL);
+        rd_buf_push(&b, buf, sizeof(buf), NULL); /* including trailing 0xff
+                                                  * garbage which should be
+                                                  * ignored by decoder */
         rd_slice_init_full(&slice, &b);
 
         /* Should fail for incomplete reads */
-        ir = rd_slice_narrow_copy(&slice, &bad_slice,
-                                  rd_slice_remains(&slice)-1);
+        ir = rd_slice_narrow_copy(&slice, &bad_slice, sz-1);
         RD_UT_ASSERT(ir, "narrow_copy failed");
         ret_num = -1;
-        r = rd_varint_dec_slice(&bad_slice, &ret_num);
+        r = rd_slice_read_varint(&bad_slice, &ret_num);
         RD_UT_ASSERT(RD_UVARINT_DEC_FAILED(r),
-                     "varint decode failed should have failed, returned %"PRIusz,
+                     "varint decode failed should have failed, "
+                     "returned %"PRIusz,
+                    r);
+        r = rd_slice_offset(&bad_slice);
+        RD_UT_ASSERT(r == 0,
+                     "expected slice position to not change, but got %"PRIusz,
                      r);
 
         /* Verify proper slice */
         ret_num = -1;
-        r = rd_varint_dec_slice(&slice, &ret_num);
+        r = rd_slice_read_varint(&slice, &ret_num);
         RD_UT_ASSERT(!RD_UVARINT_DEC_FAILED(r),
                      "varint decode failed: %"PRIusz, r);
         RD_UT_ASSERT(ret_num == num,
                      "varint decode returned wrong number: "
                      "%"PRId64" != %"PRId64, ret_num, num);
+        RD_UT_ASSERT(r == sz,
+                     "expected varint decoder to read %"PRIusz" bytes, "
+                     "not %"PRIusz,
+                     sz, r);
+        r = rd_slice_offset(&slice);
+        RD_UT_ASSERT(r == sz,
+                     "expected slice position to change to %"PRIusz
+                     ", but got %"PRIusz,
+                     sz, r);
+
 
         rd_buf_destroy(&b);
 
@@ -117,10 +107,38 @@ static int do_test_rd_uvarint_enc_i64 (const char *file, int line,
 int unittest_rdvarint (void) {
         int fails = 0;
 
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, 0,
+                                            (const char[]){ 0 }, 1);
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, 1,
+                                            (const char[]){ 0x2 }, 1);
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, -1,
+                                            (const char[]){ 0x1 }, 1);
         fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, 23,
-                                            (const char[]){ 23<<1 }, 1);
+                                            (const char[]){ 0x2e }, 1);
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, -23,
+                                            (const char[]){ 0x2d }, 1);
         fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__, 253,
                                             (const char[]){ 0xfa,  3 }, 2);
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__,
+                                            1234567890101112,
+                                            (const char[]){ 0xf0,
+                                                            0x8d,
+                                                            0xd3,
+                                                            0xc8,
+                                                            0xa7,
+                                                            0xb5,
+                                                            0xb1,
+                                                            0x04 }, 8);
+        fails += do_test_rd_uvarint_enc_i64(__FILE__, __LINE__,
+                                            -1234567890101112,
+                                            (const char[]){ 0xef,
+                                                            0x8d,
+                                                            0xd3,
+                                                            0xc8,
+                                                            0xa7,
+                                                            0xb5,
+                                                            0xb1,
+                                                            0x04 }, 8);
 
         return fails;
 }

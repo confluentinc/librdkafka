@@ -72,8 +72,11 @@
 /* >= 2.1.0-IV2: ZSTD compression */
 #define RD_KAFKA_FEATURE_ZSTD 0x800
 
+/* >= 1.0.0: SaslAuthenticateRequest */
+#define RD_KAFKA_FEATURE_SASL_AUTH_REQ 0x1000
+
 /* All features (except UNITTEST) */
-#define RD_KAFKA_FEATURE_ALL  0xfff
+#define RD_KAFKA_FEATURE_ALL  0xffff
 
 /* Unit-test mock broker: broker supports everything.
  * Should be used with RD_KAFKA_FEATURE_ALL, but not be included in bitmask */

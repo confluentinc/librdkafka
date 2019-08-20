@@ -45,8 +45,23 @@
 
 #include <sasl/sasl.h>
 
+/**
+ * @brief Process-global lock to avoid simultaneous invocation of
+ *        kinit.cmd when refreshing the tickets, which could lead to
+ *        kinit cache corruption.
+ */
 static mtx_t rd_kafka_sasl_cyrus_kinit_lock;
 
+/**
+ * @struct Per-client-instance handle
+ */
+typedef struct rd_kafka_sasl_cyrus_handle_s {
+        rd_kafka_timer_t kinit_refresh_tmr;
+} rd_kafka_sasl_cyrus_handle_t;
+
+/**
+ * @struct Per-connection state
+ */
 typedef struct rd_kafka_sasl_cyrus_state_s {
         sasl_conn_t *conn;
         sasl_callback_t callbacks[16];
@@ -62,6 +77,7 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                                      char *errstr, size_t errstr_size) {
         rd_kafka_sasl_cyrus_state_t *state = rktrans->rktrans_sasl.state;
         int r;
+        int sendcnt = 0;
 
         if (rktrans->rktrans_sasl.complete && size == 0)
                 goto auth_successful;
@@ -81,6 +97,7 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                         if (rd_kafka_sasl_send(rktrans, out, outlen,
                                                errstr, errstr_size) == -1)
                                 return -1;
+                        sendcnt++;
                 }
 
                 if (r == SASL_INTERACT)
@@ -101,6 +118,28 @@ static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                             "SASL handshake failed (step): %s",
                             sasl_errdetail(state->conn));
                 return -1;
+        }
+
+        if (!rktrans->rktrans_sasl.complete && sendcnt > 0) {
+                /* With SaslAuthenticateRequest Kafka protocol framing
+                 * we'll get a Response back after authentication is done,
+                 * which should not be processed by Cyrus, but we still
+                 * need to wait for the response to propgate its error,
+                 * if any, before authentication is considered done.
+                 *
+                 * The legacy framing does not have a final broker->client
+                 * response. */
+                rktrans->rktrans_sasl.complete = 1;
+
+                if (rktrans->rktrans_rkb->rkb_features &
+                    RD_KAFKA_FEATURE_SASL_AUTH_REQ) {
+                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
+                                   "%s authentication complete but awaiting "
+                                   "final response from broker",
+                                   rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                                   sasl.mechanisms);
+                        return 0;
+                }
         }
 
         /* Authentication successful */
@@ -136,116 +175,106 @@ auth_successful:
 
 static ssize_t render_callback (const char *key, char *buf,
                                 size_t size, void *opaque) {
-        rd_kafka_broker_t *rkb = opaque;
+        rd_kafka_t *rk = opaque;
+        rd_kafka_conf_res_t res;
+        size_t destsize = size;
 
-        if (!strcmp(key, "broker.name")) {
-                char *val, *t;
-                size_t len;
-                rd_kafka_broker_lock(rkb);
-                rd_strdupa(&val, rkb->rkb_nodename);
-                rd_kafka_broker_unlock(rkb);
+        /* Try config lookup. */
+        res = rd_kafka_conf_get(&rk->rk_conf, key, buf, &destsize);
+        if (res != RD_KAFKA_CONF_OK)
+                return -1;
 
-                /* Just the broker name, no port */
-                if ((t = strchr(val, ':')))
-                        len = (size_t)(t-val);
-                else
-                        len = strlen(val);
-
-                if (buf)
-                        memcpy(buf, val, RD_MIN(len, size));
-
-                return len;
-
-        } else {
-                rd_kafka_conf_res_t res;
-                size_t destsize = size;
-
-                /* Try config lookup. */
-                res = rd_kafka_conf_get(&rkb->rkb_rk->rk_conf, key,
-                                        buf, &destsize);
-                if (res != RD_KAFKA_CONF_OK)
-                        return -1;
-
-                /* Dont include \0 in returned size */
-                return (destsize > 0 ? destsize-1 : destsize);
-        }
+        /* Dont include \0 in returned size */
+        return (destsize > 0 ? destsize-1 : destsize);
 }
 
 
 /**
- * Execute kinit to refresh ticket.
+ * @brief Execute kinit to refresh ticket.
  *
- * Returns 0 on success, -1 on error.
+ * @returns 0 on success, -1 on error.
  *
- * Locality: any
+ * @locality rdkafka main thread
  */
-static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_broker_t *rkb) {
-        rd_kafka_t *rk = rkb->rkb_rk;
+static int rd_kafka_sasl_cyrus_kinit_refresh (rd_kafka_t *rk) {
         int r;
         char *cmd;
         char errstr[128];
-
-        if (!rk->rk_conf.sasl.kinit_cmd ||
-            !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
-                return 0; /* kinit not configured */
+        rd_ts_t ts_start;
 
         /* Build kinit refresh command line using string rendering and config */
         cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
                                errstr, sizeof(errstr),
-                               render_callback, rkb);
+                               render_callback, rk);
         if (!cmd) {
-                rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
-                           "Failed to construct kinit command "
-                           "from sasl.kerberos.kinit.cmd template: %s",
-                           errstr);
+                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                             "Failed to construct kinit command "
+                             "from sasl.kerberos.kinit.cmd template: %s",
+                             errstr);
                 return -1;
         }
 
         /* Execute kinit */
-        rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH",
-                   "Refreshing SASL keys with command: %s", cmd);
+        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
+                     "Refreshing Kerberos ticket with command: %s", cmd);
 
+        ts_start = rd_clock();
+
+        /* Prevent multiple simultaneous refreshes by the same process to
+         * avoid Kerberos credential cache corruption. */
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
         r = system(cmd);
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
 
         if (r == -1) {
-                rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
-                           "SASL key refresh failed: Failed to execute %s",
-                           cmd);
-                rd_free(cmd);
-                return -1;
+                if (errno == ECHILD) {
+                        rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
+                                     "Kerberos ticket refresh command "
+                                     "returned ECHILD: %s: exit status "
+                                     "unknown, assuming success",
+                                     cmd);
+                } else {
+                        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                                     "Kerberos ticket refresh failed: %s: %s",
+                                     cmd, rd_strerror(errno));
+                        rd_free(cmd);
+                        return -1;
+                }
         } else if (WIFSIGNALED(r)) {
-                rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
-                           "SASL key refresh failed: %s: received signal %d",
-                           cmd, WTERMSIG(r));
+                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                             "Kerberos ticket refresh failed: %s: "
+                             "received signal %d",
+                             cmd, WTERMSIG(r));
                 rd_free(cmd);
                 return -1;
         } else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
-                rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
-                           "SASL key refresh failed: %s: exited with code %d",
-                           cmd, WEXITSTATUS(r));
+                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                             "Kerberos ticket refresh failed: %s: "
+                             "exited with code %d",
+                             cmd, WEXITSTATUS(r));
                 rd_free(cmd);
                 return -1;
         }
 
         rd_free(cmd);
 
-        rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH", "SASL key refreshed");
+        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
+                     "Kerberos ticket refreshed in %"PRId64"ms",
+                     (rd_clock() - ts_start) / 1000);
         return 0;
 }
 
 
 /**
- * Refresh timer callback
+ * @brief Refresh timer callback
  *
- * Locality: kafka main thread
+ * @locality rdkafka main thread
  */
 static void rd_kafka_sasl_cyrus_kinit_refresh_tmr_cb (rd_kafka_timers_t *rkts,
                                                       void *arg) {
-        rd_kafka_broker_t *rkb = arg;
+        rd_kafka_t *rk = arg;
 
-        rd_kafka_sasl_cyrus_kinit_refresh(rkb);
+        rd_kafka_sasl_cyrus_kinit_refresh(rk);
 }
 
 
@@ -456,9 +485,6 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
 
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
-        /* Acquire or refresh ticket if kinit is configured */ 
-        rd_kafka_sasl_cyrus_kinit_refresh(rkb);
-
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname,
                             NULL, NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
@@ -509,42 +535,45 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
 }
 
 
+/**
+ * @brief Per-client-instance initializer
+ */
+static int rd_kafka_sasl_cyrus_init (rd_kafka_t *rk,
+                                     char *errstr, size_t errstr_size) {
+        rd_kafka_sasl_cyrus_handle_t *handle;
 
+        if (!rk->rk_conf.sasl.relogin_min_time ||
+            !rk->rk_conf.sasl.kinit_cmd ||
+            strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
+                return 0; /* kinit not configured, no need to start timer */
 
+        handle = rd_calloc(1, sizeof(*handle));
+        rk->rk_sasl.handle = handle;
 
+        rd_kafka_timer_start(&rk->rk_timers, &handle->kinit_refresh_tmr,
+                             rk->rk_conf.sasl.relogin_min_time * 1000ll,
+                             rd_kafka_sasl_cyrus_kinit_refresh_tmr_cb, rk);
+
+        /* Acquire or refresh ticket */
+        rd_kafka_sasl_cyrus_kinit_refresh(rk);
+
+        return 0;
+}
 
 
 /**
- * Per handle SASL term.
- *
- * Locality: broker thread
+ * @brief Per-client-instance destructor
  */
-static void rd_kafka_sasl_cyrus_broker_term (rd_kafka_broker_t *rkb) {
-        rd_kafka_t *rk = rkb->rkb_rk;
+static void rd_kafka_sasl_cyrus_term (rd_kafka_t *rk) {
+        rd_kafka_sasl_cyrus_handle_t *handle = rk->rk_sasl.handle;
 
-        if (!rk->rk_conf.sasl.kinit_cmd)
+        if (!handle)
                 return;
 
-        rd_kafka_timer_stop(&rk->rk_timers, &rkb->rkb_sasl_kinit_refresh_tmr,1);
+        rd_kafka_timer_stop(&rk->rk_timers, &handle->kinit_refresh_tmr, 1);
+        rd_free(handle);
+        rk->rk_sasl.handle = NULL;
 }
-
-/**
- * Broker SASL init.
- *
- * Locality: broker thread
- */
-static void rd_kafka_sasl_cyrus_broker_init (rd_kafka_broker_t *rkb) {
-        rd_kafka_t *rk = rkb->rkb_rk;
-
-        if (!rk->rk_conf.sasl.kinit_cmd ||
-            !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
-                return; /* kinit not configured, no need to start timer */
-
-        rd_kafka_timer_start(&rk->rk_timers, &rkb->rkb_sasl_kinit_refresh_tmr,
-                             rk->rk_conf.sasl.relogin_min_time * 1000ll,
-                             rd_kafka_sasl_cyrus_kinit_refresh_tmr_cb, rkb);
-}
-
 
 
 static int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
@@ -553,21 +582,14 @@ static int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
         if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
                 return 0;
 
-        if (rk->rk_conf.sasl.kinit_cmd) {
-                rd_kafka_broker_t rkb;
+        if (rk->rk_conf.sasl.relogin_min_time &&
+            rk->rk_conf.sasl.kinit_cmd) {
                 char *cmd;
                 char tmperr[128];
 
-                memset(&rkb, 0, sizeof(rkb));
-                strcpy(rkb.rkb_nodename, "ATestBroker:9092");
-                rkb.rkb_rk = rk;
-                mtx_init(&rkb.rkb_lock, mtx_plain);
-
                 cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
                                        tmperr, sizeof(tmperr),
-                                       render_callback, &rkb);
-
-                mtx_destroy(&rkb.rkb_lock);
+                                       render_callback, rk);
 
                 if (!cmd) {
                         rd_snprintf(errstr, errstr_size,
@@ -614,10 +636,10 @@ int rd_kafka_sasl_cyrus_global_init (void) {
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider = {
         .name          = "Cyrus",
+        .init          = rd_kafka_sasl_cyrus_init,
+        .term          = rd_kafka_sasl_cyrus_term,
         .client_new    = rd_kafka_sasl_cyrus_client_new,
         .recv          = rd_kafka_sasl_cyrus_recv,
         .close         = rd_kafka_sasl_cyrus_close,
-        .broker_init   = rd_kafka_sasl_cyrus_broker_init,
-        .broker_term   = rd_kafka_sasl_cyrus_broker_term,
         .conf_validate = rd_kafka_sasl_cyrus_conf_validate
 };

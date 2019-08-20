@@ -154,6 +154,23 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 	return ret;
 }
 
+/**
+ * @brief strerror() for Win32 API errors as returned by GetLastError() et.al.
+ */
+static RD_UNUSED char *
+rd_strerror_w32 (DWORD errcode, char *dst, size_t dstsize) {
+        char *t;
+        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
+                       FORMAT_MESSAGE_IGNORE_INSERTS,
+                       NULL, errcode,
+                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPSTR)dst, (DWORD)dstsize - 1, NULL);
+        /* Remove newlines */
+        while ((t = strchr(dst, (int)'\r')) || (t = strchr(dst, (int)'\n')))
+                *t = (char)'.';
+        return dst;
+}
+
 
 /**
  * Atomics
@@ -314,20 +331,6 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
 #define rd_read(fd,buf,sz) recv(fd,buf,sz,0)
 #define rd_write(fd,buf,sz) send(fd,buf,sz,0)
 #define rd_close(fd) closesocket(fd)
-
-static RD_UNUSED char *
-rd_strerror_w32 (DWORD errcode, char *dst, size_t dstsize) {
-        char *t;
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
-                       FORMAT_MESSAGE_IGNORE_INSERTS,
-                       NULL, errcode,
-                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       (LPSTR)dst, (DWORD)dstsize - 1, NULL);
-        /* Remove newlines */
-        while ((t = strchr(dst, (int)'\r')) || (t = strchr(dst, (int)'\n')))
-                *t = (char)'.';
-        return dst;
-}
 
 #endif /* !__cplusplus*/
 

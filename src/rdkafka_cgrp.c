@@ -631,11 +631,13 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_c.rebalance_cnt++;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
-	/* Pause current partition set consumers until new assign() is called */
-	if (rkcg->rkcg_assignment)
-		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
-					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-					      rkcg->rkcg_assignment);
+        /* Pause current partition set consumers until new assign() is called */
+        if (rkcg->rkcg_assignment)
+                rd_kafka_toppars_pause_resume(rkcg->rkcg_rk,
+                                              rd_true/*pause*/,
+                                              RD_ASYNC,
+                                              RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+                                              rkcg->rkcg_assignment);
 
 	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
 	    || !assignment
@@ -1902,7 +1904,10 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
         else if (err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP ||
-                 err == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE) {
+                 err == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE ||
+                 err == RD_KAFKA_RESP_ERR__TRANSPORT) {
+                /* The coordinator is not available, defer the offset commit
+                 * to when the coordinator is back up again. */
 
                 /* future-proofing, see timeout_scan(). */
                 rd_kafka_assert(NULL, err != RD_KAFKA_RESP_ERR__WAIT_COORD);
@@ -2302,9 +2307,11 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_toppar_unlock(rktp);
         }
 
-	/* Resume partition consumption. */
-	rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 0/*resume*/,
-				      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+        /* Resume partition consumption. */
+        rd_kafka_toppars_pause_resume(rkcg->rkcg_rk,
+                                      rd_false/*resume*/,
+                                      RD_ASYNC,
+                                      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
                                       old_assignment);
 
         rd_kafka_topic_partition_list_destroy(old_assignment);
@@ -2987,6 +2994,8 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 break;
 
         case RD_KAFKA_OP_SUBSCRIBE:
+                rd_kafka_app_polled(rk);
+
                 /* New atomic subscription (may be NULL) */
                 err = rd_kafka_cgrp_subscribe(
                         rkcg, rko->rko_u.subscribe.topics);

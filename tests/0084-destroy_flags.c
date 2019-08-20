@@ -98,7 +98,8 @@ static void do_test_destroy_flags (const char *topic,
                         rkt = test_create_producer_topic(rk, topic, NULL);
                         test_produce_msgs_nowait(rk, rkt, 0,
                                                  RD_KAFKA_PARTITION_UA,
-                                                 0, 10000, NULL, 100, 0,
+                                                 0, args->produce_cnt,
+                                                 NULL, 100, 0,
                                                  &msgcounter);
                         rd_kafka_topic_destroy(rkt);
                 }
@@ -171,7 +172,7 @@ static void do_test_destroy_flags (const char *topic,
 static void destroy_flags (int local_mode) {
         const struct df_args args[] = {
                 { RD_KAFKA_PRODUCER, 0, 0, 0 },
-                { RD_KAFKA_PRODUCER, 10000, 0, 0 },
+                { RD_KAFKA_PRODUCER, test_quick ? 100 : 10000, 0, 0 },
                 { RD_KAFKA_CONSUMER, 0, 1, 0 },
                 { RD_KAFKA_CONSUMER, 0, 1, 1 },
                 { RD_KAFKA_CONSUMER, 0, 0, 0 }

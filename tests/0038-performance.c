@@ -50,7 +50,7 @@ int main_0038_performance (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	test_timing_t t_create, t_produce, t_consume;
-	int totsize = 1024*1024*128;
+	int totsize = 1024 * 1024 * (test_quick ? 8 : 128);
 	int msgcnt;
 
 	if (!strcmp(test_mode, "valgrind") || !strcmp(test_mode, "helgrind") ||

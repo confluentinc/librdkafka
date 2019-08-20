@@ -28,6 +28,7 @@
 
 #include "rdkafka_int.h"
 #include "rd.h"
+#include "rdfloat.h"
 
 #include <stdlib.h>
 #include <ctype.h>
@@ -37,6 +38,7 @@
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_sasl_oauthbearer.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
 #endif
@@ -44,6 +46,12 @@
 
 #ifndef _MSC_VER
 #include <netinet/tcp.h>
+#else
+
+#ifndef WIN32_MEAN_AND_LEAN
+#define WIN32_MEAN_AND_LEAN
+#endif
+#include <windows.h>
 #endif
 
 struct rd_kafka_property {
@@ -52,6 +60,7 @@ struct rd_kafka_property {
 	enum {
 		_RK_C_STR,
 		_RK_C_INT,
+                _RK_C_DBL,  /* Double */
 		_RK_C_S2I,  /* String to Integer mapping.
 			     * Supports limited canonical str->int mappings
 			     * using s2i[] */
@@ -72,6 +81,9 @@ struct rd_kafka_property {
 	int   vdef;        /* Default value (int) */
 	const char *sdef;  /* Default value (string) */
         void  *pdef;       /* Default value (pointer) */
+        double ddef;       /* Default value (double) */
+        double dmin;
+        double dmax;
 	struct {
 		int val;
 		const char *str;
@@ -242,6 +254,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
 #endif         
+#if WITH_SASL_OAUTHBEARER
+                { 0x800, "sasl_oauthbearer" },
+#endif         
 		{ 0, NULL }
 		}
 	},
@@ -289,12 +304,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Non-topic request timeout in milliseconds. "
 	  "This is for metadata requests, etc.",
 	  10, 900*1000, 60*1000},
-	{ _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
-	  _RK(metadata_refresh_interval_ms),
-	  "Topic metadata refresh interval in milliseconds. "
-	  "The metadata is automatically refreshed on error and connect. "
-	  "Use -1 to disable the intervalled refresh.",
-	  -1, 3600*1000, 5*60*1000 },
+        { _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
+          _RK(metadata_refresh_interval_ms),
+          "Period of time in milliseconds at which topic and broker "
+          "metadata is refreshed in order to proactively discover any new "
+          "brokers, topics, partitions or partition leader changes. "
+          "Use -1 to disable the intervalled refresh (not recommended). "
+          "If there are no locally referenced topics "
+          "(no topic objects created, no messages produced, "
+          "no subscription or no assignment) then only the broker list will "
+          "be refreshed every interval but no more often than every 10s.",
+          -1, 3600*1000, 5*60*1000 },
 	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
           _RK(metadata_max_age_ms),
           "Metadata cache max age. "
@@ -600,35 +620,90 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`SSL_CTX_set1_sigalgs_list(3)`. OpenSSL >= 1.0.2 required."
         },
 #endif
-	{ _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
-	  _RK(ssl.key_location),
-	  "Path to client's private key (PEM) used for authentication."
-	},
-	{ _RK_GLOBAL, "ssl.key.password", _RK_C_STR,
-	  _RK(ssl.key_password),
-	  "Private key passphrase"
-	},
-	{ _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
-	  _RK(ssl.cert_location),
-	  "Path to client's public key (PEM) used for authentication."
-	},
-	{ _RK_GLOBAL|_RK_MED, "ssl.ca.location", _RK_C_STR,
-	  _RK(ssl.ca_location),
-	  "File or directory path to CA certificate(s) for verifying "
-	  "the broker's key."
-	},
-	{ _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
-	  _RK(ssl.crl_location),
-	  "Path to CRL for verifying broker's certificate validity."
-	},
-	{ _RK_GLOBAL, "ssl.keystore.location", _RK_C_STR,
-	_RK(ssl.keystore_location),
-	"Path to client's keystore (PKCS#12) used for authentication."
-	},
-	{ _RK_GLOBAL, "ssl.keystore.password", _RK_C_STR,
-	_RK(ssl.keystore_password),
-	"Client's keystore (PKCS#12) password."
-	},
+        { _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
+          _RK(ssl.key_location),
+          "Path to client's private key (PEM) used for authentication."
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.password", _RK_C_STR,
+          _RK(ssl.key_password),
+          "Private key passphrase (for use with `ssl.key.location` "
+          "and `set_ssl_cert()`)"
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.pem", _RK_C_STR,
+          _RK(ssl.key_pem),
+          "Client's private key string (PEM format) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl_key", _RK_C_INTERNAL,
+          _RK(ssl.key),
+          "Client's private key as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
+        { _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
+          _RK(ssl.cert_location),
+          "Path to client's public key (PEM) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl.certificate.pem", _RK_C_STR,
+          _RK(ssl.cert_pem),
+          "Client's public key string (PEM format) used for authentication."
+        },
+        { _RK_GLOBAL, "ssl_certificate", _RK_C_INTERNAL,
+          _RK(ssl.key),
+          "Client's public key as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
+
+        { _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
+          _RK(ssl.ca_location),
+          "File or directory path to CA certificate(s) for verifying "
+          "the broker's key."
+        },
+        { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
+          _RK(ssl.ca),
+          "CA certificate as set by rd_kafka_conf_set_ssl_cert()",
+          .dtor = rd_kafka_conf_cert_dtor,
+          .copy = rd_kafka_conf_cert_copy
+        },
+        { _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
+          _RK(ssl.crl_location),
+          "Path to CRL for verifying broker's certificate validity."
+        },
+        { _RK_GLOBAL, "ssl.keystore.location", _RK_C_STR,
+          _RK(ssl.keystore_location),
+          "Path to client's keystore (PKCS#12) used for authentication."
+        },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
+          _RK(ssl.keystore_password),
+          "Client's keystore (PKCS#12) password."
+        },
+        { _RK_GLOBAL, "enable.ssl.certificate.verification", _RK_C_BOOL,
+          _RK(ssl.enable_verify),
+          "Enable OpenSSL's builtin broker (server) certificate verification. "
+          "This verification can be extended by the application by "
+          "implementing a certificate_verify_cb.",
+          0, 1, 1
+        },
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+        { _RK_GLOBAL, "ssl.endpoint.identification.algorithm", _RK_C_S2I,
+          _RK(ssl.endpoint_identification),
+          "Endpoint identification algorithm to validate broker "
+          "hostname using broker certificate. "
+          "https - Server (broker) hostname verification as "
+          "specified in RFC2818. "
+          "none - No endpoint verification. "
+          "OpenSSL >= 1.0.2 required.",
+          .vdef = RD_KAFKA_SSL_ENDPOINT_ID_NONE,
+          .s2i = {
+                        { RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none" },
+                        { RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https" }
+                }
+        },
+#endif
+        { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
+          _RK(ssl.cert_verify_cb),
+          "Callback to verify the broker certificate chain."
+        },
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply
@@ -649,7 +724,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{_RK_GLOBAL|_RK_HIGH, "sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
-	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
+	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
@@ -666,23 +741,30 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "(Not supported on Windows, will use the logon user's principal).",
 	  .sdef = "kafkaclient" },
 #ifndef _MSC_VER
-	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
-	  _RK(sasl.kinit_cmd),
-	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
-	  "by corresponding config object value, %{broker.name} returns the "
-	  "broker's hostname.",
-	  .sdef = "kinit -S \"%{sasl.kerberos.service.name}/%{broker.name}\" "
-	  "-k -t \"%{sasl.kerberos.keytab}\" %{sasl.kerberos.principal}" },
-	{ _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
-	  _RK(sasl.keytab),
-	  "Path to Kerberos keytab file. Uses system default if not set."
-	  "**NOTE**: This is not automatically used but must be added to the "
-	  "template in sasl.kerberos.kinit.cmd as "
-	  "` ... -t %{sasl.kerberos.keytab}`." },
-	{ _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
-	  _RK(sasl.relogin_min_time),
-	  "Minimum time in milliseconds between key refresh attempts.",
-	  1, 86400*1000, 60*1000 },
+        { _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
+          _RK(sasl.kinit_cmd),
+          "Shell command to refresh or acquire the client's Kerberos ticket. "
+          "This command is executed on client creation and every "
+          "sasl.kerberos.min.time.before.relogin (0=disable). "
+          "%{config.prop.name} is replaced by corresponding config "
+          "object value.",
+          .sdef =
+          /* First attempt to refresh, else acquire. */
+          "kinit -R -t \"%{sasl.kerberos.keytab}\" "
+          "-k %{sasl.kerberos.principal} || "
+          "kinit -t \"%{sasl.kerberos.keytab}\" -k %{sasl.kerberos.principal}"
+        },
+        { _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
+          _RK(sasl.keytab),
+          "Path to Kerberos keytab file. "
+          "This configuration property is only used as a variable in "
+          "`sasl.kerberos.kinit.cmd` as "
+          "` ... -t \"%{sasl.kerberos.keytab}\"`." },
+        { _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
+          _RK(sasl.relogin_min_time),
+          "Minimum time in milliseconds between key refresh attempts. "
+          "Disable automatic key refresh by setting this property to 0.",
+          0, 86400*1000, 60*1000 },
 #endif
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
@@ -690,6 +772,39 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+#if WITH_SASL_OAUTHBEARER
+        { _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
+          _RK(sasl.oauthbearer_config),
+          "SASL/OAUTHBEARER configuration. The format is "
+          "implementation-dependent and must be parsed accordingly. The "
+          "default unsecured token implementation (see "
+          "https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes "
+          "space-separated name=value pairs with valid names including "
+          "principalClaimName, principal, scopeClaimName, scope, and "
+          "lifeSeconds. The default value for principalClaimName is \"sub\", "
+          "the default value for scopeClaimName is \"scope\", and the default "
+          "value for lifeSeconds is 3600. The scope value is CSV format with "
+          "the default value being no/empty scope. For example: "
+          "`principalClaimName=azp principal=admin scopeClaimName=roles "
+          "scope=role1,role2 lifeSeconds=600`. In addition, SASL extensions "
+          "can be communicated to the broker via "
+          "`extension_<extensionname>=value`. For example: "
+          "`principal=admin extension_traceId=123`" },
+        { _RK_GLOBAL, "enable.sasl.oauthbearer.unsecure.jwt", _RK_C_BOOL,
+          _RK(sasl.enable_oauthbearer_unsecure_jwt),
+          "Enable the builtin unsecure JWT OAUTHBEARER token handler "
+          "if no oauthbearer_refresh_cb has been set. "
+          "This builtin handler should only be used for development "
+          "or testing, and not in production.",
+          0, 1, 0 },
+        { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
+          _RK(sasl.oauthbearer_token_refresh_cb),
+          "SASL/OAUTHBEARER token refresh callback (set with "
+          "rd_kafka_conf_set_oauthbearer_token_refresh_cb(), triggered by "
+          "rd_kafka_poll(), et.al. "
+          "This callback will be triggered when it is time to refresh "
+          "the client's OAUTHBEARER token." },
+#endif
 
 #if WITH_PLUGINS
         /* Plugins */
@@ -872,6 +987,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
                 }
         },
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_HIGH, "isolation.level",
+          _RK_C_S2I,
+          _RK(isolation_level),
+          "Controls how to read messages written transactionally: "
+          "`read_committed` - only return transactional messages which have "
+          "been committed. `read_uncommitted` - return all messages, even "
+          "transactional messages which have been aborted.",
+          .vdef = RD_KAFKA_READ_UNCOMMITTED,
+          .s2i = {
+                        { RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted" },
+                        { RD_KAFKA_READ_COMMITTED, "read_committed" }
+                }
+        },
         { _RK_GLOBAL|_RK_CONSUMER, "consume_cb", _RK_C_PTR,
 	  _RK(consume_cb),
 	  "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
@@ -933,17 +1061,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum total message size sum allowed on the producer queue. "
 	  "This queue is shared by all topics and partitions. "
 	  "This property has higher priority than queue.buffering.max.messages.",
-	  1, INT_MAX/1024, 0x100000/*1GB*/ },
+	  1, INT_MAX, 0x100000/*1GB*/ },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.ms",
-          _RK_C_INT,
-	  _RK(buffering_max_ms),
+          _RK_C_DBL,
+	  _RK(buffering_max_ms_dbl),
 	  "Delay in milliseconds to wait for messages in the producer queue "
           "to accumulate before constructing message batches (MessageSets) to "
           "transmit to brokers. "
 	  "A higher value allows larger and more effective "
           "(less overhead, improved compression) batches of messages to "
           "accumulate at the expense of increased message delivery latency.",
-	  0, 900*1000, 0 },
+	  .dmin = 0, .dmax = 900.0*1000.0, .ddef = 0.5 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "message.send.max.retries",
@@ -1049,7 +1177,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This is the maximum time librdkafka may use to deliver a message "
 	  "(including retries). Delivery error occurs when either the retry "
 	  "count or the message timeout are exceeded.",
-	  0, 900*1000, 300*1000 },
+	  0, INT32_MAX, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
         { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,
@@ -1369,6 +1497,20 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		}
                 break;
 	}
+        case _RK_C_DBL:
+        {
+                double *val = _RK_PTR(double *, conf, prop->offset);
+                if (istr) {
+                        char *endptr;
+                        double new_val = strtod(istr, &endptr);
+                        /* This is verified in set_prop() */
+                        rd_assert(endptr != istr);
+                        *val = new_val;
+                } else
+                        *val = prop->ddef;
+                break;
+        }
+
         case _RK_C_PATLIST:
         {
                 /* Split comma-separated list into individual regex expressions
@@ -1562,6 +1704,45 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 
+        case _RK_C_DBL:
+        {
+                const char *end;
+                double dval;
+
+                if (!value) {
+                        rd_snprintf(errstr, errstr_size,
+                                 "Float configuration "
+                                 "property \"%s\" cannot be set "
+                                 "to empty value", prop->name);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                dval = strtod(value, (char **)&end);
+                if (end == value) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value for "
+                                    "configuration property \"%s\"",
+                                    prop->name);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                if (dval < prop->dmin ||
+                    dval > prop->dmax) {
+                        rd_snprintf(errstr, errstr_size,
+                                 "Configuration property \"%s\" value "
+                                 "%g is outside allowed range %g..%g\n",
+                                 prop->name, dval,
+                                 prop->dmin,
+                                 prop->dmax);
+                        return RD_KAFKA_CONF_INVALID;
+                }
+
+                rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
+                                           _RK_CONF_PROP_SET_REPLACE,
+                                           errstr, errstr_size);
+                return RD_KAFKA_CONF_OK;
+        }
+
 	case _RK_C_S2I:
 	case _RK_C_S2F:
 	{
@@ -1693,7 +1874,8 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
                 if (prop->ctor)
                         prop->ctor(scope, conf);
 
-		if (prop->sdef || prop->vdef || prop->pdef)
+                if (prop->sdef || prop->vdef || prop->pdef ||
+                    !rd_dbl_zero(prop->ddef))
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
                                                    prop->sdef : prop->pdef,
@@ -1832,8 +2014,96 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 }
 
 
+/**
+ * @brief Overwrites the contents of \p str up until but not including
+ *        the nul-term.
+ */
+void rd_kafka_desensitize_str (char *str) {
+        size_t len;
+        static const char redacted[] = "(REDACTED)";
+
+#ifdef _MSC_VER
+        len = strlen(str);
+        SecureZeroMemory(str, len);
+#else
+        volatile char *volatile s;
+
+        for (s = str ; *s ; s++)
+                *s = '\0';
+
+        len = (size_t)(s - str);
+#endif
+
+        if (len > sizeof(redacted))
+                memcpy(str, redacted, sizeof(redacted));
+}
+
+
+
+
+/**
+ * @brief Overwrite the value of \p prop, if sensitive.
+ */
+static RD_INLINE void
+rd_kafka_anyconf_prop_desensitize (int scope, void *conf,
+                                   const struct rd_kafka_property *prop) {
+        if (likely(!(prop->scope & _RK_SENSITIVE)))
+                return;
+
+        switch (prop->type)
+        {
+        case _RK_C_STR:
+        {
+                char **str = _RK_PTR(char **, conf, prop->offset);
+                if (*str)
+                        rd_kafka_desensitize_str(*str);
+                break;
+        }
+
+        default:
+                rd_assert(!*"BUG: Don't know how to desensitize prop type");
+                break;
+        }
+}
+
+
+/**
+ * @brief Desensitize all sensitive properties in \p conf
+ */
+static void rd_kafka_anyconf_desensitize (int scope, void *conf) {
+        const struct rd_kafka_property *prop;
+
+        for (prop = rd_kafka_properties; prop->name ; prop++) {
+                if (!(prop->scope & scope))
+                        continue;
+
+                rd_kafka_anyconf_prop_desensitize(scope, conf, prop);
+        }
+}
+
+/**
+ * @brief Overwrite the values of sensitive properties
+ */
+void rd_kafka_conf_desensitize (rd_kafka_conf_t *conf) {
+        if (conf->topic_conf)
+                rd_kafka_anyconf_desensitize(_RK_TOPIC,
+                                             conf->topic_conf);
+        rd_kafka_anyconf_desensitize(_RK_GLOBAL, conf);
+}
+
+/**
+ * @brief Overwrite the values of sensitive properties
+ */
+void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf) {
+        rd_kafka_anyconf_desensitize(_RK_TOPIC, tconf);
+}
+
+
 static void rd_kafka_anyconf_clear (int scope, void *conf,
 				    const struct rd_kafka_property *prop) {
+
+        rd_kafka_anyconf_prop_desensitize(scope, conf, prop);
+
 	switch (prop->type)
 	{
 	case _RK_C_STR:
@@ -1996,6 +2266,14 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                         rd_kafka_anyconf_get0(src, prop, valstr, &valsz);
                         val = valstr;
 			break;
+                case _RK_C_DBL:
+                        /* Get string representation of configuration value. */
+                        valsz = 0;
+                        rd_kafka_anyconf_get0(src, prop, NULL, &valsz);
+                        valstr = rd_alloca(valsz);
+                        rd_kafka_anyconf_get0(src, prop, valstr, &valsz);
+                        val = valstr;
+                        break;
                 case _RK_C_PATLIST:
                 {
                         const rd_kafka_pattern_list_t **plist;
@@ -2162,6 +2440,17 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "stats_cb", stats_cb);
 }
 
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
+                void (*oauthbearer_token_refresh_cb) (
+                        rd_kafka_t *rk,
+                        const char *oauthbearer_config,
+                        void *opaque)) {
+#if WITH_SASL_OAUTHBEARER
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                "oauthbearer_token_refresh_cb", oauthbearer_token_refresh_cb);
+#endif
+}
+
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                   int (*socket_cb) (int domain, int type,
                                                     int protocol,
@@ -2199,6 +2488,29 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "open_cb", open_cb);
 }
 #endif
+
+
+rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert_verify_cb (
+        rd_kafka_conf_t *conf,
+        int (*ssl_cert_verify_cb) (rd_kafka_t *rk,
+                                   const char *broker_name,
+                                   int32_t broker_id,
+                                   int *x509_set_error,
+                                   int depth,
+                                   const char *buf, size_t size,
+                                   char *errstr, size_t errstr_size,
+                                   void *opaque)) {
+#if !WITH_SSL
+        return RD_KAFKA_CONF_INVALID;
+#else
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "ssl.certificate.verify_cb",
+                                      ssl_cert_verify_cb);
+        return RD_KAFKA_CONF_OK;
+#endif
+}
+
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "opaque", opaque);
@@ -2338,6 +2650,12 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
         case _RK_C_INT:
                 rd_snprintf(tmp, sizeof(tmp), "%i",
                             *_RK_PTR(int *, conf, prop->offset));
+                val = tmp;
+                break;
+
+        case _RK_C_DBL:
+                rd_snprintf(tmp, sizeof(tmp), "%g",
+                            *_RK_PTR(double *, conf, prop->offset));
                 val = tmp;
                 break;
 
@@ -2592,6 +2910,12 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 				    "%d .. %d", prop->vmin, prop->vmax);
 			fprintf(fp, "%-15s | %13i", tmp, prop->vdef);
 			break;
+                case _RK_C_DBL:
+                        typeinfo = "float"; /* more user-friendly than double */
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "%g .. %g", prop->dmin, prop->dmax);
+                        fprintf(fp, "%-15s | %13g", tmp, prop->ddef);
+                        break;
 		case _RK_C_S2I:
 			typeinfo = "enum value";
 			rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
@@ -2881,6 +3205,16 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (conf->ssl.keystore_location && !conf->ssl.keystore_password)
                 return "`ssl.keystore.password` is mandatory when "
                         "`ssl.keystore.location` is set";
+        if (conf->ssl.ca && conf->ssl.ca_location)
+                return "`ssl.ca.location`, and memory-based "
+                       "set_ssl_cert(CERT_CA) are mutually exclusive.";
+#endif
+
+#if WITH_SASL_OAUTHBEARER
+        if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
+            conf->sasl.oauthbearer_token_refresh_cb)
+                return "`enable.sasl.oauthbearer.unsecure.jwt` and "
+                        "`oauthbearer_token_refresh_cb` are mutually exclusive";
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {
@@ -3004,7 +3338,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
  * @returns an error string if configuration is incorrect, else NULL.
  */
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf) {
 
         if (conf->eos.idempotence) {
@@ -3031,7 +3365,13 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
         if (cltype == RD_KAFKA_PRODUCER) {
-                if (tconf->message_timeout_ms <= conf->buffering_max_ms)
+                /* Convert double linger.ms to internal int microseconds */
+                conf->buffering_max_us = (rd_ts_t)(conf->buffering_max_ms_dbl *
+                                                   1000);
+
+                if (tconf->message_timeout_ms != 0 &&
+                    (rd_ts_t)tconf->message_timeout_ms * 1000 <=
+                    conf->buffering_max_us)
                         return "`message.timeout.ms` must be greater than "
                                 "`linger.ms`";
         }
@@ -3113,6 +3453,11 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
 }
 
 
+const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk) {
+        return &rk->rk_conf;
+}
+
+
 /**
  * @brief Unittests
  */
@@ -3177,6 +3522,11 @@ int unittest_conf (void) {
 
                         case _RK_C_INT:
                                 rd_snprintf(tmp, sizeof(tmp), "%d", prop->vdef);
+                                val = tmp;
+                                break;
+
+                        case _RK_C_DBL:
+                                rd_snprintf(tmp, sizeof(tmp), "%g", prop->ddef);
                                 val = tmp;
                                 break;
 

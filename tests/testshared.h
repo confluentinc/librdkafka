@@ -32,9 +32,23 @@
  * C variables and functions shared with C++ tests
  */
 
+typedef struct rd_kafka_s rd_kafka_t;
+
+/* ANSI color codes */
+#define _C_CLR "\033[0m"
+#define _C_RED "\033[31m"
+#define _C_GRN "\033[32m"
+#define _C_YEL "\033[33m"
+#define _C_BLU "\033[34m"
+#define _C_MAG "\033[35m"
+#define _C_CYA "\033[36m"
+
+
 /** @returns the \p msecs timeout multiplied by the test timeout multiplier */
 extern int tmout_multip (int msecs);
 
+/** @brief true if tests should run in quick-mode (faster, less data) */
+extern int test_quick;
 
 /** @brief Broker version to int */
 #define TEST_BRKVER(A,B,C,D) \
@@ -47,6 +61,11 @@ extern int test_broker_version;
 extern int test_on_ci;
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
+
+void test_delete_topic (rd_kafka_t *use_rk, const char *topicname);
+
+void test_create_topic (rd_kafka_t *use_rk, const char *topicname,
+                        int partition_cnt, int replication_factor);
 
 uint64_t
 test_produce_msgs_easy_size (const char *topic, uint64_t testid,
@@ -63,6 +82,8 @@ int test_set_special_conf (const char *name, const char *val, int *timeoutp);
 const char *test_conf_get_path (void);
 const char *test_getenv (const char *env, const char *def);
 
+int test_needs_auth (void);
+
 uint64_t test_id_generate (void);
 char *test_str_id_generate (char *dest, size_t dest_size);
 const char *test_str_id_generate_tmp (void);
@@ -78,6 +99,8 @@ void test_msg_parse00 (const char *func, int line,
                        const char *topic, int32_t partition, int64_t offset,
                        const char *key, size_t key_size);
 
+
+int test_check_builtin (const char *feature);
 
 /**
  * @returns the current test's name (thread-local)
@@ -222,4 +245,8 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
  #define __SANITIZE_ADDRESS__ 1
  #endif
 #endif
+
+
+int test_run_java (const char *cls, const char **argv);
+int test_waitpid (int pid);
 #endif /* _TESTSHARED_H_ */

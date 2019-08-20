@@ -129,13 +129,16 @@ static void do_test_unkpart (void) {
 			msgs_wait |= (1 << i);
 		}
 
-		/* After half the messages: sleep to allow the metadata
-		 * to be fetched from broker and update the actual partition
-		 * count: this will make subsequent produce() calls fail
-		 * immediately. */
-		if (i == 5)
-			rd_sleep(2);
-	}
+                /* After half the messages: forcibly refresh metadata
+                 * to update the actual partition count:
+                 * this will make subsequent produce() calls fail immediately.
+                 */
+                if (i == 5) {
+                        r = test_get_partition_count(
+                                rk, rd_kafka_topic_name(rkt), 15000);
+                        TEST_ASSERT(r != -1, "failed to get partition count");
+                }
+        }
 
 	/* Wait for messages to time out */
 	rd_kafka_flush(rk, -1);
@@ -149,7 +152,7 @@ static void do_test_unkpart (void) {
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);
-		
+
 	/* Destroy rdkafka instance */
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);

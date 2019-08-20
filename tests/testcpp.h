@@ -97,6 +97,27 @@ namespace Test {
   }
 
   /**
+   * @brief Create a topic
+   */
+  static RD_UNUSED void create_topic (RdKafka::Handle *use_handle, const char *topicname,
+                                      int partition_cnt, int replication_factor) {
+    rd_kafka_t *use_rk = NULL;
+    if (use_handle != NULL)
+      use_rk = use_handle->c_ptr();
+    test_create_topic(use_rk, topicname, partition_cnt, replication_factor);
+  }
+
+  /**
+   * @brief Delete a topic
+   */
+  static RD_UNUSED void delete_topic (RdKafka::Handle *use_handle, const char *topicname) {
+    rd_kafka_t *use_rk = NULL;
+    if (use_handle != NULL)
+      use_rk = use_handle->c_ptr();
+    test_delete_topic(use_rk, topicname);
+  }
+
+  /**
    * @brief Get new configuration objects
    */
   void conf_init (RdKafka::Conf **conf,

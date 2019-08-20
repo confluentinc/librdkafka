@@ -192,6 +192,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_offset_fp = NULL;
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets);
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
+        rktp->rktp_ls_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_hi_offset = RD_KAFKA_OFFSET_INVALID;
 	rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_query_offset = RD_KAFKA_OFFSET_INVALID;
@@ -1104,47 +1105,6 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
 }
 
 
-/**
- * Commit toppar's offset on broker.
- * This is an asynch operation, this function simply enqueues an op
- * on the cgrp's queue.
- *
- * Locality: rktp's broker thread
- */
-void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
-				    const char *metadata) {
-        rd_kafka_topic_partition_list_t *offsets;
-        rd_kafka_topic_partition_t *rktpar;
-
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_cgrp != NULL);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
-                        rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE);
-
-        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "OFFSETCMT",
-                     "%.*s [%"PRId32"]: committing offset %"PRId64,
-                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition, offset);
-
-        offsets = rd_kafka_topic_partition_list_new(1);
-        rktpar = rd_kafka_topic_partition_list_add(
-                offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        rktpar->offset = offset;
-        if (metadata) {
-                rktpar->metadata = rd_strdup(metadata);
-                rktpar->metadata_size = strlen(metadata);
-        }
-
-        rktp->rktp_committing_offset = offset;
-
-        rd_kafka_commit(rktp->rktp_rkt->rkt_rk, offsets, 1/*async*/);
-
-        rd_kafka_topic_partition_list_destroy(offsets);
-}
-
-
-
-
-
 
 
 
@@ -1277,10 +1237,6 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
         offsets = rd_kafka_topic_partition_list_new(1);
 
-        /* Parse and return Offset */
-        err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-                                     rkbuf, request, offsets);
-
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 		   "Offset reply for "
 		   "topic %.*s [%"PRId32"] (v%d vs v%d)",
@@ -1294,6 +1250,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 		/* Outdated request response, ignore. */
 		    err = RD_KAFKA_RESP_ERR__OUTDATED;
 	}
+
+        if (err != RD_KAFKA_RESP_ERR__OUTDATED) {
+                /* Parse and return Offset */
+                err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
+                                             rkbuf, request, offsets);
+        }
 
         if (!err &&
             (!(rktpar = rd_kafka_topic_partition_list_find(
@@ -2002,8 +1964,12 @@ rd_ts_t rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
 
 
 /**
- * Serve a toppar op
- * 'rktp' may be NULL for certain ops (OP_RECV_BUF)
+ * @brief Serve a toppar op
+ *
+ * @param rktp may be NULL for certain ops (OP_RECV_BUF)
+ *
+ * Will send an empty reply op if the request rko has a replyq set,
+ * providing synchronous operation.
  *
  * @locality toppar handler thread
  */
@@ -2036,7 +2002,7 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 #if ENABLE_DEVEL
 			rd_kafka_op_print(stdout, "PART_OUTDATED", rko);
 #endif
-                        rd_kafka_op_destroy(rko);
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__OUTDATED);
 			return RD_KAFKA_OP_RES_HANDLED;
 		}
 	}
@@ -2152,7 +2118,7 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                 break;
         }
 
-        rd_kafka_op_destroy(rko);
+        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
@@ -2294,16 +2260,17 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
 
 
 /**
- * Pause/resume partition (async operation).
- * \p flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
- * depending on if the app paused or librdkafka.
- * \p pause is 1 for pausing or 0 for resuming.
+ * @brief Pause/resume partition (async operation).
  *
- * Locality: any
+ * @param flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
+ *             depending on if the app paused or librdkafka.
+ * @param pause is 1 for pausing or 0 for resuming.
+ *
+ * @locality any
  */
 static rd_kafka_resp_err_t
-rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp,
-				 int pause, int flag) {
+rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp, int pause, int flag,
+                                 rd_kafka_replyq_t replyq) {
 	int32_t version;
 	rd_kafka_op_t *rko;
 
@@ -2321,7 +2288,7 @@ rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp,
 	rko->rko_u.pause.pause = pause;
 	rko->rko_u.pause.flag = flag;
 
-	rd_kafka_toppar_op0(rktp, rko, RD_KAFKA_NO_REPLYQ);
+        rd_kafka_toppar_op0(rktp, rko, replyq);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -2331,20 +2298,29 @@ rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp,
 
 
 /**
- * Pause or resume a list of partitions.
- * \p flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
- * depending on if the app paused or librdkafka.
- * \p pause is 1 for pausing or 0 for resuming.
+ * @brief Pause or resume a list of partitions.
  *
- * Locality: any
+ * @param flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
+ *             depending on if the app paused or librdkafka.
+ * @param pause true for pausing, false for resuming.
+ * @param async RD_SYNC to wait for background thread to handle op,
+ *              RD_ASYNC for asynchronous operation.
+ *
+ * @locality any
  *
  * @remark This is an asynchronous call, the actual pause/resume is performed
  *         by toppar_pause() in the toppar's handler thread.
  */
 rd_kafka_resp_err_t
-rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
-			       rd_kafka_topic_partition_list_t *partitions) {
-	int i;
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
+                               rd_bool_t pause, rd_async_t async, int flag,
+                               rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        int waitcnt = 0;
+        rd_kafka_q_t *tmpq = NULL;
+
+        if (!async)
+                tmpq = rd_kafka_q_new(rk);
 
 	rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
 		     "%s %s %d partition(s)",
@@ -2370,12 +2346,23 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 
 		rktp = rd_kafka_toppar_s2i(s_rktp);
 
-		rd_kafka_toppar_op_pause_resume(rktp, pause, flag);
+                rd_kafka_toppar_op_pause_resume(rktp, pause, flag,
+                                                RD_KAFKA_REPLYQ(tmpq, 0));
+
+                if (!async)
+                        waitcnt++;
 
 		rd_kafka_toppar_destroy(s_rktp);
 
 		rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 	}
+
+        if (!async) {
+                while (waitcnt-- > 0)
+                        rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
+
+                rd_kafka_q_destroy_owner(tmpq);
+        }
 
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -2512,9 +2499,6 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
         rd_kafka_topic_partition_list_t *rktparlist;
 
         rktparlist = rd_calloc(1, sizeof(*rktparlist));
-
-        rktparlist->size = size;
-        rktparlist->cnt = 0;
 
         if (size > 0)
                 rd_kafka_topic_partition_list_grow(rktparlist, size);
@@ -2721,7 +2705,7 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
         if (r)
                 return r;
         else
-                return a->partition - b->partition;
+                return RD_CMP(a->partition, b->partition);
 }
 
 
@@ -3386,6 +3370,8 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
  * @brief Update \p dst with info from \p src.
  *
  * Fields updated:
+ *  - metadata
+ *  - metadata_size
  *  - offset
  *  - err
  *
@@ -3408,6 +3394,18 @@ rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
 
                 d->offset = s->offset;
                 d->err    = s->err;
+                if (d->metadata) {
+                        rd_free(d->metadata);
+                        d->metadata = NULL;
+                        d->metadata_size = 0;
+                }
+                if (s->metadata_size > 0) {
+                        d->metadata =
+                                rd_malloc(s->metadata_size);
+                        d->metadata_size = s->metadata_size;
+                        memcpy((void *)d->metadata, s->metadata,
+                                s->metadata_size);
+                }
         }
 }
 

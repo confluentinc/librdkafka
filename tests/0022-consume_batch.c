@@ -47,7 +47,7 @@ static int do_test_consume_batch (void) {
         rd_kafka_queue_t *rkq;
         rd_kafka_topic_t *rkts[topic_cnt];
 	rd_kafka_resp_err_t err;
-        const int msgcnt = test_on_ci ? 5000 : 10000;
+        const int msgcnt = test_quick ? 1000 : 10000;
         uint64_t testid;
         int i, p;
         int batch_cnt = 0;

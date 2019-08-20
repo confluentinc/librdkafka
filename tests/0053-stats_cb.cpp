@@ -56,7 +56,7 @@ class TestSchemaValidator {
     /* Read schema from file */
     schema_path_ = schema_path;
 
-    std::ifstream f(schema_path);
+    std::ifstream f(schema_path.c_str());
     if (!f.is_open())
             Test::Fail(tostr() << "Failed to open schema " << schema_path <<
                        ": " << strerror(errno));
@@ -368,7 +368,7 @@ static void test_stats () {
   std::string topic = Test::mk_topic_name("0053_stats", 1);
 
   const int partcnt = 2;
-  int msgcnt = 100 * partcnt;
+  int msgcnt = (test_quick ? 10 : 100) * partcnt;
   const int msgsize = 6*1024;
 
   /*

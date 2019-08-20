@@ -52,7 +52,7 @@ int main_0051_assign_adds (int argc, char **argv) {
                 rd_strdup(test_mk_topic_name("0051_assign_adds_3", 1)),
         };
         uint64_t testid;
-        int msgcnt = 1000;
+        int msgcnt = test_quick ? 100 : 1000;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;

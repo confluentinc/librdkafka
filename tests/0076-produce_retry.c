@@ -246,8 +246,8 @@ static void do_test_produce_retries_disconnect (const char *topic,
 
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        test_conf_set(conf, "socket.timeout.ms", "10000");
-        test_conf_set(conf, "message.timeout.ms", "30000");
+        test_conf_set(conf, "socket.timeout.ms", test_quick ? "3000":"10000");
+        test_conf_set(conf, "message.timeout.ms", test_quick ? "9000":"30000");
         test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
         if (!try_fail) {
                 test_conf_set(conf, "retries", "1");

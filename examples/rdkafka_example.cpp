@@ -658,7 +658,7 @@ int main (int argc, char **argv) {
       class RdKafka::Metadata *metadata;
 
       /* Fetch metadata */
-      RdKafka::ErrorCode err = producer->metadata(topic!=NULL, topic,
+      RdKafka::ErrorCode err = producer->metadata(!topic, topic,
                               &metadata, 5000);
       if (err != RdKafka::ERR_NO_ERROR) {
         std::cerr << "%% Failed to acquire metadata: "

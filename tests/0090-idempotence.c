@@ -119,7 +119,7 @@ static void do_test_implicit_ack (const char *what,
         test_conf_set(conf, "enable.idempotence", "true");
         test_conf_set(conf, "batch.num.messages", "10");
         test_conf_set(conf, "linger.ms", "500");
-        test_conf_set(conf, "retry.backoff.ms", "2000");
+        test_conf_set(conf, "retry.backoff.ms", "10");
 
         /* The ProduceResponse handler will inject timed-out-in-flight
          * errors for the first N ProduceRequests, which will trigger retries
@@ -127,9 +127,10 @@ static void do_test_implicit_ack (const char *what,
         test_conf_set(conf, "ut_handle_ProduceResponse",
                       (char *)handle_ProduceResponse);
 
-        test_create_topic(topic, 1, 1);
-
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        test_create_topic(rk, topic, 1, 1);
+
         rkt = test_create_producer_topic(rk, topic, NULL);
 
 

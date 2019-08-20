@@ -377,12 +377,7 @@ int rd_kafka_msg_cmp_msgid (const void *_a, const void *_b) {
 
         rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
-                return 1;
-        else if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
-                return -1;
-        else
-                return 0;
+        return RD_CMP(a->rkm_u.producer.msgid, b->rkm_u.producer.msgid);
 }
 
 /**
@@ -395,12 +390,7 @@ int rd_kafka_msg_cmp_msgid_lifo (const void *_a, const void *_b) {
 
         rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
-                return 1;
-        else if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
-                return -1;
-        else
-                return 0;
+        return RD_CMP(b->rkm_u.producer.msgid, a->rkm_u.producer.msgid);
 }
 
 
@@ -476,7 +466,8 @@ rd_kafka_msgq_overlap (const rd_kafka_msgq_t *a, const rd_kafka_msgq_t *b) {
 int rd_kafka_msgq_age_scan (struct rd_kafka_toppar_s *rktp,
                             rd_kafka_msgq_t *rkmq,
                             rd_kafka_msgq_t *timedout,
-                            rd_ts_t now);
+                            rd_ts_t now,
+                            rd_ts_t *abs_next_timeout);
 
 rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
                                         const rd_kafka_msg_t *rkm,

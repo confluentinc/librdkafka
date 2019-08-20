@@ -33,8 +33,8 @@
  * @brief Admin API local dry-run unit-tests.
  */
 
-#define MY_SOCKET_TIMEOUT_MS 1500
-#define MY_SOCKET_TIMEOUT_MS_STR "1500"
+#define MY_SOCKET_TIMEOUT_MS      100
+#define MY_SOCKET_TIMEOUT_MS_STR "100"
 
 
 

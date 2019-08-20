@@ -163,8 +163,13 @@ struct rd_kafka_s {
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t                  rk_broker_by_id; /* Fast id lookups. */
 	rd_atomic32_t              rk_broker_cnt;
-        rd_atomic32_t              rk_broker_up_cnt; /**< Number of brokers
-                                                      *   in state >= UP */
+        /**< Number of brokers in state >= UP */
+        rd_atomic32_t              rk_broker_up_cnt;
+        /**< Number of logical brokers in state >= UP, this is a sub-set
+         *   of rk_broker_up_cnt. */
+        rd_atomic32_t              rk_logical_broker_up_cnt;
+        /**< Number of brokers that are down, only includes brokers
+         *   that have had at least one connection attempt. */
 	rd_atomic32_t              rk_broker_down_cnt;
         /**< Logical brokers currently without an address.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
@@ -350,13 +355,28 @@ struct rd_kafka_s {
                 rd_interval_t sparse_connect_random;
                 /**< Lock for sparse_connect_random */
                 mtx_t         sparse_connect_lock;
+
+                /**< Broker metadata refresh interval:
+                 *   this is rate-limiting the number of topic-less
+                 *   broker/cluster metadata refreshes when there are no
+                 *   topics to refresh.
+                 *   Will be refreshed every topic.metadata.refresh.interval.ms
+                 *   but no more often than every 10s.
+                 *   No locks: only accessed by rdkafka main thread. */
+                rd_interval_t broker_metadata_refresh;
         } rk_suppress;
+
+        struct {
+                void *handle; /**< Provider-specific handle struct pointer.
+                               *   Typically assigned in provider's .init() */
+        } rk_sasl;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)    rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk)    rwlock_rdunlock(&(rk)->rk_lock)
 #define rd_kafka_wrunlock(rk)    rwlock_wrunlock(&(rk)->rk_lock)
+
 
 /**
  * @brief Add \p cnt messages and of total size \p size bytes to the
@@ -471,6 +491,7 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);
 
+void rd_kafka_global_init (void);
 
 /**
  * @returns true if \p rk handle is terminating.
@@ -616,11 +637,13 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code (rd_kafka_t *rk) {
-        return rd_atomic32_get(&rk->rk_fatal.err);
+        return rk->rk_conf.eos.idempotence &&
+                rd_atomic32_get(&rk->rk_fatal.err);
 }
 
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
+extern char RD_TLS rd_kafka_thread_name[64];
 
 void rd_kafka_set_thread_name (const char *fmt, ...);
 void rd_kafka_set_thread_sysname (const char *fmt, ...);
@@ -645,13 +668,45 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
  */
 static RD_INLINE RD_UNUSED int
 rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
-        int exceeded =
-                (int)((rd_clock() -
-                       rd_atomic64_get(&rk->rk_ts_last_poll)) / 1000ll) -
+        rd_ts_t last_poll;
+        int exceeded;
+
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+                return 0;
+
+        last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
+
+        /* Application is blocked in librdkafka function, see
+         * rd_kafka_app_poll_blocking(). */
+        if (last_poll == INT64_MAX)
+                return 0;
+
+        exceeded = (int)((rd_clock() - last_poll) / 1000ll) -
                 rk->rk_conf.max_poll_interval_ms;
+
         if (unlikely(exceeded > 0))
                 return exceeded;
+
         return 0;
+}
+
+/**
+ * @brief Call on entry to blocking polling function to indicate
+ *        that the application is blocked waiting for librdkafka
+ *        and that max.poll.interval.ms should not be enforced.
+ *
+ *        Call app_polled() Upon return from the function calling
+ *        this function to register the application's last time of poll.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_app_poll_blocking (rd_kafka_t *rk) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER)
+                rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
 }
 
 /**
@@ -664,7 +719,8 @@ rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void
 rd_kafka_app_polled (rd_kafka_t *rk) {
-        rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+        if (rk->rk_type == RD_KAFKA_CONSUMER)
+                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
 }
 
 

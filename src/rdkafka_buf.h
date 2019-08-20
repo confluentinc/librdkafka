@@ -125,8 +125,8 @@ rd_tmpabuf_write0 (const char *func, int line,
 		   rd_tmpabuf_t *tab, const void *buf, size_t size) {
 	void *ptr = rd_tmpabuf_alloc0(func, line, tab, size);
 
-	if (ptr)
-		memcpy(ptr, buf, size);
+        if (likely(ptr && size))
+                memcpy(ptr, buf, size);
 
 	return ptr;
 }
@@ -328,7 +328,7 @@ rd_tmpabuf_write_str0 (const char *func, int line,
  */
 #define rd_kafka_buf_read_varint(rkbuf,dst) do {                        \
                 int64_t _v;                                             \
-                size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, &_v); \
+                size_t _r = rd_slice_read_varint(&(rkbuf)->rkbuf_reader, &_v);\
                 if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
                         rd_kafka_buf_underflow_fail(rkbuf, (size_t)0,   \
                                                     "varint parsing failed");\
@@ -413,8 +413,8 @@ rd_tmpabuf_write_str0 (const char *func, int line,
  */
 #define rd_kafka_buf_read_bytes_varint(rkbuf,kbytes) do {               \
                 int64_t _len2;                                          \
-                size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, \
-                                                &_len2);                \
+                size_t _r = rd_slice_read_varint(&(rkbuf)->rkbuf_reader, \
+                                                 &_len2);               \
                 if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
                         rd_kafka_buf_underflow_fail(rkbuf, (size_t)0,   \
                                                     "varint parsing failed"); \

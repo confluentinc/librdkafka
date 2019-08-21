@@ -3087,6 +3087,7 @@ rd_kafka_confval_set_type (rd_kafka_confval_t *confval,
                                             confval->name);
                                 return RD_KAFKA_RESP_ERR__INVALID_TYPE;
                         }
+                        break;
                 default:
                         rd_snprintf(errstr, errstr_size,
                                     "Invalid value type for \"%s\": "

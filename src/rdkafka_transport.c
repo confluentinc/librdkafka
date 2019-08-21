@@ -150,6 +150,7 @@ rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
                 if (socket_errno == EAGAIN)
                         return 0;
                 rd_snprintf(errstr, errstr_size, "%s", rd_strerror(errno));
+                return -1;
         }
 
         /* Update buffer read position */

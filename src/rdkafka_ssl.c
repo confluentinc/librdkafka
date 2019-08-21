@@ -480,7 +480,7 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
                 goto fail;
 
         if (rd_kafka_transport_ssl_set_endpoint_id(rktrans, errstr,
-                                                   sizeof(errstr)) == -1)
+                                                   errstr_size) == -1)
                 return -1;
 
         rd_kafka_transport_ssl_clear_error(rktrans);

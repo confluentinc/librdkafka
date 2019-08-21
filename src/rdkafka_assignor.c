@@ -335,7 +335,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                                     (rd_kafka_assignor_topic_t **)
                                     eligible_topics.rl_elems,
                                     eligible_topics.rl_cnt,
-                                    errstr, sizeof(errstr),
+                                    errstr, errstr_size,
                                     rkas->rkas_opaque);
 
         if (err) {

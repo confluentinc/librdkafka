@@ -1483,7 +1483,7 @@ static int do_unittest_write_read_payload_correctness (void) {
                 for (i = 0 ; i < max_cnt ; i++) {
                         uint32_t buf_crc;
 
-                        crc = rd_crc32_update(crc, (void *)&i, sizeof(&i));
+                        crc = rd_crc32_update(crc, (void *)&i, sizeof(i));
 
                         if (pass == 0)
                                 r = rd_slice_peek(&slice, i * sizeof(buf_crc),

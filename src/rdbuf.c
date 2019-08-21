@@ -1232,7 +1232,7 @@ static int do_unittest_write_read (void) {
         RD_UT_ASSERT(pos == 200, "pos() returned position %"PRIusz, pos);
 
         r = rd_buf_write(&b, twos, 800);
-        RD_UT_ASSERT(pos == 200, "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(r == 200, "write() returned position %"PRIusz, r);
         pos = rd_buf_write_pos(&b);
         RD_UT_ASSERT(pos == 200+800, "pos() returned position %"PRIusz, pos);
 

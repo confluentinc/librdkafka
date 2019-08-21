@@ -595,8 +595,7 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 #define rd_rkb_log(rkb,level,fac,...) do {				\
 		char _logname[RD_KAFKA_NODENAME_SIZE];			\
                 mtx_lock(&(rkb)->rkb_logname_lock);                     \
-		strncpy(_logname, rkb->rkb_logname, sizeof(_logname)-1); \
-		_logname[RD_KAFKA_NODENAME_SIZE-1] = '\0';		\
+                rd_strlcpy(_logname, rkb->rkb_logname, sizeof(_logname)); \
                 mtx_unlock(&(rkb)->rkb_logname_lock);                   \
 		rd_kafka_log0(&(rkb)->rkb_rk->rk_conf, \
                               (rkb)->rkb_rk, _logname,                  \

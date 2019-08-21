@@ -34,6 +34,11 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE  /* for strndup() */
 #endif
+
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE /* for strlcpy, pthread_setname_np, etc */
+#endif
+
 #define __need_IOV_MAX
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L  /* for timespec on solaris */

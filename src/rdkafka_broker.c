@@ -1812,7 +1812,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
         rd_atomic32_add(&rkb->rkb_c.connects, 1);
 
         rd_kafka_broker_lock(rkb);
-        strncpy(nodename, rkb->rkb_nodename, sizeof(nodename));
+        rd_strlcpy(nodename, rkb->rkb_nodename, sizeof(nodename));
         rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
         /* Logical brokers might not have a hostname set, in which case
          * we should not try to connect. */
@@ -2618,9 +2618,9 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                    "Nodename changed from %s to %s",
                                    rkb->rkb_nodename,
                                    rko->rko_u.node.nodename);
-                        strncpy(rkb->rkb_nodename,
-                                rko->rko_u.node.nodename,
-                                sizeof(rkb->rkb_nodename)-1);
+                        rd_strlcpy(rkb->rkb_nodename,
+                                   rko->rko_u.node.nodename,
+                                   sizeof(rkb->rkb_nodename));
                         rkb->rkb_nodename_epoch++;
                         updated |= _UPD_NAME;
                 }
@@ -2659,8 +2659,8 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
                                    "Name changed from %s to %s",
                                    rkb->rkb_name, brokername);
-                        strncpy(rkb->rkb_name, brokername,
-                                sizeof(rkb->rkb_name)-1);
+                        rd_strlcpy(rkb->rkb_name, brokername,
+                                   sizeof(rkb->rkb_name));
                 }
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_wrunlock(rkb->rkb_rk);
@@ -4954,7 +4954,7 @@ void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
         /* Get nodename from from_rkb */
         if (from_rkb) {
                 rd_kafka_broker_lock(from_rkb);
-                strncpy(nodename, from_rkb->rkb_nodename, sizeof(nodename));
+                rd_strlcpy(nodename, from_rkb->rkb_nodename, sizeof(nodename));
                 nodeid = from_rkb->rkb_nodeid;
                 rd_kafka_broker_unlock(from_rkb);
         } else {
@@ -4968,8 +4968,8 @@ void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, BROKER, "NODENAME",
                            "Broker nodename changed from \"%s\" to \"%s\"",
                            rkb->rkb_nodename, nodename);
-                strncpy(rkb->rkb_nodename, nodename,
-                        sizeof(rkb->rkb_nodename));
+                rd_strlcpy(rkb->rkb_nodename, nodename,
+                           sizeof(rkb->rkb_nodename));
                 rkb->rkb_nodename_epoch++;
                 changed = rd_true;
         }
@@ -5296,8 +5296,8 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                         rd_kafka_op_t *rko;
 
                         rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
-                        strncpy(rko->rko_u.node.nodename, nodename,
-				sizeof(rko->rko_u.node.nodename)-1);
+                        rd_strlcpy(rko->rko_u.node.nodename, nodename,
+                                   sizeof(rko->rko_u.node.nodename));
                         rko->rko_u.node.nodeid   = mdb->id;
                         rd_kafka_q_enq(rkb->rkb_ops, rko);
                 }

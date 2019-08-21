@@ -31,10 +31,6 @@
  * @brief Extra methods added to tinycthread/c11threads
  */
 
-#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
-#define _DARWIN_C_SOURCE  /* for pthread_setname_np() on macOS */
-#endif
-
 #include "rd.h"
 #include "rdtime.h"
 #include "tinycthread.h"

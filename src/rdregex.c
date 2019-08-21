@@ -28,6 +28,7 @@
 
 
 #include "rd.h"
+#include "rdstring.h"
 #include "rdregex.h"
 
 #if HAVE_REGEX
@@ -80,10 +81,8 @@ rd_regex_comp (const char *pattern, char *errstr, size_t errstr_size) {
 
 	re->re = re_regcomp(pattern, 0, &errstr2);
 	if (!re->re) {
-		if (errstr) {
-			strncpy(errstr, errstr2, errstr_size-1);
-			errstr[errstr_size-1] = '\0';
-		}
+                if (errstr)
+                        rd_strlcpy(errstr, errstr2, errstr_size);
 		rd_free(re);
 		return NULL;
 	}
@@ -141,10 +140,8 @@ int rd_regex_match (const char *pattern, const char *str,
 	/* FIXME: cache compiled regex */
 	re = re_regcomp(pattern, 0, &errstr2);
 	if (!re) {
-		if (errstr) {
-			strncpy(errstr, errstr2, errstr_size-1);
-			errstr[errstr_size-1] = '\0';
-		}
+                if (errstr)
+                        rd_strlcpy(errstr, errstr2, errstr_size);
 		return -1;
 	}
 

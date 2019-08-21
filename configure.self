@@ -204,6 +204,16 @@ int foo (void) {
    return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
+    # Check if strlcpy() is available
+    mkl_compile_check "strlcpy" "HAVE_STRLCPY" disable CC "" \
+"
+#define _DARWIN_C_SOURCE
+#include <string.h>
+int foo (void) {
+    char dest[4];
+   return strlcpy(dest, \"something\", sizeof(dest));
+}"
+
     # Check if strerror_r() is available.
     # The check for GNU vs XSI is done in rdposix.h since
     # we can't rely on all defines to be set here (_GNU_SOURCE).

@@ -238,8 +238,7 @@ static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
                 rko = rd_kafka_op_new(RD_KAFKA_OP_LOG);
                 rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_MEDIUM);
                 rko->rko_u.log.level = level;
-                strncpy(rko->rko_u.log.fac, fac,
-                        sizeof(rko->rko_u.log.fac) - 1);
+                rd_strlcpy(rko->rko_u.log.fac, fac, sizeof(rko->rko_u.log.fac));
                 rko->rko_u.log.str = rd_strdup(buf);
                 rd_kafka_q_enq(rk->rk_logq, rko);
 

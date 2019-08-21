@@ -212,6 +212,7 @@ ssize_t rd_kafka_transport_ssl_send (rd_kafka_transport_t *rktrans,
 
         while ((rlen = rd_slice_peeker(slice, &p))) {
                 int r;
+                size_t r2;
 
                 r = SSL_write(rktrans->rktrans_ssl, p, (int)rlen);
 
@@ -225,7 +226,10 @@ ssize_t rd_kafka_transport_ssl_send (rd_kafka_transport_t *rktrans,
                 }
 
                 /* Update buffer read position */
-                rd_slice_read(slice, NULL, (size_t)r);
+                r2 = rd_slice_read(slice, NULL, (size_t)r);
+                rd_assert((size_t)r == r2 &&
+                          *"BUG: wrote more bytes than available in slice");
+
 
                 sum += r;
                 /* FIXME: remove this and try again immediately and let

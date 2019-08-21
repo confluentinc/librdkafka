@@ -4757,25 +4757,27 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
 
-	/* ApiVersion fallback interval */
-	if (rkb->rkb_rk->rk_conf.api_version_request) {
-		rd_interval_init(&rkb->rkb_ApiVersion_fail_intvl);
-		rd_interval_fixed(&rkb->rkb_ApiVersion_fail_intvl,
-				  rkb->rkb_rk->rk_conf.api_version_fallback_ms*1000);
-	}
+        /* ApiVersion fallback interval */
+        if (rkb->rkb_rk->rk_conf.api_version_request) {
+                rd_interval_init(&rkb->rkb_ApiVersion_fail_intvl);
+                rd_interval_fixed(
+                        &rkb->rkb_ApiVersion_fail_intvl,
+                        (rd_ts_t)rkb->rkb_rk->rk_conf.api_version_fallback_ms *
+                        1000);
+        }
 
         rd_interval_init(&rkb->rkb_suppress.unsupported_compression);
         rd_interval_init(&rkb->rkb_suppress.unsupported_kip62);
 
-	/* Set next intervalled metadata refresh, offset by a random
-	 * value to avoid all brokers to be queried simultaneously. */
-	if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)
-		rkb->rkb_ts_metadata_poll = rd_clock() +
-			(rkb->rkb_rk->rk_conf.
-			 metadata_refresh_interval_ms * 1000) +
-			(rd_jitter(500,1500) * 1000);
-	else /* disabled */
-		rkb->rkb_ts_metadata_poll = UINT64_MAX;
+        /* Set next intervalled metadata refresh, offset by a random
+         * value to avoid all brokers to be queried simultaneously. */
+        if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)
+                rkb->rkb_ts_metadata_poll = rd_clock() +
+                        ((rd_ts_t)rkb->rkb_rk->rk_conf.
+                         metadata_refresh_interval_ms * 1000) +
+                        (rd_jitter(500,1500) * 1000);
+        else /* disabled */
+                rkb->rkb_ts_metadata_poll = UINT64_MAX;
 
 #ifndef _MSC_VER
         /* Block all signals in newly created thread.

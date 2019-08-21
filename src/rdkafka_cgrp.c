@@ -722,7 +722,7 @@ rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
                                   rkcg->rkcg_group_id,
                                   rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,
-                                  members, err ? 0 : member_cnt,
+                                  members, member_cnt,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                   rd_kafka_handle_SyncGroup, rkcg);
         return;

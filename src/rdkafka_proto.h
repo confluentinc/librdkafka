@@ -278,7 +278,7 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	if (!str)
 		len = RD_KAFKAP_STR_LEN_NULL;
 	else if (len == -1)
-		len = str ? (int)strlen(str) : RD_KAFKAP_STR_LEN_NULL;
+		len = (int)strlen(str);
 
 	kstr = rd_malloc(sizeof(*kstr) + 2 +
 			 (len == RD_KAFKAP_STR_LEN_NULL ? 0 : len + 1));

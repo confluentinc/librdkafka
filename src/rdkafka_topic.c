@@ -1400,8 +1400,7 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 
 
 /**
- * Trigger broker metadata query for topic leader.
- * 'rkt' may be NULL to query for all topics.
+ * @brief Trigger broker metadata query for topic leader.
  *
  * @locks none
  */
@@ -1415,8 +1414,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
         rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
                                          0/*dont force*/, "leader query");
 
-        if (rkt)
-                rd_list_destroy(&topics);
+        rd_list_destroy(&topics);
 }
 
 

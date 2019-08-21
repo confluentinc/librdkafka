@@ -2878,8 +2878,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
                 fprintf(fp, "%3s | ",
                         (!(prop->scope & _RK_PRODUCER) ==
                          !(prop->scope & _RK_CONSUMER) ? " * " :
-                         ((prop->scope & _RK_PRODUCER) ? " P " :
-                          (prop->scope & _RK_CONSUMER) ? " C " : "")));
+                         ((prop->scope & _RK_PRODUCER) ? " P " : " C ")));
 
 		switch (prop->type)
 		{

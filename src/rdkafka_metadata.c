@@ -1050,7 +1050,8 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk) {
                                    &rk->rk_metadata_cache.rkmc_query_tmr,
                                    1/*lock*/);
         if (next == -1 /* not started */ ||
-            next > rk->rk_conf.metadata_refresh_fast_interval_ms*1000) {
+            next >
+            (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
                 rd_kafka_dbg(rk, METADATA|RD_KAFKA_DBG_TOPIC, "FASTQUERY",
                              "Starting fast leader query");
                 rd_kafka_timer_start(&rk->rk_timers,

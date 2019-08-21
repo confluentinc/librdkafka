@@ -125,7 +125,7 @@ static RD_UNUSED void rd_kafka_print_ssl_errors (void) {
                        file, line,
                        (flags & ERR_TXT_STRING) && data && *data ?
                        data : ERR_reason_error_string(l),
-                       data, (int)strlen(data),
+                       data, data ? (int)strlen(data) : -1,
                        flags & ERR_TXT_STRING);
 
         }

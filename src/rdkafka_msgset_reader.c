@@ -516,7 +516,7 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
         rd_kafka_q_op_err(&msetr->msetr_rkq, RD_KAFKA_OP_CONSUMER_ERR,
                           err, msetr->msetr_tver->version, rktp, Offset,
                           "Decompression (codec 0x%x) of message at %"PRIu64
-                          " of %"PRIu64" bytes failed: %s",
+                          " of %"PRIusz" bytes failed: %s",
                           codec, Offset, compressed_size, rd_kafka_err2str(err));
 
         return err;

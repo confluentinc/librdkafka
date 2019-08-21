@@ -1167,7 +1167,8 @@ void rd_buf_dump (const rd_buf_t *rbuf, int do_hexdump) {
                         rbuf->rbuf_segment_cnt);
                 TAILQ_FOREACH(seg, &rbuf->rbuf_segments, seg_link) {
                         rd_segment_dump(seg, "  ", 0, do_hexdump);
-                        rd_assert(++segcnt <= rbuf->rbuf_segment_cnt);
+                        segcnt++;
+                        rd_assert(segcnt <= rbuf->rbuf_segment_cnt);
                 }
         }
 }

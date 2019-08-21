@@ -888,10 +888,12 @@ void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Migrate rktp from (optional) \p old_rkb to (optional) \p new_rkb.
+ * @brief Migrate rktp from (optional) \p old_rkb to (optional) \p new_rkb,
+ *        but at least one is required to be non-NULL.
+ *
  * This is an async operation.
  *
- * Locks: rd_kafka_toppar_lock() MUST be held
+ * @locks rd_kafka_toppar_lock() MUST be held
  */
 static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
                                             rd_kafka_broker_t *old_rkb,
@@ -899,6 +901,8 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
         rd_kafka_op_t *rko;
         rd_kafka_broker_t *dest_rkb;
         int had_next_leader = rktp->rktp_next_leader ? 1 : 0;
+
+        rd_assert(old_rkb || new_rkb);
 
         /* Update next leader */
         if (new_rkb)
@@ -1621,10 +1625,9 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 
         /* Assign the future replyq to propagate stop results. */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_replyq.q == NULL);
-	if (rko_orig) {
-		rktp->rktp_replyq = rko_orig->rko_replyq;
-		rd_kafka_replyq_clear(&rko_orig->rko_replyq);
-	}
+        rktp->rktp_replyq = rko_orig->rko_replyq;
+        rd_kafka_replyq_clear(&rko_orig->rko_replyq);
+
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPING);
 
         /* Stop offset store (possibly async).
@@ -1693,7 +1696,7 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 err_reply:
 	rd_kafka_toppar_unlock(rktp);
 
-        if (rko_orig && rko_orig->rko_replyq.q) {
+        if (rko_orig->rko_replyq.q) {
                 rd_kafka_op_t *rko;
 
                 rko = rd_kafka_op_new(RD_KAFKA_OP_SEEK|RD_KAFKA_OP_REPLY);

@@ -158,12 +158,12 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         if (!err) {
                 rd_kafka_idemp_set_state(rkb->rkb_rk,
                                          RD_KAFKA_IDEMP_STATE_WAIT_PID);
-                rd_kafka_wrunlock(rkb->rkb_rk);
+                rd_kafka_wrunlock(rk);
                 rd_kafka_broker_destroy(rkb);
                 return 1;
         }
 
-        rd_kafka_wrunlock(rkb->rkb_rk);
+        rd_kafka_wrunlock(rk);
 
         rd_rkb_dbg(rkb, EOS, "GETPID",
                    "Can't acquire ProducerId from this broker: %s", errstr);

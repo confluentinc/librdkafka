@@ -317,13 +317,13 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                         int errno_save = socket_errno;
                         if (errno_save == EAGAIN
 #ifdef _MSC_VER
-                           || errno_save == WSAEWOULDBLOCK
-#endif 
-                           )
+                            || errno_save == WSAEWOULDBLOCK
+#endif
+                                )
                                 return sum;
                         else {
                                 rd_snprintf(errstr, errstr_size, "%s",
-                                    socket_strerror(errno_save));
+                                            socket_strerror(errno_save));
 #ifndef _MSC_VER
                                 errno = errno_save;
 #endif
@@ -540,8 +540,6 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
 	return 0;
 
  err_parse:
-	if (rkbuf)
-		rd_kafka_buf_destroy(rkbuf);
         rd_snprintf(errstr, errstr_size, "Frame header parsing failed: %s",
                     rd_kafka_err2str(rkbuf->rkbuf_err));
 	return -1;

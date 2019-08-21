@@ -128,6 +128,7 @@ rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
         struct msghdr msg = { .msg_iov = iov };
         size_t iovlen;
         ssize_t r;
+        size_t r2;
 
         rd_slice_get_iov(slice, msg.msg_iov, &iovlen, IOV_MAX,
                          /* FIXME: Measure the effects of this */
@@ -152,7 +153,9 @@ rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
         }
 
         /* Update buffer read position */
-        rd_slice_read(slice, NULL, (size_t)r);
+        r2 = rd_slice_read(slice, NULL, (size_t)r);
+        rd_assert((size_t)r == r2 &&
+                  *"BUG: wrote more bytes than available in slice");
 
         return r;
 }
@@ -172,6 +175,7 @@ rd_kafka_transport_socket_send0 (rd_kafka_transport_t *rktrans,
 
         while ((rlen = rd_slice_peeker(slice, &p))) {
                 ssize_t r;
+                size_t r2;
 
                 r = send(rktrans->rktrans_s, p,
 #ifdef _MSC_VER
@@ -202,7 +206,10 @@ rd_kafka_transport_socket_send0 (rd_kafka_transport_t *rktrans,
 #endif
 
                 /* Update buffer read position */
-                rd_slice_read(slice, NULL, (size_t)r);
+                r2 = rd_slice_read(slice, NULL, (size_t)r);
+                rd_assert((size_t)r == r2 &&
+                          *"BUG: wrote more bytes than available in slice");
+
 
                 sum += r;
 

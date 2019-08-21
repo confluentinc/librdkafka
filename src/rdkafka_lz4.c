@@ -345,7 +345,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
                         .frameInfo = { .blockMode = LZ4F_blockIndependent },
                         .compressionLevel = comp_level
                 };
-				
+
         *outbuf = NULL;
 
         out_sz = LZ4F_compressBound(len, NULL) + 1000;
@@ -371,6 +371,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Unable to create LZ4 compression context: %s",
                            LZ4F_getErrorName(r));
+                rd_free(out);
                 return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
         }
 

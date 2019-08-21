@@ -4156,7 +4156,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
         struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode;
-        char **grps;
+        char **grps = NULL;
         int cnt, grpcnt, i = 0;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
@@ -4227,6 +4227,8 @@ err:
         return;
 
  err_parse:
+        if (grps)
+                rd_free(grps);
         state->err = reply->rkbuf_err;
 }
 

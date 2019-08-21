@@ -2632,25 +2632,21 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 skel.name = config->name;
                 orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
                                          &skel, rd_kafka_ConfigResource_cmp);
-                if (orig_pos == -1) {
-                        rd_kafka_ConfigResource_destroy(config);
+                if (orig_pos == -1)
                         rd_kafka_buf_parse_fail(
                                 reply,
                                 "Broker returned ConfigResource %d,%s "
                                 "that was not "
                                 "included in the original request",
                                 res_type, res_name);
-                }
 
                 if (rd_list_elem(&rko_result->rko_u.admin_result.results,
-                                 orig_pos) != NULL) {
-                        rd_kafka_ConfigResource_destroy(config);
+                                 orig_pos) != NULL)
                         rd_kafka_buf_parse_fail(
                                 reply,
                                 "Broker returned ConfigResource %d,%s "
                                 "multiple times",
                                 res_type, res_name);
-                }
 
                 rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
                             config);

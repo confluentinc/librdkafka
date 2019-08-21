@@ -867,6 +867,11 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
 
                 rd_assert(rk->rk_conf.ssl.key->pkey);
                 r = SSL_CTX_use_PrivateKey(ctx, rk->rk_conf.ssl.key->pkey);
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl_key (in-memory) failed: ");
+                        return -1;
+                }
 
                 check_pkey = rd_true;
         }

@@ -1676,7 +1676,10 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
         if (s == -1)
                 return -1;
 #ifdef FD_CLOEXEC
-        fcntl(s, F_SETFD, FD_CLOEXEC, &on);
+        if (fcntl(s, F_SETFD, FD_CLOEXEC, &on) == -1)
+                fprintf(stderr, "WARNING: librdkafka: %s: "
+                        "fcntl(FD_CLOEXEC) failed: %s: ignoring\n",
+                        __FUNCTION__, rd_strerror(errno));
 #endif
         return s;
 }

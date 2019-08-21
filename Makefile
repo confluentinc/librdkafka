@@ -72,3 +72,13 @@ LICENSES.txt: .PHONY
 	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
 	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
 
+
+coverity: Makefile.config
+	@(which cov-build >/dev/null 2>&1 || echo "Make sure coverity../bin is in your PATH")
+	@(cd src && \
+	 make clean && \
+	 (rm -rf cov-int cov-librdkafka.tgz cov-build || true) && \
+	 cov-build --dir cov-int make -j && \
+	 tar cvzf ../cov-librdkafka.tgz cov-int && \
+	 printf "$(MKL_GREEN)Now upload cov-librdkafka.tgz to Coverity for analysis$(MKL_CLR_RESET)\n")
+

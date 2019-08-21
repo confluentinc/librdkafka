@@ -1991,26 +1991,28 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         errcnt = rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
 
         if (!offset_commit_cb_served &&
-            err != RD_KAFKA_RESP_ERR_NO_ERROR &&
-            err != RD_KAFKA_RESP_ERR__NO_OFFSET) {
+            (errcnt > 0 ||
+             (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
+              err != RD_KAFKA_RESP_ERR__NO_OFFSET))) {
                 /* If there is no callback or handler for this (auto)
                  * commit then raise an error to the application (#1043) */
                 char tmp[512];
 
                 rd_kafka_topic_partition_list_str(
                         offsets, tmp, sizeof(tmp),
-                        /*no partition-errs if a global error*/
+                        /* Print per-partition errors unless there was a
+                         * request-level error. */
                         RD_KAFKA_FMT_F_OFFSET |
-                        (err ? 0 : RD_KAFKA_FMT_F_ONLY_ERR));
+                        (errcnt ? RD_KAFKA_FMT_F_ONLY_ERR : 0));
 
                 rd_kafka_log(rkcg->rkcg_rk, LOG_WARNING, "COMMITFAIL",
                              "Offset commit (%s) failed "
                              "for %d/%d partition(s): "
                              "%s%s%s",
                              rko_orig->rko_u.offset_commit.reason,
-                             err ? offsets->cnt : errcnt, offsets->cnt,
-                             err ? rd_kafka_err2str(err) : "",
-                             err ? ": " : "",
+                             errcnt ? offsets->cnt : errcnt, offsets->cnt,
+                             errcnt ? rd_kafka_err2str(err) : "",
+                             errcnt ? ": " : "",
                              tmp);
         }
 

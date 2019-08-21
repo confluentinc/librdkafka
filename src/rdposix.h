@@ -147,7 +147,15 @@ void rd_usleep (int usec, rd_atomic32_t *terminate) {
 #define rd_gettimeofday(tv,tz)  gettimeofday(tv,tz)
 
 
+#ifndef __COVERITY__
 #define rd_assert(EXPR)  assert(EXPR)
+#else
+extern void __coverity_panic__(void);
+#define rd_assert(EXPR) do {                    \
+                if (!(EXPR))                    \
+                        __coverity_panic__();   \
+        }
+#endif
 
 /**
  * Empty struct initializer

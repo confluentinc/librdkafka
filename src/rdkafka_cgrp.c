@@ -3327,7 +3327,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      rd_kafka_resp_err_t err,
                                      const rd_kafkap_bytes_t *member_state) {
         rd_kafka_buf_t *rkbuf = NULL;
-        rd_kafka_topic_partition_list_t *assignment;
+        rd_kafka_topic_partition_list_t *assignment = NULL;
         const int log_decode_errors = LOG_ERR;
         int16_t Version;
         int32_t TopicCnt;
@@ -3403,6 +3403,9 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
  err:
         if (rkbuf)
                 rd_kafka_buf_destroy(rkbuf);
+
+        if (assignment)
+                rd_kafka_topic_partition_list_destroy(assignment);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "GRPSYNC",
                      "Group \"%s\": synchronization failed: %s: rejoining",

@@ -4272,17 +4272,14 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                         rd_kafka_broker_unlock(rkb);
                         continue;
                 }
-
-                state.wait_cnt++;
-                rd_kafka_ListGroupsRequest(rkb,
-                                           RD_KAFKA_REPLYQ(state.q, 0),
-					   rd_kafka_ListGroups_resp_cb,
-                                           &state);
-
-                rkb_cnt++;
-
                 rd_kafka_broker_unlock(rkb);
 
+                state.wait_cnt++;
+                rkb_cnt++;
+                rd_kafka_ListGroupsRequest(rkb,
+                                           RD_KAFKA_REPLYQ(state.q, 0),
+                                           rd_kafka_ListGroups_resp_cb,
+                                           &state);
         }
         rd_kafka_rdunlock(rk);
 

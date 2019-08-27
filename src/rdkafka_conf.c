@@ -994,7 +994,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`read_committed` - only return transactional messages which have "
           "been committed. `read_uncommitted` - return all messages, even "
           "transactional messages which have been aborted.",
-          .vdef = RD_KAFKA_READ_UNCOMMITTED,
+          .vdef = RD_KAFKA_READ_COMMITTED,
           .s2i = {
                         { RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted" },
                         { RD_KAFKA_READ_COMMITTED, "read_committed" }

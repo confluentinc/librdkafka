@@ -45,7 +45,7 @@ The two most important configuration properties for performance tuning are:
 
   * `batch.num.messages` - the maximum number of messages to wait for to
 	  accumulate in the local queue before sending off a message set.
-  * `queue.buffering.max.ms` - how long to wait for batch.num.messages to
+  * `linger.ms` - how long to wait for batch.num.messages to
 	  fill up in the local queue. A lower value improves latency at the
           cost of lower throughput and higher per-message overhead.
           A higher value improves throughput at the expense of latency.
@@ -101,7 +101,7 @@ of messages to accumulate in the local queue before sending them off in
 one large message set or batch to the peer. This amortizes the messaging
 overhead and eliminates the adverse effect of the round trip time (rtt).
 
-`queue.buffering.max.ms` (also called `linger.ms`) allows librdkafka to
+`linger.ms` (also called `queue.buffering.max.ms`) allows librdkafka to
 wait up to the specified amount of time to accumulate up to
 `batch.num.messages` in a single batch (MessageSet) before sending
 to the broker. The larger the batch the higher the throughput.
@@ -109,7 +109,7 @@ Enabling `msg` debugging (set `debug` property to `msg`) will emit log
 messages for the accumulation process which lets you see what batch sizes
 are being produced.
 
-Example using `queue.buffering.max.ms=1`:
+Example using `linger.ms=1`:
 
 ```
 ... test [0]: MessageSet with 1514 message(s) delivered
@@ -121,7 +121,7 @@ Example using `queue.buffering.max.ms=1`:
 ... test [3]: MessageSet with 11 message(s) delivered
 ```
 
-Example using `queue.buffering.max.ms=1000`:
+Example using `linger.ms=1000`:
 ```
 ... test [0]: MessageSet with 10000 message(s) delivered
 ... test [0]: MessageSet with 10000 message(s) delivered
@@ -133,7 +133,7 @@ Example using `queue.buffering.max.ms=1000`:
 ```
 
 
-The default setting of `queue.buffering.max.ms=1` is not suitable for
+The default setting of `linger.ms=0.1` is not suitable for
 high throughput, it is recommended to set this value to >50ms, with
 throughput leveling out somewhere around 100-1000ms depending on
 message produce pattern and sizes.
@@ -144,13 +144,15 @@ per topic+partition basis.
 
 ### Low latency
 
-When low latency messaging is required the `queue.buffering.max.ms` should be
+When low latency messaging is required the `linger.ms` should be
 tuned to the maximum permitted producer-side latency.
-Setting queue.buffering.max.ms to 1 will make sure messages are sent as
-soon as possible. You could check out [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
-to find more details.
+Setting `linger.ms` to 0 or 0.1 will make sure messages are sent as
+soon as possible.
 Lower buffering time leads to smaller batches and larger per-message overheads,
 increasing network, memory and CPU usage for producers, brokers and consumers.
+
+See [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency) for more info.
+
 
 #### Latency measurement
 
@@ -217,7 +219,7 @@ configuration property.
 Compression is performed on the batch of messages in the local queue, the
 larger the batch the higher likelyhood of a higher compression ratio.
 The local batch queue size is controlled through the `batch.num.messages` and
-`queue.buffering.max.ms` configuration properties as described in the
+`linger.ms` configuration properties as described in the
 **High throughput** chapter above.
 
 

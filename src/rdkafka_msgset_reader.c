@@ -820,14 +820,14 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                         if (unlikely(aborted_txn_start_offset == -1))
                                 goto unexpected_abort_txn;
 
-                        if (unlikely(aborted_txn_start_offset >= hdr.Offset))
+                        if (unlikely(aborted_txn_start_offset > hdr.Offset))
                                 rd_rkb_log(msetr->msetr_rkb, LOG_ERR, "TXN",
                                         "%s [%"PRId32"]: "
                                         "Abort txn ctrl msg bad order "
                                         "at offset %"PRId64". Expected "
                                         "before or at %"PRId64". Messages "
                                         "in aborted transactions may be "
-                                        " delivered to the application",
+                                        "delivered to the application",
                                         rktp->rktp_rkt->rkt_topic->str,
                                         rktp->rktp_partition,
                                         hdr.Offset, aborted_txn_start_offset);

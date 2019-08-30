@@ -126,13 +126,21 @@ static TestEventCb ex_event_cb;
 
 
 static void execute_java_produce_cli(std::string &bootstrapServers,
-                                     std::string &topic, std::string cmd) {
-  const char *argv[] = {
+                                     std::string &topic,
+                                     std::vector<std::string> cmds) {
+  std::string topicCmd = "topic," + topic;
+  const char *argv[1 + 1 + 1 + cmds.size() + 1] = {
     bootstrapServers.c_str(),
-    topic.c_str(),
-    cmd.c_str(),
-    NULL
+    topicCmd.c_str(),
+    "produce",
   };
+  int i = 2;
+
+  for (std::vector<std::string>::iterator it = cmds.begin();
+       it != cmds.end(); it++)
+    argv[i++] = it->c_str();
+
+  argv[i] = NULL;
 
   int pid = test_run_java("TransactionProducerCli", argv);
   test_waitpid(pid);
@@ -243,21 +251,24 @@ static void do_test_consumer_txn_test (void) {
   std::vector<RdKafka::Message *> msgs;
 
   std::string bootstrap_servers = get_bootstrap_servers();
-  Test::Say("bootstrap.servers: " + bootstrap_servers);
 
   if (test_quick) {
     Test::Say("Skipping consumer_txn tests 0->4 due to quick mode\n");
     goto test5;
   }
 
+#define run_producer(CMDS...)                                           \
+  execute_java_produce_cli(bootstrap_servers, topic_name,               \
+                           (std::vector<std::string>){ CMDS })
+
   // Test 0 - basic commit + abort.
-  // Note: Refer to TransactionProducerCli for further details.
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-0", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "0");
+  run_producer("producer1, -1, 0x0, 5, BeginCommit, DoFlush",
+               "producer1, -1, 0x10, 5, BeginAbort, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5,
@@ -300,7 +311,8 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "0.1");
+  run_producer("producer1, -1, 0x0, 5, BeginCommit, DontFlush",
+               "producer1, -1, 0x10, 5, BeginAbort, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5,
@@ -343,7 +355,8 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "0.2");
+  run_producer("producer1, -1, 0x10, 5, BeginAbort, DoFlush",
+               "producer1, -1, 0x30, 5, BeginCommit, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 5,
@@ -387,7 +400,9 @@ static void do_test_consumer_txn_test (void) {
   Test::create_topic(c, topic_name.c_str(), 1, 3);
   TestEventCb::topic = topic_name;
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "1");
+  run_producer("producer3, -1, 0x10, 5, None, DoFlush",
+               "producer1, -1, 0x50, 5, BeginCommit, DoFlush",
+               "producer1, -1, 0x80, 5, BeginAbort, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
 
@@ -429,7 +444,10 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "1.1");
+  run_producer("producer1, -1, 0x30, 5, BeginAbort, DoFlush",
+               "producer3, -1, 0x40, 5, None, DoFlush",
+               "producer1, -1, 0x60, 5, BeginCommit, DoFlush");
+
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 10,
@@ -458,7 +476,9 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "1.2");
+  run_producer("producer1, -1, 0x10, 5, BeginCommit, DoFlush",
+               "producer1, -1, 0x20, 5, BeginAbort, DoFlush",
+               "producer3, -1, 0x30, 5, None, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 10,
@@ -482,12 +502,24 @@ static void do_test_consumer_txn_test (void) {
 
 
   // Test 2 - rapid abort / committing.
+  // note: aborted records never seem to make it to the broker when not flushed.
 
   topic_name = Test::mk_topic_name("0098-consumer_txn-2", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "2");
+  run_producer("producer1, -1, 0x10, 1, BeginAbort, DontFlush",
+               "producer1, -1, 0x20, 1, BeginCommit, DontFlush",
+               "producer1, -1, 0x30, 1, BeginAbort, DontFlush",
+               "producer1, -1, 0x40, 1, BeginCommit, DontFlush",
+               "producer1, -1, 0x50, 1, BeginAbort, DontFlush",
+               "producer1, -1, 0x60, 1, BeginCommit, DontFlush",
+               "producer1, -1, 0x70, 1, BeginAbort, DontFlush",
+               "producer1, -1, 0x80, 1, BeginCommit, DontFlush",
+               "producer1, -1, 0x90, 1, BeginAbort, DontFlush",
+               "producer1, -1, 0xa0, 1, BeginCommit, DoFlush",
+               "producer3, -1, 0xb0, 1, None, DontFlush",
+               "producer3, -1, 0xc0, 1, None, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7,
@@ -529,7 +561,18 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "2.1");
+  run_producer("producer1, -1, 0x10, 1, BeginAbort, DoFlush",
+               "producer1, -1, 0x20, 1, BeginCommit, DoFlush",
+               "producer1, -1, 0x30, 1, BeginAbort, DoFlush",
+               "producer1, -1, 0x40, 1, BeginCommit, DoFlush",
+               "producer1, -1, 0x50, 1, BeginAbort, DoFlush",
+               "producer1, -1, 0x60, 1, BeginCommit, DoFlush",
+               "producer1, -1, 0x70, 1, BeginAbort, DoFlush",
+               "producer1, -1, 0x80, 1, BeginCommit, DoFlush",
+               "producer1, -1, 0x90, 1, BeginAbort, DoFlush",
+               "producer1, -1, 0xa0, 1, BeginCommit, DoFlush",
+               "producer3, -1, 0xb0, 1, None, DoFlush",
+               "producer3, -1, 0xc0, 1, None, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7,
@@ -602,7 +645,9 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 2, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "3");
+  run_producer("producer1, 0, 0x10, 3, BeginOpen, DoFlush",
+               "producer1, 1, 0x20, 3, ContinueOpen, DoFlush",
+               "producer1, 0, 0x30, 3, ContinueCommit, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 6,
@@ -645,7 +690,12 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 2, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "3.1");
+  run_producer("producer1, 0, 0x55, 1, BeginCommit, DoFlush",
+               "producer1, 0, 0x10, 3, BeginOpen, DoFlush",
+               "producer1, 1, 0x20, 3, ContinueOpen, DoFlush",
+               "producer1, 0, 0x30, 3, ContinueAbort, DoFlush",
+               "producer3, 0, 0x00, 1, None, DoFlush",
+               "producer1, 1, 0x44, 1, BeginCommit, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 2,
@@ -681,7 +731,11 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "4");
+  run_producer("producer3, 0, 0x10, 1, None, DoFlush",
+               "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
+               "producer2, 0, 0x30, 3, BeginOpen, DoFlush",
+               "producer1, 0, 0x40, 3, ContinueCommit, DoFlush",
+               "producer2, 0, 0x50, 3, ContinueAbort, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7,
@@ -712,7 +766,11 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "4.1");
+  run_producer("producer3, 0, 0x10, 1, None, DoFlush",
+               "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
+               "producer2, 0, 0x30, 3, BeginOpen, DoFlush",
+               "producer1, 0, 0x40, 3, ContinueAbort, DoFlush",
+               "producer2, 0, 0x50, 3, ContinueCommit, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 7,
@@ -743,7 +801,11 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "4.2");
+  run_producer("producer3, 0, 0x10, 1, None, DoFlush",
+               "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
+               "producer2, 0, 0x30, 3, BeginOpen, DoFlush",
+               "producer1, 0, 0x40, 3, ContinueCommit, DoFlush",
+               "producer2, 0, 0x50, 3, ContinueCommit, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 13,
@@ -774,7 +836,11 @@ static void do_test_consumer_txn_test (void) {
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "4.3");
+  run_producer("producer3, 0, 0x10, 1, None, DoFlush",
+               "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
+               "producer2, 0, 0x30, 3, BeginOpen, DoFlush",
+               "producer1, 0, 0x40, 3, ContinueAbort, DoFlush",
+               "producer2, 0, 0x50, 3, ContinueAbort, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 1,
@@ -800,14 +866,26 @@ static void do_test_consumer_txn_test (void) {
 
 
 
-  // Test 5 - split transaction across message set.
+  // Test 5 - split transaction across message sets.
 
 test5:
   topic_name = Test::mk_topic_name("0098-consumer_txn-5", 1);
   c = create_consumer(topic_name, "READ_COMMITTED");
   Test::create_topic(c, topic_name.c_str(), 1, 3);
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "5");
+  run_producer("producer1, 0, 0x10, 2, BeginOpen, DontFlush",
+               "sleep,200",
+               "producer1, 0, 0x20, 2, ContinueAbort, DontFlush",
+               "producer1, 0, 0x30, 2, BeginOpen, DontFlush",
+               "sleep,200",
+               "producer1, 0, 0x40, 2, ContinueCommit, DontFlush",
+               "producer1, 0, 0x50, 2, BeginOpen, DontFlush",
+               "sleep,200",
+               "producer1, 0, 0x60, 2, ContinueAbort, DontFlush",
+               "producer1, 0, 0xa0, 2, BeginOpen, DontFlush",
+               "sleep,200",
+               "producer1, 0, 0xb0, 2, ContinueCommit, DontFlush",
+               "producer3, 0, 0x70, 1, None, DoFlush");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 9,
@@ -856,7 +934,10 @@ test5:
   Test::create_topic(c, topic_name.c_str(), 1, 3);
   TestEventCb::topic = topic_name;
 
-  execute_java_produce_cli(bootstrap_servers, topic_name, "6");
+  run_producer("producer3, 0, 0x10, 1, None, DoFlush",
+               "producer1, 0, 0x20, 3, BeginOpen, DoFlush",
+               // prevent abort control message from being written.
+               "exit,0");
 
   msgs = consume_messages(c, topic_name, 0);
   test_assert(msgs.size() == 1,
@@ -864,7 +945,7 @@ test5:
                          "Expected 1, got: "
                       << msgs.size());
 
-  test_assert(TestEventCb::partition_0_ls_offset + 3 == 
+  test_assert(TestEventCb::partition_0_ls_offset + 3 ==
               TestEventCb::partition_0_hi_offset,
               tostr() << "Expected hi_offset to be 3 greater than ls_offset "
                          "but got hi_offset: "

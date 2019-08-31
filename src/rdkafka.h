@@ -193,8 +193,8 @@ typedef enum rd_kafka_type_t {
 } rd_kafka_type_t;
 
 
-/**
- * @enum Timestamp types
+/*!
+ * Timestamp types
  *
  * @sa rd_kafka_message_timestamp()
  */
@@ -676,9 +676,11 @@ int rd_kafka_errno (void);
  * Idempotent Producer and the in-order or exactly-once producer guarantees
  * can't be satisfied.
  *
+ * @param rk Client instance.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
  *
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if no fatal error has been raised, else
@@ -696,6 +698,7 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
  * idempotent producer, this method allows an application to trigger
  * fabricated fatal errors in tests to check its error handling code.
  *
+ * @param rk Client instance.
  * @param err The underlying error code.
  * @param reason A human readable error reason.
  *               Will be prefixed with "test_fatal_error: " to differentiate
@@ -1046,6 +1049,7 @@ typedef enum rd_kafka_vtype_t {
  *        Header operations are O(n).
  */
 
+/*! Message Headers list */
 typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 
 /**
@@ -1073,6 +1077,7 @@ rd_kafka_headers_copy (const rd_kafka_headers_t *src);
  * @brief Add header with name \p name and value \p val (copied) of size
  *        \p size (not including null-terminator).
  *
+ * @param hdrs       Headers list.
  * @param name       Header name.
  * @param name_size  Header name size (not including the null-terminator).
  *                   If -1 the \p name length is automatically acquired using
@@ -1104,6 +1109,7 @@ rd_kafka_header_remove (rd_kafka_headers_t *hdrs, const char *name);
 /**
  * @brief Find last header in list \p hdrs matching \p name.
  *
+ * @param hdrs   Headers list.
  * @param name   Header to find (last match).
  * @param valuep (out) Set to a (null-terminated) const pointer to the value
  *               (may be NULL).
@@ -1308,6 +1314,7 @@ rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
 /**
  * @brief Replace the message's current headers with a new list.
  *
+ * @param rkmessage The message to set headers.
  * @param hdrs New header list. The message object assumes ownership of
  *             the list, the list will be destroyed automatically with
  *             the message object.
@@ -1953,11 +1960,11 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
  * the certificate succeed (0) or failed (an OpenSSL error code).
  * The application may set the SSL context error code by returning 0
  * from the verify callback and providing a non-zero SSL context error code
- * in \p x509_error.
- * If the verify callback sets \x509_error to 0, returns 1, and the
- * original \p x509_error was non-zero, the error on the SSL context will
+ * in \c x509_error.
+ * If the verify callback sets \c x509_error to 0, returns 1, and the
+ * original \c x509_error was non-zero, the error on the SSL context will
  * be cleared.
- * \p x509_error is always a valid pointer to an int.
+ * \c x509_error is always a valid pointer to an int.
  *
  * \c depth is the depth of the current certificate in the chain, starting
  * at the root certificate.
@@ -2542,6 +2549,7 @@ char *rd_kafka_memberid (const rd_kafka_t *rk);
 /**
  * @brief Returns the ClusterId as reported in broker metadata.
  *
+ * @param rk         Client instance.
  * @param timeout_ms If there is no cached value from metadata retrieval
  *                   then this specifies the maximum amount of time
  *                   (in milliseconds) the call will block waiting
@@ -2563,6 +2571,7 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
 /**
  * @brief Returns the current ControllerId as reported in broker metadata.
  *
+ * @param rk         Client instance.
  * @param timeout_ms If there is no cached value from metadata retrieval
  *                   then this specifies the maximum amount of time
  *                   (in milliseconds) the call will block waiting
@@ -2917,6 +2926,7 @@ void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
  *        This allows an application to serve log callbacks (\c log_cb)
  *        in its thread of choice.
  *
+ * @param rk   Client instance.
  * @param rkqu Queue to forward logs to. If the value is NULL the logs
  *        are forwarded to the main queue.
  *
@@ -3754,7 +3764,8 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
 /**
  * @brief Purge messages currently handled by the producer instance.
  *
- * @param purge_flags tells which messages should be purged and how.
+ * @param rk          Client instance.
+ * @param purge_flags Tells which messages to purge and how.
  *
  * The application will need to call rd_kafka_poll() or rd_kafka_flush()
  * afterwards to serve the delivery report callbacks of the purged messages.
@@ -4206,7 +4217,7 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
  * @brief Event types
  */
 typedef int rd_kafka_event_type_t;
-#define RD_KAFKA_EVENT_NONE          0x0
+#define RD_KAFKA_EVENT_NONE          0x0  /**< Unset value */
 #define RD_KAFKA_EVENT_DR            0x1  /**< Producer Delivery report batch */
 #define RD_KAFKA_EVENT_FETCH         0x2  /**< Fetched message (consumer) */
 #define RD_KAFKA_EVENT_LOG           0x4  /**< Log message */
@@ -4426,14 +4437,20 @@ RD_EXPORT rd_kafka_topic_partition_t *
 rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 
 
-
+/*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
+/*! DeleteTopics result type */
 typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
+/*! CreatePartitions result type */
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
+/*! AlterConfigs result type */
 typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
+/*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 
 /**
+ * @brief Get CreateTopics result.
+ *
  * @returns the result of a CreateTopics request, or NULL if event is of
  *          different type.
  *
@@ -4444,6 +4461,8 @@ RD_EXPORT const rd_kafka_CreateTopics_result_t *
 rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
 
 /**
+ * @brief Get DeleteTopics result.
+ *
  * @returns the result of a DeleteTopics request, or NULL if event is of
  *          different type.
  *
@@ -4454,6 +4473,8 @@ RD_EXPORT const rd_kafka_DeleteTopics_result_t *
 rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
 
 /**
+ * @brief Get CreatePartitions result.
+ *
  * @returns the result of a CreatePartitions request, or NULL if event is of
  *          different type.
  *
@@ -4464,6 +4485,8 @@ RD_EXPORT const rd_kafka_CreatePartitions_result_t *
 rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
 
 /**
+ * @brief Get AlterConfigs result.
+ *
  * @returns the result of a AlterConfigs request, or NULL if event is of
  *          different type.
  *
@@ -4474,6 +4497,8 @@ RD_EXPORT const rd_kafka_AlterConfigs_result_t *
 rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
 
 /**
+ * @brief Get DescribeConfigs result.
+ *
  * @returns the result of a DescribeConfigs request, or NULL if event is of
  *          different type.
  *
@@ -4966,7 +4991,7 @@ rd_kafka_conf_interceptor_add_on_conf_destroy (
  *
  * @param conf Configuration object.
  * @param ic_name Interceptor name, used in logging.
- * @param on_send Function pointer.
+ * @param on_new Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
   *
  * @remark Since the on_new() interceptor is added to the configuration object
@@ -5287,8 +5312,13 @@ RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
  * @brief Sets the overall request timeout, including broker lookup,
  *        request transmission, operation time on broker, and response.
  *
+ * @param options Admin options.
  * @param timeout_ms Timeout in milliseconds, use -1 for indefinite timeout.
  *                   Defaults to `socket.timeout.ms`.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
@@ -5314,8 +5344,12 @@ rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
  * DeleteTopics: same semantics as CreateTopics.
  * CreatePartitions: same semantics as CreateTopics.
  *
- *
+ * @param options Admin options.
  * @param timeout_ms Timeout in milliseconds.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
@@ -5334,7 +5368,12 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
  * @brief Tell broker to only validate the request, without performing
  *        the requested operation (create topics, etc).
  *
+ * @param options Admin options.
  * @param true_or_false Defaults to false.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
  *          error code on failure in which case an error string will
@@ -5359,7 +5398,12 @@ rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
  *   - DescribeConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *
+ * @param options Admin Options.
  * @param broker_id The broker to send the request to.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
  *          error code on failure in which case an error string will
@@ -5407,6 +5451,11 @@ typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
  * @param replication_factor Default replication factor for the topic's
  *                           partitions, or -1 if set_replica_assignment()
  *                           will be used.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
+ *
  *
  * @returns a new allocated NewTopic object, or NULL if the input parameters
  *          are invalid.
@@ -5484,6 +5533,7 @@ rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
  * @brief Create topics in cluster as specified by the \p new_topics
  *        array of size \p new_topic_cnt elements.
  *
+ * @param rk Client instance.
  * @param new_topics Array of new topics to create.
  * @param new_topic_cnt Number of elements in \p new_topics array.
  * @param options Optional admin options, or NULL for defaults.
@@ -5513,7 +5563,9 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
  * @brief Get an array of topic results from a CreateTopics result.
  *
  * The returned \p topics life-time is the same as the \p result object.
- * @param cntp is updated to the number of elements in the array.
+ *
+ * @param result Result to get topics from. 
+ * @param cntp Updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_topic_result_t **
 rd_kafka_CreateTopics_result_topics (
@@ -5564,8 +5616,9 @@ rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
  * @brief Delete topics from cluster as specified by the \p topics
  *        array of size \p topic_cnt elements.
  *
- * @param topics Array of topics to delete.
- * @param topic_cnt Number of elements in \p topics array.
+ * @param rk Client instance.
+ * @param del_topics Array of topics to delete.
+ * @param del_topic_cnt Number of elements in \p topics array.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
  *
@@ -5574,10 +5627,10 @@ rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
  */
 RD_EXPORT
 void rd_kafka_DeleteTopics (rd_kafka_t *rk,
-                                  rd_kafka_DeleteTopic_t **del_topics,
-                                  size_t del_topic_cnt,
-                                  const rd_kafka_AdminOptions_t *options,
-                                  rd_kafka_queue_t *rkqu);
+                            rd_kafka_DeleteTopic_t **del_topics,
+                            size_t del_topic_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu);
 
 
 
@@ -5589,6 +5642,8 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
  * @brief Get an array of topic results from a DeleteTopics result.
  *
  * The returned \p topics life-time is the same as the \p result object.
+ *
+ * @param result Result to get topic results from.
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_topic_result_t **
@@ -5607,6 +5662,7 @@ rd_kafka_DeleteTopics_result_topics (
  *
  */
 
+/*! NewPartitions */
 typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
@@ -5616,6 +5672,10 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
  *
  * @param topic Topic name to create more partitions for.
  * @param new_total_cnt Increase the topic's partition count to this value.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * @returns a new allocated NewPartitions object, or NULL if the
  *          input parameters are invalid.
@@ -5676,6 +5736,7 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_par
  * @brief Create additional partitions for the given topics, as specified
  *        by the \p new_parts array of size \p new_parts_cnt elements.
  *
+ * @param rk Client instance.
  * @param new_parts Array of topics for which new partitions are to be created.
  * @param new_parts_cnt Number of elements in \p new_parts array.
  * @param options Optional admin options, or NULL for defaults.
@@ -5706,6 +5767,8 @@ rd_kafka_CreatePartitions (rd_kafka_t *rk,
  * @brief Get an array of topic results from a CreatePartitions result.
  *
  * The returned \p topics life-time is the same as the \p result object.
+ *
+ * @param result Result o get topic results from.
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_topic_result_t **
@@ -5726,8 +5789,8 @@ rd_kafka_CreatePartitions_result_topics (
  *
  */
 
-/**
- * @enum Apache Kafka config sources
+/*!
+ * Apache Kafka config sources
  */
 typedef enum rd_kafka_ConfigSource_t {
         /**< Source unknown, e.g., in the ConfigEntry used for alter requests
@@ -5759,6 +5822,7 @@ RD_EXPORT const char *
 rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource);
 
 
+/*! ConfigEntry */
 typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
 
 /**
@@ -5815,6 +5879,7 @@ rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry);
 /**
  * @returns the synonym config entry array.
  *
+ * @param entry Entry to get synonyms for.
  * @param cntp is updated to the number of elements in the array.
  *
  * @remark The lifetime of the returned entry is the same as \p conf .
@@ -5828,9 +5893,7 @@ rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
 
 
 
-/**
- * @enum Apache Kafka resource types
- */
+/*! Apache Kafka resource types */
 typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_UNKNOWN = 0, /**< Unknown */
         RD_KAFKA_RESOURCE_ANY = 1,     /**< Any (used for lookups) */
@@ -5846,9 +5909,18 @@ typedef enum rd_kafka_ResourceType_t {
 RD_EXPORT const char *
 rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
 
+/*! ConfigResource */
 typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
 
 
+/**
+ * @brief Create new ConfigResource object.
+ *
+ * @param restype The resource type (e.g., RD_KAFKA_RESOURCE_TOPIC)
+ * @param resname The resource name (e.g., the topic name)
+ *
+ * @returns a newly allocated object
+ */
 RD_EXPORT rd_kafka_ConfigResource_t *
 rd_kafka_ConfigResource_new (rd_kafka_ResourceType_t restype,
                              const char *resname);
@@ -5874,6 +5946,7 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
 /**
  * @brief Set configuration name value pair.
  *
+ * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
  * @param value Configuration value, depends on resource type and \p name.
  *              Set to \c NULL to revert configuration value to default.
@@ -5893,6 +5966,7 @@ rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
  *
  * The returned object life-times are the same as the \p config object.
  *
+ * @param config ConfigResource to get configs from.
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_ConfigEntry_t **
@@ -5975,6 +6049,7 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
  *
  * The returned object life-times are the same as the \p result object.
  *
+ * @param result Result object to get resource results from.
  * @param cntp is updated to the number of elements in the array.
  *
  * @returns an array of ConfigResource elements, or NULL if not available.
@@ -5999,19 +6074,19 @@ rd_kafka_AlterConfigs_result_resources (
 /**
  * @brief Get configuration for the specified resources in \p configs.
  *
- *        The returned configuration includes default values and the
- *        rd_kafka_ConfigEntry_is_default() or rd_kafka_ConfigEntry_source()
- *        methods may be used to distinguish them from user supplied values.
- *
- *        The value of config entries where rd_kafka_ConfigEntry_is_sensitive()
- *        is true will always be NULL to avoid disclosing sensitive
- *        information, such as security settings.
- *
- *        Configuration entries where rd_kafka_ConfigEntry_is_read_only()
- *        is true can't be updated (with rd_kafka_AlterConfigs()).
- *
- *        Synonym configuration entries are returned if the broker supports
- *        it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
+ * The returned configuration includes default values and the
+ * rd_kafka_ConfigEntry_is_default() or rd_kafka_ConfigEntry_source()
+ * methods may be used to distinguish them from user supplied values.
+ * 
+ * The value of config entries where rd_kafka_ConfigEntry_is_sensitive()
+ * is true will always be NULL to avoid disclosing sensitive
+ * information, such as security settings.
+ * 
+ * Configuration entries where rd_kafka_ConfigEntry_is_read_only()
+ * is true can't be updated (with rd_kafka_AlterConfigs()).
+ * 
+ * Synonym configuration entries are returned if the broker supports
+ * it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
  *
  * @remark Requires broker version >=0.11.0.0
  *
@@ -6028,6 +6103,8 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
                                rd_kafka_queue_t *rkqu);
 
 
+
+
 /**
  * @brief DescribeConfigs result type and methods
  */
@@ -6036,6 +6113,8 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
  * @brief Get an array of resource results from a DescribeConfigs result.
  *
  * The returned \p resources life-time is the same as the \p result object.
+ *
+ * @param result Result object to get resource results from.
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_ConfigResource_t **
@@ -6074,7 +6153,8 @@ rd_kafka_DescribeConfigs_result_resources (
  *  which must be a non-negative multiple of 2.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is an error.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  *
  * The SASL/OAUTHBEARER token refresh callback or event handler should invoke
  * this method upon success. The extension keys must not include the reserved
@@ -6131,8 +6211,9 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**@}*/
 
-
+/* @cond NO_DOC */
 #ifdef __cplusplus
 }
 #endif
 #endif /* _RDKAFKA_H_ */
+/* @endcond NO_DOC */

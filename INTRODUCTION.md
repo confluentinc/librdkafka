@@ -232,7 +232,7 @@ configuration (`request.required.acks` and `message.send.max.retries`, etc).
 
 If the topic configuration property `request.required.acks` is set to wait
 for message commit acknowledgements from brokers (any value but 0, see
-[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+[`CONFIGURATION.md`](CONFIGURATION.md)
 for specifics) then librdkafka will hold on to the message until
 all expected acks have been received, gracefully handling the following events:
 
@@ -404,7 +404,7 @@ and exactly-once producer guarantees.
 The idempotent producer is enabled by setting the `enable.idempotence`
 configuration property to `true`, this will automatically adjust a number of
 other configuration properties to adhere to the idempotency requirements,
-see the documentation of `enable.idempotence` in [CONFIGURATION.md] for
+see the documentation of `enable.idempotence` in [CONFIGURATION.md](CONFIGURATION.md) for
 more information.
 Producer instantiation will fail if the user supplied an incompatible value
 for any of the automatically adjusted properties, e.g., it is an error to
@@ -698,9 +698,9 @@ This method should be called by the application on delivery report error.
 ### Documentation
 
 The librdkafka API is documented in the
-[`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka.h)
+[`rdkafka.h`](src/rdkafka.h)
 header file, the configuration properties are documented in
-[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+[`CONFIGURATION.md`](CONFIGURATION.md)
 
 ### Initialization
 
@@ -717,7 +717,7 @@ It is created by calling `rd_kafka_topic_new()`.
 Both `rd_kafka_t` and `rd_kafka_topic_t` comes with a configuration API which
 is optional.
 Not using the API will cause librdkafka to use its default values which are
-documented in [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
+documented in [`CONFIGURATION.md`](CONFIGURATION.md).
 
 **Note**: An application may create multiple `rd_kafka_t` objects and
 	they share no state.

@@ -271,7 +271,7 @@ enum ErrorCode {
         ERR__PURGE_QUEUE = -152,
         /** Purged in flight */
         ERR__PURGE_INFLIGHT = -151,
-        /** Fatal error: see ::fatal_error() */
+        /** Fatal error: see RdKafka::Handle::fatal_error() */
         ERR__FATAL = -150,
         /** Inconsistent state */
         ERR__INCONSISTENT = -149,
@@ -887,7 +887,7 @@ public:
    * The application may set the SSL context error code by returning 0
    * from the verify callback and providing a non-zero SSL context error code
    * in \p x509_error.
-   * If the verify callback sets \x509_error to 0, returns 1, and the
+   * If the verify callback sets \p x509_error to 0, returns 1, and the
    * original \p x509_error was non-zero, the error on the SSL context will
    * be cleared.
    * \p x509_error is always a valid pointer to an int.
@@ -1429,11 +1429,11 @@ class RD_EXPORT Handle {
   virtual ErrorCode set_log_queue (Queue *queue) = 0;
 
   /**
-   * @brief Cancels the current callback dispatcher (Producer::poll(),
-   *        Consumer::poll(), KafkaConsumer::consume(), etc).
+   * @brief Cancels the current callback dispatcher (Handle::poll(),
+   *        KafkaConsumer::consume(), etc).
    *
    * A callback may use this to force an immediate return to the calling
-   * code (caller of e.g. ..::poll()) without processing any further
+   * code (caller of e.g. Handle::poll()) without processing any further
    * events.
    *
    * @remark This function MUST ONLY be called from within a
@@ -1603,12 +1603,18 @@ class RD_EXPORT Handle {
 class RD_EXPORT TopicPartition {
 public:
   /**
-   * Create topic+partition object for \p topic and \p partition
-   * and optionally \p offset.
+   * @brief Create topic+partition object for \p topic and \p partition.
    *
    * Use \c delete to deconstruct.
    */
   static TopicPartition *create (const std::string &topic, int partition);
+
+  /**
+   * @brief Create topic+partition object for \p topic and \p partition
+   *        with offset \p offset.
+   *
+   * Use \c delete to deconstruct.
+   */
   static TopicPartition *create (const std::string &topic, int partition,
                                  int64_t offset);
 
@@ -1739,6 +1745,7 @@ class RD_EXPORT Topic {
 
 class RD_EXPORT MessageTimestamp {
 public:
+  /*! Message timestamp type */
   enum MessageTimestampType {
     MSG_TIMESTAMP_NOT_AVAILABLE,   /**< Timestamp not available */
     MSG_TIMESTAMP_CREATE_TIME,     /**< Message creation time (source) */
@@ -1815,13 +1822,18 @@ public:
     /**
      * @brief Copy constructor
      *
-     * @param other other Header used for the copy constructor
+     * @param other Header to make a copy of.
      */
     Header(const Header &other):
     key_(other.key_), err_(other.err_), value_size_(other.value_size_) {
       value_ = copy_value(other.value_, value_size_);
     }
 
+    /**
+     * @brief Assignment operator
+     *
+     * @param other Header to make a copy of.
+     */
     Header& operator=(const Header &other)
     {
       if (&other == this) {
@@ -1900,8 +1912,8 @@ public:
   /**
    * @brief Create a new instance of the Headers object from a std::vector
    * 
-   * @params headers std::vector of RdKafka::Headers::Header objects.
-   *                 The headers are copied, not referenced.
+   * @param headers std::vector of RdKafka::Headers::Header objects.
+   *                The headers are copied, not referenced.
    * 
    * @returns a Headers list from std::vector set to the size of the std::vector
    */
@@ -2842,7 +2854,8 @@ class RD_EXPORT Producer : public virtual Handle {
    *        to make sure all queued and in-flight produce requests are completed
    *        before terminating.
    *
-   * @remark This function will call poll() and thus trigger callbacks.
+   * @remark This function will call Producer::poll() and thus
+   *         trigger callbacks.
    *
    * @returns ERR__TIMED_OUT if \p timeout_ms was reached before all
    *          outstanding requests were completed, else ERR_NO_ERROR
@@ -2855,7 +2868,7 @@ class RD_EXPORT Producer : public virtual Handle {
    *
    * @param purge_flags tells which messages should be purged and how.
    *
-   * The application will need to call ::poll() or ::flush()
+   * The application will need to call Handle::poll() or Producer::flush()
    * afterwards to serve the delivery report callbacks of the purged messages.
    *
    * Messages purged from internal queues fail with the delivery report

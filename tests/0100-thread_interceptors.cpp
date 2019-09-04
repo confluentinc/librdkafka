@@ -29,32 +29,50 @@
 #include <iostream>
 #include "testcpp.h"
 
-/* For interceptor interface */
 extern "C" {
-#include "rdkafka.h"
+#include "rdkafka.h"            /* For interceptor interface */
+#include "../src/tinycthread.h" /* For mutexes */
 }
 
 class myThreadCb {
  public:
-  myThreadCb(): startCnt_(0), exitCnt_(0) {}
+  myThreadCb(): startCnt_(0), exitCnt_(0) {
+    mtx_init(&lock_, mtx_plain);
+  }
+  ~myThreadCb() {
+    mtx_destroy(&lock_);
+  }
   int startCount () {
-    return startCnt_;
+    int cnt;
+    mtx_lock(&lock_);
+    cnt = startCnt_;
+    mtx_unlock(&lock_);
+    return cnt;
   }
   int exitCount () {
-    return exitCnt_;
+    int cnt;
+    mtx_lock(&lock_);
+    cnt = exitCnt_;
+    mtx_unlock(&lock_);
+    return cnt;
   }
   virtual void thread_start_cb (const char *threadname) {
     Test::Say(tostr() << "Started thread: " << threadname << "\n");
+    mtx_lock(&lock_);
     startCnt_++;
+    mtx_unlock(&lock_);
   }
   virtual void thread_exit_cb (const char *threadname) {
     Test::Say(tostr() << "Exiting from thread: " << threadname << "\n");
+    mtx_lock(&lock_);
     exitCnt_++;
+    mtx_unlock(&lock_);
   }
 
  private:
   int startCnt_;
   int exitCnt_;
+  mtx_t lock_;
 };
 
 

@@ -1540,7 +1540,7 @@ rd_kafka_aborted_txns_next_offset (rd_kafka_aborted_txns_t *aborted_txns,
 static RD_INLINE int64_t
 rd_kafka_aborted_txns_pop_offset (rd_kafka_aborted_txns_t *aborted_txns,
                                   int64_t pid) {
-        return rd_kafka_aborted_txns_next_offset(aborted_txns, pid, true);
+        return rd_kafka_aborted_txns_next_offset(aborted_txns, pid, rd_true);
 }
 
 
@@ -1554,7 +1554,7 @@ static RD_INLINE int64_t
 rd_kafka_aborted_txns_get_offset (const rd_kafka_aborted_txns_t *aborted_txns,
                                   int64_t pid) {
         return rd_kafka_aborted_txns_next_offset(
-                (rd_kafka_aborted_txns_t *)aborted_txns, pid, false);
+                (rd_kafka_aborted_txns_t *)aborted_txns, pid, rd_false);
 }
 
 

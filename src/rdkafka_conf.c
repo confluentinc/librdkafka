@@ -271,9 +271,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "bootstrap.servers", _RK_C_ALIAS, 0,
 	  "See metadata.broker.list",
 	  .sdef = "metadata.broker.list" },
-	{ _RK_GLOBAL|_RK_MED, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
-	  "Maximum Kafka protocol request message size.",
-	  1000, 1000000000, 1000000 },
+        { _RK_GLOBAL|_RK_MED, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
+          "Maximum Kafka protocol request message size. "
+          "Due to differing framing overhead between protocol versions the "
+          "producer is unable to reliably enforce a strict max message limit "
+          "at produce time and may exceed the maximum size by one message in "
+          "protocol ProduceRequests, the broker will enforce the the topic's "
+          "`max.message.bytes` limit (see Apache Kafka documentation).",
+          1000, 1000000000, 1000000 },
 	{ _RK_GLOBAL, "message.copy.max.bytes", _RK_C_INT,
 	  _RK(msg_copy_max_size),
 	  "Maximum size for message to be copied to buffer. "

@@ -848,10 +848,19 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                         break;
                 }
 
+                /* Check if there is enough space in the current messageset
+                 * to add this message.
+                 * Since calculating the total size of a request at produce()
+                 * time is tricky (we don't know the protocol version or
+                 * MsgVersion that will be used), we allow a messageset to
+                 * overshoot the message.max.bytes limit by one message to
+                 * avoid getting stuck here.
+                 * The actual messageset size is enforced by the broker. */
                 if (unlikely(msgcnt == msetw->msetw_msgcntmax ||
-                             len + rd_kafka_msg_wire_size(rkm, msetw->
-                                                          msetw_MsgVersion) >
-                             max_msg_size)) {
+                             (msgcnt > 0 &&
+                              len + rd_kafka_msg_wire_size(rkm, msetw->
+                                                           msetw_MsgVersion) >
+                              max_msg_size))) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
                                    "%.*s [%"PRId32"]: "
                                    "No more space in current MessageSet "
@@ -886,7 +895,6 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                 len += rd_kafka_msgset_writer_write_msg(msetw, rkm, msgcnt, 0,
                                                         NULL);
 
-                rd_dassert(len <= max_msg_size);
                 msgcnt++;
 
         } while ((rkm = TAILQ_FIRST(&rkmq->rkmq_msgs)));

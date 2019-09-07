@@ -940,7 +940,6 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
 
         /* Calculate total request buffer length. */
         totsize = rd_buf_len(&rkbuf->rkbuf_buf) - 4;
-        rd_assert(totsize <= (size_t)rk->rk_conf.max_msg_size);
 
         /* Set up a buffer reader for sending the buffer. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);

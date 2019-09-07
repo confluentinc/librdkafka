@@ -169,14 +169,14 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
         if (hdrs)
                 hdrs_size = rd_kafka_headers_serialized_size(hdrs);
 
-	if (unlikely(len + keylen + hdrs_size >
-		     (size_t)rkt->rkt_rk->rk_conf.max_msg_size ||
-		     keylen > INT32_MAX)) {
-		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
-		if (errnop)
-			*errnop = EMSGSIZE;
-		return NULL;
-	}
+        if (unlikely(len > INT32_MAX || keylen > INT32_MAX ||
+                     rd_kafka_msg_max_wire_size(keylen, len, hdrs_size) >
+                     (size_t)rkt->rkt_rk->rk_conf.max_msg_size)) {
+                *errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+                if (errnop)
+                        *errnop = EMSGSIZE;
+                return NULL;
+        }
 
         if (msgflags & RD_KAFKA_MSG_F_BLOCK)
                 *errp = rd_kafka_curr_msgs_add(

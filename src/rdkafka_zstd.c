@@ -108,7 +108,7 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
         rd_rkb_dbg(rkb, MSG, "ZSTD",
                    "Unable to decompress ZSTD "
                    "(input buffer %"PRIusz", output buffer %llu): "
-                   "output would exceed receive.message.max.bytes (%d)",
+                   "output would exceed message.max.bytes (%d)",
                    inlen, out_bufsize, rkb->rkb_rk->rk_conf.max_msg_size);
 
         return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;

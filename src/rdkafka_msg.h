@@ -162,6 +162,19 @@ size_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm, int MsgVersion) {
 
 
 /**
+ * @returns the maximum total on-wire message size regardless of MsgVersion.
+ *
+ * @remark This does not account for the ProduceRequest, et.al, just the
+ *         per-message overhead.
+ */
+static RD_INLINE RD_UNUSED
+size_t rd_kafka_msg_max_wire_size (size_t keylen, size_t valuelen,
+                                   size_t hdrslen) {
+        return RD_KAFKAP_MESSAGE_V2_OVERHEAD +
+                keylen + valuelen + hdrslen;
+}
+
+/**
  * @returns the enveloping rd_kafka_msg_t pointer for a rd_kafka_msg_t
  *          wrapped rd_kafka_message_t.
  */

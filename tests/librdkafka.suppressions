@@ -342,6 +342,22 @@
    fun:_dl_catch_error
 }
 {
+   leak_sasl_add_plugin
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:sasl_client_add_plugin
+}
+{
+   leak_sasl_add_plugin2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   ...
+   fun:sasl_client_add_plugin
+}
+{
    debian_testing_ld_uninitialized
    Memcheck:Cond
    fun:index

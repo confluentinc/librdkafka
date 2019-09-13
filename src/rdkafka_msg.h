@@ -122,6 +122,7 @@ typedef struct rd_kafka_msg_s {
                 } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
 #define rkm_ts_enq     rkm_u.producer.ts_enq
+#define rkm_msgid      rkm_u.producer.msgid
 
                 struct {
                         rd_kafkap_bytes_t binhdrs; /**< Unparsed
@@ -469,10 +470,16 @@ int rd_kafka_msgq_age_scan (struct rd_kafka_toppar_s *rktp,
                             rd_ts_t now,
                             rd_ts_t *abs_next_timeout);
 
+void rd_kafka_msgq_split (rd_kafka_msgq_t *leftq, rd_kafka_msgq_t *rightq,
+                          rd_kafka_msg_t *first_right,
+                          int cnt, int64_t bytes);
+
 rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msg_t *start_pos,
                                         const rd_kafka_msg_t *rkm,
                                         int (*cmp) (const void *,
-                                                    const void *));
+                                                    const void *),
+                                        int *cntp, int64_t *bytesp);
 
 void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
                                  int64_t base_offset, int64_t timestamp,
@@ -502,7 +509,7 @@ static RD_INLINE RD_UNUSED int32_t rd_kafka_seq_wrap (int64_t seq) {
 
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq);
 
-rd_kafka_msg_t *ut_rd_kafka_msg_new (void);
+rd_kafka_msg_t *ut_rd_kafka_msg_new (size_t msgsize);
 void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq);
 int unittest_msg (void);
 

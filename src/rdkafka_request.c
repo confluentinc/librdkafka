@@ -3525,7 +3525,7 @@ ut_create_msgs (rd_kafka_msgq_t *rkmq, uint64_t msgid, int cnt) {
         for (i = 0 ; i < cnt ; i++) {
                 rd_kafka_msg_t *rkm;
 
-                rkm = ut_rd_kafka_msg_new();
+                rkm = ut_rd_kafka_msg_new(0);
                 rkm->rkm_u.producer.msgid = msgid++;
 
                 rd_kafka_msgq_enq(rkmq, rkm);

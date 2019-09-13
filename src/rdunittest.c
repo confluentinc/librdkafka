@@ -133,8 +133,7 @@ static int ut_tq_test (const struct ut_tq_args *args) {
                 if (!insert_after) {
                         /* Insert position is head of list,
                          * do two-step concat+move */
-                        TAILQ_CONCAT(tqh[qi], tqh[0], link); /* append */
-                        TAILQ_MOVE(tqh[0], tqh[qi], link); /* replace */
+                        TAILQ_PREPEND(tqh[0], tqh[qi], ut_tq_head, link);
                 } else {
                         TAILQ_INSERT_LIST(tqh[0], insert_after, tqh[qi],
                                           ut_tq_head,

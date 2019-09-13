@@ -673,103 +673,141 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
 
 /**
- * @brief Insert messages from \p srcq into \p dstq in their sorted
- *        position using insert-sort with \p cmp.
+ * @brief Insert \p srcq before \p insert_before in \p destq.
+ *
+ * If \p srcq and \p destq overlaps only part of the \p srcq will be inserted.
+ *
+ * Upon return \p srcq will contain any remaining messages that require
+ * another insert position in \p destq.
  */
 static void
-rd_kafka_msgq_insert_msgq_sort (rd_kafka_msgq_t *destq,
-                                rd_kafka_msgq_t *srcq,
-                                int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *rkm, *tmp;
+rd_kafka_msgq_insert_msgq_before (rd_kafka_msgq_t *destq,
+                                  rd_kafka_msg_t *insert_before,
+                                  rd_kafka_msgq_t *srcq,
+                                  int (*cmp) (const void *a, const void *b)) {
+        rd_kafka_msg_t *slast;
+        rd_kafka_msgq_t tmpq;
 
-        TAILQ_FOREACH_SAFE(rkm, &srcq->rkmq_msgs, rkm_link, tmp) {
-                rd_kafka_msgq_enq_sorted0(destq, rkm, cmp);
+        if (!insert_before) {
+                /* Append all of srcq to destq */
+                rd_kafka_msgq_concat(destq, srcq);
+                rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+                return;
         }
 
-        rd_kafka_msgq_init(srcq);
+        slast = rd_kafka_msgq_last(srcq);
+        rd_dassert(slast);
+
+        if (cmp(slast, insert_before) > 0) {
+                rd_kafka_msg_t *new_sfirst;
+                int cnt;
+                int64_t bytes;
+
+                /* destq insert_before resides somewhere between
+                 * srcq.first and srcq.last, find the first message in
+                 * srcq that is > insert_before and split srcq into
+                 * a left part that contains the messages to insert before
+                 * insert_before, and a right part that will need another
+                 * insert position. */
+
+                new_sfirst = rd_kafka_msgq_find_pos(srcq, NULL,
+                                                    insert_before,
+                                                    cmp, &cnt, &bytes);
+                rd_assert(new_sfirst);
+
+                /* split srcq into two parts using the divider message */
+                rd_kafka_msgq_split(srcq, &tmpq, new_sfirst, cnt, bytes);
+
+                rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
+                rd_kafka_msgq_verify_order(NULL, &tmpq, 0, rd_false);
+        } else {
+                rd_kafka_msgq_init(&tmpq);
+        }
+
+        /* srcq now contains messages up to the first message in destq,
+         * insert srcq at insert_before in destq. */
+        rd_dassert(!TAILQ_EMPTY(&destq->rkmq_msgs));
+        rd_dassert(!TAILQ_EMPTY(&srcq->rkmq_msgs));
+        TAILQ_INSERT_LIST_BEFORE(&destq->rkmq_msgs,
+                                 insert_before,
+                                 &srcq->rkmq_msgs,
+                                 rd_kafka_msgs_head_s,
+                                 rd_kafka_msg_t *,
+                                 rkm_link);
+        destq->rkmq_msg_cnt   += srcq->rkmq_msg_cnt;
+        destq->rkmq_msg_bytes += srcq->rkmq_msg_bytes;
+        srcq->rkmq_msg_cnt     = 0;
+        srcq->rkmq_msg_bytes   = 0;
+
+        rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+        rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
+
+        /* tmpq contains the remaining messages in srcq, move it over. */
+        rd_kafka_msgq_move(srcq, &tmpq);
+
+        rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
 }
 
 
+/**
+ * @brief Insert all messages from \p srcq into \p destq in their sorted
+ *        position (using \p cmp)
+ */
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *first, *dest_first;
+        rd_kafka_msg_t *sfirst, *start_pos = NULL;
 
-        first = TAILQ_FIRST(&srcq->rkmq_msgs);
-        if (unlikely(!first)) {
+        if (unlikely(RD_KAFKA_MSGQ_EMPTY(srcq))) {
                 /* srcq is empty */
                 return;
         }
 
-        dest_first = TAILQ_FIRST(&destq->rkmq_msgs);
-
-        /*
-         * Try to optimize insertion of source list.
-         */
-
-        if (unlikely(!dest_first)) {
-                /* Dest queue is empty, simply move the srcq. */
+        if (unlikely(RD_KAFKA_MSGQ_EMPTY(destq))) {
+                /* destq is empty, simply move the srcq. */
                 rd_kafka_msgq_move(destq, srcq);
-
+                rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
                 return;
         }
 
-        /* See if we can optimize the insertion by bulk-loading
-         * the messages in place.
+        /* Optimize insertion by bulk-moving messages in place.
          * We know that:
          *  - destq is sorted but might not be continous (1,2,3,7)
-         *  - srcq is sorted but might not be continous (4,5,6)
-         *  - there migt be overlap between the two, e.g:
-         *     destq = (1,2,3,7), srcq = (4,5,6)
+         *  - srcq is sorted but might not be continous (4,5,6,8)
+         *  - there migt be (multiple) overlaps between the two, e.g:
+         *     destq = (1,2,3,7), srcq = (4,5,6,8)
+         *  - there may be millions of messages.
          */
 
         rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
         rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
 
-        if (unlikely(rd_kafka_msgq_overlap(destq, srcq))) {
-                /* MsgId extents (first, last) in destq and srcq are
-                 * overlapping, do insert-sort to maintain ordering. */
-                rd_kafka_msgq_insert_msgq_sort(destq, srcq, cmp);
+        /* Insert messages from srcq into destq in non-overlapping
+         * chunks until srcq is exhausted. */
+        while (likely((sfirst = rd_kafka_msgq_first(srcq)) != NULL)) {
+                rd_kafka_msg_t *insert_before;
 
-        } else if (cmp(first, dest_first) < 0) {
-                /* Prepend src to dest queue.
-                 * First append existing dest queue to src queue,
-                 * then move src queue to now-empty dest queue,
-                 * effectively prepending src queue to dest queue. */
-                rd_kafka_msgq_prepend(destq, srcq);
+                /* Get insert position in destq of first element in srcq */
+                insert_before = rd_kafka_msgq_find_pos(destq, start_pos,
+                                                       sfirst, cmp,
+                                                       NULL, NULL);
 
-        } else if (cmp(first,
-                       TAILQ_LAST(&destq->rkmq_msgs,
-                                  rd_kafka_msgs_head_s)) > 0) {
-                /* Append src to dest queue */
-                rd_kafka_msgq_concat(destq, srcq);
+                /* Insert as much of srcq as possible at insert_before */
+                rd_kafka_msgq_insert_msgq_before(destq, insert_before,
+                                                 srcq, cmp);
 
-        } else {
-                /* Source queue messages reside somewhere
-                 * in the dest queue range, find the insert position. */
-                rd_kafka_msg_t *at;
+                /* Remember the current destq position so the next find_pos()
+                 * does not have to re-scan destq and what was
+                 * added from srcq. */
+                start_pos = insert_before;
 
-                at = rd_kafka_msgq_find_pos(destq, first, cmp);
-                rd_assert(at &&
-                          *"Bug in msg_order_cmp(): "
-                          "could not find insert position");
-
-                /* Insert input queue after 'at' position.
-                 * We know that:
-                 * - at is non-NULL
-                 * - at is not the last element. */
-                TAILQ_INSERT_LIST(&destq->rkmq_msgs,
-                                  at, &srcq->rkmq_msgs,
-                                  rd_kafka_msgs_head_s,
-                                  rd_kafka_msg_t *, rkm_link);
-
-                destq->rkmq_msg_cnt   += srcq->rkmq_msg_cnt;
-                destq->rkmq_msg_bytes += srcq->rkmq_msg_bytes;
-                rd_kafka_msgq_init(srcq);
+                rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+                rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
         }
 
         rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
-        rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
+
+        rd_assert(RD_KAFKA_MSGQ_EMPTY(srcq));
 }
 
 

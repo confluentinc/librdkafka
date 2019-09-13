@@ -232,17 +232,21 @@
 		TAILQ_INIT(newhead);					\
 	} while (/*CONSTCOND*/0) 
 
-#ifndef TAILQ_CONCAT
-#define TAILQ_CONCAT(dhead, shead, field) do {                          \
-		if (!TAILQ_EMPTY(shead)) {				\
-			*(dhead)->tqh_last = (shead)->tqh_first;	\
-			(shead)->tqh_first->field.tqe_prev =		\
-				(dhead)->tqh_last;			\
-			(dhead)->tqh_last = (shead)->tqh_last;		\
-			TAILQ_INIT((shead));				\
-		}							\
-	} while (0)
-#endif
+
+/* @brief Prepend \p shead to \p dhead */
+#define TAILQ_PREPEND(dhead,shead,headname,field) do {                  \
+        if (unlikely(TAILQ_EMPTY(dhead))) {                             \
+                TAILQ_MOVE(dhead, shead, field);                        \
+        } else if (likely(!TAILQ_EMPTY(shead))) {                       \
+                TAILQ_LAST(shead,headname)->field.tqe_next =            \
+                        TAILQ_FIRST(dhead);                             \
+                TAILQ_FIRST(dhead)->field.tqe_prev =                    \
+                        &TAILQ_LAST(shead,headname)->field.tqe_next;    \
+                TAILQ_FIRST(shead)->field.tqe_prev = &(dhead)->tqh_first; \
+                TAILQ_FIRST(dhead) = TAILQ_FIRST(shead);                \
+                TAILQ_INIT(shead);                                      \
+        }                                                               \
+        } while (0)
 
 /* @brief Insert \p shead after element \p listelm in \p dhead */
 #define TAILQ_INSERT_LIST(dhead,listelm,shead,headname,elmtype,field) do { \
@@ -258,6 +262,25 @@
                 _aft->field.tqe_prev  = &_last->field.tqe_next;         \
                 TAILQ_INIT((shead));                                    \
         }                                                               \
+        } while (0)
+
+/* @brief Insert \p shead before element \p listelm in \p dhead */
+#define TAILQ_INSERT_LIST_BEFORE(dhead,insert_before,shead,headname,elmtype,field) \
+        do {                                                            \
+                if (TAILQ_FIRST(dhead) == insert_before) {              \
+                        TAILQ_PREPEND(dhead, shead, headname, field);   \
+                } else {                                                \
+                        elmtype _first = TAILQ_FIRST(shead);            \
+                        elmtype _last = TAILQ_LAST(shead, headname);    \
+                        elmtype _dprev =                                \
+                                TAILQ_PREV(insert_before, headname, field); \
+                        _last->field.tqe_next = insert_before;          \
+                        _dprev->field.tqe_next = _first;                \
+                        (insert_before)->field.tqe_prev =               \
+                                &_last->field.tqe_next;                 \
+                        _first->field.tqe_prev = &(_dprev)->field.tqe_next; \
+                        TAILQ_INIT((shead));                            \
+                }                                                       \
         } while (0)
 
 #ifndef SIMPLEQ_HEAD

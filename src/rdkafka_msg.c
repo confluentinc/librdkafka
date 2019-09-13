@@ -654,25 +654,91 @@ int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
 }
 
 /**
- * @brief Find the insert position (i.e., the previous element)
- *        for message \p rkm.
+ * @brief Find the insert before position (i.e., the msg which comes
+ *        after \p rkm sequencially) for message \p rkm.
+ *
+ * @param rkmq insert queue.
+ * @param start_pos the element in \p rkmq to start scanning at, or NULL
+ *                  to start with the first element.
+ * @param rkm message to insert.
+ * @param cmp message comparator.
+ * @param cntp the accumulated number of messages up to, but not including,
+ *             the returned insert position. Optional (NULL).
+ *             Do not use when start_pos is set.
+ * @param bytesp the accumulated number of bytes up to, but not inclduing,
+ *               the returned insert position. Optional (NULL).
+ *               Do not use when start_pos is set.
+ *
+ * @remark cntp and bytesp will NOT be accurate when \p start_pos is non-NULL.
  *
  * @returns the insert position element, or NULL if \p rkm should be
- *          added at head of queue.
+ *          added at tail of queue.
  */
 rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msg_t *start_pos,
                                         const rd_kafka_msg_t *rkm,
                                         int (*cmp) (const void *,
-                                                    const void *)) {
-        const rd_kafka_msg_t *curr, *last = NULL;
+                                                    const void *),
+                                        int *cntp, int64_t *bytesp) {
+        const rd_kafka_msg_t *curr;
+        int cnt = 0;
+        int64_t bytes = 0;
 
-        TAILQ_FOREACH(curr, &rkmq->rkmq_msgs, rkm_link) {
-                if (cmp(rkm, curr) < 0)
-                        return (rd_kafka_msg_t *)last;
-                last = curr;
+        for (curr = start_pos ? start_pos : rd_kafka_msgq_first(rkmq) ;
+             curr ; curr = TAILQ_NEXT(curr, rkm_link)) {
+                if (cmp(rkm, curr) < 0) {
+                        if (cntp) {
+                                *cntp = cnt;
+                                *bytesp = bytes;
+                        }
+                        return (rd_kafka_msg_t *)curr;
+                }
+                if (cntp) {
+                        cnt++;
+                        bytes += rkm->rkm_len+rkm->rkm_key_len;
+                }
         }
 
-        return (rd_kafka_msg_t *)last;
+        return NULL;
+}
+
+
+/**
+ * @brief Split the original \p leftq into a left and right part,
+ *        with element \p first_right being the first element in the
+ *        right part (\p rightq).
+ *
+ * @param cnt is the number of messages up to, but not including \p first_right
+ *            in \p leftq, namely the number of messages to remain in
+ *            \p leftq after the split.
+ * @param bytes is the bytes counterpart to \p cnt.
+ */
+void rd_kafka_msgq_split (rd_kafka_msgq_t *leftq, rd_kafka_msgq_t *rightq,
+                          rd_kafka_msg_t *first_right,
+                          int cnt, int64_t bytes) {
+        rd_kafka_msg_t *llast;
+
+        rd_assert(first_right != TAILQ_FIRST(&leftq->rkmq_msgs));
+
+        llast = TAILQ_PREV(first_right, rd_kafka_msg_head_s, rkm_link);
+
+        rd_kafka_msgq_init(rightq);
+
+        rightq->rkmq_msgs.tqh_first = first_right;
+        rightq->rkmq_msgs.tqh_last = leftq->rkmq_msgs.tqh_last;
+
+        first_right->rkm_link.tqe_prev = &rightq->rkmq_msgs.tqh_first;
+
+        leftq->rkmq_msgs.tqh_last = &llast->rkm_link.tqe_next;
+        llast->rkm_link.tqe_next = NULL;
+
+        rightq->rkmq_msg_cnt   = leftq->rkmq_msg_cnt - cnt;
+        rightq->rkmq_msg_bytes = leftq->rkmq_msg_bytes - bytes;
+        leftq->rkmq_msg_cnt    = cnt;
+        leftq->rkmq_msg_bytes  = bytes;
+
+        rd_kafka_msgq_verify_order(NULL, leftq, 0, rd_false);
+        rd_kafka_msgq_verify_order(NULL, rightq, 0, rd_false);
 }
 
 
@@ -1201,6 +1267,7 @@ rd_kafka_message_status (const rd_kafka_message_t *rkmessage) {
 
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
         rd_kafka_msg_t *rkm;
+        int cnt = 0;
 
         fprintf(fp, "%s msgq_dump (%d messages, %"PRIusz" bytes):\n", what,
                 rd_kafka_msgq_len(rkmq), rd_kafka_msgq_size(rkmq));
@@ -1210,6 +1277,7 @@ void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
                         rkm->rkm_partition, rkm->rkm_offset,
                         rkm->rkm_u.producer.msgid,
                         (int)rkm->rkm_len, (const char *)rkm->rkm_payload);
+                rd_assert(cnt++ < rkmq->rkmq_msg_cnt);
         }
 }
 
@@ -1361,7 +1429,18 @@ void rd_kafka_msgq_verify_order0 (const char *function, int line,
                 } else
                         exp++;
 
+                if (cnt >= rkmq->rkmq_msg_cnt) {
+                        printf("%s:%d: %s [%"PRId32"]: rkm #%d (%p) "
+                               "msgid %"PRIu64": loop in queue?\n",
+                               function, line,
+                               topic, partition,
+                               cnt, rkm, rkm->rkm_u.producer.msgid);
+                        errcnt++;
+                        break;
+                }
+
                 cnt++;
+
         }
 
         rd_assert(!errcnt);
@@ -1376,13 +1455,19 @@ void rd_kafka_msgq_verify_order0 (const char *function, int line,
 /**
  * @brief Unittest: message allocator
  */
-rd_kafka_msg_t *ut_rd_kafka_msg_new (void) {
+rd_kafka_msg_t *ut_rd_kafka_msg_new (size_t msgsize) {
         rd_kafka_msg_t *rkm;
 
         rkm = rd_calloc(1, sizeof(*rkm));
         rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
         rkm->rkm_offset     = RD_KAFKA_OFFSET_INVALID;
         rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+
+        if (msgsize) {
+                rd_assert(msgsize <= sizeof(*rkm));
+                rkm->rkm_payload = rkm;
+                rkm->rkm_len = msgsize;
+        }
 
         return rkm;
 }
@@ -1406,7 +1491,8 @@ void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq) {
 
 static int ut_verify_msgq_order (const char *what,
                                  const rd_kafka_msgq_t *rkmq,
-                                 int first, int last) {
+                                 uint64_t first, uint64_t last,
+                                 rd_bool_t req_consecutive) {
         const rd_kafka_msg_t *rkm;
         uint64_t expected = first;
         int incr = first < last ? +1 : -1;
@@ -1414,15 +1500,28 @@ static int ut_verify_msgq_order (const char *what,
         int cnt = 0;
 
         TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
-                if (rkm->rkm_u.producer.msgid != expected) {
-                        RD_UT_SAY("%s: expected msgid %"PRIu64
-                                  " not %"PRIu64" at index #%d",
-                                  what, expected,
-                                  rkm->rkm_u.producer.msgid, cnt);
-                        fails++;
+                if ((req_consecutive &&
+                     rkm->rkm_u.producer.msgid != expected) ||
+                    (!req_consecutive &&
+                     rkm->rkm_u.producer.msgid < expected)) {
+                        if (fails++ < 100)
+                                RD_UT_SAY("%s: expected msgid %s %"PRIu64
+                                          " not %"PRIu64" at index #%d",
+                                          what,
+                                          req_consecutive ? "==" : ">=",
+                                          expected,
+                                          rkm->rkm_u.producer.msgid,
+                                          cnt);
                 }
+
                 cnt++;
                 expected += incr;
+
+                if (cnt > rkmq->rkmq_msg_cnt) {
+                        RD_UT_SAY("%s: loop in queue?", what);
+                        fails++;
+                        break;
+                }
         }
 
         RD_UT_ASSERT(!fails, "See %d previous failure(s)", fails);
@@ -1437,21 +1536,22 @@ static int unittest_msgq_order (const char *what, int fifo,
         rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
         rd_kafka_msg_t *rkm;
         rd_kafka_msgq_t sendq, sendq2;
+        const size_t msgsize = 100;
         int i;
 
         RD_UT_SAY("%s: testing in %s mode", what, fifo? "FIFO" : "LIFO");
 
         for (i = 1 ; i <= 6 ; i++) {
-                rkm = ut_rd_kafka_msg_new();
+                rkm = ut_rd_kafka_msg_new(msgsize);
                 rkm->rkm_u.producer.msgid = i;
                 rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
         }
 
         if (fifo) {
-                if (ut_verify_msgq_order("added", &rkmq, 1, 6))
+                if (ut_verify_msgq_order("added", &rkmq, 1, 6, rd_true))
                         return 1;
         } else {
-                if (ut_verify_msgq_order("added", &rkmq, 6, 1))
+                if (ut_verify_msgq_order("added", &rkmq, 6, 1, rd_true))
                         return 1;
         }
 
@@ -1462,16 +1562,16 @@ static int unittest_msgq_order (const char *what, int fifo,
                 rd_kafka_msgq_enq(&sendq, rd_kafka_msgq_pop(&rkmq));
 
         if (fifo) {
-                if (ut_verify_msgq_order("send removed", &rkmq, 4, 6))
+                if (ut_verify_msgq_order("send removed", &rkmq, 4, 6, rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("sendq", &sendq, 1, 3))
+                if (ut_verify_msgq_order("sendq", &sendq, 1, 3, rd_true))
                         return 1;
         } else {
-                if (ut_verify_msgq_order("send removed", &rkmq, 3, 1))
+                if (ut_verify_msgq_order("send removed", &rkmq, 3, 1, rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("sendq", &sendq, 6, 4))
+                if (ut_verify_msgq_order("sendq", &sendq, 6, 4, rd_true))
                         return 1;
         }
 
@@ -1485,10 +1585,10 @@ static int unittest_msgq_order (const char *what, int fifo,
                      rd_kafka_msgq_len(&sendq));
 
         if (fifo) {
-                if (ut_verify_msgq_order("readded", &rkmq, 1, 6))
+                if (ut_verify_msgq_order("readded", &rkmq, 1, 6, rd_true))
                         return 1;
         } else {
-                if (ut_verify_msgq_order("readded", &rkmq, 6, 1))
+                if (ut_verify_msgq_order("readded", &rkmq, 6, 1, rd_true))
                         return 1;
         }
 
@@ -1500,16 +1600,18 @@ static int unittest_msgq_order (const char *what, int fifo,
                 rd_kafka_msgq_enq(&sendq, rd_kafka_msgq_pop(&rkmq));
 
         if (fifo) {
-                if (ut_verify_msgq_order("send removed #2", &rkmq, 5, 6))
+                if (ut_verify_msgq_order("send removed #2", &rkmq, 5, 6,
+                                         rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("sendq #2", &sendq, 1, 4))
+                if (ut_verify_msgq_order("sendq #2", &sendq, 1, 4, rd_true))
                         return 1;
         } else {
-                if (ut_verify_msgq_order("send removed #2", &rkmq, 2, 1))
+                if (ut_verify_msgq_order("send removed #2", &rkmq, 2, 1,
+                                         rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("sendq #2", &sendq, 6, 3))
+                if (ut_verify_msgq_order("sendq #2", &sendq, 6, 3, rd_true))
                         return 1;
         }
 
@@ -1519,17 +1621,19 @@ static int unittest_msgq_order (const char *what, int fifo,
                             RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
 
         if (fifo) {
-                if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6))
+                if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6, rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("no more retries", &sendq, 1, 3))
+                if (ut_verify_msgq_order("no more retries", &sendq, 1, 3,
+                                         rd_true))
                         return 1;
 
         } else {
-                if (ut_verify_msgq_order("readded #2", &rkmq, 3, 1))
+                if (ut_verify_msgq_order("readded #2", &rkmq, 3, 1, rd_true))
                         return 1;
 
-                if (ut_verify_msgq_order("no more retries", &sendq, 6, 4))
+                if (ut_verify_msgq_order("no more retries", &sendq, 6, 4,
+                                         rd_true))
                         return 1;
         }
 
@@ -1552,7 +1656,7 @@ static int unittest_msgq_order (const char *what, int fifo,
         while (rd_kafka_msgq_len(&sendq2) < 3)
                 rd_kafka_msgq_enq(&sendq2, rd_kafka_msgq_pop(&rkmq));
 
-        rkm = ut_rd_kafka_msg_new();
+        rkm = ut_rd_kafka_msg_new(msgsize);
         rkm->rkm_u.producer.msgid = i;
         rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
 
@@ -1569,12 +1673,18 @@ static int unittest_msgq_order (const char *what, int fifo,
                      rd_kafka_msgq_len(&sendq2));
 
         if (fifo) {
-                if (ut_verify_msgq_order("inject", &rkmq, 1, 7))
+                if (ut_verify_msgq_order("inject", &rkmq, 1, 7, rd_true))
                         return 1;
         } else {
-                if (ut_verify_msgq_order("readded #2", &rkmq, 7, 1))
+                if (ut_verify_msgq_order("readded #2", &rkmq, 7, 1, rd_true))
                         return 1;
         }
+
+        RD_UT_ASSERT(rd_kafka_msgq_size(&rkmq) ==
+                     rd_kafka_msgq_len(&rkmq) * msgsize,
+                     "expected msgq size %"PRIusz", not %"PRIusz,
+                     (size_t)rd_kafka_msgq_len(&rkmq) * msgsize,
+                     rd_kafka_msgq_size(&rkmq));
 
 
         ut_rd_kafka_msgq_purge(&sendq);
@@ -1620,11 +1730,183 @@ static int unittest_msg_seq_wrap (void) {
         RD_UT_PASS();
 }
 
+
+/**
+ * @brief Populate message queue with message ids from lo..hi (inclusive)
+ */
+static void ut_msgq_populate (rd_kafka_msgq_t *rkmq, uint64_t lo, uint64_t hi,
+                              size_t msgsize) {
+        uint64_t i;
+
+        for (i = lo ; i <= hi ; i++) {
+                rd_kafka_msg_t *rkm = ut_rd_kafka_msg_new(msgsize);
+                rkm->rkm_u.producer.msgid = i;
+                rd_kafka_msgq_enq(rkmq, rkm);
+        }
+}
+
+
+struct ut_msg_range {
+        uint64_t lo;
+        uint64_t hi;
+};
+
+/**
+ * @brief Verify that msgq insert sorts are optimized. Issue #2508.
+ */
+static int unittest_msgq_insert_sort (const char *what,
+                                      double max_us_per_msg,
+                                      double *ret_us_per_msg,
+                                      const struct ut_msg_range *src_ranges,
+                                      const struct ut_msg_range *dest_ranges) {
+        rd_kafka_msgq_t destq, srcq;
+        int i;
+        uint64_t lo = UINT64_MAX, hi = 0;
+        uint64_t cnt = 0;
+        const size_t msgsize = 100;
+        size_t totsize = 0;
+        rd_ts_t ts;
+        double us_per_msg;
+
+        RD_UT_SAY("Testing msgq insert efficiency: %s", what);
+
+        rd_kafka_msgq_init(&destq);
+        rd_kafka_msgq_init(&srcq);
+
+        for (i = 0 ; src_ranges[i].hi > 0 ; i++) {
+                uint64_t this_cnt;
+
+                ut_msgq_populate(&srcq, src_ranges[i].lo, src_ranges[i].hi,
+                                 msgsize);
+                if (src_ranges[i].lo < lo)
+                        lo = src_ranges[i].lo;
+                if (src_ranges[i].hi > hi)
+                        hi = src_ranges[i].hi;
+                this_cnt = (src_ranges[i].hi - src_ranges[i].lo) + 1;
+                cnt += this_cnt;
+                totsize += msgsize * (size_t)this_cnt;
+        }
+
+        for (i = 0 ; dest_ranges[i].hi > 0 ; i++) {
+                uint64_t this_cnt;
+
+                ut_msgq_populate(&destq, dest_ranges[i].lo, dest_ranges[i].hi,
+                                 msgsize);
+                if (dest_ranges[i].lo < lo)
+                        lo = dest_ranges[i].lo;
+                if (dest_ranges[i].hi > hi)
+                        hi = dest_ranges[i].hi;
+                this_cnt = (dest_ranges[i].hi - dest_ranges[i].lo) + 1;
+                cnt += this_cnt;
+                totsize += msgsize * (size_t)this_cnt;
+        }
+
+        RD_UT_SAY("Begin insert of %d messages into destq with %d messages",
+                  rd_kafka_msgq_len(&srcq), rd_kafka_msgq_len(&destq));
+
+        ts = rd_clock();
+        rd_kafka_msgq_insert_msgq(&destq, &srcq, rd_kafka_msg_cmp_msgid);
+        ts = rd_clock() - ts;
+        us_per_msg = (double)ts / (double)cnt;
+
+        RD_UT_SAY("Done: took %"PRId64"us, %.4fus/msg",
+                  ts, us_per_msg);
+
+        RD_UT_ASSERT(rd_kafka_msgq_len(&srcq) == 0,
+                     "srcq should be empty, but contains %d messages",
+                     rd_kafka_msgq_len(&srcq));
+        RD_UT_ASSERT(rd_kafka_msgq_len(&destq) == (int)cnt,
+                     "destq should contain %d messages, not %d",
+                     (int)cnt, rd_kafka_msgq_len(&destq));
+
+        if (ut_verify_msgq_order("after", &destq, lo, hi, rd_false))
+                return 1;
+
+        RD_UT_ASSERT(rd_kafka_msgq_size(&destq) == totsize,
+                     "expected destq size to be %"PRIusz" bytes, not %"PRIusz,
+                     totsize, rd_kafka_msgq_size(&destq));
+
+        ut_rd_kafka_msgq_purge(&srcq);
+        ut_rd_kafka_msgq_purge(&destq);
+
+        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg),
+                     "maximum us/msg exceeded: %.4f > %.4f us/msg",
+                     us_per_msg, max_us_per_msg);
+
+        if (ret_us_per_msg)
+                *ret_us_per_msg = us_per_msg;
+
+        RD_UT_PASS();
+}
+
+
+
 int unittest_msg (void) {
         int fails = 0;
+        double insert_baseline;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgid);
         fails += unittest_msg_seq_wrap();
+
+        fails += unittest_msgq_insert_sort(
+                "get baseline insert time", 100000.0, &insert_baseline,
+                (const struct ut_msg_range[]){
+                        { 1, 1 },
+                        { 3, 3 },
+                        { 0, 0 }},
+                (const struct ut_msg_range[]) {
+                        { 2, 2 },
+                        { 4, 4 },
+                        { 0, 0 }});
+
+        /* Allow some wiggle room in baseline time. */
+        if (insert_baseline < 0.1)
+                insert_baseline = 0.1;
+        insert_baseline *= 3;
+
+        fails += unittest_msgq_insert_sort(
+                "single-message ranges", insert_baseline, NULL,
+                (const struct ut_msg_range[]){
+                        { 2, 2 },
+                        { 4, 4 },
+                        { 9, 9 },
+                        { 33692864, 33692864 },
+                        { 0, 0 }},
+                (const struct ut_msg_range[]) {
+                        { 1,  1 },
+                        { 3, 3 },
+                        { 5, 5 },
+                        { 10, 10 },
+                        { 33692865, 33692865 },
+                        { 0, 0 }});
+        fails += unittest_msgq_insert_sort(
+                "many messages", insert_baseline, NULL,
+                (const struct ut_msg_range[]){
+                        { 100000, 200000 },
+                        { 400000, 450000 },
+                        { 900000, 920000 },
+                        { 33692864, 33751992 },
+                        { 33906868, 33993690 },
+                        { 40000000, 44000000 },
+                        { 0, 0 }},
+                (const struct ut_msg_range[]) {
+                        { 1,  199 },
+                        { 350000, 360000 },
+                        { 500000, 500010 },
+                        { 1000000, 1000200 },
+                        { 33751993, 33906867 },
+                        { 50000001, 50000001 },
+                        { 0, 0 }});
+        fails += unittest_msgq_insert_sort(
+                "issue #2508", insert_baseline, NULL,
+                (const struct ut_msg_range[]){
+                        { 33692864, 33751992 },
+                        { 33906868, 33993690 },
+                        { 0, 0 }},
+                (const struct ut_msg_range[]) {
+                        { 33751993, 33906867 },
+                        { 0, 0 }});
+
 
         return fails;
 }

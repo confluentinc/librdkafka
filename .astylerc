@@ -1,0 +1,35 @@
+# This C style is compatible with the linux c-mode in emacs,
+# but with 8-space indent.
+
+# braces and indent
+#style=google
+indent=spaces=8
+
+# indentation
+#indent-switches
+#indent-continuation=8
+indent-preproc-define
+min-conditional-indent=0
+max-continuation-indent=80
+
+# padding
+pad-oper
+pad-header
+pad-method-prefix
+unpad-paren
+align-pointer=name
+
+# formatting
+break-one-line-headers
+#keep-one-line-blocks
+#keep-one-line-statements
+convert-tabs
+#close-templates
+remove-braces
+
+# objective-c
+pad-method-prefix
+unpad-return-type
+unpad-param-type
+align-method-colon
+pad-method-colon=none

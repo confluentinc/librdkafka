@@ -139,6 +139,18 @@ Example:
 
 # librdkafka C style guide
 
+## Checkstyle
+
+The C style is enforced in all PRs by a CI job that
+runs `make checkstyle`.
+
+Before pushing your PR you should run `make checkstyle` to
+check that you adhere to coding guidelines, or `make fixstyle`
+to automatically fix the style.
+
+**Note**: Only the C code is currently covered by checkstyle/fixstyle,
+         for the C++ code, please follow the Google C++ style guide.
+
 ## Function and globals naming
 
 Use self-explanatory hierarchical snake-case naming.

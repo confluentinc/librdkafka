@@ -18,7 +18,7 @@
       ],
       "testcmd": [
           "make -C tests run_local"
-      ],
+      ]
     },
 
     "xenial-i386": {
@@ -40,7 +40,7 @@
       ],
       "testcmd": [
         "make -C tests run_local"
-      ],
+      ]
     },
 
     "xenial-armhf": {
@@ -57,13 +57,13 @@
       "buildcmd": [
         "./configure",
         "make -j ${PARALLEL}",
-          "make -j ${PARALLEL} -C tests build",
+        "make -j ${PARALLEL} -C tests build"
       ],
       "testcmd": [
         "cd tests",
         "./run-test.sh -p1 -l ./merged",
         "cd .."
-      ],
+      ]
     },
 
     "stretch-mips": {
@@ -80,13 +80,13 @@
       "buildcmd": [
         "./configure",
         "make -j ${PARALLEL}",
-          "make -j ${PARALLEL} -C tests build",
+        "make -j ${PARALLEL} -C tests build"
       ],
       "testcmd": [
         "cd tests",
         "./run-test.sh -p1 -l ./merged",
         "cd .."
-      ],
+      ]
     },
 
     "cmake-xenial-amd64": {
@@ -102,13 +102,27 @@
       ],
       "buildcmd": [
         "cmake -H. -B_builds -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_BUILD_TYPE=Debug",
-        "cmake --build _builds",
+        "cmake --build _builds"
       ],
       "testcmd": [
         "cd _builds",
         "ctest -VV -R RdKafkaTestBrokerLess"
+      ]
+    },
+
+    "checkstyle": {
+
+      "buildenv": "xenial-amd64",
+      "builddeps": [
+        "build-essential",
+        "git-core",
+        "curl"
       ],
+      "buildcmd": [
+        "make checkstyle"
+      ]
     }
   },
+
   "artifacts": ["config.log", "Makefile.config", "config.h"]
 }

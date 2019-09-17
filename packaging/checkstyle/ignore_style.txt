@@ -1,0 +1,16 @@
+# Ignore style checks for the following files.
+# Format is grep regexp patterns.
+win32/wingetopt.[ch]
+win32/wintime.h
+src/crc32c.c
+src/lz4.[ch]
+src/lz4frame.[ch]
+src/lz4opt.h
+src/queue.h
+packaging/cmake/try_compile/.*
+src/regexp.[ch]
+src/snappy.[ch]
+src/tinycthread.[ch]
+src/xxhash.[ch]
+tests/sockem.[ch]
+src-cpp/

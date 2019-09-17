@@ -68,6 +68,12 @@ archive:
 rpm: distclean
 	$(MAKE) -C packaging/rpm
 
+checkstyle:
+	packaging/checkstyle/checkstyle.sh --install
+
+fixstyle:
+	packaging/checkstyle/checkstyle.sh --install --fix
+
 LICENSES.txt: .PHONY
 	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
 	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp

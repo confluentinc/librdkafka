@@ -2935,6 +2935,9 @@ class BrokerMetadata {
   /** @returns Broker listening port */
   virtual int port() const = 0;
 
+  /** @returns Broker rack */
+  virtual const std::string rack() const = 0;
+
   virtual ~BrokerMetadata() = 0;
 };
 

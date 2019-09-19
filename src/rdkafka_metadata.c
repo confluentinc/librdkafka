@@ -274,8 +274,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
 
                 if (ApiVersion >= 1) {
-                        rd_kafkap_str_t rack;
-                        rd_kafka_buf_read_str(rkbuf, &rack);
+                        // API versions 1+ contain a broker rack identifier
+                        rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, md->brokers[i].rack);
                 }
         }
 
@@ -438,10 +438,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         /* Update our list of brokers. */
         for (i = 0 ; i < md->broker_cnt ; i++) {
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+                           "  Broker #%i/%i: %s:%i (Rack: %s) NodeId %"PRId32,
                            i, md->broker_cnt,
                            md->brokers[i].host,
                            md->brokers[i].port,
+                           md->brokers[i].rack ? md->brokers[i].rack : "-",
                            md->brokers[i].id);
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i]);

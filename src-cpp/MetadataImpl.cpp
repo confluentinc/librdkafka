@@ -48,6 +48,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
 
   const std::string host() const {return host_;}
   int port() const {return broker_metadata_->port;}
+  const std::string rack() const {return broker_metadata_->rack;}
 
   virtual ~BrokerMetadataImpl() {}
 

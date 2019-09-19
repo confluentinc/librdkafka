@@ -3838,6 +3838,7 @@ typedef struct rd_kafka_metadata_broker {
         int32_t     id;             /**< Broker Id */
         char       *host;           /**< Broker hostname */
         int         port;           /**< Broker listening port */
+        char       *rack;           /**< Broker rack */
 } rd_kafka_metadata_broker_t;
 
 /**

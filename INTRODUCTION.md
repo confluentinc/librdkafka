@@ -45,7 +45,7 @@ The two most important configuration properties for performance tuning are:
 
   * `batch.num.messages` - the maximum number of messages to wait for to
 	  accumulate in the local queue before sending off a message set.
-  * `queue.buffering.max.ms` - how long to wait for batch.num.messages to
+  * `linger.ms` - how long to wait for batch.num.messages to
 	  fill up in the local queue. A lower value improves latency at the
           cost of lower throughput and higher per-message overhead.
           A higher value improves throughput at the expense of latency.
@@ -101,7 +101,7 @@ of messages to accumulate in the local queue before sending them off in
 one large message set or batch to the peer. This amortizes the messaging
 overhead and eliminates the adverse effect of the round trip time (rtt).
 
-`queue.buffering.max.ms` (also called `linger.ms`) allows librdkafka to
+`linger.ms` (also called `queue.buffering.max.ms`) allows librdkafka to
 wait up to the specified amount of time to accumulate up to
 `batch.num.messages` in a single batch (MessageSet) before sending
 to the broker. The larger the batch the higher the throughput.
@@ -109,7 +109,7 @@ Enabling `msg` debugging (set `debug` property to `msg`) will emit log
 messages for the accumulation process which lets you see what batch sizes
 are being produced.
 
-Example using `queue.buffering.max.ms=1`:
+Example using `linger.ms=1`:
 
 ```
 ... test [0]: MessageSet with 1514 message(s) delivered
@@ -121,7 +121,7 @@ Example using `queue.buffering.max.ms=1`:
 ... test [3]: MessageSet with 11 message(s) delivered
 ```
 
-Example using `queue.buffering.max.ms=1000`:
+Example using `linger.ms=1000`:
 ```
 ... test [0]: MessageSet with 10000 message(s) delivered
 ... test [0]: MessageSet with 10000 message(s) delivered
@@ -133,7 +133,7 @@ Example using `queue.buffering.max.ms=1000`:
 ```
 
 
-The default setting of `queue.buffering.max.ms=1` is not suitable for
+The default setting of `linger.ms=0.1` is not suitable for
 high throughput, it is recommended to set this value to >50ms, with
 throughput leveling out somewhere around 100-1000ms depending on
 message produce pattern and sizes.
@@ -144,13 +144,15 @@ per topic+partition basis.
 
 ### Low latency
 
-When low latency messaging is required the `queue.buffering.max.ms` should be
+When low latency messaging is required the `linger.ms` should be
 tuned to the maximum permitted producer-side latency.
-Setting queue.buffering.max.ms to 1 will make sure messages are sent as
-soon as possible. You could check out [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
-to find more details.
+Setting `linger.ms` to 0 or 0.1 will make sure messages are sent as
+soon as possible.
 Lower buffering time leads to smaller batches and larger per-message overheads,
 increasing network, memory and CPU usage for producers, brokers and consumers.
+
+See [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency) for more info.
+
 
 #### Latency measurement
 
@@ -217,7 +219,7 @@ configuration property.
 Compression is performed on the batch of messages in the local queue, the
 larger the batch the higher likelyhood of a higher compression ratio.
 The local batch queue size is controlled through the `batch.num.messages` and
-`queue.buffering.max.ms` configuration properties as described in the
+`linger.ms` configuration properties as described in the
 **High throughput** chapter above.
 
 
@@ -230,7 +232,7 @@ configuration (`request.required.acks` and `message.send.max.retries`, etc).
 
 If the topic configuration property `request.required.acks` is set to wait
 for message commit acknowledgements from brokers (any value but 0, see
-[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+[`CONFIGURATION.md`](CONFIGURATION.md)
 for specifics) then librdkafka will hold on to the message until
 all expected acks have been received, gracefully handling the following events:
 
@@ -402,7 +404,7 @@ and exactly-once producer guarantees.
 The idempotent producer is enabled by setting the `enable.idempotence`
 configuration property to `true`, this will automatically adjust a number of
 other configuration properties to adhere to the idempotency requirements,
-see the documentation of `enable.idempotence` in [CONFIGURATION.md] for
+see the documentation of `enable.idempotence` in [CONFIGURATION.md](CONFIGURATION.md) for
 more information.
 Producer instantiation will fail if the user supplied an incompatible value
 for any of the automatically adjusted properties, e.g., it is an error to
@@ -696,9 +698,9 @@ This method should be called by the application on delivery report error.
 ### Documentation
 
 The librdkafka API is documented in the
-[`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka.h)
+[`rdkafka.h`](src/rdkafka.h)
 header file, the configuration properties are documented in
-[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+[`CONFIGURATION.md`](CONFIGURATION.md)
 
 ### Initialization
 
@@ -715,7 +717,7 @@ It is created by calling `rd_kafka_topic_new()`.
 Both `rd_kafka_t` and `rd_kafka_topic_t` comes with a configuration API which
 is optional.
 Not using the API will cause librdkafka to use its default values which are
-documented in [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
+documented in [`CONFIGURATION.md`](CONFIGURATION.md).
 
 **Note**: An application may create multiple `rd_kafka_t` objects and
 	they share no state.

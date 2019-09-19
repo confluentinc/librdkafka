@@ -666,7 +666,7 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         rd_kafka_toppar_unlock(rktp);
 
         if (wakeup_q) {
-                rd_kafka_q_yield(wakeup_q);
+                rd_kafka_q_yield(wakeup_q, rd_true/*rate-limit*/);
                 rd_kafka_q_destroy(wakeup_q);
         }
 }

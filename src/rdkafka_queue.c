@@ -256,7 +256,7 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 
 	if (!dstq->rkq_fwdq && !srcq->rkq_fwdq) {
 		if (cnt > 0 && dstq->rkq_qlen == 0)
-			rd_kafka_q_io_event(dstq);
+			rd_kafka_q_io_event(dstq, rd_false/*no rate-limiting*/);
 
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
@@ -730,6 +730,8 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
                 qio->fd = fd;
                 qio->size = size;
                 qio->payload = (void *)(qio+1);
+                qio->ts_rate = rkq->rkq_rk->rk_conf.buffering_max_us;
+                qio->ts_last = 0;
                 qio->event_cb = NULL;
                 qio->event_cb_opaque = NULL;
                 memcpy(qio->payload, payload, size);

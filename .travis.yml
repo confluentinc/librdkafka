@@ -29,15 +29,17 @@ matrix:
    compiler: clang
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
- - name: "Linux GCC: +integration-tests +copyright-check"
+ - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial
    compiler: gcc
-   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y
+   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y DOC_CHECK=y
    before_script:
     - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
     - sudo dpkg -i rapidjson-dev.deb
     - sudo pip install -r tests/requirements.txt
+    - sudo apt update
+    - sudo apt install -y doxygen graphviz
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
 
 install:
@@ -53,6 +55,7 @@ script:
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
+- if [[ $DOC_CHECK == y ]]; then make docs ; fi
 - if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.2.0) ; fi
 
 deploy:

@@ -295,8 +295,14 @@ static void do_test_produce_retries_disconnect (const char *topic,
         rd_kafka_destroy(rk);
 
         TEST_SAY("Verifying messages with consumer\n");
-        test_consume_msgs_easy(NULL, topic, testid,
-                               partition_cnt, should_fail ? 0 : msgcnt, NULL);
+        test_consume_msgs_easy(NULL, topic, testid, partition_cnt,
+                               /* Since we don't know the number of
+                                * messages that got thru on the socket
+                                * before disconnect we can't let the
+                                * expected message count be 0 in case of
+                                * should_fail, so instead ignore the message
+                                * count (-1). */
+                               should_fail ? -1 : msgcnt, NULL);
 
         TEST_SAY(_C_GRN "Test produce retries by disconnect "
                  "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",

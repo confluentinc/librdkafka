@@ -147,7 +147,9 @@ compat:
 # (| is for not running suites in parallel)
 release-test: | asan tsan pristine-full compat
 
-
 # Check resource usage (requires a running cluster environment)
 rusage:
 	./run-test.sh -R bare
+
+
+-include $(DEPS)

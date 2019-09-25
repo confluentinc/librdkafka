@@ -68,7 +68,7 @@ bugfix in-place.
 New features and APIs should also result in an added test case.
 
 Submitted patches must pass all existing tests.
-For more information on the test suite see [tests/README]
+For more information on the test suite see [tests/README.md]
 
 
 

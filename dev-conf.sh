@@ -30,18 +30,61 @@
 #
 # Configure librdkafka for development
 #
+# Usage:
+#   ./dev-conf.sh             - Build with settings in dev-conf.sh
+#   ./dev-conf.sh asan|tsan   - ... and ASAN or TSAN
+#   ./dev-conf.sh clean       - Non-development clean build
+#
 
 set -e
-./configure --clean
+
+build () {
+    local btype="$1"
+    local opts="$2"
+
+    echo "$btype configuration options: $opts"
+    ./configure --clean
+    ./configure $opts
+
+    make clean
+    make -j
+    (cd tests ; make -j build)
+
+    echo "$btype build done"
+}
+
+
+case "$1" in
+    clean)
+        build Clean
+        exit $?
+        ;;
+    asan)
+        FSAN='-fsanitize=address'
+        ;;
+    tsan)
+        FSAN='-fsanitize=thread'
+        ;;
+    "")
+        ;;
+    *)
+        echo "Usage: $0 [clean|asan|tsan]"
+        exit 1
+        ;;
+esac
+
 
 # enable pedantic
 #export CFLAGS='-std=c99 -pedantic -Wshadow'
 #export CXXFLAGS='-std=c++98 -pedantic'
 
-# enable FSAN address, thread, ..
-FSAN="-fsanitize=address"
-#FSAN="-fsanitize=thread"
-#FSAN="-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer"
+if [[ -z $FSAN ]]; then
+    # enable FSAN address, thread, ..
+    #FSAN="-fsanitize=address"
+    #FSAN="-fsanitize=thread"
+    #FSAN="-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer"
+    true  # block can't be empty
+fi
 
 if [[ ! -z $FSAN ]]; then
     export CPPFLAGS="$CPPFLAGS $FSAN"
@@ -71,9 +114,5 @@ OPTS="$OPTS --disable-optimization"
 #enable refcnt debugging
 #OPTS="$OPTS --enable-refcnt-debug"
 
-echo "Devel configuration options: $OPTS"
-./configure $OPTS
+build Development $OPTS
 
-make clean
-make -j
-(cd tests ; make -j build)

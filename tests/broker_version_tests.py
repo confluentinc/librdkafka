@@ -115,7 +115,7 @@ if __name__ == '__main__':
                         default=False,
                         help='On test failure start a shell before bringing the cluster down.')
     parser.add_argument('versions', type=str, nargs='*',
-                        default=['0.8.1.1', '0.8.2.2', '0.9.0.1', 'trunk'],
+                        default=['0.8.1.1', '0.8.2.2', '0.9.0.1', '2.3.0'],
                         help='Broker versions to test')
     parser.add_argument('--interactive', action='store_true', dest='interactive',
                         default=False,

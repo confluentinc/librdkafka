@@ -9,8 +9,10 @@ CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
-KAFKA_VERSION?=2.2.0
-
+# Latest Kafka version
+KAFKA_VERSION?=2.3.0
+# Kafka versions for compatibility tests
+COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 $(KAFKA_VERSION)
 -include ../Makefile.config
 
 all: $(BIN) run_par
@@ -113,3 +115,31 @@ realclean: clean clean-output
 
 java: .PHONY
 	make -C java
+
+# Run test-suite with ASAN
+asan:
+	@(echo "### Running tests with AddressSanitizer")
+	(cd .. ; ./dev-conf.sh asan)
+	./broker_version_tests.py $(KAFKA_VERSION)
+
+# Run test-suite with TSAN
+tsan:
+	@(echo "### Running tests with ThreadSanitizer")
+	(cd .. ; ./dev-conf.sh tsan)
+	./broker_version_tests.py $(KAFKA_VERSION)
+
+# Run full test-suite with a clean release build
+pristine-full:
+	@(echo "### Running full test-suite with clean build")
+	(cd .. ; ./dev-conf.sh clean)
+	make full
+
+# Run backward compatibility tests
+compat:
+	@(echo "### Running compatibility tests with Apache Kafka versions $(COMPAT_KAFKA_VERSIONS)")
+	./broker_version_tests.py --rdkconf '{"args": "-Q"}' \
+		$(COMPAT_KAFKA_VERSIONS)
+
+# Run a full release / PR test.
+# (| is for not running suites in parallel)
+release-test: | asan tsan pristine-full compat

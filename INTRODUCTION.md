@@ -5,93 +5,104 @@ librdkafka is a high performance C implementation of the Apache
 Kafka client, providing a reliable and performant client for production use.
 librdkafka also provides a native C++ interface.
 
-## Contents
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
 
-The following chapters are available in this document
+- [Introduction to librdkafka - the Apache Kafka C/C++ client library](#introduction-to-librdkafka---the-apache-kafka-cc-client-library)
+    - [Performance](#performance)
+        - [High throughput](#high-throughput)
+        - [Low latency](#low-latency)
+            - [Latency measurement](#latency-measurement)
+        - [Compression](#compression)
+    - [Message reliability](#message-reliability)
+        - [Producer message delivery success](#producer-message-delivery-success)
+        - [Producer message delivery failure](#producer-message-delivery-failure)
+            - [Error: Timed out in transmission queue](#error-timed-out-in-transmission-queue)
+            - [Error: Timed out in flight to/from broker](#error-timed-out-in-flight-tofrom-broker)
+            - [Error: Temporary broker-side error](#error-temporary-broker-side-error)
+            - [Error: Temporary errors due to stale metadata](#error-temporary-errors-due-to-stale-metadata)
+            - [Error: Local time out](#error-local-time-out)
+            - [Error: Permanent errors](#error-permanent-errors)
+        - [Producer retries](#producer-retries)
+        - [Reordering](#reordering)
+        - [Idempotent Producer](#idempotent-producer)
+            - [Guarantees](#guarantees)
+            - [Ordering and message sequence numbers](#ordering-and-message-sequence-numbers)
+            - [Partitioner considerations](#partitioner-considerations)
+            - [Message timeout considerations](#message-timeout-considerations)
+            - [Leader change](#leader-change)
+            - [Error handling](#error-handling)
+                - [RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER](#rdkafkaresperroutofordersequencenumber)
+                - [RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER](#rdkafkaresperrduplicatesequencenumber)
+                - [RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID](#rdkafkaresperrunknownproducerid)
+                - [Standard errors](#standard-errors)
+                - [Message persistence status](#message-persistence-status)
+    - [Usage](#usage)
+        - [Documentation](#documentation)
+        - [Initialization](#initialization)
+        - [Configuration](#configuration)
+            - [Example](#example)
+        - [Termination](#termination)
+            - [High-level KafkaConsumer](#high-level-kafkaconsumer)
+            - [Producer](#producer)
+            - [Speeding up termination](#speeding-up-termination)
+        - [Threads and callbacks](#threads-and-callbacks)
+        - [Brokers](#brokers)
+            - [Sparse connections](#sparse-connections)
+                - [Random broker selection](#random-broker-selection)
+                - [Persistent broker connections](#persistent-broker-connections)
+            - [Connection close](#connection-close)
+        - [Logging](#logging)
+            - [Debug contexts](#debug-contexts)
+        - [Feature discovery](#feature-discovery)
+        - [Producer API](#producer-api)
+        - [Simple Consumer API (legacy)](#simple-consumer-api-legacy)
+            - [Offset management](#offset-management)
+                - [Auto offset commit](#auto-offset-commit)
+                - [At-least-once processing](#at-least-once-processing)
+            - [Consumer groups](#consumer-groups)
+        - [Topics](#topics)
+            - [Topic auto creation](#topic-auto-creation)
+        - [Metadata](#metadata)
+            - [< 0.9.3](#-093)
+            - [> 0.9.3](#-093)
+            - [Query reasons](#query-reasons)
+            - [Caching strategy](#caching-strategy)
+        - [Fatal errors](#fatal-errors)
+    - [Compatibility](#compatibility)
+        - [Broker version compatibility](#broker-version-compatibility)
+            - [Broker version >= 0.10.0.0 (or trunk)](#broker-version--01000-or-trunk)
+            - [Broker versions 0.9.0.x](#broker-versions-090x)
+            - [Broker versions 0.8.x.y](#broker-versions-08xy)
+            - [Detailed description](#detailed-description)
+        - [Supported KIPs](#supported-kips)
+        - [Supported protocol versions](#supported-protocol-versions)
 
-  * [Performance](#performance)
-    * [Performance numbers](#performance-numbers)
-    * [High throughput](#high-throughput)
-    * [Low latency](#low-latency)
-    * [Compression](#compression)
-  * [Message reliability](#message-reliability)
-    * [Idempotent Producer](#idempotent-producer)
-  * [Usage](#usage)
-    * [Documentation](#documentation)
-    * [Initialization](#initialization)
-    * [Configuration](#configuration)
-    * [Threads and callbacks](#threads-and-callbacks)
-    * [Brokers](#brokers)
-    * [Producer API](#producer-api)
-    * [Consumer API](#simple-consumer-api-legacy)
-  * [Appendix](#appendix)
-    * [Test details](#test-details)
-  
-
+<!-- markdown-toc end -->
 
 
 ## Performance
 
 librdkafka is a multi-threaded library designed for use on modern hardware and
-it attempts to keep memory copying at a minimal. The payload of produced or
+it attempts to keep memory copying to a minimum. The payload of produced or
 consumed messages may pass through without any copying
 (if so desired by the application) putting no limit on message sizes.
 
 librdkafka allows you to decide if high throughput is the name of the game,
-or if a low latency service is required, all through the configuration
-property interface.
+or if a low latency service is required, or a balance between the two, all
+through the configuration property interface.
 
-The two most important configuration properties for performance tuning are:
+The single most important configuration properties for performance tuning is
+`linger.ms` - how long to wait for `batch.num.messages` to fill up in the
+local per-partition queue before sending the batch of messages to the broker.
 
-  * `batch.num.messages` - the maximum number of messages to wait for to
-	  accumulate in the local queue before sending off a message set.
-  * `linger.ms` - how long to wait for batch.num.messages to
-	  fill up in the local queue. A lower value improves latency at the
-          cost of lower throughput and higher per-message overhead.
-          A higher value improves throughput at the expense of latency.
-          The recommended value for high throughput is > 50ms.
-
-
-### Performance numbers
-
-The following performance numbers stem from tests using the following setup:
-
-  * Intel Quad Core i7 at 3.4GHz, 8GB of memory
-  * Disk performance has been shortcut by setting the brokers' flush
-	configuration properties as so:
-	* `log.flush.interval.messages=10000000`
-	* `log.flush.interval.ms=100000`
-  * Two brokers running on the same machine as librdkafka.
-  * One topic with two partitions.
-  * Each broker is leader for one partition each.
-  * Using `rdkafka_performance` program available in the `examples` subdir.
-
-
-
-	
-
-**Test results**
-
-  * **Test1**: 2 brokers, 2 partitions, required.acks=2, 100 byte messages: 
-	  **850000 messages/second**, **85 MB/second**
-
-  * **Test2**: 1 broker, 1 partition, required.acks=0, 100 byte messages: 
-	  **710000 messages/second**, **71 MB/second**
-	  
-  * **Test3**: 2 broker2, 2 partitions, required.acks=2, 100 byte messages,
-	  snappy compression:
-	  **300000 messages/second**, **30 MB/second**
-
-  * **Test4**: 2 broker2, 2 partitions, required.acks=2, 100 byte messages,
-	  gzip compression:
-	  **230000 messages/second**, **23 MB/second**
-
-
-
-**Note**: See the *Test details* chapter at the end of this document for
-	information about the commands executed, etc.
-
-**Note**: Consumer performance tests will be announced soon.
+In low throughput scenarios, a lower value improves latency.
+As throughput increases, the cost of each broker request becomes significant
+impacting both maximum throughput and latency. For higher throughput
+applications, latency will typically be lower using a higher `linger.ms` due
+to larger batches resulting in a lesser number of requests, yielding decreased
+per-message load on the broker. A good general purpose setting is 5ms.
+For applications seeking maximum throughput, the recommended value is >= 50ms.
 
 
 ### High throughput
@@ -743,14 +754,123 @@ Configuration is applied prior to object creation using the
 
 #### Example
 
+```c
     rd_kafka_conf_t *conf;
+    rd_kafka_conf_res_t res;
+    rd_kafka_t *rk;
     char errstr[512];
 
     conf = rd_kafka_conf_new();
-    rd_kafka_conf_set(conf, "compression.codec", "snappy", errstr, sizeof(errstr));
-    rd_kafka_conf_set(conf, "batch.num.messages", "100", errstr, sizeof(errstr));
 
-    rd_kafka_new(RD_KAFKA_PRODUCER, conf);
+    res = rd_kafka_conf_set(conf, "compression.codec", "snappy",
+                            errstr, sizeof(errstr));
+    if (res != RD_KAFKA_CONF_RES_OK)
+        fail("%s\n", errstr);
+
+    res = rd_kafka_conf_set(conf, "batch.num.messages", "100",
+                            errstr, sizeof(errstr));
+    if (res != RD_KAFKA_CONF_RES_OK)
+        fail("%s\n", errstr);
+
+    rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+    if (!rk) {
+        rd_kafka_conf_destroy(rk);
+        fail("Failed to create producer: %s\n", errstr);
+    }
+    
+    /* Note: librdkafka takes ownership of the conf object on success */
+```
+
+### Termination
+
+librdkafka is asynchronous in its nature and performs most operation in its
+background threads.
+
+Calling the librdkafka handle destructor tells the librdkafka background
+threads to finalize their work, close network connections, clean up, etc, and
+may thus take some time. The destructor (`rd_kafka_destroy()`) will block
+until all background threads have terminated.
+
+If the destructor blocks indefinitely it typically means there is an outstanding
+object reference, such as a message or topic object, that was not destroyed
+prior to destroying the client handle.
+
+All objects except for the handle (C: `rd_kafka_t`,
+C++: `Consumer,KafkaConsumer,Producer`), such as topic objects, messages,
+`topic_partition_t`, `TopicPartition`, events, etc, **MUST** be
+destroyed/deleted prior to destroying or closing the handle.
+
+For C, make sure the following objects are destroyed prior to calling
+`rd_kafka_consumer_close()` and `rd_kafka_destroy()`:
+ * `rd_kafka_message_t`
+ * `rd_kafka_topic_t`
+ * `rd_kafka_topic_partition_t`
+ * `rd_kafka_topic_partition_list_t`
+ * `rd_kafka_event_t`
+ * `rd_kafka_queue_t`
+
+For C++ make sure the following objects are deleted prior to
+calling `KafkaConsumer::close()` and delete on the Consumer, KafkaConsumer or
+Producer handle:
+ * `Message`
+ * `Topic`
+ * `TopicPartition`
+ * `Event`
+ * `Queue`
+
+
+#### High-level KafkaConsumer
+
+Proper termination sequence for the high-level KafkaConsumer is:
+```c
+     /* 1) Leave the consumer group, commit final offsets, etc. */
+     rd_kafka_consumer_close(rk);
+
+     /* 2) Destroy handle object */
+     rd_kafka_destroy(rk);
+```
+
+**NOTE**: There is no need to unsubscribe prior to calling `rd_kafka_consumer_close()`.
+
+**NOTE**: Any topic objects created must be destroyed prior to rd_kafka_destroy()
+
+Effects of not doing the above, for:
+ 1. Final offsets are not committed and the consumer will not actively leave
+    the group, it will be kicked out of the group after the `session.timeout.ms`
+    expires. It is okay to omit the `rd_kafka_consumer_close()` call in case
+    the application does not want to wait for the blocking close call.
+ 2. librdkafka will continue to operate on the handle. Actual memory leaks.
+
+
+#### Producer
+
+The proper termination sequence for Producers is:
+
+```c
+     /* 1) Make sure all outstanding requests are transmitted and handled. */
+     rd_kafka_flush(rk, 60*1000); /* One minute timeout */
+
+     /* 2) Destroy the topic and handle objects */
+     rd_kafka_topic_destroy(rkt);  /* Repeat for all topic objects held */
+     rd_kafka_destroy(rk);
+```
+
+Effects of not doing the above, for:
+ 1. Messages in-queue or in-flight will be dropped.
+ 2. librdkafka will continue to operate on the handle. Actual memory leaks.
+
+
+#### Speeding up termination
+To speed up the termination of librdkafka an application can set a
+termination signal that will be used internally by librdkafka to quickly
+cancel any outstanding I/O waits.
+Make sure you block this signal in your application.
+
+```c
+   char tmp[16];
+   snprintf(tmp, sizeof(tmp), "%i", SIGIO);  /* Or whatever signal you decide */
+   rd_kafka_conf_set(rk_conf, "internal.termination.signal", tmp, errstr, sizeof(errstr));
+```
 
 
 ### Threads and callbacks
@@ -1258,70 +1378,234 @@ The purged messages in queue will fail with error code set to
 
 
 
+## Compatibility
+
+### Broker version compatibility
+
+librdkafka supports all released Apache Kafka broker versions since 0.8.0.0.0,
+but not all features may be available on all broker versions since some
+features rely on newer broker functionality.
+
+**Current defaults:**
+ * `api.version.request=true`
+ * `broker.version.fallback=0.9.0.0`
+ * `api.version.fallback.ms=0` (never revert to `broker.version.fallback`)
+
+Depending on what broker version you are using, please configure your
+librdkafka based client as follows:
+
+#### Broker version >= 0.10.0.0 (or trunk)
+
+For librdkafka >= v1.0.0 there is no need to set any api.version-related
+configuration parameters, the defaults are tailored for broker version 0.10.0.0
+or later.
+
+For librdkafka < v1.0.0, please specify:
+```
+api.version.request=true
+api.version.fallback.ms=0
+```
 
 
-## Appendix
+#### Broker versions 0.9.0.x
 
-### Test details
+```
+api.version.request=false
+broker.version.fallback=0.9.0.x  (the exact 0.9.0.. version you are using)
+```
 
-#### Test1: Produce to two brokers, two partitions, required.acks=2, 100 byte messages
+#### Broker versions 0.8.x.y
 
-Each broker is leader for one of the two partitions.
-The random partitioner is used (default) and each broker and partition is
-assigned approximately 250000 messages each.
+```
+api.version.request=false
+broker.version.fallback=0.8.x.y  (your exact 0.8... broker version)
+```
 
-**Command:**
+#### Detailed description
 
-    # examples/rdkafka_performance -P -t test2 -s 100 -c 500000 -m "_____________Test1:TwoBrokers:500kmsgs:100bytes" -S 1 -a 2
-	....
-    % 500000 messages and 50000000 bytes sent in 587ms: 851531 msgs/s and 85.15 Mb/s, 0 messages failed, no compression
+Apache Kafka version 0.10.0.0 added support for
+[KIP-35](https://cwiki.apache.org/confluence/display/KAFKA/KIP-35+-+Retrieving+protocol+version) -
+querying the broker for supported API request types and versions -
+allowing the client to figure out what features it can use.
+But for older broker versions there is no way for the client to reliably know
+what protocol features the broker supports.
 
-**Result:**
+To alleviate this situation librdkafka has three configuration properties:
+ * `api.version.request=true|false` - enables the API version request,
+   this requires a >= 0.10.0.0 broker and will cause a disconnect on
+   brokers 0.8.x - this disconnect is recognized by librdkafka and on the next
+   connection attempt (which is immediate) it will disable the API version
+   request and use `broker.version.fallback` as a basis of available features.
+   **NOTE**: Due to a bug in broker version 0.9.0.0 & 0.9.0.1 the broker will
+   not close the connection when receiving the API version request, instead
+   the request will time out in librdkafka after 10 seconds and it will fall
+   back to `broker.version.fallback` on the next immediate connection attempt.
+ * `broker.version.fallback=X.Y.Z.N` - if the API version request fails
+   (if `api.version.request=true`) or API version requests are disabled
+   (`api.version.request=false`) then this tells librdkafka what version the
+   broker is running and adapts its feature set accordingly.
+ * `api.version.fallback.ms=MS` - In the case where `api.version.request=true`
+   and the API version request fails, this property dictates for how long
+   librdkafka will use `broker.version.fallback` instead of
+   `api.version.request=true`. After `MS` has passed the API version request
+   will be sent on any new connections made for the broker in question.
+   This allows upgrading the Kafka broker to a new version with extended
+   feature set without needing to restart or reconfigure the client
+   (given that `api.version.request=true`).
 
-Message transfer rate is approximately **850000 messages per second**,
-**85 megabytes per second**.
+*Note: These properties applies per broker.*
 
-
-
-#### Test2: Produce to one broker, one partition, required.acks=0, 100 byte messages
-
-**Command:**
-
-    # examples/rdkafka_performance -P -t test2 -s 100 -c 500000 -m "_____________Test2:OneBrokers:500kmsgs:100bytes" -S 1 -a 0 -p 1
-	....
-	% 500000 messages and 50000000 bytes sent in 698ms: 715994 msgs/s and 71.60 Mb/s, 0 messages failed, no compression
-
-**Result:**
-
-Message transfer rate is approximately **710000 messages per second**,
-**71 megabytes per second**.
-
-
-
-#### Test3: Produce to two brokers, two partitions, required.acks=2, 100 byte messages, snappy compression
-
-**Command:**
-
-	# examples/rdkafka_performance -P -t test2 -s 100 -c 500000 -m "_____________Test3:TwoBrokers:500kmsgs:100bytes:snappy" -S 1 -a 2 -z snappy
-	....
-	% 500000 messages and 50000000 bytes sent in 1672ms: 298915 msgs/s and 29.89 Mb/s, 0 messages failed, snappy compression
-
-**Result:**
-
-Message transfer rate is approximately **300000 messages per second**,
-**30 megabytes per second**.
+The API version query was disabled by default (`api.version.request=false`) in
+librdkafka up to and including v0.9.5 due to the afforementioned bug in
+broker version 0.9.0.0 & 0.9.0.1, but was changed to `true` in
+librdkafka v0.11.0.
 
 
-#### Test4: Produce to two brokers, two partitions, required.acks=2, 100 byte messages, gzip compression
+### Supported KIPs
 
-**Command:**
+The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Improvement+Proposals) supported by librdkafka.
 
-	# examples/rdkafka_performance -P -t test2 -s 100 -c 500000 -m "_____________Test3:TwoBrokers:500kmsgs:100bytes:gzip" -S 1 -a 2 -z gzip
-	....
-	% 500000 messages and 50000000 bytes sent in 2111ms: 236812 msgs/s and 23.68 Mb/s, 0 messages failed, gzip compression
 
-**Result:**
+| KIP                                                                      | Kafka release                             | Status                                                                                        |
+|--------------------------------------------------------------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------|
+| KIP-1 - Stop accepting request.required.acks > 1                         | 0.9.0.0                                   | Not enforced on client (due to backwards compat with brokers  <0.8.3)                         |
+| KIP-4 - Metadata protocol changes                                        | 0.9.0.0, 0.10.0.0, 0.10.1.0               | Supported                                                                                     |
+| KIP-8 - Producer flush()                                                 | 0.9.0.0                                   | Supported                                                                                     |
+| KIP-12 - SASL Kerberos                                                   | 0.9.0.0                                   | Supported (uses SSPI/logged-on-user on Windows, full KRB5 keytabs on Unix)                    |
+| KIP-13 - Protocol request throttling (enforced on broker)                | 0.9.0.0                                   | Supported                                                                                     |
+| KIP-15 - Producer close with timeout                                     | 0.9.0.0                                   | Supported (through flush() + destroy())                                                       |
+| KIP-19 - Request timeouts                                                | 0.9.0.0                                   | Supported                                                                                     |
+| KIP-22 - Producer pluggable partitioner                                  | 0.9.0.0                                   | Supported (not supported by Go, .NET and Python)                                              |
+| KIP-31 - Relative offsets in messagesets                                 | 0.10.0.0                                  | Supported                                                                                     |
+| KIP-35 - ApiVersionRequest                                               | 0.10.0.0                                  | Supported                                                                                     |
+| KIP-40 - ListGroups and DescribeGroups                                   | 0.9.0.0                                   | Supported                                                                                     |
+| KIP-41 - max.poll.records                                                | 0.10.0.0                                  | Supported through batch consumption interface (not supported by .NET and Go)                  |
+| KIP-42 - Producer and Consumer interceptors                              | 0.10.0.0                                  | Supported (not supported by Go, .NET and Python)                                              |
+| KIP-43 - SASL PLAIN and handshake                                        | 0.10.0.0                                  | Supported                                                                                     |
+| KIP-48 - Delegation tokens                                               | 1.1.0                                     | Not supported                                                                                 |
+| KIP-54 - Sticky partition assignment strategy                            | 0.11.0.0                                  | Not supported                                                                                 |
+| KIP-57 - Interoperable LZ4 framing                                       | 0.10.0.0                                  | Supported                                                                                     |
+| KIP-62 - max.poll.interval and background heartbeats                     | 0.10.1.0                                  | Supported                                                                                     |
+| KIP-70 - Proper client rebalance event on unsubscribe/subscribe          | 0.10.1.0                                  | Supported                                                                                     |
+| KIP-74 - max.partition.fetch.bytes                                       | 0.10.1.0                                  | Supported                                                                                     |
+| KIP-78 - Retrieve Cluster Id                                             | 0.10.1.0                                  | Supported (not supported by Go, .NET)                                                         |
+| KIP-79 - OffsetsForTimes                                                 | 0.10.1.0                                  | Supported                                                                                     |
+| KIP-81 - Consumer pre-fetch buffer size                                  | 2.4.0 (WIP)                               | Supported                                                                                     |
+| KIP-82 - Record Headers                                                  | 0.11.0.0                                  | Supported                                                                                     |
+| KIP-84 - SASL SCRAM                                                      | 0.10.2.0                                  | Supported                                                                                     |
+| KIP-85 - SASL config properties                                          | 0.10.2.0                                  | Supported                                                                                     |
+| KIP-86 - Configurable SASL callbacks                                     | 2.0.0                                     | Not supported                                                                                 |
+| KIP-88 - AdminAPI: ListGroupOffsets                                      | 0.10.2.0                                  | Not supported                                                                                 |
+| KIP-91 - Intuitive timeouts in Producer                                  | 2.1.0                                     | Supported                                                                                     |
+| KIP-92 - Per-partition lag metrics in Consumer                           | 0.10.2.0                                  | Supported                                                                                     |
+| KIP-97 - Backwards compatibility with older brokers                      | 0.10.2.0                                  | Supported                                                                                     |
+| KIP-98 - EOS                                                             | 0.11.0.0                                  | Partially supported (WIP)                                                                     |
+| KIP-102 - Close with timeout in consumer                                 | 0.10.2.0                                  | Not supported                                                                                 |
+| KIP-107 - AdminAPI: DeleteRecordsBefore                                  | 0.11.0.0                                  | Not supported                                                                                 |
+| KIP-110 - ZStd compression                                               | 2.1.0                                     | Supported                                                                                     |
+| KIP-117 - AdminClient                                                    | 0.11.0.0                                  | Supported                                                                                     |
+| KIP-124 - Request rate quotas                                            | 0.11.0.0                                  | Partially supported (depending on protocol request)                                           |
+| KIP-126 - Producer ensure proper batch size after compression            | 0.11.0.0                                  | Supported                                                                                     |
+| KIP-133 - AdminAPI: DescribeConfigs and AlterConfigs                     | 0.11.0.0                                  | Supported                                                                                     |
+| KIP-140 - AdminAPI: ACLs                                                 | 0.11.0.0                                  | Not supported                                                                                 |
+| KIP-144 - Broker reconnect backoff                                       | 0.11.0.0                                  | Supported                                                                                     |
+| KIP-152 - Improved SASL auth error messages                              | 1.0.0                                     | Supported                                                                                     |
+| KIP-192 - Cleaner idempotence semantics                                  | 1.0.0                                     | Not supported                                                                                 |
+| KIP-195 - AdminAPI: CreatePartitions                                     | 1.0.0                                     | Supported                                                                                     |
+| KIP-204 - AdminAPI: DeleteRecords                                        | 1.1.0                                     | Not supported                                                                                 |
+| KIP-219 - Client-side throttling                                         | 2.0.0                                     | Not supported                                                                                 |
+| KIP-222 - AdminAPI: Consumer group operations                            | 2.0.0                                     | Not supported (but some APIs available outside Admin client)                                  |
+| KIP-223 - Consumer partition lead metric                                 | 2.0.0                                     | Not supported                                                                                 |
+| KIP-226 - AdminAPI: Dynamic broker config                                | 1.1.0                                     | Supported                                                                                     |
+| KIP-227 - Consumer Incremental Fetch                                     | 1.1.0                                     | Not supported                                                                                 |
+| KIP-229 - AdminAPI: DeleteGroups                                         | 1.1.0                                     | Not supported                                                                                 |
+| KIP-235 - DNS alias for secure connections                               | 2.1.0                                     | Not supported                                                                                 |
+| KIP-249 - AdminAPI: Deletegation Tokens                                  | 2.0.0                                     | Not supported                                                                                 |
+| KIP-255 - SASL OAUTHBEARER                                               | 2.0.0                                     | Supported                                                                                     |
+| KIP-266 - Fix indefinite consumer timeouts                               | 2.0.0                                     | Supported (bound by session.timeout.ms and max.poll.interval.ms)                              |
+| KIP-289 - Consumer group.id default to NULL                              | 2.2.0                                     | Supported                                                                                     |
+| KIP-294 - SSL endpoint verification                                      | 2.0.0                                     | Supported                                                                                     |
+| KIP-302 - Use all addresses for resolved broker hostname                 | 2.1.0                                     | Supported                                                                                     |
+| KIP-320 - Consumer: handle log truncation                                | 2.1.0 (partially implemented) / 2.2.0     | Not supported                                                                                 |
+| KIP-322 - DeleteTopics disabled error code                               | 2.1.0                                     | Supported                                                                                     |
+| KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                                     | Not supported                                                                                 |
+| KIP-341 - Update Sticky partition assignment data                        | 2.3.0                                     | Not supported                                                                                 |
+| KIP-342 - Custom SASL OAUTHBEARER extensions                             | 2.1.0                                     | Supported                                                                                     |
+| KIP-345 - Consumer: Static membership                                    | 2.4.0 (WIP), partially available in 2.3.0 | In progress                                                                                   |
+| KIP-357 - AdminAPI: list ACLs per principal                              | 2.1.0                                     | Not supported                                                                                 |
+| KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-360 - Improve handling of unknown Idempotent Producer                | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                                     | Not supported                                                                                 |
+| KIP-368 - SASL period reauth                                             | 2.2.0                                     | Not supported                                                                                 |
+| KIP-369 - Always roundRobin partitioner                                  | 2.4.0                                     | Not supported                                                                                 |
+| KIP-389 - Consumer group max size                                        | 2.2.0                                     | Supported (error is propagated to application, but the consumer does not raise a fatal error) |
+| KIP-394 - Consumer: require member.id in JoinGroupRequest                | 2.2.0                                     | In progress as part of KIP-345                                                                |
+| KIP-396 - AdminAPI: commit/list offsets                                  | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-412 - AdminAPI: adjust log levels                                    | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-421 - Variables in client config files                               | 2.3.0                                     | Not applicable (librdkafka, et.al, does not provide a config file interface, and shouldn't)   |
+| KIP-429 - Consumer: incremental rebalance protocol                       | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-430 - AdminAPI: return authorized operations in Describe.. responses | 2.3.0                                     | Not supported                                                                                 |
+| KIP-436 - Start time in stats                                            | 2.3.0                                     | Supported                                                                                     |
+| KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-460 - AdminAPI: electPreferredLeader                                 | 2.4.0                                     | Not supported                                                                                 |
+| KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                                     | Not supported                                                                                 |
+| KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-480 - Sticky partitioner                                             | 2.4.0                                     | Not supported                                                                                 |
+| KIP-496 - AdminAPI: delete offsets                                       | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-482 - Optional fields in Kafka protocol                              | 2.4.0 (WIP)                               | Not supported                                                                                 |
 
-Message transfer rate is approximately **230000 messages per second**,
-**23 megabytes per second**.
 
+### Supported protocol versions
+
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 2.3.0, while
+"librdkafka max" is the maximum ApiVersion supported in the latest
+release of librdkafka.
+
+
+| ApiKey  | Request name            | Kafka max   | librdkafka max          |
+| ------- | -------------------     | ----------- | ----------------------- |
+| 0       | Produce                 | 7           | 7                       |
+| 1       | Fetch                   | 11          | 4                       |
+| 2       | ListOffsets             | 5           | 1                       |
+| 3       | Metadata                | 8           | 2                       |
+| 4       | LeaderAndIsr            | 2           | -                       |
+| 5       | StopReplica             | 1           | -                       |
+| 6       | UpdateMetadata          | 5           | -                       |
+| 7       | ControlledShutdown      | 2           | -                       |
+| 8       | OffsetCommit            | 7           | 7                       |
+| 9       | OffsetFetch             | 5           | 1                       |
+| 10      | FindCoordinator         | 2           | 0                       |
+| 11      | JoinGroup               | 5           | 5                       |
+| 12      | Heartbeat               | 3           | 3                       |
+| 13      | LeaveGroup              | 3           | 1                       |
+| 14      | SyncGroup               | 3           | 3                       |
+| 15      | DescribeGroups          | 4           | 0                       |
+| 16      | ListGroups              | 2           | 0                       |
+| 17      | SaslHandshake           | 1           | 1                       |
+| 18      | ApiVersions             | 2           | 0                       |
+| 19      | CreateTopics            | 4           | 2                       |
+| 20      | DeleteTopics            | 3           | 1                       |
+| 21      | DeleteRecords           | 1           | -                       |
+| 22      | InitProducerId          | 1           | 1                       |
+| 23      | OffsetForLeaderEpoch    | 3           | -                       |
+| 24      | AddPartitionsToTxn      | 1           | -                       |
+| 25      | AddOffsetsToTxn         | 1           | -                       |
+| 26      | EndTxn                  | 1           | -                       |
+| 27      | WriteTxnMarkers         | 0           | -                       |
+| 28      | TxnOffsetCommit         | 2           | -                       |
+| 29      | DescribeAcls            | 1           | -                       |
+| 30      | CreateAcls              | 1           | -                       |
+| 31      | DeleteAcls              | 1           | -                       |
+| 32      | DescribeConfigs         | 2           | 1                       |
+| 33      | AlterConfigs            | 1           | 0                       |
+| 34      | AlterReplicaLogDirs     | 1           | -                       |
+| 35      | DescribeLogDirs         | 1           | -                       |
+| 36      | SaslAuthenticate        | 1           | 0                       |
+| 37      | CreatePartitions        | 1           | 0                       |
+| 38      | CreateDelegationToken   | 1           | -                       |
+| 39      | RenewDelegationToken    | 1           | -                       |
+| 40      | ExpireDelegationToken   | 1           | -                       |
+| 41      | DescribeDelegationToken | 1           | -                       |
+| 42      | DeleteGroups            | 1           | -                       |
+| 43      | ElectPreferredLeaders   | 0           | -                       |
+| 44      | IncrementalAlterConfigs | 0           | -                       |

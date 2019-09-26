@@ -37,6 +37,11 @@ mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
+# librdkafka with TSAN won't work with glibc C11 threads on Ubuntu 19.04.
+# This option allows disabling libc-based C11 threads and instead
+# use the builtin tinycthread alternative.
+mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "y"
+
 
 function checks {
 
@@ -47,10 +52,11 @@ function checks {
     mkl_lib_check "libpthread" "" fail CC "-lpthread" \
                   "#include <pthread.h>"
 
-    # Use internal tinycthread if C11 threads not available.
-    # Requires -lpthread on glibc c11 threads, thus the use of $LIBS.
-    mkl_lib_check "c11threads" WITH_C11THREADS disable CC "$LIBS" \
-                  "
+    if [[ $ENABLE_C11THREADS == "y" ]]; then
+        # Use internal tinycthread if C11 threads not available.
+        # Requires -lpthread on glibc c11 threads, thus the use of $LIBS.
+        mkl_lib_check "c11threads" WITH_C11THREADS disable CC "$LIBS" \
+                      "
 #include <threads.h>
 
 
@@ -67,6 +73,7 @@ void foo (void) {
     }
 }
 "
+    fi
 
     # Check if dlopen() is available
     mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \

@@ -34,9 +34,128 @@
 #include "rdkafka_request.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_metadata.h"
+#include "rdunittest.h"
 
 #include <string.h>
 
+
+
+
+/**
+ * @brief Maximum host name length
+ *
+ * @remarks The max length for a fully qualified domain name on Unix systems is 253 chars,
+ * while the POSIX standard guarantees it not to exceed 255 chars. See:
+ * http://man7.org/linux/man-pages/man7/hostname.7.html
+ */
+#define MAX_BROKER_HOST_LEN 255
+
+
+/**
+ * @brief Broker information extension (ABI compatible)
+ *
+ * This struct can be written into the memory pointed to by the public
+ * rd_kafka_metadata_broker struct's host field and still maintain binary
+ * compatibility with programs compiled against versions of the library
+ * expecting a host string since the bytes are written directly into the
+ * struct as a char array.
+ */
+typedef struct rd_kafka_metadata_broker_ext_s {
+        char       host[MAX_BROKER_HOST_LEN+1];    /**< Broker hostname */
+        const char *rack;                          /**< Broker rack */
+} rd_kafka_metadata_broker_ext_t;
+
+
+/**
+ * @brief Broker information w/ extension field (for ABI compatability)
+ *
+ * This struct has the same size and alignment as the public rd_kafka_metadata_broker struct
+ * and is guaranteed to maintain binary compatibility between the types.
+ */
+typedef struct rd_kafka_metadata_broker_extended_s {
+        int32_t                         id;     /**< Broker Id */
+        rd_kafka_metadata_broker_ext_t  *ext;   /**< Pointer to broker metadata extension */
+        int                             port;   /**< Broker listening port */
+} rd_kafka_metadata_broker_extended_t;
+
+
+/**
+ * @brief Generates a handle for retrieving extended metadata (i.e. rack) from
+ * broker \p i in the given \p metadata's broker array.
+ *
+ * * Parameters:
+ *  - \p metadata       pointer to metadata result.
+ *  - \p i              index of broker in the metadata struct's broker array.
+ *
+ * @returns returns an opaque handle for use with the rd_kafka_metadata_broker_XX
+ * accessor methods.
+ *
+ * @remarks this function should only be used with broker metadata generated from a
+ * rd_kafka_metadata call.
+ *
+ */
+rd_kafka_metadata_broker_extended_t *
+rd_kafka_metadata_broker_get (const rd_kafka_metadata_t *metadata, int i) {
+        if (!metadata || !metadata->brokers || i >= metadata->broker_cnt)
+                return NULL;
+
+        return (rd_kafka_metadata_broker_extended_t *) &metadata->brokers[i];
+}
+
+
+/**
+ * @brief Retrieves the broker id.
+ *
+ * @returns broker id (integer)
+ *
+ */
+int32_t rd_kafka_metadata_broker_id (const rd_kafka_metadata_broker_extended_t *mdb) {
+        return mdb ? mdb->id : 0;
+}
+
+
+/**
+ * @brief Retrieves the broker's host name.
+ *
+ * @returns broker host
+ *
+ */
+const char *rd_kafka_metadata_broker_host (const rd_kafka_metadata_broker_extended_t *mdb) {
+        if (!mdb || !mdb->ext)
+                return NULL;
+        return mdb->ext->host;
+}
+
+
+/**
+ * @brief Retrieves the broker's port.
+ *
+ * @returns broker port (integer)
+ *
+ */
+int rd_kafka_metadata_broker_port (const rd_kafka_metadata_broker_extended_t *mdb) {
+        return mdb ? mdb->port : 0;
+}
+
+
+/**
+ * @brief Retrieves the broker's rack identifier.
+ *
+ * @returns broker rack
+ *
+ */
+const char *rd_kafka_metadata_broker_rack (const rd_kafka_metadata_broker_extended_t *mdb) {
+        if (!mdb || !mdb->ext)
+                return NULL;
+        return mdb->ext->rack;
+}
+
+
+#define RD_METADATA_BROKER_HOST_COPY(dst, src, len) do {        \
+        size_t s = RD_MIN(len, MAX_BROKER_HOST_LEN);            \
+        strncpy(dst, src, s);                                   \
+        dst[s] = '\0';                                          \
+} while(0);
 
 
 rd_kafka_resp_err_t
@@ -136,10 +255,22 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
 	md->brokers = rd_tmpabuf_write(&tbuf, src->brokers,
 				      md->broker_cnt * sizeof(*md->brokers));
 
-	for (i = 0 ; i < md->broker_cnt ; i++)
-		md->brokers[i].host =
-			rd_tmpabuf_write_str(&tbuf, src->brokers[i].host);
+	for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_kafka_metadata_broker_extended_t *b_src, *b_dst;
+                b_src = rd_kafka_metadata_broker_get(src, i);
+                b_dst = rd_kafka_metadata_broker_get(md, i);
 
+                if (!(b_dst->ext = rd_tmpabuf_alloc(&tbuf, sizeof(*b_dst->ext))))
+                        continue;
+
+                RD_METADATA_BROKER_HOST_COPY(b_dst->ext->host, b_src->ext->host,
+                                             strlen(b_src->ext->host));
+                b_dst->ext->rack = NULL;
+
+                if (b_src->ext->rack)
+                        b_dst->ext->rack =
+                                rd_tmpabuf_write_str(&tbuf, b_src->ext->rack);
+        }
 
 	/* Copy TopicMetadata */
         md->topics = rd_tmpabuf_write(&tbuf, src->topics,
@@ -194,8 +325,6 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
 }
 
 
-
-
 /**
  * @brief Handle a Metadata response message.
  *
@@ -230,6 +359,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         int32_t controller_id = -1;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int broadcast_changes = 0;
+        int broker_cnt = 0;
+        size_t tmpabuf_size = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -240,10 +371,26 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         rd_kafka_broker_lock(rkb);
         rkb_namelen = strlen(rkb->rkb_name)+1;
+
+        // read broker count and validate
+        rd_kafka_buf_read_i32a(rkbuf, broker_cnt);
+
+        if (broker_cnt > RD_KAFKAP_BROKERS_MAX)
+                rd_kafka_buf_parse_fail(rkbuf, "Broker_cnt %i > BROKERS_MAX %i",
+                                        broker_cnt, RD_KAFKAP_BROKERS_MAX);
+        else if (broker_cnt < 0)
+                rd_kafka_buf_parse_fail(rkbuf, "Invalid broker_cnt %i",
+                                        broker_cnt);
+
         /* We assume that the marshalled representation is
-         * no more than 4 times larger than the wire representation. */
+         * no more than 4 times larger than the wire representation.
+         * Also allocate extra memory for the extended broker data. */
+        tmpabuf_size = sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4);
+        tmpabuf_size += broker_cnt *
+                        sizeof(struct rd_kafka_metadata_broker_ext_s);
+
         rd_tmpabuf_new(&tbuf,
-                       sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
+                       tmpabuf_size,
                        0/*dont assert on fail*/);
 
         if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md)))) {
@@ -258,10 +405,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafka_broker_unlock(rkb);
 
         /* Read Brokers */
-        rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
-        if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
-                rd_kafka_buf_parse_fail(rkbuf, "Broker_cnt %i > BROKERS_MAX %i",
-                                        md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
+        md->broker_cnt = broker_cnt;
 
         if (!(md->brokers = rd_tmpabuf_alloc(&tbuf, md->broker_cnt *
                                              sizeof(*md->brokers))))
@@ -270,13 +414,37 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                         md->broker_cnt);
 
         for (i = 0 ; i < md->broker_cnt ; i++) {
-                rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
-                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, md->brokers[i].host);
-                rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
+                rd_kafkap_str_t k_host_str = RD_KAFKAP_STR_INITIALIZER;
+                rd_kafka_metadata_broker_extended_t *broker; // broker metadata w/ extended info
+                rd_kafka_metadata_broker_ext_t *ext = NULL; // broker metadata extension
+
+                broker = rd_kafka_metadata_broker_get(md, i);
+                rd_kafka_buf_read_i32a(rkbuf, broker->id);
+                rd_kafka_buf_read_str(rkbuf, &k_host_str);
+                rd_kafka_buf_read_i32a(rkbuf, broker->port);
+
+                if (k_host_str.len > MAX_BROKER_HOST_LEN)
+                        rd_kafka_buf_parse_fail(rkbuf,
+                                                "broker host name \"%s\" too long: "
+                                                "max length [%"PRId32"]",
+                                                k_host_str.str,
+                                                MAX_BROKER_HOST_LEN);
+
+                // allocate broker metadata extension struct on tbuf and copy host string
+                if (!(ext = rd_tmpabuf_alloc(&tbuf, sizeof(*ext))))
+                        rd_kafka_buf_parse_fail(rkbuf,
+                                                "Not enough room in tmpabuf: "
+                                                "%"PRIusz"+%"PRIusz
+                                                " > %"PRIusz,
+                                                tbuf.of, sizeof(*ext), tbuf.size);
+
+                RD_METADATA_BROKER_HOST_COPY(ext->host, k_host_str.str, k_host_str.len);
+                ext->rack = NULL;
+                broker->ext = ext;
 
                 if (ApiVersion >= 1) {
-                        rd_kafkap_str_t rack;
-                        rd_kafka_buf_read_str(rkbuf, &rack);
+                        // read rack string from buffer into tbuf and assign address to rack var
+                        rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, ext->rack);
                 }
         }
 
@@ -438,12 +606,19 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         /* Update our list of brokers. */
         for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_kafka_metadata_broker_extended_t *broker;
+                const char *rack;
+
+                broker = rd_kafka_metadata_broker_get(md, i);
+                rack = rd_kafka_metadata_broker_rack(broker);
+
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+                           "  Broker #%i/%i: %s:%i (Rack: %s) NodeId %"PRId32,
                            i, md->broker_cnt,
-                           md->brokers[i].host,
-                           md->brokers[i].port,
-                           md->brokers[i].id);
+                           rd_kafka_metadata_broker_host(broker),
+                           rd_kafka_metadata_broker_port(broker),
+                           rack && strlen(rack) ? rack : "-",
+                           rd_kafka_metadata_broker_id(broker));
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i]);
         }
@@ -737,12 +912,19 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
                      md->broker_cnt, md->topic_cnt);
 
         for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_kafka_metadata_broker_extended_t *broker;
+                const char *rack;
+
+                broker = rd_kafka_metadata_broker_get(md, i);
+                rack = rd_kafka_metadata_broker_rack(broker);
+
                 rd_kafka_dbg(rk, METADATA, fac,
-                             "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+                             "  Broker #%i/%i: %s:%i (Rack: %s) NodeId %"PRId32,
                              i, md->broker_cnt,
-                             md->brokers[i].host,
-                             md->brokers[i].port,
-                             md->brokers[i].id);
+                             rd_kafka_metadata_broker_host(broker),
+                             rd_kafka_metadata_broker_port(broker),
+                             rack && strlen(rack) ? rack : "-",
+                             rd_kafka_metadata_broker_id(broker));
         }
 
         for (i = 0 ; i < md->topic_cnt ; i++) {
@@ -1062,4 +1244,160 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk) {
                                      rd_kafka_metadata_leader_query_tmr_cb,
                                      NULL);
         }
+}
+
+
+/**
+ * @brief copy metadata unit tests
+ */
+static int unittest_copy_metadata (void) {
+	rd_kafka_metadata_t *dst;
+        rd_kafka_metadata_broker_extended_t *broker;
+        rd_kafka_metadata_topic_t *topic;
+
+        int32_t broker_id;
+        const char *host, *rack;
+        int port;
+
+        int32_t broker_ids[2] = {1, 2};
+        const char host1[] = "broker1";
+        const char rack1[] = "rack1";
+        const char host2[] = "broker2";
+        const char rack2[] = "rack2";
+        const char topic1[] = "topic1";
+
+        rd_kafka_metadata_t src = {
+                .orig_broker_id = 1,
+                .orig_broker_name = (char *) host1,
+                .broker_cnt = 2,
+                .topic_cnt = 1
+        };
+
+        src.brokers = rd_alloca(src.broker_cnt * sizeof(*src.brokers));
+        src.topics = rd_alloca(src.topic_cnt * sizeof(*src.topics));
+
+        // broker 1:
+        broker = rd_kafka_metadata_broker_get(&src, 0);
+        broker->id = broker_ids[0];
+        broker->port = 9092;
+        broker->ext = rd_alloca(sizeof(*broker->ext));
+        RD_METADATA_BROKER_HOST_COPY(broker->ext->host, host1, strlen(host1));
+        broker->ext->rack = rack1;
+
+        // broker 2:
+        broker = rd_kafka_metadata_broker_get(&src, 1);
+        broker->id = broker_ids[1];
+        broker->port = 9093;
+        broker->ext = rd_alloca(sizeof(*broker->ext));
+        RD_METADATA_BROKER_HOST_COPY(broker->ext->host, host2, strlen(host2));
+        broker->ext->rack = rack2;
+
+        topic = &src.topics[0];
+        topic->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        topic->topic = (char *) topic1;
+        topic->partition_cnt = 2;
+        topic->partitions = rd_alloca(topic->partition_cnt *
+                                      sizeof(*topic->partitions));
+
+        // partition 0
+        topic->partitions[0].err = topic->err;
+        topic->partitions[0].id = 0;
+        topic->partitions[0].leader = broker_ids[0];
+        topic->partitions[0].replica_cnt = 2;
+        topic->partitions[0].replicas = &broker_ids[0];
+        topic->partitions[0].isr_cnt = 1;
+        topic->partitions[0].isrs = &broker_ids[1];
+
+        // partition 1
+        topic->partitions[1].err = topic->err;
+        topic->partitions[1].id = 1;
+        topic->partitions[1].leader = broker_ids[1];
+        topic->partitions[1].replica_cnt = 2;
+        topic->partitions[1].replicas = &broker_ids[0];
+        topic->partitions[1].isr_cnt = 1;
+        topic->partitions[1].isrs = &broker_ids[0];
+
+        dst = rd_kafka_metadata_copy(&src, 1024);
+
+        RD_UT_ASSERT(dst, "metadata ptr not set");
+        RD_UT_ASSERT(dst->broker_cnt == 2,
+                     "wrong broker count: %d", dst->broker_cnt);
+
+        broker = rd_kafka_metadata_broker_get(dst, 0);
+        RD_UT_ASSERT(broker, "broker at pos 0 is null");
+
+        broker_id = rd_kafka_metadata_broker_id(broker);
+        host = rd_kafka_metadata_broker_host(broker);
+        port = rd_kafka_metadata_broker_port(broker);
+        rack = rd_kafka_metadata_broker_rack(broker);
+
+        RD_UT_ASSERT(broker_id == 1, "broker id mismatch");
+        RD_UT_ASSERT(host && !strcmp(host, "broker1"),
+                     "broker host mismatch");
+        RD_UT_ASSERT(port == 9092, "broker port mismatch");
+        RD_UT_ASSERT(rack && !strcmp(rack, "rack1"),
+                     "broker rack mismatch");
+
+        broker = rd_kafka_metadata_broker_get(dst, 1);
+        RD_UT_ASSERT(broker, "broker at pos 1 is null");
+
+        broker_id = rd_kafka_metadata_broker_id(broker);
+        host = rd_kafka_metadata_broker_host(broker);
+        port = rd_kafka_metadata_broker_port(broker);
+        rack = rd_kafka_metadata_broker_rack(broker);
+
+        RD_UT_ASSERT(broker_id == 2, "broker id mismatch");
+        RD_UT_ASSERT(host && !strcmp(host, "broker2"),
+                     "broker host mismatch");
+        RD_UT_ASSERT(port == 9093, "broker port mismatch");
+        RD_UT_ASSERT(rack && !strcmp(rack, "rack2"),
+                     "broker rack mismatch");
+
+        RD_UT_ASSERT(dst->topic_cnt == 1,
+                     "wrong topic count: %d", dst->topic_cnt);
+        topic = &dst->topics[0];
+        RD_UT_ASSERT(topic->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "unexpected topic err %d", topic->err);
+        RD_UT_ASSERT(!strcmp(topic->topic, topic1),
+                     "topic mismatch");
+        RD_UT_ASSERT(topic->partition_cnt == 2,
+                     "wrong topic partition count: %d", topic->partition_cnt);
+        RD_UT_ASSERT(topic->partitions[0].err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "unexpected partition err: %d", topic->partitions[0].err);
+        RD_UT_ASSERT(topic->partitions[0].id == 0,
+                     "partition id mismatch: %d", topic->partitions[0].id);
+        RD_UT_ASSERT(topic->partitions[0].leader == 1,
+                     "partition leader mismatch: %d", topic->partitions[0].leader);
+        RD_UT_ASSERT(topic->partitions[0].replica_cnt == 2,
+                     "partition replica_cnt mismatch: %d",
+                     topic->partitions[0].replica_cnt);
+        RD_UT_ASSERT(topic->partitions[0].replicas[0] == broker_ids[0],
+                     "partition replicas[0] mismatch: %d",
+                     topic->partitions[0].replicas[0]);
+        RD_UT_ASSERT(topic->partitions[0].replicas[1] == broker_ids[1],
+                     "partition replicas[1] mismatch: %d",
+                     topic->partitions[0].replicas[1]);
+        RD_UT_ASSERT(topic->partitions[0].isr_cnt == 1,
+                     "partition isr_cnt mismatch: %d",
+                     topic->partitions[0].isr_cnt);
+        RD_UT_ASSERT(topic->partitions[0].isrs[0] == broker_ids[1],
+                     "partition isrs[0] mismatch: %d",
+                     topic->partitions[0].isrs[0]);
+
+        rd_kafka_metadata_destroy(dst);
+
+        RD_UT_PASS();
+        return 0;
+}
+
+
+/**
+ * @brief Metadata unit tests
+ */
+int unittest_metadata (void) {
+        int fails = 0;
+
+        fails += unittest_copy_metadata();
+
+        return fails;
 }

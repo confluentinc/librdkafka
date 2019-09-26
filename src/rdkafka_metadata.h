@@ -161,5 +161,7 @@ void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk);
 int  rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms);
 void rd_kafka_metadata_cache_dump (FILE *fp, rd_kafka_t *rk);
 
+int unittest_metadata (void);
+
 /**@}*/
 #endif /* _RDKAFKA_METADATA_H_ */

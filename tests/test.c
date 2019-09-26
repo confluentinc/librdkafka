@@ -206,6 +206,7 @@ _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
 _TEST_DECL(0102_static_group_rebalance);
 _TEST_DECL(0104_fetch_from_follower_mock);
+_TEST_DECL(0105_broker_metadata);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -380,6 +381,7 @@ struct test tests[] = {
               TEST_BRKVER(2,3,0,0)),
         _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
               TEST_BRKVER(2,4,0,0)),
+        _TEST(0105_broker_metadata, 0, TEST_BRKVER(0,9,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

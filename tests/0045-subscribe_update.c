@@ -271,7 +271,7 @@ static void do_test_regex (void) {
  *
  * To run with trivup, do:
  * ./interactive_broker_version.py .. -conf '{"auto_create_topics":"false"}' ..
- * TESTS=0045 ./run-test.sh -k ./merged
+ * TESTS=0045 ./run-test.sh -k
  */
 static void do_test_topic_remove (void) {
 	char *topic_f = rd_strdup(test_mk_topic_name("topic_f", 1));

@@ -61,7 +61,7 @@
       ],
       "testcmd": [
         "cd tests",
-        "./run-test.sh -p1 -l ./merged",
+        "./run-test.sh -p1 -l",
         "cd .."
       ],
     },
@@ -84,7 +84,7 @@
       ],
       "testcmd": [
         "cd tests",
-        "./run-test.sh -p1 -l ./merged",
+        "./run-test.sh -p1 -l",
         "cd .."
       ],
     },

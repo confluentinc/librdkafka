@@ -1,6 +1,6 @@
 *.test
 test.conf
-merged
+test-runner
 core
 vgcore.*
 core.*

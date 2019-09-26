@@ -2,7 +2,7 @@ TESTSRCS_C = $(wildcard [08]*-*.c)
 TESTSRCS_CXX= $(wildcard [08]*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
-BIN	  = merged
+BIN	  = test-runner
 LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
 OBJS	 += test.o testcpp.o tinycthread.o tinycthread_extra.o rdlist.o sockem.o sockem_ctrl.o
 CFLAGS += -I../src
@@ -42,32 +42,32 @@ full: broker broker_idempotent sasl
 #
 quick:
 	@echo "Running quick(er) test suite (without sockem)"
-	./run-test.sh -p5 -Q -E ./$(BIN)
+	./run-test.sh -p5 -Q -E
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
-	./run-test.sh -p5 ./$(BIN)
+	./run-test.sh -p5
 
 run_seq: $(BIN)
 	@echo "Running tests sequentially"
-	./run-test.sh -p1 ./$(BIN)
+	./run-test.sh -p1
 
 run_local: $(BIN)
 	@echo "Running local broker-less tests with idempotent producer"
-	./run-test.sh -p5 -l -P ./$(BIN)
+	./run-test.sh -p5 -l -P
 
 idempotent_par: $(BIN)
-	./run-test.sh -p5 -P ./$(BIN)
+	./run-test.sh -p5 -P
 
 idempotent_seq: $(BIN)
-	./run-test.sh -p1 -P ./$(BIN)
+	./run-test.sh -p1 -P
 
 idempotent: idempotent_par
 
 
 # Delete all test topics (based on prefix)
 delete_topics:
-	TESTS=none ./run-test.sh -D ./$(BIN) bare
+	TESTS=none ./run-test.sh -D bare
 
 .PHONY:
 
@@ -109,7 +109,7 @@ realclean: clean clean-output
 	rm -f test_report_*.json
 
 0%:
-	TESTS=$@ ./run-test.sh ./$(BIN)
+	TESTS=$@ ./run-test.sh
 
 java: .PHONY
 	make -C java

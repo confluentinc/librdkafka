@@ -53,6 +53,7 @@ build () {
     echo "$btype build done"
 }
 
+OPTS=""
 
 case "$1" in
     clean)
@@ -64,6 +65,9 @@ case "$1" in
         ;;
     tsan)
         FSAN='-fsanitize=thread'
+        # C11 threads in glibc don't play nice with TSAN,
+        # so use the builtin tinycthreads instead.
+        OPTS="$OPTS --disable-c11threads"
         ;;
     "")
         ;;
@@ -90,8 +94,6 @@ if [[ ! -z $FSAN ]]; then
     export CPPFLAGS="$CPPFLAGS $FSAN"
     export LDFLAGS="$LDFLAGS $FSAN"
 fi
-
-OPTS=""
 
 # enable devel asserts
 OPTS="$OPTS --enable-devel"

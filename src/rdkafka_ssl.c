@@ -58,6 +58,66 @@ static mtx_t *rd_kafka_ssl_locks;
 static int    rd_kafka_ssl_locks_cnt;
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
+#define HAVE_SSL_KEYLOG_CALLBACK
+#endif
+
+static FILE *rd_kafka_ssl_keylog_file;
+static void rd_kafka_transport_ssl_keylog_callback(const SSL *ssl, const char *line)
+{
+        (void)ssl;
+        if(rd_kafka_ssl_keylog_file && line && *line) {
+                fprintf(rd_kafka_ssl_keylog_file, "%s\n", line);
+        }
+}
+
+#ifndef HAVE_SSL_KEYLOG_CALLBACK
+#define KEYLOG_PREFIX      "CLIENT_RANDOM "
+#define KEYLOG_PREFIX_LEN  (sizeof(KEYLOG_PREFIX) - 1)
+static void rd_kafka_transport_ssl_dump_key(const SSL *ssl)
+{
+        const char *hex = "0123456789ABCDEF";
+        char line[KEYLOG_PREFIX_LEN + 2 * SSL3_RANDOM_SIZE + 1 + 2 * SSL_MAX_MASTER_KEY_LENGTH + 1];
+        const SSL_SESSION *session = SSL_get_session(ssl);
+        if (!session) {
+                return;
+        }
+
+        unsigned char client_random[SSL3_RANDOM_SIZE];
+        unsigned char master_key[SSL_MAX_MASTER_KEY_LENGTH];
+        size_t master_key_length = 0;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !(defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x20700000L)
+        SSL_get_client_random(ssl, client_random, SSL3_RANDOM_SIZE);
+        master_key_length = SSL_SESSION_get_master_key(session, master_key, SSL_MAX_MASTER_KEY_LENGTH);
+#else
+        if (!ssl->s3 || session->master_key_length<=0) {
+                return;
+        }
+        memcpy(client_random, ssl->s3->client_random, SSL3_RANDOM_SIZE);
+        master_key_length = RD_MIN(session->master_key_length, SSL_MAX_MASTER_KEY_LENGTH);
+        memcpy(master_key, session->master_key, master_key_length);
+#endif
+        size_t pos, i;
+        memcpy(line, KEYLOG_PREFIX, KEYLOG_PREFIX_LEN);
+        pos = KEYLOG_PREFIX_LEN;
+        for(i = 0; i < SSL3_RANDOM_SIZE; i++) {
+                line[pos++] = hex[client_random[i] >> 4];
+                line[pos++] = hex[client_random[i] & 0xF];
+        }
+        line[pos++] = ' ';
+        for(i = 0; i < master_key_length; i++) {
+                line[pos++] = hex[master_key[i] >> 4];
+                line[pos++] = hex[master_key[i] & 0xF];
+        }
+        line[pos++] = '\0';
+
+        rd_kafka_transport_ssl_keylog_callback(ssl, line);
+
+}
+#endif
+
+
 
 /**
  * @brief Close and destroy SSL session
@@ -482,6 +542,11 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         rd_kafka_transport_ssl_clear_error(rktrans);
 
         r = SSL_connect(rktrans->rktrans_ssl);
+
+#ifndef HAVE_KEYLOG_CALLBACK
+        rd_kafka_transport_ssl_dump_key(rktrans->rktrans_ssl);
+#endif
+
         if (r == 1) {
                 /* Connected, highly unlikely since this is a
                  * non-blocking operation. */
@@ -1112,6 +1177,12 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
+#ifdef HAVE_SSL_KEYLOG_CALLBACK
+        if(rd_kafka_ssl_keylog_file) {
+                SSL_CTX_set_keylog_callback(ctx, rd_kafka_transport_ssl_keylog_callback);
+        }
+#endif
+
         rk->rk_conf.ssl.ctx = ctx;
 
         return 0;
@@ -1177,6 +1248,12 @@ void rd_kafka_ssl_term (void) {
                 rd_free(rd_kafka_ssl_locks);
         }
 #endif
+
+        if (rd_kafka_ssl_keylog_file) {
+                fclose(rd_kafka_ssl_keylog_file);
+                rd_kafka_ssl_keylog_file = NULL;
+        }
+
 }
 
 
@@ -1216,4 +1293,17 @@ void rd_kafka_ssl_init (void) {
         ERR_load_crypto_strings();
         OpenSSL_add_all_algorithms();
 #endif
+
+        char *sslkeylogfile = getenv("SSLKEYLOGFILE");
+        if (sslkeylogfile && *sslkeylogfile) {
+                rd_kafka_ssl_keylog_file = fopen(sslkeylogfile, "a");
+                if(rd_kafka_ssl_keylog_file) {
+                        if(setvbuf(rd_kafka_ssl_keylog_file, NULL, _IOLBF, 4096))
+                        {
+                                fclose(rd_kafka_ssl_keylog_file);
+                                rd_kafka_ssl_keylog_file = NULL;
+                        }
+                }
+        }
+
 }

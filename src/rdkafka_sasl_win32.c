@@ -430,10 +430,31 @@ static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
 
         if (rktrans->rktrans_sasl.complete) {
-                if (rd_kafka_sasl_win32_validate_token(
-                        rktrans, buf, size, errstr, errstr_size) == -1) {
-                        rktrans->rktrans_sasl.complete = 0;
-                        return -1;
+
+                if (size > 0) {
+                        /* After authentication is done the broker will send
+                         * back its token for us to verify.
+                         * The client responds to the broker which will
+                         * return an empty (size==0) frame that
+                         * completes the authentication handshake.
+                         * With legacy SASL framing the final empty token
+                         * is not sent. */
+                        int r;
+
+                        r = rd_kafka_sasl_win32_validate_token(
+                                rktrans, buf, size, errstr, errstr_size);
+
+                        if (r == -1) {
+                                rktrans->rktrans_sasl.complete = 0;
+                                return r;
+                        } else if (rktrans->rktrans_rkb->rkb_features &
+                                   RD_KAFKA_FEATURE_SASL_AUTH_REQ) {
+                                /* Kafka-framed handshake requires
+                                 * one more back and forth. */
+                                return r;
+                        }
+
+                        /* Legacy-framed handshake is done here */
                 }
 
                 /* Final ack from broker. */

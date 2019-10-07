@@ -154,7 +154,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_atomic32_t disconnects;   /**< Disconnects.
                                               *   Always peer-triggered. */
 
-                rd_atomic64_t reqtype[RD_KAFKAP__NUM]; /**< Per request-type
+                rd_atomic64_t reqtype[RD_KAFKAP__CNT]; /**< Per request-type
                                                         *   counter */
 	} rkb_c;
 

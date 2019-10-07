@@ -265,7 +265,7 @@ void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
 		switch (rkbuf->rkbuf_reqhdr.ApiKey)
 		{
-		case RD_KAFKAP_ApiVersion:
+		case RD_KAFKAP_ApiVersions:
 		case RD_KAFKAP_SaslHandshake:
 			rd_kafka_bufq_deq(rkbufq, rkbuf);
 			rd_kafka_buf_callback(rkb->rkb_rk, rkb,

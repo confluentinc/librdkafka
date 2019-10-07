@@ -38,6 +38,7 @@
 #include "rdkafka_msgset.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl.h"
+#include "rdkafka_proto_requests.h"
 
 #include "rdrand.h"
 #include "rdstring.h"
@@ -192,7 +193,7 @@ void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_GroupCoordinator, 1,
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_FindCoordinator, 1,
                                          RD_KAFKAP_STR_SIZE(cgrp));
         rd_kafka_buf_write_kstr(rkbuf, cgrp);
 
@@ -333,7 +334,7 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
         rd_kafka_topic_partition_list_sort_by_topic(partitions);
 
         rkbuf = rd_kafka_buf_new_request(
-                rkb, RD_KAFKAP_Offset, 1,
+                rkb, RD_KAFKAP_ListOffset, 1,
                 /* ReplicaId+TopicArrayCnt+Topic */
                 4+4+100+
                 /* PartArrayCnt */
@@ -1707,7 +1708,7 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ApiVersion, 1, 4);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ApiVersions, 1, 4);
 
         /* Should be sent before any other requests since it is part of
          * the initial connection handshake. */

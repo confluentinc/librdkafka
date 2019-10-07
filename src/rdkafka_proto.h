@@ -33,6 +33,7 @@
 #include "rdendian.h"
 #include "rdvarint.h"
 
+#include "rdkafka_proto_requests.h"
 
 
 /*
@@ -49,6 +50,7 @@
 struct rd_kafkap_reqhdr {
         int32_t  Size;
         int16_t  ApiKey;
+        #if 0
 #define RD_KAFKAP_None         -1
 #define RD_KAFKAP_Produce       0
 #define RD_KAFKAP_Fetch         1
@@ -94,6 +96,7 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_DescribeDelegationToken 41
 #define RD_KAFKAP_DeleteGroups 42
 #define RD_KAFKAP__NUM         43
+#endif
         int16_t  ApiVersion;
         int32_t  CorrId;
         /* ClientId follows */
@@ -117,7 +120,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
         static const char *names[] = {
                 [RD_KAFKAP_Produce] = "Produce",
                 [RD_KAFKAP_Fetch] = "Fetch",
-                [RD_KAFKAP_Offset] = "Offset",
+                [RD_KAFKAP_ListOffset] = "ListOffset",
                 [RD_KAFKAP_Metadata] = "Metadata",
                 [RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
                 [RD_KAFKAP_StopReplica] = "StopReplica",
@@ -125,7 +128,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_ControlledShutdown] = "ControlledShutdown",
                 [RD_KAFKAP_OffsetCommit] = "OffsetCommit",
                 [RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-                [RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
+                [RD_KAFKAP_FindCoordinator] = "FindCoordinator",
                 [RD_KAFKAP_JoinGroup] = "JoinGroup",
                 [RD_KAFKAP_Heartbeat] = "Heartbeat",
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
@@ -133,7 +136,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_DescribeGroups] = "DescribeGroups",
                 [RD_KAFKAP_ListGroups] = "ListGroups",
                 [RD_KAFKAP_SaslHandshake] = "SaslHandshake",
-                [RD_KAFKAP_ApiVersion] = "ApiVersion",
+                [RD_KAFKAP_ApiVersions] = "ApiVersions",
                 [RD_KAFKAP_CreateTopics] = "CreateTopics",
                 [RD_KAFKAP_DeleteTopics] = "DeleteTopics",
                 [RD_KAFKAP_DeleteRecords] = "DeleteRecords",

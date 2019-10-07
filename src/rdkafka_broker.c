@@ -2184,7 +2184,7 @@ rd_kafka_broker_request_supported (rd_kafka_broker_t *rkb,
         };
         struct rd_kafka_ApiVersion *ret;
 
-        if (unlikely(rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_ApiVersion))
+        if (unlikely(rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_ApiVersions))
                 return 1; /* ApiVersion requests are used to detect
                            * the supported API versions, so should always
                            * be allowed through. */

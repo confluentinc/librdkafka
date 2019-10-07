@@ -57,7 +57,7 @@ static const struct rd_kafka_feature_map {
 
 	/* Depends on the following ApiVersions overlapping with
 	 * what the broker supports: */
-	struct rd_kafka_ApiVersion depends[RD_KAFKAP__NUM];
+	struct rd_kafka_ApiVersion depends[RD_KAFKAP__CNT];
 
 } rd_kafka_feature_map[] = {
 	/**
@@ -96,7 +96,7 @@ static const struct rd_kafka_feature_map {
 		 *         even when broker supports it. */
 		.feature = RD_KAFKA_FEATURE_APIVERSION,
 		.depends = {
-			{ RD_KAFKAP_ApiVersion, 0, 0 },
+			{ RD_KAFKAP_ApiVersions, 0, 0 },
 			{ -1 },
 		},
 	},
@@ -104,7 +104,7 @@ static const struct rd_kafka_feature_map {
 		/* @brief >=0.8.2.0: Broker-based Group coordinator */
 		.feature = RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
 		.depends = {
-			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
+			{ RD_KAFKAP_FindCoordinator, 0, 0 },
 			{ -1 },
 		},
 	},
@@ -112,7 +112,7 @@ static const struct rd_kafka_feature_map {
 		/* @brief >=0.9.0: Broker-based balanced consumer groups. */
 		.feature = RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER,
 		.depends = {
-			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
+			{ RD_KAFKAP_FindCoordinator, 0, 0 },
 			{ RD_KAFKAP_OffsetCommit, 1, 2 },
 			{ RD_KAFKAP_OffsetFetch, 1, 1 },
 			{ RD_KAFKAP_JoinGroup, 0, 0 },
@@ -163,7 +163,7 @@ static const struct rd_kafka_feature_map {
                  * GrooupCoordinator was released in 0.8.2 */
                 .feature = RD_KAFKA_FEATURE_LZ4,
                 .depends = {
-                        { RD_KAFKAP_GroupCoordinator, 0, 0 },
+                        { RD_KAFKAP_FindCoordinator, 0, 0 },
                         { -1 },
                 },
         },
@@ -172,7 +172,7 @@ static const struct rd_kafka_feature_map {
                  * Time-based offset requests */
                 .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
                 .depends = {
-                        { RD_KAFKAP_Offset, 1, 1 },
+                        { RD_KAFKAP_ListOffset, 1, 1 },
                         { -1 },
                 }
         },
@@ -214,7 +214,7 @@ static const struct rd_kafka_feature_map {
 
 /* >= 0.10.0.0: dummy for all future versions that support ApiVersionRequest */
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_Queryable[] = {
-	{ RD_KAFKAP_ApiVersion, 0, 0 }
+	{ RD_KAFKAP_ApiVersions, 0, 0 }
 };
 
 
@@ -222,11 +222,11 @@ static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_Queryable[] = {
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_9_0[] = {
 	{ RD_KAFKAP_Produce, 0, 1 },
 	{ RD_KAFKAP_Fetch, 0, 1 },
-	{ RD_KAFKAP_Offset, 0, 0 },
+	{ RD_KAFKAP_ListOffset, 0, 0 },
 	{ RD_KAFKAP_Metadata, 0, 0 },
 	{ RD_KAFKAP_OffsetCommit, 0, 2 },
 	{ RD_KAFKAP_OffsetFetch, 0, 1 },
-	{ RD_KAFKAP_GroupCoordinator, 0, 0 },
+	{ RD_KAFKAP_FindCoordinator, 0, 0 },
 	{ RD_KAFKAP_JoinGroup, 0, 0 },
 	{ RD_KAFKAP_Heartbeat, 0, 0 },
 	{ RD_KAFKAP_LeaveGroup, 0, 0 },
@@ -239,18 +239,18 @@ static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_9_0[] = {
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_2[] = {
 	{ RD_KAFKAP_Produce, 0, 0 },
 	{ RD_KAFKAP_Fetch, 0, 0 },
-	{ RD_KAFKAP_Offset, 0, 0 },
+	{ RD_KAFKAP_ListOffset, 0, 0 },
 	{ RD_KAFKAP_Metadata, 0, 0 },
 	{ RD_KAFKAP_OffsetCommit, 0, 1 },
 	{ RD_KAFKAP_OffsetFetch, 0, 1 },
-	{ RD_KAFKAP_GroupCoordinator, 0, 0 }
+	{ RD_KAFKAP_FindCoordinator, 0, 0 }
 };
 
 /* =~ 0.8.1 */
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_1[] = {
 	{ RD_KAFKAP_Produce, 0, 0 },
 	{ RD_KAFKAP_Fetch, 0, 0 },
-	{ RD_KAFKAP_Offset, 0, 0 },
+	{ RD_KAFKAP_ListOffset, 0, 0 },
 	{ RD_KAFKAP_Metadata, 0, 0 },
 	{ RD_KAFKAP_OffsetCommit, 0, 1 },
 	{ RD_KAFKAP_OffsetFetch, 0, 0 }
@@ -260,7 +260,7 @@ static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_1[] = {
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_0[] = {
 	{ RD_KAFKAP_Produce, 0, 0 },
 	{ RD_KAFKAP_Fetch, 0, 0 },
-	{ RD_KAFKAP_Offset, 0, 0 },
+	{ RD_KAFKAP_ListOffset, 0, 0 },
 	{ RD_KAFKAP_Metadata, 0, 0 }
 };
 

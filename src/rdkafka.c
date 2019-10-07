@@ -1364,12 +1364,12 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
                                              rd_kafka_broker_t *rkb) {
         /* Filter out request types that will never be sent by the client. */
-        static const rd_bool_t filter[4][RD_KAFKAP__NUM] = {
+        static const rd_bool_t filter[4][RD_KAFKAP__CNT] = {
                 [RD_KAFKA_PRODUCER] = {
                         [RD_KAFKAP_Fetch] = rd_true,
                         [RD_KAFKAP_OffsetCommit] = rd_true,
                         [RD_KAFKAP_OffsetFetch] = rd_true,
-                        [RD_KAFKAP_GroupCoordinator] = rd_true,
+                        [RD_KAFKAP_FindCoordinator] = rd_true,
                         [RD_KAFKAP_JoinGroup] = rd_true,
                         [RD_KAFKAP_Heartbeat] = rd_true,
                         [RD_KAFKAP_LeaveGroup] = rd_true,
@@ -1425,7 +1425,7 @@ static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
         int cnt = 0;
 
         _st_printf("\"req\": { ");
-        for (i = 0 ; i < RD_KAFKAP__NUM ; i++) {
+        for (i = 0 ; i <= RD_KAFKAP__CNT ; i++) {
                 int64_t v;
 
                 if (filter[rkb->rkb_rk->rk_type][i] || filter[2][i])

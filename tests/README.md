@@ -64,7 +64,7 @@ To run tests:
     $ TESTS=0004 make
 
     # Run test(s) with helgrind, valgrind, gdb
-    $ TESTS=0009 ./run-test.sh valgrind|helgrind|gdb
+    $ TESTS=0009 ./run-test.sh ./merged valgrind|helgrind|gdb
 
 
 All tests in the 0000-0999 series are run automatically with `make`.
@@ -198,18 +198,18 @@ Run a single test:
 
 Run test suite with valgrind (see instructions below):
 
-    $ ./run-test.sh valgrind   # memory checking
+    $ ./run-test.sh ./merged valgrind   # memory checking
 
 or with helgrind (the valgrind thread checker):
 
-    $ ./run-test.sh helgrind   # thread checking
+    $ ./run-test.sh ./merged helgrind   # thread checking
 
 
 To run the tests in gdb:
 
 **NOTE**: gdb support is flaky on OSX due to signing issues.
 
-    $ ./run-test.sh gdb
+    $ ./run-test.sh ./merged gdb
     (gdb) run
 
     # wait for test to crash, or interrupt with Ctrl-C
@@ -316,7 +316,7 @@ To use valgrind, make sure librdkafka and the test suite is built without
 ASAN or TSAN, it must be a clean build without any other instrumentation,
 then simply run:
 
-    $ ./run-test.sh valgrind
+    $ ./run-test.sh ./merged valgrind
 
 Valgrind will report to stderr, just like ASAN.
 

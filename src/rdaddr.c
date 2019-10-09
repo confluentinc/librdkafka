@@ -39,7 +39,7 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 	const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
 	static RD_TLS char ret[32][INET6_ADDRSTRLEN + 16];
 	static RD_TLS int  reti = 0;
-	char portstr[64];
+	char portstr[32];
 	int of = 0;
 	int niflags = NI_NUMERICSERV;
 

@@ -865,7 +865,7 @@ static void rd_kafka_offset_sync_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
  * Locks: toppar_lock(rktp) must be held
  */
 static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
-	char spath[4096];
+	char spath[4096+1]; /* larger than escfile to avoid warning */
 	const char *path = rktp->rktp_rkt->rkt_conf.offset_store_path;
 	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 

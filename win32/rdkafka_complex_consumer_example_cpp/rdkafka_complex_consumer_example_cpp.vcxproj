@@ -3,7 +3,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{88B682AB-5082-49D5-A672-9904C5F43ABB}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>rdkafka_consumer_example_cpp</RootNamespace>
+    <RootNamespace>rdkafka_complex_consumer_example_cpp</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(SolutionDir)common.vcxproj"/>
@@ -55,7 +55,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\examples\rdkafka_consumer_example.cpp" />
+    <ClCompile Include="..\..\examples\rdkafka_complex_consumer_example.cpp" />
     <ClCompile Include="..\wingetopt.c" />
   </ItemGroup>
   <ItemGroup>

@@ -107,7 +107,7 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
                 int feature;
                 int16_t ApiVersion;
         } compr_req[RD_KAFKA_COMPRESSION_NUM] = {
-                [RD_KAFKA_COMPRESSION_LZ4] = { RD_KAFKA_FEATURE_LZ4, 3 },
+                [RD_KAFKA_COMPRESSION_LZ4] = { RD_KAFKA_FEATURE_LZ4, 0 },
 #if WITH_ZSTD
                 [RD_KAFKA_COMPRESSION_ZSTD] = { RD_KAFKA_FEATURE_ZSTD, 7 },
 #endif

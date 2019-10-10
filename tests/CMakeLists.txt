@@ -94,6 +94,7 @@ set(
     8000-idle.cpp
     test.c
     testcpp.cpp
+    rusage.c
 )
 
 if(NOT WIN32)

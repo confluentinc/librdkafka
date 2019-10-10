@@ -1861,7 +1861,7 @@ int unittest_msg (void) {
 
         /* Allow some wiggle room in baseline time. */
         if (insert_baseline < 0.1)
-                insert_baseline = 0.1;
+                insert_baseline = 0.2;
         insert_baseline *= 3;
 
         fails += unittest_msgq_insert_sort(

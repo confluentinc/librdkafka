@@ -260,5 +260,25 @@ void foo (void) {
 	mkl_compile_check valgrind WITH_VALGRIND disable CC "" \
 			  "#include <valgrind/memcheck.h>"
     fi
+
+    # getrusage() is used by the test framework
+    mkl_compile_check "getrusage" "HAVE_GETRUSAGE" disable CC "" \
+'
+#include <stdio.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+
+
+void foo (void) {
+  struct rusage ru;
+  if (getrusage(RUSAGE_SELF, &ru) == -1)
+    return;
+  printf("ut %ld, st %ld, maxrss %ld, nvcsw %ld\n",
+         (long int)ru.ru_utime.tv_usec,
+         (long int)ru.ru_stime.tv_usec,
+         (long int)ru.ru_maxrss,
+         (long int)ru.ru_nvcsw);
+}'
+
 }
 

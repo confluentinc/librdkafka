@@ -41,6 +41,11 @@
 #include <time.h>
 #include <ctype.h>
 
+#if HAVE_GETRUSAGE
+#include <sys/time.h>
+#include <sys/resource.h>
+#endif
+
 #include "rdkafka.h"
 #include "tinycthread.h"
 #include "rdlist.h"
@@ -65,6 +70,9 @@ extern char test_mode[64];
 extern RD_TLS struct test *test_curr;
 extern int test_assert_on_fail;
 extern int tests_running_cnt;
+extern int test_concurrent_max;
+extern int test_rusage;
+extern double test_rusage_cpu_calibration;
 extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
 extern int  test_flags;
@@ -76,6 +84,15 @@ extern mtx_t test_mtx;
 #define TEST_LOCK()   mtx_lock(&test_mtx)
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
+
+/** @struct Resource usage thresholds */
+struct rusage_thres {
+        double ucpu;  /**< Max User CPU in percentage */
+        double scpu;  /**< Max Sys CPU in percentage */
+        double rss;   /**< Max RSS (memory) increase in MB */
+        int    ctxsw; /**< Max number of voluntary context switches, i.e.
+                       *   syscalls. */
+};
 
 typedef enum {
         TEST_NOT_STARTED,
@@ -131,6 +148,12 @@ struct test {
 #endif
         int (*is_fatal_cb) (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                             const char *reason);
+
+        /**< Resource usage thresholds */
+        struct rusage_thres rusage_thres;  /**< Usage thresholds */
+#if HAVE_GETRUSAGE
+        struct rusage rusage; /**< Monitored process CPU/mem usage */
+#endif
 };
 
 
@@ -611,5 +634,15 @@ test_AlterConfigs_simple (rd_kafka_t *rk,
                           const char **configs, size_t config_cnt);
 
 rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
+
+
+/**
+ * @name rusage.c
+ * @{
+ */
+void test_rusage_start (struct test *test);
+int test_rusage_stop (struct test *test, double duration);
+
+/**@}*/
 
 #endif /* _TEST_H_ */

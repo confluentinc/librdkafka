@@ -255,7 +255,11 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 
         /* Issue #827: cause committed() to return prematurely by specifying
          *             low timeout. The bug (use after free) will only
-         *             be catched by valgrind. */
+         *             be catched by valgrind.
+         *
+         * rusage: this triggers a bunch of protocol requests which
+         *         increase .ucpu, .scpu, .ctxsw.
+         */
         do {
                 parts = rd_kafka_topic_partition_list_new(1);
                 rd_kafka_topic_partition_list_add(parts, topic, partition);

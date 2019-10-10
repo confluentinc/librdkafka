@@ -51,8 +51,8 @@ char test_mode[64] = "bare";
 static int  test_exit = 0;
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
-       int  tests_running_cnt = 0;
-static int  test_concurrent_max = 5;
+int          tests_running_cnt = 0;
+int          test_concurrent_max = 5;
 int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
 static char *test_sql_cmd = NULL;
@@ -69,6 +69,11 @@ int          test_on_ci = 0; /* Tests are being run on CI, be more forgiving
                               * with regards to timeouts, etc. */
 int          test_quick = 0; /** Run tests quickly */
 int          test_idempotent_producer = 0;
+int          test_rusage = 0; /**< Check resource usage */
+/**< CPU speed calibration for rusage threshold checks.
+ *   >1.0: CPU is slower than base line system,
+ *   <1.0: CPU is faster than base line system. */
+double       test_rusage_cpu_calibration = 1.0;
 static  const char *tests_to_run = NULL; /* all */
 
 static int show_summary = 1;
@@ -202,13 +207,36 @@ _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(8000_idle);
 
 
+/* Define test resource usage thresholds if the default limits
+ * are not tolerable.
+ *
+ * Fields:
+ *  .ucpu  - Max User CPU percentage  (double)
+ *  .scpu  - Max System/Kernel CPU percentage  (double)
+ *  .rss   - Max RSS (memory) in megabytes  (double)
+ *  .ctxsw - Max number of voluntary context switches  (int)
+ *
+ * Also see test_rusage_check_thresholds() in rusage.c
+ *
+ * Make a comment in the _THRES() below why the extra thresholds are required.
+ *
+ * Usage:
+ *  _TEST(00...., ...,
+ *        _THRES(.ucpu = 15.0)),  <--  Max 15% User CPU usage
+ */
+#define _THRES(...) .rusage_thres = { __VA_ARGS__ }
+
 /**
  * Define all tests here
  */
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
         { .name = "<MAIN>", .flags = TEST_F_LOCAL },
-        _TEST(0000_unittests, TEST_F_LOCAL),
+        _TEST(0000_unittests, TEST_F_LOCAL,
+              /* The msgq insert order tests are heavy on
+               * user CPU (memory scan), RSS, and
+               * system CPU (lots of allocations -> madvise(2)). */
+              _THRES(.ucpu = 100.0, .scpu = 20.0, .rss = 900.0)),
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),
@@ -217,7 +245,9 @@ struct test tests[] = {
         _TEST(0006_symbols, TEST_F_LOCAL),
         _TEST(0007_autotopic, 0),
         _TEST(0008_reqacks, 0),
-        _TEST(0011_produce_batch, 0),
+        _TEST(0011_produce_batch, 0,
+              /* Produces a lot of messages */
+              _THRES(.ucpu = 40.0, .scpu = 8.0)),
         _TEST(0012_produce_consume, 0),
         _TEST(0013_null_msgs, 0),
         _TEST(0014_reconsume_191, 0),
@@ -234,7 +264,9 @@ struct test tests[] = {
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE, TEST_BRKVER(0,9,0,0),
 	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
-	_TEST(0030_offset_commit, 0, TEST_BRKVER(0,9,0,0)),
+	_TEST(0030_offset_commit, 0, TEST_BRKVER(0,9,0,0),
+              /* Loops over committed() until timeout */
+              _THRES(.ucpu = 10.0, .scpu = 5.0)),
 	_TEST(0031_get_offsets, 0),
 	_TEST(0033_regex_subscribe, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0033_regex_subscribe_local, TEST_F_LOCAL),
@@ -242,14 +274,20 @@ struct test tests[] = {
 	_TEST(0035_api_version, 0),
 	_TEST(0036_partial_fetch, 0),
 	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
-	_TEST(0038_performance, 0),
+	_TEST(0038_performance, 0,
+              /* Produces and consumes a lot of messages */
+              _THRES(.ucpu = 150.0, .scpu = 10)),
 	_TEST(0039_event_dr, 0),
         _TEST(0039_event, TEST_F_LOCAL),
 	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
-	_TEST(0041_fetch_max_bytes, 0),
+	_TEST(0041_fetch_max_bytes, 0,
+              /* Re-fetches large messages multiple times */
+              _THRES(.ucpu = 20.0, .scpu = 10.0)),
 	_TEST(0042_many_topics, 0),
 	_TEST(0043_no_connection, TEST_F_LOCAL),
-	_TEST(0044_partition_cnt, 0),
+	_TEST(0044_partition_cnt, 0,
+              /* Produces a lot of messages */
+              _THRES(.ucpu = 30.0)),
 	_TEST(0045_subscribe_update, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE,
               TEST_BRKVER(0,9,0,0)),
@@ -257,7 +295,9 @@ struct test tests[] = {
               TEST_BRKVER(0,9,0,0)),
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
-	_TEST(0048_partitioner, 0),
+	_TEST(0048_partitioner, 0,
+              /* Produces many small messages */
+              _THRES(.ucpu = 10.0, .scpu = 5.0)),
 #if WITH_SOCKEM
         _TEST(0049_consume_conn_close, TEST_F_SOCKEM, TEST_BRKVER(0,9,0,0)),
 #endif
@@ -548,6 +588,17 @@ static void test_init (void) {
                 seed = atoi(tmp);
         else
                 seed = test_clock() & 0xffffffff;
+        if ((tmp = test_getenv("TEST_CPU_CALIBRATION", NULL))) {
+                test_rusage_cpu_calibration = strtod(tmp, NULL);
+                if (test_rusage_cpu_calibration < 0.00001) {
+                        fprintf(stderr,
+                                "%% Invalid CPU calibration "
+                                "value (from TEST_CPU_CALIBRATION env): %s\n",
+                                tmp);
+                        exit(1);
+                }
+        }
+
 #ifdef _MSC_VER
         test_init_win32();
 	{
@@ -918,10 +969,17 @@ static int run_test0 (struct run_args *run_args) {
 		 test->name);
         if (test->stats_fp)
                 TEST_SAY("==== Stats written to file %s ====\n", stats_file);
+
+        test_rusage_start(test_curr);
 	TIMING_START(&t_run, "%s", test->name);
         test->start = t_run.ts_start;
+
+        /* Run test main function */
 	r = test->mainfunc(run_args->argc, run_args->argv);
-	TIMING_STOP(&t_run);
+
+        TIMING_STOP(&t_run);
+        test_rusage_stop(test_curr,
+                         (double)TIMING_DURATION(&t_run) / 1000000.0);
 
         TEST_LOCK();
         test->duration = TIMING_DURATION(&t_run);
@@ -1428,9 +1486,15 @@ int main(int argc, char **argv) {
 	test_conf_init(NULL, NULL, 10);
 
         for (i = 1 ; i < argc ; i++) {
-                if (!strncmp(argv[i], "-p", 2) && strlen(argv[i]) > 2)
+                if (!strncmp(argv[i], "-p", 2) && strlen(argv[i]) > 2) {
+                        if (test_rusage) {
+                                fprintf(stderr,
+                                        "%% %s ignored: -R takes preceedence\n",
+                                        argv[i]);
+                                continue;
+                        }
                         test_concurrent_max = (int)strtod(argv[i]+2, NULL);
-                else if (!strcmp(argv[i], "-l"))
+                } else if (!strcmp(argv[i], "-l"))
                         test_flags |= TEST_F_LOCAL;
 		else if (!strcmp(argv[i], "-L"))
                         test_neg_flags |= TEST_F_LOCAL;
@@ -1452,7 +1516,20 @@ int main(int argc, char **argv) {
                         test_idempotent_producer = 1;
                 else if (!strcmp(argv[i], "-Q"))
                         test_quick = 1;
-		else if (*argv[i] != '-')
+                else if (!strncmp(argv[i], "-R", 2)) {
+                        test_rusage = 1;
+                        test_concurrent_max = 1;
+                        if (strlen(argv[i]) > strlen("-R")) {
+                                test_rusage_cpu_calibration =
+                                        strtod(argv[i]+2, NULL);
+                                if (test_rusage_cpu_calibration < 0.00001) {
+                                        fprintf(stderr,
+                                                "%% Invalid CPU calibration "
+                                                "value: %s\n", argv[i]+2);
+                                        exit(1);
+                                }
+                        }
+                } else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
                         printf("Unknown option: %s\n"
@@ -1469,6 +1546,11 @@ int main(int argc, char **argv) {
                                "  -D     Delete all test topics between each test (-p1) or after all tests\n"
                                "  -P     Run all tests with `enable.idempotency=true`\n"
                                "  -Q     Run tests in quick mode: faster tests, fewer iterations, less data.\n"
+                               "  -R     Check resource usage thresholds.\n"
+                               "  -R<C>  Check resource usage thresholds but adjust CPU thresholds by C (float):\n"
+                               "            C < 1.0: CPU is faster than base line system.\n"
+                               "            C > 1.0: CPU is slower than base line system.\n"
+                               "            E.g. -R2.5 = CPU is 2.5x slower than base line system.\n"
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
@@ -1548,6 +1630,9 @@ int main(int argc, char **argv) {
         TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
+        if (test_rusage)
+                TEST_SAY("Test rusage : yes (%.2fx CPU calibration)\n",
+                         test_rusage_cpu_calibration);
         if (test_idempotent_producer)
                 TEST_SAY("Test Idempotent Producer: enabled\n");
 

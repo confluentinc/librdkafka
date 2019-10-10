@@ -349,6 +349,50 @@ is valgrind's thread checker (`./run-test.sh helgrind`).
 **NOTE**: ASAN, TSAN and valgrind are mutually exclusive.
 
 
+### Resource usage thresholds (experimental)
+
+**NOTE**: This is an experimental feature, some form of system-specific
+          calibration will be needed.
+
+If the `-R` option is passed to the `test-runner`, or the `make rusage`
+target is used, the test framework will monitor each test's resource usage
+and fail the test if the default or test-specific thresholds are exceeded.
+
+Per-test thresholds are specified in test.c using the `_THRES()` macro.
+
+Currently monitored resources are:
+ * `utime` - User CPU time in seconds (default 1.0s)
+ * `stime` - System/Kernel CPU time in seconds (default 0.5s).
+ * `rss` - RSS (memory) usage (default 10.0 MB)
+ * `ctxsw` - Number of voluntary context switches, e.g. syscalls (default 10000).
+
+Upon successful test completion a log line will be emitted with a resource
+usage summary, e.g.:
+
+    Test resource usage summary: 20.161s (32.3%) User CPU time, 12.976s (20.8%) Sys CPU time, 0.000MB RSS memory increase, 4980 Voluntary context switches
+
+The User and Sys CPU thresholds are based on observations running the
+test suite on an Intel(R) Core(TM) i7-2600 CPU @ 3.40GHz (8 cores)
+which define the base line system.
+
+Since no two development environments are identical a manual CPU calibration
+value can be passed as `-R<C>`, where `C` is the CPU calibration for
+the local system compared to the base line system.
+The CPU threshold will be multiplied by the CPU calibration value (default 1.0),
+thus a value less than 1.0 means the local system is faster than the
+base line system, and a value larger than 1.0 means the local system is
+slower than the base line system.
+I.e., if you are on an i5 system, pass `-R2.0` to allow higher CPU usages,
+or `-R0.8` if your system is faster than the base line system.
+The the CPU calibration value may also be set with the
+`TEST_CPU_CALIBRATION=1.5` environment variable.
+
+In an ideal future, the test suite would be able to auto-calibrate.
+
+
+**NOTE**: The resource usage threshold checks will run tests in sequence,
+          not parallell, to be able to effectively measure per-test usage.
+
 
 # PR and release verification
 

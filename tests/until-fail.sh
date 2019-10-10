@@ -48,7 +48,7 @@ while true ; do
             else
                 export TESTS=$t
             fi
-            ./run-test.sh $ARGS $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
+            ./run-test.sh -p1 $ARGS $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
         done
     done
 

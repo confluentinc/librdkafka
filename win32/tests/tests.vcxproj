@@ -184,6 +184,7 @@
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
+    <ClCompile Include="..\..\tests\rusage.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\tinycthread_extra.c" />
     <ClCompile Include="..\..\src\rdlist.c" />

@@ -33,6 +33,10 @@ producer: ../src/librdkafka.a producer.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 
+producer_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) producer.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
 consumer: ../src/librdkafka.a consumer.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)

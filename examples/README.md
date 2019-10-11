@@ -6,8 +6,9 @@ statically or dynamically to librdkafka in the parent `../src` directory.
 
 Begin with the following examples:
 
- * [consumer.c](consumer.c) - a typical high-level consumer application.
- * [producer.c](producer.c) - a typical producer application.
+ * [consumer.c](consumer.c) - a typical C high-level consumer application.
+ * [producer.c](producer.c) - a typical C producer application.
+ * [producer.cpp](producer.cpp) - a typical C++ producer application.
  * [idempotent_producer.c](idempotent_producer.c) - Idempotent producer.
 
 

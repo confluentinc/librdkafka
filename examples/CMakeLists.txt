@@ -5,6 +5,9 @@ endif(WIN32)
 add_executable(producer producer.c ${win32_sources})
 target_link_libraries(producer PUBLIC rdkafka)
 
+add_executable(producer_cpp producer.cpp ${win32_sources})
+target_link_libraries(producer_cpp PUBLIC rdkafka++)
+
 add_executable(consumer consumer.c ${win32_sources})
 target_link_libraries(consumer PUBLIC rdkafka)
 

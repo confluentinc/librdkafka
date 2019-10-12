@@ -195,7 +195,13 @@ static RD_INLINE void rd_timeout_init_timespec_us (struct timespec *tspec,
                 tspec->tv_sec = timeout_us;
                 tspec->tv_nsec = 0;
         } else {
+#ifdef __APPLE__
+                struct timeval tv;
+                gettimeofday(&tv, NULL);
+                TIMEVAL_TO_TIMESPEC(&tv, tspec);
+#else
                 timespec_get(tspec, TIME_UTC);
+#endif
                 tspec->tv_sec  += timeout_us / 1000000;
                 tspec->tv_nsec += (timeout_us % 1000000) * 1000;
                 if (tspec->tv_nsec >= 1000000000) {
@@ -220,7 +226,13 @@ static RD_INLINE void rd_timeout_init_timespec (struct timespec *tspec,
                 tspec->tv_sec = timeout_ms;
                 tspec->tv_nsec = 0;
         } else {
+#ifdef __APPLE__
+                struct timeval tv;
+                gettimeofday(&tv, NULL);
+                TIMEVAL_TO_TIMESPEC(&tv, tspec);
+#else
                 timespec_get(tspec, TIME_UTC);
+#endif
                 tspec->tv_sec  += timeout_ms / 1000;
                 tspec->tv_nsec += (timeout_ms % 1000) * 1000000;
                 if (tspec->tv_nsec >= 1000000000) {

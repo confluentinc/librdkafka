@@ -24,8 +24,8 @@ done
 
 TEST=./test-runner
 
-if [ ! -z "$2" ]; then
-    MODES=$2
+if [ ! -z "$1" ]; then
+    MODES=$1
 else
     MODES="bare"
     # Enable valgrind:
@@ -74,6 +74,11 @@ for mode in $MODES; do
 	    ;;
 	drd)
 	    valgrind $VALGRIND_ARGS --tool=drd $SUPP $GEN_SUPP \
+		$TEST	$ARGS
+	    RET=$?
+	    ;;
+        callgrind)
+	    valgrind $VALGRIND_ARGS --tool=callgrind $SUPP $GEN_SUPP \
 		$TEST	$ARGS
 	    RET=$?
 	    ;;

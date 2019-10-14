@@ -161,7 +161,7 @@ void rd_hdr_histogram_reset (rd_hdr_histogram_t *hdr) {
 
 
 
-static int32_t
+static RD_INLINE int32_t
 rd_hdr_countsIndex (const rd_hdr_histogram_t *hdr,
                     int32_t bucketIdx, int32_t subBucketIdx) {
         int32_t bucketBaseIdx = (bucketIdx + 1) <<
@@ -170,14 +170,14 @@ rd_hdr_countsIndex (const rd_hdr_histogram_t *hdr,
         return bucketBaseIdx + offsetInBucket;
 }
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_getCountAtIndex (const rd_hdr_histogram_t *hdr,
                         int32_t bucketIdx, int32_t subBucketIdx) {
         return hdr->counts[rd_hdr_countsIndex(hdr, bucketIdx, subBucketIdx)];
 }
 
 
-static __inline int64_t bitLen (int64_t x) {
+static RD_INLINE int64_t bitLen (int64_t x) {
         int64_t n = 0;
         for (; x >= 0x8000; x >>= 16)
                 n += 16;
@@ -199,36 +199,36 @@ static __inline int64_t bitLen (int64_t x) {
 }
 
 
-static __inline int32_t
+static RD_INLINE int32_t
 rd_hdr_getBucketIndex (const rd_hdr_histogram_t *hdr, int64_t v) {
         int64_t pow2Ceiling = bitLen(v | hdr->subBucketMask);
         return (int32_t)(pow2Ceiling - (int64_t)hdr->unitMagnitude -
                          (int64_t)(hdr->subBucketHalfCountMagnitude+1));
 }
 
-static __inline int32_t
+static RD_INLINE int32_t
 rd_hdr_getSubBucketIdx (const rd_hdr_histogram_t *hdr, int64_t v, int32_t idx) {
         return (int32_t)(v >> ((int64_t)idx + (int64_t)hdr->unitMagnitude));
 }
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_valueFromIndex (const rd_hdr_histogram_t *hdr,
                        int32_t bucketIdx, int32_t subBucketIdx) {
         return (int64_t)subBucketIdx <<
                 ((int64_t)bucketIdx + hdr->unitMagnitude);
 }
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_sizeOfEquivalentValueRange (const rd_hdr_histogram_t *hdr, int64_t v) {
         int32_t bucketIdx = rd_hdr_getBucketIndex(hdr, v);
         int32_t subBucketIdx = rd_hdr_getSubBucketIdx(hdr, v, bucketIdx);
         int32_t adjustedBucket = bucketIdx;
-        if (subBucketIdx >= hdr->subBucketCount)
+        if (unlikely(subBucketIdx >= hdr->subBucketCount))
                 adjustedBucket++;
         return (int64_t)1 << (hdr->unitMagnitude + (int64_t)adjustedBucket);
 }
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_lowestEquivalentValue (const rd_hdr_histogram_t *hdr, int64_t v) {
         int32_t bucketIdx = rd_hdr_getBucketIndex(hdr, v);
         int32_t subBucketIdx = rd_hdr_getSubBucketIdx(hdr, v, bucketIdx);
@@ -236,26 +236,26 @@ rd_hdr_lowestEquivalentValue (const rd_hdr_histogram_t *hdr, int64_t v) {
 }
 
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_nextNonEquivalentValue (const rd_hdr_histogram_t *hdr, int64_t v) {
         return rd_hdr_lowestEquivalentValue(hdr, v) +
                 rd_hdr_sizeOfEquivalentValueRange(hdr, v);
 }
 
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_highestEquivalentValue (const rd_hdr_histogram_t *hdr, int64_t v) {
         return rd_hdr_nextNonEquivalentValue(hdr, v) - 1;
 }
 
-static __inline int64_t
+static RD_INLINE int64_t
 rd_hdr_medianEquivalentValue (const rd_hdr_histogram_t *hdr, int64_t v) {
         return rd_hdr_lowestEquivalentValue(hdr, v) +
                 (rd_hdr_sizeOfEquivalentValueRange(hdr, v) >> 1);
 }
 
 
-static __inline int32_t
+static RD_INLINE int32_t
 rd_hdr_countsIndexFor (const rd_hdr_histogram_t *hdr, int64_t v) {
         int32_t bucketIdx = rd_hdr_getBucketIndex(hdr, v);
         int32_t subBucketIdx = rd_hdr_getSubBucketIdx(hdr, v, bucketIdx);
@@ -279,16 +279,16 @@ typedef struct rd_hdr_iter_s {
 static int rd_hdr_iter_next (rd_hdr_iter_t *it) {
         const rd_hdr_histogram_t *hdr = it->hdr;
 
-        if (it->countToIdx >= hdr->totalCount)
+        if (unlikely(it->countToIdx >= hdr->totalCount))
                 return 0;
 
         it->subBucketIdx++;
-        if (it->subBucketIdx >= hdr->subBucketCount) {
+        if (unlikely(it->subBucketIdx >= hdr->subBucketCount)) {
                 it->subBucketIdx = hdr->subBucketHalfCount;
                 it->bucketIdx++;
         }
 
-        if (it->bucketIdx >= hdr->bucketCount)
+        if (unlikely(it->bucketIdx >= hdr->bucketCount))
                 return 0;
 
         it->countAtIdx = rd_hdr_getCountAtIndex(hdr,

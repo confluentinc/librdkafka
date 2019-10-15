@@ -756,7 +756,7 @@ rd_kafka_msgq_insert_msgq_before (rd_kafka_msgq_t *destq,
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *sfirst, *start_pos = NULL;
+        rd_kafka_msg_t *sfirst, *dlast, *start_pos = NULL;
 
         if (unlikely(RD_KAFKA_MSGQ_EMPTY(srcq))) {
                 /* srcq is empty */
@@ -782,9 +782,22 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
         rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
         rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
 
+        dlast = rd_kafka_msgq_last(destq);
+        sfirst = rd_kafka_msgq_first(srcq);
+
+        /* Most common case, all of srcq goes after destq */
+        if (likely(cmp(dlast, sfirst) < 0)) {
+                rd_kafka_msgq_concat(destq, srcq);
+
+                rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+
+                rd_assert(RD_KAFKA_MSGQ_EMPTY(srcq));
+                return;
+        }
+
         /* Insert messages from srcq into destq in non-overlapping
          * chunks until srcq is exhausted. */
-        while (likely((sfirst = rd_kafka_msgq_first(srcq)) != NULL)) {
+        while (likely(sfirst != NULL)) {
                 rd_kafka_msg_t *insert_before;
 
                 /* Get insert position in destq of first element in srcq */
@@ -800,6 +813,9 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                  * does not have to re-scan destq and what was
                  * added from srcq. */
                 start_pos = insert_before;
+
+                /* For next iteration */
+                sfirst = rd_kafka_msgq_first(srcq);
 
                 rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
                 rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);

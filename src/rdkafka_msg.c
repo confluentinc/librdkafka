@@ -1753,12 +1753,14 @@ struct ut_msg_range {
 
 /**
  * @brief Verify that msgq insert sorts are optimized. Issue #2508.
+ *        All source ranges are combined into a single queue before insert.
  */
-static int unittest_msgq_insert_sort (const char *what,
-                                      double max_us_per_msg,
-                                      double *ret_us_per_msg,
-                                      const struct ut_msg_range *src_ranges,
-                                      const struct ut_msg_range *dest_ranges) {
+static int
+unittest_msgq_insert_all_sort (const char *what,
+                               double max_us_per_msg,
+                               double *ret_us_per_msg,
+                               const struct ut_msg_range *src_ranges,
+                               const struct ut_msg_range *dest_ranges) {
         rd_kafka_msgq_t destq, srcq;
         int i;
         uint64_t lo = UINT64_MAX, hi = 0;
@@ -1768,7 +1770,7 @@ static int unittest_msgq_insert_sort (const char *what,
         rd_ts_t ts;
         double us_per_msg;
 
-        RD_UT_SAY("Testing msgq insert efficiency: %s", what);
+        RD_UT_SAY("Testing msgq insert (all) efficiency: %s", what);
 
         rd_kafka_msgq_init(&destq);
         rd_kafka_msgq_init(&srcq);
@@ -1829,7 +1831,113 @@ static int unittest_msgq_insert_sort (const char *what,
         ut_rd_kafka_msgq_purge(&srcq);
         ut_rd_kafka_msgq_purge(&destq);
 
-        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg),
+        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
+                     "maximum us/msg exceeded: %.4f > %.4f us/msg",
+                     us_per_msg, max_us_per_msg);
+
+        if (ret_us_per_msg)
+                *ret_us_per_msg = us_per_msg;
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Verify that msgq insert sorts are optimized. Issue #2508.
+ *        Inserts each source range individually.
+ */
+static int
+unittest_msgq_insert_each_sort (const char *what,
+                                double max_us_per_msg,
+                                double *ret_us_per_msg,
+                                const struct ut_msg_range *src_ranges,
+                                const struct ut_msg_range *dest_ranges) {
+        rd_kafka_msgq_t destq;
+        int i;
+        uint64_t lo = UINT64_MAX, hi = 0;
+        uint64_t cnt = 0;
+        uint64_t scnt = 0;
+        const size_t msgsize = 100;
+        size_t totsize = 0;
+        double us_per_msg;
+        rd_ts_t accum_ts = 0;
+
+        RD_UT_SAY("Testing msgq insert (each) efficiency: %s", what);
+
+        rd_kafka_msgq_init(&destq);
+
+        for (i = 0 ; dest_ranges[i].hi > 0 ; i++) {
+                uint64_t this_cnt;
+
+                ut_msgq_populate(&destq, dest_ranges[i].lo, dest_ranges[i].hi,
+                                 msgsize);
+                if (dest_ranges[i].lo < lo)
+                        lo = dest_ranges[i].lo;
+                if (dest_ranges[i].hi > hi)
+                        hi = dest_ranges[i].hi;
+                this_cnt = (dest_ranges[i].hi - dest_ranges[i].lo) + 1;
+                cnt += this_cnt;
+                totsize += msgsize * (size_t)this_cnt;
+        }
+
+
+        for (i = 0 ; src_ranges[i].hi > 0 ; i++) {
+                rd_kafka_msgq_t srcq;
+                uint64_t this_cnt;
+                rd_ts_t ts;
+
+                rd_kafka_msgq_init(&srcq);
+
+                ut_msgq_populate(&srcq, src_ranges[i].lo, src_ranges[i].hi,
+                                 msgsize);
+                if (src_ranges[i].lo < lo)
+                        lo = src_ranges[i].lo;
+                if (src_ranges[i].hi > hi)
+                        hi = src_ranges[i].hi;
+                this_cnt = (src_ranges[i].hi - src_ranges[i].lo) + 1;
+                cnt += this_cnt;
+                scnt += this_cnt;
+                totsize += msgsize * (size_t)this_cnt;
+
+                RD_UT_SAY("Begin insert of %d messages into destq with "
+                          "%d messages",
+                          rd_kafka_msgq_len(&srcq), rd_kafka_msgq_len(&destq));
+
+                ts = rd_clock();
+                rd_kafka_msgq_insert_msgq(&destq, &srcq,
+                                          rd_kafka_msg_cmp_msgid);
+                ts = rd_clock() - ts;
+                accum_ts += ts;
+
+                RD_UT_SAY("Done: took %"PRId64"us, %.4fus/msg",
+                          ts, (double)ts / (double)this_cnt);
+
+                RD_UT_ASSERT(rd_kafka_msgq_len(&srcq) == 0,
+                             "srcq should be empty, but contains %d messages",
+                             rd_kafka_msgq_len(&srcq));
+                RD_UT_ASSERT(rd_kafka_msgq_len(&destq) == (int)cnt,
+                             "destq should contain %d messages, not %d",
+                             (int)cnt, rd_kafka_msgq_len(&destq));
+
+                if (ut_verify_msgq_order("after", &destq, lo, hi, rd_false))
+                        return 1;
+
+                RD_UT_ASSERT(rd_kafka_msgq_size(&destq) == totsize,
+                             "expected destq size to be %"PRIusz
+                             " bytes, not %"PRIusz,
+                             totsize, rd_kafka_msgq_size(&destq));
+
+                ut_rd_kafka_msgq_purge(&srcq);
+        }
+
+        ut_rd_kafka_msgq_purge(&destq);
+
+        us_per_msg = (double)accum_ts / (double)scnt;
+
+        RD_UT_SAY("Total: %.4fus/msg over %"PRId64" messages in %"PRId64"us",
+                  us_per_msg, scnt, accum_ts);
+
+        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
                      "maximum us/msg exceeded: %.4f > %.4f us/msg",
                      us_per_msg, max_us_per_msg);
 
@@ -1841,9 +1949,38 @@ static int unittest_msgq_insert_sort (const char *what,
 
 
 
+/**
+ * @brief Calls both insert_all and insert_each
+ */
+static int
+unittest_msgq_insert_sort (const char *what,
+                           double max_us_per_msg,
+                           double *ret_us_per_msg,
+                           const struct ut_msg_range *src_ranges,
+                           const struct ut_msg_range *dest_ranges) {
+        double ret_all = 0.0, ret_each = 0.0;
+        int r;
+
+        r = unittest_msgq_insert_all_sort(what, max_us_per_msg, &ret_all,
+                                          src_ranges, dest_ranges);
+        if (r)
+                return r;
+
+        r = unittest_msgq_insert_each_sort(what, max_us_per_msg, &ret_each,
+                                           src_ranges, dest_ranges);
+        if (r)
+                return r;
+
+        if (ret_us_per_msg)
+                *ret_us_per_msg = RD_MAX(ret_all, ret_each);
+
+        return 0;
+}
+
+
 int unittest_msg (void) {
         int fails = 0;
-        double insert_baseline;
+        double insert_baseline = 0.0;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgid);
         fails += unittest_msg_seq_wrap();
@@ -1907,6 +2044,27 @@ int unittest_msg (void) {
                         { 33751993, 33906867 },
                         { 0, 0 }});
 
+        /* The standard case where all of the srcq
+         * goes after the destq.
+         * Create a big destq and a number of small srcqs.
+         * Should not result in O(n) scans to find the insert position. */
+        fails += unittest_msgq_insert_sort(
+                "issue #2450 (v1.2.1 regression)", insert_baseline, NULL,
+                (const struct ut_msg_range[]){
+                        { 200000, 200001 },
+                        { 200002, 200006 },
+                        { 200009, 200012 },
+                        { 200015, 200016 },
+                        { 200020, 200022 },
+                        { 200030, 200090 },
+                        { 200091, 200092 },
+                        { 200093, 200094 },
+                        { 200095, 200096 },
+                        { 200097, 200099 },
+                        { 0, 0 }},
+                (const struct ut_msg_range[]) {
+                        { 1, 199999 },
+                        { 0, 0 }});
 
         return fails;
 }

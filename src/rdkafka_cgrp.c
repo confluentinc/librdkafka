@@ -1751,10 +1751,10 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
                  * The timer interval is 2 hz. */
 
                 rd_kafka_timer_start(&rkcg->rkcg_rk->rk_timers,
-                               &rkcg->rkcg_max_poll_interval_tmr,
-                               500 * 1000ll /* 500ms */,
-                               rd_kafka_cgrp_max_poll_interval_check_tmr_cb,
-                               rkcg);
+                             &rkcg->rkcg_max_poll_interval_tmr,
+                             500 * 1000ll /* 500ms */,
+                             rd_kafka_cgrp_max_poll_interval_check_tmr_cb,
+                             rkcg);
 
                 for (i = 0 ; i < assignment->cnt ; i++) {
                         rd_kafka_topic_partition_t *rktpar =

@@ -738,6 +738,9 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
         if (err)
 		goto err;
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 3)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         for (i = 0 ; i < TopicArrayCnt ; i++) {
                 rd_kafkap_str_t topic;
@@ -853,7 +856,6 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
  */
 int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_cgrp_t *rkcg,
-                                   int16_t api_version,
                                    rd_kafka_topic_partition_list_t *offsets,
                                    rd_kafka_replyq_t replyq,
                                    rd_kafka_resp_cb_t *resp_cb,
@@ -866,6 +868,13 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         int PartCnt = 0;
 	int tot_PartCnt = 0;
         int i;
+        int16_t ApiVersion;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
+                                                          RD_KAFKAP_OffsetCommit,
+                                                          0, 7,
+                                                          &features);
 
         rd_kafka_assert(NULL, offsets != NULL);
 
@@ -876,15 +885,20 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_id);
 
         /* v1,v2 */
-        if (api_version >= 1) {
+        if (ApiVersion >= 1) {
                 /* ConsumerGroupGenerationId */
                 rd_kafka_buf_write_i32(rkbuf, rkcg->rkcg_generation_id);
                 /* ConsumerId */
                 rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_member_id);
-                /* v2: RetentionTime */
-                if (api_version == 2)
-                        rd_kafka_buf_write_i64(rkbuf, -1);
         }
+
+        /* v7: GroupInstanceId */
+        if (ApiVersion >= 7)
+            rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_instance_id);
+
+        /* v2-4: RetentionTime */
+        if (ApiVersion >= 2 && ApiVersion <= 4)
+            rd_kafka_buf_write_i64(rkbuf, -1);
 
         /* Sort offsets by topic */
         rd_kafka_topic_partition_list_sort_by_topic(offsets);
@@ -924,9 +938,13 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                 /* Offset */
                 rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
 
+                /* v6: KIP-101 CommittedLeaderEpoch */
+                if (ApiVersion >= 6)
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+
                 /* v1: TimeStamp */
-                if (api_version == 1)
-                        rd_kafka_buf_write_i64(rkbuf, -1);// FIXME: retention time
+                if (ApiVersion == 1)
+                        rd_kafka_buf_write_i64(rkbuf, -1);
 
                 /* Metadata */
 		/* Java client 0.9.0 and broker <0.10.0 can't parse
@@ -954,11 +972,11 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         /* Finalize TopicCnt */
         rd_kafka_buf_update_u32(rkbuf, of_TopicCnt, TopicCnt);
 
-        rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                    "Enqueue OffsetCommitRequest(v%d, %d/%d partition(s))): %s",
-                   api_version, tot_PartCnt, offsets->cnt, reason);
+                   ApiVersion, tot_PartCnt, offsets->cnt, reason);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 
@@ -1033,6 +1051,7 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 const rd_kafka_group_member_t
                                 *assignments,
                                 int assignment_cnt,
@@ -1041,17 +1060,28 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int i;
+        int16_t ApiVersion;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
+                                                          RD_KAFKAP_SyncGroup,
+                                                          0, 3,
+                                                          &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SyncGroup,
                                          1,
                                          RD_KAFKAP_STR_SIZE(group_id) +
                                          4 /* GenerationId */ +
                                          RD_KAFKAP_STR_SIZE(member_id) +
+                                         RD_KAFKAP_STR_SIZE(
+                                                 group_instance_id) +
                                          4 /* array size group_assignment */ +
                                          (assignment_cnt * 100/*guess*/));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
+        if (ApiVersion >= 3)
+                rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
         rd_kafka_buf_write_i32(rkbuf, assignment_cnt);
 
         for (i = 0 ; i < assignment_cnt ; i++) {
@@ -1068,6 +1098,8 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
                 rkb->rkb_rk->rk_conf.group_session_timeout_ms +
                 3000/* 3s grace period*/,
                 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1101,6 +1133,9 @@ void rd_kafka_handle_SyncGroup (rd_kafka_t *rk,
                 ErrorCode = err;
                 goto err;
         }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_bytes(rkbuf, &MemberState);
@@ -1147,6 +1182,7 @@ err:
 void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 const rd_kafkap_str_t *protocol_type,
 				const rd_list_t *topics,
                                 rd_kafka_replyq_t replyq,
@@ -1161,7 +1197,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
                                                           RD_KAFKAP_JoinGroup,
-                                                          0, 2,
+                                                          0, 5,
                                                           &features);
 
 
@@ -1171,6 +1207,8 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                          4 /* sessionTimeoutMs */ +
                                          4 /* rebalanceTimeoutMs */ +
                                          RD_KAFKAP_STR_SIZE(member_id) +
+                                         RD_KAFKAP_STR_SIZE(
+                                                 group_instance_id) +
                                          RD_KAFKAP_STR_SIZE(protocol_type) +
                                          4 /* array count GroupProtocols */ +
                                          (rd_list_cnt(topics) * 100));
@@ -1179,6 +1217,9 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         if (ApiVersion >= 1)
                 rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.max_poll_interval_ms);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
+        if (ApiVersion >= 5)
+                rd_kafka_buf_write_kstr(rkbuf,
+                                        group_instance_id);
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
@@ -1211,6 +1252,20 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                            rk->rk_conf.max_poll_interval_ms,
                            rk->rk_conf.group_session_timeout_ms);
 
+
+        if (ApiVersion < 5 &&
+            rk->rk_conf.group_instance_id &&
+            rd_interval(&rkb->rkb_suppress.unsupported_kip345,
+                        /* at most once per day */
+                        (rd_ts_t)86400 * 1000 * 1000, 0) > 0)
+                rd_rkb_log(rkb, LOG_NOTICE, "STATICMEMBER",
+                           "Broker does not support KIP-345 "
+                           "(requires Apache Kafka >= v2.3.0): "
+                           "consumer configuration "
+                           "`group.instance.id` (%s) "
+                           "will not take effect",
+                           rk->rk_conf.group_instance_id);
+
         /* Absolute timeout */
         rd_kafka_buf_set_abs_timeout_force(
                 rkbuf,
@@ -1240,10 +1295,18 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                  const rd_kafkap_str_t *group_id,
                                  const rd_kafkap_str_t *member_id,
+                                 const rd_kafkap_str_t *group_instance_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
+                                                          RD_KAFKAP_LeaveGroup,
+                                                          0, 1,
+                                                          &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup,
                                          1,
@@ -1251,6 +1314,8 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                          RD_KAFKAP_STR_SIZE(member_id));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         /* LeaveGroupRequests are best-effort, the local consumer
          * does not care if it succeeds or not, so the request timeout
@@ -1325,10 +1390,18 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
+                                                          RD_KAFKAP_Heartbeat,
+                                                          0, 3,
+                                                          &features);
 
         rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                    "Heartbeat for group \"%s\" generation id %"PRId32,
@@ -1343,6 +1416,10 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
+        if (ApiVersion >= 3)
+                rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_buf_set_abs_timeout(
                 rkbuf,

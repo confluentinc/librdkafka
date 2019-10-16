@@ -53,6 +53,7 @@ extern const char *rd_kafka_cgrp_join_state_names[];
 typedef struct rd_kafka_cgrp_s {
         const rd_kafkap_str_t    *rkcg_group_id;
         rd_kafkap_str_t          *rkcg_member_id;  /* Last assigned MemberId */
+        rd_kafkap_str_t          *rkcg_group_instance_id;
         const rd_kafkap_str_t    *rkcg_client_id;
 
         enum {
@@ -252,6 +253,12 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,rkb)          \
         ((rkcg)->rkcg_coord_id != -1 &&                  \
          (rkcg)->rkcg_coord_id == (rkb)->rkb_nodeid)
+
+/**
+ * @returns true if cgrp is using static group membership
+ */
+#define RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg) \
+        !RD_KAFKAP_STR_IS_NULL((rkcg)->rkcg_group_instance_id)
 
 extern const char *rd_kafka_cgrp_state_names[];
 extern const char *rd_kafka_cgrp_join_state_names[];

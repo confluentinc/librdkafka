@@ -56,7 +56,7 @@ script:
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
 - if [[ $DOC_CHECK == y ]]; then make docs ; fi
-- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.2.0) ; fi
+- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.3.0) ; fi
 
 deploy:
   provider: s3

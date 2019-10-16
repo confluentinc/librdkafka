@@ -181,6 +181,7 @@
     <ClCompile Include="..\..\tests\0098-consumer-txn.cpp" />
     <ClCompile Include="..\..\tests\0099-commit_metadata.c" />
     <ClCompile Include="..\..\tests\0100-thread_interceptors.cpp" />
+    <ClCompile Include="..\..\tests\0102-static_group_rebalance.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

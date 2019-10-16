@@ -1414,9 +1414,12 @@ typedef enum {
  * The properties are identical to the Apache Kafka configuration properties
  * whenever possible.
  *
+ * @remark A successful call to rd_kafka_new() will assume ownership of
+ * the conf object and rd_kafka_conf_destroy() must not be called.
+ *
  * @returns A new rd_kafka_conf_t object with defaults set.
  *
- * @sa rd_kafka_conf_set(), rd_kafka_conf_destroy()
+ * @sa rd_kafka_new(), rd_kafka_conf_set(), rd_kafka_conf_destroy()
  */
 RD_EXPORT
 rd_kafka_conf_t *rd_kafka_conf_new(void);

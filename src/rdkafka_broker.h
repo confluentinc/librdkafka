@@ -268,6 +268,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
                 /**< Log: KIP-62 not supported by broker. */
                 rd_interval_t unsupported_kip62;
+
+                /**< Log: KIP-345 not supported by broker. */
+                rd_interval_t unsupported_kip345;
         } rkb_suppress;
 
 	struct {

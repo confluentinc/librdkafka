@@ -45,6 +45,9 @@ void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm) {
         if (rkgm->rkgm_member_id)
                 rd_kafkap_str_destroy(rkgm->rkgm_member_id);
 
+        if (rkgm->rkgm_group_instance_id)
+                rd_kafkap_str_destroy(rkgm->rkgm_group_instance_id);
+
         if (rkgm->rkgm_userdata)
                 rd_kafkap_bytes_destroy(rkgm->rkgm_userdata);
 
@@ -56,13 +59,19 @@ void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm) {
 
 
 /**
- * Member id string comparator (takes rd_kafka_group_member_t *)
+ * @brief Group member comparator (takes rd_kafka_group_member_t *)
  */
 int rd_kafka_group_member_cmp (const void *_a, const void *_b) {
         const rd_kafka_group_member_t *a =
                 (const rd_kafka_group_member_t *)_a;
         const rd_kafka_group_member_t *b =
                 (const rd_kafka_group_member_t *)_b;
+
+        /* Use the group instance id to compare static group members */
+        if (!RD_KAFKAP_STR_IS_NULL(a->rkgm_group_instance_id) &&
+            !RD_KAFKAP_STR_IS_NULL(b->rkgm_group_instance_id))
+                return rd_kafkap_str_cmp(a->rkgm_group_instance_id,
+                                         b->rkgm_group_instance_id);
 
         return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
 }

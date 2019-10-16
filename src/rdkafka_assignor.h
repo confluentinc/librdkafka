@@ -35,6 +35,7 @@ typedef struct rd_kafka_group_member_s {
         rd_kafka_topic_partition_list_t *rkgm_assignment;
         rd_list_t                        rkgm_eligible;
         rd_kafkap_str_t                 *rkgm_member_id;
+        rd_kafkap_str_t                 *rkgm_group_instance_id;
         rd_kafkap_bytes_t               *rkgm_userdata;
         rd_kafkap_bytes_t               *rkgm_member_metadata;
 } rd_kafka_group_member_t;

@@ -22,6 +22,8 @@ mkl_option "Standard" sharedstatedir "--sharedstatedir=PATH" \
     "Modifiable arch-independent data" "\$prefix/com"
 mkl_option "Standard" localstatedir "--localstatedir=PATH" \
     "Modifiable local state data" "\$prefix/var"
+mkl_option "Standard" runstatedir "--runstatedir=PATH" \
+    "Modifiable per-process data" "\$prefix/var/run"
 mkl_option "Standard" libdir "--libdir=PATH" "Libraries" "\$exec_prefix/lib"
 mkl_option "Standard" includedir "--includedir=PATH" "C/C++ header files" \
     "\$prefix/include"

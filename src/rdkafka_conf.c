@@ -3454,6 +3454,26 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
                                      rk->rk_conf.socket_timeout_ms);
         }
 
+        if (rd_kafka_conf_is_modified(&rk->rk_conf, "sasl.mechanisms") &&
+            !(rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
+              rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT)) {
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property `sasl.mechanism` set to "
+                             "`%s` but `security.protocol` is not configured "
+                             "for SASL: recommend setting "
+                             "`security.protocol` to SASL_SSL or "
+                             "SASL_PLAINTEXT",
+                             rk->rk_conf.sasl.mechanisms);
+        }
+
+        if (rd_kafka_conf_is_modified(&rk->rk_conf, "sasl.username") &&
+            !(!strncmp(rk->rk_conf.sasl.mechanisms, "SCRAM", 5) ||
+              !strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")))
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property `sasl.username` only "
+                             "applies when `sasl.mechanism` is set to "
+                             "PLAIN or SCRAM-SHA-..");
+
         return cnt;
 }
 

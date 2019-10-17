@@ -700,20 +700,7 @@ const char *test_conf_get_path (void) {
 }
 
 const char *test_getenv (const char *env, const char *def) {
-#ifndef _MSC_VER
-        const char *tmp;
-        tmp = getenv(env);
-        if (tmp && *tmp)
-                return tmp;
-        return def;
-#else
-        static RD_TLS char tmp[512];
-        DWORD r;
-        r = GetEnvironmentVariableA(env, tmp, sizeof(tmp));
-        if (r == 0 || r > sizeof(tmp))
-                return def;
-        return tmp;
-#endif
+        return rd_getenv(env, def);
 }
 
 void test_conf_common_init (rd_kafka_conf_t *conf, int timeout) {

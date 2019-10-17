@@ -149,6 +149,17 @@ void rd_usleep (int usec, rd_atomic32_t *terminate) {
 
 #define rd_assert(EXPR)  assert(EXPR)
 
+
+static RD_INLINE RD_UNUSED
+const char *rd_getenv (const char *env, const char *def) {
+        const char *tmp;
+        tmp = getenv(env);
+        if (tmp && *tmp)
+                return tmp;
+        return def;
+}
+
+
 /**
  * Empty struct initializer
  */

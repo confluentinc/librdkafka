@@ -214,6 +214,17 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
 #define rd_assert(EXPR)  assert(EXPR)
 
 
+static RD_INLINE RD_UNUSED
+const char *rd_getenv (const char *env, const char *def) {
+        static RD_TLS char tmp[512];
+        DWORD r;
+        r = GetEnvironmentVariableA(env, tmp, sizeof(tmp));
+        if (r == 0 || r > sizeof(tmp))
+                return def;
+        return tmp;
+}
+
+
 /**
  * Empty struct initializer
  */

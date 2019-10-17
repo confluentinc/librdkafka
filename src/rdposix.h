@@ -157,6 +157,17 @@ extern void __coverity_panic__(void);
         }
 #endif
 
+
+static RD_INLINE RD_UNUSED
+const char *rd_getenv (const char *env, const char *def) {
+        const char *tmp;
+        tmp = getenv(env);
+        if (tmp && *tmp)
+                return tmp;
+        return def;
+}
+
+
 /**
  * Empty struct initializer
  */

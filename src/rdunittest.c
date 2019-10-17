@@ -49,7 +49,8 @@
 #include "rdkafka_msgset.h"
 
 
-int rd_unittest_assert_on_failure = 0;
+rd_bool_t rd_unittest_assert_on_failure = rd_false;
+rd_bool_t rd_unittest_on_ci = rd_false;
 
 
 /**
@@ -416,10 +417,12 @@ int rd_unittest (void) {
         };
         int i;
 
-#ifndef _MSC_VER
-        if (getenv("RD_UT_ASSERT"))
-                rd_unittest_assert_on_failure = 1;
-#endif
+        if (rd_getenv("RD_UT_ASSERT", NULL))
+                rd_unittest_assert_on_failure = rd_true;
+        if (rd_getenv("CI", NULL)) {
+                RD_UT_SAY("Unittests running on CI");
+                rd_unittest_on_ci = rd_true;
+        }
 
         for (i = 0 ; unittests[i].name ; i++) {
                 int f = unittests[i].call();

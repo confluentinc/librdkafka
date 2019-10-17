@@ -1831,9 +1831,13 @@ unittest_msgq_insert_all_sort (const char *what,
         ut_rd_kafka_msgq_purge(&srcq);
         ut_rd_kafka_msgq_purge(&destq);
 
-        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
-                     "maximum us/msg exceeded: %.4f > %.4f us/msg",
-                     us_per_msg, max_us_per_msg);
+        if (!rd_unittest_on_ci)
+                RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
+                             "maximum us/msg exceeded: %.4f > %.4f us/msg",
+                             us_per_msg, max_us_per_msg);
+        else if (us_per_msg > max_us_per_msg + 0.0001)
+                RD_UT_WARN("maximum us/msg exceeded: %.4f > %.4f us/msg",
+                           us_per_msg, max_us_per_msg);
 
         if (ret_us_per_msg)
                 *ret_us_per_msg = us_per_msg;
@@ -1937,9 +1941,14 @@ unittest_msgq_insert_each_sort (const char *what,
         RD_UT_SAY("Total: %.4fus/msg over %"PRId64" messages in %"PRId64"us",
                   us_per_msg, scnt, accum_ts);
 
-        RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
-                     "maximum us/msg exceeded: %.4f > %.4f us/msg",
-                     us_per_msg, max_us_per_msg);
+        if (!rd_unittest_on_ci)
+                RD_UT_ASSERT(!(us_per_msg > max_us_per_msg + 0.0001),
+                             "maximum us/msg exceeded: %.4f > %.4f us/msg",
+                             us_per_msg, max_us_per_msg);
+        else if (us_per_msg > max_us_per_msg + 0.0001)
+                RD_UT_WARN("maximum us/msg exceeded: %.4f > %.4f us/msg",
+                           us_per_msg, max_us_per_msg);
+
 
         if (ret_us_per_msg)
                 *ret_us_per_msg = us_per_msg;

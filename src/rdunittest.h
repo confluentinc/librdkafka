@@ -32,7 +32,8 @@
 #include <stdio.h>
 
 
-extern int rd_unittest_assert_on_failure;
+extern rd_bool_t rd_unittest_assert_on_failure;
+extern rd_bool_t rd_unittest_on_ci;
 
 /**
  * @brief Fail the current unit-test function.

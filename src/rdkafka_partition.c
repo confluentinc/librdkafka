@@ -119,17 +119,22 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
 /**
  * Request information from broker to keep track of consumer lag.
  *
- * Locality: toppar handle thread
+ * @locality: toppar handle thread
+ * @locks: none
  */
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
-	rd_kafka_broker_t *rkb;
+	rd_kafka_broker_t *leader;
         rd_kafka_topic_partition_list_t *partitions;
 
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
 
-        rkb = rd_kafka_toppar_broker(rktp, 1/*proper brokers only*/);
-        if (!rkb)
+        rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
+        leader = rd_kafka_broker_find_by_nodeid(rktp->rktp_rkt->rkt_rk,
+                                                rktp->rktp_leader_id);
+        rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
+
+        if (!leader)
 		return;
 
         rktp->rktp_wait_consumer_lag_resp = 1;
@@ -142,14 +147,14 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_OffsetRequest(rkb, partitions, 0,
+        rd_kafka_OffsetRequest(leader, partitions, 0,
                                RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        rd_kafka_broker_destroy(rkb); /* from toppar_leader() */
+        rd_kafka_broker_destroy(leader); /* from rd_kafka_broker_find_by_nodeid() */
 }
 
 

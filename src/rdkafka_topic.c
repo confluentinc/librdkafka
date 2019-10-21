@@ -499,7 +499,7 @@ int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
         rktp->rktp_broker_id = broker_id;
         if (is_leader) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-                             "Topic %s [%"PRId32"] migrating leader: "
+                             "Topic %s [%"PRId32"] migrating from leader: "
                              "%"PRId32" to %"PRId32,
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition,

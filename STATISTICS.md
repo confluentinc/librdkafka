@@ -160,6 +160,7 @@ partitions | object | | Partitions dict, key is partition id. See **partitions**
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 partition | int | 3 | Partition Id (-1 for internal UA/UnAssigned partition)
+broker | int | | The id of the broker that messages are currently being fetched from
 leader | int | | Current leader broker id
 desired | bool | | Partition is explicitly desired by application
 unknown | bool | | Partition not seen in topic metadata from broker
@@ -508,6 +509,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
       "partitions": {
         "0": {
           "partition": 0,
+          "broker": 3,
           "leader": 3,
           "desired": false,
           "unknown": false,
@@ -537,6 +539,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         },
         "1": {
           "partition": 1,
+          "broker": 2,
           "leader": 2,
           "desired": false,
           "unknown": false,
@@ -566,6 +569,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         },
         "-1": {
           "partition": -1,
+          "broker": -1,
           "leader": -1,
           "desired": false,
           "unknown": false,

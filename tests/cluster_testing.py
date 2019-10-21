@@ -15,11 +15,10 @@ from trivup.apps.SslApp import SslApp
 
 import os, sys, json, argparse
 
-def version_as_number (version):
+def version_as_list (version):
     if version == 'trunk':
-        return sys.maxint
-    tokens = version.split('.')
-    return float('%s.%s' % (tokens[0], tokens[1]))
+        return [sys.maxint]
+    return [int(a) for a in version.split('.')]
 
 class LibrdkafkaTestCluster(Cluster):
     def __init__(self, version, conf={}, num_brokers=3, debug=False):
@@ -59,7 +58,7 @@ class LibrdkafkaTestCluster(Cluster):
 
         for n in range(0, num_brokers):
             # Configure rack & replica selector if broker supports fetch-from-follower
-            if version_as_number(version) >= 2.4:
+            if version_as_list(version) >= [2, 4, 0]:
                 defconf.update({'conf': ['broker.rack=RACK${appid}', 'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
             self.brokers.append(KafkaBrokerApp(self, defconf))
 

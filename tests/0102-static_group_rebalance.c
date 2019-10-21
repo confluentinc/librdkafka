@@ -229,7 +229,6 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
         static_member_wait_rebalance(&c[1], rebalance_start, 
                                      &c[1].assigned_at, -1);
 
-
         TEST_SAY("== Testing consumer unsubscribe ==\n");
 
         /* Unsubscribe should send a LeaveGroupRequest invoking a reblance */
@@ -248,7 +247,7 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
 
         /* New cgrp generation with 1 member, c[0] */
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        static_member_wait_rebalance(&c[0], rebalance_start, 
+        static_member_wait_rebalance(&c[0], rebalance_start,
                                      &c[0].assigned_at, -1);
 
         /* Send JoinGroup bumping generation by 1 */
@@ -267,7 +266,7 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
                                              &c[1].assigned_at, 1000))
                 test_consumer_poll_once(c[0].rk, &mv, 0);
 
-        static_member_wait_rebalance(&c[0], rebalance_start, 
+        static_member_wait_rebalance(&c[0], rebalance_start,
                                      &c[0].assigned_at, -1);
 
         TEST_SAY("== Testing max poll violation ==\n");
@@ -302,10 +301,8 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
         static_member_wait_rebalance(&c[0], rebalance_start,
                                      &c[0].assigned_at, -1);
 
-
         test_msgver_verify("final.validation", &mv, TEST_MSGVER_ALL, 0, 
                            msgcnt);
-
 
         rebalance_start = test_clock();
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;

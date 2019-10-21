@@ -80,7 +80,8 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_ADMIN_RESULT] = "REPLY:ADMIN_RESULT",
                 [RD_KAFKA_OP_PURGE] = "REPLY:PURGE",
                 [RD_KAFKA_OP_CONNECT] = "REPLY:CONNECT",
-                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = "REPLY:OAUTHBEARER_REFRESH"
+                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = "REPLY:OAUTHBEARER_REFRESH",
+                [RD_KAFKA_OP_MOCK] = "REPLY:MOCK",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -203,6 +204,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_PURGE] = sizeof(rko->rko_u.purge),
                 [RD_KAFKA_OP_CONNECT] = 0,
                 [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = 0,
+                [RD_KAFKA_OP_MOCK] = sizeof(rko->rko_u.mock),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -321,6 +323,10 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ADMIN_RESULT:
                 rd_list_destroy(&rko->rko_u.admin_result.results);
                 RD_IF_FREE(rko->rko_u.admin_result.errstr, rd_free);
+                break;
+
+        case RD_KAFKA_OP_MOCK:
+                RD_IF_FREE(rko->rko_u.mock.name, rd_free);
                 break;
 
 	default:

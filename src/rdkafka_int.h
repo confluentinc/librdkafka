@@ -96,7 +96,7 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_metadata.h"
-
+#include "rdkafka_mock.h"
 
 /**
  * Protocol level sanity
@@ -370,6 +370,11 @@ struct rd_kafka_s {
                 void *handle; /**< Provider-specific handle struct pointer.
                                *   Typically assigned in provider's .init() */
         } rk_sasl;
+
+        /* Test mocks */
+        struct {
+                rd_kafka_mock_cluster_t *cluster; /**< Mock cluster */
+        } rk_mock;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -567,7 +572,8 @@ const char *rd_kafka_purge_flags2str (int flags);
 #define RD_KAFKA_DBG_CONSUMER       0x2000
 #define RD_KAFKA_DBG_ADMIN          0x4000
 #define RD_KAFKA_DBG_EOS            0x8000
-#define RD_KAFKA_DBG_ALL            0xffff
+#define RD_KAFKA_DBG_MOCK           0x10000
+#define RD_KAFKA_DBG_ALL            0xfffff
 #define RD_KAFKA_DBG_NONE           0x0
 
 void rd_kafka_log0(const rd_kafka_conf_t *conf,

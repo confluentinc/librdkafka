@@ -468,6 +468,13 @@ struct rd_kafka_conf_s {
 
 
         /*
+         * Test mocks
+         */
+        struct {
+                int broker_cnt;  /**< Number of mock brokers */
+        } mock;
+
+        /*
          * Unit test pluggable interfaces
          */
         struct {

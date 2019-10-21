@@ -1147,6 +1147,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         }
 
         rd_list_destroy(&wait_thrds);
+
+        /* Destroy mock cluster */
+        if (rk->rk_mock.cluster)
+                rd_kafka_mock_cluster_destroy(rk->rk_mock.cluster);
 }
 
 /**
@@ -2070,6 +2074,33 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 ret_errno = EINVAL;
                 goto fail;
         }
+
+        /* Create Mock cluster */
+        if (rk->rk_conf.mock.broker_cnt > 0) {
+                rk->rk_mock.cluster = rd_kafka_mock_cluster_new(
+                        rk, rk->rk_conf.mock.broker_cnt);
+
+                if (!rk->rk_mock.cluster) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Failed to create mock cluster, see logs");
+                        ret_err = RD_KAFKA_RESP_ERR__FAIL;
+                        ret_errno = EINVAL;
+                        goto fail;
+                }
+
+                rd_kafka_log(rk, LOG_NOTICE, "MOCK", "Mock cluster enabled: "
+                             "original bootstrap.servers ignored and replaced");
+
+                /* Overwrite bootstrap.servers and connection settings */
+                if (rd_kafka_conf_set(&rk->rk_conf, "bootstrap.servers",
+                                      rd_kafka_mock_cluster_bootstraps(
+                                              rk->rk_mock.cluster),
+                                      NULL, 0) != RD_KAFKA_CONF_OK)
+                        rd_assert(!"failed to replace mock bootstrap.servers");
+
+                rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
+        }
+
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {

@@ -9,6 +9,7 @@ set(
     0006-symbols.c
     0007-autotopic.c
     0008-reqacks.c
+    0009-mock_cluster.c
     0011-produce_batch.c
     0012-produce_consume.c
     0013-null-msgs.c

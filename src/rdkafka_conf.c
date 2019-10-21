@@ -367,6 +367,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_DBG_CONSUMER, "consumer" },
                         { RD_KAFKA_DBG_ADMIN,    "admin" },
                         { RD_KAFKA_DBG_EOS,      "eos" },
+                        { RD_KAFKA_DBG_MOCK,     "mock" },
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -833,6 +834,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .ctor = rd_kafka_conf_interceptor_ctor,
           .dtor = rd_kafka_conf_interceptor_dtor,
           .copy = rd_kafka_conf_interceptor_copy },
+
+        /* Test mocks. */
+        { _RK_GLOBAL|_RK_HIDDEN, "test.mock.num.brokers", _RK_C_INT,
+          _RK(mock.broker_cnt),
+          "Number of mock brokers to create. "
+          "This will automatically overwrite `bootstrap.servers` with the "
+          "mock broker list.",
+          0, 10000, 0 },
 
         /* Unit test interfaces.
          * These are not part of the public API and may change at any time.

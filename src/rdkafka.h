@@ -363,7 +363,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE = -148,
         /** Maximum poll interval exceeded */
         RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED = -147,
-	/** Unknown broker */
+        /** Unknown broker */
         RD_KAFKA_RESP_ERR__UNKNOWN_BROKER = -146,
 
 	/** End internal error codes */

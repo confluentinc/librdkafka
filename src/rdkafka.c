@@ -3599,12 +3599,14 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms) {
 static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 				  rd_kafka_toppar_t *rktp) {
 
-	fprintf(fp, "%s%.*s [%"PRId32"] broker %s\n",
+	fprintf(fp, "%s%.*s [%"PRId32"] broker %s, "
+                "leader_id %"PRIu32"\n",
 		indent,
 		RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 		rktp->rktp_partition,
 		rktp->rktp_broker ?
-		rktp->rktp_broker->rkb_name : "none");
+		rktp->rktp_broker->rkb_name : "none",
+                rktp->rktp_leader_id);
 	fprintf(fp,
 		"%s refcnt %i\n"
 		"%s msgq:      %i messages\n"

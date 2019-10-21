@@ -37,6 +37,8 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include <set>
+#include "rdkafka.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/schema.h>
@@ -59,7 +61,7 @@
  */
 
 
-static void test_assert(bool cond, std::string msg) {
+static void test_assert (bool cond, std::string msg) {
   if (!cond)
     Test::Say(msg);
   assert(cond);
@@ -120,7 +122,7 @@ std::map<int32_t, int64_t> TestEvent2Cb::rxbytes;
 static TestEvent2Cb ex_event_cb;
 
 
-static void get_brokers_info(std::string &topic_str, int32_t *leader, std::vector<int> &brokers) {
+static void get_brokers_info (std::string &topic_str, int32_t *leader, std::vector<int> &brokers) {
   std::string errstr;
   RdKafka::ErrorCode err;
   class RdKafka::Metadata *metadata;
@@ -134,9 +136,7 @@ static void get_brokers_info(std::string &topic_str, int32_t *leader, std::vecto
   delete pConf;
   test_assert(p, tostr() << "Failed to create producer: " << errstr);
 
-  RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
-  RdKafka::Topic *topic = RdKafka::Topic::create(p, topic_str, tconf, errstr);
-  delete tconf;
+  RdKafka::Topic *topic = RdKafka::Topic::create(p, topic_str, NULL, errstr);
   test_assert(topic, tostr() << "Failed to create topic: " << errstr);
 
   err = p->metadata(0, topic, &metadata, tmout_multip(5000));
@@ -169,6 +169,107 @@ static void get_brokers_info(std::string &topic_str, int32_t *leader, std::vecto
 }
 
 
+/**
+ * @brief Wait for up to \p tmout for any type of admin result.
+ * @returns the event
+ */
+rd_kafka_event_t *
+test_wait_admin_result (rd_kafka_queue_t *q,
+                        rd_kafka_event_type_t evtype,
+                        int tmout) {
+  rd_kafka_event_t *rkev;
+
+  while (1) {
+    rkev = rd_kafka_queue_poll(q, tmout);
+    if (!rkev)
+      Test::Fail(tostr() << "Timed out waiting for admin result ("
+                          << evtype << ")\n");
+
+    if (rd_kafka_event_type(rkev) == evtype)
+      return rkev;
+
+    if (rd_kafka_event_type(rkev) == RD_KAFKA_EVENT_ERROR) {
+      Test::Say(tostr() << "Received error event while waiting for "
+                        << evtype << ": "
+                        << rd_kafka_event_error_string(rkev)
+                        << ": ignoring");
+      continue;
+    }
+
+    test_assert(rd_kafka_event_type(rkev) == evtype,
+                tostr() << "Expected event type " << evtype
+                        << ", got " << rd_kafka_event_type(rkev) << " ("
+                        << rd_kafka_event_name(rkev) << ")");
+  }
+
+  return NULL;
+}
+
+
+/**
+ * @returns the number of broker.rack values configured across all brokers.
+ */
+static int get_broker_rack_count (std::vector<int> &replica_ids)
+{
+  std::string errstr;
+  RdKafka::Conf *pConf;
+  Test::conf_init(&pConf, NULL, 10);
+  RdKafka::Producer *p = RdKafka::Producer::create(pConf, errstr);
+  delete pConf;
+
+  rd_kafka_queue_t *mainq = rd_kafka_queue_get_main(p->c_ptr());
+
+  std::set<std::string> racks;
+  for (size_t i=0; i<replica_ids.size(); ++i) {
+    std::string name = tostr() << replica_ids[i];
+
+    rd_kafka_ConfigResource_t *config = rd_kafka_ConfigResource_new(
+                    RD_KAFKA_RESOURCE_BROKER, &name[0]);
+
+    rd_kafka_AdminOptions_t *options;
+    char cerrstr[128];
+    options = rd_kafka_AdminOptions_new(p->c_ptr(), RD_KAFKA_ADMIN_OP_ANY);
+    rd_kafka_resp_err_t err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, cerrstr, sizeof(cerrstr));
+    test_assert(!err, cerrstr);
+
+    rd_kafka_DescribeConfigs(p->c_ptr(), &config, 1, options, mainq);
+    rd_kafka_AdminOptions_destroy(options);
+    rd_kafka_event_t *rkev = test_wait_admin_result(mainq, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, 5000);
+
+    const rd_kafka_DescribeConfigs_result_t *res = rd_kafka_event_DescribeConfigs_result(rkev);
+    test_assert(res, "expecting describe config results to be not NULL");
+
+    err = rd_kafka_event_error(rkev);
+    const char *errstr2 = rd_kafka_event_error_string(rkev);
+    test_assert(!err, tostr() << "Expected success, not " << rd_kafka_err2name(err) << ": " << errstr2);
+
+    size_t rconfig_cnt;
+    const rd_kafka_ConfigResource_t **rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
+    test_assert(rconfig_cnt == 1, tostr() << "Expecting 1 resource, got " << rconfig_cnt);
+
+    err = rd_kafka_ConfigResource_error(rconfigs[0]);
+    errstr2 = rd_kafka_ConfigResource_error_string(rconfigs[0]);
+
+    size_t entry_cnt;
+    const rd_kafka_ConfigEntry_t **entries = rd_kafka_ConfigResource_configs(rconfigs[0], &entry_cnt);
+
+    for (size_t j = 0; j<entry_cnt; ++j) {
+      const rd_kafka_ConfigEntry_t *e = entries[j];
+      const char * name = rd_kafka_ConfigEntry_name(e);
+      if (!strcmp(name, "broker.rack")) {
+        const char * val = rd_kafka_ConfigEntry_value(e) ? rd_kafka_ConfigEntry_value(e) : "(NULL)";
+        racks.insert(std::string(val));
+      }
+    }
+
+    rd_kafka_event_destroy(rkev);
+  }
+
+  delete p;
+
+  return (int)racks.size();
+}
+
 
 static void do_fff_test (void) {
 
@@ -186,6 +287,10 @@ static void do_fff_test (void) {
   get_brokers_info(topic_str, &leader_id, replica_ids);
   test_assert(replica_ids.size() == 3, tostr() << "expecting three replicas, but " << replica_ids.size() << " were reported.");
   Test::Say(tostr() << topic_str << " leader id: " << leader_id << ", all replica ids: [" << replica_ids[0] << ", " << replica_ids[1] << ", " << replica_ids[2] << "]\n");
+
+  if (get_broker_rack_count(replica_ids) != 3) {
+    Test::Skip("unexpected broker.rack configuration: skipping test.\n");
+  }
 
   /* arrange for the consumer's client.rack to align with a broker that is not the leader. */
   int client_rack_id = -1;
@@ -235,9 +340,9 @@ static void do_fff_test (void) {
       case RdKafka::ERR_NO_ERROR:
         {
           test_assert(msg->len() == 100, "expecting message value size to be 100");
-          char* cnt_str_start_ptr = strstr((char *)msg->payload(), "msg=") + 4;
+          char *cnt_str_start_ptr = strstr((char *)msg->payload(), "msg=") + 4;
           test_assert(cnt_str_start_ptr, "expecting 'msg=' in message payload");
-          char* cnt_str_end_ptr = strstr(cnt_str_start_ptr, "\n");
+          char *cnt_str_end_ptr = strstr(cnt_str_start_ptr, "\n");
           test_assert(cnt_str_start_ptr, "expecting '\n' following 'msg=' in message payload");
           *cnt_str_end_ptr = '\0';
           int msg_cnt = atoi(cnt_str_start_ptr);
@@ -304,12 +409,7 @@ static void do_fff_test (void) {
 #endif
 
 extern "C" {
-  int main_0101_fetch_from_follower (int argc, char **argv) {
-    if (!test_getenv("TRIVUP_ROOT", NULL)) {
-      // specific broker.rack settings are expected,
-      // assume these are not set up outside trivup.
-      Test::Skip("Not in trivup environment.\n");
-    }
+int main_0101_fetch_from_follower (int argc, char **argv) {
 #if WITH_RAPIDJSON
     do_fff_test();
 #else

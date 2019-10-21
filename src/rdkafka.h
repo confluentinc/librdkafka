@@ -223,7 +223,7 @@ const char *rd_kafka_get_debug_contexts(void);
  *             Use rd_kafka_get_debug_contexts() instead.
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos"
+        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,mock"
 
 
 /* @cond NO_DOC */

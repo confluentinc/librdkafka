@@ -99,6 +99,7 @@
     <ClCompile Include="..\..\tests\0006-symbols.c" />
     <ClCompile Include="..\..\tests\0007-autotopic.c" />
     <ClCompile Include="..\..\tests\0008-reqacks.c" />
+    <ClCompile Include="..\..\tests\0009-mock_cluster.c" />
     <ClCompile Include="..\..\tests\0011-produce_batch.c" />
     <ClCompile Include="..\..\tests\0012-produce_consume.c" />
     <ClCompile Include="..\..\tests\0013-null-msgs.c" />

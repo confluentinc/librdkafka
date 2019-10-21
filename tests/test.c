@@ -113,6 +113,7 @@ _TEST_DECL(0005_order);
 _TEST_DECL(0006_symbols);
 _TEST_DECL(0007_autotopic);
 _TEST_DECL(0008_reqacks);
+_TEST_DECL(0009_mock_cluster);
 _TEST_DECL(0011_produce_batch);
 _TEST_DECL(0012_produce_consume);
 _TEST_DECL(0013_null_msgs);
@@ -246,6 +247,7 @@ struct test tests[] = {
         _TEST(0006_symbols, TEST_F_LOCAL),
         _TEST(0007_autotopic, 0),
         _TEST(0008_reqacks, 0),
+        _TEST(0009_mock_cluster, TEST_F_LOCAL),
         _TEST(0011_produce_batch, 0,
               /* Produces a lot of messages */
               _THRES(.ucpu = 40.0, .scpu = 8.0)),
@@ -5361,4 +5363,43 @@ void test_fail0 (const char *file, int line, const char *function,
                 assert(0);
         else
                 thrd_exit(0);
+}
+
+
+/**
+ * @brief Destroy a mock cluster and its underlying rd_kafka_t handle
+ */
+void test_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_t *rk = rd_kafka_mock_cluster_handle(mcluster);
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+}
+
+
+
+/**
+ * @brief Create a standalone mock cluster that can be used by multiple
+ *        rd_kafka_t instances.
+ */
+rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
+                                                const char **bootstraps) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        rd_kafka_mock_cluster_t *mcluster;
+        char errstr[256];
+
+        test_conf_common_init(conf, 0);
+
+        test_conf_set(conf, "client.id", "MOCK");
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "Failed to create mock cluster rd_kafka_t: %s", errstr);
+
+        mcluster = rd_kafka_mock_cluster_new(rk, broker_cnt);
+        TEST_ASSERT(mcluster, "Failed to acquire mock cluster");
+
+        if (bootstraps)
+                *bootstraps = rd_kafka_mock_cluster_bootstraps(mcluster);
+
+        return mcluster;
 }

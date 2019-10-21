@@ -977,6 +977,7 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
  */
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         int r;
+
 #ifndef _MSC_VER
 	r = poll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
 	if (r <= 0)

@@ -47,6 +47,7 @@
 #endif
 
 #include "rdkafka.h"
+#include "rdkafka_mock.h"
 #include "tinycthread.h"
 #include "rdlist.h"
 
@@ -637,6 +638,11 @@ test_AlterConfigs_simple (rd_kafka_t *rk,
                           const char **configs, size_t config_cnt);
 
 rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
+
+
+void test_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
+rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
+                                                const char **bootstraps);
 
 
 /**

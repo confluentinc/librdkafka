@@ -350,7 +350,8 @@ static void test_per_message_partition_flag (void) {
         for (i = 0 ; i < msgcnt ; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 *msgidp = i;
-                rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+                rd_snprintf(msg, sizeof(msg) + sizeof(__FILE__) + sizeof(__FUNCTION__),
+                            "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 
                 rkmessages[i].payload = rd_strdup(msg);
@@ -479,8 +480,9 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         for (i = 0 ; i < msgcnt ; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 *msgidp = i;
-                rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
-                        __FILE__, __FUNCTION__, i);
+                rd_snprintf(msg, sizeof(msg) sizeof(__FILE__) + sizeof(__FUNCTION__),
+                            "%s:%s test message #%i",
+                            __FILE__, __FUNCTION__, i);
 
                 rkmessages[i].payload = rd_strdup(msg);
                 rkmessages[i].len     = strlen(msg);

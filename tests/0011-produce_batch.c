@@ -480,7 +480,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         for (i = 0 ; i < msgcnt ; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 *msgidp = i;
-                rd_snprintf(msg, sizeof(msg) sizeof(__FILE__) + sizeof(__FUNCTION__),
+                rd_snprintf(msg, sizeof(msg) + sizeof(__FILE__) + sizeof(__FUNCTION__),
                             "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 

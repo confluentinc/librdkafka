@@ -50,7 +50,7 @@
 
 struct rd_kafka_transport_s {
 	int rktrans_s;
-	rd_kafka_broker_t *rktrans_rkb;
+        rd_kafka_broker_t *rktrans_rkb;    /* Not reference counted */
 
 #if WITH_SSL
 	SSL *rktrans_ssl;

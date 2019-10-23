@@ -54,11 +54,17 @@ void rd_kafka_transport_request_sent (rd_kafka_broker_t *rkb,
 int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
                                     rd_kafka_buf_t **rkbufp,
                                     char *errstr, size_t errstr_size);
+
+rd_kafka_transport_t *rd_kafka_transport_new (rd_kafka_broker_t *rkb, int s,
+                                              char *errstr,
+                                              size_t errstr_size);
 struct rd_kafka_broker_s;
 rd_kafka_transport_t *rd_kafka_transport_connect(struct rd_kafka_broker_s *rkb, const rd_sockaddr_inx_t *sinx,
                                                  char *errstr, size_t errstr_size);
 void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 				      char *errstr);
+
+void rd_kafka_transport_post_connect_setup (rd_kafka_transport_t *rktrans);
 
 void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);

@@ -316,7 +316,7 @@ static void test_per_message_partition_flag (void) {
         rd_kafka_topic_t *rkt;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
-        char msg[128];
+        char msg[128 + sizeof(__FILE__) + sizeof(__FUNCTION__)];
         int msgcnt = test_quick ? 100 : 1000;
         int failcnt = 0;
         int i;
@@ -350,8 +350,7 @@ static void test_per_message_partition_flag (void) {
         for (i = 0 ; i < msgcnt ; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 *msgidp = i;
-                rd_snprintf(msg, sizeof(msg) + sizeof(__FILE__) + sizeof(__FUNCTION__),
-                            "%s:%s test message #%i",
+                rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 
                 rkmessages[i].payload = rd_strdup(msg);
@@ -451,7 +450,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         rd_kafka_topic_t *rkt;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
-        char msg[128];
+        char msg[128 + sizeof(__FILE__) + sizeof(__FUNCTION__)];
         int msgcnt = test_quick ? 100 : 1000;
         int failcnt = 0;
         int i;
@@ -480,8 +479,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         for (i = 0 ; i < msgcnt ; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
                 *msgidp = i;
-                rd_snprintf(msg, sizeof(msg) + sizeof(__FILE__) + sizeof(__FUNCTION__),
-                            "%s:%s test message #%i",
+                rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 
                 rkmessages[i].payload = rd_strdup(msg);

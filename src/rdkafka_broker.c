@@ -2235,7 +2235,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                                    "Failing %sResponse "
                                    "(v%hd, %"PRIusz" bytes, CorrId %"PRId32"): "
                                    "request not supported by broker "
-                                   "(missing api.version.request or "
+                                   "(missing api.version.request=false or "
                                    "incorrect broker.version.fallback config?)",
                                    rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
                                                        ApiKey),

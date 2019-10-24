@@ -111,5 +111,5 @@ OPTS="$OPTS --disable-optimization"
 #enable refcnt debugging
 #OPTS="$OPTS --enable-refcnt-debug"
 
-build Development $OPTS
+build Development "$OPTS"
 

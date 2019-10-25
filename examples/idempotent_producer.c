@@ -163,7 +163,7 @@ int main (int argc, char **argv) {
         /*
          * Argument validation
          */
-        if (argc != 3) {
+        if (argc != 4) {
                 fprintf(stderr, "%% Usage: %s <broker> <topic>\n", argv[0]);
                 return 1;
         }
@@ -176,6 +176,10 @@ int main (int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
+
+        rd_kafka_conf_set(conf, "test.mock.num.brokers", "3", NULL, 0);
+        rd_kafka_conf_set(conf, "transactional.id", "gooseGreen", NULL, 0);
+        rd_kafka_conf_set(conf, "debug", argv[3], NULL, 0);
 
         /* Set bootstrap broker(s) as a comma-separated list of
          * host or host:port (default port 9092).
@@ -227,6 +231,19 @@ int main (int argc, char **argv) {
 
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
+
+
+        if (rd_kafka_init_transactions(rk, 5000, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% init_transactions failed: %s\n",
+                        errstr);
+                return 1;
+        }
+
+        if (rd_kafka_begin_transaction(rk, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% begin_transactions failed: %s\n",
+                        errstr);
+                return 1;
+        }
 
         fprintf(stderr, "%% Running producer loop. Press Ctrl-C to exit\n");
 
@@ -309,17 +326,26 @@ int main (int argc, char **argv) {
                 /* Since fatal errors can't be triggered in practice,
                  * use the test API to trigger a fabricated error after
                  * some time. */
-                if (msgcnt == 13)
+                if (msgcnt == 13) {
+                        break;
                         rd_kafka_test_fatal_error(
                                 rk,
                                 RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
                                 "This is a fabricated error to test the "
                                 "fatal error handling");
+                }
 
                 /* Short sleep to rate-limit this example.
                  * A real application should not do this. */
                 usleep(500 * 1000); /* 500ms */
         }
+
+        if (rd_kafka_commit_transaction(rk, 30*1000, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% commit_transactions failed: %s\n",
+                        errstr);
+                return 1;
+        }
+
 
 
         /* Wait for final messages to be delivered or fail.

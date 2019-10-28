@@ -853,7 +853,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Enable static group membership. "
           "Static group members are able to leave and rejoin a group "
           "within the configured `session.timeout.ms` without prompting a "
-          "group rebalance. This be used in combination with a larger "
+          "group rebalance. This should be used in combination with a larger "
           "`session.timeout.ms` to avoid group rebalances caused by transient "
           "unavailability (e.g. process restarts). "
           "Requires broker version >= 2.3.0."},

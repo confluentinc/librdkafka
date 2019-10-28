@@ -885,9 +885,22 @@ rd_kafka_buf_write_varint (rd_kafka_buf_t *rkbuf, int64_t v) {
  */
 static RD_INLINE size_t rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
                                                 const rd_kafkap_str_t *kstr) {
-        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_STR_SER(kstr),
-				  RD_KAFKAP_STR_SIZE(kstr));
+        size_t len;
+
+        if (!kstr || RD_KAFKAP_STR_IS_NULL(kstr))
+                return rd_kafka_buf_write_i16(rkbuf, -1);
+
+        if (RD_KAFKAP_STR_IS_SERIALIZED(kstr))
+                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_STR_SER(kstr),
+                                          RD_KAFKAP_STR_SIZE(kstr));
+
+        len = RD_KAFKAP_STR_LEN(kstr);
+        rd_kafka_buf_write_i16(rkbuf, (int16_t)len);
+        rd_kafka_buf_write(rkbuf, kstr->str, len);
+
+        return 2 + len;
 }
+
 
 /**
  * Write (copy) char * string to buffer.
@@ -920,10 +933,23 @@ static RD_INLINE void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) Kafka bytes to buffer.
  */
-static RD_INLINE size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
-					          const rd_kafkap_bytes_t *kbytes){
-        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                                  RD_KAFKAP_BYTES_SIZE(kbytes));
+static RD_INLINE size_t
+rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
+                           const rd_kafkap_bytes_t *kbytes) {
+        size_t len;
+
+        if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
+                return rd_kafka_buf_write_i32(rkbuf, -1);
+
+        if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
+                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
+                                          RD_KAFKAP_BYTES_SIZE(kbytes));
+
+        len = RD_KAFKAP_BYTES_LEN(kbytes);
+        rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
+        rd_kafka_buf_write(rkbuf, kbytes->data, len);
+
+        return 4 + len;
 }
 
 /**

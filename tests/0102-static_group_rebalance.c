@@ -183,7 +183,7 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
 
         TEST_SAY("== Testing consumer restart ==\n");
         conf = rd_kafka_conf_dup(rd_kafka_conf(c[1].rk));
-        
+
         /* Only c[1] should exhibit rebalance behavior */
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         TIMING_START(&t_close, "consumer restart");
@@ -203,7 +203,7 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
                 test_consumer_poll_once(c[0].rk, &mv, 0);
         TIMING_STOP(&t_close);
 
-        /* Catch slow close issues earlier (don't wait to call poll on c[0]) */
+        /* Should complete before `session.timeout.ms` */
         TIMING_ASSERT(&t_close, 0, 6000);
 
 
@@ -325,8 +325,8 @@ int main_0102_static_group_rebalance (int argc, char **argv) {
         static_member_wait_rebalance(&c[1], rebalance_start,
                                      &c[1].assigned_at, 2000);
 
-        /* Should take at least as long as `session.timeout.ms but less than 
-         * max.poll.interval.ms */
+        /* Should take at least as long as `session.timeout.ms` but less than
+         * `max.poll.interval.ms` */
         TIMING_ASSERT(&t_close, 6000, 9000);
 
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;

@@ -246,7 +246,12 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_SIZE(kstr) RD_KAFKAP_STR_SIZE0((kstr)->len)
 
 
-/* Serialized Kafka string: only works for _new() kstrs */
+/** @returns true if kstr is pre-serialized through .._new() */
+#define RD_KAFKAP_STR_IS_SERIALIZED(kstr)                               \
+        (((const char *)((kstr)+1))+2 == (const char *)((kstr)->str))
+
+/* Serialized Kafka string: only works for _new() kstrs.
+ * Check with RD_KAFKAP_STR_IS_SERIALIZED */
 #define RD_KAFKAP_STR_SER(kstr)  ((kstr)+1)
 
 /* Macro suitable for "%.*s" printing. */
@@ -297,7 +302,7 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	klen = htobe16(len);
 	memcpy(kstr+1, &klen, 2);
 
-	/* Serialised format: non null-terminated string */
+	/* Pre-Serialised format: non null-terminated string */
 	if (len == RD_KAFKAP_STR_LEN_NULL)
 		kstr->str = NULL;
 	else {
@@ -382,6 +387,9 @@ typedef struct rd_kafkap_bytes_s {
 #define RD_KAFKAP_BYTES_SIZE0(len) (4 + RD_KAFKAP_BYTES_LEN0(len))
 #define RD_KAFKAP_BYTES_SIZE(kbytes) RD_KAFKAP_BYTES_SIZE0((kbytes)->len)
 
+/** @returns true if kbyes is pre-serialized through .._new() */
+#define RD_KAFKAP_BYTES_IS_SERIALIZED(kstr)                             \
+        (((const char *)((kbytes)+1))+2 == (const char *)((kbytes)->data))
 
 /* Serialized Kafka bytes: only works for _new() kbytes */
 #define RD_KAFKAP_BYTES_SER(kbytes)  ((kbytes)+1)

@@ -416,6 +416,7 @@ int rd_unittest (void) {
                 { NULL }
         };
         int i;
+        const char *match = rd_getenv("RD_UT_TEST", NULL);
 
         if (rd_getenv("RD_UT_ASSERT", NULL))
                 rd_unittest_assert_on_failure = rd_true;
@@ -425,7 +426,12 @@ int rd_unittest (void) {
         }
 
         for (i = 0 ; unittests[i].name ; i++) {
-                int f = unittests[i].call();
+                int f;
+
+                if (match && strcmp(match, unittests[i].name))
+                        continue;
+
+                f = unittests[i].call();
                 RD_UT_SAY("unittest: %s: %4s\033[0m",
                           unittests[i].name,
                           f ? "\033[31mFAIL" : "\033[32mPASS");

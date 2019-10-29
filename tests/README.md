@@ -157,6 +157,10 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
                       E.g.. `TEST_DEBUG=broker,protocol TESTS=0001 make`
  * `TEST_LEVEL=n` - controls the `TEST_SAY()` output level, a higher number
                       yields more test output. Default level is 2.
+ * `RD_UT_TEST=name` - only run the specific unittest, should be used with
+                          `TESTS=0000`.
+                          See [../src/rdunittest.c](../src/rdunittest.c) for
+                          unit test names.
 
 
 Let's say that you run the full test suite and get a failure in test 0061,

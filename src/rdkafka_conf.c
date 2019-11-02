@@ -678,6 +678,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(ssl.keystore_location),
           "Path to client's keystore (PKCS#12) used for authentication."
         },
+        { _RK_GLOBAL, "openssl.engine.location", _RK_C_STR,
+          _RK(ssl.openssl_engine_location),
+          "Location of openssl engine dll"
+        },
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
           _RK(ssl.keystore_password),
           "Client's keystore (PKCS#12) password."

@@ -31,6 +31,7 @@
 
 #include "rdlist.h"
 #include "rdkafka_cert.h"
+#include <openssl/engine.h>
 
 
 /**
@@ -228,6 +229,8 @@ struct rd_kafka_conf_s {
                 char *ca_location;
                 rd_kafka_cert_t *ca;
                 char *crl_location;
+                ENGINE *ptr_engine;
+                char *openssl_engine_location;
                 char *keystore_location;
                 char *keystore_password;
                 int   endpoint_identification;

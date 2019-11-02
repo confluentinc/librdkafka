@@ -999,6 +999,51 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 check_pkey = rd_true;
         }
 
+        if (rk->rk_conf.ssl.ptr_engine) {
+                STACK_OF(X509_NAME)* cert_names = sk_X509_NAME_new_null();
+                STACK_OF(X509_OBJECT)* roots = X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
+                X509* x509 = NULL;
+                EVP_PKEY* pkey = NULL;
+
+                for (int i = 0; i < sk_X509_OBJECT_num(roots); i++) {
+                    x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, i));
+                    if (x509)
+                        sk_X509_NAME_push(cert_names, X509_get_subject_name(x509));
+                }
+
+                x509 = NULL;
+                r = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.ptr_engine, NULL,
+                    NULL,
+                    &x509,
+                    &pkey,
+                    NULL, NULL, NULL);
+
+                if (cert_names)
+                        sk_X509_NAME_pop_free(cert_names, X509_NAME_free);
+
+                if (r == -1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ENGINE_load_ssl_client_cert failed ");
+                        return -1;
+                }
+                
+                r = SSL_CTX_use_certificate(ctx, x509);
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                            "Failed to use SSL_CTX_use_certificate with engine");
+                        return -1;
+                }
+
+                r = SSL_CTX_use_PrivateKey(ctx, pkey);
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                            "Failed to use SSL_CTX_use_PrivateKey with engine");
+                    return -1;
+                }
+
+                check_pkey = rd_true;
+        }
+
         /* Check that a valid private/public key combo was set. */
         if (check_pkey && SSL_CTX_check_private_key(ctx) != 1) {
                 rd_snprintf(errstr, errstr_size,
@@ -1113,6 +1158,30 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 }
         }
 #endif
+
+        if(rk->rk_conf.ssl.openssl_engine_location && !rk->rk_conf.ssl.ptr_engine) {
+                char* engineLoadErrStr = NULL;
+                rk->rk_conf.ssl.ptr_engine = ENGINE_by_id("dynamic");
+                if (!rk->rk_conf.ssl.ptr_engine)
+                        engineLoadErrStr = "ENGINE_by_id failed";
+            
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.ptr_engine, "SO_PATH", rk->rk_conf.ssl.openssl_engine_location, 0))
+                        engineLoadErrStr = "ENGINE_ctrl_cmd_string SO_PATH failed";
+
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.ptr_engine, "LIST_ADD", "1", 0))
+                        engineLoadErrStr = "ENGINE_ctrl_cmd_string LIST_ADD failed";
+
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.ptr_engine, "LOAD", NULL, 0))
+                        engineLoadErrStr = "ENGINE_ctrl_cmd_string LOAD failed";
+
+                if (!ENGINE_init(rk->rk_conf.ssl.ptr_engine))
+                        engineLoadErrStr = "ENGINE_init failed";
+
+                if (engineLoadErrStr) {
+                        rd_snprintf(errstr, errstr_size, engineLoadErrStr);
+                        goto fail;
+                }
+        }
 
         /* Register certificates, keys, etc. */
         if (rd_kafka_ssl_set_certs(rk, ctx, errstr, errstr_size) == -1)

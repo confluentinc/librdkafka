@@ -69,6 +69,11 @@ idempotent_seq: $(BIN)
 idempotent: idempotent_par
 
 
+# Run unit tests
+unit: $(BIN)
+	TESTS=0000 ./run-test.sh -p1
+
+
 # Delete all test topics (based on prefix)
 delete_topics:
 	TESTS=none ./run-test.sh -D bare

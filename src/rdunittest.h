@@ -122,6 +122,89 @@ extern rd_bool_t rd_unittest_slow;
         } while (0)
 
 
+
 int rd_unittest (void);
+
+
+
+/**
+ * @name Manual code coverage
+ *
+ * The RD_UT_COVERAGE*() set of macros are used to perform manual
+ * code coverage testing.
+ * This provides an alternative to object and state inspection by
+ * instead verifying that certain code paths (typically error paths)
+ * are executed, allowing functional black-box testing on the one part
+ * combined with precise knowledge of code flow on the other part.
+ *
+ * How to use:
+ *
+ * 1. First identify a code path that you want to make sure is executed, such
+ *    as a corner error case, increase RD_UT_COVNR_MAX (below) and use the
+ *    new max number as the coverage number (COVNR).
+ *
+ * 2. In the code path add RD_UT_COVERAGE(your_covnr).
+ *
+ * 3. Write a unittest case that is supposed to trigger the code path.
+ *
+ * 4. In the unittest, add a call to RD_UT_COVERAGE_CHECK(your_covnr) at the
+ *    point where you expect the code path to have executed.
+ *
+ * 5. RD_UT_COVERAGE_CHECK(your_covnr) will fail the current test, but not
+ *    return from your test function, so you need to `return 1;` if
+ *    RD_UT_COVERAGE_CHECK(your_covnr) returns 0, e.g:
+ *
+ *         if (!RD_UT_COVERAGE_CHECK(your_covnr))
+ *              return 1; -- failure
+ *
+ * 6. Run the unit tests with `make unit` in tests/.
+ *
+ * 7. If the code path was not executed your test will fail, otherwise pass.
+ *
+ *
+ * Code coverage checks require --enable-devel.
+ *
+ * There is a script in packaging/tools/rdutcoverage.sh that checks that
+ * code coverage numbers are not reused.
+ *
+ * @{
+ */
+
+#if ENABLE_CODECOV
+
+/* @define When adding new code coverages, use the next value and increment
+ *         this maximum accordingly. */
+#define RD_UT_COVNR_MAX 1
+
+/**
+ * @brief Register code as covered/executed.
+ */
+#define RD_UT_COVERAGE(COVNR)                                   \
+        rd_ut_coverage(__FILE__, __FUNCTION__, __LINE__, COVNR)
+
+/**
+ * @returns how many times the code was executed.
+ *          will fail the unit test (but not return) if code has not
+ *          been executed.
+ */
+#define RD_UT_COVERAGE_CHECK(COVNR)                                     \
+        rd_ut_coverage_check(__FILE__, __FUNCTION__, __LINE__, COVNR)
+
+
+void rd_ut_coverage (const char *file, const char *func, int line, int covnr);
+int64_t rd_ut_coverage_check (const char *file, const char *func, int line,
+                              int covnr);
+
+#else
+
+/* Does nothing if ENABLE_CODECOV is not set */
+#define RD_UT_COVERAGE(COVNR) do {} while (0)
+#define RD_UT_COVERAGE_CHECK(COVNR) 1
+
+#endif /* ENABLE_CODECOV */
+
+
+/**@}*/
+
 
 #endif /* _RD_UNITTEST_H */

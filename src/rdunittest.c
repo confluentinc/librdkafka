@@ -51,6 +51,55 @@
 
 rd_bool_t rd_unittest_assert_on_failure = rd_false;
 rd_bool_t rd_unittest_on_ci = rd_false;
+rd_bool_t rd_unittest_slow = rd_false;
+
+#if ENABLE_CODECOV
+/**
+ * @name Code coverage
+ * @{
+ */
+
+static rd_atomic64_t rd_ut_covnrs[RD_UT_COVNR_MAX+1];
+
+void rd_ut_coverage (const char *file, const char *func, int line, int covnr) {
+        rd_assert(covnr >= 0 && covnr <= RD_UT_COVNR_MAX);
+        rd_atomic64_add(&rd_ut_covnrs[covnr], 1);
+}
+
+
+int64_t rd_ut_coverage_check (const char *file, const char *func, int line,
+                              int covnr) {
+        int64_t r;
+
+        rd_assert(covnr >= 0 && covnr <= RD_UT_COVNR_MAX);
+
+        r = rd_atomic64_get(&rd_ut_covnrs[covnr]);
+
+        if (!r) {
+                fprintf(stderr,
+                        "\033[31m"
+                        "RDUT: FAIL: %s:%d: %s: "
+                        "Code coverage nr %d: FAIL: "
+                        "code path not executed: "
+                        "perform `grep -RnF 'COVERAGE(%d)' src/` to find "
+                        "source location"
+                        "\033[0m\n",
+                        file, line, func, covnr, covnr);
+                if (rd_unittest_assert_on_failure)
+                        rd_assert(!*"unittest failure");
+                return 0;
+        }
+
+        fprintf(stderr,
+                "\033[34mRDUT: CCOV: %s:%d: %s: Code coverage nr %d: "
+                "PASS (%"PRId64" code path execution(s))\033[0m\n",
+                file, line, func, covnr, r);
+
+        return r;
+}
+/**@}*/
+
+#endif /* ENABLE_CODECOV */
 
 
 /**
@@ -447,6 +496,16 @@ int rd_unittest (void) {
                           f ? "\033[31mFAIL" : "\033[32mPASS");
                 fails += f;
         }
+
+#if ENABLE_CODECOV
+        if (!match) {
+                /* Verify all code paths were covered */
+                for (i = 0 ; i < RD_UT_COVNR_MAX+1 ; i++) {
+                        if (!RD_UT_COVERAGE_CHECK(i))
+                                fails++;
+                }
+        }
+#endif
 
         return fails;
 }

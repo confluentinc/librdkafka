@@ -34,6 +34,20 @@
 
 extern rd_bool_t rd_unittest_assert_on_failure;
 extern rd_bool_t rd_unittest_on_ci;
+extern rd_bool_t rd_unittest_slow;
+
+#define ENABLE_CODECOV ENABLE_DEVEL
+
+
+/**
+ * @brief Begin single unit-test function (optional).
+ *        Currently only used for logging.
+ */
+#define RD_UT_BEGIN()                                                   \
+        fprintf(stderr,                                                 \
+                "\033[34mRDUT: INFO: %s:%d: %s: BEGIN: \033[0m\n",      \
+                __FILE__, __LINE__, __FUNCTION__)
+
 
 /**
  * @brief Fail the current unit-test function.

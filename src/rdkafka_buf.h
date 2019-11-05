@@ -821,7 +821,7 @@ static RD_INLINE void rd_kafka_buf_update_i16 (rd_kafka_buf_t *rkbuf,
  */
 static RD_INLINE size_t rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf,
                                                int32_t v) {
-        v = htobe32(v);
+        v = (int32_t)htobe32(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
 }
 

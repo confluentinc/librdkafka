@@ -41,6 +41,14 @@ matrix:
     - sudo apt update
     - sudo apt install -y doxygen graphviz
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "Linux GCC: +devel +code-cov"
+   os: linux
+   dist: bionic
+   compiler: gcc
+   env: NO_ARTIFACTS=y
+   before_script:
+    - ./configure --enable-devel --disable-lz4-ext
+    - ./packaging/tools/rdutcoverage.sh
 
 install:
  - ccache -s || echo "CCache is not available."

@@ -183,20 +183,40 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 
 
 /**
- * Send GroupCoordinatorRequest
+ * @brief Send FindCoordinatorRequest.
+ *
+ * @param coordkey is the group.id for RD_KAFKA_COORD_GROUP,
+ *                 and the transactional.id for RD_KAFKA_COORD_TXN
  */
-void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
-                                       const rd_kafkap_str_t *cgrp,
-                                       rd_kafka_replyq_t replyq,
-                                       rd_kafka_resp_cb_t *resp_cb,
-                                       void *opaque) {
+rd_kafka_resp_err_t
+rd_kafka_FindCoordinatorRequest (rd_kafka_broker_t *rkb,
+                                 rd_kafka_coordtype_t coordtype,
+                                 const char *coordkey,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_GroupCoordinator, 1,
-                                         RD_KAFKAP_STR_SIZE(cgrp));
-        rd_kafka_buf_write_kstr(rkbuf, cgrp);
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_FindCoordinator, 0, 2, NULL);
+
+        if (coordtype != RD_KAFKA_COORD_GROUP && ApiVersion < 1)
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_FindCoordinator, 1,
+                                         1 + 2 + strlen(coordkey));
+
+        rd_kafka_buf_write_str(rkbuf, coordkey, -1);
+
+        if (ApiVersion >= 1)
+                rd_kafka_buf_write_i8(rkbuf, (int8_t)coordtype);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

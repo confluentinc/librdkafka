@@ -290,6 +290,13 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 *(dstptr) = be32toh(_v);                                \
         } while (0)
 
+#define rd_kafka_buf_peek_i32(rkbuf,of,dstptr) do {                     \
+                int32_t _v;                                             \
+                rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));          \
+                *(dstptr) = be32toh(_v);                                \
+        } while (0)
+
+
 /* Same as .._read_i32 but does a direct assignment.
  * dst is assumed to be a scalar, not pointer. */
 #define rd_kafka_buf_read_i32a(rkbuf, dst) do {				\
@@ -943,6 +950,13 @@ static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
 }
 
 
+/**
+ * @brief Write bool to buffer.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_bool (rd_kafka_buf_t *rkbuf,
+                                                 rd_bool_t v) {
+        return rd_kafka_buf_write_i8(rkbuf, (int8_t)v);
+}
 
 
 /**

@@ -60,7 +60,7 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_ControlledShutdown 7
 #define RD_KAFKAP_OffsetCommit  8
 #define RD_KAFKAP_OffsetFetch   9
-#define RD_KAFKAP_GroupCoordinator 10
+#define RD_KAFKAP_FindCoordinator 10
 #define RD_KAFKAP_JoinGroup     11
 #define RD_KAFKAP_Heartbeat     12
 #define RD_KAFKAP_LeaveGroup    13
@@ -125,7 +125,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_ControlledShutdown] = "ControlledShutdown",
                 [RD_KAFKAP_OffsetCommit] = "OffsetCommit",
                 [RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-                [RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
+                [RD_KAFKAP_FindCoordinator] = "FindCoordinator",
                 [RD_KAFKAP_JoinGroup] = "JoinGroup",
                 [RD_KAFKAP_Heartbeat] = "Heartbeat",
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
@@ -207,6 +207,15 @@ typedef enum {
 
 #define RD_KAFKA_CTRL_MSG_ABORT 0
 #define RD_KAFKA_CTRL_MSG_COMMIT 1
+
+
+/**
+ * @enum Coordinator type, used with FindCoordinatorRequest
+ */
+typedef enum rd_kafka_coordtype_t {
+        RD_KAFKA_COORD_GROUP = 0,
+        RD_KAFKA_COORD_TXN = 1
+} rd_kafka_coordtype_t;
 
 
 /**

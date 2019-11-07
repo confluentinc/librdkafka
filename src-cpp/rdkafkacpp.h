@@ -314,12 +314,18 @@ enum ErrorCode {
 	ERR_OFFSET_METADATA_TOO_LARGE = 12,
 	/** Broker disconnected before response received */
 	ERR_NETWORK_EXCEPTION = 13,
-	/** Group coordinator load in progress */
-        ERR_GROUP_LOAD_IN_PROGRESS = 14,
-	 /** Group coordinator not available */
-        ERR_GROUP_COORDINATOR_NOT_AVAILABLE = 15,
-	/** Not coordinator for group */
-        ERR_NOT_COORDINATOR_FOR_GROUP = 16,
+        /** Coordinator load in progress */
+        ERR_COORDINATOR_LOAD_IN_PROGRESS = 14,
+        /** Group coordinator load in progress */
+#define ERR_GROUP_LOAD_IN_PROGRESS           ERR_COORDINATOR_LOAD_IN_PROGRESS
+        /** Coordinator not available */
+        ERR_COORDINATOR_NOT_AVAILABLE = 15,
+        /** Group coordinator not available */
+#define ERR_GROUP_COORDINATOR_NOT_AVAILABLE  ERR_COORDINATOR_NOT_AVAILABLE
+        /** Not coordinator */
+        ERR_NOT_COORDINATOR = 16,
+        /** Not coordinator for group */
+#define ERR_NOT_COORDINATOR_FOR_GROUP        ERR_NOT_COORDINATOR
 	/** Invalid topic */
         ERR_TOPIC_EXCEPTION = 17,
 	/** Message batch larger than configured server segment size */

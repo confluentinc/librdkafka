@@ -1587,7 +1587,7 @@ release of librdkafka.
 | 7       | ControlledShutdown      | 2           | -                       |
 | 8       | OffsetCommit            | 7           | 7                       |
 | 9       | OffsetFetch             | 5           | 1                       |
-| 10      | FindCoordinator         | 2           | 0                       |
+| 10      | FindCoordinator         | 2           | 2                       |
 | 11      | JoinGroup               | 5           | 5                       |
 | 12      | Heartbeat               | 3           | 3                       |
 | 13      | LeaveGroup              | 3           | 1                       |

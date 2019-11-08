@@ -551,6 +551,7 @@ enum CertificateEncoding {
 
 /**@cond NO_DOC*/
 /* Forward declarations */
+class Handle;
 class Producer;
 class Message;
 class Headers;
@@ -707,7 +708,8 @@ class RD_EXPORT OAuthBearerTokenRefreshCb {
   /**
    * @brief SASL/OAUTHBEARER token refresh callback class.
    */
-  virtual void oauthbearer_token_refresh_cb (const std::string &oauthbearer_config) = 0;
+  virtual void oauthbearer_token_refresh_cb (RdKafka::Handle* handle,
+                                             const std::string &oauthbearer_config) = 0;
 
   virtual ~OAuthBearerTokenRefreshCb() { }
 };

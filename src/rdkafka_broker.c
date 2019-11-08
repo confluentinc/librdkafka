@@ -2668,7 +2668,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rd_kafka_wrunlock(rkb->rkb_rk);
 
                 if (updated & _UPD_NAME)
-                        rd_kafka_broker_fail(rkb, LOG_NOTICE,
+                        rd_kafka_broker_fail(rkb, LOG_DEBUG,
                                              RD_KAFKA_RESP_ERR__NODE_UPDATE,
                                              "Broker hostname updated");
                 else if (updated & _UPD_ID) {

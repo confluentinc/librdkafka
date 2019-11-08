@@ -1363,8 +1363,10 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
         msetw->msetw_rkbuf->rkbuf_u.Produce.batch.pid = msetw->msetw_pid;
 
         /* Compress the message set */
-        if (msetw->msetw_compression)
-                rd_kafka_msgset_writer_compress(msetw, &len);
+        if (msetw->msetw_compression) {
+                if (rd_kafka_msgset_writer_compress(msetw, &len) == -1)
+                        msetw->msetw_compression = 0;
+        }
 
         msetw->msetw_messages_len = len;
 
@@ -1378,13 +1380,16 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
                    "%s [%"PRId32"]: "
                    "Produce MessageSet with %i message(s) (%"PRIusz" bytes, "
                    "ApiVersion %d, MsgVersion %d, MsgId %"PRIu64", "
-                   "BaseSeq %"PRId32", %s)",
+                   "BaseSeq %"PRId32", %s, %s)",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    cnt, msetw->msetw_MessageSetSize,
                    msetw->msetw_ApiVersion, msetw->msetw_MsgVersion,
                    msetw->msetw_batch->first_msgid,
                    msetw->msetw_batch->first_seq,
-                   rd_kafka_pid2str(msetw->msetw_pid));
+                   rd_kafka_pid2str(msetw->msetw_pid),
+                   msetw->msetw_compression ?
+                   rd_kafka_compression2str(msetw->msetw_compression) :
+                   "uncompressed");
 
         rd_kafka_msgq_verify_order(rktp, &msetw->msetw_batch->msgq,
                                    msetw->msetw_batch->first_msgid, rd_false);

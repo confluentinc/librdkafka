@@ -197,6 +197,8 @@ typedef struct rd_kafka_msgset_reader_s {
                                          *   message set.
                                          *   Not freed (use const memory).
                                          *   Add trailing space. */
+
+        rd_kafka_compression_t msetr_compression; /**< Compression codec */
 } rd_kafka_msgset_reader_t;
 
 
@@ -264,6 +266,8 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
         int codec = Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_buf_t *rkbufz;
+
+        msetr->msetr_compression = codec;
 
         switch (codec)
         {
@@ -1359,14 +1363,17 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                    "Enqueue %i %smessage(s) (%"PRId64" bytes, %d ops) on "
                    "%s [%"PRId32"] "
                    "fetch queue (qlen %d, v%d, last_offset %"PRId64
-                   ", %d ctrl msgs)",
+                   ", %d ctrl msgs, %s)",
                    msetr->msetr_msgcnt, msetr->msetr_srcname,
                    msetr->msetr_msg_bytes,
                    rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
                    msetr->msetr_tver->version, last_offset,
-                   msetr->msetr_ctrl_cnt);
+                   msetr->msetr_ctrl_cnt,
+                   msetr->msetr_compression ?
+                   rd_kafka_compression2str(msetr->msetr_compression) :
+                   "uncompressed");
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */

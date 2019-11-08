@@ -62,6 +62,14 @@ rd_kafka_compression2str (rd_kafka_compression_t compr) {
                 [RD_KAFKA_COMPRESSION_ZSTD] = "zstd",
                 [RD_KAFKA_COMPRESSION_INHERIT] = "inherit"
         };
+        static RD_TLS char ret[32];
+
+        if (compr < 0 || compr >= RD_KAFKA_COMPRESSION_NUM) {
+                rd_snprintf(ret, sizeof(ret),
+                            "codec0x%x?", (int)compr);
+                return ret;
+        }
+
         return names[compr];
 }
 

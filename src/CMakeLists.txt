@@ -302,6 +302,6 @@ install(
 )
 
 install(
-    FILES "rdkafka.h"
+    FILES "rdkafka.h" "rdkafka_mock.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
 )

@@ -321,6 +321,7 @@ class NugetPackage (Package):
         mappings = [
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka_mock.h', 'build/native/include/librdkafka/rdkafka_mock.h'],
 
             # Travis OSX build
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
@@ -422,6 +423,7 @@ class NugetPackage (Package):
             "build/native/librdkafka.redist.targets",
             "build/native/include/librdkafka/rdkafka.h",
             "build/native/include/librdkafka/rdkafkacpp.h",
+            "build/native/include/librdkafka/rdkafka_mock.h",
             "build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib",
             "build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib",
             "build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib",

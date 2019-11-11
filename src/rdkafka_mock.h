@@ -29,6 +29,11 @@
 #ifndef _RDKAFKA_MOCK_H_
 #define _RDKAFKA_MOCK_H_
 
+#ifndef _RDKAFKA_H_
+#error "rdkafka_mock.h must be included after rdkafka.h"
+#endif
+
+
 
 /**
  * @name Mock cluster
@@ -79,6 +84,7 @@ typedef struct rd_kafka_mock_cluster_s rd_kafka_mock_cluster_t;
  * The \p rk instance is required for internal book keeping but continues
  * to operate as usual.
  */
+RD_EXPORT
 rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
                                                     int broker_cnt);
 
@@ -86,6 +92,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
 /**
  * @brief Destroy mock cluster.
  */
+RD_EXPORT
 void rd_kafka_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
 
 
@@ -94,7 +101,7 @@ void rd_kafka_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
  * @returns the rd_kafka_t instance for a cluster as passed to
  *          rd_kafka_mock_cluster_new().
  */
-rd_kafka_t *
+RD_EXPORT rd_kafka_t *
 rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster);
 
 
@@ -102,7 +109,7 @@ rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster);
 /**
  * @returns the mock cluster's bootstrap.servers list
  */
-const char *
+RD_EXPORT const char *
 rd_kafka_mock_cluster_bootstraps (const rd_kafka_mock_cluster_t *mcluster);
 
 
@@ -116,6 +123,7 @@ rd_kafka_mock_cluster_bootstraps (const rd_kafka_mock_cluster_t *mcluster);
  * provided error code and removed from the stack, starting with
  * the first error code, then the second, etc.
  */
+RD_EXPORT
 void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
                                         int16_t ApiKey, size_t cnt, ...);
 
@@ -124,6 +132,7 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
  *
  * Currently only used for TopicMetadataRequest and AddPartitionsToTxnRequest.
  */
+RD_EXPORT
 void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
                                     const char *topic,
                                     rd_kafka_resp_err_t err);
@@ -133,6 +142,7 @@ void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
  *
  * \p broker_id does not need to point to an existing broker.
  */
+RD_EXPORT
 void rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
                                            const char *topic, int32_t partition,
                                            int32_t broker_id);
@@ -140,6 +150,7 @@ void rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief Set's the broker's rack as reported in Metadata to the client.
  */
+RD_EXPORT
 void rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
                                     int32_t broker_id, const char *rack);
 

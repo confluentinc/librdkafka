@@ -35,7 +35,7 @@ nuget {
     };
 	nestedInclude: {
 		#destination = ${d_include}librdkafka;
-		${TOPDIR}src\rdkafka.h, ${TOPDIR}src-cpp\rdkafkacpp.h
+		${TOPDIR}src\rdkafka.h, ${TOPDIR}src\rdkafka_mock.h, ${TOPDIR}src-cpp\rdkafkacpp.h
 	};
 	docs: { ${TOPDIR}README.md, ${TOPDIR}CONFIGURATION.md, ${TOPDIR}LICENSES.txt };
 

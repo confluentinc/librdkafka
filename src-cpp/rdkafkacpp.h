@@ -684,18 +684,18 @@ class RD_EXPORT DeliveryReportCb {
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
  *
  * The \c oauthbearer_config argument is the value of the
- * sasl.oauthbearer.config configuration property.
+ * \c sasl.oauthbearer.config configuration property.
  *
- * The callback should invoke RdKafka::oauthbearer_set_token() or
- * RdKafka::oauthbearer_set_token_failure() to indicate success or failure,
- * respectively.
- *
+ * The callback should invoke RdKafka::Handle::oauthbearer_set_token() or
+ * RdKafka::Handle::oauthbearer_set_token_failure() to indicate success or
+ * failure, respectively.
+ * 
  * The refresh operation is eventable and may be received when an event
  * callback handler is set with an event type of
  * \c RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH.
  *
  * Note that before any SASL/OAUTHBEARER broker connection can succeed the
- * application must call RdKafka::oauthbearer_set_token() once -- either
+ * application must call RdKafka::Handle::oauthbearer_set_token() once -- either
  * directly or, more typically, by invoking RdKafka::poll() -- in order to
  * cause retrieval of an initial token to occur.
  *

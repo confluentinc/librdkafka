@@ -87,7 +87,7 @@ struct rd_kafka_q_s {
 /* Application signalling state holder. */
 struct rd_kafka_q_io {
         /* For FD-based signalling */
-	int    fd;
+	rd_socket_t fd;
 	void  *payload;
 	size_t size;
         rd_ts_t ts_rate;  /**< How often the IO wakeup may be performed (us) */
@@ -815,7 +815,7 @@ rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
 	return NULL;
 }
 
-void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, rd_socket_t fd,
                                  const void *payload, size_t size);
 
 /* Public interface */

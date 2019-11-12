@@ -721,7 +721,7 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu) {
 /**
  * @brief Enable or disable(fd==-1) fd-based wake-ups for queue
  */
-void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, rd_socket_t fd,
                                  const void *payload, size_t size) {
         struct rd_kafka_q_io *qio = NULL;
 
@@ -906,7 +906,7 @@ void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq) {
                 rkq->rkq_qlen, rkq->rkq_qsize);
 
         if (rkq->rkq_qio)
-                fprintf(fp, " QIO fd %d\n", rkq->rkq_qio->fd);
+                fprintf(fp, " QIO fd %d\n", (int)rkq->rkq_qio->fd);
         if (rkq->rkq_serve)
                 fprintf(fp, " Serve callback %p, opaque %p\n",
                         rkq->rkq_serve, rkq->rkq_opaque);

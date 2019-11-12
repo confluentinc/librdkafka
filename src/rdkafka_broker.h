@@ -212,10 +212,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         char               *rkb_logname;
         mtx_t               rkb_logname_lock;
 
-        int                 rkb_wakeup_fd[2];     /* Wake-up fds (r/w) to wake
+        rd_socket_t         rkb_wakeup_fd[2];     /* Wake-up fds (r/w) to wake
                                                    * up from IO-wait when
                                                    * queues have content. */
-        int                 rkb_toppar_wakeup_fd; /* Toppar msgq wakeup fd,
+        rd_socket_t         rkb_toppar_wakeup_fd; /* Toppar msgq wakeup fd,
                                                    * this is rkb_wakeup_fd[1]
                                                    * if enabled. */
 

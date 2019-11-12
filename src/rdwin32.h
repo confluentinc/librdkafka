@@ -235,11 +235,34 @@ const char *rd_getenv (const char *env, const char *def) {
  * Sockets, IO
  */
 
+/** @brief Socket type */
+typedef SOCKET rd_socket_t;
+
+/** @brief Socket API error return value */
+#define RD_SOCKET_ERROR SOCKET_ERROR
+
+/** @brief Last socket error */
+#define rd_socket_errno WSAGetLastError()
+
+/** @brief String representation of socket error */
+static RD_UNUSED const char *rd_socket_strerror (int err) {
+	static RD_TLS char buf[256];
+	rd_strerror_w32(err, buf, sizeof(buf));
+	return buf;
+}
+
+/** @brief WSAPoll() struct type */
+typedef WSAPOLLFD rd_pollfd_t;
+
+/** @brief poll(2) */
+#define rd_socket_poll(POLLFD,FDCNT,TIMEOUT_MS) WSAPoll(POLLFD,FDCNT,TIMEOUT_MS)
+
+
 /**
  * @brief Set socket to non-blocking
- * @returns 0 on success or -1 on failure (see rd_kafka_socket_errno)
+ * @returns 0 on success or -1 on failure (see rd_kafka_rd_socket_errno)
  */
-static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
+static RD_UNUSED int rd_fd_set_nonblocking (rd_socket_t fd) {
         int on = 1;
         if (ioctlsocket(fd, FIONBIO, &on) == SOCKET_ERROR)
                 return (int)WSAGetLastError();
@@ -250,7 +273,7 @@ static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
  * @brief Create non-blocking pipe
  * @returns 0 on success or errno on failure
  */
-static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
+static RD_UNUSED int rd_pipe_nonblocking (rd_socket_t *fds) {
         /* On windows, the "pipe" will be a tcp connection.
         * This is to allow WSAPoll to be used to poll pipe events */
 
@@ -300,10 +323,10 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         /* Done with listening */
         closesocket(listen_s);
 
-        if (rd_fd_set_nonblocking((int)accept_s) != 0)
+        if (rd_fd_set_nonblocking(accept_s) != 0)
                 goto err;
 
-        if (rd_fd_set_nonblocking((int)connect_s) != 0)
+        if (rd_fd_set_nonblocking(connect_s) != 0)
                 goto err;
 
         /* Minimize buffer sizes to avoid a large number
@@ -325,8 +348,8 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         /* Store resulting sockets.
          * They are bidirectional, so it does not matter which is read or
          * write side of pipe. */
-        fds[0] = (int)accept_s;
-        fds[1] = (int)connect_s;
+        fds[0] = accept_s;
+        fds[1] = connect_s;
         return 0;
 
     err:

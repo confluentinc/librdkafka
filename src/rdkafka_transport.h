@@ -55,7 +55,8 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
                                     rd_kafka_buf_t **rkbufp,
                                     char *errstr, size_t errstr_size);
 
-rd_kafka_transport_t *rd_kafka_transport_new (rd_kafka_broker_t *rkb, int s,
+rd_kafka_transport_t *rd_kafka_transport_new (rd_kafka_broker_t *rkb,
+                                              rd_socket_t s,
                                               char *errstr,
                                               size_t errstr_size);
 struct rd_kafka_broker_s;

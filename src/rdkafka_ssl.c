@@ -177,7 +177,7 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 
         case SSL_ERROR_SYSCALL:
                 serr2 = ERR_peek_error();
-                if (!serr2 && !socket_errno)
+                if (!serr2 && !rd_socket_errno)
                         rd_snprintf(errstr, errstr_size, "Disconnected");
                 else if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
@@ -185,7 +185,7 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
                 else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
-                                    rd_strerror(socket_errno));
+                                    rd_strerror(rd_socket_errno));
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
@@ -476,7 +476,7 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         if (!rktrans->rktrans_ssl)
                 goto fail;
 
-        if (!SSL_set_fd(rktrans->rktrans_ssl, rktrans->rktrans_s))
+        if (!SSL_set_fd(rktrans->rktrans_ssl, (int)rktrans->rktrans_s))
                 goto fail;
 
         if (rd_kafka_transport_ssl_set_endpoint_id(rktrans, errstr,

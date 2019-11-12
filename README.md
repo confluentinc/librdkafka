@@ -152,6 +152,7 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * Node.js: [node-rdkafka](https://github.com/Blizzard/node-rdkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
+  * Perl: [Net::Kafka](https://github.com/bookingcom/perl-Net-Kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)

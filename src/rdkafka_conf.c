@@ -848,6 +848,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(group_id_str),
           "Client group id string. All clients sharing the same group.id "
           "belong to the same group." },
+        { _RK_GLOBAL|_RK_CGRP|_RK_MED, "group.instance.id", _RK_C_STR,
+          _RK(group_instance_id),
+          "Enable static group membership. "
+          "Static group members are able to leave and rejoin a group "
+          "within the configured `session.timeout.ms` without prompting a "
+          "group rebalance. This should be used in combination with a larger "
+          "`session.timeout.ms` to avoid group rebalances caused by transient "
+          "unavailability (e.g. process restarts). "
+          "Requires broker version >= 2.3.0."},
         { _RK_GLOBAL|_RK_CGRP|_RK_MED, "partition.assignment.strategy",
           _RK_C_STR,
           _RK(partition_assignment_strategy),

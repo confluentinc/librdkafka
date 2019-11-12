@@ -1278,6 +1278,19 @@ The latest stored offset will be automatically committed every
 Broker based consumer groups (requires Apache Kafka broker >=0.9) are supported,
 see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 
+##### Static Consumer groups
+
+By default Kafka consumers are rebalanced each time a new consumer joins
+the group or an existing member leaves. This is what is known as a dynamic
+membership. Apache Kafka >= 2.3.0 introduces static membership.
+Unlike dynamic membership, static members can leave and rejoin a group
+within the `session.timeout.ms` without triggering a rebalance retaining 
+their existing partitions assignment.
+
+To enable static group membership configure each consumer instance
+in the group with a unique `group.instance.id`.
+
+To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
 
 ### Topics
 
@@ -1531,7 +1544,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                                     | Not supported                                                                                 |
 | KIP-341 - Update Sticky partition assignment data                        | 2.3.0                                     | Not supported                                                                                 |
 | KIP-342 - Custom SASL OAUTHBEARER extensions                             | 2.1.0                                     | Supported                                                                                     |
-| KIP-345 - Consumer: Static membership                                    | 2.4.0 (WIP), partially available in 2.3.0 | In progress                                                                                   |
+| KIP-345 - Consumer: Static membership                                    | 2.4.0 (WIP), partially available in 2.3.0 | Supported                                                                                 |
 | KIP-357 - AdminAPI: list ACLs per principal                              | 2.1.0                                     | Not supported                                                                                 |
 | KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0 (WIP)                               | Not supported                                                                                 |
 | KIP-360 - Improve handling of unknown Idempotent Producer                | 2.4.0 (WIP)                               | Not supported                                                                                 |

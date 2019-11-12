@@ -174,6 +174,8 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
+        if (rkcg->rkcg_group_instance_id)
+                 rd_kafkap_str_destroy(rkcg->rkcg_group_instance_id);
 
         rd_kafka_q_destroy_owner(rkcg->rkcg_q);
         rd_kafka_q_destroy_owner(rkcg->rkcg_ops);
@@ -210,6 +212,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q->rkq_serve = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
         rkcg->rkcg_q = rd_kafka_q_new(rk);
+        rkcg->rkcg_group_instance_id =
+                rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
 
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
@@ -546,6 +550,9 @@ static void rd_kafka_cgrp_handle_LeaveGroup (rd_kafka_t *rk,
                 goto err;
         }
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 err:
@@ -599,6 +606,7 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_coord,
                                            rkcg->rkcg_group_id,
                                            rkcg->rkcg_member_id,
+                                           rkcg->rkcg_group_instance_id,
                                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                            rd_kafka_cgrp_handle_LeaveGroup,
                                            rkcg);
@@ -722,7 +730,8 @@ rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
                                   rkcg->rkcg_group_id,
                                   rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,
-                                  members, member_cnt,
+                                  rkcg->rkcg_group_instance_id,
+                                  members, err ? 0 : member_cnt,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                   rd_kafka_handle_SyncGroup, rkcg);
         return;
@@ -915,8 +924,8 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         if (!ErrorCode) {
                 char *my_member_id;
                 RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
-                rkcg->rkcg_generation_id = GenerationId;
                 rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
+                rkcg->rkcg_generation_id = GenerationId;
                 i_am_leader = !rd_kafkap_str_cmp(&LeaderId, &MyMemberId);
         } else {
                 rd_interval_backoff(&rkcg->rkcg_join_intvl, 1000*1000);
@@ -947,12 +956,17 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         rd_kafkap_str_t MemberId;
                         rd_kafkap_bytes_t MemberMetadata;
                         rd_kafka_group_member_t *rkgm;
+                        rd_kafkap_str_t GroupInstanceId = RD_KAFKAP_STR_INITIALIZER;
 
                         rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        if (request->rkbuf_reqhdr.ApiVersion >= 5)
+                                rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
                         rd_kafka_buf_read_bytes(rkbuf, &MemberMetadata);
 
                         rkgm = &members[sub_cnt];
                         rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);
+                        rkgm->rkgm_group_instance_id =
+                                rd_kafkap_str_copy(&GroupInstanceId);
                         rd_list_init(&rkgm->rkgm_eligible, 0, NULL);
 
                         if (rd_kafka_group_MemberMetadata_consumer_read(
@@ -1006,6 +1020,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 rd_kafka_SyncGroupRequest(rkb, rkcg->rkcg_group_id,
                                           rkcg->rkcg_generation_id,
                                           rkcg->rkcg_member_id,
+                                          rkcg->rkcg_group_instance_id,
                                           NULL, 0,
                                           RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                           rd_kafka_handle_SyncGroup, rkcg);
@@ -1016,6 +1031,9 @@ err:
         actions = rd_kafka_err_action(rkb, ErrorCode, request,
                                       RD_KAFKA_ERR_ACTION_IGNORE,
                                       RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
+                                      RD_KAFKA_ERR_ACTION_IGNORE,
+                                      RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED,
 
                                       RD_KAFKA_ERR_ACTION_END);
 
@@ -1041,6 +1059,14 @@ err:
 
                 if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");
+
+                /* KIP-394 requires member.id on initial join group request */
+                if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED) {
+                        char *my_member_id;
+                        RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
+                        rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
+                }
+
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_INIT);
         }
@@ -1241,6 +1267,7 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
         rd_kafka_JoinGroupRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id,
                                   rkcg->rkcg_member_id,
+                                  rkcg->rkcg_group_instance_id,
                                   rkcg->rkcg_rk->rk_conf.group_protocol_type,
                                   rkcg->rkcg_subscribed_topics,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
@@ -1356,6 +1383,9 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                 goto err;
         }
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 err:
@@ -1403,6 +1433,7 @@ static void rd_kafka_cgrp_heartbeat (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_HeartbeatRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id,
                                   rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,
+                                  rkcg->rkcg_group_instance_id,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                   rd_kafka_cgrp_handle_Heartbeat, NULL);
 }
@@ -1717,7 +1748,8 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
                  * which would be costly (once per message), set up an
                  * intervalled timer that checks a timestamp
                  * (that is updated on ..poll()).
-                 * The timer interval is 2 hz */
+                 * The timer interval is 2 hz. */
+
                 rd_kafka_timer_start(&rkcg->rkcg_rk->rk_timers,
                              &rkcg->rkcg_max_poll_interval_tmr,
                              500 * 1000ll /* 500ms */,
@@ -2106,7 +2138,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
                 /* Send OffsetCommit */
                 r = rd_kafka_OffsetCommitRequest(
-                            rkcg->rkcg_coord, rkcg, 1, offsets,
+                            rkcg->rkcg_coord, rkcg, offsets,
                             RD_KAFKA_REPLYQ(rkcg->rkcg_ops, op_version),
                             rd_kafka_cgrp_op_handle_OffsetCommit, rko,
                         reason);
@@ -2190,6 +2222,14 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
 
         /* Don't send Leave when termating with NO_CONSUMER_CLOSE flag */
         if (rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
+
+        /*
+         * KIP-345: Static group members must not send a LeaveGroupRequest
+         * on termination.
+         */
+        if (RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg) &&
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
                 rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 
 	if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN) {
@@ -2614,8 +2654,13 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
         /* Leave the group before calling rebalance since the standard leave
          * will be triggered first after the rebalance callback has been served.
          * But since the application is blocked still doing processing
-         * that leave will be further delayed. */
-        rd_kafka_cgrp_leave(rkcg);
+         * that leave will be further delayed.
+         *
+         * KIP-345: static group members should continue to respect
+         * `max.poll.interval.ms` but should not send a LeaveGroupRequest.
+         */
+        if (!RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg))
+                rd_kafka_cgrp_leave(rkcg);
 
         /* Leaving the group invalidates the member id, reset it now
          * to avoid an ERR_UNKNOWN_MEMBER_ID on the next join. */

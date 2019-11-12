@@ -202,6 +202,7 @@ _TEST_DECL(0097_ssl_verify);
 _TEST_DECL(0098_consumer_txn);
 _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
+_TEST_DECL(0102_static_group_rebalance);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -366,6 +367,7 @@ struct test tests[] = {
         _TEST(0098_consumer_txn, 0),
         _TEST(0099_commit_metadata, 0),
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
+        _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -3315,8 +3317,7 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 			test_msgver_add_msg(&mv, rkmessage);
 
                 } else if (rkmessage->err) {
-                        TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
-				"): %s",
+                        TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64"): %s",
                                  rkmessage->rkt ?
                                  rd_kafka_topic_name(rkmessage->rkt) :
                                  "(no-topic)",
@@ -3349,7 +3350,45 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 	TEST_ASSERT(cnt == 0, "Expected 0 messages, got %d", cnt);
 }
 
+/**
+ * @brief Consumer poll with expectation that a \p err will be reached
+ * within \p timeout_ms.
+ */
+void test_consumer_poll_expect_err (rd_kafka_t *rk, uint64_t testid,
+                                    int timeout_ms, rd_kafka_resp_err_t err) {
+        int64_t tmout = test_clock() + timeout_ms * 1000;
 
+        TEST_SAY("%s: expecting error %s within %dms\n",
+                 rd_kafka_name(rk), rd_kafka_err2name(err), timeout_ms);
+
+        do {
+                rd_kafka_message_t *rkmessage;
+                rkmessage = rd_kafka_consumer_poll(rk, timeout_ms);
+                if (!rkmessage)
+                        continue;
+
+                if (rkmessage->err == err) {
+                        TEST_SAY("Got expected error: %s: %s\n", 
+                                 rd_kafka_err2name(rkmessage->err),
+                                 rd_kafka_message_errstr(rkmessage));
+                        rd_kafka_message_destroy(rkmessage);
+
+                        return;
+                } else if (rkmessage->err) {
+                        TEST_FAIL("%s [%"PRId32"] unexpected error "
+                                 "(offset %"PRId64"): %s",
+                                 rkmessage->rkt ?
+                                 rd_kafka_topic_name(rkmessage->rkt) :
+                                 "(no-topic)",
+                                 rkmessage->partition,
+                                 rkmessage->offset,
+                                 rd_kafka_err2name(rkmessage->err));
+                }
+
+                rd_kafka_message_destroy(rkmessage);
+        } while (test_clock() <= tmout);
+        TEST_FAIL("Expected error %s not seen in %dms", err, timeout_ms);
+}
 
 /**
  * Call consumer poll once and then return.
@@ -3380,8 +3419,7 @@ int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
 		return RD_KAFKA_RESP_ERR__PARTITION_EOF;
 
 	} else if (rkmessage->err) {
-		TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
-			  "): %s",
+		TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64"): %s",
 			  rkmessage->rkt ?
 			  rd_kafka_topic_name(rkmessage->rkt) :
 			  "(no-topic)",

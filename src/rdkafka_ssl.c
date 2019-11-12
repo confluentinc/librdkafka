@@ -41,6 +41,7 @@
 #endif
 
 #include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
 
 
 
@@ -1004,8 +1005,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 STACK_OF(X509_OBJECT)* roots = X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
                 X509* x509 = NULL;
                 EVP_PKEY* pkey = NULL;
-
-                for (int i = 0; i < sk_X509_OBJECT_num(roots); i++) {
+                int i = 0;
+                for (i = 0; i < sk_X509_OBJECT_num(roots); i++) {
                     x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, i));
                     if (x509)
                         sk_X509_NAME_push(cert_names, X509_get_subject_name(x509));
@@ -1013,32 +1014,35 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
 
                 x509 = NULL;
                 r = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.ptr_engine, NULL,
-                    NULL,
+                    cert_names,
                     &x509,
                     &pkey,
                     NULL, NULL, NULL);
 
                 if (cert_names)
-                        sk_X509_NAME_pop_free(cert_names, X509_NAME_free);
+                        sk_X509_NAME_free(cert_names);
 
-                if (r == -1) {
+                if (r == -1 || !x509 || !pkey) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ENGINE_load_ssl_client_cert failed ");
+                                    "ENGINE_load_ssl_client_cert failed");
                         return -1;
                 }
                 
                 r = SSL_CTX_use_certificate(ctx, x509);
+                X509_free(x509);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
                             "Failed to use SSL_CTX_use_certificate with engine");
+                        EVP_PKEY_free(pkey);
                         return -1;
                 }
 
                 r = SSL_CTX_use_PrivateKey(ctx, pkey);
+                EVP_PKEY_free(pkey);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
                             "Failed to use SSL_CTX_use_PrivateKey with engine");
-                    return -1;
+                        return -1;
                 }
 
                 check_pkey = rd_true;

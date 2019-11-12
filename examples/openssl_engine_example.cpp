@@ -53,8 +53,7 @@ class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
 public:
     void dr_cb(RdKafka::Message& message) {
         std::string status_name;
-        switch (message.status())
-        {
+        switch (message.status()) {
         case RdKafka::Message::MSG_STATUS_NOT_PERSISTED:
             status_name = "NotPersisted";
             break;
@@ -68,6 +67,7 @@ public:
             status_name = "Unknown?";
             break;
         }
+
         std::cout << "Message delivery for (" << message.len() << " bytes): " <<
             status_name << ": " << message.errstr() << std::endl;
         if (message.key())
@@ -187,6 +187,7 @@ int main(int argc, char** argv) {
     std::string brokers;
     std::string errstr;
     std::string enginePath;
+    std::string caLocation;
     std::string topic_str;
     std::string mode;
 
@@ -195,9 +196,9 @@ int main(int argc, char** argv) {
      */
     RdKafka::Conf* conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
-
     int opt;
-    while ((opt = getopt(argc, argv, "b:p:t:m:d:X:")) != -1) {
+
+    while ((opt = getopt(argc, argv, "b:p:c:t:m:d:X:")) != -1) {
         switch (opt) {
         case 'b':
             brokers = optarg;
@@ -205,11 +206,13 @@ int main(int argc, char** argv) {
         case 'p':
             enginePath = optarg;
             break;
+        case 'c':
+            caLocation = optarg;
+            break;
         case 't':
             topic_str = optarg;
             break;
-        case 'm':
-        {
+        case 'm': {
             if (strcmp(optarg, "P") != 0 && strcmp(optarg, "C") != 0) {
                 std::cerr << "Supported values for 'm' are P or C , not " << optarg << std::endl;
                 exit(1);
@@ -223,8 +226,7 @@ int main(int argc, char** argv) {
                 exit(1);
             }
             break;
-        case 'X':
-        {
+        case 'X': {
             char* name, * val;
 
             name = optarg;
@@ -264,6 +266,7 @@ int main(int argc, char** argv) {
             " Options:\n"
             "  -b <brokers>     Broker address\n"
             "  -p <engine path> Path to openssl engine. Capi Openssl engine can be used to try this code"
+            "  -c ssl.ca.location File path to ca cert\n"
             "  -t <topic_name>  Topic to fetch / produce\n"
             "  -m C|P           Consumer or Producer mode\n"
             "  -d [facs..]      Enable debugging contexts: %s\n"
@@ -278,6 +281,9 @@ int main(int argc, char** argv) {
 
     conf->set("bootstrap.servers", brokers, errstr);
     conf->set("openssl.engine.location", enginePath, errstr);
+    conf->set("security.protocol", "ssl", errstr);
+    if(caLocation.length() > 0) 
+        conf->set("ssl.ca.location", caLocation, errstr);
 
     /* We use the Certificiate verification callback to print the
      * certificate chains being used. */

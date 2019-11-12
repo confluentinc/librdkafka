@@ -2518,8 +2518,8 @@ void rd_kafka_dr_implicit_ack (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Map and assign existing partitions to this broker using
- *        the toppar's leader_id. Only undelegated partitions
+ * @brief Map existing partitions to this broker using the
+ *        toppar's leader_id. Only undelegated partitions
  *        matching this broker are mapped.
  *
  * @locks none
@@ -2547,8 +2547,7 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
                         if (rktp->rktp_leader_id == rkb->rkb_nodeid &&
                             !(rktp->rktp_broker && rktp->rktp_next_broker)) {
                                 rd_kafka_toppar_broker_update(
-                                        rktp, rktp->rktp_leader_id, rkb,
-                                        rd_true);
+                                        rktp, rktp->rktp_leader_id, rkb);
                                 cnt++;
                         }
                         rd_kafka_toppar_unlock(rktp);
@@ -3697,7 +3696,7 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
                 rd_interval_reset_to_now(&rktp->rktp_lease_intvl, 0);
                 rd_kafka_toppar_lock(rktp);
                 rd_kafka_toppar_broker_update(rktp, preferred_id,
-                                              preferred_rkb, rd_false);
+                                              preferred_rkb);
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_broker_destroy(preferred_rkb);
                 return;

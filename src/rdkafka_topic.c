@@ -477,13 +477,12 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
 
 
 /**
- * @brief Update the broker for a topic+partition.
+ * @brief Update the broker that the topic+partition is delegated to.
  * 
  * @param broker_id The id of the broker to associate the toppar with.
  * @param rkb A reference to the broker to delegate to (must match
  *        broker_id) or NULL if the toppar should be undelegated for
  *        any reason.
- * @param is_leader rd_true if broker_id is the leader, else rd_false.
  * 
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.
@@ -493,19 +492,9 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
  */
 int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
                                    int32_t broker_id,
-                                   rd_kafka_broker_t *rkb,
-                                   rd_bool_t is_leader) {
+                                   rd_kafka_broker_t *rkb) {
 
         rktp->rktp_broker_id = broker_id;
-        if (is_leader) {
-                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-                             "Topic %s [%"PRId32"] migrating from leader: "
-                             "%"PRId32" to %"PRId32,
-                             rktp->rktp_rkt->rkt_topic->str,
-                             rktp->rktp_partition,
-                             rktp->rktp_leader_id, broker_id);
-                rktp->rktp_leader_id = broker_id;
-        }
 
 	if (!rkb) {
 		int had_broker = rktp->rktp_broker ? 1 : 0;
@@ -537,7 +526,7 @@ int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
 
 
 /**
- * @brief Update the leader for a topic+partition.
+ * @brief Update a topic+partition for a new leader.
  * 
  * @remark If a toppar is currently delegated to a preferred replica,
  *         it will not be delegated to the leader broker unless there
@@ -588,9 +577,16 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
                         rktp->rktp_partition,
                         leader_id, rktp->rktp_broker_id);
                 r = 0;
-        } else
-                r = rd_kafka_toppar_broker_update(rktp, leader_id, 
-                                                  leader, rd_true);
+        } else {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
+                        "Topic %s [%"PRId32"] migrating from broker: "
+                        "%"PRId32" to leader %"PRId32,
+                        rktp->rktp_rkt->rkt_topic->str,
+                        rktp->rktp_partition,
+                        rktp->rktp_leader_id, leader_id);
+                rktp->rktp_leader_id = leader_id;
+                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader);
+        }
 
         rd_kafka_toppar_unlock(rktp);
 
@@ -601,7 +597,9 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
 
 
 /**
- * @brief Revert the topic+partition delegation to the leader.
+ * @brief Revert the topic+partition delegation to the leader from
+ *        a preferred replica.
+ * 
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.
  *
@@ -624,7 +622,7 @@ int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
                                                 rktp->rktp_leader_id);
 
         r = rd_kafka_toppar_broker_update(
-                rktp, rktp->rktp_leader_id, leader, rd_true);
+                rktp, rktp->rktp_leader_id, leader);
 
         if (leader)
                 rd_kafka_broker_destroy(leader);
@@ -1310,8 +1308,8 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 			rd_kafka_toppar_lock(rktp);
 
-                        /* Check that partition has a leader that is up,
-                         * else add topic to query list. */
+                        /* Check that partition is delegated to a broker that
+                         * is up, else add topic to query list. */
                         if (p != RD_KAFKA_PARTITION_UA) {
                                 const char *leader_reason =
                                         rd_kafka_toppar_needs_query(rk, rktp);
@@ -1319,7 +1317,7 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                 if (leader_reason) {
                                         rd_kafka_dbg(rk, TOPIC, "QRYLEADER",
                                                      "Topic %s [%"PRId32"]: "
-                                                     "leader is %s: re-query",
+                                                     "broker is %s: re-query",
                                                      rkt->rkt_topic->str,
                                                      rktp->rktp_partition,
                                                      leader_reason);

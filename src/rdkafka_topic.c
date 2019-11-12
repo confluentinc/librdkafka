@@ -477,7 +477,7 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
 
 
 /**
- * @brief Update the broker that the topic+partition is delegated to.
+ * @brief Update the broker that a topic+partition is delegated to.
  * 
  * @param broker_id The id of the broker to associate the toppar with.
  * @param rkb A reference to the broker to delegate to (must match
@@ -603,12 +603,15 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.
  *
- * @locks caller must have rd_kafka_toppar_lock(rktp)
+ * @locks none
  * @locality any
  */
 int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
         rd_kafka_broker_t *leader;
         int r;
+
+        rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
+        rd_kafka_toppar_lock(rktp);
 
         rd_assert(rktp->rktp_leader_id != rktp->rktp_broker_id);
 
@@ -621,8 +624,13 @@ int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
         leader = rd_kafka_broker_find_by_nodeid(rktp->rktp_rkt->rkt_rk,
                                                 rktp->rktp_leader_id);
 
+        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
+
+        rd_kafka_toppar_lock(rktp);
         r = rd_kafka_toppar_broker_update(
                 rktp, rktp->rktp_leader_id, leader);
+        rd_kafka_toppar_unlock(rktp);
 
         if (leader)
                 rd_kafka_broker_destroy(leader);

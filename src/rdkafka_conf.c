@@ -835,7 +835,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_GLOBAL, "openssl.engine.location", _RK_C_STR,
           _RK(ssl.openssl_engine_location),
-          "Location of openssl engine dll"
+          "Path to openssl engine dll."
         },
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
           _RK(ssl.keystore_password),

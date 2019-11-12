@@ -1881,6 +1881,7 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
  * @returns the partition's Fetch backoff timestamp, or 0 if no backoff.
  *
  * @locality broker thread
+ * @locks none
  */
 rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 				   rd_kafka_broker_t *rkb,
@@ -1889,6 +1890,23 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
         const char *reason = "";
         int32_t version;
         rd_ts_t ts_backoff = 0;
+        rd_bool_t lease_expired = rd_false;
+
+        /* Check for preferred replica lease expiry */
+        rd_kafka_toppar_lock(rktp);
+        lease_expired =
+                rktp->rktp_leader_id != rktp->rktp_broker_id &&
+                rd_interval(&rktp->rktp_lease_intvl,
+                        5*60*1000*1000/*5 minutes*/, 0) > 0;
+        rd_kafka_toppar_unlock(rktp);
+
+        if (lease_expired) {
+                rd_kafka_toppar_delegate_to_leader(rktp);
+                reason = "preferred replica lease expired";
+                should_fetch = 0;
+                rd_kafka_toppar_lock(rktp);
+                goto done;
+        }
 
 	rd_kafka_toppar_lock(rktp);
 
@@ -1904,16 +1922,6 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 		should_fetch = 0;
 		goto done;
 	}
-
-        /* Check for preferred replica lease expiry */
-        if (rktp->rktp_leader_id != rktp->rktp_broker_id &&
-            rd_interval(&rktp->rktp_lease_intvl,
-                        5*60*1000*1000/*5 minutes*/, 0) > 0) {
-                rd_kafka_toppar_delegate_to_leader(rktp);
-                reason = "preferred replica lease expired";
-                should_fetch = 0;
-                goto done;
-        }
 
 	/* Skip toppars not in active fetch state */
 	if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_ACTIVE) {

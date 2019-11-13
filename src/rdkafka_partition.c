@@ -123,19 +123,16 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
  * @locks: none
  */
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
-	rd_kafka_broker_t *leader;
         rd_kafka_topic_partition_list_t *partitions;
 
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
 
-        rd_kafka_rdlock(rktp->rktp_rkt->rkt_rk);
-        leader = rd_kafka_broker_find_by_nodeid(rktp->rktp_rkt->rkt_rk,
-                                                rktp->rktp_leader_id);
-        rd_kafka_rdunlock(rktp->rktp_rkt->rkt_rk);
-
-        if (!leader)
+        rd_kafka_toppar_lock(rktp);
+        if (!rktp->rktp_leader) {
+                rd_kafka_toppar_unlock(rktp);
 		return;
+        }
 
         rktp->rktp_wait_consumer_lag_resp = 1;
 
@@ -147,14 +144,14 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_OffsetRequest(leader, partitions, 0,
+        rd_kafka_OffsetRequest(rktp->rktp_leader, partitions, 0,
                                RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
 
-        rd_kafka_topic_partition_list_destroy(partitions);
+        rd_kafka_toppar_unlock(rktp);
 
-        rd_kafka_broker_destroy(leader); /* from rd_kafka_broker_find_by_nodeid() */
+        rd_kafka_topic_partition_list_destroy(partitions);
 }
 
 

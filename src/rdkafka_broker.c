@@ -3890,6 +3890,12 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 
+                        rd_kafka_toppar_lock(rktp);
+                        rktp->rktp_lo_offset = hdr.LogStartOffset;
+                        rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
+                        rktp->rktp_ls_offset = hdr.LastStableOffset;
+                        rd_kafka_toppar_unlock(rktp);
+
                         if (hdr.PreferredReadReplica != -1) {
 
                                 rd_kafka_fetch_preferred_replica_handle(
@@ -3981,12 +3987,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   hdr.HighwaterMarkOffset,
                                    hdr.LastStableOffset,
                                    tver->version, fetch_version);
-
-			/* High offset for get_watermark_offsets() */
-			rd_kafka_toppar_lock(rktp);
-			rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
-                        rktp->rktp_ls_offset = hdr.LastStableOffset;
-			rd_kafka_toppar_unlock(rktp);
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */

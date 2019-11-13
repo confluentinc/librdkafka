@@ -129,9 +129,27 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
                 return; /* Previous request not finished yet */
 
         rd_kafka_toppar_lock(rktp);
-        if (!rktp->rktp_leader) {
+
+        /* Offset requests can only be sent to the leader replica.
+         *
+         * Note: If rktp is delegated to a preferred replica, it is
+         * certain that FETCH >= v5 and so rktp_lo_offset will be
+         * updated via LogStartOffset in the FETCH response.
+         */
+        if (!rktp->rktp_leader || (rktp->rktp_leader != rktp->rktp_broker)) {
                 rd_kafka_toppar_unlock(rktp);
 		return;
+        }
+
+        /* Also don't send a timed log start offset request if leader
+         * broker supports FETCH >= v5, since this will be set when
+         * doing fetch requests.
+         */
+        if (rd_kafka_broker_ApiVersion_supported(rktp->rktp_broker, 
+                                                 RD_KAFKAP_Fetch, 0,
+                                                 5, NULL) == 5) {
+                rd_kafka_toppar_unlock(rktp);
+                return;
         }
 
         rktp->rktp_wait_consumer_lag_resp = 1;
@@ -140,11 +158,11 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
         rd_kafka_topic_partition_list_add(partitions,
                                           rktp->rktp_rkt->rkt_topic->str,
                                           rktp->rktp_partition)->offset =
-                RD_KAFKA_OFFSET_BEGINNING;
+                                          RD_KAFKA_OFFSET_BEGINNING;
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_OffsetRequest(rktp->rktp_leader, partitions, 0,
+        rd_kafka_OffsetRequest(rktp->rktp_broker, partitions, 0,
                                RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
@@ -157,7 +175,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Request earliest offset to measure consumer lag
+ * Request earliest offset for a partition
  *
  * Locality: toppar handler thread
  */
@@ -223,12 +241,15 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
         rd_kafka_pid_reset(&rktp->rktp_eos.pid);
 
-        /* Consumer: If statistics is available we query the oldest offset
+        /* Consumer: If statistics is available we query the log start offset
          * of each partition.
          * Since the oldest offset only moves on log retention, we cap this
          * value on the low end to a reasonable value to avoid flooding
          * the brokers with OffsetRequests when our statistics interval is low.
-         * FIXME: Use a global timer to collect offsets for all partitions */
+         * FIXME: Use a global timer to collect offsets for all partitions
+         * FIXME: This timer is superfulous for FETCH >= v5 because the log
+         *        start offset is included in fetch responses.
+         * */
         if (rktp->rktp_rkt->rkt_rk->rk_conf.stats_interval_ms > 0 &&
             rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER &&
             rktp->rktp_partition != RD_KAFKA_PARTITION_UA) {

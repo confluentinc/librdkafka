@@ -303,6 +303,9 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 
 	mtx_destroy(&rktp->rktp_lock);
 
+        if (rktp->rktp_leader)
+                rd_kafka_broker_destroy(rktp->rktp_leader);
+
         rd_refcnt_destroy(&rktp->rktp_refcnt);
 
 	rd_free(rktp);

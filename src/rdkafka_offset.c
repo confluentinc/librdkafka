@@ -785,7 +785,20 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
 
 	} else {
-		/* Query logical offset */
+                /* Use cached log start offset if available */
+                if (offset == RD_KAFKA_OFFSET_BEGINNING &&
+                    rktp->rktp_lo_offset >= 0) {
+                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                                     "%s [%"PRId32"]: offset reset (at offset %s) "
+                                     "to BEGINNING (%"PRId64") from cache",
+                                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                                     rd_kafka_offset2str(err_offset),
+                                     rktp->rktp_lo_offset);
+                        rd_kafka_toppar_next_offset_handle(rktp, rktp->rktp_lo_offset);
+                        return;
+                }
+
+                /* Query logical offset */
 		rktp->rktp_query_offset = offset;
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);

@@ -578,13 +578,12 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
                         leader_id, rktp->rktp_broker_id);
                 r = 0;
         } else {
-                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
-                        "Topic %s [%"PRId32"] migrating from broker: "
-                        "%"PRId32" to leader %"PRId32,
-                        rktp->rktp_rkt->rkt_topic->str,
-                        rktp->rktp_partition,
-                        rktp->rktp_leader_id, leader_id);
                 rktp->rktp_leader_id = leader_id;
+                if (rktp->rktp_leader)
+                        rd_kafka_broker_destroy(rktp->rktp_leader);
+                if (leader)
+                        rd_kafka_broker_keep(leader);
+                rktp->rktp_leader = leader;
                 r = rd_kafka_toppar_broker_update(rktp, leader_id, leader);
         }
 

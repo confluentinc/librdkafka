@@ -475,9 +475,9 @@ void test_produce_msgs_rate (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                        uint64_t testid, int32_t partition);
 
-void test_produce_msgs_easy2 (const char *bootstraps, const char *topic,
-                              int32_t partition, uint64_t testid,
-                              int msg_base, int cnt, size_t size);
+void test_produce_msgs_easy_v (const char *topic, int32_t partition,
+                               uint64_t testid,
+                               int msg_base, int cnt, size_t size, ...);
 
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (

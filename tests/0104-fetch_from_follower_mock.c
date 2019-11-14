@@ -44,7 +44,7 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
         rd_kafka_t *c;
         const char *topic = "test";
         const int msgcnt = 1000;
-        const size_t msgsize = 10000;
+        const size_t msgsize = 1000;
 
         TEST_SAY(_C_MAG "[ Test FFF auto.offset.reset=%s ]\n",
                  auto_offset_reset);
@@ -52,7 +52,10 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
         /* Seed the topic with messages */
-        test_produce_msgs_easy2(bootstraps, topic, 0, 0, 0, msgcnt, msgsize);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "10",
+                                 NULL);
 
         /* Set partition leader to broker 1, follower to broker 2 */
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);

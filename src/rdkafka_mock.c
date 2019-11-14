@@ -90,6 +90,8 @@ static void rd_kafka_mock_msgset_destroy (rd_kafka_mock_partition_t *mpart,
                 /* Removing first messageset */
                 mpart->start_offset = next->first_offset;
 
+        mpart->follower_start_offset = mpart->start_offset;
+
         rd_assert(mpart->cnt > 0);
         mpart->cnt--;
         mpart->size -= RD_KAFKAP_BYTES_LEN(&mset->bytes);
@@ -108,6 +110,7 @@ rd_kafka_mock_msgset_new (rd_kafka_mock_partition_t *mpart,
         rd_kafka_mock_msgset_t *mset;
         size_t totsize = sizeof(*mset) + RD_KAFKAP_BYTES_LEN(bytes);
         int64_t BaseOffset;
+        int64_t orig_start_offset = mpart->start_offset;
 
         rd_assert(!RD_KAFKAP_BYTES_IS_NULL(bytes));
 
@@ -144,11 +147,13 @@ rd_kafka_mock_msgset_new (rd_kafka_mock_partition_t *mpart,
         rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCK",
                      "Broker %"PRId32": Log append %s [%"PRId32"] "
                      "%"PRIusz" messages, %"PRId32" bytes at offset %"PRId64
-                     " (log now %"PRId64"..%"PRId64")",
+                     " (log now %"PRId64"..%"PRId64", "
+                     "original start %"PRId64")",
                      mpart->leader->id, mpart->topic->name, mpart->id,
                      msgcnt, RD_KAFKAP_BYTES_LEN(&mset->bytes),
                      mset->first_offset,
-                     mpart->start_offset, mpart->end_offset);
+                     mpart->start_offset, mpart->end_offset,
+                     orig_start_offset);
 
         return mset;
 }

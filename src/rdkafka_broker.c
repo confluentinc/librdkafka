@@ -4394,6 +4394,8 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                            rktp->rktp_offsets.fetch_offset,
 			   rktp->rktp_fetch_version);
 
+                rd_dassert(rktp->rktp_offsets.fetch_offset >= 0);
+
 		/* Add toppar + op version mapping. */
 		tver = rd_list_add(rkbuf->rkbuf_rktp_vers, NULL);
 		tver->s_rktp = rd_kafka_toppar_keep(rktp);

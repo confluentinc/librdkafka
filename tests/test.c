@@ -2058,16 +2058,27 @@ rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 }
 
 
-void test_produce_msgs_easy2 (const char *bootstraps, const char *topic,
-                              int32_t partition, uint64_t testid,
-                              int msg_base, int cnt, size_t size) {
+/**
+ * @brief Easy produce function.
+ *
+ * @param ... is a NULL-terminated list of key, value config property pairs.
+ */
+void test_produce_msgs_easy_v (const char *topic,
+                               int32_t partition, uint64_t testid,
+                               int msg_base, int cnt, size_t size, ...) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *p;
         rd_kafka_topic_t *rkt;
+        va_list ap;
+        const char *key, *val;
 
         test_conf_init(&conf, NULL, 0);
-        if (bootstraps)
-                test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        va_start(ap, size);
+        while ((key = va_arg(ap, const char *)) &&
+               (val = va_arg(ap, const char *)))
+                test_conf_set(conf, key, val);
+        va_end(ap);
 
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 

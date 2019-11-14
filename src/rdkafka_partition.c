@@ -1953,13 +1953,26 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
         /* Update broker thread's fetch op version */
         version = rktp->rktp_op_version;
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "FETCHDEC",
+                     "Topic %s [%"PRId32"]: fetch decide: "
+                     "updating to version %d (was %d) at "
+                     "offset %"PRId64" last %"PRId64" (was %"PRId64") CCCCCCCCCHEECK",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     version, rktp->rktp_fetch_version,
+                     rktp->rktp_next_offset, rktp->rktp_last_next_offset,
+                     rktp->rktp_offsets.fetch_offset);
+
         if (version > rktp->rktp_fetch_version ||
-	    rktp->rktp_next_offset != rktp->rktp_last_next_offset) {
+	    rktp->rktp_next_offset != rktp->rktp_last_next_offset ||
+            rktp->rktp_offsets.fetch_offset == RD_KAFKA_OFFSET_INVALID) {
                 /* New version barrier, something was modified from the
                  * control plane. Reset and start over.
 		 * Alternatively only the next_offset changed but not the
 		 * barrier, which is the case when automatically triggering
-		 * offset.reset (such as on PARTITION_EOF). */
+		 * offset.reset (such as on PARTITION_EOF or
+                 * OFFSET_OUT_OF_RANGE). */
 
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "FETCHDEC",
                              "Topic %s [%"PRId32"]: fetch decide: "
@@ -2018,7 +2031,7 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                            "Topic %s [%"PRId32"] in state %s at offset %s "
                            "(%d/%d msgs, %"PRId64"/%d kb queued, "
-			   "opv %"PRId32") is %s %s",
+			   "opv %"PRId32") is %s%s",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
 			   rd_kafka_fetch_states[rktp->rktp_fetch_state],

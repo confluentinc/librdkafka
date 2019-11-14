@@ -205,6 +205,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rktp->rktp_broker_id = -1;
         rd_interval_init(&rktp->rktp_lease_intvl);
         rd_interval_init(&rktp->rktp_new_lease_intvl);
+        rd_interval_init(&rktp->rktp_new_lease_log_intvl);
         rd_interval_init(&rktp->rktp_metadata_intvl);
         /* Mark partition as unknown (does not exist) until we see the
          * partition in topic metadata. */

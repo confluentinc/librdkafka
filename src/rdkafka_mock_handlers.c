@@ -263,11 +263,17 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
 
                         /* Find MessageSet for FetchOffset */
-                        if (!err && FetchOffset != mpart->end_offset &&
-                            !(mset = rd_kafka_mock_msgset_find(mpart,
-                                                               FetchOffset,
-                                                               on_follower)))
-                                err = RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE;
+                        if (!err && FetchOffset != mpart->end_offset) {
+                                if (on_follower &&
+                                    FetchOffset <= mpart->end_offset &&
+                                    FetchOffset > mpart->follower_end_offset)
+                                        err = RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE;
+                                else if (!(mset = rd_kafka_mock_msgset_find(
+                                                   mpart,
+                                                   FetchOffset,
+                                                   on_follower)))
+                                        err = RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE;
+                        }
 
 
                         /* Response: ErrorCode */
@@ -275,7 +281,10 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
 
                         /* Response: Highwatermark */
                         rd_kafka_buf_write_i64(resp,
-                                               mpart ? mpart->end_offset : -1);
+                                               mpart ?
+                                               (on_follower ?
+                                                mpart->follower_end_offset :
+                                                mpart->end_offset) : -1);
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4) {
                                 /* Response: LastStableOffset */
@@ -302,18 +311,20 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 11) {
                                 int32_t PreferredReadReplica =
-                                        mpart && mpart->follower_id != -1 ?
+                                        mpart &&
+                                        mpart->leader == mconn->broker &&
+                                        mpart->follower_id != -1 ?
                                         mpart->follower_id : -1;
 
-                                /* Response: #PreferredReadReplica */
+                                /* Response: PreferredReplica */
                                 rd_kafka_buf_write_i32(
-                                        resp,
-                                        PreferredReadReplica == -1 ? 0 : 1);
+                                        resp, PreferredReadReplica);
 
                                 if (PreferredReadReplica != -1) {
-                                        /* Response: PreferredReplica */
-                                        rd_kafka_buf_write_i32(
-                                                resp, PreferredReadReplica);
+                                        /* Don't return any data when
+                                         * PreferredReadReplica is set */
+                                        mset = NULL;
+                                        MaxWait = 0;
                                 }
                         }
 
@@ -346,13 +357,18 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
                                              "fetch response for requested "
                                              "Offset %"PRId64": "
                                              "Log start..end Offsets are "
-                                             "%"PRId64"..%"PRId64,
+                                             "%"PRId64"..%"PRId64
+                                             " (follower %"PRId64"..%"PRId64")",
                                              mconn->broker->id,
                                              mtopic ? mtopic->name : "n/a",
                                              mpart ? mpart->id : -1,
                                              FetchOffset,
                                              mpart ? mpart->start_offset : -1,
-                                             mpart ? mpart->end_offset : -1);
+                                             mpart ? mpart->end_offset : -1,
+                                             mpart ?
+                                             mpart->follower_start_offset : -1,
+                                             mpart ?
+                                             mpart->follower_end_offset : -1);
                                 /* Response: Records: Null */
                                 rd_kafka_buf_write_i32(resp, 0);
                         }

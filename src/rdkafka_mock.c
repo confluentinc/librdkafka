@@ -90,6 +90,9 @@ static void rd_kafka_mock_msgset_destroy (rd_kafka_mock_partition_t *mpart,
                 /* Removing first messageset */
                 mpart->start_offset = next->first_offset;
 
+        if (mpart->update_follower_start_offset)
+                mpart->follower_start_offset = mpart->start_offset;
+
         rd_assert(mpart->cnt > 0);
         mpart->cnt--;
         mpart->size -= RD_KAFKAP_BYTES_LEN(&mset->bytes);
@@ -108,6 +111,7 @@ rd_kafka_mock_msgset_new (rd_kafka_mock_partition_t *mpart,
         rd_kafka_mock_msgset_t *mset;
         size_t totsize = sizeof(*mset) + RD_KAFKAP_BYTES_LEN(bytes);
         int64_t BaseOffset;
+        int64_t orig_start_offset = mpart->start_offset;
 
         rd_assert(!RD_KAFKAP_BYTES_IS_NULL(bytes));
 
@@ -116,7 +120,9 @@ rd_kafka_mock_msgset_new (rd_kafka_mock_partition_t *mpart,
 
         mset->first_offset = mpart->end_offset;
         mset->last_offset = mset->first_offset + msgcnt - 1;
-        mpart->follower_end_offset = mpart->end_offset = mset->last_offset + 1;
+        mpart->end_offset = mset->last_offset + 1;
+        if (mpart->update_follower_end_offset)
+                mpart->follower_end_offset = mpart->end_offset;
         mpart->cnt++;
 
         mset->bytes.len = bytes->len;
@@ -144,11 +150,13 @@ rd_kafka_mock_msgset_new (rd_kafka_mock_partition_t *mpart,
         rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCK",
                      "Broker %"PRId32": Log append %s [%"PRId32"] "
                      "%"PRIusz" messages, %"PRId32" bytes at offset %"PRId64
-                     " (log now %"PRId64"..%"PRId64")",
+                     " (log now %"PRId64"..%"PRId64", "
+                     "original start %"PRId64")",
                      mpart->leader->id, mpart->topic->name, mpart->id,
                      msgcnt, RD_KAFKAP_BYTES_LEN(&mset->bytes),
                      mset->first_offset,
-                     mpart->start_offset, mpart->end_offset);
+                     mpart->start_offset, mpart->end_offset,
+                     orig_start_offset);
 
         return mset;
 }
@@ -237,7 +245,19 @@ rd_kafka_mock_partition_log_append (rd_kafka_mock_partition_t *mpart,
 }
 
 
+/**
+ * @brief Set the partition leader
+ */
+static void
+rd_kafka_mock_partition_set_leader0 (rd_kafka_mock_partition_t *mpart,
+                                     rd_kafka_mock_broker_t *mrkb) {
+        mpart->leader = mrkb;
+}
 
+
+/**
+ * @brief Automatically assign replicas for partition
+ */
 static void
 rd_kafka_mock_partition_assign_replicas (rd_kafka_mock_partition_t *mpart) {
         rd_kafka_mock_cluster_t *mcluster = mpart->topic->cluster;
@@ -260,7 +280,8 @@ rd_kafka_mock_partition_assign_replicas (rd_kafka_mock_partition_t *mpart) {
         }
 
         /* Select a random leader */
-        mpart->leader = mpart->replicas[rd_jitter(0, replica_cnt-1)];
+        rd_kafka_mock_partition_set_leader0(
+                mpart, mpart->replicas[rd_jitter(0, replica_cnt-1)]);
 }
 
 
@@ -356,10 +377,15 @@ static void rd_kafka_mock_partition_init (rd_kafka_mock_topic_t *mtopic,
         mpart->topic = mtopic;
         mpart->id = id;
 
+        mpart->follower_id = -1;
+
         TAILQ_INIT(&mpart->msgsets);
 
         mpart->max_size = 1024*1024*5;
         mpart->max_cnt = 100000;
+
+        mpart->update_follower_start_offset = rd_true;
+        mpart->update_follower_end_offset = rd_true;
 
         TAILQ_INIT(&mpart->committed_offsets);
 
@@ -487,6 +513,27 @@ rd_kafka_mock_topic_get (rd_kafka_mock_cluster_t *mcluster, const char *topic,
                                                partition_cnt, &err);
 }
 
+/**
+ * @brief Find or create a partition.
+ *
+ * @returns NULL if topic already exists and partition is out of range.
+ */
+static rd_kafka_mock_partition_t *
+rd_kafka_mock_partition_get (rd_kafka_mock_cluster_t *mcluster,
+                             const char *topic, int32_t partition) {
+        rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_resp_err_t err;
+
+        if (!(mtopic = rd_kafka_mock_topic_find(mcluster, topic)))
+                mtopic = rd_kafka_mock_topic_auto_create(mcluster, topic,
+                                                         partition+1, &err);
+
+        if (partition >= mtopic->partition_cnt)
+                return NULL;
+
+        return &mtopic->partitions[partition];
+}
+
 
 /**
  * @brief Set IO events for fd
@@ -560,7 +607,7 @@ static void rd_kafka_mock_cluster_io_add (rd_kafka_mock_cluster_t *mcluster,
                                           rd_kafka_mock_io_handler_t handler,
                                           void *opaque) {
 
-        if (mcluster->fd_cnt + 1 > mcluster->fd_size) {
+        if (mcluster->fd_cnt + 1 >= mcluster->fd_size) {
                 mcluster->fd_size += 8;
 
                 mcluster->fds = rd_realloc(mcluster->fds,
@@ -676,7 +723,7 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                                     errstr, sizeof(errstr));
         if (r == -1) {
                 rd_kafka_dbg(rk, MOCK, "MOCK",
-                             "Mock broker %"PRId32": connection %s: "
+                             "Broker %"PRId32": Connection %s: "
                              "receive failed: %s",
                              mconn->broker->id,
                              rd_sockaddr2str(&mconn->peer,
@@ -795,7 +842,7 @@ rd_kafka_mock_connection_parse_request (rd_kafka_mock_connection_t *mconn,
             rkbuf->rkbuf_reqhdr.ApiKey >= RD_KAFKAP__NUM ||
             !rd_kafka_mock_api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].cb) {
                 rd_kafka_log(rk, LOG_ERR, "MOCK",
-                             "Mock broker %"PRId32": unsupported %sRequestV%hd "
+                             "Broker %"PRId32": unsupported %sRequestV%hd "
                              "from %s",
                              mconn->broker->id,
                              rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
@@ -810,7 +857,7 @@ rd_kafka_mock_connection_parse_request (rd_kafka_mock_connection_t *mconn,
             rkbuf->rkbuf_reqhdr.ApiVersion >
             rd_kafka_mock_api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].MaxVersion) {
                 rd_kafka_log(rk, LOG_ERR, "MOCK",
-                             "Mock broker %"PRId32": unsupported %sRequest "
+                             "Broker %"PRId32": unsupported %sRequest "
                              "version %hd from %s",
                              mconn->broker->id,
                              rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
@@ -869,7 +916,7 @@ rd_kafka_mock_connection_write_out (rd_kafka_mock_connection_t *mconn) {
                                 rkbuf->rkbuf_ts_retry-now,
                                 rd_kafka_mock_connection_write_out_tmr_cb,
                                 mconn);
-                                break;
+                        break;
                 }
 
                 if ((r = rd_kafka_transport_send(mconn->transport,
@@ -992,7 +1039,10 @@ rd_kafka_mock_connection_new (rd_kafka_mock_broker_t *mrkb, rd_socket_t fd,
 static void rd_kafka_mock_cluster_op_io (rd_kafka_mock_cluster_t *mcluster,
                                          rd_socket_t fd,
                                          int events, void *opaque) {
-        /* nop */
+        /* Read wake-up fd data and throw away, just used for wake-ups*/
+        char buf[1024];
+        while (rd_read(fd, buf, sizeof(buf)) > 0)
+                ; /* Read all buffered signalling bytes */
 }
 
 
@@ -1001,7 +1051,7 @@ static int rd_kafka_mock_cluster_io_poll (rd_kafka_mock_cluster_t *mcluster,
         int r;
         int i;
 
-		r = rd_socket_poll(mcluster->fds, mcluster->fd_cnt, timeout_ms);
+        r = rd_socket_poll(mcluster->fds, mcluster->fd_cnt, timeout_ms);
         if (r == RD_SOCKET_ERROR) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Mock cluster failed to poll %d fds: %d: %s",
@@ -1047,11 +1097,13 @@ static int rd_kafka_mock_cluster_thread_main (void *arg) {
         mcluster->run = rd_true;
 
         while (mcluster->run) {
-                rd_ts_t sleeptime = rd_kafka_timers_next(
-                        &mcluster->timers, 1000*1000/*1s*/, 1/*lock*/);
+                int sleeptime =
+                        (int)((rd_kafka_timers_next(
+                                       &mcluster->timers,
+                                       1000*1000/*1s*/,
+                                       1/*lock*/) + 999) / 1000);
 
-                if (rd_kafka_mock_cluster_io_poll(mcluster,
-                                                  (int)(sleeptime/100)) == -1)
+                if (rd_kafka_mock_cluster_io_poll(mcluster, sleeptime) == -1)
                         break;
 
                 rd_kafka_timers_run(&mcluster->timers, RD_POLL_NOWAIT);
@@ -1140,7 +1192,7 @@ rd_kafka_mock_broker_new (rd_kafka_mock_cluster_t *mcluster,
         }
 
         if (bind(listen_s, (struct sockaddr *)&sin, sizeof(sin)) ==
-			RD_SOCKET_ERROR) {
+            RD_SOCKET_ERROR) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to bind mock broker socket to %s: %s",
                              rd_socket_strerror(rd_socket_errno),
@@ -1150,7 +1202,7 @@ rd_kafka_mock_broker_new (rd_kafka_mock_cluster_t *mcluster,
         }
 
         if (getsockname(listen_s, (struct sockaddr *)&sin, &sin_len) ==
-			RD_SOCKET_ERROR) {
+            RD_SOCKET_ERROR) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to get mock broker socket name: %s",
                              rd_socket_strerror(rd_socket_errno));
@@ -1203,7 +1255,7 @@ rd_kafka_mock_error_stack_next (rd_kafka_mock_error_stack_t *errstack) {
         rd_kafka_resp_err_t err;
 
         if (likely(errstack->cnt == 0))
-            return RD_KAFKA_RESP_ERR_NO_ERROR;
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         err = errstack->errs[0];
         errstack->cnt--;
@@ -1333,9 +1385,25 @@ void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
 }
 
 
-void rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
-                                           const char *topic, int32_t partition,
-                                           int32_t broker_id) {
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_set_leader (rd_kafka_mock_cluster_t *mcluster,
+                                    const char *topic, int32_t partition,
+                                    int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name = rd_strdup(topic);
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_PART_SET_LEADER;
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.broker_id = broker_id;
+
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
+                                      const char *topic, int32_t partition,
+                                      int32_t broker_id) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
         rko->rko_u.mock.name = rd_strdup(topic);
@@ -1343,23 +1411,39 @@ void rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
         rko->rko_u.mock.partition = partition;
         rko->rko_u.mock.broker_id = broker_id;
 
-        rko = rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE);
-        if (rko)
-                rd_kafka_op_destroy(rko);
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_set_follower_wmarks (rd_kafka_mock_cluster_t *mcluster,
+                                             const char *topic,
+                                             int32_t partition,
+                                             int64_t lo, int64_t hi) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name = rd_strdup(topic);
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS;
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.lo = lo;
+        rko->rko_u.mock.hi = hi;
+
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
 
-void rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
-                                    int32_t broker_id, const char *rack) {
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
+                               int32_t broker_id, const char *rack) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
         rko->rko_u.mock.broker_id = broker_id;
         rko->rko_u.mock.name = rd_strdup(rack);
         rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_BROKER_SET_RACK;
 
-        rko = rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE);
-        if (rko)
-                rd_kafka_op_destroy(rko);
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
 
@@ -1375,6 +1459,7 @@ static rd_kafka_resp_err_t
 rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
                            rd_kafka_op_t *rko) {
         rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_partition_t *mpart;
         rd_kafka_mock_broker_t *mrkb;
 
         switch (rko->rko_u.mock.cmd)
@@ -1385,21 +1470,70 @@ rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
                 mtopic->err = rko->rko_u.mock.err;
                 break;
 
+        case RD_KAFKA_MOCK_CMD_PART_SET_LEADER:
+                mpart = rd_kafka_mock_partition_get(mcluster,
+                                                    rko->rko_u.mock.name,
+                                                    rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                mrkb = rd_kafka_mock_broker_find(mcluster,
+                                                 rko->rko_u.mock.broker_id);
+                if (!mrkb)
+                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Set %s [%"PRId32"] leader to %"PRId32,
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                             rko->rko_u.mock.broker_id);
+
+                rd_kafka_mock_partition_set_leader0(mpart, mrkb);
+                break;
+
         case RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER:
-                mtopic = rd_kafka_mock_topic_get(mcluster,
-                                                 rko->rko_u.mock.name,
-                                                 rko->rko_u.mock.partition+1);
-                if (!mtopic)
-                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                mpart = rd_kafka_mock_partition_get(mcluster,
+                                                    rko->rko_u.mock.name,
+                                                    rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                              "Set %s [%"PRId32"] preferred follower "
                              "to %"PRId32,
-                             mtopic->name, rko->rko_u.mock.partition,
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
                              rko->rko_u.mock.broker_id);
 
-                mtopic->partitions[rko->rko_u.mock.partition].follower_id =
-                        rko->rko_u.mock.broker_id;
+                mpart->follower_id = rko->rko_u.mock.broker_id;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS:
+                mpart = rd_kafka_mock_partition_get(mcluster,
+                                                    rko->rko_u.mock.name,
+                                                    rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Set %s [%"PRId32"] follower "
+                             "watermark offets to %"PRId64"..%"PRId64,
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                             rko->rko_u.mock.lo, rko->rko_u.mock.hi);
+
+                if (rko->rko_u.mock.lo == -1) {
+                        mpart->follower_start_offset = mpart->start_offset;
+                        mpart->update_follower_start_offset = rd_true;
+                } else {
+                        mpart->follower_start_offset = rko->rko_u.mock.lo;
+                        mpart->update_follower_start_offset = rd_false;
+                }
+
+                if (rko->rko_u.mock.hi == -1) {
+                        mpart->follower_end_offset = mpart->end_offset;
+                        mpart->update_follower_end_offset = rd_true;
+                } else {
+                        mpart->follower_end_offset = rko->rko_u.mock.hi;
+                        mpart->update_follower_end_offset = rd_false;
+                }
                 break;
 
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:

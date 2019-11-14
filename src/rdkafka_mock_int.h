@@ -122,6 +122,12 @@ typedef struct rd_kafka_mock_partition_s {
         int64_t end_offset;             /**< Actual/leader end offset */
         int64_t follower_start_offset;  /**< Follower's start offset */
         int64_t follower_end_offset;    /**< Follower's end offset */
+        rd_bool_t update_follower_start_offset; /**< Keep follower_start_offset
+                                                 *   in synch with start_offset
+                                                 */
+        rd_bool_t update_follower_end_offset;   /**< Keep follower_end_offset
+                                                 *   in synch with end_offset
+                                                 */
 
         TAILQ_HEAD(, rd_kafka_mock_msgset_s) msgsets;
         size_t size;      /**< Total size of all .msgsets */

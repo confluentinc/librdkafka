@@ -427,7 +427,9 @@ struct rd_kafka_op_s {
                 struct {
                         enum {
                                 RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
+                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
+                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK
                         } cmd;
 
@@ -436,12 +438,22 @@ struct rd_kafka_op_s {
                         char *name;              /**< For:
                                                   *    TOPIC_SET_ERROR
                                                   *    PART_SET_FOLLOWER
+                                                  *    PART_SET_FOLLOWER_WMARKS
                                                   *    BROKER_SET_RACK */
                         int32_t partition;       /**< For:
-                                                  *    PART_SET_FOLLOWER */
+                                                  *    PART_SET_FOLLOWER
+                                                  *    PART_SET_FOLLOWER_WMARKS
+                                                  *    PART_SET_LEADER */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
+                                                  *    PART_SET_LEADER
                                                   *    BROKER_SET_RACK */
+                        int64_t lo;              /**< Low offset, for:
+                                                  *    PART_SET_FOLLOWER_WMARKS
+                                                  */
+                        int64_t hi;              /**< High offset, for:
+                                                  *    PART_SET_FOLLOWER_WMARKS
+                                                  */
                 } mock;
         } rko_u;
 };

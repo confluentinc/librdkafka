@@ -3647,7 +3647,7 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
 
 /**
  * @brief Handle preferred replica in fetch response.
- * 
+ *
  * @locks rd_kafka_toppar_lock(rktp) and
  *        rd_kafka_rdlock(rk) must NOT be held.
  *
@@ -3678,10 +3678,12 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
                  * so we back off the toppar to slow down potential
                  * back-and-forth.
                  */
+                /* FIXME: This log itself needs to a suppression interval */
                 rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
                            "%.*s [%"PRId32"]: preferred replica (%"PRId32") "
                            "lease changing too quickly (%"PRId64"s < 60s): "
-                           "backing off next fetch",
+                           "possibly due to unavailable replica or "
+                           "stale cluster state: backing off next fetch",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                            rktp->rktp_partition,
                            preferred_id,
@@ -3707,13 +3709,21 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
         }
 
         if (rd_interval_immediate(&rktp->rktp_metadata_intvl,
-                                  five_seconds, 0) > 0)
+                                  five_seconds, 0) > 0) {
+                rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
+                           "%.*s [%"PRId32"]: preferred replica (%"PRId32") "
+                           "is unknown: refreshing metadata",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           preferred_id);
+
                 rd_kafka_metadata_refresh_brokers(
                         rktp->rktp_rkt->rkt_rk, NULL,
                         "preferred replica unavailable");
+        }
 
-        rd_kafka_toppar_fetch_backoff(rkb,
-                rktp, RD_KAFKA_RESP_ERR__UNKNOWN_BROKER);
+        rd_kafka_toppar_fetch_backoff(
+                rkb, rktp, RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE);
 }
 
 /**
@@ -4412,11 +4422,10 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 rd_kafka_buf_write_i32(rkbuf, 0);
         }
 
-        if (rd_kafka_buf_ApiVersion(rkbuf) >= 11) {
-                /* RackId */
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 11)
                 rd_kafka_buf_write_kstr(rkbuf,
-                        rkb->rkb_rk->rk_conf.client_rack);
-        }
+                                        rkb->rkb_rk->rk_conf.client_rack);
+
 
         /* Update next toppar to fetch in round-robin list. */
         rd_kafka_broker_active_toppar_next(

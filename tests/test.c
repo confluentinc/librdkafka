@@ -1565,8 +1565,8 @@ int main(int argc, char **argv) {
 
 	TEST_SAY("Git version: %s\n", test_git_version);
 
-	if (!strcmp(test_broker_version_str, "trunk"))
-		test_broker_version_str = "0.10.0.0"; /* for now */
+        if (!strcmp(test_broker_version_str, "trunk"))
+                test_broker_version_str = "9.9.9.9"; /* for now */
 
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d",

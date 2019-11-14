@@ -492,7 +492,8 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
  */
 int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
                                    int32_t broker_id,
-                                   rd_kafka_broker_t *rkb) {
+                                   rd_kafka_broker_t *rkb,
+                                   const char *reason) {
 
         rktp->rktp_broker_id = broker_id;
 
@@ -508,15 +509,17 @@ int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
 			return 0;
 		}
 
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             TOPIC|RD_KAFKA_DBG_FETCH, "TOPICUPD",
                              "Topic %s [%"PRId32"]: migrating from "
                              "broker %"PRId32" to %"PRId32" (leader is "
-                             "%"PRId32")",
+                             "%"PRId32"): %s",
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition,
                              rktp->rktp_broker->rkb_nodeid,
                              rkb->rkb_nodeid,
-                             rktp->rktp_leader_id);
+                             rktp->rktp_leader_id,
+                             reason);
 	}
 
 	rd_kafka_toppar_broker_delegate(rktp, rkb);
@@ -584,7 +587,8 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
                 if (leader)
                         rd_kafka_broker_keep(leader);
                 rktp->rktp_leader = leader;
-                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader);
+                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader,
+                                                  "leader updated");
         }
 
         rd_kafka_toppar_unlock(rktp);
@@ -628,7 +632,8 @@ int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
 
         rd_kafka_toppar_lock(rktp);
         r = rd_kafka_toppar_broker_update(
-                rktp, rktp->rktp_leader_id, leader);
+                rktp, rktp->rktp_leader_id, leader,
+                "reverting from preferred replica to leader");
         rd_kafka_toppar_unlock(rktp);
 
         if (leader)

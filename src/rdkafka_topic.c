@@ -478,21 +478,22 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
 
 /**
  * @brief Update the broker that a topic+partition is delegated to.
- * 
+ *
  * @param broker_id The id of the broker to associate the toppar with.
  * @param rkb A reference to the broker to delegate to (must match
  *        broker_id) or NULL if the toppar should be undelegated for
  *        any reason.
- * 
+ *
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.
- * 
+ *
  * @locks caller must have rd_kafka_toppar_lock(rktp)
  * @locality any
  */
 int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
                                    int32_t broker_id,
-                                   rd_kafka_broker_t *rkb) {
+                                   rd_kafka_broker_t *rkb,
+                                   const char *reason) {
 
         rktp->rktp_broker_id = broker_id;
 
@@ -508,15 +509,17 @@ int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
 			return 0;
 		}
 
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             TOPIC|RD_KAFKA_DBG_FETCH, "TOPICUPD",
                              "Topic %s [%"PRId32"]: migrating from "
                              "broker %"PRId32" to %"PRId32" (leader is "
-                             "%"PRId32")",
+                             "%"PRId32"): %s",
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition,
                              rktp->rktp_broker->rkb_nodeid,
                              rkb->rkb_nodeid,
-                             rktp->rktp_leader_id);
+                             rktp->rktp_leader_id,
+                             reason);
 	}
 
 	rd_kafka_toppar_broker_delegate(rktp, rkb);
@@ -527,19 +530,19 @@ int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
 
 /**
  * @brief Update a topic+partition for a new leader.
- * 
+ *
  * @remark If a toppar is currently delegated to a preferred replica,
  *         it will not be delegated to the leader broker unless there
  *         has been a leader change.
- * 
+ *
  * @param leader_id The id of the new leader broker.
- * @param leader A reference to the leader broker or NULL if the 
+ * @param leader A reference to the leader broker or NULL if the
  *        toppar should be undelegated for any reason.
- * 
+ *
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *        delegation was changed and is now undelegated, else 0.
- * 
- * @locks caller must have rd_kafka_topic_wrlock(rkt) 
+ *
+ * @locks caller must have rd_kafka_topic_wrlock(rkt)
  *        AND NOT rd_kafka_toppar_lock(rktp)
  * @locality any
  */
@@ -584,7 +587,8 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
                 if (leader)
                         rd_kafka_broker_keep(leader);
                 rktp->rktp_leader = leader;
-                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader);
+                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader,
+                                                  "leader updated");
         }
 
         rd_kafka_toppar_unlock(rktp);
@@ -598,7 +602,7 @@ static int rd_kafka_toppar_leader_update (rd_kafka_itopic_t *rkt,
 /**
  * @brief Revert the topic+partition delegation to the leader from
  *        a preferred replica.
- * 
+ *
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.
  *
@@ -628,7 +632,8 @@ int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
 
         rd_kafka_toppar_lock(rktp);
         r = rd_kafka_toppar_broker_update(
-                rktp, rktp->rktp_leader_id, leader);
+                rktp, rktp->rktp_leader_id, leader,
+                "reverting from preferred replica to leader");
         rd_kafka_toppar_unlock(rktp);
 
         if (leader)

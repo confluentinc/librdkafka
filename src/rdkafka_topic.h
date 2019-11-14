@@ -173,7 +173,8 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 			  const char *topic);
 
 int rd_kafka_toppar_broker_update (rd_kafka_toppar_t *rktp,
-                                   int32_t broker_id, rd_kafka_broker_t *rkb);
+                                   int32_t broker_id, rd_kafka_broker_t *rkb,
+                                   const char *reason);
 
 int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp);
 

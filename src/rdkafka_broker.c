@@ -2547,7 +2547,8 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
                         if (rktp->rktp_leader_id == rkb->rkb_nodeid &&
                             !(rktp->rktp_broker && rktp->rktp_next_broker)) {
                                 rd_kafka_toppar_broker_update(
-                                        rktp, rktp->rktp_leader_id, rkb);
+                                        rktp, rktp->rktp_leader_id, rkb,
+                                        "broker node information updated");
                                 cnt++;
                         }
                         rd_kafka_toppar_unlock(rktp);
@@ -3646,13 +3647,13 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
 
 /**
  * @brief Handle preferred replica in fetch response.
- * 
+ *
  * @locks rd_kafka_toppar_lock(rktp) and
  *        rd_kafka_rdlock(rk) must NOT be held.
  *
  * @locality broker thread
  */
-void
+static void
 rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
                                          rd_kafka_buf_t *rkbuf,
                                          rd_kafka_broker_t *rkb,
@@ -3661,28 +3662,32 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
         const rd_ts_t five_seconds = 5*1000*1000;
         rd_kafka_broker_t *preferred_rkb;
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-        rd_ts_t new_intvl = rd_interval_immediate(&rktp->rktp_new_lease_intvl,
-                                                  one_minute, 0);
+        rd_ts_t new_intvl = rd_interval(&rktp->rktp_new_lease_intvl,
+                                        one_minute, 0);
 
         if (new_intvl < 0) {
                 /* In lieu of KIP-320, the toppar is delegated back to
-                 * the leader in the event of an offset out-of-range 
+                 * the leader in the event of an offset out-of-range
                  * error (KIP-392 error case #4) because this scenario
                  * implies the preferred replica is out-of-sync.
-                 * 
+                 *
                  * If program execution reaches here, the leader has
-                 * relatively quickly instructed the client back to 
+                 * relatively quickly instructed the client back to
                  * a preferred replica, quite possibly the same one
                  * as before (possibly resulting from stale metadata),
                  * so we back off the toppar to slow down potential
                  * back-and-forth.
                  */
-                rd_rkb_log(rkb, LOG_WARNING, "FETCH",
-                           "%.*s [%"PRId32"]: preferred replica lease was "
-                           "last generated %"PRId64"s ago (< 1 minute) - "
-                           "backing off toppar",
+                /* FIXME: This log itself needs a suppression interval */
+                rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
+                           "%.*s [%"PRId32"]: preferred replica (%"PRId32") "
+                           "lease changing too quickly (%"PRId64"s < 60s): "
+                           "possibly due to unavailable replica or "
+                           "stale cluster state: backing off next fetch",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition, -new_intvl/(1000*1000));
+                           rktp->rktp_partition,
+                           preferred_id,
+                           (one_minute - -new_intvl)/(1000*1000));
                 rd_kafka_toppar_fetch_backoff(rkb,
                         rktp, RD_KAFKA_RESP_ERR_NO_ERROR);
         }
@@ -3696,20 +3701,29 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
                 rd_interval_reset_to_now(&rktp->rktp_lease_intvl, 0);
                 rd_kafka_toppar_lock(rktp);
                 rd_kafka_toppar_broker_update(rktp, preferred_id,
-                                              preferred_rkb);
+                                              preferred_rkb,
+                                              "preferred replica updated");
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_broker_destroy(preferred_rkb);
                 return;
         }
 
         if (rd_interval_immediate(&rktp->rktp_metadata_intvl,
-                                  five_seconds, 0) > 0)
+                                  five_seconds, 0) > 0) {
+                rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
+                           "%.*s [%"PRId32"]: preferred replica (%"PRId32") "
+                           "is unknown: refreshing metadata",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           preferred_id);
+
                 rd_kafka_metadata_refresh_brokers(
                         rktp->rktp_rkt->rkt_rk, NULL,
                         "preferred replica unavailable");
+        }
 
-        rd_kafka_toppar_fetch_backoff(rkb,
-                rktp, RD_KAFKA_RESP_ERR__UNKNOWN_BROKER);
+        rd_kafka_toppar_fetch_backoff(
+                rkb, rktp, RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE);
 }
 
 /**
@@ -3815,7 +3829,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                         AbortedTxnCnt);
 
                                                 rd_kafka_buf_skip(rkbuf,
-                                                          AbortedTxnCnt 
+                                                          AbortedTxnCnt
                                                           * (8+8));
                                         }
                                 } else {
@@ -4389,6 +4403,9 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 			   rktp->rktp_partition,
                            rktp->rktp_offsets.fetch_offset,
 			   rktp->rktp_fetch_version);
+
+                /* We must have a valid fetch offset when we get here */
+                rd_dassert(rktp->rktp_offsets.fetch_offset >= 0);
 
 		/* Add toppar + op version mapping. */
 		tver = rd_list_add(rkbuf->rkbuf_rktp_vers, NULL);

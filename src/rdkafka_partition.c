@@ -119,8 +119,8 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
 /**
  * Request information from broker to keep track of consumer lag.
  *
- * @locality: toppar handle thread
- * @locks: none
+ * @locality toppar handle thread
+ * @locks none
  */
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
         rd_kafka_topic_partition_list_t *partitions;
@@ -1913,23 +1913,23 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
         rd_ts_t ts_backoff = 0;
         rd_bool_t lease_expired = rd_false;
 
-        /* Check for preferred replica lease expiry */
         rd_kafka_toppar_lock(rktp);
+
+        /* Check for preferred replica lease expiry */
         lease_expired =
                 rktp->rktp_leader_id != rktp->rktp_broker_id &&
                 rd_interval(&rktp->rktp_lease_intvl,
-                        5*60*1000*1000/*5 minutes*/, 0) > 0;
-        rd_kafka_toppar_unlock(rktp);
-
+                            5*60*1000*1000/*5 minutes*/, 0) > 0;
         if (lease_expired) {
+                /* delete_to_leader() requires no locks to be held */
+                rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_delegate_to_leader(rktp);
+                rd_kafka_toppar_lock(rktp);
+
                 reason = "preferred replica lease expired";
                 should_fetch = 0;
-                rd_kafka_toppar_lock(rktp);
                 goto done;
         }
-
-	rd_kafka_toppar_lock(rktp);
 
 	/* Forced removal from fetch list */
 	if (unlikely(force_remove)) {
@@ -1954,12 +1954,14 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
         /* Update broker thread's fetch op version */
         version = rktp->rktp_op_version;
         if (version > rktp->rktp_fetch_version ||
-	    rktp->rktp_next_offset != rktp->rktp_last_next_offset) {
+            rktp->rktp_next_offset != rktp->rktp_last_next_offset ||
+            rktp->rktp_offsets.fetch_offset == RD_KAFKA_OFFSET_INVALID) {
                 /* New version barrier, something was modified from the
                  * control plane. Reset and start over.
 		 * Alternatively only the next_offset changed but not the
 		 * barrier, which is the case when automatically triggering
-		 * offset.reset (such as on PARTITION_EOF). */
+		 * offset.reset (such as on PARTITION_EOF or
+                 * OFFSET_OUT_OF_RANGE). */
 
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "FETCHDEC",
                              "Topic %s [%"PRId32"]: fetch decide: "
@@ -2018,7 +2020,7 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                            "Topic %s [%"PRId32"] in state %s at offset %s "
                            "(%d/%d msgs, %"PRId64"/%d kb queued, "
-			   "opv %"PRId32") is %s %s",
+			   "opv %"PRId32") is %s%s",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
 			   rd_kafka_fetch_states[rktp->rktp_fetch_state],

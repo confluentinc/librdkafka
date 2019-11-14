@@ -205,6 +205,7 @@ _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
 _TEST_DECL(0102_static_group_rebalance);
+_TEST_DECL(0104_fetch_from_follower_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -372,6 +373,7 @@ struct test tests[] = {
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
         _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
+        _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -1562,8 +1564,8 @@ int main(int argc, char **argv) {
 
 	TEST_SAY("Git version: %s\n", test_git_version);
 
-	if (!strcmp(test_broker_version_str, "trunk"))
-		test_broker_version_str = "0.10.0.0"; /* for now */
+        if (!strcmp(test_broker_version_str, "trunk"))
+                test_broker_version_str = "9.9.9.9"; /* for now */
 
         d = 0;
         if (sscanf(test_broker_version_str, "%d.%d.%d.%d",
@@ -2055,6 +2057,42 @@ rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 }
 
 
+/**
+ * @brief Easy produce function.
+ *
+ * @param ... is a NULL-terminated list of key, value config property pairs.
+ */
+void test_produce_msgs_easy_v (const char *topic,
+                               int32_t partition, uint64_t testid,
+                               int msg_base, int cnt, size_t size, ...) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *p;
+        rd_kafka_topic_t *rkt;
+        va_list ap;
+        const char *key, *val;
+
+        test_conf_init(&conf, NULL, 0);
+
+        va_start(ap, size);
+        while ((key = va_arg(ap, const char *)) &&
+               (val = va_arg(ap, const char *)))
+                test_conf_set(conf, key, val);
+        va_end(ap);
+
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        rkt = test_create_producer_topic(p, topic, NULL);
+
+        test_produce_msgs(p, rkt, testid, partition, msg_base, cnt, NULL, size);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(p);
+}
+
+
+
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,
@@ -2389,6 +2427,22 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
 }
 
 
+/**
+ * @brief Assign a single partition with an optional starting offset
+ */
+void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
+                                     const char *topic, int32_t partition,
+                                     int64_t offset) {
+        rd_kafka_topic_partition_list_t *part;
+
+        part = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(part, topic, partition)->offset =
+                offset;
+
+        test_consumer_assign(what, rk, part);
+
+        rd_kafka_topic_partition_list_destroy(part);
+}
 
 
 /**

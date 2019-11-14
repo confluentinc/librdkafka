@@ -3662,8 +3662,8 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
         const rd_ts_t five_seconds = 5*1000*1000;
         rd_kafka_broker_t *preferred_rkb;
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-        rd_ts_t new_intvl = rd_interval(&rktp->rktp_new_lease_intvl,
-                                        one_minute, 0);
+        rd_ts_t new_intvl = rd_interval_immediate(&rktp->rktp_new_lease_intvl,
+                                                  one_minute, 0);
 
         if (new_intvl < 0) {
                 /* In lieu of KIP-320, the toppar is delegated back to
@@ -3678,18 +3678,22 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
                  * so we back off the toppar to slow down potential
                  * back-and-forth.
                  */
-                /* FIXME: This log itself needs a suppression interval */
-                rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
-                           "%.*s [%"PRId32"]: preferred replica (%"PRId32") "
-                           "lease changing too quickly (%"PRId64"s < 60s): "
-                           "possibly due to unavailable replica or "
-                           "stale cluster state: backing off next fetch",
-                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition,
-                           preferred_id,
-                           (one_minute - -new_intvl)/(1000*1000));
+
+                if (rd_interval_immediate(&rktp->rktp_new_lease_log_intvl,
+                                          one_minute, 0) > 0)
+                        rd_rkb_log(rkb, LOG_NOTICE, "FETCH",
+                                   "%.*s [%"PRId32"]: preferred replica "
+                                   "(%"PRId32") lease changing too quickly "
+                                   "(%"PRId64"s < 60s): possibly due to "
+                                   "unavailable replica or stale cluster "
+                                   "state: backing off next fetch",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   preferred_id,
+                                   (one_minute - -new_intvl)/(1000*1000));
+
                 rd_kafka_toppar_fetch_backoff(rkb,
-                        rktp, RD_KAFKA_RESP_ERR_NO_ERROR);
+                                              rktp, RD_KAFKA_RESP_ERR_NO_ERROR);
         }
 
         rd_kafka_rdlock(rk);
@@ -4038,7 +4042,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                          *   - HWM is >= offset, but msg not
                                          *     yet available at that offset
                                          *     (replica is out of sync).
-                                         * 
+                                         *
                                          * Handle by retrying FETCH (with
                                          * backoff).
                                          */

@@ -483,6 +483,7 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
  * @param rkb A reference to the broker to delegate to (must match
  *        broker_id) or NULL if the toppar should be undelegated for
  *        any reason.
+ * @param reason Human-readable reason for the update, included in debug log.
  *
  * @returns 1 if the broker delegation was changed, -1 if the broker
  *          delegation was changed and is now undelegated, else 0.

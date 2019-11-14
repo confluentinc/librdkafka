@@ -475,6 +475,10 @@ void test_produce_msgs_rate (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                        uint64_t testid, int32_t partition);
 
+void test_produce_msgs_easy_v (const char *topic, int32_t partition,
+                               uint64_t testid,
+                               int msg_base, int cnt, size_t size, ...);
+
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,
@@ -535,6 +539,9 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
 			   rd_kafka_topic_partition_list_t *parts);
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
+void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
+                                     const char *topic, int32_t partition,
+                                     int64_t offset);
 
 void test_consumer_close (rd_kafka_t *rk);
 

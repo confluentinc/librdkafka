@@ -758,6 +758,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason) {
 	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_op_t *rko;
+        const char *extra = "";
 
         /* Enqueue op for toppar handler thread if we're on the wrong thread. */
         if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
@@ -790,49 +791,33 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
 
-	} else {
-                /* Use cached log start / end offsets from last FETCH
-                   if available */
-                if (offset == RD_KAFKA_OFFSET_BEGINNING &&
-                    rktp->rktp_lo_offset >= 0) {
-                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-                                     "%s [%"PRId32"]: offset reset "
-                                     "(at offset %s) "
-                                     "to cached BEGINNING (%"PRId64")",
-                                     rktp->rktp_rkt->rkt_topic->str,
-                                     rktp->rktp_partition,
-                                     rd_kafka_offset2str(err_offset),
-                                     rktp->rktp_lo_offset);
-                        offset = rktp->rktp_lo_offset;
-                        rd_kafka_toppar_next_offset_handle(rktp, offset);
+        } else if (offset == RD_KAFKA_OFFSET_BEGINNING &&
+                   rktp->rktp_lo_offset >= 0) {
+                /* Use cached log start from last Fetch if available */
+                extra = "cached BEGINNING offset ";
+                offset = rktp->rktp_lo_offset;
+                rd_kafka_toppar_next_offset_handle(rktp, offset);
 
-                } else if (offset == RD_KAFKA_OFFSET_END &&
-                           rktp->rktp_ls_offset >= 0) {
-                        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-                                     "%s [%"PRId32"]: offset reset "
-                                     "(at offset %s) "
-                                     "to cached END (%"PRId64")",
-                                     rktp->rktp_rkt->rkt_topic->str,
-                                     rktp->rktp_partition,
-                                     rd_kafka_offset2str(err_offset),
-                                     rktp->rktp_ls_offset);
-                        offset = rktp->rktp_ls_offset;
-                        rd_kafka_toppar_next_offset_handle(rktp, offset);
+        } else if (offset == RD_KAFKA_OFFSET_END &&
+                   rktp->rktp_ls_offset >= 0) {
+                /* Use cached log start from last Fetch if available */
+                extra = "cached END offset ";
+                offset = rktp->rktp_ls_offset;
+                rd_kafka_toppar_next_offset_handle(rktp, offset);
 
-                } else {
-                        /* Else query cluster for offset */
-		        rktp->rktp_query_offset = offset;
-                        rd_kafka_toppar_set_fetch_state(
-			        rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-                }
+        } else {
+                /* Else query cluster for offset */
+                rktp->rktp_query_offset = offset;
+                rd_kafka_toppar_set_fetch_state(
+                        rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 	}
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 		     "%s [%"PRId32"]: offset reset (at offset %s) "
-		     "to %s: %s: %s",
+		     "to %s%s: %s: %s",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
 		     rd_kafka_offset2str(err_offset),
-                     rd_kafka_offset2str(offset),
+                     extra, rd_kafka_offset2str(offset),
                      reason, rd_kafka_err2str(err));
 
         /* Note: If rktp is not delegated to the leader, then low and high
@@ -840,7 +825,8 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
            and so this offset query will never occur in that case for
            BEGINNING / END logical offsets. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
-		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset, 0);
+		rd_kafka_toppar_offset_request(rktp,
+                                               rktp->rktp_query_offset, 0);
 }
 
 

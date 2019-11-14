@@ -337,6 +337,8 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                   *   replica lease can be
                                                   *   created for a toppar.
                                                   */
+        rd_interval_t      rktp_new_lease_log_intvl; /**< .. and how often
+                                                      *   we log about it. */
         rd_interval_t      rktp_metadata_intvl;  /**< Controls max frequency
                                                   *   of metadata requests
                                                   *   in preferred replica

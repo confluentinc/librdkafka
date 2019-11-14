@@ -204,7 +204,9 @@ _TEST_DECL(0098_consumer_txn);
 _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
+_TEST_DECL(0101_fetch_from_follower_errors);
 _TEST_DECL(0102_static_group_rebalance);
+_TEST_DECL(0104_fetch_from_follower_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -372,6 +374,7 @@ struct test tests[] = {
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
         _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
+        _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -2055,6 +2058,31 @@ rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 }
 
 
+void test_produce_msgs_easy2 (const char *bootstraps, const char *topic,
+                              int32_t partition, uint64_t testid,
+                              int msg_base, int cnt, size_t size) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *p;
+        rd_kafka_topic_t *rkt;
+
+        test_conf_init(&conf, NULL, 0);
+        if (bootstraps)
+                test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        rkt = test_create_producer_topic(p, topic, NULL);
+
+        test_produce_msgs(p, rkt, testid, partition, msg_base, cnt, NULL, size);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(p);
+}
+
+
+
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,
@@ -2389,6 +2417,22 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
 }
 
 
+/**
+ * @brief Assign a single partition with an optional starting offset
+ */
+void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
+                                     const char *topic, int32_t partition,
+                                     int64_t offset) {
+        rd_kafka_topic_partition_list_t *part;
+
+        part = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(part, topic, partition)->offset =
+                offset;
+
+        test_consumer_assign(what, rk, part);
+
+        rd_kafka_topic_partition_list_destroy(part);
+}
 
 
 /**

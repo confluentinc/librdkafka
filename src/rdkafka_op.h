@@ -427,6 +427,7 @@ struct rd_kafka_op_s {
                 struct {
                         enum {
                                 RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
+                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK
                         } cmd;

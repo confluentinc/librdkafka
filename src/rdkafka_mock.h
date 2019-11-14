@@ -137,22 +137,37 @@ void rd_kafka_mock_topic_set_error (rd_kafka_mock_cluster_t *mcluster,
                                     const char *topic,
                                     rd_kafka_resp_err_t err);
 
+
+/**
+ * @brief Sets the partition leader.
+ *
+ * The topic will be created if it does not exist.
+ *
+ * \p broker_id needs to be an existing broker.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_partition_set_leader (rd_kafka_mock_cluster_t *mcluster,
+                                    const char *topic, int32_t partition,
+                                    int32_t broker_id);
+
 /**
  * @brief Sets the partition's preferred replica / follower.
  *
+ * The topic will be created if it does not exist.
+ *
  * \p broker_id does not need to point to an existing broker.
  */
-RD_EXPORT
-void rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
-                                           const char *topic, int32_t partition,
-                                           int32_t broker_id);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_partition_set_follower (rd_kafka_mock_cluster_t *mcluster,
+                                      const char *topic, int32_t partition,
+                                      int32_t broker_id);
 
 /**
  * @brief Set's the broker's rack as reported in Metadata to the client.
  */
-RD_EXPORT
-void rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
-                                    int32_t broker_id, const char *rack);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
+                               int32_t broker_id, const char *rack);
 
 /**@}*/
 

@@ -38,6 +38,7 @@
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
 
+#include <stdarg.h>
 
 
 static rd_kafka_mock_broker_t *

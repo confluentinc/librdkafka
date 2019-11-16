@@ -240,8 +240,10 @@ struct rd_kafka_conf_s {
                 /** CSV list of Windows certificate stores */
                 char *ca_cert_stores;
                 char *crl_location;
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
                 ENGINE *ptr_engine;
                 char *openssl_engine_location;
+#endif
                 char *keystore_location;
                 char *keystore_password;
                 int   endpoint_identification;

@@ -74,7 +74,7 @@ ssl.ca.certificate.stores                |  *  |                 |          Root
 ssl.crl.location                         |  *  |                 |               | low        | Path to CRL for verifying broker's certificate validity. <br>*Type: string*
 ssl.keystore.location                    |  *  |                 |               | low        | Path to client's keystore (PKCS#12) used for authentication. <br>*Type: string*
 ssl.keystore.password                    |  *  |                 |               | low        | Client's keystore (PKCS#12) password. <br>*Type: string*
-openssl.engine.location                  |  *  |                 |               | low        | Path to openssl engine dll. <br>*Type: string*
+openssl.engine.location                  |  *  |                 |               | low        | Path to openssl engine dll. OpenSSL >= 1.1.0 required. <br>*Type: string*
 enable.ssl.certificate.verification      |  *  | true, false     |          true | low        | Enable OpenSSL's builtin broker (server) certificate verification. This verification can be extended by the application by implementing a certificate_verify_cb. <br>*Type: boolean*
 ssl.endpoint.identification.algorithm    |  *  | none, https     |          none | low        | Endpoint identification algorithm to validate broker hostname using broker certificate. https - Server (broker) hostname verification as specified in RFC2818. none - No endpoint verification. OpenSSL >= 1.0.2 required. <br>*Type: enum value*
 ssl.certificate.verify_cb                |  *  |                 |               | low        | Callback to verify the broker certificate chain. <br>*Type: see dedicated API*

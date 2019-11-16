@@ -1000,6 +1000,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 check_pkey = rd_true;
         }
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
         if (rk->rk_conf.ssl.ptr_engine) {
                 STACK_OF(X509_NAME)* cert_names = sk_X509_NAME_new_null();
                 STACK_OF(X509_OBJECT)* roots = X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
@@ -1027,7 +1028,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                                     "ENGINE_load_ssl_client_cert failed");
                         return -1;
                 }
-                
+
                 r = SSL_CTX_use_certificate(ctx, x509);
                 X509_free(x509);
                 if (r != 1) {
@@ -1047,6 +1048,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
 
                 check_pkey = rd_true;
         }
+#endif
 
         /* Check that a valid private/public key combo was set. */
         if (check_pkey && SSL_CTX_check_private_key(ctx) != 1) {
@@ -1163,12 +1165,13 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         }
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
         if(rk->rk_conf.ssl.openssl_engine_location && !rk->rk_conf.ssl.ptr_engine) {
                 char* engineLoadErrStr = NULL;
                 rk->rk_conf.ssl.ptr_engine = ENGINE_by_id("dynamic");
                 if (!rk->rk_conf.ssl.ptr_engine)
                         engineLoadErrStr = "ENGINE_by_id failed";
-            
+
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.ptr_engine, "SO_PATH", rk->rk_conf.ssl.openssl_engine_location, 0))
                         engineLoadErrStr = "ENGINE_ctrl_cmd_string SO_PATH failed";
 
@@ -1186,6 +1189,7 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                         goto fail;
                 }
         }
+#endif
 
         /* Register certificates, keys, etc. */
         if (rd_kafka_ssl_set_certs(rk, ctx, errstr, errstr_size) == -1)

@@ -229,8 +229,10 @@ struct rd_kafka_conf_s {
                 char *ca_location;
                 rd_kafka_cert_t *ca;
                 char *crl_location;
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
                 ENGINE *ptr_engine;
                 char *openssl_engine_location;
+#endif
                 char *keystore_location;
                 char *keystore_password;
                 int   endpoint_identification;

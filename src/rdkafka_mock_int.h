@@ -178,7 +178,7 @@ typedef void (rd_kafka_mock_io_handler_t) (struct rd_kafka_mock_cluster_s
  *
  * No locking is needed.
  */
-typedef struct rd_kafka_mock_cluster_s {
+struct rd_kafka_mock_cluster_s {
         char id[32];  /**< Generated cluster id */
 
         rd_kafka_t *rk;
@@ -233,7 +233,7 @@ typedef struct rd_kafka_mock_cluster_s {
         mtx_t lock;
 
         rd_kafka_timers_t timers;    /**< Timers */
-} rd_kafka_mock_cluster_t;
+};
 
 
 

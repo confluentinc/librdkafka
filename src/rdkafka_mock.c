@@ -1766,6 +1766,12 @@ rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster) {
         return (rd_kafka_t *)mcluster->rk;
 }
 
+rd_kafka_mock_cluster_t *
+rd_kafka_handle_mock_cluster (const rd_kafka_t *rk) {
+        return (rd_kafka_mock_cluster_t *)rk->rk_mock.cluster;
+}
+
+
 const char *
 rd_kafka_mock_cluster_bootstraps (const rd_kafka_mock_cluster_t *mcluster) {
         return mcluster->bootstraps;

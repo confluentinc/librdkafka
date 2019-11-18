@@ -105,6 +105,15 @@ RD_EXPORT rd_kafka_t *
 rd_kafka_mock_cluster_handle (const rd_kafka_mock_cluster_t *mcluster);
 
 
+/**
+ * @returns the rd_kafka_mock_cluster_t instance as created by
+ *          setting the `test.mock.num.brokers` configuration property,
+ *          or NULL if no such instance.
+ */
+RD_EXPORT rd_kafka_mock_cluster_t *
+rd_kafka_handle_mock_cluster (const rd_kafka_t *rk);
+
+
 
 /**
  * @returns the mock cluster's bootstrap.servers list

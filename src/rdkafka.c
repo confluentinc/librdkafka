@@ -1685,6 +1685,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            rk->rk_eos.pid.id,
                            rk->rk_eos.pid.epoch,
                            rk->rk_eos.epoch_cnt);
+                /* FIXME: transactional state */
         }
 
         if ((err = rd_atomic32_get(&rk->rk_fatal.err)))

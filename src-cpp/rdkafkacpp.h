@@ -2930,18 +2930,18 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief
    *
-   * @fixme blocking?
+   * FIXME blocking?
    */
   virtual ErrorCode init_transactions (int timeout_ms,
                                        std::string &errstr) = 0;
 
   /**
-   * @fixme blocking?
+   * FIXME blocking?
    */
   virtual ErrorCode begin_transaction (std::string &errstr) = 0;
 
   /**
-   * @fixme blocking?
+   * FIXME blocking?
    */
   virtual ErrorCode send_offsets_to_transaction (
           const std::vector<TopicPartition*> &offsets,
@@ -2951,7 +2951,7 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief
    *
-   * @fixme blocking?
+   * FIXME blocking?
    */
   virtual ErrorCode commit_transaction (int timeout_ms,
                                         std::string &errstr) = 0;
@@ -2959,7 +2959,7 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief
    *
-   * @fixme blocking?
+   * FIXME blocking?
    */
   virtual ErrorCode abort_transaction (int timeout_ms,
                                        std::string &errstr) = 0;

@@ -74,6 +74,8 @@ static void do_test_txn_recoverable_errors (void) {
         char errstr[512];
         rd_kafka_topic_partition_list_t *offsets;
 
+        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+
         rk = create_txn_producer(&mcluster);
 
         /*
@@ -154,12 +156,99 @@ static void do_test_txn_recoverable_errors (void) {
         /* All done */
 
         rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
 }
+
+
+/**
+ * @brief Test abortable errors using mock broker error injections
+ *        and code coverage checks.
+ */
+static void do_test_txn_abortable_errors (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        rd_kafka_topic_partition_list_t *offsets;
+
+        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+
+        rk = create_txn_producer(&mcluster);
+
+        TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
+                                               errstr, sizeof(errstr)));
+
+        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+
+        /*
+         * Produce a message, trigger a fatal idempotence error
+         * that is treated as abortable by the transactional producer.
+         */
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_Produce,
+                1,
+                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID);
+
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /*
+         * Send some arbitrary offsets, first with some failures, then
+         * succeed.
+         */
+        offsets = rd_kafka_topic_partition_list_new(4);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+                999999111;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 999;
+        rd_kafka_topic_partition_list_add(offsets, "srctop2", 3499)->offset =
+                123456789;
+
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_AddPartitionsToTxn,
+                1,
+                RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS);
+
+        TEST_CALL__(rd_kafka_send_offsets_to_transaction(
+                            rk, offsets,
+                            "myGroupId",
+                            errstr, sizeof(errstr)));
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        /*
+         * Commit transaction, first with som failures, then succeed.
+         */
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_EndTxn,
+                3,
+                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+                RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+
+        TEST_CALL__(rd_kafka_commit_transaction(rk, 5000,
+                                                errstr, sizeof(errstr)));
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+}
+
 
 
 int main_0105_transactions_mock (int argc, char **argv) {
 
-        do_test_txn_recoverable_errors();
+        //do_test_txn_recoverable_errors();
+
+        do_test_txn_abortable_errors();
 
         return 0;
 }

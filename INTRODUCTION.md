@@ -769,7 +769,7 @@ following pseudo-code:
            /* Produce output message to output topic */
            rd_kafka_produce(producer, "outputTopic", out);
 
-           / FIXME: or perhaps */
+           /* FIXME: or perhaps */
            rd_kafka_topic_partition_list_set_from_msg(processed, msg);
            /* or */
            rd_kafka_transaction_store_offset_from_msg(producer, msg);

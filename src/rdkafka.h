@@ -6234,8 +6234,81 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
 
 /**
  * @name Transactional producer API
- * @{
  *
+ * The transactional producer operates on top of the idempotent producer,
+ * and provides full exactly-once semantics (EOS) for Kafka when used with
+ * the transaction aware consumer (\c isolation.level=read_committed).
+ *
+ * A producer instance is configured for transactions by setting the
+ * \c transactional.id to an identifier unique for the application. This
+ * id will be used to fence stale transactions from previous instances of
+ * the application, typically following an outage or crash.
+ *
+ * After creating the transactional produce instance using rd_kafka_new()
+ * the transactional state must be initialized by calling
+ * rd_kafka_init_transactions(). This is a blocking call that will
+ * acquire a runtime producer id from the transaction coordinator broker
+ * as well as abort any stale transactions and fence any still running producer
+ * instances with the same \c transactional.id.
+ *
+ * Once transactions are initialized the application may begin a new
+ * transaction by calling rd_kafka_begin_transaction().
+ * A prodoucer instance may only have one single ongoing transaction.
+ *
+ * Any messages produced after the transaction has been started will
+ * belong to the ongoing transaction and will be committed or aborted
+ * atomatically.
+ * It is not permitted to produce messages outside a transaction
+ * boundary, e.g., before rd_kafka_begin_transaction() or after
+ * rd_kafka_commit_transaction() or rd_kafka_abort_transaction().
+ *
+ * If consumed messages are used as input to the transaction, the consumer
+ * instance must be configured with \c enable.auto.commit set to \c false.
+ * To commit the consumed offsets along with the transaction pass the
+ * list of consumed partitions and the last offset processed to
+ * rd_kafka_send_offsets_to_transaction() prior to committing the transaction.
+ * This allows an aborted transaction to be restarted using the previously
+ * committed offsets.
+ *
+ * To commit the produced messages, and any consumed offsets, to the
+ * current transaction, call rd_kafka_commit_transaction().
+ * This call will block until the transaction has been fully committed or
+ * failed (typically due to fencing by a newer producer instance).
+ *
+ * Alternatively, if processing fails, or an abortable transaction error is
+ * raised, the transaction needs to be aborted by calling
+ * rd_kafka_abort_transaction() which marks any produced messages and
+ * offset commits as aborted.
+ *
+ * After the current transaction has been committed or aborted a new
+ * transaction may be started by calling rd_kafka_begin_transaction() again.
+ *
+ * \par Abortable errors
+ * An ongoing transaction may fail permanently due to various errors,
+ * such as transaction coordinator becoming unavailable, write failures to the
+ * Kafka log, under-replicated partitions, etc.
+ * At this point the producer application should abort the current transaction
+ * using rd_kafka_abort_transaction() and optionally start a new transaction
+ * by calling rd_kafka_begin_transaction().
+ *
+ * \par Fatal errors
+ * While the underlying idempotent producer will typically only raise
+ * fatal errors for unrecoverable cluster errors where the idempotency
+ * guarantees can't be maintained, most of these are treated as abortable by 
+ * the transactional producer since transactions may be aborted and retried
+ * in their entirety;
+ * The transactional producer on the other hand introduces a set of new
+ * fatal errors which the application should take care to handle:
+ *
+ *  * RD_KAFKA_RESP_ERR__FENCED - a newer instance of the producer with the
+ *    same \c transactional.id has been started and the current instance 
+ *    should terminate.
+ *
+ * These fatal errors are raised by trigger the \c error_cb (see the
+ * Fatal error chapter in INTRODUCTION.md for more information) , and any
+ * sub-sequent transactional API calls will return FIXME (what error??).
+ *
+ * @{
  */
 
 
@@ -6295,7 +6368,6 @@ RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms,
                             char *errstr, size_t errstr_size);
-
 
 
 
@@ -6398,6 +6470,7 @@ rd_kafka_send_offsets_to_transaction (
         const char *consumer_group_id,
         char *errstr, size_t errstr_size);
 
+
 /**
  * @brief Commit the current transaction (as started with
  *        rd_kafka_begin_transaction()).
@@ -6451,6 +6524,8 @@ RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
                              char *errstr, size_t errstr_size);
+
+
 /**
  * @brief Aborts the ongoing transaction.
  *
@@ -6497,6 +6572,7 @@ RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms,
                             char *errstr, size_t errstr_size);
+
 /**@}*/
 
 /* @cond NO_DOC */

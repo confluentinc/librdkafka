@@ -54,6 +54,7 @@ static int rd_kafka_mock_handle_Produce (rd_kafka_mock_connection_t *mconn,
         rd_kafkap_str_t TransactionalId = RD_KAFKAP_STR_INITIALIZER;
         int16_t Acks;
         int32_t TimeoutMs;
+        rd_kafka_resp_err_t all_err;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_str(rkbuf, &TransactionalId);
@@ -64,6 +65,10 @@ static int rd_kafka_mock_handle_Produce (rd_kafka_mock_connection_t *mconn,
 
         /* Response: #Topics */
         rd_kafka_buf_write_i32(resp, TopicsCnt);
+
+        /* Inject error, if any */
+        all_err = rd_kafka_mock_next_request_error(mcluster,
+                                                   rkbuf->rkbuf_reqhdr.ApiKey);
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -98,7 +103,9 @@ static int rd_kafka_mock_handle_Produce (rd_kafka_mock_connection_t *mconn,
                         /* Response: Partition */
                         rd_kafka_buf_write_i32(resp, Partition);
 
-                        if (!mpart)
+                        if (all_err)
+                                err = all_err;
+                        else if (!mpart)
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
                         else if (mpart->leader != mconn->broker)
                                 err = RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;

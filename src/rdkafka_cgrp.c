@@ -899,7 +899,8 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t GenerationId;
-        rd_kafkap_str_t Protocol, LeaderId, MyMemberId;
+        rd_kafkap_str_t Protocol, LeaderId;
+        rd_kafkap_str_t MyMemberId = RD_KAFKAP_STR_INITIALIZER;
         int32_t member_cnt;
         int actions;
         int i_am_leader = 0;

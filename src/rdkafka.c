@@ -800,10 +800,21 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
         /* Indicate to the application that a fatal error was raised,
          * the app should use rd_kafka_fatal_error() to extract the
-         * fatal error code itself. */
-        rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__FATAL,
-                        "Fatal error: %s: %s",
-                        rd_kafka_err2str(err), rk->rk_fatal.errstr);
+         * fatal error code itself.
+         * For the high-level consumer we propagate the error as a
+         * consumer error so it is returned from consumer_poll(),
+         * while for all other client types (the producer) we propagate to
+         * the standard error handler (typically error_cb). */
+        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
+                rd_kafka_q_op_err(rk->rk_cgrp->rkcg_q,
+                                  RD_KAFKA_OP_CONSUMER_ERR,
+                                  RD_KAFKA_RESP_ERR__FATAL, 0, NULL, 0,
+                                  "Fatal error: %s: %s",
+                                  rd_kafka_err2str(err), rk->rk_fatal.errstr);
+        else
+                rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__FATAL,
+                                "Fatal error: %s: %s",
+                                rd_kafka_err2str(err), rk->rk_fatal.errstr);
 
 
         /* Purge producer queues, but not in-flight since we'll
@@ -934,8 +945,9 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
                 NULL
         };
 
-        /* _F_IMMEDIATE also sets .._NO_CONSUMER_CLOSE */
-        if (flags & RD_KAFKA_DESTROY_F_IMMEDIATE)
+        /* Fatal errors and _F_IMMEDIATE also sets .._NO_CONSUMER_CLOSE */
+        if (flags & RD_KAFKA_DESTROY_F_IMMEDIATE ||
+            rd_kafka_fatal_error_code(rk))
                 flags |= RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE;
 
         rd_flags2str(flags_str, sizeof(flags_str),
@@ -2881,6 +2893,14 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+
+        /* If a fatal error has been raised and this is an
+         * explicit consumer_close() from the application we return
+         * a fatal error. Otherwise let the "silent" no_consumer_close
+         * logic be performed to clean up properly. */
+        if (rd_kafka_fatal_error_code(rk) &&
+            !rd_kafka_destroy_flags_no_consumer_close(rk))
+                return RD_KAFKA_RESP_ERR__FATAL;
 
         rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Closing consumer");
 

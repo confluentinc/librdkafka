@@ -2394,8 +2394,8 @@ void test_consumer_subscribe (rd_kafka_t *rk, const char *topic) {
 
         err = rd_kafka_subscribe(rk, topics);
         if (err)
-                TEST_FAIL("Failed to subscribe to %s: %s\n",
-                          topic, rd_kafka_err2str(err));
+                TEST_FAIL("%s: Failed to subscribe to %s: %s\n",
+                          rd_kafka_name(rk), topic, rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
 }

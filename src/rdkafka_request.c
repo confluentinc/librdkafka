@@ -843,7 +843,15 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 		RD_KAFKA_ERR_ACTION_PERMANENT,
 		RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
 
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+
 		RD_KAFKA_ERR_ACTION_END);
+
+        if (err == RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID)
+                rd_kafka_set_fatal_error(rk, err,
+                                         "Fatal consumer error: %s",
+                                         rd_kafka_err2str(err));
 
 	if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
 		/* Mark coordinator dead or re-query for coordinator.

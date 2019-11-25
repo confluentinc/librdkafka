@@ -642,8 +642,15 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code (rd_kafka_t *rk) {
-        return rk->rk_conf.eos.idempotence &&
-                rd_atomic32_get(&rk->rk_fatal.err);
+        /* This is an optimization to avoid an atomic read which are costly
+         * on some platforms:
+         * Fatal errors are currently only raised by the idempotent producer
+         * and static consumers (group.instance.id). */
+        if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
+            (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_conf.group_instance_id))
+                return rd_atomic32_get(&rk->rk_fatal.err);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

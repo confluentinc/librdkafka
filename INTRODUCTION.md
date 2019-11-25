@@ -52,6 +52,7 @@ librdkafka also provides a native C++ interface.
                 - [Random broker selection](#random-broker-selection)
                 - [Persistent broker connections](#persistent-broker-connections)
             - [Connection close](#connection-close)
+            - [Fetch From Follower](#fetch-from-follower)
         - [Logging](#logging)
             - [Debug contexts](#debug-contexts)
         - [Feature discovery](#feature-discovery)
@@ -61,6 +62,7 @@ librdkafka also provides a native C++ interface.
                 - [Auto offset commit](#auto-offset-commit)
                 - [At-least-once processing](#at-least-once-processing)
             - [Consumer groups](#consumer-groups)
+                - [Static consumer groups](#static-consumer-groups)
         - [Topics](#topics)
             - [Topic auto creation](#topic-auto-creation)
         - [Metadata](#metadata)
@@ -69,6 +71,8 @@ librdkafka also provides a native C++ interface.
             - [Query reasons](#query-reasons)
             - [Caching strategy](#caching-strategy)
         - [Fatal errors](#fatal-errors)
+            - [Fatal producer errors](#fatal-producer-errors)
+            - [Fatal consumer errors](#fatal-consumer-errors)
     - [Compatibility](#compatibility)
         - [Broker version compatibility](#broker-version-compatibility)
             - [Broker version >= 0.10.0.0 (or trunk)](#broker-version--01000-or-trunk)
@@ -1288,6 +1292,31 @@ The latest stored offset will be automatically committed every
 Broker based consumer groups (requires Apache Kafka broker >=0.9) are supported,
 see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 
+##### Static consumer groups
+
+By default Kafka consumers are rebalanced each time a new consumer joins
+the group or an existing member leaves. This is what is known as a dynamic
+membership. Apache Kafka >= 2.3.0 introduces static membership.
+Unlike dynamic membership, static members can leave and rejoin a group
+within the `session.timeout.ms` without triggering a rebalance, retaining
+their existing partitions assignment.
+
+To enable static group membership configure each consumer instance
+in the group with a unique `group.instance.id`.
+
+Consumers with `group.instance.id` set will not send a leave group request on
+close - session timeout, change of subscription, or a new group member joining
+the group, are the only mechanisms that will trigger a group rebalance for
+static consumer groups.
+
+If a new consumer joins the group with same `group.instance.id` as an
+existing consumer, the existing consumer will be fenced and raise a fatal error.
+The fatal error is propagated as a consumer error with error code
+`RD_KAFKA_RESP_ERR__FATAL`, use `rd_kafka_fatal_error()` to retrieve
+the original fatal error code and reason.
+
+To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
+
 
 ### Topics
 
@@ -1348,9 +1377,7 @@ is returned.
 
 ### Fatal errors
 
-The added guarantee of ordering and no duplicates also requires a way for
-the client to fail gracefully when these guarantees can't be satisfied.
-If an unresolvable error occurs a fatal error is triggered in one
+If an unrecoverable error occurs, a fatal error is triggered in one
 or more of the follow ways depending on what APIs the application is utilizing:
 
  * C: the `error_cb` is triggered with error code `RD_KAFKA_RESP_ERR__FATAL`,
@@ -1359,12 +1386,23 @@ or more of the follow ways depending on what APIs the application is utilizing:
  * C: an `RD_KAFKA_EVENT_ERROR` event is triggered and
    `rd_kafka_event_error_is_fatal()` returns true: the fatal error code
    and string are available through `rd_kafka_event_error()`, and `.._string()`.
+ * C and C++: any API call may return `RD_KAFKA_RESP_ERR__FATAL`, use
+   `rd_kafka_fatal_error()` to retrieve the underlying fatal error code
+   and error string.
  * C++: an `EVENT_ERROR` event is triggered and `event.fatal()` returns true:
    the fatal error code and string are available through `event.err()` and
    `event.str()`.
 
+
 An application may call `rd_kafka_fatal_error()` at any time to check if
 a fatal error has been raised.
+
+
+#### Fatal producer errors
+
+The idempotent producer guarantees of ordering and no duplicates also
+requires a way for the client to fail gracefully when these guarantees
+can't be satisfied.
 
 If a fatal error has been raised, sub-sequent use of the following API calls
 will fail:
@@ -1386,6 +1424,27 @@ automatically to allow waiting for the proper acknowledgement from the broker.
 The purged messages in queue will fail with error code set to
 `RD_KAFKA_RESP_ERR__PURGE_QUEUE`.
 
+
+#### Fatal consumer errors
+
+A consumer configured for static group membership (`group.instance.id`) may
+raise a fatal error if a new consumer instance is started with the same
+instance id, causing the existing consumer to be fenced by the new consumer.
+
+This fatal error is propagated on the fenced existing consumer in multiple ways:
+ * `error_cb` (if configured) is triggered.
+ * `rd_kafka_consumer_poll()` (et.al) will return a message object
+   with the `err` field set to `RD_KAFKA_ERR__FATAL`.
+ * any sub-sequent calls to state-changing consumer calls will
+   return `RD_KAFKA_ERR___FATAL`.
+   This includes `rd_kafka_subscribe()`, `rd_kafka_assign()`,
+   `rd_kafka_consumer_close()`, `rd_kafka_commit*()`, etc.
+
+The consumer will automatically stop consuming when a fatal error has occurred
+and no further subscription, assignment, consumption or offset committing
+will be possible. At this point the application should simply destroy the
+consumer instance and terminate the application since it has been replaced
+by a newer instance.
 
 
 ## Compatibility

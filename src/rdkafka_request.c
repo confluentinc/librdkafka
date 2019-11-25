@@ -2846,6 +2846,25 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                         rd_kafka_idemp_drain_reset(
                                 rk, "fenced by new transactional producer");
 
+                } else if (rd_kafka_is_transactional(rk)) {
+                        /* When transactional any permanent produce failure
+                         * would lead to an incomplete transaction, so raise
+                         * an abortable transaction error. */
+                        rd_kafka_txn_set_abortable_error(
+                                rk,
+                                perr->err,
+                                "ProduceRequest for %.*s [%"PRId32"] "
+                                "with %d message(s) failed: %s "
+                                "(broker %"PRId32" %s, base seq %"PRId32"): "
+                                "current transaction must be aborted",
+                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                rktp->rktp_partition,
+                                rd_kafka_msgq_len(&batch->msgq),
+                                rd_kafka_err2str(perr->err),
+                                rkb->rkb_nodeid,
+                                rd_kafka_pid2str(batch->pid),
+                                batch->first_seq);
+
                 } else if (rk->rk_conf.eos.gapless) {
                         /* A permanent non-idempotent error will lead to
                          * gaps in the message series, the next request

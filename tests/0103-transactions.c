@@ -226,9 +226,10 @@ void do_test_consumer_producer_txn (void) {
         rd_kafka_t *p1, *p2, *c1, *c2;
         rd_kafka_conf_t *conf, *tmpconf, *c1_conf;
         uint64_t testid;
+#define _MSGCNT (10 * 30)
         const int txncnt = 10;
+        const int msgcnt = _MSGCNT;
         int txn;
-        int msgcnt = txncnt * 30;
         int committed_msgcnt = 0;
         char errstr[512];
         test_msgver_t expect_mv, actual_mv;
@@ -312,7 +313,7 @@ void do_test_consumer_producer_txn (void) {
 
         for (txn = 0 ; txn < txncnt ; txn++) {
                 int msgcnt = 10 * (1 + (txn % 3));
-                rd_kafka_message_t *msgs[msgcnt];
+                rd_kafka_message_t *msgs[_MSGCNT];
                 int i;
                 rd_bool_t do_abort = !(txn % 3);
                 rd_bool_t recreate_consumer = do_abort && txn == 3;
@@ -707,8 +708,7 @@ static void do_test_txn_local (void) {
 
 int main_0103_transactions_local (int argc, char **argv) {
 
-        if (1)
-                do_test_txn_local();
+        do_test_txn_local();
 
         return 0;
 }

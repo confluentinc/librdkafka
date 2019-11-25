@@ -49,8 +49,9 @@ static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp) {
 
         test_conf_init(&conf, NULL, 0);
 
-        rd_kafka_conf_set(conf, "transactional.id", "txnid", NULL, 0);
-        rd_kafka_conf_set(conf, "test.mock.num.brokers", "3", NULL, 0);
+        test_conf_set(conf, "transactional.id", "txnid");
+        test_conf_set(conf, "test.mock.num.brokers", "3");
+        test_conf_set(conf, "debug", "msg,eos,protocol");
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
@@ -101,12 +102,15 @@ static void do_test_txn_recoverable_errors (void) {
         TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
 
         /*
-         * Produce a message, let it fail on the first attempt, then succeed.
+         * Produce a message, let it first fail on a fatal idempotent error
+         * that is retryable by the transaction manager, then let it fail with
+         * a non-idempo/non-txn retryable error
          */
         rd_kafka_mock_push_request_errors(
                 mcluster,
                 RD_KAFKAP_Produce,
                 1,
+                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS);
 
         err = rd_kafka_producev(rk,
@@ -114,6 +118,9 @@ static void do_test_txn_recoverable_errors (void) {
                                 RD_KAFKA_V_VALUE("hi", 2),
                                 RD_KAFKA_V_END);
         TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Make sure messages are produced */
+        rd_kafka_flush(rk, -1);
 
         /*
          * Send some arbitrary offsets, first with some failures, then
@@ -182,14 +189,15 @@ static void do_test_txn_abortable_errors (void) {
         TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
 
         /*
-         * Produce a message, trigger a fatal idempotence error
-         * that is treated as abortable by the transactional producer.
+         * 1. Fail on produce
          */
+        TEST_SAY("1. Fail on produce\n");
+
         rd_kafka_mock_push_request_errors(
                 mcluster,
                 RD_KAFKAP_Produce,
                 1,
-                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID);
+                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 
         err = rd_kafka_producev(rk,
                                 RD_KAFKA_V_TOPIC("mytopic"),
@@ -197,43 +205,87 @@ static void do_test_txn_abortable_errors (void) {
                                 RD_KAFKA_V_END);
         TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
 
-        /*
-         * Send some arbitrary offsets, first with some failures, then
-         * succeed.
-         */
-        offsets = rd_kafka_topic_partition_list_new(4);
+        /* Wait for messages to fail */
+        test_flush(rk, 5000);
+
+        /* Any other transactional API should now raise an error */
+        offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
-                999999111;
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 999;
-        rd_kafka_topic_partition_list_add(offsets, "srctop2", 3499)->offset =
-                123456789;
+ 
+        err = rd_kafka_send_offsets_to_transaction(
+                rk, offsets,
+                "myGroupId",
+                errstr, sizeof(errstr));
+        rd_kafka_topic_partition_list_destroy(offsets);
+        TEST_ASSERT(err, "expected abortable error");
+        TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
+
+        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
+                                               errstr, sizeof(errstr)));
+
+        /*
+         * 2. Restart transaction and fail on AddPartitionsToTxn
+         */
+        TEST_SAY("2. Fail on AddPartitionsToTxn\n");
+
+        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
 
         rd_kafka_mock_push_request_errors(
                 mcluster,
                 RD_KAFKAP_AddPartitionsToTxn,
                 1,
-                RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS);
+                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 
-        TEST_CALL__(rd_kafka_send_offsets_to_transaction(
-                            rk, offsets,
-                            "myGroupId",
-                            errstr, sizeof(errstr)));
-        rd_kafka_topic_partition_list_destroy(offsets);
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        err = rd_kafka_commit_transaction(rk, 5000, errstr, sizeof(errstr));
+        TEST_ASSERT(err, "commit_transaction should have failed");
+        TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
+
+        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
+                                               errstr, sizeof(errstr)));
 
         /*
-         * Commit transaction, first with som failures, then succeed.
-         */
+        * 3. Restart transaction and fail on AddOffsetsToTxn
+        */
+        TEST_SAY("3. Fail on AddOffsetsToTxn\n");
+
+        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
         rd_kafka_mock_push_request_errors(
                 mcluster,
-                RD_KAFKAP_EndTxn,
-                3,
-                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-                RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+                RD_KAFKAP_AddOffsetsToTxn,
+                1,
+                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 
-        TEST_CALL__(rd_kafka_commit_transaction(rk, 5000,
-                                                errstr, sizeof(errstr)));
+        TEST_SAY("bla\n");
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+
+        TEST_CALL__(rd_kafka_send_offsets_to_transaction(rk,
+                                                         offsets,
+                                                         "mygroup",
+                                                         errstr,
+                                                         sizeof(errstr)));
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+
+        err = rd_kafka_commit_transaction(rk, 5000, errstr, sizeof(errstr));
+        TEST_ASSERT(err, "commit_transaction should have failed");
+        TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
+
+        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
+                                               errstr, sizeof(errstr)));
 
         /* All done */
 

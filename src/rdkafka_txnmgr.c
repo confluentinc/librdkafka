@@ -145,6 +145,7 @@ rd_kafka_txn_state_transition_is_valid (rd_kafka_txn_state_t curr,
 
         case RD_KAFKA_TXN_STATE_ABORTABLE_ERROR:
                 return curr == RD_KAFKA_TXN_STATE_IN_TRANSACTION ||
+                        curr == RD_KAFKA_TXN_STATE_BEGIN_COMMIT ||
                         curr == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION;
 
         case RD_KAFKA_TXN_STATE_FATAL_ERROR:
@@ -271,18 +272,37 @@ void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
         vsnprintf(errstr, sizeof(errstr), fmt, ap);
         va_end(ap);
 
-        rd_kafka_log(rk, LOG_ERR, "TXNERR",
-                     "Abortable transaction error: %s (%s)",
-                     errstr, rd_kafka_err2name(err));
-
         rd_kafka_wrlock(rk);
+        if (rk->rk_eos.txn_err) {
+                rd_kafka_dbg(rk, EOS, "TXNERR",
+                             "Ignoring sub-sequent abortable transaction "
+                             "error: %s (%s): "
+                             "previous error (%s) already raised",
+                             errstr,
+                             rd_kafka_err2name(err),
+                             rd_kafka_err2name(rk->rk_eos.txn_err));
+                rd_kafka_wrunlock(rk);
+                return;
+        }
+
         rk->rk_eos.txn_err = err;
         if (rk->rk_eos.txn_errstr)
                 rd_free(rk->rk_eos.txn_errstr);
         rk->rk_eos.txn_errstr = rd_strdup(errstr);
 
+        rd_kafka_log(rk, LOG_ERR, "TXNERR",
+                     "Current transaction failed: %s (%s)",
+                     errstr, rd_kafka_err2name(err));
+
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORTABLE_ERROR);
         rd_kafka_wrunlock(rk);
+
+        /* Purge all messages in queue/flight */
+        rd_kafka_purge(rk,
+                       RD_KAFKA_PURGE_F_QUEUE |
+                       RD_KAFKA_PURGE_F_ABORT_TXN |
+                       RD_KAFKA_PURGE_F_NON_BLOCKING);
+
 }
 
 
@@ -457,6 +477,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                 rd_kafkap_str_t Topic;
                 rd_kafka_itopic_t *rkt;
                 int32_t PartCnt;
+                int p_actions = 0;
 
                 rd_kafka_buf_read_str(rkbuf, &Topic);
                 rd_kafka_buf_read_i32(rkbuf, &PartCnt);
@@ -492,20 +513,6 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 
-                        if (ErrorCode) {
-                                errcnt++;
-                                rd_rkb_dbg(rkb, EOS,
-                                           "ADDPARTS",
-                                           "AddPartitionsToTxn response: "
-                                           "partition \"%.*s\": "
-                                           "[%"PRId32"]: %s",
-                                           RD_KAFKAP_STR_PR(&Topic),
-                                           Partition,
-                                           rd_kafka_err2name(ErrorCode));
-                        } else {
-                                okcnt++;
-                        }
-
                         switch (ErrorCode)
                         {
                         case RD_KAFKA_RESP_ERR_NO_ERROR:
@@ -518,7 +525,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                                            rkb);
                                 /* FALLTHRU */
                         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
-                                actions |= RD_KAFKA_ERR_ACTION_REFRESH;
+                                p_actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                                 break;
 
                         case RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS:
@@ -526,19 +533,20 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                 /* FALLTHRU */
                         case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
                         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                                p_actions |= RD_KAFKA_ERR_ACTION_RETRY;
                                 break;
 
                         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
                         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING:
                         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
                         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
-                                actions |= RD_KAFKA_ERR_ACTION_FATAL;
+                                p_actions |= RD_KAFKA_ERR_ACTION_FATAL;
                                 err = ErrorCode;
                                 break;
 
                         case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
-                                // FIXME
+                                p_actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                                err = ErrorCode;
                                 break;
 
                         case RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED:
@@ -547,8 +555,37 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                 break;
                         default:
                                 /* Unhandled error, retry later */
-                                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                                p_actions |= RD_KAFKA_ERR_ACTION_RETRY;
                                 break;
+                        }
+
+                        if (ErrorCode) {
+                                errcnt++;
+                                actions |= p_actions;
+
+                                if (!(p_actions & (RD_KAFKA_ERR_ACTION_FATAL |
+                                                   RD_KAFKA_ERR_ACTION_PERMANENT)))
+                                        rd_rkb_dbg(rkb, EOS,
+                                                   "ADDPARTS",
+                                                   "AddPartitionsToTxn response: "
+                                                   "partition \"%.*s\": "
+                                                   "[%"PRId32"]: %s",
+                                                   RD_KAFKAP_STR_PR(&Topic),
+                                                   Partition,
+                                                   rd_kafka_err2str(
+                                                           ErrorCode));
+                                else
+                                        rd_rkb_log(rkb, LOG_ERR,
+                                                   "ADDPARTS",
+                                                   "Failed to add partition "
+                                                   "\"%.*s\" [%"PRId32"] to "
+                                                   "transaction: %s",
+                                                   RD_KAFKAP_STR_PR(&Topic),
+                                                   Partition,
+                                                   rd_kafka_err2str(
+                                                           ErrorCode));
+                        } else {
+                                okcnt++;
                         }
 
                         rd_kafka_toppar_destroy(s_rktp);
@@ -559,6 +596,9 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                         rd_kafka_topic_destroy0(rkt);
                 }
         }
+
+        if (actions) /* Actions set from encountered errors '*/
+                goto done;
 
         /* Since these partitions are now allowed to produce
          * we wake up all broker threads. */
@@ -589,10 +629,6 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                              "AddPartitionsToTxn response");
         }
 
-
-        rd_rkb_dbg(rkb, EOS, "ADDPARTS", "err %s, actions 0x%x",
-                   rd_kafka_err2name(err), actions);
-
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
                 rd_kafka_txn_set_fatal_error(rk, err,
                                              "Failed to add partitions to "
@@ -601,10 +637,17 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
 
         } else if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Requery for coordinator? */
+                // FIXME
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 rd_kafka_txn_schedule_register_partitions(rk, retry_backoff_ms);
 
+        } else if (errcnt > 0) {
+                /* Treat all other errors as abortable errors */
+                rd_kafka_txn_set_abortable_error(
+                        rk, err,
+                        "Failed to add %d/%d partition(s) to transaction: %s",
+                        errcnt, errcnt + okcnt, rd_kafka_err2str(err));
         }
 }
 
@@ -994,6 +1037,9 @@ rd_kafka_txn_op_begin_transaction (rd_kafka_t *rk,
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_IN_TRANSACTION);
 
                 rk->rk_eos.txn_req_cnt = 0;
+                rk->rk_eos.txn_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                RD_IF_FREE(rk->rk_eos.txn_errstr, rd_free);
+                rk->rk_eos.txn_errstr = NULL;
 
                 /* Wake up all broker threads (that may have messages to send
                  * that were waiting for this transaction state.
@@ -1901,7 +1947,8 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms /* FIXME:handle */,
         rd_kafka_wrlock(rk);
         if ((err = rd_kafka_txn_require_state(
                      rk, errstr, errstr_size,
-                     RD_KAFKA_TXN_STATE_IN_TRANSACTION))) {
+                     RD_KAFKA_TXN_STATE_IN_TRANSACTION,
+                     RD_KAFKA_TXN_STATE_ABORTABLE_ERROR))) {
                 rd_kafka_wrunlock(rk);
                 return err;
         }

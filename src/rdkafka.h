@@ -550,6 +550,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
         /** Consumer group has reached maximum size */
         RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED = 81,
+        /** Static consumer fenced by other consumer with same
+         *  group.instance.id. */
+        RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID = 82,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -3358,7 +3361,8 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes.
+ *          topics or regexes,
+ *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
@@ -3429,6 +3433,8 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  *
  * @remark The application still needs to call rd_kafka_destroy() after
  *         this call finishes to clean up the underlying handle resources.
@@ -3451,6 +3457,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  * A zero-length \p partitions will treat the partitions as a valid,
  * albeit empty, assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
+ *
+ * @returns An error code indicating if the new assignment was applied or not.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
@@ -3485,6 +3495,11 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
  * configured the callback will be enqueued for a future call to
  * rd_kafka_poll(), rd_kafka_consumer_poll() or similar.
+ *
+ * @returns An error code indiciating if the commit was successful,
+ *          or successfully scheduled if asynchronous, or failed.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,

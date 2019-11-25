@@ -42,8 +42,9 @@ static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
                                                const char *reason);
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);
-static void rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
-				  rd_kafka_topic_partition_list_t *assignment);
+static rd_kafka_resp_err_t
+rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
+                      rd_kafka_topic_partition_list_t *assignment);
 static rd_kafka_resp_err_t rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg);
 static void
 rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
@@ -677,7 +678,8 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
 	    || !assignment
-            || rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
+            || rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)
+            || rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
 	no_delegation:
 		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
 			rd_kafka_cgrp_assign(rkcg, assignment);
@@ -1064,6 +1066,9 @@ err:
                                       RD_KAFKA_ERR_ACTION_IGNORE,
                                       RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED,
 
+                                      RD_KAFKA_ERR_ACTION_PERMANENT,
+                                      RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+
                                       RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
@@ -1079,7 +1084,13 @@ err:
                 if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                         return; /* Termination */
 
-                if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
+                if (ErrorCode == RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID) {
+                        rd_kafka_set_fatal_error(rkcg->rkcg_rk, ErrorCode,
+                                                 "Fatal consumer error: %s",
+                                                 rd_kafka_err2str(ErrorCode));
+                        ErrorCode = RD_KAFKA_RESP_ERR__FATAL;
+
+                } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
                         rd_kafka_q_op_err(rkcg->rkcg_q,
                                           RD_KAFKA_OP_CONSUMER_ERR,
                                           ErrorCode, 0, NULL, 0,
@@ -1088,9 +1099,9 @@ err:
 
                 if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");
-
-                /* KIP-394 requires member.id on initial join group request */
-                if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED) {
+                else if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED) {
+                        /* KIP-394 requires member.id on initial join
+                         * group request */
                         char *my_member_id;
                         RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
                         rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
@@ -2052,6 +2063,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         errcnt = rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
 
         if (!offset_commit_cb_served &&
+            offsets &&
             (errcnt > 0 ||
              (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
               err != RD_KAFKA_RESP_ERR__NO_OFFSET))) {
@@ -2137,6 +2149,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                 /* wait_commit_cnt has already been increased for
                  * reprocessed ops. */
                 rkcg->rkcg_wait_commit_cnt++;
+        }
+
+        if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
+                /* Commits are not allowed when a fatal error has been raised */
+                err = RD_KAFKA_RESP_ERR__FATAL;
+                goto err;
         }
 
 	if (!valid_offsets) {
@@ -2394,13 +2412,16 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 
 
 /**
- * Set new atomic partition assignment
- * May update \p assignment but will not hold on to it.
+ * @brief Set new atomic partition assignment
+ *        May update \p assignment but will not hold on to it.
+ *
+ * @returns 0 on success or an error if a fatal error has been raised.
  */
-static void
+static rd_kafka_resp_err_t
 rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                       rd_kafka_topic_partition_list_t *assignment) {
         int i;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGN",
                      "Group \"%s\": new assignment of %d partition(s) "
@@ -2440,6 +2461,13 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 	if (rkcg->rkcg_assignment)
 		rd_kafka_cgrp_unassign(rkcg);
 
+        /* If the consumer has raised a fatal error we treat all
+         * assigns as unassigns */
+        if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
+                err = RD_KAFKA_RESP_ERR__FATAL;
+                assignment = NULL;
+        }
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
                      "Group \"%s\": assigning %d partition(s) in join state %s",
                      rkcg->rkcg_group_id->str, assignment ? assignment->cnt : 0,
@@ -2464,7 +2492,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
         }
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
-                return;
+                return err;
 
         rd_dassert(rkcg->rkcg_wait_unassign_cnt == 0);
 
@@ -2476,6 +2504,8 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_cgrp_partitions_fetch_start(
                         rkcg, rkcg->rkcg_assignment, 0);
         }
+
+        return err;
 }
 
 
@@ -2566,6 +2596,13 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
                 reason = "group is rebalancing";
+                break;
+
+        case RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID:
+                rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
+                                         "Fatal consumer error: %s",
+                                         rd_kafka_err2str(err));
+                reason = "consumer fenced by newer instance";
                 break;
 
         default:
@@ -2691,8 +2728,8 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
         if (!RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg))
                 rd_kafka_cgrp_leave(rkcg);
 
-        /* Leaving the group invalidates the member id, reset it now
-         * to avoid an ERR_UNKNOWN_MEMBER_ID on the next join. */
+        /* Timing out or leaving the group invalidates the member id, reset it
+         * now to avoid an ERR_UNKNOWN_MEMBER_ID on the next join. */
         rd_kafka_cgrp_set_member_id(rkcg, "");
 
         /* Trigger rebalance */
@@ -2767,6 +2804,11 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                                   rktparlist ?
                                   0/* dont leave group if new subscription */ :
                                   1/* leave group if no new subscription */);
+
+        /* If the consumer has raised a fatal error we treat all
+         * subscribes as unsubscribe */
+        if (rd_kafka_fatal_error_code(rkcg->rkcg_rk))
+                return RD_KAFKA_RESP_ERR__FATAL;
 
         if (!rktparlist)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3075,8 +3117,10 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 /* New atomic subscription (may be NULL) */
                 err = rd_kafka_cgrp_subscribe(
                         rkcg, rko->rko_u.subscribe.topics);
-                if (!err)
-                        rko->rko_u.subscribe.topics = NULL; /* owned by rkcg */
+
+                if (!err) /* now owned by rkcg */
+                        rko->rko_u.subscribe.topics = NULL;
+
                 rd_kafka_op_reply(rko, err);
                 rko = NULL;
                 break;
@@ -3092,8 +3136,8 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         if (rko->rko_u.assign.partitions)
                                 err = RD_KAFKA_RESP_ERR__DESTROY;
                 } else {
-                        rd_kafka_cgrp_assign(
-                                rkcg, rko->rko_u.assign.partitions);
+                        err = rd_kafka_cgrp_assign(rkcg,
+                                                   rko->rko_u.assign.partitions);
                 }
                 rd_kafka_op_reply(rko, err);
                 rko = NULL;
@@ -3139,6 +3183,9 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
  * Client group's join state handling
  */
 static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg) {
+
+        if (unlikely(rd_kafka_fatal_error_code(rkcg->rkcg_rk)))
+                return;
 
         switch (rkcg->rkcg_join_state)
         {
@@ -3484,5 +3531,11 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "GRPSYNC",
                      "Group \"%s\": synchronization failed: %s: rejoining",
                      rkcg->rkcg_group_id->str, rd_kafka_err2str(err));
+
+        if (err == RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID)
+                rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
+                                         "Fatal consumer error: %s",
+                                         rd_kafka_err2str(err));
+
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }

@@ -463,6 +463,9 @@ enum ErrorCode {
         ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
         /** Consumer group has reached maximum size */
         ERR_GROUP_MAX_SIZE_REACHED = 81,
+        /** Static consumer fenced by other consumer with same
+         * group.instance.id. */
+        ERR_FENCED_INSTANCE_ID = 82,
 };
 
 

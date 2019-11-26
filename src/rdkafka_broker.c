@@ -842,7 +842,8 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
 
 	if (!rkb->rkb_rsal) {
 		/* Resolve */
-		rkb->rkb_rsal = rd_getaddrinfo(rkb->rkb_nodename,
+        rkb->rkb_rsal = rd_getaddrinfo(rkb->rkb_rk->rk_conf.getaddrinfo_cb,
+                           rkb->rkb_nodename,
 					       RD_KAFKA_PORT_STR,
 					       AI_ADDRCONFIG,
 					       rkb->rkb_rk->rk_conf.

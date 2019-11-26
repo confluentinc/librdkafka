@@ -81,6 +81,7 @@ typedef SSIZE_T ssize_t;
 
 #else
 #include <sys/socket.h> /* for sockaddr, .. */
+#include <netdb.h> /* for struct addrinfo */
 
 #define RD_UNUSED __attribute__((unused))
 #define RD_INLINE inline
@@ -1868,6 +1869,24 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
         void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
                                               const char *oauthbearer_config,
                                               void *opaque));
+
+/**
+ * @brief Set broker name resolution callback.
+ *
+ * The getaddrinfo callback is responsible for resolving broker name \p node
+ * to its corresponding ip addresses \p res.
+ *
+ * \p getaddrinfo_cb shall return 0 on success (name resolved) or an error
+ * number (errno) on error.
+ *
+ * @remark The callback will be called from an internal librdkafka thread.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_getaddrinfo_cb (rd_kafka_conf_t *conf,
+                                  int (*getaddrinfo_cb) (const char *node,
+                                                    const char *service,
+                                                    const struct addrinfo *hints,
+                                                    struct addrinfo **res));
 
 /**
  * @brief Set socket callback.

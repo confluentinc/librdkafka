@@ -153,7 +153,10 @@ rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) {
 				     * FIXME: Guessing non-used bits like this
 				     *        is a bad idea. */
 
-rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
+rd_sockaddr_list_t *rd_getaddrinfo (int(*getaddrinfo_cb)(const char *node, const char *service,
+        const struct addrinfo *hints,
+        struct addrinfo **res),
+                    const char *nodesvc, const char *defsvc,
 				    int flags, int family,
 				    int socktype, int protocol,
 				    const char **errstr);

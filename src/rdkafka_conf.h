@@ -434,6 +434,11 @@ struct rd_kafka_conf_s {
 			 size_t json_len,
 			 void *opaque);
 
+    /* Broker name resolution callback */
+	int(*getaddrinfo_cb)(const char *node, const char *service,
+	        const struct addrinfo *hints,
+	        struct addrinfo **res);
+
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);
 

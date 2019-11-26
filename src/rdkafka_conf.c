@@ -503,6 +503,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(background_event_cb),
           "Background queue event callback "
           "(set with rd_kafka_conf_set_background_event_cb())" },
+        { _RK_GLOBAL, "getaddrinfo_cb", _RK_C_PTR,
+          _RK(getaddrinfo_cb),
+          "Broker name resolution callback",
+        },
         { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
           _RK(socket_cb),
           "Socket creation callback to provide race-free CLOEXEC",
@@ -2478,6 +2482,15 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
                 "oauthbearer_token_refresh_cb", oauthbearer_token_refresh_cb);
 #endif
+}
+
+void rd_kafka_conf_set_getaddrinfo_cb (rd_kafka_conf_t *conf,
+                                  int (*getaddrinfo_cb) (const char *node,
+                                                    const char *service,
+                                                    const struct addrinfo *hints,
+                                                    struct addrinfo **res)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "getaddrinfo_cb",
+                                      getaddrinfo_cb);
 }
 
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,

@@ -143,7 +143,10 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 
 
 
-rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
+rd_sockaddr_list_t *rd_getaddrinfo (int(*getaddrinfo_cb)(const char *node, const char *service,
+                         const struct addrinfo *hints,
+                         struct addrinfo **res),
+                     const char *nodesvc, const char *defsvc,
 				    int flags, int family,
 				    int socktype, int protocol,
 				    const char **errstr) {
@@ -165,7 +168,12 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 	if (*svc)
 		defsvc = svc;
 		
-	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
+    if (getaddrinfo_cb) {
+        r = getaddrinfo_cb(node, defsvc, &hints, &ais);
+    } else {
+        r = getaddrinfo(node, defsvc, &hints, &ais);
+    }
+    if (r) {
 #ifdef EAI_SYSTEM
 		if (r == EAI_SYSTEM)
 #else

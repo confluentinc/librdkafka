@@ -57,6 +57,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_conf_set_error_cb(NULL, NULL);
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
                 rd_kafka_conf_set_log_cb(NULL, NULL);
+                rd_kafka_conf_set_getaddrinfo_cb(NULL, NULL);
                 rd_kafka_conf_set_socket_cb(NULL, NULL);
 		rd_kafka_conf_set_rebalance_cb(NULL, NULL);
 		rd_kafka_conf_set_offset_commit_cb(NULL, NULL);

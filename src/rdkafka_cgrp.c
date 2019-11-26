@@ -1105,6 +1105,8 @@ err:
                         char *my_member_id;
                         RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
                         rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
+                        /* Skip the join backoff */
+                        rd_interval_reset(&rkcg->rkcg_join_intvl);
                 }
 
                 rd_kafka_cgrp_set_join_state(rkcg,

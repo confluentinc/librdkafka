@@ -857,7 +857,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(group_id_str),
           "Client group id string. All clients sharing the same group.id "
           "belong to the same group." },
-        { _RK_GLOBAL|_RK_CGRP|_RK_MED, "group.instance.id", _RK_C_STR,
+        { _RK_GLOBAL|_RK_CGRP|_RK_MED|_RK_HIDDEN|_RK_EXPERIMENTAL,
+          "group.instance.id", _RK_C_STR,
           _RK(group_instance_id),
           "Enable static group membership. "
           "Static group members are able to leave and rejoin a group "

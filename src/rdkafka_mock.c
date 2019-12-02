@@ -439,6 +439,11 @@ rd_kafka_mock_topic_new (rd_kafka_mock_cluster_t *mcluster, const char *topic,
         TAILQ_INSERT_TAIL(&mcluster->topics, mtopic, link);
         mcluster->topic_cnt++;
 
+        rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                     "Created topic \"%s\" with %d partition(s) and "
+                     "replication-factor %d",
+                     mtopic->name, mtopic->partition_cnt, replication_factor);
+
         return mtopic;
 }
 

@@ -820,8 +820,10 @@ rd_kafka_mock_buf_write_Metadata_Topic (rd_kafka_buf_t *resp,
         rd_kafka_buf_write_i16(resp, err);
         /* Response: Topics.Name */
         rd_kafka_buf_write_str(resp, topic, -1);
-        /* Response: Topics.IsInternal */
-        rd_kafka_buf_write_bool(resp, rd_false);
+        if (ApiVersion >= 1) {
+                /* Response: Topics.IsInternal */
+                rd_kafka_buf_write_bool(resp, rd_false);
+        }
         /* Response: Topics.#Partitions */
         rd_kafka_buf_write_i32(resp, mtopic ? mtopic->partition_cnt : 0);
 
@@ -906,10 +908,15 @@ static int rd_kafka_mock_handle_Metadata (rd_kafka_mock_connection_t *mconn,
                 }
         }
 
-        /* Response: ClusterId */
-        rd_kafka_buf_write_str(resp, mcluster->id, -1);
-        /* Response: ControllerId */
-        rd_kafka_buf_write_i32(resp, mcluster->controller_id);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
+                /* Response: ClusterId */
+                rd_kafka_buf_write_str(resp, mcluster->id, -1);
+        }
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
+                /* Response: ControllerId */
+                rd_kafka_buf_write_i32(resp, mcluster->controller_id);
+        }
 
         /* #Topics */
         rd_kafka_buf_read_i32(rkbuf, &TopicsCnt);

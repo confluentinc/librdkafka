@@ -172,6 +172,7 @@ endif()
 
 if(WITH_ZLIB)
   find_package(ZLIB REQUIRED)
+  target_include_directories(rdkafka PUBLIC ${ZLIB_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC ZLIB::ZLIB)
 endif()
 
@@ -191,6 +192,7 @@ if(WITH_SSL)
     add_dependencies(rdkafka bundled-ssl)
   else()
     find_package(OpenSSL REQUIRED)
+    target_include_directories(rdkafka PUBLIC ${OPENSSL_INCLUDE_DIR})
     target_link_libraries(rdkafka PUBLIC OpenSSL::SSL OpenSSL::Crypto)
   endif()
 endif()
@@ -203,6 +205,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
 if(WITH_SASL_CYRUS)
+  target_include_directories(rdkafka PUBLIC ${SASL_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
 
@@ -211,6 +214,7 @@ if(WITH_LIBDL)
 endif()
 
 if(WITH_LZ4_EXT)
+  target_include_directories(rdkafka PUBLIC ${LZ4_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
 endif()
 

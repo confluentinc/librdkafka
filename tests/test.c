@@ -376,7 +376,8 @@ struct test tests[] = {
         _TEST(0099_commit_metadata, 0),
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
         _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
-        _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
+        _TEST(0102_static_group_rebalance, TEST_F_KNOWN_ISSUE,
+              TEST_BRKVER(2,3,0,0)),
         _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
               TEST_BRKVER(2,4,0,0)),
 

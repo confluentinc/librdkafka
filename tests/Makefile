@@ -122,13 +122,13 @@ java: .PHONY
 asan:
 	@(echo "### Running tests with AddressSanitizer")
 	(cd .. ; ./dev-conf.sh asan)
-	./broker_version_tests.py $(KAFKA_VERSION)
+	CI=true ./broker_version_tests.py $(KAFKA_VERSION)
 
 # Run test-suite with TSAN
 tsan:
 	@(echo "### Running tests with ThreadSanitizer")
 	(cd .. ; ./dev-conf.sh tsan)
-	./broker_version_tests.py $(KAFKA_VERSION)
+	CI=true ./broker_version_tests.py $(KAFKA_VERSION)
 
 # Run full test-suite with a clean release build
 pristine-full:

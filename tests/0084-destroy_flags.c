@@ -180,10 +180,16 @@ static void destroy_flags (int local_mode) {
         const int flag_combos[] = { 0,
                                     RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE };
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        const rd_bool_t can_subscribe =
+                test_broker_version >= TEST_BRKVER(0,9,0,0);
         int i, j;
 
         for (i = 0 ; i < (int)RD_ARRAYSIZE(args) ; i++) {
                 for (j = 0 ; j < (int)RD_ARRAYSIZE(flag_combos) ; j++) {
+                        if (!can_subscribe &&
+                            (args[i].consumer_subscribe ||
+                             args[i].consumer_unsubscribe))
+                                continue;
                         do_test_destroy_flags(topic,
                                               flag_combos[j],
                                               local_mode,

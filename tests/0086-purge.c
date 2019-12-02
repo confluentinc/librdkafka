@@ -293,11 +293,17 @@ static void do_test_purge (const char *what, int remote,
 
 
 int main_0086_purge_remote (int argc, char **argv) {
+        const rd_bool_t has_idempotence =
+                test_broker_version >= TEST_BRKVER(0,11,0,0);
+
         do_test_purge("remote", 1/*remote*/, 0/*idempotence*/, 0/*!gapless*/);
-        do_test_purge("remote,idempotence", 1/*remote*/, 1/*idempotence*/,
-                      0/*!gapless*/);
-        do_test_purge("remote,idempotence,gapless", 1/*remote*/,
-                      1/*idempotence*/, 1/*!gapless*/);
+
+        if (has_idempotence) {
+                do_test_purge("remote,idempotence",
+                              1/*remote*/, 1/*idempotence*/, 0/*!gapless*/);
+                do_test_purge("remote,idempotence,gapless",
+                              1/*remote*/, 1/*idempotence*/, 1/*!gapless*/);
+        }
         return 0;
 }
 

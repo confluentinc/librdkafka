@@ -69,10 +69,9 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
     os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
     os.write(fd, 'broker.address.family=v4\n'.encode('ascii'))
-    if version != 'trunk':
+    if version.startswith('0.9') or version.startswith('0.8'):
+        os.write(fd, 'api.version.request=false\n'.encode('ascii'))
         os.write(fd, ('broker.version.fallback=%s\n' % version).encode('ascii'))
-    else:
-        os.write(fd, 'api.version.request=true\n'.encode('ascii'))
     # SASL (only one mechanism supported)
     mech = defconf.get('sasl_mechanisms', '').split(',')[0]
     if mech != '':

@@ -1169,9 +1169,13 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
         do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
 
-        /* Create Partitions */
-        do_test_CreatePartitions("temp queue, op timeout 6500", rk, NULL, 6500);
-        do_test_CreatePartitions("main queue, op timeout 0", rk, mainq, 0);
+        if (test_broker_version >= TEST_BRKVER(1,0,0,0)) {
+                /* Create Partitions */
+                do_test_CreatePartitions("temp queue, op timeout 6500",
+                                         rk, NULL, 6500);
+                do_test_CreatePartitions("main queue, op timeout 0",
+                                         rk, mainq, 0);
+        }
 
         /* AlterConfigs */
         do_test_AlterConfigs(rk, mainq);

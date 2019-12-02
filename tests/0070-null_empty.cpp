@@ -181,7 +181,8 @@ static void do_test_null_empty (bool api_version_request) {
 
 extern "C" {
   int main_0070_null_empty (int argc, char **argv) {
-    do_test_null_empty(true);
+    if (test_broker_version >= TEST_BRKVER(0,10,0,0))
+      do_test_null_empty(true);
     do_test_null_empty(false);
     return 0;
   }

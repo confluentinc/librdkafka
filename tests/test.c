@@ -249,7 +249,9 @@ struct test tests[] = {
         _TEST(0006_symbols, TEST_F_LOCAL),
         _TEST(0007_autotopic, 0),
         _TEST(0008_reqacks, 0),
-        _TEST(0009_mock_cluster, TEST_F_LOCAL),
+        _TEST(0009_mock_cluster, TEST_F_LOCAL,
+              /* Mock cluster requires MsgVersion 2 */
+              TEST_BRKVER(0,11,0,0)),
         _TEST(0011_produce_batch, 0,
               /* Produces a lot of messages */
               _THRES(.ucpu = 40.0, .scpu = 8.0)),
@@ -290,7 +292,7 @@ struct test tests[] = {
               _THRES(.ucpu = 20.0, .scpu = 10.0)),
 	_TEST(0042_many_topics, 0),
 	_TEST(0043_no_connection, TEST_F_LOCAL),
-	_TEST(0044_partition_cnt, 0,
+	_TEST(0044_partition_cnt, 0, TEST_BRKVER(1,0,0,0),
               /* Produces a lot of messages */
               _THRES(.ucpu = 30.0)),
 	_TEST(0045_subscribe_update, 0, TEST_BRKVER(0,9,0,0)),
@@ -331,7 +333,7 @@ struct test tests[] = {
         _TEST(0068_produce_timeout, TEST_F_SOCKEM),
 #endif
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
-              TEST_BRKVER(0,9,0,0)),
+              TEST_BRKVER(1,0,0,0)),
         _TEST(0070_null_empty, 0),
         _TEST(0072_headers_ut, TEST_F_LOCAL),
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
@@ -340,7 +342,9 @@ struct test tests[] = {
         _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
         _TEST(0076_produce_retry, TEST_F_SOCKEM),
-        _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0077_compaction, 0,
+              /* The test itself requires message headers */
+              TEST_BRKVER(0,11,0,0)),
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
               .extra = "using a fork():ed rd_kafka_t is not supported and will "
@@ -368,12 +372,13 @@ struct test tests[] = {
 #endif
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
-        _TEST(0098_consumer_txn, 0),
+        _TEST(0098_consumer_txn, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0099_commit_metadata, 0),
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
         _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2,3,0,0)),
-        _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL),
+        _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
+              TEST_BRKVER(2,4,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -2685,7 +2690,7 @@ int test_msgver_add_msg0 (const char *func, int line,
                                           "%s:%d: msgid expected in header %s "
                                           "but %s exists for "
                                           "message at offset %"PRId64
-                                          " has no headers",
+                                          " has no headers\n",
                                           func, line, mv->msgid_hdr,
                                           hdrs ? "no such header" : "no headers",
                                           rkmessage->offset);

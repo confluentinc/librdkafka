@@ -6,15 +6,18 @@
 #   mkl_require libzstd
 #
 # And then call the following function from the correct place/order in checks:
-#   mkl_check libzstd [<action>]
+#   mkl_check libzstd
 #
 
-mkl_toggle_option "Feature" ENABLE_ZSTD "--enable-zstd" "Enable support for ZSTD compression" "y"
+mkl_toggle_option "Feature" ENABLE_ZSTD "--enable-zstd" "Enable support for ZSTD compression" "try"
 
 function manual_checks {
-    local action=${1:-disable}
-
-    [[ $ENABLE_ZSTD == y ]] || return 0
+    case "$ENABLE_ZSTD" in
+        n) return 0 ;;
+        y) local action=fail ;;
+        try) local action=disable ;;
+        *) mkl_err "mklove internal error: invalid value for ENABLE_ZSTD: $ENABLE_ZSTD"; exit 1 ;;
+    esac
 
     mkl_meta_set "libzstd" "brew" "zstd"
     mkl_meta_set "libzstd" "apk" "zstd-dev zstd-static"

@@ -39,7 +39,7 @@ mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for
 # librdkafka with TSAN won't work with glibc C11 threads on Ubuntu 19.04.
 # This option allows disabling libc-based C11 threads and instead
 # use the builtin tinycthread alternative.
-mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "y"
+mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "try"
 
 mkl_toggle_option "Feature" ENABLE_SYSLOG "--enable-syslog" "Enable logging to syslog" "y"
 
@@ -53,10 +53,15 @@ function checks {
     mkl_lib_check "libpthread" "" fail CC "-lpthread" \
                   "#include <pthread.h>"
 
-    if [[ $ENABLE_C11THREADS == "y" ]]; then
+    if [[ $ENABLE_C11THREADS != n ]]; then
+        case "$ENABLE_C11THREADS" in
+            y) local action=fail ;;
+            try) local action=disable ;;
+            *) mkl_err "mklove internal error: invalid value for ENABLE_C11THREADS: $ENABLE_C11THREADS"; exit 1 ;;
+        esac
         # Use internal tinycthread if C11 threads not available.
         # Requires -lpthread on glibc c11 threads, thus the use of $LIBS.
-        mkl_lib_check "c11threads" WITH_C11THREADS disable CC "$LIBS" \
+        mkl_lib_check "c11threads" WITH_C11THREADS $action CC "$LIBS" \
                       "
 #include <threads.h>
 
@@ -94,10 +99,10 @@ void foo (void) {
     fi
 
     # optional libs
-    mkl_check "zlib" disable
-    mkl_check "libssl" disable
-    mkl_check "libsasl2" disable
-    mkl_check "libzstd" disable
+    mkl_check "zlib"
+    mkl_check "libssl"
+    mkl_check "libsasl2"
+    mkl_check "libzstd"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then
@@ -130,15 +135,6 @@ void foo (void) {
 
     # Enable sockem (tests)
     mkl_allvar_set WITH_SOCKEM WITH_SOCKEM y
-
-    if [[ "$ENABLE_SASL" == "y" ]]; then
-        mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-        mkl_meta_set "libsasl2" "rpm" "cyrus-sasl"
-        if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
-            mkl_lib_check "libsasl" "WITH_SASL_CYRUS" disable CC "-lsasl" \
-                          "#include <sasl/sasl.h>"
-        fi
-    fi
 
     if [[ "$WITH_SSL" == "y" ]]; then
         # SASL SCRAM requires base64 encoding from OpenSSL
@@ -273,7 +269,7 @@ void foo (void) {
     fi
 
     if [[ "$ENABLE_VALGRIND" == "y" ]]; then
-	mkl_compile_check valgrind WITH_VALGRIND disable CC "" \
+	mkl_compile_check valgrind WITH_VALGRIND fail CC "" \
 			  "#include <valgrind/memcheck.h>"
     fi
 

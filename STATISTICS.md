@@ -179,7 +179,8 @@ committed_offset | int gauge | | Last committed offset
 eof_offset | int gauge | | Last PARTITION_EOF signaled offset
 lo_offset | int gauge | | Partition's low watermark offset on broker
 hi_offset | int gauge | | Partition's high watermark offset on broker
-consumer_lag | int gauge | | Difference between hi_offset - max(app_offset, committed_offset)
+ls_offset | int gauge | | Partition's last stable offset on broker, or same as hi_offset is broker version is less than 0.11.0.0.
+consumer_lag | int gauge | | Difference between (hi_offset or ls_offset) - max(app_offset, committed_offset). hi_offset is used when isolation.level=read_uncommitted, otherwise ls_offset.
 txmsgs | int | | Total number of messages transmitted (produced)
 txbytes | int | | Total number of bytes transmitted for txmsgs
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc).

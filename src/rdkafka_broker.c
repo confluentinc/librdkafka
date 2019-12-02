@@ -3911,7 +3911,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         rd_kafka_toppar_lock(rktp);
                         rktp->rktp_lo_offset = hdr.LogStartOffset;
                         rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
-                        rktp->rktp_ls_offset = hdr.LastStableOffset;
+                        /* Let the LastStable offset be the effective
+                         * end_offset based on protocol version, that is:
+                         * if connected to a broker that does not support
+                         * LastStableOffset we use the HighwaterMarkOffset. */
+                        rktp->rktp_ls_offset = end_offset;
                         rd_kafka_toppar_unlock(rktp);
 
                         if (hdr.PreferredReadReplica != -1) {

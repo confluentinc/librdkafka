@@ -794,7 +794,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`principalClaimName=azp principal=admin scopeClaimName=roles "
           "scope=role1,role2 lifeSeconds=600`. In addition, SASL extensions "
           "can be communicated to the broker via "
-          "`extension_<extensionname>=value`. For example: "
+          "`extension_NAME=value`. For example: "
           "`principal=admin extension_traceId=123`" },
         { _RK_GLOBAL, "enable.sasl.oauthbearer.unsecure.jwt", _RK_C_BOOL,
           _RK(sasl.enable_oauthbearer_unsecure_jwt),

@@ -13,12 +13,12 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 
-import os, sys, json, argparse
+import os, sys, json, argparse, re
 
 def version_as_list (version):
     if version == 'trunk':
         return [sys.maxint]
-    return [int(a) for a in version.split('.')]
+    return [int(a) for a in re.findall('\d+', version)][0:3]
 
 class LibrdkafkaTestCluster(Cluster):
     def __init__(self, version, conf={}, num_brokers=3, debug=False):

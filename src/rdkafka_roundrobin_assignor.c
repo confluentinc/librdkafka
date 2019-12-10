@@ -75,21 +75,37 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
                 rd_kafka_assignor_topic_t *eligible_topic = eligible_topics[ti];
 		int partition;
 
+		/* Sort eligible members by name */
+		rd_list_sort(&eligible_topic->members,
+			     rd_kafka_group_member_cmp);
+
 		/* For each topic+partition, assign one member (in a cyclic
 		 * iteration) per partition until the partitions are exhausted*/
 		for (partition = 0 ;
 		     partition < eligible_topic->metadata->partition_cnt ;
 		     partition++) {
-			rd_kafka_group_member_t *rkgm;
+			rd_kafka_group_member_t *next_rkgm = &members[next];
 
-			/* Scan through members until we find one with a
-			 * subscription to this topic. */
-			while (!rd_kafka_group_member_find_subscription(
-				       rk, &members[next],
-				       eligible_topic->metadata->topic))
-				next++;
+			/* Find if next member is eligible */
+			rd_kafka_group_member_t *rkgm = rd_list_find(
+				&eligible_topic->members, next_rkgm,
+				rd_kafka_group_member_cmp);
 
-			rkgm = &members[next];
+			/* Not found; find first eligible member >= next */
+			if (rkgm == NULL) {
+				int i;
+				rd_kafka_group_member_t *eligible_rkgm;
+
+				/* Default to first */
+				rkgm = rd_list_elem(&eligible_topic->members, 0);
+
+				RD_LIST_FOREACH(eligible_rkgm, &eligible_topic->members, i) {
+					if (rd_kafka_group_member_cmp(eligible_rkgm, next_rkgm) >= 0) {
+						rkgm = eligible_rkgm;
+						break;
+					}
+				}
+			}
 
 			rd_kafka_dbg(rk, CGRP, "ASSIGN",
 				     "roundrobin: Member \"%s\": "
@@ -102,7 +118,7 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 				rkgm->rkgm_assignment,
 				eligible_topic->metadata->topic, partition);
 
-			next = (next+1) % rd_list_cnt(&eligible_topic->members);
+			next = (next+1) % member_cnt;
 		}
 	}
 

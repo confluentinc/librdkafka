@@ -98,6 +98,7 @@ set(
     0104-fetch_from_follower_mock.c
     0105-transactions_mock.c
     0106-cgrp_sess_timeout.c
+    0107-regex_rebalance.c
     0108-client_swname.c
     8000-idle.cpp
     test.c

@@ -26,6 +26,10 @@ else
     tests="$TESTS"
 fi
 
+if [[ $modes != gdb ]]; then
+    ARGS="$ARGS -p1"
+fi
+
 iter=0
 while true ; do
     iter=$(expr $iter + 1)
@@ -48,7 +52,7 @@ while true ; do
             else
                 export TESTS=$t
             fi
-            ./run-test.sh -p1 $ARGS $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
+            ./run-test.sh $ARGS $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
         done
     done
 

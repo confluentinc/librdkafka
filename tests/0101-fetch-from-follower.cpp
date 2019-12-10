@@ -98,7 +98,7 @@ class TestEvent2Cb : public RdKafka::EventCb {
 
           for (rapidjson::Value::ConstMemberIterator itr = pp->MemberBegin(); itr != pp->MemberEnd(); ++itr) {
             std::string broker_name = itr->name.GetString();
-            size_t broker_id_idx = broker_name.find('/');
+            size_t broker_id_idx = broker_name.rfind('/');
             if (broker_id_idx == (size_t)-1)
               continue;
             std::string broker_id = broker_name.substr(broker_id_idx + 1, broker_name.size() - broker_id_idx - 1);

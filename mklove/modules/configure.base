@@ -1578,6 +1578,7 @@ function mkl_lib_check0 {
         # E.g., check for crypto and then ssl should result in -lssl -lcrypto
         mkl_dbg "$1: from lib_check: LIBS: prepend $libs"
         mkl_mkvar_prepend "$1" LIBS "$libs"
+        mkl_mkvar_prepend "$1" MKL_PKGCONFIG_LIBS_PRIVATE "$libs"
     fi
 
     return 0
@@ -1714,6 +1715,8 @@ $cflags"
             return 1
         fi
     fi
+
+    mkl_mkvar_append $1 "MKL_PKGCONFIG_REQUIRES_PRIVATE" "$libname"
 
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 

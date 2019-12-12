@@ -38,6 +38,7 @@ endif
 # Ignore previously defined library dependencies for the C library,
 # we'll get those dependencies through the C library linkage.
 LIBS := -L../src -lrdkafka
+MKL_PKGCONFIG_REQUIRES_PRIVATE := rdkafka
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 

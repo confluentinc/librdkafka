@@ -25,8 +25,8 @@ function manual_checks {
     mkl_meta_set "libsasl2" "rpm" "cyrus-sasl"
     mkl_meta_set "libsasl2" "apk" "cyrus-sasl-dev"
 
-    if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" $action CC "-lsasl2" "#include <sasl/sasl.h>" ; then
+    if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" $action CC "-lsasl2" "#include <stddef.h>\n#include <sasl/sasl.h>" ; then
         mkl_lib_check "libsasl" "WITH_SASL_CYRUS" $action CC "-lsasl" \
-                      "#include <sasl/sasl.h>"
+                      "#include <stddef.h>\n#include <sasl/sasl.h>"
     fi
 }

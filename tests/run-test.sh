@@ -6,7 +6,7 @@ GREEN='\033[32m'
 CYAN='\033[36m'
 CCLR='\033[0m'
 
-if [ -z "$1" ]; then
+if [[ $1 == -h ]]; then
     echo "Usage: $0 [-..] [modes..]"
     echo ""
     echo "  Modes: bare valgrind helgrind drd gdb lldb bash"

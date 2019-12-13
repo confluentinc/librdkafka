@@ -28,3 +28,4 @@ tmp
 stats*.json
 test_report*.json
 cov-int
+gdbrun*.gdb

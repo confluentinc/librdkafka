@@ -78,6 +78,9 @@ RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
   if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, rk_conf,
                           errbuf, sizeof(errbuf)))) {
     errstr = errbuf;
+    // rd_kafka_new() takes ownership only if succeeds
+    if (rk_conf)
+      rd_kafka_conf_destroy(rk_conf);
     delete rkp;
     return NULL;
   }

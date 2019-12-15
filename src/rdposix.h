@@ -154,7 +154,7 @@ extern void __coverity_panic__(void);
 #define rd_assert(EXPR) do {                    \
                 if (!(EXPR))                    \
                         __coverity_panic__();   \
-        }
+        } while (0)
 #endif
 
 

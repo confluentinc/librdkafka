@@ -500,10 +500,14 @@ int rd_unittest (void) {
 #if ENABLE_CODECOV
         if (!match) {
                 /* Verify all code paths were covered */
+                int cov_fails = 0;
                 for (i = 0 ; i < RD_UT_COVNR_MAX+1 ; i++) {
                         if (!RD_UT_COVERAGE_CHECK(i))
-                                fails++;
+                                cov_fails++;
                 }
+                if (cov_fails > 0)
+                        RD_UT_SAY("%d code coverage failure(s) (ignored)\n",
+                                  cov_fails);
         }
 #endif
 

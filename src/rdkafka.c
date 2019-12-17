@@ -1177,6 +1177,17 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Destroy mock cluster */
         if (rk->rk_mock.cluster)
                 rd_kafka_mock_cluster_destroy(rk->rk_mock.cluster);
+
+        if (rd_atomic32_get(&rk->rk_mock.cluster_cnt) > 0) {
+                rd_kafka_log(rk, LOG_EMERG, "MOCK",
+                             "%d mock cluster(s) still active: "
+                             "must be explicitly destroyed with "
+                             "rd_kafka_mock_cluster_destroy() prior to "
+                             "terminating the rd_kafka_t instance",
+                             (int)rd_atomic32_get(&rk->rk_mock.cluster_cnt));
+                rd_assert(!*"All mock clusters must be destroyed prior to "
+                          "rd_kafka_t destroy");
+        }
 }
 
 /**
@@ -2114,6 +2125,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         /* Create Mock cluster */
+        rd_atomic32_init(&rk->rk_mock.cluster_cnt, 0);
         if (rk->rk_conf.mock.broker_cnt > 0) {
                 rk->rk_mock.cluster = rd_kafka_mock_cluster_new(
                         rk, rk->rk_conf.mock.broker_cnt);
@@ -2127,7 +2139,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 }
 
                 rd_kafka_log(rk, LOG_NOTICE, "MOCK", "Mock cluster enabled: "
-                             "original bootstrap.servers ignored and replaced");
+                             "original bootstrap.servers and security.protocol "
+                             "ignored and replaced");
 
                 /* Overwrite bootstrap.servers and connection settings */
                 if (rd_kafka_conf_set(&rk->rk_conf, "bootstrap.servers",
@@ -2135,6 +2148,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                               rk->rk_mock.cluster),
                                       NULL, 0) != RD_KAFKA_CONF_OK)
                         rd_assert(!"failed to replace mock bootstrap.servers");
+
+                if (rd_kafka_conf_set(&rk->rk_conf, "security.protocol",
+                                      "plaintext", NULL, 0) != RD_KAFKA_CONF_OK)
+                        rd_assert(!"failed to reset mock security.protocol");
 
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
         }

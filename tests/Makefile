@@ -12,7 +12,7 @@ CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 # Latest Kafka version
-KAFKA_VERSION?=2.3.0
+KAFKA_VERSION?=2.4.0
 # Kafka versions for compatibility tests
 COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 $(KAFKA_VERSION)
 -include ../Makefile.config

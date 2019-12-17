@@ -561,7 +561,16 @@ struct rd_kafka_s {
 
         /* Test mocks */
         struct {
-                rd_kafka_mock_cluster_t *cluster; /**< Mock cluster */
+                rd_kafka_mock_cluster_t *cluster; /**< Mock cluster, created
+                                                   *   by test.mock.num.brokers
+                                                   */
+                rd_atomic32_t cluster_cnt;        /**< Total number of mock
+                                                   *   clusters, created either
+                                                   *   through
+                                                   *   test.mock.num.brokers
+                                                   *   or mock_cluster_new().
+                                                   */
+
         } rk_mock;
 };
 

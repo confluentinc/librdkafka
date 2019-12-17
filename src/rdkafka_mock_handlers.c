@@ -1137,6 +1137,13 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
         err = rd_kafka_mock_next_request_error(mcluster,
                                                rkbuf->rkbuf_reqhdr.ApiKey);
 
+        if (!err &&
+            !RD_KAFKAP_STR_IS_NULL(&TransactionalId) &&
+            rd_kafka_mock_cluster_get_coord(mcluster,
+                                            RD_KAFKA_COORD_TXN,
+                                            &TransactionalId) != mconn->broker)
+                err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -1193,6 +1200,12 @@ rd_kafka_mock_handle_AddPartitionsToTxn (rd_kafka_mock_connection_t *mconn,
         /* Inject error */
         all_err = rd_kafka_mock_next_request_error(mcluster,
                                                    rkbuf->rkbuf_reqhdr.ApiKey);
+
+        if (!all_err &&
+            rd_kafka_mock_cluster_get_coord(mcluster,
+                                            RD_KAFKA_COORD_TXN,
+                                            &TransactionalId) != mconn->broker)
+                all_err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -1270,6 +1283,12 @@ rd_kafka_mock_handle_AddOffsetsToTxn (rd_kafka_mock_connection_t *mconn,
         err = rd_kafka_mock_next_request_error(mcluster,
                                                rkbuf->rkbuf_reqhdr.ApiKey);
 
+        if (!err &&
+            rd_kafka_mock_cluster_get_coord(mcluster,
+                                            RD_KAFKA_COORD_TXN,
+                                            &TransactionalId) != mconn->broker)
+                err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
         /* Response: ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -1317,6 +1336,12 @@ rd_kafka_mock_handle_TxnOffsetCommit (rd_kafka_mock_connection_t *mconn,
         /* Inject error */
         err = rd_kafka_mock_next_request_error(mcluster,
                                                rkbuf->rkbuf_reqhdr.ApiKey);
+
+        if (!err &&
+            rd_kafka_mock_cluster_get_coord(mcluster,
+                                            RD_KAFKA_COORD_GROUP,
+                                            &GroupId) != mconn->broker)
+                err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -1405,6 +1430,12 @@ rd_kafka_mock_handle_EndTxn (rd_kafka_mock_connection_t *mconn,
         err = rd_kafka_mock_next_request_error(mcluster,
                                                rkbuf->rkbuf_reqhdr.ApiKey);
 
+        if (!err &&
+            rd_kafka_mock_cluster_get_coord(mcluster,
+                                            RD_KAFKA_COORD_TXN,
+                                            &TransactionalId) != mconn->broker)
+                err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -1450,6 +1481,7 @@ rd_kafka_mock_api_handlers[RD_KAFKAP__NUM] = {
  */
 static int rd_kafka_mock_handle_ApiVersion (rd_kafka_mock_connection_t *mconn,
                                             rd_kafka_buf_t *rkbuf) {
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         size_t of_ApiKeysCnt;
         int cnt = 0;
@@ -1462,17 +1494,18 @@ static int rd_kafka_mock_handle_ApiVersion (rd_kafka_mock_connection_t *mconn,
         of_ApiKeysCnt = rd_kafka_buf_write_i32(resp, 0); /* updated later */
 
         for (i = 0 ; i < RD_KAFKAP__NUM ; i++) {
-                if (!rd_kafka_mock_api_handlers[i].cb)
+                if (!mcluster->api_handlers[i].cb ||
+                    mcluster->api_handlers[i].MaxVersion == -1)
                         continue;
 
                 /* ApiKey */
                 rd_kafka_buf_write_i16(resp, (int16_t)i);
                 /* MinVersion */
                 rd_kafka_buf_write_i16(
-                        resp, rd_kafka_mock_api_handlers[i].MinVersion);
+                        resp, mcluster->api_handlers[i].MinVersion);
                 /* MaxVersion */
                 rd_kafka_buf_write_i16(
-                        resp, rd_kafka_mock_api_handlers[i].MaxVersion);
+                        resp, mcluster->api_handlers[i].MaxVersion);
 
                 cnt++;
         }

@@ -3299,6 +3299,11 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * @remark on_consume() interceptors may be called from this function prior to
  *         passing message to application.
+ *
+ * @remark This function will return early if a transaction control message is
+ *         received, these messages are not exposed to the application but
+ *         still enqueued on the consumer queue to make sure their
+ *         offsets are stored.
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,

@@ -112,14 +112,82 @@ class StatsCb : public RdKafka::EventCb {
 };
 
 
-static void do_test_consumer_lag (void) {
+/**
+ * @brief Produce \p msgcnt in a transaction that is aborted.
+ */
+static void produce_aborted_txns (const std::string &topic,
+                                  int32_t partition, int msgcnt) {
+  RdKafka::Producer *p;
+  RdKafka::Conf *conf;
+  RdKafka::Error *error;
+
+  Test::Say(tostr() << "Producing " << msgcnt << " transactional messages " <<
+            "which will be aborted\n");
+  Test::conf_init(&conf, NULL, 0);
+
+  Test::conf_set(conf, "transactional.id", "txn_id_" + topic);
+
+  std::string errstr;
+  p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail("Failed to create Producer:  " + errstr);
+
+  error = p->init_transactions(-1);
+  if (error)
+    Test::Fail("init_transactions() failed: " + error->str());
+
+  error = p->begin_transaction();
+  if (error)
+    Test::Fail("begin_transaction() failed: " + error->str());
+
+  for (int i = 0 ; i < msgcnt ; i++) {
+    RdKafka::ErrorCode err;
+
+    err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
+                     &i, sizeof(i),
+                     NULL, 0,
+                     0, NULL);
+    if (err)
+      Test::Fail("produce() failed: " + RdKafka::err2str(err));
+  }
+
+  /* Flush is typically not needed for transactions since
+   * commit_transaction() will do it automatically, but in the case of
+   * abort_transaction() nothing might have been sent to the broker yet,
+   * so call flush() here so we know the messages are sent and the
+   * partitions are added to the transaction, so that a control(abort)
+   * message is written to the partition. */
+  p->flush(-1);
+
+  error = p->abort_transaction(-1);
+  if (error)
+    Test::Fail("abort_transaction() failed: " + error->str());
+
+  delete p;
+}
+
+
+static void do_test_consumer_lag (bool with_txns) {
   int msgcnt = test_quick ? 5 : 10;
+  int txn_msgcnt = 3;
+  int addcnt = 0;
   std::string errstr;
   RdKafka::ErrorCode err;
+
+  Test::Say(tostr() << _C_MAG << "[ Test consumer lag " <<
+            (with_txns ? "with":"without") << " transactions ]\n");
 
   topic = Test::mk_topic_name("0061-consumer_lag", 1);
 
   test_produce_msgs_easy(topic.c_str(), 0, 0, msgcnt);
+
+  if (with_txns) {
+    /* After the standard messages have been produced,
+     * produce some transactional messages that are aborted to advance
+     * the end offset with control messages. */
+    produce_aborted_txns(topic, 0, txn_msgcnt);
+    addcnt = txn_msgcnt + 1 /* ctrl msg */;
+  }
 
   /*
    * Create consumer
@@ -151,11 +219,14 @@ static void do_test_consumer_lag (void) {
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
-  while (cnt < msgcnt) {
-    RdKafka::Message *msg = c->consume(tmout_multip(1000));
+  while (cnt < msgcnt + addcnt) {
+    RdKafka::Message *msg = c->consume(1000);
+
     switch (msg->err())
       {
       case RdKafka::ERR__TIMED_OUT:
+        if (with_txns && cnt >= msgcnt && stats.calc_lag == 0)
+          addcnt = 0; /* done */
         break;
       case RdKafka::ERR__PARTITION_EOF:
         Test::Fail(tostr() << "Unexpected PARTITION_EOF (not enbaled) after "
@@ -165,7 +236,10 @@ static void do_test_consumer_lag (void) {
       case RdKafka::ERR_NO_ERROR:
         /* Proper message. Update calculated lag for later
          * checking in stats callback */
-        stats.calc_lag = msgcnt - (msg->offset()+1);
+        if (msg->offset()+1 >= msgcnt && with_txns)
+          stats.calc_lag = 0;
+        else
+          stats.calc_lag = (msgcnt+addcnt) - (msg->offset()+1);
         cnt++;
         Test::Say(2, tostr() << "Received message #" << cnt << "/" << msgcnt <<
                   " at offset " << msg->offset() << " (calc lag " << stats.calc_lag << ")\n");
@@ -193,7 +267,9 @@ static void do_test_consumer_lag (void) {
 
 extern "C" {
   int main_0061_consumer_lag (int argc, char **argv) {
-    do_test_consumer_lag();
+    do_test_consumer_lag(false/*no txns*/);
+    if (test_broker_version >= TEST_BRKVER(0,11,0,0))
+      do_test_consumer_lag(true/*txns*/);
     return 0;
   }
 }

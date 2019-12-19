@@ -556,6 +556,12 @@ rd_kafka_op_new_fetch_msg (rd_kafka_msg_t **rkmp,
                            size_t key_len, const void *key,
                            size_t val_len, const void *val);
 
+rd_kafka_op_t *
+rd_kafka_op_new_ctrl_msg (rd_kafka_toppar_t *rktp,
+                           int32_t version,
+                           rd_kafka_buf_t *rkbuf,
+                           int64_t offset);
+
 void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
@@ -571,7 +577,12 @@ extern rd_atomic32_t rd_kafka_op_cnt;
 
 void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
-void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
-			       const rd_kafka_message_t *rkmessage);
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko);
+
+
+#define rd_kafka_op_is_ctrl_msg(rko)                                    \
+        ((rko)->rko_type == RD_KAFKA_OP_FETCH &&                        \
+         !(rko)->rko_err &&                                             \
+         ((rko)->rko_u.fetch.rkm.rkm_flags & RD_KAFKA_MSG_F_CONTROL))
 
 #endif /* _RDKAFKA_OP_H_ */

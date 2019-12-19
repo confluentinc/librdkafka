@@ -104,6 +104,10 @@ class TestEventCb : public RdKafka::EventCb {
         }
         break;
 
+      case RdKafka::Event::EVENT_LOG:
+        std::cerr << event.str() << "\n";
+        break;
+
       default:
         break;
     }
@@ -156,7 +160,8 @@ static std::vector<RdKafka::Message *> consume_messages(
     Test::Fail("assign failed: " + RdKafka::err2str(err));
   RdKafka::TopicPartition::destroy(parts);
 
-  Test::Say("Consuming from topic " + topic + "\n");
+  Test::Say(tostr() << "Consuming from topic " << topic <<
+            " partition " << partition << "\n");
   std::vector<RdKafka::Message *> result = std::vector<RdKafka::Message *>();
 
   while (true) {

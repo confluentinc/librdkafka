@@ -596,6 +596,12 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 						       rktp->rktp_app_offset,
                                                        0/* no lock */);
 			rd_kafka_toppar_unlock(rktp);
+
+                        /* if this is a control messages, don't
+                         * include - only store the offset */
+                        if (rko->rko_u.fetch.rkm.rkm_flags &
+                            RD_KAFKA_MSG_F_CONTROL)
+                                continue;
                 }
 
 		/* Get rkmessage from rko and append to array. */

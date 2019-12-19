@@ -2827,8 +2827,21 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
 
-                if (res == RD_KAFKA_OP_RES_PASS)
+                if (res == RD_KAFKA_OP_RES_PASS) {
+                        /* If the op represents a ctrl message, do
+                         * nothing except store the offset.
+                         */
+                        if (rko->rko_type == RD_KAFKA_OP_FETCH &&
+                            (rko->rko_u.fetch.rkm.rkm_flags &
+                             RD_KAFKA_MSG_F_CONTROL)) {
+                                rkmessage = &rko->rko_u.fetch.rkm.rkm_rkmessage;
+                                rd_kafka_op_offset_store(rk, rko, rkmessage);
+                                rd_kafka_op_destroy(rko);
+                            continue;
+                        }
+
                         break;
+                }
 
                 if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
                              rd_kafka_yield_thread)) {

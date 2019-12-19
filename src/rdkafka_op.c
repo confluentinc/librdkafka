@@ -32,6 +32,7 @@
 #include "rdkafka_op.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_proto.h"
 #include "rdkafka_offset.h"
 
 /* Current number of rd_kafka_op_t */
@@ -548,6 +549,30 @@ rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_q_t *rkq,
         return res;
 }
 
+
+/**
+ * @brief Creates a new RD_KAFKA_OP_FETCH op representing a
+ *        control message. The rkm_flags property is set to
+ *        RD_KAFKA_MSG_F_CONTROL.
+ */
+rd_kafka_op_t *
+rd_kafka_op_new_ctrl_msg (rd_kafka_toppar_t *rktp,
+                           int32_t version,
+                           rd_kafka_buf_t *rkbuf,
+                           int64_t offset) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new_fetch_msg(&rkm,
+                rktp, version, rkbuf,
+                offset,
+                RD_KAFKAP_BYTES_LEN_NULL, NULL,
+                RD_KAFKAP_BYTES_LEN_NULL, NULL);
+
+        rkm->rkm_flags |= RD_KAFKA_MSG_F_CONTROL;
+
+        return rko;
+}
 
 /**
  * @brief Creates a new RD_KAFKA_OP_FETCH op and sets up the

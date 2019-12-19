@@ -84,6 +84,7 @@ typedef struct rd_kafka_msg_s {
 #define RD_KAFKA_MSG_F_FREE_RKM     0x10000 /* msg_t is allocated */
 #define RD_KAFKA_MSG_F_ACCOUNT      0x20000 /* accounted for in curr_msgs */
 #define RD_KAFKA_MSG_F_PRODUCER     0x40000 /* Producer message */
+#define RD_KAFKA_MSG_F_CONTROL      0x80000 /* Control message */
 
 	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
 	int64_t    rkm_timestamp;  /* Message format V1.

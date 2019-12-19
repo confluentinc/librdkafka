@@ -32,6 +32,7 @@
 #include "rdkafka_op.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_proto.h"
 #include "rdkafka_offset.h"
 
 /* Current number of rd_kafka_op_t */
@@ -550,6 +551,31 @@ rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_q_t *rkq,
 
 
 /**
+ * @brief Creates a new RD_KAFKA_OP_FETCH op representing a
+ *        control message. The rkm_flags property is set to
+ *        RD_KAFKA_MSG_F_CONTROL.
+ */
+rd_kafka_op_t *
+rd_kafka_op_new_ctrl_msg (rd_kafka_toppar_t *rktp,
+                           int32_t version,
+                           rd_kafka_buf_t *rkbuf,
+                           int64_t offset) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new_fetch_msg(
+                &rkm,
+                rktp, version, rkbuf,
+                offset,
+                0, NULL,
+                0, NULL);
+
+        rkm->rkm_flags |= RD_KAFKA_MSG_F_CONTROL;
+
+        return rko;
+}
+
+/**
  * @brief Creates a new RD_KAFKA_OP_FETCH op and sets up the
  *        embedded message according to the parameters.
  *
@@ -637,7 +663,12 @@ rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         rd_kafka_op_t *rko, int cb_type) {
         if (cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
                 return RD_KAFKA_OP_RES_PASS;
-        else if (cb_type != RD_KAFKA_Q_CB_EVENT &&
+        else if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                /* Control messages must not be exposed to the application
+                 * but we need to store their offsets. */
+                rd_kafka_op_offset_store(rk, rko);
+                return RD_KAFKA_OP_RES_HANDLED;
+        } else if (cb_type != RD_KAFKA_Q_CB_EVENT &&
                  rko->rko_type & RD_KAFKA_OP_CB)
                 return rd_kafka_op_call(rk, rkq, rko);
         else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
@@ -698,10 +729,12 @@ rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
 /**
  * @brief Store offset for fetched message.
+ *
+ * @locks rktp_lock and rk_lock MUST NOT be held
  */
-void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
-			       const rd_kafka_message_t *rkmessage) {
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	rd_kafka_toppar_t *rktp;
+        int64_t offset;
 
 	if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
 		return;
@@ -711,9 +744,11 @@ void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	if (unlikely(!rk))
 		rk = rktp->rktp_rkt->rkt_rk;
 
+        offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+
 	rd_kafka_toppar_lock(rktp);
-	rktp->rktp_app_offset = rkmessage->offset+1;
+	rktp->rktp_app_offset = offset;
 	if (rk->rk_conf.enable_auto_offset_store)
-		rd_kafka_offset_store0(rktp, rkmessage->offset+1, 0/*no lock*/);
+		rd_kafka_offset_store0(rktp, offset, 0/*no lock*/);
 	rd_kafka_toppar_unlock(rktp);
 }

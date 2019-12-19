@@ -109,7 +109,7 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 			return NULL;
 
 		/* Store offset */
-		rd_kafka_op_offset_store(NULL, rko, rkmessage);
+		rd_kafka_op_offset_store(NULL, rko);
 
 		return rkmessage;
 

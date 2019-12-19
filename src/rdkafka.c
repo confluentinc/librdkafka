@@ -2727,9 +2727,9 @@ rd_kafka_consume_cb (rd_kafka_t *rk,
 
 	rkmessage = rd_kafka_message_get(rko);
 
-	rd_kafka_op_offset_store(rk, rko, rkmessage);
+	rd_kafka_op_offset_store(rk, rko);
 
-	ctx->consume_cb(rkmessage, ctx->opaque);
+        ctx->consume_cb(rkmessage, ctx->opaque);
 
         rd_kafka_op_destroy(rko);
 
@@ -2867,7 +2867,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rkmessage = rd_kafka_message_get(rko);
 
 	/* Store offset */
-	rd_kafka_op_offset_store(rk, rko, rkmessage);
+	rd_kafka_op_offset_store(rk, rko);
 
 	rd_kafka_set_last_error(0, 0);
 

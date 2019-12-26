@@ -754,7 +754,7 @@ void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
                 rkm->rkm_offset = base_offset++;
                 if (timestamp != -1) {
                         rkm->rkm_timestamp = timestamp;
-                        rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
+                        rkm->rkm_tstype = RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME;
                 }
 
                 /* Don't downgrade a message from any form of PERSISTED

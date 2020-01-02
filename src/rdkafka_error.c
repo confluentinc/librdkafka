@@ -75,6 +75,31 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
         return error;
 }
 
+rd_kafka_error_t *rd_kafka_error_copy (const rd_kafka_error_t *src) {
+        rd_kafka_error_t *error;
+        ssize_t strsz = 0;
+
+        if (src->errstr) {
+                strsz = strlen(src->errstr);
+        }
+
+        error = rd_malloc(sizeof(*error) + strsz);
+        error->code = src->code;
+        error->fatal = src->fatal;
+        error->retriable = src->retriable;
+        error->txn_requires_abort = src->txn_requires_abort;
+
+        if (strsz > 0) {
+                error->errstr = (char *)(error+1);
+                rd_strlcpy(error->errstr, src->errstr, strsz);
+        } else {
+                error->errstr = NULL;
+        }
+
+        return error;
+}
+
+
 rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
                                       const char *fmt, ...) {
         rd_kafka_error_t *error;

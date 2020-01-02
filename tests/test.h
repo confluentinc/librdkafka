@@ -637,6 +637,18 @@ test_AlterConfigs_simple (rd_kafka_t *rk,
                           const char *resname,
                           const char **configs, size_t config_cnt);
 
+rd_kafka_resp_err_t
+test_DeleteGroups_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **groups, size_t group_cnt,
+                          void *opaque);
+
+rd_kafka_resp_err_t
+test_DeleteRecords_simple (rd_kafka_t *rk,
+                           rd_kafka_queue_t *useq,
+                           const rd_kafka_topic_partition_list_t *offsets,
+                           void *opaque);
+
 rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
 
 

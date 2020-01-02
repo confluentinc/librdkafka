@@ -1799,7 +1799,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-97 - Backwards compatibility with older brokers                      | 0.10.2.0                    | Supported                                                                                     |
 | KIP-98 - EOS                                                             | 0.11.0.0                    | Supported                                                                                     |
 | KIP-102 - Close with timeout in consumer                                 | 0.10.2.0                    | Not supported                                                                                 |
-| KIP-107 - AdminAPI: DeleteRecordsBefore                                  | 0.11.0.0                    | Not supported                                                                                 |
+| KIP-107 - AdminAPI: DeleteRecordsBefore                                  | 0.11.0.0                    | Supported                                                                                     |
 | KIP-110 - ZStd compression                                               | 2.1.0                       | Supported                                                                                     |
 | KIP-117 - AdminClient                                                    | 0.11.0.0                    | Supported                                                                                     |
 | KIP-124 - Request rate quotas                                            | 0.11.0.0                    | Partially supported (depending on protocol request)                                           |
@@ -1810,13 +1810,13 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-152 - Improved SASL auth error messages                              | 1.0.0                       | Supported                                                                                     |
 | KIP-192 - Cleaner idempotence semantics                                  | 1.0.0                       | Not supported                                                                                 |
 | KIP-195 - AdminAPI: CreatePartitions                                     | 1.0.0                       | Supported                                                                                     |
-| KIP-204 - AdminAPI: DeleteRecords                                        | 1.1.0                       | Not supported                                                                                 |
+| KIP-204 - AdminAPI: DeleteRecords                                        | 1.1.0                       | Supported                                                                                     |
 | KIP-219 - Client-side throttling                                         | 2.0.0                       | Not supported                                                                                 |
 | KIP-222 - AdminAPI: Consumer group operations                            | 2.0.0                       | Not supported (but some APIs available outside Admin client)                                  |
 | KIP-223 - Consumer partition lead metric                                 | 2.0.0                       | Not supported                                                                                 |
 | KIP-226 - AdminAPI: Dynamic broker config                                | 1.1.0                       | Supported                                                                                     |
 | KIP-227 - Consumer Incremental Fetch                                     | 1.1.0                       | Not supported                                                                                 |
-| KIP-229 - AdminAPI: DeleteGroups                                         | 1.1.0                       | Not supported                                                                                 |
+| KIP-229 - AdminAPI: DeleteGroups                                         | 1.1.0                       | Supported                                                                                     |
 | KIP-235 - DNS alias for secure connections                               | 2.1.0                       | Not supported                                                                                 |
 | KIP-249 - AdminAPI: Deletegation Tokens                                  | 2.0.0                       | Not supported                                                                                 |
 | KIP-255 - SASL OAUTHBEARER                                               | 2.0.0                       | Supported                                                                                     |
@@ -1904,7 +1904,7 @@ release of librdkafka.
 | 18      | ApiVersions             | 3           | 3                       |
 | 19      | CreateTopics            | 4           | 2                       |
 | 20      | DeleteTopics            | 3           | 1                       |
-| 21      | DeleteRecords           | 1           | -                       |
+| 21      | DeleteRecords           | 2           | 1                       |
 | 22      | InitProducerId          | 1           | 1                       |
 | 23      | OffsetForLeaderEpoch    | 3           | -                       |
 | 24      | AddPartitionsToTxn      | 1           | 0                       |
@@ -1925,7 +1925,7 @@ release of librdkafka.
 | 39      | RenewDelegationToken    | 1           | -                       |
 | 40      | ExpireDelegationToken   | 1           | -                       |
 | 41      | DescribeDelegationToken | 1           | -                       |
-| 42      | DeleteGroups            | 1           | -                       |
+| 42      | DeleteGroups            | 2           | 1                       |
 | 43      | ElectPreferredLeaders   | 0           | -                       |
 | 44      | IncrementalAlterConfigs | 0           | -                       |
 
@@ -1996,4 +1996,3 @@ you monitor the conversions in there to pick up questions specific to your
 bindings.
 But for the most part user questions are usually generic enough to apply to all
 librdkafka bindings.
-

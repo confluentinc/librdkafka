@@ -1388,7 +1388,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_true);
+        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_false, rd_true);
         if (!partitions)
                 goto err_parse;
 

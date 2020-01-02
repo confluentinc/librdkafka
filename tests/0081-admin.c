@@ -43,7 +43,7 @@ static size_t avail_broker_cnt;
 static void do_test_CreateTopics (const char *what,
                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                   int op_timeout, rd_bool_t validate_only) {
-        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_queue_t *q;
 #define MY_NEW_TOPICS_CNT 6
         char *topics[MY_NEW_TOPICS_CNT];
         rd_kafka_NewTopic_t *new_topics[MY_NEW_TOPICS_CNT];
@@ -69,14 +69,16 @@ static void do_test_CreateTopics (const char *what,
         int num_replicas = (int)avail_broker_cnt;
         int32_t *replicas;
 
+        SUB_TEST_QUICK("%s CreateTopics with %s, "
+                       "op_timeout %d, validate_only %d",
+                       rd_kafka_name(rk), what, op_timeout, validate_only);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
         /* Set up replicas */
         replicas = rd_alloca(sizeof(*replicas) * num_replicas);
         for (i = 0 ; i < num_replicas ; i++)
                 replicas[i] = avail_brokers[i];
-
-        TEST_SAY(_C_MAG "[ %s CreateTopics with %s, "
-                 "op_timeout %d, validate_only %d ]\n",
-                 rd_kafka_name(rk), what, op_timeout, validate_only);
 
         /**
          * Construct NewTopic array with different properties for
@@ -274,7 +276,10 @@ static void do_test_CreateTopics (const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
+        TEST_LATER_CHECK();
 #undef MY_NEW_TOPICS_CNT
+
+        SUB_TEST_PASS();
 }
 
 
@@ -288,7 +293,7 @@ static void do_test_CreateTopics (const char *what,
 static void do_test_DeleteTopics (const char *what,
                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                   int op_timeout) {
-        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_queue_t *q;
         const int skip_topic_cnt = 2;
 #define MY_DEL_TOPICS_CNT 9
         char *topics[MY_DEL_TOPICS_CNT];
@@ -313,8 +318,10 @@ static void do_test_DeleteTopics (const char *what,
         size_t restopic_cnt;
         int metadata_tmout;
 
-        TEST_SAY(_C_MAG "[ %s DeleteTopics with %s, op_timeout %d ]\n",
-                 rd_kafka_name(rk), what, op_timeout);
+        SUB_TEST_QUICK("%s DeleteTopics with %s, op_timeout %d",
+                       rd_kafka_name(rk), what, op_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
 
         /**
          * Construct DeleteTopic array
@@ -463,7 +470,10 @@ static void do_test_DeleteTopics (const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
+        TEST_LATER_CHECK();
 #undef MY_DEL_TOPICS_CNT
+
+        SUB_TEST_PASS();
 }
 
 
@@ -476,7 +486,7 @@ static void do_test_DeleteTopics (const char *what,
 static void do_test_CreatePartitions (const char *what,
                                       rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                       int op_timeout) {
-        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_queue_t *q;
 #define MY_CRP_TOPICS_CNT 9
         char *topics[MY_CRP_TOPICS_CNT];
         rd_kafka_NewTopic_t *new_topics[MY_CRP_TOPICS_CNT];
@@ -493,8 +503,10 @@ static void do_test_CreatePartitions (const char *what,
         int metadata_tmout;
         int num_replicas = (int)avail_broker_cnt;
 
-        TEST_SAY(_C_MAG "[ %s CreatePartitions with %s, op_timeout %d ]\n",
-                 rd_kafka_name(rk), what, op_timeout);
+        SUB_TEST_QUICK("%s CreatePartitions with %s, op_timeout %d",
+                       rd_kafka_name(rk), what, op_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
 
         /* Set up two expected partitions with different replication sets
          * so they can be matched by the metadata checker later.
@@ -659,7 +671,10 @@ static void do_test_CreatePartitions (const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
+        TEST_LATER_CHECK();
 #undef MY_CRP_TOPICS_CNT
+
+        SUB_TEST_PASS();
 }
 
 
@@ -726,6 +741,8 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         int ci = 0;
         int i;
         int fails = 0;
+
+        SUB_TEST_QUICK();
 
         /*
          * Only create one topic, the others will be non-existent.
@@ -898,7 +915,10 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         rd_kafka_ConfigResource_destroy_array(configs, ci);
 
+        TEST_LATER_CHECK();
 #undef MY_CONFRES_CNT
+
+        SUB_TEST_PASS();
 }
 
 
@@ -923,6 +943,8 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         int i;
         int fails = 0;
         int max_retry_describe = 3;
+
+        SUB_TEST_QUICK();
 
         /*
          * Only create one topic, the others will be non-existent.
@@ -1088,7 +1110,10 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         rd_kafka_ConfigResource_destroy_array(configs, ci);
 
+        TEST_LATER_CHECK();
 #undef MY_CONFRES_CNT
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1104,13 +1129,13 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_NewTopic_t *topic;
         test_timing_t t_destroy;
 
+        SUB_TEST_QUICK("Test unclean destroy using %s",
+                       with_mainq ? "mainq" : "tempq");
+
         test_conf_init(&conf, NULL, 0);
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
-
-        TEST_SAY(_C_MAG "[ Test unclean destroy for %s using %s]\n", rd_kafka_name(rk),
-                 with_mainq ? "mainq" : "tempq");
 
         if (with_mainq)
                 q = rd_kafka_queue_get_main(rk);
@@ -1131,11 +1156,469 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_destroy(rk);
         TIMING_STOP(&t_destroy);
 
+        SUB_TEST_PASS();
+
         /* Restore timeout */
-        test_timeout_set(60);;
+        test_timeout_set(60);
 }
 
 
+
+
+/**
+  * @brief Test deletion of records
+  *
+  *
+  */
+static void do_test_DeleteRecords (const char *what,
+                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                   int op_timeout) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *del_records = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define MY_DEL_RECORDS_CNT 3
+        rd_kafka_topic_partition_list_t *results = NULL;
+        int i;
+        const int partitions_cnt = 3;
+        const int msgs_cnt = 100;
+        char *topics[MY_DEL_RECORDS_CNT];
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_DEL_RECORDS_CNT] = {{0}};
+        int exp_mdtopic_cnt = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_DeleteRecords_result_t *res;
+
+        SUB_TEST_QUICK("%s DeleteRecords with %s, op_timeout %d",
+                       rd_kafka_name(rk), what, op_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++) {
+                char pfx[32];
+                char *topic;
+
+                rd_snprintf(pfx, sizeof(pfx), "DeleteRecords-topic%d", i);
+                topic = rd_strdup(test_mk_topic_name(pfx, 1));
+
+                topics[i] = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+        }
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, topics,
+                                 MY_DEL_RECORDS_CNT,
+                                 partitions_cnt /*num_partitions*/,
+                                 NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics, exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  15*1000);
+
+        /* Produce 100 msgs / partition */
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT; i++ ) {
+                int32_t partition;
+                for (partition = 0 ; partition < partitions_cnt; partition++ ) {
+                        test_produce_msgs_easy(topics[i], 0, partition,
+                                               msgs_cnt);
+                }
+        }
+
+        del_records = rd_kafka_topic_partition_list_new(10);
+
+        /* Wipe all data from topic 0 */
+        for (i = 0 ; i < partitions_cnt; i++)
+                rd_kafka_topic_partition_list_add(del_records, topics[0], i)->
+                        offset = RD_KAFKA_OFFSET_END;
+
+        /* Wipe all data from partition 0 in topic 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[1], 0)->
+                offset = RD_KAFKA_OFFSET_END;
+
+        /* Wipe some data from partition 2 in topic 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[1], 2)->
+                offset = msgs_cnt / 2;
+
+        /* Not changing the offset (out of range) for topic 2 partition 0 */
+        rd_kafka_topic_partition_list_add(del_records, topics[2], 0);
+
+        /* Offset out of range for topic 2 partition 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[2], 1)->
+                offset = msgs_cnt + 1;
+
+        TIMING_START(&timing, "DeleteRecords");
+        TEST_SAY("Call DeleteRecords\n");
+        rd_kafka_DeleteRecords(rk, del_records, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "DeleteRecords.queue_poll");
+
+        /* Poll result queue for DeleteRecords result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20*1000));
+                TEST_SAY("DeleteRecords: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DELETERECORDS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteRecords_result(rkev);
+        TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected DeleteRecords to return %s, not %s (%s)",
+                    rd_kafka_err2str(exp_err),
+                    rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DeleteRecords: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        results = rd_kafka_topic_partition_list_copy(
+                rd_kafka_DeleteRecords_result_offsets(res));
+
+        /* Sort both input and output list */
+        rd_kafka_topic_partition_list_sort(del_records, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(results, NULL, NULL);
+
+        TEST_SAY("Input partitions:\n");
+        test_print_partition_list(del_records);
+        TEST_SAY("Result partitions:\n");
+        test_print_partition_list(results);
+
+        TEST_ASSERT(del_records->cnt == results->cnt,
+                    "expected DeleteRecords_result_offsets to return %d items, "
+                    "not %d",
+                    del_records->cnt,
+                    results->cnt);
+
+        for (i = 0 ; i < results->cnt ; i++) {
+                const rd_kafka_topic_partition_t *input =&del_records->elems[i];
+                const rd_kafka_topic_partition_t *output = &results->elems[i];
+                int64_t expected_offset = input->offset;
+                rd_kafka_resp_err_t expected_err = 0;
+
+                if (expected_offset == RD_KAFKA_OFFSET_END)
+                        expected_offset = msgs_cnt;
+
+                /* Expect Offset out of range error */
+                if (input->offset < RD_KAFKA_OFFSET_END ||
+                    input->offset > msgs_cnt)
+                        expected_err = 1;
+
+                TEST_SAY("DeleteRecords Returned %s for %s [%"PRId32"] "
+                         "low-watermark = %d\n",
+                         rd_kafka_err2name(output->err),
+                         output->topic,
+                         output->partition,
+                         (int)output->offset);
+
+                if (strcmp(output->topic, input->topic))
+                        TEST_FAIL_LATER("Result order mismatch at #%d: "
+                                        "expected topic %s, got %s",
+                                        i,
+                                        input->topic,
+                                        output->topic);
+
+                if (output->partition != input->partition)
+                        TEST_FAIL_LATER("Result order mismatch at #%d: "
+                                        "expected partition %d, got %d",
+                                        i,
+                                        input->partition,
+                                        output->partition);
+
+                if (output->err != expected_err)
+                        TEST_FAIL_LATER("%s [%"PRId32"]: "
+                                        "expected error code %d (%s), "
+                                        "got %d (%s)",
+                                        output->topic,
+                                        output->partition,
+                                        expected_err,
+                                        rd_kafka_err2str(expected_err),
+                                        output->err,
+                                        rd_kafka_err2str(output->err));
+
+                if (output->err == 0 && output->offset != expected_offset)
+                        TEST_FAIL_LATER("%s [%"PRId32"]: "
+                                        "expected offset %"PRId64", "
+                                        "got %"PRId64,
+                                        output->topic,
+                                        output->partition,
+                                        expected_offset,
+                                        output->offset);
+        }
+
+        /* Check watermarks for partitions */
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT; i++ ) {
+                int32_t partition;
+                for (partition = 0 ; partition < partitions_cnt; partition++ ) {
+                        const rd_kafka_topic_partition_t *del =
+                                rd_kafka_topic_partition_list_find(
+                                        results, topics[i], partition);
+                        int64_t expected_low = 0;
+                        int64_t expected_high = msgs_cnt;
+                        int64_t low, high;
+
+                        if (del && del->err == 0) {
+                                expected_low = del->offset;
+                        }
+
+                        err = rd_kafka_query_watermark_offsets(
+                                rk, topics[i], partition,
+                                &low, &high, tmout_multip(10000));
+                        if (err)
+                                TEST_FAIL("query_watermark_offsets failed: "
+                                          "%s\n",
+                                          rd_kafka_err2str(err));
+
+                        if (low != expected_low)
+                                TEST_FAIL_LATER("For %s [%"PRId32"] expected "
+                                                "a low watermark of %"PRId64
+                                                ", got %"PRId64,
+                                                topics[i],
+                                                partition,
+                                                expected_low,
+                                                low);
+
+                        if (high != expected_high)
+                                TEST_FAIL_LATER("For %s [%"PRId32"] expected "
+                                                "a high watermark of %"PRId64
+                                                ", got %"PRId64,
+                                                topics[i],
+                                                partition,
+                                                expected_high,
+                                                high);
+                }
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++)
+                rd_free(topics[i]);
+
+        if (results)
+                rd_kafka_topic_partition_list_destroy(results);
+
+        if (del_records)
+                rd_kafka_topic_partition_list_destroy(del_records);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef MY_DEL_RECORDS_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+  * @brief Test deletion of groups
+  *
+  *
+  */
+
+typedef struct expected_group_result {
+        char *group;
+        rd_kafka_resp_err_t err;
+} expected_group_result_t;
+
+static void do_test_DeleteGroups (const char *what,
+                                  rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                  int op_timeout) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define MY_DEL_GROUPS_CNT 4
+        int known_groups = MY_DEL_GROUPS_CNT - 1;
+        int i;
+        const int partitions_cnt = 1;
+        const int msgs_cnt = 100;
+        char *topic;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid = test_id_generate();
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_group_result_t **results = NULL;
+        expected_group_result_t expected[MY_DEL_GROUPS_CNT] = {{0}};
+        rd_kafka_DeleteGroup_t *del_groups[MY_DEL_GROUPS_CNT];
+        const rd_kafka_DeleteGroups_result_t *res;
+
+        SUB_TEST_QUICK("%s DeleteGroups with %s, op_timeout %d",
+                       rd_kafka_name(rk), what, op_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1,
+                                 partitions_cnt,
+                                 NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  &exp_mdtopic, 1,
+                                  NULL, 0,
+                                  15*1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                if (i < known_groups) {
+                        test_consume_msgs_easy(group, topic, testid, -1, msgs_cnt, NULL);
+                        expected[i].group = group;
+                        expected[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                } else {
+                        expected[i].group = group;
+                        expected[i].err = RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND;
+                }
+                del_groups[i] = rd_kafka_DeleteGroup_new(group);
+        }
+
+        TIMING_START(&timing, "DeleteGroups");
+        TEST_SAY("Call DeleteGroups\n");
+        rd_kafka_DeleteGroups(rk, del_groups, MY_DEL_GROUPS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "DeleteGroups.queue_poll");
+
+        /* Poll result queue for DeleteGroups result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while(1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20*1000));
+                TEST_SAY("DeleteGroups: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteGroups_result(rkev);
+        TEST_ASSERT(res, "expected DeleteGroups_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected DeleteGroups to return %s, not %s (%s)",
+                    rd_kafka_err2str(exp_err),
+                    rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DeleteGroups: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        size_t cnt = 0;
+        results = rd_kafka_DeleteGroups_result_groups(res, &cnt);
+
+        TEST_ASSERT(MY_DEL_GROUPS_CNT == cnt,
+                    "expected DeleteGroups_result_groups to return %d items, not %"PRIusz,
+                    MY_DEL_GROUPS_CNT,
+                    cnt);
+
+        for (i = 0 ; i < MY_DEL_GROUPS_CNT ; i++) {
+                const expected_group_result_t *exp = &expected[i];
+                rd_kafka_resp_err_t exp_err = exp->err;
+                const rd_kafka_group_result_t *act = results[i];
+                rd_kafka_resp_err_t act_err = rd_kafka_error_code(rd_kafka_group_result_error(act));
+                TEST_ASSERT(strcmp(exp->group, rd_kafka_group_result_name(act)) == 0,
+                            "Result order mismatch at #%d: expected group name to be %s, not %s",
+                            i, exp->group, rd_kafka_group_result_name(act));
+                TEST_ASSERT(exp_err == act_err,
+                            "expected err=%d for group %s, not %d (%s)",
+                            exp_err,
+                            exp->group,
+                            act_err,
+                            rd_kafka_err2str(act_err));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0 ; i < MY_DEL_GROUPS_CNT ; i++) {
+                rd_kafka_DeleteGroup_destroy(del_groups[i]);
+                rd_free(expected[i].group);
+        }
+
+        rd_free(topic);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef MY_DEL_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
+}
 
 static void do_test_apis (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
@@ -1188,6 +1671,15 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);
 
+        /* Delete records */
+        do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
+
+        /* Delete groups */
+        do_test_DeleteGroups("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteGroups("main queue, op timeout 1500", rk, mainq, 1500);
+        do_test_DeleteGroups("main queue, op timeout 1500", rk, mainq, 1500);
+
         rd_kafka_queue_destroy(mainq);
 
         rd_kafka_destroy(rk);
@@ -1209,4 +1701,3 @@ int main_0081_admin (int argc, char **argv) {
 
         return 0;
 }
-

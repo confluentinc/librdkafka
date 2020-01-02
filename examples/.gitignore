@@ -10,3 +10,4 @@ consumer
 idempotent_producer
 rdkafka_consume_batch
 transactions
+delete_records

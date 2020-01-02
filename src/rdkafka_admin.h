@@ -57,7 +57,9 @@ struct rd_kafka_AdminOptions_s {
         /* Specific for one or more APIs */
         rd_kafka_confval_t operation_timeout; /**< I32: Timeout on broker.
                                                *   Valid for:
+                                               *     CreateParititons
                                                *     CreateTopics
+                                               *     DeleteRecords
                                                *     DeleteTopics
                                                */
         rd_kafka_confval_t validate_only;  /**< BOOL: Only validate (on broker),
@@ -85,9 +87,6 @@ struct rd_kafka_AdminOptions_s {
         rd_kafka_confval_t opaque;         /**< PTR: Application opaque.
                                             *   Valid for all. */
 };
-
-
-
 
 
 /**
@@ -260,6 +259,24 @@ struct rd_kafka_DescribeConfigs_result_s {
 
 /**@}*/
 
+
+/**
+ * @name DeleteGroups
+ * @{
+ */
+
+/**
+ * @brief DeleteGroups result
+ */
+struct rd_kafka_DeleteGroups_result_s {
+        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_DeleteGroup_s {
+        char *group;   /**< Points to data */
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
 
 /**@}*/
 

@@ -322,13 +322,13 @@ void rd_list_apply (rd_list_t *rl,
 
 
 
+typedef void *(rd_list_copy_cb_t) (const void *elem, void *opaque);
 /**
  * @brief Copy list \p src, returning a new list,
  *        using optional \p copy_cb (per elem)
  */
 rd_list_t *rd_list_copy (const rd_list_t *src,
-                         void *(*copy_cb) (const void *elem, void *opaque),
-                         void *opaque);
+                         rd_list_copy_cb_t *copy_cb, void *opaque);
 
 
 /**

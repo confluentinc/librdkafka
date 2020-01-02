@@ -146,7 +146,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
          * broker supports FETCH >= v5, since this will be set when
          * doing fetch requests.
          */
-        if (rd_kafka_broker_ApiVersion_supported(rktp->rktp_broker, 
+        if (rd_kafka_broker_ApiVersion_supported(rktp->rktp_broker,
                                                  RD_KAFKAP_Fetch, 0,
                                                  5, NULL) == 5) {
                 rd_kafka_toppar_unlock(rktp);
@@ -3360,7 +3360,7 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
 int
 rd_kafka_topic_partition_list_get_leaders (
         rd_kafka_t *rk,
-        rd_kafka_topic_partition_list_t *rktparlist,
+        const rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders,
         rd_list_t *query_topics) {
         int cnt = 0;
@@ -3473,7 +3473,7 @@ rd_kafka_topic_partition_list_get_leaders (
 rd_kafka_resp_err_t
 rd_kafka_topic_partition_list_query_leaders (
         rd_kafka_t *rk,
-        rd_kafka_topic_partition_list_t *rktparlist,
+        const rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders, int timeout_ms) {
         rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_ts_t ts_query = 0;

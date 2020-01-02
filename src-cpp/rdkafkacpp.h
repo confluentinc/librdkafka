@@ -292,6 +292,8 @@ enum ErrorCode {
         ERR__APPLICATION = -143,
         /** Assignment lost */
         ERR__ASSIGNMENT_LOST = -142,
+        /** No operation performed */
+        ERR__NOOP = -141,
 
         /** End internal error codes */
 	ERR__END = -100,

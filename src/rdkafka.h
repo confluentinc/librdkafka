@@ -249,6 +249,7 @@ typedef struct rd_kafka_consumer_group_metadata_s
 rd_kafka_consumer_group_metadata_t;
 typedef struct rd_kafka_error_s rd_kafka_error_t;
 typedef struct rd_kafka_headers_s rd_kafka_headers_t;
+typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
 /* @endcond */
 
 
@@ -387,6 +388,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__APPLICATION = -143,
         /** Assignment lost */
         RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
+        /** No operation performed */
+        RD_KAFKA_RESP_ERR__NOOP = -141,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -4826,6 +4829,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_DELETERECORDS_RESULT 105 /**< DeleteRecords_result_t */
+#define RD_KAFKA_EVENT_DELETEGROUPS_RESULT 106 /**< DeleteGroups_result_t */
 #define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
                                                              token needs to be
                                                              refreshed */
@@ -4974,6 +4979,8 @@ int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ *  - RD_KAFKA_EVENT_DELETERECORDS_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
@@ -5059,6 +5066,10 @@ typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
 /*! CreateTopics result type */
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
+/*! DeleteRecords result type */
+typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
+/*! DeleteGroups result type */
+typedef rd_kafka_event_t rd_kafka_DeleteGroups_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -5120,8 +5131,27 @@ rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
 RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
 rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
 
+/**
+ * @returns the result of a DeleteRecords request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETERECORDS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteRecords_result_t *
+rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev);
 
-
+/**
+ * @brief Get DeleteGroups result.
+ *
+ * @returns the result of a DeleteGroups request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteGroups_result_t *
+rd_kafka_event_DeleteGroups_result (rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -5819,6 +5849,25 @@ rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres);
 RD_EXPORT const char *
 rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
 
+/**
+ * @brief Group result provides per-group operation result information.
+ *
+ */
+
+/**
+ * @returns the error for the given group result, or NULL on success.
+ * @remark lifetime of the returned error is the same as the \p groupres.
+ */
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres);
+
+/**
+ * @returns the name of the group for the given group result.
+ * @remark lifetime of the returned string is the same as the \p groupres.
+ *
+ */
+RD_EXPORT const char *
+rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres);
 
 /**@}*/
 
@@ -5873,6 +5922,8 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, /**< CreatePartitions */
         RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
         RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
+        RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
         RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -5966,8 +6017,8 @@ rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
  *          case an error string will be written \p errstr.
  *
- * @remark This option is valid for CreateTopics, DeleteTopics and
- *         CreatePartitions.
+ * @remark This option is valid for CreateTopics, DeleteTopics,
+ *         CreatePartitions, and DeleteRecords.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
@@ -6153,7 +6204,7 @@ rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
  * Supported admin options:
  *  - rd_kafka_AdminOptions_set_validate_only() - default false
  *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
- *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_CREATETOPICS_RESULT
@@ -6166,8 +6217,8 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
                        rd_kafka_queue_t *rkqu);
 
 
-/**
- * @brief CreateTopics result type and methods
+/*
+ * CreateTopics result type and methods
  */
 
 /**
@@ -6245,8 +6296,8 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
 
 
 
-/**
- * @brief DeleteTopics result type and methods
+/*
+ * DeleteTopics result type and methods
  */
 
 /**
@@ -6267,7 +6318,7 @@ rd_kafka_DeleteTopics_result_topics (
 
 
 
-/**
+/*
  * CreatePartitions - add partitions to topic.
  *
  */
@@ -6355,7 +6406,7 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_par
  * Supported admin options:
  *  - rd_kafka_AdminOptions_set_validate_only() - default false
  *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
- *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
@@ -6369,8 +6420,8 @@ rd_kafka_CreatePartitions (rd_kafka_t *rk,
 
 
 
-/**
- * @brief CreatePartitions result type and methods
+/*
+ * CreatePartitions result type and methods
  */
 
 /**
@@ -6390,7 +6441,7 @@ rd_kafka_CreatePartitions_result_topics (
 
 
 
-/**
+/*
  * Cluster, broker, topic configuration entries, sources, etc.
  *
  */
@@ -6613,7 +6664,7 @@ RD_EXPORT const char *
 rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
 
 
-/**
+/*
  * AlterConfigs - alter cluster configuration.
  *
  */
@@ -6647,8 +6698,8 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
                             rd_kafka_queue_t *rkqu);
 
 
-/**
- * @brief AlterConfigs result type and methods
+/*
+ * AlterConfigs result type and methods
  */
 
 /**
@@ -6675,7 +6726,7 @@ rd_kafka_AlterConfigs_result_resources (
 
 
 
-/**
+/*
  * DescribeConfigs - retrieve cluster configuration.
  *
  */
@@ -6715,8 +6766,8 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
 
 
 
-/**
- * @brief DescribeConfigs result type and methods
+/*
+ * DescribeConfigs result type and methods
  */
 
 /**
@@ -6732,8 +6783,138 @@ rd_kafka_DescribeConfigs_result_resources (
         const rd_kafka_DescribeConfigs_result_t *result,
         size_t *cntp);
 
-/**@}*/
 
+/*
+ * DeleteRecords - delete records (messages) from partitions
+ *
+ *
+ */
+
+/**
+ * @brief Delete records (messages) in topic partitions as older than the
+ *        offsets provided in \p before_offsets.
+ *
+ * \p before_offsets must contain \c topic, \c partition, and
+ * \c offset is the offset before which the messages will
+ * be deleted (exclusive).
+ * Set \c offset to RD_KAFKA_OFFSET_END (high-watermark) in order to
+ * delete all data in the partition.
+ *
+ * @param rk Client instance.
+ * @param before_offsets For each partition delete all messages up to but not
+ *                       including the specified offset.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0.
+ *    Controls how long the brokers will wait for records to be deleted.
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms.
+ *    Controls how long \c rdkafka will wait for the request to complete.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETERECORDS_RESULT
+ */
+RD_EXPORT void
+rd_kafka_DeleteRecords (rd_kafka_t *rk,
+                        const rd_kafka_topic_partition_list_t *before_offsets,
+                        const rd_kafka_AdminOptions_t *options,
+                        rd_kafka_queue_t *rkqu);
+
+
+/*
+ * DeleteRecords result type and methods
+ */
+
+/**
+ * @brief Get a list of topic and partition results from a DeleteRecords result.
+ *        The returned objects will contain \c topic, \c partition, \c offset
+ *        and \c err. \c offset will be set to the post-deletion low-watermark
+ *        (smallest available offset of all live replicas). \c err will be set
+ *        per-partition if deletion failed.
+ *
+ * The returned object's life-time is the same as the \p result object.
+ */
+RD_EXPORT const rd_kafka_topic_partition_list_t *
+rd_kafka_DeleteRecords_result_offsets (
+    const rd_kafka_DeleteRecords_result_t *result);
+
+/*
+ * DeleteGroups - delete groups from cluster
+ *
+ *
+ */
+
+typedef struct rd_kafka_DeleteGroup_s rd_kafka_DeleteGroup_t;
+
+/**
+ * @brief Create a new DeleteGroup object. This object is later passed to
+ *        rd_kafka_DeleteGroups().
+ *
+ * @param group Name of group to delete.
+ *
+ * @returns a new allocated DeleteGroup object.
+ *          Use rd_kafka_DeleteGroup_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_DeleteGroup_t *
+rd_kafka_DeleteGroup_new (const char *group);
+
+/**
+ * @brief Destroy and free a DeleteGroup object previously created with
+ *        rd_kafka_DeleteGroup_new()
+ */
+RD_EXPORT void
+rd_kafka_DeleteGroup_destroy (rd_kafka_DeleteGroup_t *del_group);
+
+/**
+ * @brief Helper function to destroy all DeleteGroup objects in
+ *        the \p del_groups array (of \p del_group_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_DeleteGroup_destroy_array (rd_kafka_DeleteGroup_t **del_groups,
+                                    size_t del_group_cnt);
+
+/**
+ * @brief Delete groups from cluster as specified by the \p del_groups
+ *        array of size \p del_group_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param del_groups Array of groups to delete.
+ * @param del_group_cnt Number of elements in \p del_groups array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DeleteGroups (rd_kafka_t *rk,
+                            rd_kafka_DeleteGroup_t **del_groups,
+                            size_t del_group_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu);
+
+
+
+/*
+ * DeleteGroups result type and methods
+ */
+
+/**
+ * @brief Get an array of group results from a DeleteGroups result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_DeleteGroups_result_groups (
+        const rd_kafka_DeleteGroups_result_t *result,
+        size_t *cntp);
+
+/**@}*/
 
 
 /**

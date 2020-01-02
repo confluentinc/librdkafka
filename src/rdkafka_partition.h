@@ -668,13 +668,13 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
 int
 rd_kafka_topic_partition_list_get_leaders (
         rd_kafka_t *rk,
-        rd_kafka_topic_partition_list_t *rktparlist,
+        const rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders, rd_list_t *query_topics);
 
 rd_kafka_resp_err_t
 rd_kafka_topic_partition_list_query_leaders (
         rd_kafka_t *rk,
-        rd_kafka_topic_partition_list_t *rktparlist,
+        const rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders, int timeout_ms);
 
 int

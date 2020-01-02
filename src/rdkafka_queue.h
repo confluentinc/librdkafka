@@ -959,6 +959,41 @@ void rd_kafka_enq_once_trigger_destroy (void *ptr);
 
 
 /**
+ * @brief Decrement refcount for source (non-owner) and return the rko
+ *        if still set.
+ *
+ * @remark Must only be called by sources (non-owner) but only on the
+ *         the owner's thread to make sure the rko is not freed.
+ *
+ * @remark The rko remains set on the eonce.
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_op_t *rd_kafka_enq_once_del_source_return (rd_kafka_enq_once_t *eonce,
+                                                    const char *srcdesc) {
+        rd_bool_t do_destroy;
+        rd_kafka_op_t *rko;
+
+        mtx_lock(&eonce->lock);
+
+        rd_assert(eonce->refcnt > 0);
+        /* Owner must still hold a eonce reference, or the eonce must
+         * have been disabled by the owner (no rko) */
+        rd_assert(eonce->refcnt > 1 || !eonce->rko);
+        eonce->refcnt--;
+        do_destroy = eonce->refcnt == 0;
+
+        rko = eonce->rko;
+        mtx_unlock(&eonce->lock);
+
+        if (do_destroy) {
+                /* We're the last refcount holder, clean up eonce. */
+                rd_kafka_enq_once_destroy0(eonce);
+        }
+
+        return rko;
+}
+
+/**
  * @brief Trigger enqueuing of the rko (unless already enqueued)
  *        and drops the source's refcount.
  *

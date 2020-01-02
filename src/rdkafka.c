@@ -497,6 +497,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Application generated error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST,
                   "Local: Group partition assignment lost"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__NOOP,
+                  "Local: No operation performed"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -3700,6 +3702,9 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
+        case RD_KAFKA_OP_DELETERECORDS:
+        case RD_KAFKA_OP_DELETEGROUPS:
+        case RD_KAFKA_OP_ADMIN_FANOUT:
                 /* Calls op_destroy() from worker callback,
                  * when the time comes. */
                 res = rd_kafka_op_call(rk, rkq, rko);

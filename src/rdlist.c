@@ -429,8 +429,7 @@ static void *rd_list_nocopy_ptr (const void *elem, void *opaque) {
 }
 
 rd_list_t *rd_list_copy (const rd_list_t *src,
-                         void *(*copy_cb) (const void *elem, void *opaque),
-                         void *opaque) {
+                         rd_list_copy_cb_t *copy_cb, void *opaque) {
         rd_list_t *dst;
 
         dst = rd_list_new(src->rl_cnt, src->rl_free_cb);

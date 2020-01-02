@@ -115,9 +115,15 @@ typedef enum {
         RD_KAFKA_OP_WAKEUP,          /* Wake-up signaling */
         RD_KAFKA_OP_CREATETOPICS,    /**< Admin: CreateTopics: u.admin_request*/
         RD_KAFKA_OP_DELETETOPICS,    /**< Admin: DeleteTopics: u.admin_request*/
-        RD_KAFKA_OP_CREATEPARTITIONS,/**< Admin: CreatePartitions: u.admin_request*/
+        RD_KAFKA_OP_CREATEPARTITIONS,/**< Admin: CreatePartitions:
+                                      *   u.admin_request*/
         RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
-        RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs: u.admin_request*/
+        RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs:
+                                      *   u.admin_request*/
+        RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
+                                      *   u.admin_request*/
+        RD_KAFKA_OP_DELETEGROUPS,    /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_ADMIN_FANOUT,    /**< Admin: fanout request */
         RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
         RD_KAFKA_OP_PURGE,           /**< Purge queues */
         RD_KAFKA_OP_CONNECT,         /**< Connect (to broker) */
@@ -212,10 +218,11 @@ typedef rd_kafka_op_res_t (rd_kafka_op_cb_t) (rd_kafka_t *rk,
 
 /* Forward declaration */
 struct rd_kafka_admin_worker_cbs;
+struct rd_kafka_admin_fanout_worker_cbs;
 
 
-#define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
-	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
+#define RD_KAFKA_OP_TYPE_ASSERT(rko,type)                               \
+        rd_assert(((rko)->rko_type & ~RD_KAFKA_OP_FLAGMASK) == (type))
 
 struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
@@ -372,7 +379,7 @@ struct rd_kafka_op_s {
 
                 struct {
                         rd_kafka_AdminOptions_t options; /**< Copy of user's
-                                                          * options, or NULL */
+                                                          * options */
                         rd_ts_t abs_timeout;        /**< Absolute timeout
                                                      *   for this request. */
                         rd_kafka_timer_t tmr;       /**< Timeout timer */
@@ -403,6 +410,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_ADMIN_STATE_INIT,
                                 RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
                                 RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
                                 RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
                                 RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
                         } state;
@@ -413,12 +421,47 @@ struct rd_kafka_op_s {
                                             *   that needs to speak to a
                                             *   specific broker rather than
                                             *   the controller.
-                                            *   Defaults to -1:
-                                            *   look up and use controller. */
+                                            *   See RD_KAFKA_ADMIN_TARGET_..
+                                            *   for special values (coordinator,
+                                            *   fanout, etc).
+                                            */
+                        /** The type of coordinator to look up */
+                        rd_kafka_coordtype_t coordtype;
+                        /** Which coordinator to look up */
+                        char *coordkey;
 
                         /** Application's reply queue */
                         rd_kafka_replyq_t replyq;
                         rd_kafka_event_type_t reply_event_type;
+
+                        /** A collection of fanout child ops. */
+                        struct {
+                                /** The type of request being fanned out.
+                                 *  This is used for the ADMIN_RESULT. */
+                                rd_kafka_op_type_t reqtype;
+
+                                /** Worker callbacks, see rdkafka_admin.c */
+                                struct rd_kafka_admin_fanout_worker_cbs *cbs;
+
+                                /** Number of outstanding requests remaining to
+                                 *  wait for. */
+                                int outstanding;
+
+                                /** Incremental results from fanouts.
+                                 *  This list is pre-allocated to the number
+                                 *  of input objects and can thus be set
+                                 *  by index to retain original ordering. */
+                                rd_list_t results;
+
+                                /** Reply event type */
+                                rd_kafka_event_type_t reply_event_type;
+
+                        } fanout;
+
+                        /** A reference to the parent ADMIN_FANOUT op that
+                         *  spawned this op, if applicable. NULL otherwise. */
+                        struct rd_kafka_op_s *fanout_parent;
+
                 } admin_request;
 
                 struct {
@@ -441,6 +484,10 @@ struct rd_kafka_op_s {
                         void *opaque;     /**< Application's opaque as set by
                                            *   rd_kafka_AdminOptions_set_opaque
                                            */
+
+                        /** A reference to the parent ADMIN_FANOUT op that
+                         *  spawned this op, if applicable. NULL otherwise. */
+                        struct rd_kafka_op_s *fanout_parent;
                 } admin_result;
 
                 struct {

@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2012-2015, Magnus Edenhill
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -209,6 +209,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 rd_kafka_topic_partition_list_t *
 rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
                                     size_t estimated_part_cnt,
+                                    rd_bool_t read_offset,
                                     rd_bool_t read_part_errs) {
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
@@ -236,12 +237,18 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
 
                 while (PartArrayCnt-- > 0) {
                         int32_t Partition;
+                        int64_t Offset;
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
 
                         rktpar = rd_kafka_topic_partition_list_add(
                                 parts, topic, Partition);
+
+                        if (read_offset) {
+                                rd_kafka_buf_read_i64(rkbuf, &Offset);
+                                rktpar->offset = Offset;
+                        }
 
                         if (read_part_errs) {
                                 rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
@@ -314,10 +321,7 @@ int rd_kafka_buf_write_topic_partitions (
 
                 /* Time/Offset */
                 if (write_Offset) {
-                        if (rktpar->offset >= 0)
-                                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
-                        else
-                                rd_kafka_buf_write_i64(rkbuf, -1);
+                        rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
                 }
 
                 if (write_Epoch) {
@@ -3614,6 +3618,73 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @brief Construct and send DeleteRecordsRequest to \p rkb
+ *        with the offsets to delete (rd_kafka_topic_partition_list_t *) in
+ *        \p offsets_list, using \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @remark The rd_kafka_topic_partition_list_t in \p offsets_list must already
+ *          be sorted.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteRecordsRequest (rd_kafka_broker_t *rkb,
+                               /*(rd_kafka_topic_partition_list_t*)*/
+                               const rd_list_t *offsets_list,
+                               rd_kafka_AdminOptions_t *options,
+                               char *errstr, size_t errstr_size,
+                               rd_kafka_replyq_t replyq,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        const rd_kafka_topic_partition_list_t *partitions;
+        int op_timeout;
+
+        partitions = rd_list_elem(offsets_list, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DeleteRecords, 0, 1, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DeleteRecords Admin API (KIP-107) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteRecords, 1,
+                                         4 +
+                                         (partitions->cnt * 100) +
+                                         4);
+
+        rd_kafka_buf_write_topic_partitions(
+                rkbuf, partitions,
+                rd_false /*don't skip invalid offsets*/,
+                rd_true  /*do write offsets*/,
+                rd_false /*don't write epoch*/,
+                rd_false /*don't write metadata*/);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 
 /**
  * @brief Construct and send CreatePartitionsRequest to \p rkb
@@ -3629,7 +3700,8 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
  */
 rd_kafka_resp_err_t
 rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
-                                  const rd_list_t *new_parts /*(NewPartitions_t*)*/,
+                                  /*(NewPartitions_t*)*/
+                                  const rd_list_t *new_parts,
                                   rd_kafka_AdminOptions_t *options,
                                   char *errstr, size_t errstr_size,
                                   rd_kafka_replyq_t replyq,
@@ -3926,6 +3998,60 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+/**
+ * @brief Construct and send DeleteGroupsRequest to \p rkb
+ *        with the groups (DeleteGroup_t *) in \p del_groups, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteGroupsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *del_groups /*(DeleteGroup_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        int i = 0;
+        rd_kafka_DeleteGroup_t *delt;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DeleteGroups, 0, 1, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DeleteGroups Admin API (KIP-229) not supported "
+                            "by broker, requires broker version >= 1.1.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteGroups, 1,
+                                         4 +
+                                         (rd_list_cnt(del_groups) * 100) +
+                                         4);
+
+        /* #groups */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_groups));
+
+        while ((delt = rd_list_elem(del_groups, i++)))
+                rd_kafka_buf_write_str(rkbuf, delt->group, -1);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 
 /**

@@ -5163,10 +5163,17 @@ test_wait_admin_result (rd_kafka_queue_t *q,
 
 
 /**
- * @brief Wait for up to \p tmout for a
- *        CreateTopics/DeleteTopics/CreatePartitions or
- *        DescribeConfigs/AlterConfigs result and return the
+ * @brief Wait for up to \p tmout for an admin API result and return the
  *        distilled error code.
+ * 
+ *        Supported APIs:
+ *        - AlterConfigs
+ *        - CreatePartitions
+ *        - CreateTopics
+ *        - DeleteGroups
+ *        - DeleteRecords
+ *        - DeleteTopics
+ *        - DescribeConfigs
  */
 rd_kafka_resp_err_t
 test_wait_topic_admin_result (rd_kafka_queue_t *q,
@@ -5181,6 +5188,9 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
         size_t cres_cnt = 0;
         int errcnt = 0;
         rd_kafka_resp_err_t err;
+        const rd_kafka_group_result_t **gres = NULL;
+        size_t gres_cnt = 0;
+        const rd_kafka_topic_partition_list_t *offsets = NULL;
 
         rkev = test_wait_admin_result(q, evtype, tmout);
 
@@ -5235,6 +5245,22 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
 
                 cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
+                const rd_kafka_DeleteGroups_result_t *res;
+                if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))
+                        TEST_FAIL("Expected a DeleteGroups result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                gres = rd_kafka_DeleteGroups_result_groups(res, &gres_cnt);
+        
+        } else if (evtype == RD_KAFKA_EVENT_DELETERECORDS_RESULT) {
+                const rd_kafka_DeleteRecords_result_t *res;
+                if (!(res = rd_kafka_event_DeleteRecords_result(rkev)))
+                        TEST_FAIL("Expected a DeleteRecords result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                offsets = rd_kafka_DeleteRecords_result_offsets(res);
+
         } else {
                 TEST_FAIL("Bad evtype: %d", evtype);
                 RD_NOTREACHED();
@@ -5260,6 +5286,28 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                                   rd_kafka_ConfigResource_error_string(cres[i]));
                         if (!(errcnt++))
                                 err = rd_kafka_ConfigResource_error(cres[i]);
+                }
+        }
+
+        /* Check group errors */
+        for (i = 0 ; i < gres_cnt ; i++) {
+                if (rd_kafka_group_result_error(gres[i])) {
+                        TEST_WARN("DeleteGroups result: %s: error: %s\n",
+                                  rd_kafka_group_result_name(gres[i]),
+                                  rd_kafka_error_string(rd_kafka_group_result_error(gres[i])));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(rd_kafka_group_result_error(gres[i]));
+                }
+        }
+
+        /* Check offset errors */
+        for (i = 0 ; (offsets && i < (size_t)offsets->cnt) ; i++) {
+                if (offsets->elems[i].err) {
+                        TEST_WARN("DeleteRecords result: %s [%d]: error: %s\n",
+                                  offsets->elems[i].topic, offsets->elems[i].partition,
+                                  rd_kafka_err2str(offsets->elems[i].err));
+                        if (!(errcnt++))
+                                err = offsets->elems[i].err;
                 }
         }
 
@@ -5478,7 +5526,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         err = test_wait_topic_admin_result(q,
-                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           RD_KAFKA_EVENT_DELETETOPICS_RESULT,
                                            NULL, tmout+5000);
 
         rd_kafka_queue_destroy(q);
@@ -5490,6 +5538,124 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
         return err;
 }
 
+rd_kafka_resp_err_t
+test_DeleteGroups_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **groups, size_t group_cnt,
+                          void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_DeleteGroup_t **del_groups;
+        rd_kafka_AdminOptions_t *options;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+
+        del_groups = malloc(sizeof(*del_groups) * group_cnt);
+
+        for (i = 0 ; i < group_cnt ; i++) {
+                del_groups[i] = rd_kafka_DeleteGroup_new(groups[i]);
+                TEST_ASSERT(del_groups[i]);
+        }
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEGROUPS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting %"PRIusz" groups\n", group_cnt);
+
+        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, useq);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
+        free(del_groups);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_DELETEGROUPS_RESULT,
+                                           NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
+
+        if (err)
+                TEST_FAIL("Failed to delete groups: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
+
+rd_kafka_resp_err_t
+test_DeleteRecords_simple (rd_kafka_t *rk,
+                           rd_kafka_queue_t *useq,
+                           const rd_kafka_topic_partition_list_t *offsets,
+                           void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+
+        options = rd_kafka_AdminOptions_new(rk,
+                                            RD_KAFKA_ADMIN_OP_DELETERECORDS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options,
+                        tmout-5000,
+                        errstr,
+                        sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
+
+        rd_kafka_DeleteRecords(rk, offsets, options, useq);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_DELETERECORDS_RESULT,
+                                           NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete records: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
 
 /**
  * @brief Delta Alter configuration for the given resource,

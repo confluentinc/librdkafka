@@ -55,7 +55,7 @@ extern "C" {
 #endif
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <basetsd.h>
 #ifndef WIN32_MEAN_AND_LEAN
 #define WIN32_MEAN_AND_LEAN

@@ -285,6 +285,8 @@ enum ErrorCode {
         ERR__NOT_CONFIGURED = -145,
         /** Instance has been fenced */
         ERR__FENCED = -144,
+        /** Application generated error */
+        ERR__APPLICATION = -143,
 
         /** End internal error codes */
 	ERR__END = -100,

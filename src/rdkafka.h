@@ -369,7 +369,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOT_CONFIGURED = -145,
         /** Instance has been fenced */
         RD_KAFKA_RESP_ERR__FENCED = -144,
-
+        /** Application generated error */
+        RD_KAFKA_RESP_ERR__APPLICATION = -143,
+        
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
 

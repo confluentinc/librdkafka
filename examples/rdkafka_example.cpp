@@ -407,7 +407,7 @@ int main (int argc, char **argv) {
             "                  random (default), hash\n"
             "  -b <brokers>    Broker address (localhost:9092)\n"
             "  -z <codec>      Enable compression:\n"
-            "                  none|gzip|snappy\n"
+            "                  none|gzip|snappy|lz4|zstd\n"
             "  -o <offset>     Start offset (consumer)\n"
             "  -e              Exit consumer when last message\n"
             "                  in partition has been received.\n"

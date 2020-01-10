@@ -39,7 +39,7 @@
 #include <ws2ipdef.h>
 #endif
 
-#if defined(__FreeBSD__) || defined(_AIX)
+#if defined(__FreeBSD__) || defined(_AIX) || defined(__OpenBSD__)
 #include <sys/socket.h>
 #endif
 

@@ -1322,7 +1322,7 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                  * increase it automatically.
                  * If there was at least one control message there
                  * is probably not a size limit and nothing is done. */
-                if (msetr->msetr_ctrl_cnt > 0) {
+                if (msetr->msetr_ctrl_cnt > 0 || msetr->msetr_aborted_txns) {
                         /* Noop */
 
                 } else  if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {

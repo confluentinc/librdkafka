@@ -3009,8 +3009,9 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 			break;
 		case _RK_C_PTR:
-			typeinfo = "pointer";
-			/* FALLTHRU */
+                case _RK_C_INTERNAL:
+                        typeinfo = "see dedicated API";
+                        /* FALLTHRU */
 		default:
 			fprintf(fp, "%-15s | %-13s", "", " ");
 			break;

@@ -48,7 +48,7 @@ int test_level = 2;
 int test_seed = 0;
 
 char test_mode[64] = "bare";
-static int  test_exit = 0;
+static volatile sig_atomic_t test_exit = 0;
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
 int          tests_running_cnt = 0;

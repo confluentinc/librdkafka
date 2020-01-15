@@ -47,7 +47,7 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 
-static int run = 1;
+static volatile sig_atomic_t run = 1;
 static rd_kafka_t *rk;
 static int exit_eof = 0;
 static int wait_eof = 0;  /* number of partitions awaiting EOF */

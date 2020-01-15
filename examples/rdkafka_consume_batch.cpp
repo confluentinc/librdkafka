@@ -66,10 +66,10 @@
 
 
 
-static bool run = true;
+static volatile sig_atomic_t run = 1;
 
 static void sigterm (int sig) {
-  run = false;
+  run = 0;
 }
 
 
@@ -116,7 +116,7 @@ consume_batch (RdKafka::KafkaConsumer *consumer, size_t batch_size, int batch_tm
 
     default:
       std::cerr << "%% Consumer error: " << msg->errstr() << std::endl;
-      run = false;
+      run = 0;
       delete msg;
       return msgs;
     }

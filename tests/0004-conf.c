@@ -90,7 +90,7 @@ static void conf_cmp (const char *desc,
 	int i;
 
 	if (acnt != bcnt)
-		TEST_FAIL("%s config compare: count %zd != %zd mismatch",
+		TEST_FAIL("%s config compare: count %"PRIusz" != %"PRIusz" mismatch",
 			  desc, acnt, bcnt);
 
 	for (i = 0 ; i < (int)acnt ; i += 2) {

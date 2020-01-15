@@ -96,7 +96,7 @@ rd_tmpabuf_alloc0 (const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
 	if (unlikely(tab->of + size > tab->size)) {
 		if (tab->assert_on_fail) {
 			fprintf(stderr,
-				"%s: %s:%d: requested size %zd + %zd > %zd\n",
+				"%s: %s:%d: requested size %"PRIusz" + %"PRIusz" > %"PRIusz"\n",
 				__FUNCTION__, func, line, tab->of, size,
 				tab->size);
 			assert(!*"rd_tmpabuf_alloc: not enough size in buffer");

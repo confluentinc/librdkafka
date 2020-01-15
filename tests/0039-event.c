@@ -131,7 +131,7 @@ int main_0039_event_dr (int argc, char **argv) {
 		switch (rd_kafka_event_type(rkev))
 		{
 		case RD_KAFKA_EVENT_DR:
-                        TEST_SAYL(3, "%s event with %zd messages\n",
+                        TEST_SAYL(3, "%s event with %"PRIusz" messages\n",
                                   rd_kafka_event_name(rkev),
                                   rd_kafka_event_message_count(rkev));
 			handle_drs(rkev);

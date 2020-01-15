@@ -325,7 +325,7 @@ void rd_buf_destroy (rd_buf_t *rbuf) {
                 float fill_grade = (float)rbuf->rbuf_len /
                         (float)rbuf->rbuf_size;
 
-                printf("fill grade: %.2f%% (%zu bytes over-allocated)\n",
+                printf("fill grade: %.2f%% (%"PRIusz" bytes over-allocated)\n",
                        fill_grade * 100.0f, overalloc);
         }
 #endif

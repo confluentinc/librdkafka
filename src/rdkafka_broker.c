@@ -2688,7 +2688,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 if (updated & _UPD_NAME)
                         rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                             RD_KAFKA_RESP_ERR__NODE_UPDATE,
+                                             RD_KAFKA_RESP_ERR__TRANSPORT,
                                              "Broker hostname updated");
                 else if (updated & _UPD_ID) {
                         /* Map existing partitions to this broker. */
@@ -2974,7 +2974,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         if (do_disconnect)
                                 rd_kafka_broker_fail(
                                         rkb, LOG_DEBUG,
-                                        RD_KAFKA_RESP_ERR__NODE_UPDATE,
+                                        RD_KAFKA_RESP_ERR__TRANSPORT,
                                         "Closing connection due to "
                                         "nodename change");
                 }

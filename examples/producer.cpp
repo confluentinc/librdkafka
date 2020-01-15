@@ -50,10 +50,10 @@
 #include "rdkafkacpp.h"
 
 
-static bool run = true;
+static volatile sig_atomic_t run = 1;
 
 static void sigterm (int sig) {
-  run = false;
+  run = 0;
 }
 
 

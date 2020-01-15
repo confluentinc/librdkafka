@@ -60,7 +60,7 @@
  */
 #include "rdkafkacpp.h"
 
-static bool run = true;
+static volatile sig_atomic_t run = 1;
 static bool exit_eof = false;
 static int verbosity = 1;
 static std::string value_prefix;
@@ -252,7 +252,7 @@ static void sigterm (int sig) {
     std::cerr << now() << ": Forced termination" << std::endl;
     exit(1);
   }
-  run = false;
+  run = 0;
 }
 
 
@@ -495,14 +495,14 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
       /* Last message */
       if (exit_eof) {
         std::cerr << now() << ": Terminate: exit on EOF" << std::endl;
-        run = false;
+        run = 0;
       }
       break;
 
     case RdKafka::ERR__UNKNOWN_TOPIC:
     case RdKafka::ERR__UNKNOWN_PARTITION:
       std::cerr << now() << ": Consume failed: " << msg->errstr() << std::endl;
-      run = false;
+      run = 0;
       break;
 
     case RdKafka::ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
@@ -512,7 +512,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
     default:
       /* Errors */
       std::cerr << now() << ": Consume failed: " << msg->errstr() << std::endl;
-      run = false;
+      run = 0;
   }
 }
 
@@ -865,7 +865,7 @@ int main (int argc, char **argv) {
       usleep(1000);
       watchdog_kick();
     }
-    run = true;
+    run = 1;
 
     while (run && producer->outq_len() > 0) {
       std::cerr << now() << ": Waiting for " << producer->outq_len() << std::endl;

@@ -58,7 +58,7 @@
 #endif
 
 
-static int run = 1;
+static volatile sig_atomic_t run = 1;
 static int forever = 1;
 static rd_ts_t dispintvl = 1000;
 static int do_seq = 0;

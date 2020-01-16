@@ -760,21 +760,27 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
 /**
  * @brief Set's the fatal error for this instance.
  *
+ * @param do_lock RD_DO_LOCK: rd_kafka_wrlock() will be acquired and released,
+ *                RD_DONT_LOCK: caller must hold rd_kafka_wrlock().
+ *
  * @returns 1 if the error was set, or 0 if a previous fatal error
  *          has already been set on this instance.
  *
  * @locality any
  * @locks none
  */
-int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                              const char *fmt, ...) {
+int rd_kafka_set_fatal_error0 (rd_kafka_t *rk, rd_dolock_t do_lock,
+                               rd_kafka_resp_err_t err,
+                               const char *fmt, ...) {
         va_list ap;
         char buf[512];
 
-        rd_kafka_wrlock(rk);
+        if (do_lock)
+                rd_kafka_wrlock(rk);
         rk->rk_fatal.cnt++;
         if (rd_atomic32_get(&rk->rk_fatal.err)) {
-                rd_kafka_wrunlock(rk);
+                if (do_lock)
+                        rd_kafka_wrunlock(rk);
                 rd_kafka_dbg(rk, GENERIC, "FATAL",
                              "Suppressing subsequent fatal error: %s",
                              rd_kafka_err2name(err));
@@ -788,7 +794,8 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         va_end(ap);
         rk->rk_fatal.errstr = rd_strdup(buf);
 
-        rd_kafka_wrunlock(rk);
+        if (do_lock)
+                rd_kafka_wrunlock(rk);
 
         /* If there is an error callback or event handler we
          * also log the fatal error as it happens.
@@ -823,15 +830,19 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                                 rd_kafka_err2str(err), rk->rk_fatal.errstr);
 
 
-        /* Purge producer queues, but not in-flight since we'll
-         * want proper delivery status for transmitted requests.
+        /* Tell rdkafka main thread to purge producer queues, but not
+         * in-flight since we'll want proper delivery status for transmitted
+         * requests.
          * Need NON_BLOCKING to avoid dead-lock if user is
          * calling purge() at the same time, which could be
          * waiting for this broker thread to handle its
          * OP_PURGE request. */
-        if (rk->rk_type == RD_KAFKA_PRODUCER)
-                rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE|
-                               RD_KAFKA_PURGE_F_NON_BLOCKING);
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PURGE);
+                rko->rko_u.purge.flags = RD_KAFKA_PURGE_F_QUEUE|
+                        RD_KAFKA_PURGE_F_NON_BLOCKING;
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        }
 
         return 1;
 }
@@ -3603,6 +3614,10 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 /* Must only be handled by rdkafka main thread */
                 rd_assert(thrd_is_current(rk->rk_thread));
                 res = rd_kafka_op_call(rk, rkq, rko);
+                break;
+
+        case RD_KAFKA_OP_PURGE:
+                rd_kafka_purge(rk, rko->rko_u.purge.flags);
                 break;
 
         default:

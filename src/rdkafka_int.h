@@ -843,8 +843,11 @@ rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 }
 
 
-int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                              const char *fmt, ...) RD_FORMAT(printf, 3, 4);
+int rd_kafka_set_fatal_error0 (rd_kafka_t *rk, rd_dolock_t do_lock,
+                               rd_kafka_resp_err_t err,
+                               const char *fmt, ...) RD_FORMAT(printf, 4, 5);
+#define rd_kafka_set_fatal_error(rk,err,fmt,...)                        \
+        rd_kafka_set_fatal_error0(rk, RD_DO_LOCK, err, fmt, __VA_ARGS__)
 
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code (rd_kafka_t *rk) {

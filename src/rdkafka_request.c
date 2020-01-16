@@ -2835,7 +2835,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                         /* Producer was fenced by new transactional producer
                          * with the same transactional.id */
                         rd_kafka_txn_set_fatal_error(
-                                rk,
+                                rk, RD_DO_LOCK,
                                 RD_KAFKA_RESP_ERR__FENCED,
                                 "ProduceRequest for %.*s [%"PRId32"] "
                                 "with %d message(s) failed: %s "

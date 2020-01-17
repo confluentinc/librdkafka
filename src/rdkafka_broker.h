@@ -439,7 +439,11 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                         int (*filter) (rd_kafka_broker_t *rkb,
                                                        void *opaque),
                                         void *opaque, const char *reason);
-
+rd_kafka_broker_t *
+rd_kafka_broker_any_up (rd_kafka_t *rk,
+                        int (*filter) (rd_kafka_broker_t *rkb,
+                                       void *opaque),
+                        void *opaque, const char *reason);
 rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
                                                int do_lock, const char *reason);
 

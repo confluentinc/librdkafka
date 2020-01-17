@@ -499,9 +499,9 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
         rd_kafka_resp_err_t err;
 
 	rd_kafka_rdlock(rkcg->rkcg_rk);
-        rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
-                                  rd_kafka_broker_filter_can_coord_query, NULL,
-                                  "coordinator query");
+        rkb = rd_kafka_broker_any_up(rkcg->rkcg_rk,
+                                     rd_kafka_broker_filter_can_coord_query,
+                                     NULL, "coordinator query");
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {

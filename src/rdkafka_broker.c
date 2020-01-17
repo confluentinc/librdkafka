@@ -1148,6 +1148,7 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
  *
  * Uses reservoir sampling.
  *
+ * @param is_up Any broker that is up (UP or UPDATE state), \p state is ignored.
  * @param filter is an optional callback used to filter out undesired brokers.
  *               The filter function should return 1 to filter out a broker,
  *               or 0 to keep it in the list of eligible brokers to return.
@@ -1160,6 +1161,7 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
 static rd_kafka_broker_t *
 rd_kafka_broker_random0 (const char *func, int line,
                          rd_kafka_t *rk,
+                         rd_bool_t is_up,
                          int state,
                          int (*filter) (rd_kafka_broker_t *rk, void *opaque),
                          void *opaque) {
@@ -1171,7 +1173,8 @@ rd_kafka_broker_random0 (const char *func, int line,
                         continue;
 
                 rd_kafka_broker_lock(rkb);
-                if ((int)rkb->rkb_state == state &&
+                if (((is_up && rd_kafka_broker_state_is_up(rkb->rkb_state)) ||
+                     (!is_up && (int)rkb->rkb_state == state)) &&
                     (!filter || !filter(rkb, opaque))) {
                         if (cnt < 1 || rd_jitter(0, cnt) < 1) {
                                 if (good)
@@ -1187,9 +1190,9 @@ rd_kafka_broker_random0 (const char *func, int line,
         return good;
 }
 
-#define rd_kafka_broker_random(rk,state,filter,opaque)          \
-        rd_kafka_broker_random0(__FUNCTION__, __LINE__,         \
-                                rk, state, filter, opaque)
+#define rd_kafka_broker_random(rk,state,filter,opaque)                  \
+        rd_kafka_broker_random0(__FUNCTION__, __LINE__,                 \
+                                rk, rd_false, state, filter, opaque)
 
 
 /**
@@ -1225,6 +1228,39 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
 
 
 /**
+ * @brief Returns a random broker (with refcnt increased) which is up.
+ *
+ * Uses Reservoir sampling.
+ *
+ * @param filter is optional, see rd_kafka_broker_random().
+ *
+ * @sa rd_kafka_broker_random
+ *
+ * @locks rd_kafka_*lock(rk) MUST be held.
+ * @locality any thread
+ */
+rd_kafka_broker_t *
+rd_kafka_broker_any_up (rd_kafka_t *rk,
+                        int (*filter) (rd_kafka_broker_t *rkb,
+                                       void *opaque),
+                        void *opaque, const char *reason) {
+        rd_kafka_broker_t *rkb;
+
+        rkb = rd_kafka_broker_random0(__FUNCTION__, __LINE__,
+                                      rk, rd_true/*is_up*/, -1, filter, opaque);
+
+        if (!rkb && rk->rk_conf.sparse_connections) {
+                /* Sparse connections:
+                 * If no eligible broker was found, schedule
+                 * a random broker for connecting. */
+                rd_kafka_connect_any(rk, reason);
+        }
+
+        return rkb;
+}
+
+
+/**
  * @brief Spend at most \p timeout_ms to acquire a usable (Up && non-blocking)
  *        broker.
  *
@@ -1246,12 +1282,10 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
                 /* Try non-blocking (e.g., non-fetching) brokers first. */
                 if (do_lock)
                         rd_kafka_rdlock(rk);
-                rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                          rd_kafka_broker_filter_non_blocking,
-                                          NULL, reason);
+                rkb = rd_kafka_broker_any_up(
+                        rk, rd_kafka_broker_filter_non_blocking, NULL, reason);
                 if (!rkb)
-                        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                                  NULL, NULL, reason);
+                        rkb = rd_kafka_broker_any_up(rk, NULL, NULL, reason);
                 if (do_lock)
                         rd_kafka_rdunlock(rk);
 

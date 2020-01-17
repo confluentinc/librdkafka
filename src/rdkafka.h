@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010300ff
+#define RD_KAFKA_VERSION  0x01040005
 
 /**
  * @brief Returns the librdkafka version as integer.

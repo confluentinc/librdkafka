@@ -45,7 +45,7 @@ struct timestamp_range {
 
 const struct timestamp_range invalid_timestamp = { -1, -1 };
 const struct timestamp_range broker_timestamp = {
-        946684800000/* 2000-01-01 */, 1577836800000 /* 2020-01-01 */
+        946684800000/* 2000-01-01 */, 1735686000000/* 2025-01-01 */
 };
 const struct timestamp_range my_timestamp = { 1234, 1234 };
 

@@ -7,47 +7,13 @@ env:
   - ARCH=x64
 matrix:
  include:
- - name: "Linux GCC: +centos +debian"
-   os: linux
-   compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian"
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "Linux clang: +alpine"
-   os: linux
-   compiler: clang
-   env: ADDITIONAL_BUILDS="alpine"
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX GCC"
-   os: osx
-   compiler: gcc
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX clang: +static"
-   os: osx
-   compiler: clang
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
- - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
-   os: linux
-   dist: xenial
-   compiler: gcc
-   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y DOC_CHECK=y
-   before_script:
-    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-    - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip install -r tests/requirements.txt
-    - sudo apt update
-    - sudo apt install -y doxygen graphviz
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "Linux GCC: +devel +code-cov"
    os: linux
    dist: bionic
    compiler: gcc
    env: NO_ARTIFACTS=y
    before_script:
-    - ./configure --enable-devel --disable-lz4-ext
+    - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
     - ./packaging/tools/rdutcoverage.sh
 
 install:

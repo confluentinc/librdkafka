@@ -45,6 +45,9 @@ The finalized nuget package maybe uploaded manually to NuGet.org
 
  * https://www.nuget.org/packages/manage/upload
 
+7. If you trust this process you can have release.py upload the package
+   automatically to NuGet after building it:
 
+    $ ./release.py --upload "$(cat your-nuget-api.key)" v0.11.0
 
 

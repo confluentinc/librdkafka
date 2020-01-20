@@ -6,6 +6,7 @@
 #
 
 
+import os
 import sys
 import argparse
 import packaging
@@ -26,6 +27,7 @@ if __name__ == '__main__':
     parser.add_argument("--no-cleanup", help="Don't clean up temporary folders", action="store_true")
     parser.add_argument("--sha", help="Also match on this git sha1", default=None)
     parser.add_argument("--nuget-version", help="The nuget package version (defaults to same as tag)", default=None)
+    parser.add_argument("--upload", help="Upload package to after building, using provided NuGet API key", default=None, type=str)
     parser.add_argument("tag", help="Git tag to collect")
 
     args = parser.parse_args()
@@ -79,5 +81,11 @@ if __name__ == '__main__':
     if not p.verify(pkgfile):
         print('Package failed verification.')
         sys.exit(1)
-    else:
-        print('Created package: %s' % pkgfile)
+
+    print('Created package: %s' % pkgfile)
+
+    if args.upload is not None:
+        print('Uploading %s to NuGet' % pkgfile)
+        r = os.system("./push-to-nuget.sh '{}' {}".format(args.upload, pkgfile))
+        assert int(r) == 0, "NuGet upload failed with exit code {}, see previous errors".format(r)
+        print('{} successfully uploaded to NuGet' % pkgfile)

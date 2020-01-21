@@ -538,6 +538,27 @@ rd_kafka_mock_cluster_io_set_events (rd_kafka_mock_cluster_t *mcluster,
         rd_assert(!*"mock_cluster_io_set_events: fd not found");
 }
 
+/**
+ * @brief Set or clear single IO events for fd
+ */
+static void
+rd_kafka_mock_cluster_io_set_event (rd_kafka_mock_cluster_t *mcluster,
+                                    rd_socket_t fd, rd_bool_t set, int event) {
+        int i;
+
+        for (i = 0 ; i < mcluster->fd_cnt ; i++) {
+                if (mcluster->fds[i].fd == fd) {
+                        if (set)
+                                mcluster->fds[i].events |= event;
+                        else
+                                mcluster->fds[i].events &= ~event;
+                        return;
+                }
+        }
+
+        rd_assert(!*"mock_cluster_io_set_event: fd not found");
+}
+
 
 /**
  * @brief Clear IO events for fd
@@ -624,6 +645,8 @@ static void rd_kafka_mock_connection_close (rd_kafka_mock_connection_t *mconn,
                      rd_sockaddr2str(&mconn->peer, RD_SOCKADDR2STR_F_PORT),
                      reason);
 
+        rd_kafka_mock_cgrps_connection_closed(mconn->broker->cluster, mconn);
+
         rd_kafka_timer_stop(&mconn->broker->cluster->timers,
                             &mconn->write_tmr, rd_true);
 
@@ -644,7 +667,6 @@ static void rd_kafka_mock_connection_close (rd_kafka_mock_connection_t *mconn,
 
 
 void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
-                                             const rd_kafka_buf_t *request,
                                              rd_kafka_buf_t *resp) {
 
         resp->rkbuf_reshdr.Size =
@@ -655,8 +677,8 @@ void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                      "Broker %"PRId32": Sending %sResponseV%hd to %s",
                      mconn->broker->id,
-                     rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
-                     request->rkbuf_reqhdr.ApiVersion,
+                     rd_kafka_ApiKey2str(resp->rkbuf_reqhdr.ApiKey),
+                     resp->rkbuf_reqhdr.ApiVersion,
                      rd_sockaddr2str(&mconn->peer, RD_SOCKADDR2STR_F_PORT));
 
         /* Set up a buffer reader for sending the buffer. */
@@ -799,6 +821,9 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
 
 rd_kafka_buf_t *rd_kafka_mock_buf_new_response (const rd_kafka_buf_t *request) {
         rd_kafka_buf_t *rkbuf = rd_kafka_buf_new(1, 100);
+
+        /* Copy request header so the ApiVersion remains known */
+        rkbuf->rkbuf_reqhdr = request->rkbuf_reqhdr;
 
         /* Size, updated later */
         rd_kafka_buf_write_i32(rkbuf, 0);
@@ -978,6 +1003,16 @@ static void rd_kafka_mock_connection_io (rd_kafka_mock_cluster_t *mcluster,
         }
 }
 
+
+/**
+ * @brief Set connection as blocking, POLLIN will not be served.
+ */
+void rd_kafka_mock_connection_set_blocking (rd_kafka_mock_connection_t *mconn,
+                                            rd_bool_t blocking) {
+        rd_kafka_mock_cluster_io_set_event(mconn->broker->cluster,
+                                           mconn->transport->rktrans_s,
+                                           !blocking, POLLIN);
+}
 
 
 static rd_kafka_mock_connection_t *
@@ -1809,6 +1844,7 @@ static void
 rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_broker_t *mrkb;
+        rd_kafka_mock_cgrp_t *mcgrp;
         rd_kafka_mock_coord_t *mcoord;
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
@@ -1819,6 +1855,9 @@ rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster) {
 
         while ((mrkb = TAILQ_FIRST(&mcluster->brokers)))
                 rd_kafka_mock_broker_destroy(mrkb);
+
+        while ((mcgrp = TAILQ_FIRST(&mcluster->cgrps)))
+                rd_kafka_mock_cgrp_destroy(mcgrp);
 
         while ((mcoord = TAILQ_FIRST(&mcluster->coords)))
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
@@ -1921,6 +1960,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->topics);
         mcluster->defaults.partition_cnt = 4;
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
+
+        TAILQ_INIT(&mcluster->cgrps);
 
         TAILQ_INIT(&mcluster->coords);
 

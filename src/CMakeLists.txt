@@ -46,6 +46,7 @@ set(
     rdkafka_coord.c
     rdkafka_mock.c
     rdkafka_mock_handlers.c
+    rdkafka_mock_cgrp.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

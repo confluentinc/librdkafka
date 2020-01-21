@@ -49,7 +49,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
 		rdkafka_txnmgr.c rdkafka_coord.c \
 		rdvarint.c rdbuf.c rdunittest.c \
-		rdkafka_mock.c rdkafka_mock_handlers.c \
+		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h rdkafka_mock.h

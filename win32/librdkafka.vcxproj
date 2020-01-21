@@ -214,6 +214,7 @@
     <ClCompile Include="..\src\rdkafka_zstd.c" />
     <ClCompile Include="..\src\rdkafka_mock.c" />
     <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
+    <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

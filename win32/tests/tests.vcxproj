@@ -187,6 +187,7 @@
     <ClCompile Include="..\..\tests\0103-transactions.c" />
     <ClCompile Include="..\..\tests\0104-fetch_from_follower_mock.c" />
     <ClCompile Include="..\..\tests\0105-transactions_mock.c" />
+    <ClCompile Include="..\..\tests\0106-cgrp_sess_timeout.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

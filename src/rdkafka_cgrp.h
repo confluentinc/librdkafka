@@ -166,6 +166,15 @@ typedef struct rd_kafka_cgrp_s {
         rd_interval_t      rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t      rkcg_timeout_scan_intvl; /* Timeout scanner */
 
+        rd_ts_t            rkcg_ts_session_timeout; /**< Absolute session
+                                                     *   timeout enforced by
+                                                     *   the consumer, this
+                                                     *   value is updated on
+                                                     *   Heartbeat success,
+                                                     *   etc. */
+        rd_kafka_resp_err_t rkcg_last_heartbeat_err; /**< Last Heartbeat error,
+                                                      *   used for logging. */
+
         TAILQ_HEAD(, rd_kafka_topic_s)  rkcg_topics;/* Topics subscribed to */
 
         rd_list_t          rkcg_toppars;            /* Toppars subscribed to*/
@@ -234,7 +243,7 @@ typedef struct rd_kafka_cgrp_s {
                                                         * last rebalance */
                 int                rebalance_cnt;      /* Number of
                                                           rebalances */
-                char               rebalance_reason[128]; /**< Last rebalance
+                char               rebalance_reason[256]; /**< Last rebalance
                                                            *   reason */
                 int                assignment_size;    /* Partition count
                                                         * of last rebalance
@@ -284,9 +293,6 @@ rd_kafka_resp_err_t rd_kafka_cgrp_topic_pattern_add (rd_kafka_cgrp_t *rkcg,
 int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic);
 
 void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id);
-
-void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
-					   rd_kafka_resp_err_t err);
 
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 				     rd_kafka_broker_t *rkb,

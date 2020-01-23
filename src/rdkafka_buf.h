@@ -357,13 +357,18 @@ rd_tmpabuf_write_str0 (const char *func, int line,
         } while (0)
 
 /* Read Kafka String representation (2+N) and write it to the \p tmpabuf
- * with a trailing nul byte. */
+ * with a trailing nul byte. If the marshalled string is nul, nothing is
+ * written to the \p tmpabuf and the \p dst string is set to NULL. */
 #define rd_kafka_buf_read_str_tmpabuf(rkbuf, tmpabuf, dst) do {		\
                 rd_kafkap_str_t _kstr;					\
 		size_t _slen;						\
 		char *_dst;						\
 		rd_kafka_buf_read_str(rkbuf, &_kstr);			\
-		_slen = RD_KAFKAP_STR_LEN(&_kstr);			\
+                if (RD_KAFKAP_STR_IS_NULL(&_kstr)) {                    \
+                        dst = NULL;                                     \
+                        break;                                          \
+                }                                                       \
+                _slen = RD_KAFKAP_STR_LEN(&_kstr);                      \
 		if (!(_dst =						\
 		      rd_tmpabuf_write(tmpabuf, _kstr.str, _slen+1)))	\
 			rd_kafka_buf_parse_fail(			\

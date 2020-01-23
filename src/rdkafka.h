@@ -235,6 +235,7 @@ typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
+typedef struct rd_kafka_metadata_broker_extended_s rd_kafka_metadata_broker_extended_t;
 /* @endcond */
 
 
@@ -3869,6 +3870,7 @@ typedef struct rd_kafka_metadata_broker {
         int         port;           /**< Broker listening port */
 } rd_kafka_metadata_broker_t;
 
+
 /**
  * @brief Partition information
  */
@@ -3936,6 +3938,65 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
  */
 RD_EXPORT
 void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
+
+
+/**
+ * @brief Generates a handle for retrieving extended metadata (i.e. rack) from
+ * broker \p i in the given \p metadata's broker array.
+ * 
+ * * Parameters:
+ *  - \p metadata       pointer to metadata result.
+ *  - \p i              index of broker in the metadata struct's broker array.
+ *
+ * @returns returns an opaque handle for use with the rd_kafka_metadata_broker_XX
+ * accessor methods.
+ *
+ * @remarks this function should only be used with broker metadata generated from a
+ * rd_kafka_metadata call.
+ *
+ */
+RD_EXPORT rd_kafka_metadata_broker_extended_t *
+rd_kafka_metadata_broker_get(const rd_kafka_metadata_t *metadata, int i);
+
+
+/**
+ * @brief Retrieves the broker id.
+ *
+ * @returns broker id (integer)
+ *
+ */
+RD_EXPORT
+int32_t rd_kafka_metadata_broker_id (const rd_kafka_metadata_broker_extended_t *mdb);
+
+
+/**
+ * @brief Retrieves the broker's host name.
+ *
+ * @returns broker host
+ *
+ */
+RD_EXPORT
+const char *rd_kafka_metadata_broker_host (const rd_kafka_metadata_broker_extended_t *mdb);
+
+
+/**
+ * @brief Retrieves the broker's port.
+ *
+ * @returns broker port (integer)
+ *
+ */
+RD_EXPORT
+int rd_kafka_metadata_broker_port (const rd_kafka_metadata_broker_extended_t *mdb);
+
+
+/**
+ * @brief Retrieves the broker's rack identifier.
+ *
+ * @returns broker rack
+ *
+ */
+RD_EXPORT
+const char *rd_kafka_metadata_broker_rack (const rd_kafka_metadata_broker_extended_t *mdb);
 
 
 /**@}*/

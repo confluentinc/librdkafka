@@ -107,12 +107,12 @@ else()
     list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
 endif()
 
-add_executable(rdkafka_test ${sources})
-target_link_libraries(rdkafka_test PUBLIC rdkafka++)
+add_executable(test-runner ${sources})
+target_link_libraries(test-runner PUBLIC rdkafka++)
 
-add_test(NAME RdKafkaTestInParallel COMMAND rdkafka_test -p5)
-add_test(NAME RdKafkaTestSequentially COMMAND rdkafka_test -p1)
-add_test(NAME RdKafkaTestBrokerLess COMMAND rdkafka_test -p5 -l)
+add_test(NAME RdKafkaTestInParallel COMMAND test-runner -p5)
+add_test(NAME RdKafkaTestSequentially COMMAND test-runner -p1)
+add_test(NAME RdKafkaTestBrokerLess COMMAND test-runner -p5 -l)
 
 if(NOT WIN32 AND NOT APPLE)
   set(tests_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

@@ -43,8 +43,8 @@ struct timestamp_range broker_timestamp;
 struct timestamp_range my_timestamp;
 
 static void prepare_timestamps() {
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
+        struct timeval ts;
+        rd_gettimeofday(&ts, NULL);
 
         /* broker timestamps expected to be within 120 seconds */
         broker_timestamp.min = ((int64_t)ts.tv_sec * 1000LLU);

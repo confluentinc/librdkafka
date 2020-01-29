@@ -2592,14 +2592,18 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 
         rd_dassert(rkcg->rkcg_wait_unassign_cnt == 0);
 
-        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
-
-        if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) && rkcg->rkcg_assignment) {
+        if (rkcg->rkcg_assignment) {
                 /* No existing assignment that needs to be decommissioned,
                  * start partition fetchers right away */
-                rd_kafka_cgrp_partitions_fetch_start(
-                        rkcg, rkcg->rkcg_assignment, 0);
-        }
+		rd_kafka_cgrp_set_join_state(rkcg,
+					     RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
+                if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
+                        rd_kafka_cgrp_partitions_fetch_start(
+                                rkcg, rkcg->rkcg_assignment, 0);
+	} else {
+		rd_kafka_cgrp_set_join_state(rkcg,
+					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
+	}
 
         return err;
 }

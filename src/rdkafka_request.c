@@ -895,6 +895,7 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
         int32_t TopicArrayCnt;
         int16_t ErrorCode = 0, last_ErrorCode = 0;
 	int errcnt = 0;
+        int partcnt = 0;
         int i;
 	int actions;
 
@@ -937,12 +938,14 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 				last_ErrorCode = ErrorCode;
 				errcnt++;
 			}
+
+                        partcnt++;
                 }
         }
 
 	/* If all partitions failed use error code
 	 * from last partition as the global error. */
-	if (offsets && errcnt == offsets->cnt)
+	if (offsets && errcnt == partcnt)
 		err = last_ErrorCode;
 	goto done;
 

@@ -192,7 +192,7 @@ static int test_rusage_check_thresholds (struct test *test,
         if (!fails || !test_rusage)
                 return 0;
 
-        TEST_FAIL("Test resource usage exceeds %d threshold(s): %s%s%s%s",
+        TEST_FAIL("Test resource usage exceeds %d threshold(s): %s%s%s%s%s",
                   fails,
                   reasons[0],
                   fails > 1 ? ", " : "",

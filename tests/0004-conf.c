@@ -280,7 +280,8 @@ static void do_test_idempotence_conf (void) {
 
                         } else {
                                 TEST_ASSERT(!check[i].exp_rk_fail,
-                                            "Expect config #%d.%d to fail");
+                                            "Expect config #%d.%d to fail",
+                                            i, j);
                         }
 
                         if (j == 1) {
@@ -302,7 +303,7 @@ static void do_test_idempotence_conf (void) {
                         } else {
                                 TEST_ASSERT(!check[i].exp_rkt_fail,
                                             "Expect topic config "
-                                            "#%d.%d to fail");
+                                            "#%d.%d to fail", i, j);
                                 rd_kafka_topic_destroy(rkt);
                         }
 

@@ -1983,40 +1983,47 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 	int i;
         int errcnt = 0;
 
-	if (!err) {
-		/* Update toppars' committed offset */
-		for (i = 0 ; i < offsets->cnt ; i++) {
-			rd_kafka_topic_partition_t *rktpar =&offsets->elems[i];
-			shptr_rd_kafka_toppar_t *s_rktp;
-			rd_kafka_toppar_t *rktp;
+        /* Update toppars' committed offset or global error */
+        for (i = 0 ; i < offsets->cnt ; i++) {
+                rd_kafka_topic_partition_t *rktpar =&offsets->elems[i];
+                shptr_rd_kafka_toppar_t *s_rktp;
+                rd_kafka_toppar_t *rktp;
 
-			if (unlikely(rktpar->err)) {
-				rd_kafka_dbg(rkcg->rkcg_rk, TOPIC,
-					     "OFFSET",
-					     "OffsetCommit failed for "
-					     "%s [%"PRId32"] at offset "
-					     "%"PRId64": %s",
-					     rktpar->topic, rktpar->partition,
-					     rktpar->offset,
-					     rd_kafka_err2str(rktpar->err));
-                                errcnt++;
-				continue;
-			} else if (unlikely(rktpar->offset < 0))
-				continue;
+                /* Ignore logical offsets since they were never
+                 * sent to the broker. */
+                if (RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
+                        continue;
 
-			s_rktp = rd_kafka_topic_partition_list_get_toppar(
-				rkcg->rkcg_rk, rktpar);
-			if (!s_rktp)
-				continue;
+                /* Propagate global error to all partitions that don't have
+                 * explicit error set. */
+                if (err && !rktpar->err)
+                        rktpar->err = err;
 
-			rktp = rd_kafka_toppar_s2i(s_rktp);
-			rd_kafka_toppar_lock(rktp);
-			rktp->rktp_committed_offset = rktpar->offset;
-			rd_kafka_toppar_unlock(rktp);
+                if (rktpar->err) {
+                        rd_kafka_dbg(rkcg->rkcg_rk, TOPIC,
+                                     "OFFSET",
+                                     "OffsetCommit failed for "
+                                     "%s [%"PRId32"] at offset "
+                                     "%"PRId64": %s",
+                                     rktpar->topic, rktpar->partition,
+                                     rktpar->offset,
+                                     rd_kafka_err2str(rktpar->err));
+                        errcnt++;
+                        continue;
+                }
 
-			rd_kafka_toppar_destroy(s_rktp);
-		}
-	}
+                s_rktp = rd_kafka_topic_partition_list_get_toppar(
+                        rkcg->rkcg_rk, rktpar);
+                if (!s_rktp)
+                        continue;
+
+                rktp = rd_kafka_toppar_s2i(s_rktp);
+                rd_kafka_toppar_lock(rktp);
+                rktp->rktp_committed_offset = rktpar->offset;
+                rd_kafka_toppar_unlock(rktp);
+
+                rd_kafka_toppar_destroy(s_rktp);
+        }
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
                 rd_kafka_cgrp_check_unassign_done(rkcg, "OffsetCommit done");
@@ -2296,8 +2303,10 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
  err:
 	/* Propagate error to whoever wanted offset committed. */
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
-		     "OffsetCommit internal error: %s", rd_kafka_err2str(err));
+        if (err != RD_KAFKA_RESP_ERR__NO_OFFSET)
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                             "OffsetCommit internal error: %s",
+                             rd_kafka_err2str(err));
 	rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, NULL, err,
 					     NULL, NULL, rko);
 }

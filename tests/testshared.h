@@ -75,12 +75,14 @@ test_produce_msgs_easy_size (const char *topic, uint64_t testid,
 
 
 void test_fail0 (const char *file, int line, const char *function,
-                 int do_lock, int fail_now, const char *fmt, ...);
+                 int do_lock, int fail_now, const char *fmt, ...)
+        RD_FORMAT(printf, 6, 7);
 
 
 
 void test_fail0 (const char *file, int line, const char *function,
-                 int do_lock, int fail_now, const char *fmt, ...);
+                 int do_lock, int fail_now, const char *fmt, ...)
+        RD_FORMAT(printf, 6, 7);
 
 #define TEST_FAIL0(file,line,do_lock,fail_now,...)   \
         test_fail0(__FILE__, __LINE__, __FUNCTION__, \

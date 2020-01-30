@@ -3564,7 +3564,8 @@ void test_consumer_poll_expect_err (rd_kafka_t *rk, uint64_t testid,
 
                 rd_kafka_message_destroy(rkmessage);
         } while (test_clock() <= tmout);
-        TEST_FAIL("Expected error %s not seen in %dms", err, timeout_ms);
+        TEST_FAIL("Expected error %s not seen in %dms",
+                  rd_kafka_err2name(err), timeout_ms);
 }
 
 /**

@@ -4365,6 +4365,31 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                                sizeof(struct rd_kafka_toppar_ver),
                                rkb->rkb_active_toppar_cnt, 0);
 
+        /* If the fetch list has changed, start fetching from a random position.
+         * This is to address the case where a program is too busy, so it has paused
+         * all consuming, then resumes when it is no longer busy. On resume, the
+         * fetch order will always be in the order of the topic/partition assignment.
+         * This means that if the busy state happens frequently, partitions lower
+         * in the assignment will be preferred for consuming messages. */
+        if (rkb->rkb_fetch_dirty) {
+                rkb->rkb_fetch_dirty = 0;
+
+                int index = 0;
+                int radom_fetch_position = rd_jitter(0, rkb->rkb_active_toppar_cnt);
+
+                rd_kafka_toppar_t *rktp_start = CIRCLEQ_FIRST(&rkb->rkb_active_toppars);
+                for (index = 0; index < radom_fetch_position; ++index) {
+                        rktp_start = CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars,
+                                           rktp_start, rktp_activelink);
+                }
+
+                rd_kafka_broker_active_toppar_next(
+                        rkb,
+                        rktp_start ?
+                        CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars,
+                                          rktp_start, rktp_activelink) : NULL);
+        }
+
 	/* Round-robin start of the list. */
         rktp = rkb->rkb_active_toppar_next;
         do {
@@ -5824,8 +5849,10 @@ void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
         CIRCLEQ_INSERT_TAIL(&rkb->rkb_active_toppars, rktp, rktp_activelink);
         rkb->rkb_active_toppar_cnt++;
 
-        if (is_consumer)
+        if (is_consumer) {
                 rktp->rktp_fetch = 1;
+                rkb->rkb_fetch_dirty = 1;
+        }
 
         if (unlikely(rkb->rkb_active_toppar_cnt == 1))
                 rd_kafka_broker_active_toppar_next(rkb, rktp);
@@ -5858,8 +5885,10 @@ void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
         rd_kafka_assert(NULL, rkb->rkb_active_toppar_cnt > 0);
         rkb->rkb_active_toppar_cnt--;
 
-        if (is_consumer)
+        if (is_consumer) {
                 rktp->rktp_fetch = 0;
+                rkb->rkb_fetch_dirty = 1;
+        }
 
         if (rkb->rkb_active_toppar_next == rktp) {
                 /* Update next pointer */

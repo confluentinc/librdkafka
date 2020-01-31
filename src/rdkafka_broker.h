@@ -84,6 +84,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_ts_t             rkb_ts_fetch_backoff;
 	int                 rkb_fetching;
 
+        /* Dirty flag for knowing that the list of toppars to fetch has changed */
+        int                 rkb_fetch_dirty;
+
 	enum {
 		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,

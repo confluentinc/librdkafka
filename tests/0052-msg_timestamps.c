@@ -38,19 +38,22 @@ struct timestamp_range {
         int64_t max;
 };
 
-const struct timestamp_range invalid_timestamp = { -1, -1 };
-struct timestamp_range broker_timestamp;
-struct timestamp_range my_timestamp;
+const static struct timestamp_range invalid_timestamp = { -1, -1 };
+static struct timestamp_range broker_timestamp;
+static struct timestamp_range my_timestamp;
 
 static void prepare_timestamps() {
         struct timeval ts;
         rd_gettimeofday(&ts, NULL);
 
-        /* broker timestamps expected to be within 120 seconds */
+        /* broker timestamps expected to be within 600 seconds */
         broker_timestamp.min = ((int64_t)ts.tv_sec * 1000LLU);
-        broker_timestamp.max = broker_timestamp.min + 120 * 1000LLU;
+        broker_timestamp.max = broker_timestamp.min + 600 * 1000LLU;
 
-        my_timestamp.min = my_timestamp.max = ((int64_t)ts.tv_sec * 1000LLU);
+        /* client timestamps: set in the future (24 hours)
+         * to be outside of broker timestamps */
+        my_timestamp.min = my_timestamp.max = (((int64_t)ts.tv_sec + 24*3600LLU)
+        									  * 1000LLU);
 }
 
 /**

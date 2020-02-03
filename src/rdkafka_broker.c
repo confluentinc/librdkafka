@@ -1149,6 +1149,9 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
  * Uses reservoir sampling.
  *
  * @param is_up Any broker that is up (UP or UPDATE state), \p state is ignored.
+ * @param filtered_cnt Optional pointer to integer which will be set to the
+ *               number of brokers that matches the \p state or \p is_up but
+ *               were filtered out by \p filter.
  * @param filter is an optional callback used to filter out undesired brokers.
  *               The filter function should return 1 to filter out a broker,
  *               or 0 to keep it in the list of eligible brokers to return.
@@ -1163,36 +1166,46 @@ rd_kafka_broker_random0 (const char *func, int line,
                          rd_kafka_t *rk,
                          rd_bool_t is_up,
                          int state,
+                         int *filtered_cnt,
                          int (*filter) (rd_kafka_broker_t *rk, void *opaque),
                          void *opaque) {
         rd_kafka_broker_t *rkb, *good = NULL;
         int cnt = 0;
+        int fcnt = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         continue;
 
                 rd_kafka_broker_lock(rkb);
-                if (((is_up && rd_kafka_broker_state_is_up(rkb->rkb_state)) ||
-                     (!is_up && (int)rkb->rkb_state == state)) &&
-                    (!filter || !filter(rkb, opaque))) {
-                        if (cnt < 1 || rd_jitter(0, cnt) < 1) {
-                                if (good)
-                                        rd_kafka_broker_destroy(good);
-                                rd_kafka_broker_keep_fl(func, line, rkb);
-                                good = rkb;
+                if ((is_up && rd_kafka_broker_state_is_up(rkb->rkb_state)) ||
+                    (!is_up && (int)rkb->rkb_state == state)) {
+                        if (filter && filter(rkb, opaque)) {
+                                /* Filtered out */
+                                fcnt++;
+                        } else {
+                                if (cnt < 1 || rd_jitter(0, cnt) < 1) {
+                                        if (good)
+                                                rd_kafka_broker_destroy(good);
+                                        rd_kafka_broker_keep_fl(func, line,
+                                                                rkb);
+                                        good = rkb;
+                                }
+                                cnt += 1;
                         }
-                        cnt += 1;
                 }
 		rd_kafka_broker_unlock(rkb);
 	}
+
+        if (filtered_cnt)
+                *filtered_cnt = fcnt;
 
         return good;
 }
 
 #define rd_kafka_broker_random(rk,state,filter,opaque)                  \
         rd_kafka_broker_random0(__FUNCTION__, __LINE__,                 \
-                                rk, rd_false, state, filter, opaque)
+                                rk, rd_false, state, NULL, filter, opaque)
 
 
 /**
@@ -1232,7 +1245,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
  *
  * Uses Reservoir sampling.
  *
- * @param filter is optional, see rd_kafka_broker_random().
+ * @param filtered_cnt optional, see rd_kafka_broker_random0().
+ * @param filter is optional, see rd_kafka_broker_random0().
  *
  * @sa rd_kafka_broker_random
  *
@@ -1241,13 +1255,15 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
  */
 rd_kafka_broker_t *
 rd_kafka_broker_any_up (rd_kafka_t *rk,
+                        int *filtered_cnt,
                         int (*filter) (rd_kafka_broker_t *rkb,
                                        void *opaque),
                         void *opaque, const char *reason) {
         rd_kafka_broker_t *rkb;
 
         rkb = rd_kafka_broker_random0(__FUNCTION__, __LINE__,
-                                      rk, rd_true/*is_up*/, -1, filter, opaque);
+                                      rk, rd_true/*is_up*/, -1,
+                                      filtered_cnt, filter, opaque);
 
         if (!rkb && rk->rk_conf.sparse_connections) {
                 /* Sparse connections:
@@ -1283,9 +1299,11 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
                 if (do_lock)
                         rd_kafka_rdlock(rk);
                 rkb = rd_kafka_broker_any_up(
-                        rk, rd_kafka_broker_filter_non_blocking, NULL, reason);
+                        rk, NULL, rd_kafka_broker_filter_non_blocking, NULL,
+                        reason);
                 if (!rkb)
-                        rkb = rd_kafka_broker_any_up(rk, NULL, NULL, reason);
+                        rkb = rd_kafka_broker_any_up(rk, NULL, NULL, NULL,
+                                                     reason);
                 if (do_lock)
                         rd_kafka_rdunlock(rk);
 

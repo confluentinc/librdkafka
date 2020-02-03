@@ -108,16 +108,13 @@ rd_kafka_idemp_broker_any (rd_kafka_t *rk,
                            rd_kafka_resp_err_t *errp,
                            char *errstr, size_t errstr_size) {
         rd_kafka_broker_t *rkb;
-        int all_cnt, up_cnt;
+        int up_cnt;
 
-        rkb = rd_kafka_broker_any_up(rk,
+        rkb = rd_kafka_broker_any_up(rk, &up_cnt,
                                      rd_kafka_broker_filter_non_idempotent,
                                      NULL, "acquire ProducerID");
         if (rkb)
                 return rkb;
-
-        all_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
-        up_cnt = rd_atomic32_get(&rk->rk_broker_up_cnt);
 
         if (up_cnt > 0) {
                 *errp = RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
@@ -134,7 +131,7 @@ rd_kafka_idemp_broker_any (rd_kafka_t *rk,
                             "No brokers available for %s (%d broker(s) known)",
                             rd_kafka_is_transactional(rk) ?
                             "Transactions" : "Idempotent producer",
-                            all_cnt);
+                            rd_atomic32_get(&rk->rk_broker_cnt));
         }
 
         rd_kafka_dbg(rk, EOS, "PIDBROKER", "%s", errstr);

@@ -441,6 +441,7 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                         void *opaque, const char *reason);
 rd_kafka_broker_t *
 rd_kafka_broker_any_up (rd_kafka_t *rk,
+                        int *filtered_cnt,
                         int (*filter) (rd_kafka_broker_t *rkb,
                                        void *opaque),
                         void *opaque, const char *reason);

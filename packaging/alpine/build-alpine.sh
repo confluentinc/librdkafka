@@ -16,7 +16,7 @@ if [ "$1" = "--in-docker" ]; then
     ./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static
     make -j
     examples/rdkafka_example -X builtin.features
-    make -C tests run_local
+    make -C tests run_local_quick
 
     # Create a tarball in artifacts/
     cd src

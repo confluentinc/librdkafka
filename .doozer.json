@@ -17,7 +17,7 @@
           "make -C tests build"
       ],
       "testcmd": [
-          "make -C tests run_local"
+          "make -C tests run_local_quick"
       ],
     },
 
@@ -39,7 +39,7 @@
         "make -C tests build"
       ],
       "testcmd": [
-        "make -C tests run_local"
+        "make -C tests run_local_quick"
       ],
     },
 

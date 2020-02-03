@@ -339,18 +339,6 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
                         if (mset &&
                             partsize < (size_t)PartMaxBytes &&
                             totsize < (size_t)MaxBytes) {
-                                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
-                                             "Broker %"PRId32": "
-                                             "Topic %s [%"PRId32"]: "
-                                             "fetch response at "
-                                             "Offset %"PRId64
-                                             " (requested Offset %"PRId64"): "
-                                             "MessageSet of %"PRId32" bytes",
-                                             mconn->broker->id,
-                                             mtopic->name, mpart->id,
-                                             mset->first_offset, FetchOffset,
-                                             RD_KAFKAP_BYTES_SIZE(&mset->
-                                                                  bytes));
                                 /* Response: Records */
                                 rd_kafka_buf_write_kbytes(resp, &mset->bytes);
                                 partsize += RD_KAFKAP_BYTES_SIZE(&mset->bytes);
@@ -358,25 +346,7 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
 
                                 /* FIXME: Multiple messageSets ? */
                         } else {
-                                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
-                                             "Broker %"PRId32": "
-                                             "Topic %s [%"PRId32"]: empty "
-                                             "fetch response for requested "
-                                             "Offset %"PRId64": "
-                                             "Log start..end Offsets are "
-                                             "%"PRId64"..%"PRId64
-                                             " (follower %"PRId64"..%"PRId64")",
-                                             mconn->broker->id,
-                                             mtopic ? mtopic->name : "n/a",
-                                             mpart ? mpart->id : -1,
-                                             FetchOffset,
-                                             mpart ? mpart->start_offset : -1,
-                                             mpart ? mpart->end_offset : -1,
-                                             mpart ?
-                                             mpart->follower_start_offset : -1,
-                                             mpart ?
-                                             mpart->follower_end_offset : -1);
-                                /* Response: Records: Null */
+                                /* Empty Response: Records: Null */
                                 rd_kafka_buf_write_i32(resp, 0);
                         }
                 }

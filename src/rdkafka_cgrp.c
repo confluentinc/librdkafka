@@ -516,6 +516,7 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 
 	rd_kafka_rdlock(rkcg->rkcg_rk);
         rkb = rd_kafka_broker_any_up(rkcg->rkcg_rk,
+                                     NULL,
                                      rd_kafka_broker_filter_can_coord_query,
                                      NULL, "coordinator query");
 	rd_kafka_rdunlock(rkcg->rkcg_rk);

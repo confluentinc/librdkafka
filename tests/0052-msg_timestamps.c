@@ -32,24 +32,29 @@
 /**
  * Verify message timestamp behaviour on supporting brokers (>=0.10.0.0).
  * Issue #858
- *
- * FIXME: Intermittent failures:
- *  "consume.easy: consumer_poll() timeout (1/-1 eof, 0/20 msgs)"
- * are due to the really old timestamps being used (my_timestamp, 1234)
- * causing the offset retention cleaner on the broker to kick in.
  */
 struct timestamp_range {
         int64_t min;
         int64_t max;
 };
 
-const struct timestamp_range invalid_timestamp = { -1, -1 };
-const struct timestamp_range broker_timestamp = {
-        946684800000/* 2000-01-01 */, 1577836800000 /* 2020-01-01 */
-};
-const struct timestamp_range my_timestamp = { 1234, 1234 };
+static const struct timestamp_range invalid_timestamp = { -1, -1 };
+static struct timestamp_range broker_timestamp;
+static struct timestamp_range my_timestamp;
 
+static void prepare_timestamps (void) {
+        struct timeval ts;
+        rd_gettimeofday(&ts, NULL);
 
+        /* broker timestamps expected to be within 600 seconds */
+        broker_timestamp.min = (int64_t)ts.tv_sec * 1000LLU;
+        broker_timestamp.max = broker_timestamp.min + (600 * 1000LLU);
+
+        /* client timestamps: set in the future (24 hours)
+         * to be outside of broker timestamps */
+        my_timestamp.min = my_timestamp.max =
+                (int64_t)ts.tv_sec + (24 * 3600 * 1000LLU);
+}
 
 /**
  * @brief Produce messages according to compress \p codec
@@ -187,6 +192,8 @@ int main_0052_msg_timestamps (int argc, char **argv) {
          *
          * Any other option should honour the producer create timestamps.
          */
+        prepare_timestamps();
+
         test_timestamps("CreateTime",    "0.10.1.0", "none", &my_timestamp);
         test_timestamps("LogAppendTime", "0.10.1.0", "none", &broker_timestamp);
         test_timestamps("CreateTime",    "0.9.0.0",  "none", &invalid_timestamp);

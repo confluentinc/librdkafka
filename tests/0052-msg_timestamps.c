@@ -53,7 +53,7 @@ static void prepare_timestamps (void) {
         /* client timestamps: set in the future (24 hours)
          * to be outside of broker timestamps */
         my_timestamp.min = my_timestamp.max =
-                ((int64_t)ts.tv_sec + (24 * 3600 * 1000LLU);
+                (int64_t)ts.tv_sec + (24 * 3600 * 1000LLU);
 }
 
 /**

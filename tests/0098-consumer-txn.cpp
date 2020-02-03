@@ -1074,7 +1074,7 @@ static void do_test_consumer_txn_test (bool use_java_producer) {
   msgs = consume_messages(c, topic_name, 0);
   TEST_ASSERT(msgs.size() == 13,
               "Consumed unexpected number of messages. "
-              "Expected 13, got: ", (int)msgs.size());
+              "Expected 13, got: %d", (int)msgs.size());
   delete_messages(msgs);
 
   Test::delete_topic(c, topic_name.c_str());

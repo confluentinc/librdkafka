@@ -124,8 +124,8 @@ static void do_test_txn_recoverable_errors (void) {
         TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
                                                errstr, sizeof(errstr)));
 
-        RD_UT_COVERAGE_CHECK(0); /* idemp_request_pid_failed(retry) */
-        RD_UT_COVERAGE_CHECK(1); /* txn_idemp_state_change(READY) */
+        (void)RD_UT_COVERAGE_CHECK(0); /* idemp_request_pid_failed(retry) */
+        (void)RD_UT_COVERAGE_CHECK(1); /* txn_idemp_state_change(READY) */
 
         /*
          * Start a transaction

@@ -274,8 +274,9 @@ void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
 					      NULL, rkbuf);
 			break;
                 default:
-                        /* Reset buffer send position */
+                        /* Reset buffer send position and corrid */
                         rd_slice_seek(&rkbuf->rkbuf_reader, 0);
+                        rkbuf->rkbuf_corrid = 0;
                         /* Reset timeout */
                         rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, now);
                         break;

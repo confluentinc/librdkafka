@@ -87,6 +87,14 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v)
 #endif
 }
 
+/**
+ * @warning The returned value is the nominal value and will be outdated
+ *          by the time the application reads it.
+ *          It should not be used for exact arithmetics, any correlation
+ *          with other data is unsynchronized, meaning that two atomics,
+ *          or one atomic and a mutex-protected piece of data have no
+ *          common synchronization and can't be relied on.
+ */
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 #if defined(_MSC_VER) || defined(__SUNPRO_C)
 	return ra->val;
@@ -164,6 +172,15 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v)
 #endif
 }
 
+/**
+ * @warning The returned value is the nominal value and will be outdated
+ *          by the time the application reads it.
+ *          It should not be used for exact arithmetics, any correlation
+ *          with other data is unsynchronized, meaning that two atomics,
+ *          or one atomic and a mutex-protected piece of data have no
+ *          common synchronization and can't be relied on.
+ *          Use with care.
+ */
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 #if defined(_MSC_VER) || defined(__SUNPRO_C)
 	return ra->val;

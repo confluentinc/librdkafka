@@ -2147,7 +2147,10 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 		rd_kafka_broker_fail(rkb, LOG_DEBUG,
 				     RD_KAFKA_RESP_ERR__TRANSPORT,
 				     "ApiVersionRequest failed: %s: "
-				     "probably due to old broker version",
+				     "probably due to incorrect "
+                                     "security.protocol "
+                                     "or broker version is < 0.10 "
+                                     "(see api.version.request)",
 				     rd_kafka_err2str(err));
 		return;
 	}

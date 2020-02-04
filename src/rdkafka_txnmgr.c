@@ -113,11 +113,17 @@ rd_kafka_txn_require_states0 (rd_kafka_t *rk,
 
 
 /**
+ * @param ignore Will be set to true if the state transition should be
+ *               completely ignored.
  * @returns true if the state transition is valid, else false.
  */
 static rd_bool_t
 rd_kafka_txn_state_transition_is_valid (rd_kafka_txn_state_t curr,
-                                        rd_kafka_txn_state_t new_state) {
+                                        rd_kafka_txn_state_t new_state,
+                                        rd_bool_t *ignore) {
+
+        *ignore = rd_false;
+
         switch (new_state)
         {
         case RD_KAFKA_TXN_STATE_INIT:
@@ -150,6 +156,14 @@ rd_kafka_txn_state_transition_is_valid (rd_kafka_txn_state_t curr,
                         curr == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR;
 
         case RD_KAFKA_TXN_STATE_ABORTABLE_ERROR:
+                if (curr == RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION ||
+                    curr == RD_KAFKA_TXN_STATE_FATAL_ERROR) {
+                        /* Ignore sub-sequent abortable errors in
+                         * these states. */
+                        *ignore = rd_true;
+                        return 1;
+                }
+
                 return curr == RD_KAFKA_TXN_STATE_IN_TRANSACTION ||
                         curr == RD_KAFKA_TXN_STATE_BEGIN_COMMIT ||
                         curr == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION;
@@ -176,12 +190,14 @@ rd_kafka_txn_state_transition_is_valid (rd_kafka_txn_state_t curr,
  */
 static void rd_kafka_txn_set_state (rd_kafka_t *rk,
                                     rd_kafka_txn_state_t new_state) {
+        rd_bool_t ignore;
+
         if (rk->rk_eos.txn_state == new_state)
                 return;
 
         /* Check if state transition is valid */
         if (!rd_kafka_txn_state_transition_is_valid(rk->rk_eos.txn_state,
-                                                    new_state)) {
+                                                    new_state, &ignore)) {
                 rd_kafka_log(rk, LOG_CRIT, "TXNSTATE",
                              "BUG: Invalid transaction state transition "
                              "attempted: %s -> %s",
@@ -189,6 +205,11 @@ static void rd_kafka_txn_set_state (rd_kafka_t *rk,
                              rd_kafka_txn_state2str(new_state));
 
                 rd_assert(!*"BUG: Invalid transaction state transition");
+        }
+
+        if (ignore) {
+                /* Ignore this state change */
+                return;
         }
 
         rd_kafka_dbg(rk, EOS, "TXNSTATE",

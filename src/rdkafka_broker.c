@@ -2134,14 +2134,55 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
 				   rd_kafka_buf_t *rkbuf,
 				   rd_kafka_buf_t *request, void *opaque) {
-	struct rd_kafka_ApiVersion *apis;
-	size_t api_cnt;
+	struct rd_kafka_ApiVersion *apis = NULL;
+	size_t api_cnt = 0;
+        int16_t retry_ApiVersion = -1;
 
 	if (err == RD_KAFKA_RESP_ERR__DESTROY)
 		return;
 
 	err = rd_kafka_handle_ApiVersion(rk, rkb, err, rkbuf, request,
 					 &apis, &api_cnt);
+
+        /* Broker does not support our ApiVersionRequest version,
+         * see if we can downgrade to an older version. */
+        if (err == RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION) {
+                size_t i;
+
+                /* Find the broker's highest supported version for
+                 * ApiVersionRequest and use that to retry. */
+                for (i = 0 ; i < api_cnt ; i++) {
+                        if (apis[i].ApiKey == RD_KAFKAP_ApiVersion) {
+                                retry_ApiVersion = RD_MIN(
+                                        request->rkbuf_reqhdr.ApiVersion - 1,
+                                        apis[i].MaxVer);
+                                break;
+                        }
+                }
+
+                /* Before v3 the broker would not return its supported
+                 * ApiVersionRequests, so we go straight for version 0. */
+                if (i == api_cnt && request->rkbuf_reqhdr.ApiVersion > 0)
+                        retry_ApiVersion = 0;
+        }
+
+        if (err && apis)
+                rd_free(apis);
+
+        if (retry_ApiVersion != -1) {
+                /* Retry request with a lower version */
+                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_FEATURE, "APIVERSION",
+                           "ApiVersionRequest v%hd failed due to %s: "
+                           "retrying with v%hd",
+                           request->rkbuf_reqhdr.ApiVersion,
+                           rd_kafka_err2name(err), retry_ApiVersion);
+                rd_kafka_ApiVersionRequest(rkb, retry_ApiVersion,
+                                           RD_KAFKA_NO_REPLYQ,
+                                           rd_kafka_broker_handle_ApiVersion,
+                                           NULL);
+                return;
+        }
+
 
 	if (err) {
 		rd_kafka_broker_fail(rkb, LOG_DEBUG,
@@ -2216,7 +2257,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_ApiVersionRequest(
-			rkb, RD_KAFKA_NO_REPLYQ,
+			rkb, -1 /* Use highest version we support */,
+                        RD_KAFKA_NO_REPLYQ,
 			rd_kafka_broker_handle_ApiVersion, NULL);
 	} else {
 		/* Authenticate if necessary */

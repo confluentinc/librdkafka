@@ -1879,10 +1879,12 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
  * @brief Parses and handles ApiVersion reply.
  *
  * @param apis will be allocated, populated and sorted
- *             with broker's supported APIs.
+ *             with broker's supported APIs, or set to NULL.
  * @param api_cnt will be set to the number of elements in \p *apis
-
+ *
  * @returns 0 on success, else an error.
+ *
+ * @remark A valid \p apis might be returned even if an error is returned.
  */
 rd_kafka_resp_err_t
 rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
@@ -1898,19 +1900,24 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 	int i = 0;
 
 	*apis = NULL;
+        *api_cnt = 0;
 
         if (err)
                 goto err;
 
 	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-	if ((err = ErrorCode))
-		goto err;
-
         rd_kafka_buf_read_i32(rkbuf, &ApiArrayCnt);
-	if (ApiArrayCnt > 1000)
+	if (ApiArrayCnt > 1000 || ApiArrayCnt < 0)
 		rd_kafka_buf_parse_fail(rkbuf,
 					"ApiArrayCnt %"PRId32" out of range",
 					ApiArrayCnt);
+
+        if (ErrorCode && ApiArrayCnt == 0) {
+                /* Version >=3 returns the ApiVersions array if the error
+                 * code is ERR_UNSUPPORTED_VERSION, previous versions don't */
+                err = ErrorCode;
+                goto err;
+        }
 
 	rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
 		   "Broker API support:");
@@ -1930,18 +1937,26 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 			   api->ApiKey, api->MinVer, api->MaxVer);
         }
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
 	*api_cnt = ApiArrayCnt;
         qsort(*apis, *api_cnt, sizeof(**apis), rd_kafka_ApiVersion_key_cmp);
+
+        err = ErrorCode;
 
 	goto done;
 
  err_parse:
         err = rkbuf->rkbuf_err;
  err:
+        /* There are no retryable errors. */
+
 	if (*apis)
 		rd_free(*apis);
 
-        /* There are no retryable errors. */
+        *apis = NULL;
+        *api_cnt = 0;
 
  done:
         return err;
@@ -1950,13 +1965,20 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 
 
 /**
- * Send ApiVersionRequest (KIP-35)
+ * @brief Send ApiVersionRequest (KIP-35)
+ *
+ * @param ApiVersion If -1 use the highest supported version, else use the
+ *                   specified value.
  */
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+                                 int16_t ApiVersion,
 				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
 				 void *opaque) {
         rd_kafka_buf_t *rkbuf;
+
+        if (ApiVersion == -1)
+                ApiVersion = 0;
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ApiVersion, 1, 4);
 
@@ -1977,6 +1999,8 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
                 rkbuf,
                 rkb->rkb_rk->rk_conf.api_version_request_timeout_ms,
                 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb,

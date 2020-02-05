@@ -5,7 +5,7 @@ librdkafka is a high performance C implementation of the Apache
 Kafka client, providing a reliable and performant client for production use.
 librdkafka also provides a native C++ interface.
 
-<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-generate-toc again -->
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
 - [Introduction to librdkafka - the Apache Kafka C/C++ client library](#introduction-to-librdkafka---the-apache-kafka-cc-client-library)
@@ -38,7 +38,7 @@ librdkafka also provides a native C++ interface.
                 - [Standard errors](#standard-errors)
                 - [Message persistence status](#message-persistence-status)
         - [Transactional Producer](#transactional-producer)
-            - [Error handling](#error-handling)
+            - [Error handling](#error-handling-1)
             - [Old producer fencing](#old-producer-fencing)
             - [Configuration considerations](#configuration-considerations)
         - [Exactly Once Semantics (EOS) and transactions](#exactly-once-semantics-eos-and-transactions)
@@ -66,8 +66,8 @@ librdkafka also provides a native C++ interface.
             - [Offset management](#offset-management)
                 - [Auto offset commit](#auto-offset-commit)
                 - [At-least-once processing](#at-least-once-processing)
-            - [Consumer groups](#consumer-groups)
-                - [Static consumer groups](#static-consumer-groups)
+        - [Consumer groups](#consumer-groups)
+            - [Static consumer groups](#static-consumer-groups)
         - [Topics](#topics)
             - [Topic auto creation](#topic-auto-creation)
         - [Metadata](#metadata)
@@ -1459,12 +1459,19 @@ The latest stored offset will be automatically committed every
 
 
 
-#### Consumer groups
+### Consumer groups
 
 Broker based consumer groups (requires Apache Kafka broker >=0.9) are supported,
 see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 
-##### Static consumer groups
+The following diagram visualizes the high-level balanced consumer group state
+flow and synchronization between the application, librdkafka consumer,
+group coordinator, and partition leader(s).
+
+![Consumer group state diagram](src/librdkafka_cgrp_synch.png)
+
+
+#### Static consumer groups
 
 By default Kafka consumers are rebalanced each time a new consumer joins
 the group or an existing member leaves. This is what is known as a dynamic

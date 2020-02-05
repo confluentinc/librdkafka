@@ -1747,7 +1747,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-91 - Intuitive timeouts in Producer                                  | 2.1.0                                     | Supported                                                                                     |
 | KIP-92 - Per-partition lag metrics in Consumer                           | 0.10.2.0                                  | Supported                                                                                     |
 | KIP-97 - Backwards compatibility with older brokers                      | 0.10.2.0                                  | Supported                                                                                     |
-| KIP-98 - EOS                                                             | 0.11.0.0                                  | Partially supported (WIP)                                                                     |
+| KIP-98 - EOS                                                             | 0.11.0.0                                  | Supported                                                                                     |
 | KIP-102 - Close with timeout in consumer                                 | 0.10.2.0                                  | Not supported                                                                                 |
 | KIP-107 - AdminAPI: DeleteRecordsBefore                                  | 0.11.0.0                                  | Not supported                                                                                 |
 | KIP-110 - ZStd compression                                               | 2.1.0                                     | Supported                                                                                     |
@@ -1837,11 +1837,11 @@ release of librdkafka.
 | 21      | DeleteRecords           | 1           | -                       |
 | 22      | InitProducerId          | 1           | 1                       |
 | 23      | OffsetForLeaderEpoch    | 3           | -                       |
-| 24      | AddPartitionsToTxn      | 1           | -                       |
-| 25      | AddOffsetsToTxn         | 1           | -                       |
-| 26      | EndTxn                  | 1           | -                       |
+| 24      | AddPartitionsToTxn      | 1           | 0                       |
+| 25      | AddOffsetsToTxn         | 1           | 0                       |
+| 26      | EndTxn                  | 1           | 1                       |
 | 27      | WriteTxnMarkers         | 0           | -                       |
-| 28      | TxnOffsetCommit         | 2           | -                       |
+| 28      | TxnOffsetCommit         | 2           | 0                       |
 | 29      | DescribeAcls            | 1           | -                       |
 | 30      | CreateAcls              | 1           | -                       |
 | 31      | DeleteAcls              | 1           | -                       |

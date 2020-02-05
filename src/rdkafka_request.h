@@ -207,6 +207,7 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 			    struct rd_kafka_ApiVersion **apis,
 			    size_t *api_cnt);
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+                                 int16_t ApiVersion,
 				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
 				 void *opaque);

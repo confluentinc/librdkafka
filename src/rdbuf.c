@@ -868,13 +868,13 @@ size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
 
 
 /**
- * @brief Read a varint-encoded signed integer from \p slice,
+ * @brief Read a varint-encoded unsigned integer from \p slice,
  *        storing the decoded number in \p nump on success (return value > 0).
  *
  * @returns the number of bytes read on success or 0 in case of
  *          buffer underflow.
  */
-size_t rd_slice_read_varint (rd_slice_t *slice, int64_t *nump) {
+size_t rd_slice_read_uvarint (rd_slice_t *slice, uint64_t *nump) {
         uint64_t num = 0;
         int shift = 0;
         size_t rof = slice->rof;
@@ -896,10 +896,7 @@ size_t rd_slice_read_varint (rd_slice_t *slice, int64_t *nump) {
 
                         if (!(oct & 0x80)) {
                                 /* Done: no more bytes expected */
-
-                                /* Zig-zag decoding */
-                                *nump = (int64_t)((num >> 1) ^
-                                                  -(int64_t)(num & 1));
+                                *nump = num;
 
                                 /* Update slice's read pointer and offset */
                                 if (slice->seg != seg)

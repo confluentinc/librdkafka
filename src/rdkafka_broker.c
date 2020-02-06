@@ -1559,8 +1559,11 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		   rkbuf->rkbuf_totlen, rkbuf->rkbuf_reshdr.CorrId,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
-        /* Copy request's header to response object's reqhdr for convenience. */
+        /* Copy request's header and certain flags to response object's
+         * reqhdr for convenience. */
         rkbuf->rkbuf_reqhdr = req->rkbuf_reqhdr;
+        rkbuf->rkbuf_flags |= (req->rkbuf_flags &
+                               RD_KAFKA_BUF_FLAGS_RESP_COPY_MASK);
 
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
@@ -2164,6 +2167,18 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
                  * ApiVersionRequests, so we go straight for version 0. */
                 if (i == api_cnt && request->rkbuf_reqhdr.ApiVersion > 0)
                         retry_ApiVersion = 0;
+
+        } else if (err == RD_KAFKA_RESP_ERR_INVALID_REQUEST) {
+                rd_rkb_log(rkb, LOG_ERR, "APIVERSION",
+                           "ApiVersionRequest v%hd failed due to "
+                           "invalid request: "
+                           "check client.software.name (\"%s\") and "
+                           "client.software.version (\"%s\") "
+                           "for invalid characters: "
+                           "falling back to older request version",
+                           request->rkbuf_reqhdr.ApiVersion,
+                           rk->rk_conf.sw_name, rk->rk_conf.sw_version);
+                retry_ApiVersion = 0;
         }
 
         if (err && apis)
@@ -2171,7 +2186,9 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 
         if (retry_ApiVersion != -1) {
                 /* Retry request with a lower version */
-                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_FEATURE, "APIVERSION",
+                rd_rkb_dbg(rkb,
+                           BROKER|RD_KAFKA_DBG_FEATURE|RD_KAFKA_DBG_PROTOCOL,
+                           "APIVERSION",
                            "ApiVersionRequest v%hd failed due to %s: "
                            "retrying with v%hd",
                            request->rkbuf_reqhdr.ApiVersion,

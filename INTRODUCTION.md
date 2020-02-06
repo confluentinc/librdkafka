@@ -1800,13 +1800,16 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                                     | Not supported                                                                                 |
 | KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0 (WIP)                               | Not supported                                                                                 |
 | KIP-480 - Sticky partitioner                                             | 2.4.0                                     | Not supported                                                                                 |
-| KIP-496 - AdminAPI: delete offsets                                       | 2.4.0 (WIP)                               | Not supported                                                                                 |
-| KIP-482 - Optional fields in Kafka protocol                              | 2.4.0 (WIP)                               | Not supported                                                                                 |
+| KIP-482 - Optional fields in Kafka protocol                              | 2.4.0                                     | Partially supported (ApiVersionRequest)                                                       |
+| KIP-496 - AdminAPI: delete offsets                                       | 2.4.0                                     | Not supported                                                                                 |
+| KIP-511 - Collect Client's Name and Version                              | 2.4.0                                     | Supported                                                                                     |
+| KIP-514 - Bounded flush()                                                | 2.4.0                                     | Supported                                                                                     |
+| KIP-517 - Consumer poll() metrics                                        | 2.4.0                                     | Not supported                                                                                 |
 
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 2.3.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 2.4.0, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 
@@ -1831,7 +1834,7 @@ release of librdkafka.
 | 15      | DescribeGroups          | 4           | 0                       |
 | 16      | ListGroups              | 2           | 0                       |
 | 17      | SaslHandshake           | 1           | 1                       |
-| 18      | ApiVersions             | 2           | 0                       |
+| 18      | ApiVersions             | 3           | 3                       |
 | 19      | CreateTopics            | 4           | 2                       |
 | 20      | DeleteTopics            | 3           | 1                       |
 | 21      | DeleteRecords           | 1           | -                       |

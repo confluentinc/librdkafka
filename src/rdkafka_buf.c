@@ -148,7 +148,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey
         /* CorrId: updated later */
         rd_kafka_buf_write_i32(rkbuf, 0);
 
-        /* ClientId */
+        /* ClientId: possibly updated later if a flexible version */
         rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->rk_client_id);
 
         return rkbuf;

@@ -495,6 +495,9 @@ struct rd_kafka_conf_s {
                         uint64_t msgid,
                         rd_kafka_resp_err_t err);
         } ut;
+
+        char *sw_name;    /**< Software/client name */
+        char *sw_version; /**< Software/client version */
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);

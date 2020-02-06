@@ -58,7 +58,7 @@ double test_timeout_multiplier  = 1.0;
 static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
 int          test_broker_version;
-static const char *test_broker_version_str = "0.9.0.0";
+static const char *test_broker_version_str = "2.4.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
@@ -210,6 +210,7 @@ _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
+_TEST_DECL(0108_client_swname);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -388,6 +389,7 @@ struct test tests[] = {
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL),
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL),
+        _TEST(0108_client_swname, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

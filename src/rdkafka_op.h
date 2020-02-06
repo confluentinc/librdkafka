@@ -67,7 +67,8 @@ typedef struct rd_kafka_replyq_s {
 #define RD_KAFKA_OP_F_BLOCKING    0x8  /* rkbuf: blocking protocol request */
 #define RD_KAFKA_OP_F_REPROCESS   0x10 /* cgrp: Reprocess at a later time. */
 #define RD_KAFKA_OP_F_SENT        0x20 /* rkbuf: request sent on wire */
-
+#define RD_KAFKA_OP_F_FLEXVER     0x40 /* rkbuf: flexible protocol version
+                                        *        (KIP-482) */
 
 typedef enum {
         RD_KAFKA_OP_NONE,     /* No specific type, use OP_CB */

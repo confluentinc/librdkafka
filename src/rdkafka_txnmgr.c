@@ -31,6 +31,8 @@
  *
  */
 
+#include <stdarg.h>
+
 #include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_txnmgr.h"

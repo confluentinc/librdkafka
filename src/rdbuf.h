@@ -286,7 +286,32 @@ size_t rd_slice_read (rd_slice_t *slice, void *dst, size_t size);
 size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
                       void *dst, size_t size);
 
-size_t rd_slice_read_varint (rd_slice_t *slice, int64_t *nump);
+size_t rd_slice_read_uvarint (rd_slice_t *slice, uint64_t *nump);
+
+/**
+ * @brief Read a zig-zag varint-encoded signed integer from \p slice,
+ *        storing the decoded number in \p nump on success (return value > 0).
+ *
+ * @returns the number of bytes read on success or 0 in case of
+ *          buffer underflow.
+ */
+static RD_UNUSED RD_INLINE
+size_t rd_slice_read_varint (rd_slice_t *slice, int64_t *nump) {
+        size_t r;
+        uint64_t unum;
+
+        r = rd_slice_read_uvarint(slice, &unum);
+        if (likely(r > 0)) {
+                /* Zig-zag decoding */
+                *nump = (int64_t)((unum >> 1) ^
+                                  -(int64_t)(unum & 1));
+        }
+
+        return r;
+}
+
+
+
 
 const void *rd_slice_ensure_contig (rd_slice_t *slice, size_t size);
 

@@ -237,6 +237,7 @@ typedef void (rd_kafka_mock_io_handler_t) (struct rd_kafka_mock_cluster_s
 struct rd_kafka_mock_api_handler {
         int16_t MinVersion;
         int16_t MaxVersion;
+        int16_t FlexVersion;  /**< First Flexible version */
         int (*cb) (rd_kafka_mock_connection_t *mconn, rd_kafka_buf_t *rkbuf);
 };
 
@@ -367,6 +368,18 @@ rd_kafka_resp_err_t
 rd_kafka_mock_partition_log_append (rd_kafka_mock_partition_t *mpart,
                                     const rd_kafkap_bytes_t *bytes,
                                     int64_t *BaseOffset);
+
+
+/**
+ * @returns true if the ApiVersion is supported, else false.
+ */
+static RD_UNUSED rd_bool_t
+rd_kafka_mock_cluster_ApiVersion_check (const rd_kafka_mock_cluster_t *mcluster,
+                                        int16_t ApiKey,
+                                        int16_t ApiVersion) {
+        return (ApiVersion >= mcluster->api_handlers[ApiKey].MinVersion &&
+                ApiVersion <= mcluster->api_handlers[ApiKey].MaxVersion);
+}
 
 
 /**

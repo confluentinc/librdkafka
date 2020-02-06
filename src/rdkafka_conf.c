@@ -253,16 +253,41 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
-#endif         
+#endif
 #if WITH_SASL_OAUTHBEARER
                 { 0x800, "sasl_oauthbearer" },
-#endif         
+#endif
 		{ 0, NULL }
 		}
 	},
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
 	  "Client identifier.",
 	  .sdef =  "rdkafka" },
+        { _RK_GLOBAL|_RK_HIDDEN, "client.software.name", _RK_C_STR,
+          _RK(sw_name),
+          "Client software name as reported to broker version >= v2.4.0. "
+          "Broker-side character restrictions apply, as of broker version "
+          "v2.4.0 the allowed characters are `a-zA-Z0-9.-`. The local client "
+          "will replace any other character with `-` and strip leading and "
+          "trailing non-alphanumeric characters before tranmission to "
+          "the broker. "
+          "This property should only be set by high-level language "
+          "librdkafka client bindings.",
+          .sdef = "librdkafka"
+        },
+        { _RK_GLOBAL|_RK_HIDDEN, "client.software.version", _RK_C_STR,
+          _RK(sw_version),
+          "Client software version as reported to broker version >= v2.4.0. "
+          "Broker-side character restrictions apply, as of broker version "
+          "v2.4.0 the allowed characters are `a-zA-Z0-9.-`. The local client "
+          "will replace any other character with `-` and strip leading and "
+          "trailing non-alphanumeric characters before tranmission to "
+          "the broker. "
+          "This property should only be set by high-level language "
+          "librdkafka client bindings."
+          "If changing this property it is highly recommended to append the "
+          "librdkafka version.",
+        },
 	{ _RK_GLOBAL|_RK_HIGH, "metadata.broker.list", _RK_C_STR,
           _RK(brokerlist),
 	  "Initial list of brokers as a CSV list of broker host or host:port. "
@@ -3247,6 +3272,71 @@ void *rd_kafka_confval_get_ptr (const rd_kafka_confval_t *confval) {
 }
 
 
+#define _is_alphanum(C) (                                       \
+                ((C) >= 'a' && (C) <= 'z') ||                   \
+                ((C) >= 'A' && (C) <= 'Z') ||                   \
+                ((C) >= '0' && (C) <= '9'))
+
+/**
+ * @returns true if the string is KIP-511 safe, else false.
+ */
+static rd_bool_t rd_kafka_sw_str_is_safe (const char *str) {
+        const char *s;
+
+        if (!*str)
+                return rd_true;
+
+        for (s = str ; *s ; s++) {
+                int c = (int)*s;
+
+                if (unlikely(!(_is_alphanum(c) || c == '-' || c == '.')))
+                        return rd_false;
+        }
+
+        /* Verify that the string begins and ends with a-zA-Z0-9 */
+        if (!_is_alphanum(*str))
+                return rd_false;
+        if (!_is_alphanum(*(s-1)))
+                return rd_false;
+
+        return rd_true;
+}
+
+
+/**
+ * @brief Sanitize KIP-511 software name/version strings in-place,
+ *        replacing unaccepted characters with "-".
+ *
+ * @warning The \p str is modified in-place.
+ */
+static void rd_kafka_sw_str_sanitize_inplace (char *str) {
+        char *s = str, *d = str;
+
+        /* Strip any leading non-alphanums */
+        while (!_is_alphanum(*s))
+                s++;
+
+        for (; *s ; s++) {
+                int c = (int)*s;
+
+                if (unlikely(!(_is_alphanum(c) ||
+                               c == '-' || c == '.')))
+                        *d = '-';
+                else
+                        *d = *s;
+                d++;
+        }
+
+        *d = '\0';
+
+        /* Strip any trailing non-alphanums */
+        for (d = d-1 ; d >= str && !_is_alphanum(*d) ; d--)
+                *d = '\0';
+}
+
+#undef _is_alphanum
+
+
 /**
  * @brief Verify configuration \p conf is
  *        correct/non-conflicting and finalize the configuration
@@ -3256,6 +3346,22 @@ void *rd_kafka_confval_get_ptr (const rd_kafka_confval_t *confval) {
  */
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf) {
+
+        if (!conf->sw_name)
+                rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
+                                  NULL, 0);
+        if (!conf->sw_version)
+                rd_kafka_conf_set(conf, "client.software.version",
+                                  rd_kafka_version_str(),
+                                  NULL, 0);
+
+        /* The client.software.name and .version are sent to the broker
+         * with the ApiVersionRequest starting with AK 2.4.0 (KIP-511).
+         * These strings need to be sanitized or the broker will reject them,
+         * so modify them in-place here. */
+        rd_assert(conf->sw_name && conf->sw_version);
+        rd_kafka_sw_str_sanitize_inplace(conf->sw_name);
+        rd_kafka_sw_str_sanitize_inplace(conf->sw_version);
 
         /* Verify mandatory configuration */
         if (!conf->socket_cb)
@@ -3569,6 +3675,20 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
                              "applies when `sasl.mechanism` is set to "
                              "PLAIN or SCRAM-SHA-..");
 
+        if (rd_kafka_conf_is_modified(&rk->rk_conf, "client.software.name") &&
+            !rd_kafka_sw_str_is_safe(rk->rk_conf.sw_name))
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property `client.software.name` "
+                             "may only contain 'a-zA-Z0-9.-', other characters "
+                             "will be replaced with '-'");
+
+        if (rd_kafka_conf_is_modified(&rk->rk_conf, "client.software.version") &&
+            !rd_kafka_sw_str_is_safe(rk->rk_conf.sw_version))
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property `client.software.verison` "
+                             "may only contain 'a-zA-Z0-9.-', other characters "
+                             "will be replaced with '-'");
+
         return cnt;
 }
 
@@ -3584,10 +3704,13 @@ const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk) {
 int unittest_conf (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;
-        rd_kafka_conf_res_t res;
+        rd_kafka_conf_res_t res, res2;
         char errstr[128];
         int iteration;
         const struct rd_kafka_property *prop;
+        char readval[512];
+        size_t readlen;
+        const char *errstr2;
 
         conf = rd_kafka_conf_new();
         tconf = rd_kafka_topic_conf_new();
@@ -3613,12 +3736,11 @@ int unittest_conf (void) {
                         char tmp[64];
                         int odd = cnt & 1;
                         int do_set = iteration == 3 || (iteration == 1 && odd);
-                        char readval[512];
-                        size_t readlen = sizeof(readval);
-                        rd_kafka_conf_res_t res2;
                         rd_bool_t is_modified;
                         int exp_is_modified = iteration >= 3 ||
                                 (iteration > 0 && (do_set || odd));
+
+                        readlen = sizeof(readval);
 
                         /* Avoid some special configs */
                         if (!strcmp(prop->name, "plugin.library.paths") ||
@@ -3745,6 +3867,37 @@ int unittest_conf (void) {
 
         rd_kafka_conf_destroy(conf);
         rd_kafka_topic_conf_destroy(tconf);
+
+
+        /* Verify that software.client.* string-safing works */
+        conf = rd_kafka_conf_new();
+        res = rd_kafka_conf_set(conf, "client.software.name",
+                                " .~aba. va! !.~~", NULL, 0);
+        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res);
+        res = rd_kafka_conf_set(conf, "client.software.version",
+                                "!1.2.3.4.5!!! a", NULL, 0);
+        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res);
+
+        errstr2 = rd_kafka_conf_finalize(RD_KAFKA_PRODUCER, conf);
+        RD_UT_ASSERT(!errstr2, "conf_finalize() failed: %s", errstr2);
+
+        readlen = sizeof(readval);
+        res2 = rd_kafka_conf_get(conf, "client.software.name",
+                                 readval, &readlen);
+        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res2);
+        RD_UT_ASSERT(!strcmp(readval, "aba.-va"),
+                     "client.software.* safification failed: \"%s\"", readval);
+        RD_UT_SAY("Safified client.software.name=\"%s\"", readval);
+
+        readlen = sizeof(readval);
+        res2 = rd_kafka_conf_get(conf, "client.software.version",
+                                 readval, &readlen);
+        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res2);
+        RD_UT_ASSERT(!strcmp(readval, "1.2.3.4.5----a"),
+                     "client.software.* safification failed: \"%s\"", readval);
+        RD_UT_SAY("Safified client.software.version=\"%s\"", readval);
+
+        rd_kafka_conf_destroy(conf);
 
         RD_UT_PASS();
 }

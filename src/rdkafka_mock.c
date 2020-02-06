@@ -701,7 +701,8 @@ void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
 static int
 rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                                        rd_kafka_buf_t **rkbufp) {
-        rd_kafka_t *rk = mconn->broker->cluster->rk;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_t *rk = mcluster->rk;
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_buf_t *rkbuf;
         char errstr[128];
@@ -757,6 +758,27 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                                       &rkbuf->rkbuf_reqhdr.ApiKey);
                 rd_kafka_buf_read_i16(rkbuf,
                                       &rkbuf->rkbuf_reqhdr.ApiVersion);
+
+                if (rkbuf->rkbuf_reqhdr.ApiKey < 0 ||
+                    rkbuf->rkbuf_reqhdr.ApiKey >= RD_KAFKAP__NUM) {
+                        rd_kafka_buf_parse_fail(rkbuf,
+                                                "Invalid ApiKey %hd from %s",
+                                                rkbuf->rkbuf_reqhdr.ApiKey,
+                                                rd_sockaddr2str(
+                                                        &mconn->peer,
+                                                        RD_SOCKADDR2STR_F_PORT));
+                        RD_NOTREACHED();
+                }
+
+                /* Check if request version has flexible fields (KIP-482) */
+                if (mcluster->api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].
+                    FlexVersion != -1 &&
+                    rkbuf->rkbuf_reqhdr.ApiVersion >=
+                    mcluster->api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].
+                    FlexVersion)
+                        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+
+
                 rd_kafka_buf_read_i32(rkbuf,
                                       &rkbuf->rkbuf_reqhdr.CorrId);
 
@@ -803,8 +825,8 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                               rd_buf_len(&rkbuf->rkbuf_buf) -
                               RD_KAFKAP_REQHDR_SIZE);
 
-                /* For convenience, shave of the ClientId */
-                rd_kafka_buf_read_str(rkbuf, &clientid);
+                /* For convenience, shave off the ClientId */
+                rd_kafka_buf_read_compact_str(rkbuf, &clientid);
 
                 /* Return the buffer to the caller */
                 *rkbufp = rkbuf;
@@ -863,10 +885,13 @@ rd_kafka_mock_connection_parse_request (rd_kafka_mock_connection_t *mconn,
                 return -1;
         }
 
-        if (rkbuf->rkbuf_reqhdr.ApiVersion <
-            mcluster->api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].MinVersion ||
-            rkbuf->rkbuf_reqhdr.ApiVersion >
-            mcluster->api_handlers[rkbuf->rkbuf_reqhdr.ApiKey].MaxVersion) {
+        /* ApiVersionRequest handles future versions, for everything else
+         * make sure the ApiVersion is supported. */
+        if (rkbuf->rkbuf_reqhdr.ApiKey != RD_KAFKAP_ApiVersion &&
+            !rd_kafka_mock_cluster_ApiVersion_check(
+                    mcluster,
+                    rkbuf->rkbuf_reqhdr.ApiKey,
+                    rkbuf->rkbuf_reqhdr.ApiVersion)) {
                 rd_kafka_log(rk, LOG_ERR, "MOCK",
                              "Broker %"PRId32": unsupported %sRequest "
                              "version %hd from %s",
@@ -877,6 +902,7 @@ rd_kafka_mock_connection_parse_request (rd_kafka_mock_connection_t *mconn,
                                              RD_SOCKADDR2STR_F_PORT));
                 return -1;
         }
+
         rd_kafka_dbg(rk, MOCK, "MOCK",
                      "Broker %"PRId32": Received %sRequestV%hd from %s",
                      mconn->broker->id,

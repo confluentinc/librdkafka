@@ -45,11 +45,11 @@ static const char *rd_kafka_feature_names[] = {
         "MsgVer2",
         "IdempotentProducer",
         "ZSTD",
-        "UnitTest",
         "SaslAuthReq",
 #ifdef RD_KAFKA_FEATURE_KIP360
         "KIP-360",
 #endif
+        "UnitTest",
         NULL
 };
 

@@ -80,12 +80,13 @@
 #define RD_KAFKA_FEATURE_KIP360 0x2000
 #endif
 
-/* All features (except UNITTEST) */
-#define RD_KAFKA_FEATURE_ALL  0xffff
-
 /* Unit-test mock broker: broker supports everything.
  * Should be used with RD_KAFKA_FEATURE_ALL, but not be included in bitmask */
-#define RD_KAFKA_FEATURE_UNITTEST 0x100000
+#define RD_KAFKA_FEATURE_UNITTEST 0x4000
+
+/* All features (except UNITTEST) */
+#define RD_KAFKA_FEATURE_ALL  (0xffff & ~RD_KAFKA_FEATURE_UNITTEST)
+
 
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,

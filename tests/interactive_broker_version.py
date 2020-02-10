@@ -153,9 +153,16 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cmd_env['BROKERS'] = bootstrap_servers
     cmd_env['TEST_KAFKA_VERSION'] = version
     cmd_env['TRIVUP_ROOT'] = cluster.instance_path()
-    # Add each broker pid as an env so they can be killed indivdidually.
+
+    # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
+        cmd_env['BROKER_ADDRESS_%d' % b.appid] = b.conf['address']
+        # Add each broker pid as an env so they can be killed indivdidually.
         cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
+        # JMX port, if available
+        jmx_port = b.conf.get('jmx_port', None)
+        if jmx_port is not None:
+            cmd_env['BROKER_JMX_PORT_%d' % b.appid] = str(jmx_port)
 
     if not cmd:
         cmd_env['PS1'] = '[TRIVUP:%s@%s] \\u@\\h:\w$ ' % (cluster.name, version)

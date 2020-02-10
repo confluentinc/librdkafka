@@ -1144,6 +1144,7 @@ static void run_tests (int argc, char **argv) {
                 char testnum[128];
                 char *t;
                 const char *skip_reason = NULL;
+                rd_bool_t skip_silent = rd_false;
 		char tmp[128];
 
                 if (!test->mainfunc)
@@ -1155,9 +1156,10 @@ static void run_tests (int argc, char **argv) {
                 if ((t = strchr(testnum, '_')))
                         *t = '\0';
 
-                if ((test_flags && (test_flags & test->flags) != test_flags))
+                if ((test_flags && (test_flags & test->flags) != test_flags)) {
                         skip_reason = "filtered due to test flags";
-		if ((test_neg_flags & ~test_flags) & test->flags)
+                        skip_silent = rd_true;
+                } if ((test_neg_flags & ~test_flags) & test->flags)
 			skip_reason = "Filtered due to negative test flags";
 		if (test_broker_version &&
 		    (test->minver > test_broker_version ||
@@ -1172,21 +1174,31 @@ static void run_tests (int argc, char **argv) {
 			skip_reason = tmp;
 		}
 
-                if (tests_to_run && !strstr(tests_to_run, testnum))
+                if (tests_to_run && !strstr(tests_to_run, testnum)) {
                         skip_reason = "not included in TESTS list";
-                else if (!tests_to_run && (test->flags & TEST_F_MANUAL))
+                        skip_silent = rd_true;
+                } else if (!tests_to_run && (test->flags & TEST_F_MANUAL)) {
                         skip_reason = "manual test";
+                        skip_silent = rd_true;
+                }
 
                 if (!skip_reason) {
                         run_test(test, argc, argv);
                 } else {
-                        TEST_SAYL(3,
-                                  "================= Skipping test %s (%s)"
-                                  "================\n",
-                                  test->name, skip_reason);
-                        TEST_LOCK();
-                        test->state = TEST_SKIPPED;
-                        TEST_UNLOCK();
+                        if (skip_silent) {
+                                TEST_SAYL(3,
+                                          "================= Skipping test %s "
+                                          "(%s) ================\n",
+                                          test->name, skip_reason);
+                                TEST_LOCK();
+                                test->state = TEST_SKIPPED;
+                                TEST_UNLOCK();
+                        } else {
+                                test_curr = test;
+                                TEST_SKIP("%s\n", skip_reason);
+                                test_curr = &tests[0];
+                        }
+
                 }
         }
 

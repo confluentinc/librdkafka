@@ -86,6 +86,12 @@ librdkafka also provides a native C++ interface.
             - [Detailed description](#detailed-description)
         - [Supported KIPs](#supported-kips)
         - [Supported protocol versions](#supported-protocol-versions)
+- [Recommendations for language binding developers](#recommendations-for-language-binding-developers)
+    - [Expose the configuration interface pass-thru](#expose-the-configuration-interface-pass-thru)
+    - [Error constants](#error-constants)
+    - [Reporting client software name and version to broker](#reporting-client-software-name-and-version-to-broker)
+    - [Documentation reuse](#documentation-reuse)
+    - [Community support](#community-support)
 
 <!-- markdown-toc end -->
 
@@ -1861,3 +1867,72 @@ release of librdkafka.
 | 42      | DeleteGroups            | 1           | -                       |
 | 43      | ElectPreferredLeaders   | 0           | -                       |
 | 44      | IncrementalAlterConfigs | 0           | -                       |
+
+
+
+# Recommendations for language binding developers
+
+These recommendations are targeted for developers that wrap librdkafka
+with their high-level languages, such as confluent-kafka-go or node-rdkafka.
+
+## Expose the configuration interface pass-thru
+
+librdkafka's string-based key=value configuration property interface controls
+most runtime behaviour and evolves over time.
+Most features are also only configuration-based, meaning they do not require a
+new API (SSL and SASL are two good examples which are purely enabled through
+configuration properties) and thus no changes needed to the binding/application
+code.
+
+If your language binding/applications allows configuration properties to be set
+in a pass-through fashion without any pre-checking done by your binding code it
+means that a simple upgrade of the underlying librdkafka library (but not your
+bindings) will provide new features to the user.
+
+## Error constants
+
+The error constants, both the official (value >= 0) errors as well as the
+internal (value < 0) evolve constantly.
+To avoid hard-coding them to expose to your users, librdkafka provides an API
+to extract the full list programmatically during runtime,
+see `rd_kafka_get_err_descs()`.
+
+## Reporting client software name and version to broker
+
+[KIP-511](https://cwiki.apache.org/confluence/display/KAFKA/KIP-511%3A+Collect+and+Expose+Client%27s+Name+and+Version+in+the+Brokers) introduces a means for a
+Kafka client to report its implementation name and version to the broker, the
+broker then exposes this as metrics (e.g., through JMX) to help Kafka operators
+troubleshoot problematic clients, understand the impact of broker and client
+upgrades, etc.
+This requires broker version 2.4.0 or later (metrics added in 2.5.0).
+
+librdkafka will send its name (`librdkafka`) and version (e.g., `v1.3.0`)
+upon connect to a supporting broker.
+To help distinguish high-level client bindings on top of librdkafka, a client
+binding should configure the following two properties:
+ * `client.software.name` - set to the binding name, e.g,
+   `confluent-kafka-go` or `node-rdkafka`.
+ * `client.software.version` - the version of the binding and the version
+   of librdkafka, e.g., `v1.3.0-librdkafka-v1.3.0` or
+   `1.2.0-librdkafka-v1.3.0`.
+   It is **highly recommended** to include the librdkafka version in this
+   version string.
+
+These configuration properties are hidden (from CONFIGURATION.md et.al.) as
+they should typically not be modified by the user.
+
+## Documentation reuse
+
+You are free to reuse the librdkafka API and CONFIGURATION documentation in
+your project, but please do return any documentation improvements back to
+librdkafka (file a github pull request).
+
+## Community support
+
+You are welcome to direct your users to
+[librdkafka's Gitter chat room](http://gitter.im/edenhill/librdkafka) as long as
+you monitor the conversions in there to pick up questions specific to your
+bindings.
+But for the most part user questions are usually generic enough to apply to all
+librdkafka bindings.
+

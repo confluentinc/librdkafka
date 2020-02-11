@@ -1892,10 +1892,10 @@ bindings) will provide new features to the user.
 ## Error constants
 
 The error constants, both the official (value >= 0) errors as well as the
-internal (value < 0) evolve constantly.
+internal (value < 0) errors, evolve constantly.
 To avoid hard-coding them to expose to your users, librdkafka provides an API
-to extract the full list programmatically during runtime,
-see `rd_kafka_get_err_descs()`.
+to extract the full list programmatically during runtime or for
+code generation, see `rd_kafka_get_err_descs()`.
 
 ## Reporting client software name and version to broker
 

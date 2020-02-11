@@ -1985,7 +1985,7 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
         int errcnt = 0;
 
         /* Update toppars' committed offset or global error */
-        for (i = 0 ; i < offsets->cnt ; i++) {
+        for (i = 0 ; offsets && i < offsets->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar =&offsets->elems[i];
                 shptr_rd_kafka_toppar_t *s_rktp;
                 rd_kafka_toppar_t *rktp;

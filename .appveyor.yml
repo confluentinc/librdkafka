@@ -27,7 +27,7 @@ build:
   parallel: true
   verbosity: normal
 test_script:
-- cmd: cd tests && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -Q -p1
+- cmd: cd tests && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -Q -p1 && cd ..
 artifacts:
 - path: test_report*.json
   name: Test report

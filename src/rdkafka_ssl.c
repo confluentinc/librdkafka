@@ -177,11 +177,11 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 
         case SSL_ERROR_SYSCALL:
                 serr2 = ERR_peek_error();
-                if (!serr2 && !rd_socket_errno)
-                        rd_snprintf(errstr, errstr_size, "Disconnected");
-                else if (serr2)
+                if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
                                            errstr, errstr_size);
+                else if (!rd_socket_errno || rd_socket_errno == ECONNRESET)
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
                 else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",

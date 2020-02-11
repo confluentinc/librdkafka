@@ -82,7 +82,7 @@ static void do_test_swname (const char *broker,
                  "client.software.version=%s ]\n",
                  swname ? swname : "NULL", swversion ? swversion : "NULL");
 
-        test_conf_init(&conf, NULL, 10);
+        test_conf_init(&conf, NULL, 30 /* jmxtool is severely slow */);
         if (broker)
                 test_conf_set(conf, "bootstrap.servers", broker);
         if (swname)

@@ -1296,9 +1296,6 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
         if (!partitions)
                 goto err_parse;
 
-        rd_kafka_topic_partition_list_log(rk, "TXNOFFSRESP", RD_KAFKA_DBG_EOS,
-                                          partitions);
-
         err = rd_kafka_topic_partition_list_get_err(partitions);
         if (err) {
                 char errparts[256];

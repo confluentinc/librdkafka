@@ -53,6 +53,7 @@ librdkafka also provides a native C++ interface.
             - [Speeding up termination](#speeding-up-termination)
         - [Threads and callbacks](#threads-and-callbacks)
         - [Brokers](#brokers)
+            - [SSL](#ssl)
             - [Sparse connections](#sparse-connections)
                 - [Random broker selection](#random-broker-selection)
                 - [Persistent broker connections](#persistent-broker-connections)
@@ -1130,6 +1131,37 @@ If host resolves to multiple addresses librdkafka will round-robin the
 addresses for each connection attempt.
 A DNS record containing all broker address can thus be used to provide a
 reliable bootstrap broker.
+
+
+#### SSL
+
+If the client is to connect to a broker's SSL endpoints/listeners the client
+needs to be configured with `security.protocol=SSL` for just SSL transport or
+`security.protocol=SASL_SSL` for SASL authentication and SSL transport.
+The client will try to verify the broker's certificate by checking the
+CA root certificates, if the broker's certificate can't be verified
+the connection is closed (and retried). This is to protect the client
+from connecting to rogue brokers.
+
+The CA root certificate defaults are system specific:
+ * On Linux, Mac OSX, and other Unix-like system the OpenSSL default
+   CA path will be used, also called the OPENSSLDIR,  which is typically
+   `/usr/lib/ssl` (on Linux, typcially in the `ca-certificates` package) and
+   `/usr/local/etc/openssl` on Mac OSX (Homebrew).
+ * On Windows the Root certificate store is used.
+
+If the system-provided default CA root certificates are not sufficient to
+verify the broker's certificate, such as when a self-signed certificate
+or a local CA authority is used, the CA certificate must be specified
+explicitly so that the client can find it.
+This can be done either by providing a PEM file (e.g., `cacert.pem`)
+as the `ssl.ca.location` configuration property, or by passing an in-memory
+PEM, X.509/DER or PKCS#12 certificate to `rd_kafka_conf_set_ssl_cert()`.
+
+It is also possible to disable broker certificate verification completely
+by setting `enable.ssl.certificate.verification=false`, but this is not
+recommended since it allows for rogue brokers and man-in-the-middle attacks,
+and should only be used for testing and troubleshooting purposes.
 
 
 #### Sparse connections

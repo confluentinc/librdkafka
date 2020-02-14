@@ -989,6 +989,10 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
          * but a sub-sequent _F_REUSE call will reset it. */
         for_reuse = !!(flags & RD_KAFKA_TXN_CURR_API_F_FOR_REUSE);
 
+        /* If no timeout has been specified, use the transaction.timeout.ms */
+        if (timeout_ms < 0)
+                timeout_ms = rk->rk_conf.eos.transaction_timeout_ms;
+
         if (!reuse && timeout_ms >= 0) {
                 rd_kafka_q_keep(tmpq);
                 rd_kafka_timer_start_oneshot(

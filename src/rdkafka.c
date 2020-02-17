@@ -3528,18 +3528,34 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
                         rkmessage = rd_kafka_message_get_from_rkm(rko, rkm);
 
-                        if (rk->rk_conf.dr_msg_cb) {
+                        if (likely(rk->rk_conf.dr_msg_cb != NULL)) {
                                 rk->rk_conf.dr_msg_cb(rk, rkmessage,
                                                       rk->rk_conf.opaque);
 
-                        } else {
-
+                        } else if (rk->rk_conf.dr_cb) {
                                 rk->rk_conf.dr_cb(rk,
                                                   rkmessage->payload,
                                                   rkmessage->len,
                                                   rkmessage->err,
                                                   rk->rk_conf.opaque,
                                                   rkmessage->_private);
+                        } else if (rk->rk_conf.enabled_events &
+                                   RD_KAFKA_EVENT_DR) {
+                                rd_kafka_log(rk, LOG_WARNING, "DRDROP",
+                                             "Dropped delivery report for "
+                                             "message to "
+                                             "%s [%"PRId32"] (%s) with "
+                                             "opaque %p: flush() or poll() "
+                                             "should not be called when "
+                                             "EVENT_DR is enabled",
+                                             rd_kafka_topic_name(rkmessage->
+                                                                 rkt),
+                                             rkmessage->partition,
+                                             rd_kafka_err2name(rkmessage->err),
+                                             rkmessage->_private);
+                        } else {
+                                rd_assert(!*"BUG: neither a delivery report "
+                                          "callback or EVENT_DR flag set");
                         }
 
                         rd_kafka_msg_destroy(rk, rkm);
@@ -3964,29 +3980,55 @@ int rd_kafka_outq_len (rd_kafka_t *rk) {
 
 rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
         unsigned int msg_cnt = 0;
-	int qlen;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
-        int tmout;
 
 	if (rk->rk_type != RD_KAFKA_PRODUCER)
 		return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 
         rd_kafka_yield_thread = 0;
 
-        /* First poll call is non-blocking for the case
-         * where timeout_ms==RD_POLL_NOWAIT to make sure poll is
-         * called at least once. */
-        tmout = RD_POLL_NOWAIT;
-        do {
-                rd_kafka_poll(rk, tmout);
-        } while (((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
-                  (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) &&
-                 !rd_kafka_yield_thread &&
-                 (tmout = rd_timeout_remains_limit(ts_end, 10)) !=
-                 RD_POLL_NOWAIT);
+        if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) {
+                /* Application wants delivery reports as events rather
+                 * than callbacks, we must thus not serve this queue
+                 * with rd_kafka_poll() since that would trigger non-existent
+                 * delivery report callbacks, which would result
+                 * in the delivery reports being dropped.
+                 * Instead we rely on the application to serve the event
+                 * queue in another thread, so all we do here is wait
+                 * for the current message count to reach zero. */
+                struct timespec tspec;
 
-	return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
-		RD_KAFKA_RESP_ERR_NO_ERROR;
+                rd_timeout_init_timespec(&tspec, timeout_ms);
+
+                while ((msg_cnt =
+                        rd_kafka_curr_msgs_wait_zero(rk, &tspec)) > 0) {
+                        if (unlikely(rd_kafka_yield_thread))
+                                return RD_KAFKA_RESP_ERR__TIMED_OUT;
+                }
+
+                return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
+                        RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        } else {
+                /* Standard poll interface.
+                 *
+                 * First poll call is non-blocking for the case
+                 * where timeout_ms==RD_POLL_NOWAIT to make sure poll is
+                 * called at least once. */
+                rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+                int tmout = RD_POLL_NOWAIT;
+                int qlen = 0;
+
+                do {
+                        rd_kafka_poll(rk, tmout);
+                } while (((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
+                          (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) &&
+                         !rd_kafka_yield_thread &&
+                         (tmout = rd_timeout_remains_limit(ts_end, 10)) !=
+                         RD_POLL_NOWAIT);
+
+                return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
+                        RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
 }
 
 

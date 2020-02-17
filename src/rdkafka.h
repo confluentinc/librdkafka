@@ -6545,6 +6545,9 @@ rd_kafka_send_offsets_to_transaction (
  * @remark Will automatically call rd_kafka_flush() to ensure all queued
  *         messages are delivered before attempting to commit the
  *         transaction.
+ *         If the application has enabled RD_KAFKA_EVENT_DR it must
+ *         serve the event queue in a separate thread since rd_kafka_flush()
+ *         will not serve delivery reports in this mode.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
@@ -6593,6 +6596,10 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
  *         handled by the transaction coordinator, or until \p timeout_ms
  *         expires, which ever comes first. On timeout the application may
  *         call the function again.
+ *         If the application has enabled RD_KAFKA_EVENT_DR it must
+ *         serve the event queue in a separate thread since rd_kafka_flush()
+ *         will not serve delivery reports in this mode.
+
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,

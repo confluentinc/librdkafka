@@ -2029,14 +2029,18 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
 
         /* Wait for queued messages to be delivered, limited by
          * the remaining transaction lifetime. */
-        err = rd_kafka_flush(rk, rd_timeout_remains(abs_timeout));
-        if (err) {
+        if ((err = rd_kafka_flush(rk, rd_timeout_remains(abs_timeout)))) {
                 if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to flush all outstanding messages "
                                     "within the transaction timeout: "
-                                    "%d message(s) remaining",
-                                    rd_kafka_outq_len(rk));
+                                    "%d message(s) remaining%s",
+                                    rd_kafka_outq_len(rk),
+                                    (rk->rk_conf.enabled_events &
+                                     RD_KAFKA_EVENT_DR) ?
+                                    ": the event queue must be polled "
+                                    "for delivery report events in a separate "
+                                    "thread or prior to calling commit" : "");
                 else
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to flush outstanding messages: %s",
@@ -2218,16 +2222,21 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms,
                              RD_KAFKA_PURGE_F_QUEUE|
                              RD_KAFKA_PURGE_F_ABORT_TXN);
 
-        /* Serve delivery reports for the purged messages */
-        err = rd_kafka_flush(rk, rd_timeout_remains(abs_timeout));
-        if (err) {
+        /* Serve delivery reports for the purged messages. */
+        if ((err = rd_kafka_flush(rk, rd_timeout_remains(abs_timeout)))) {
                 /* FIXME: Not sure these errors matter that much */
                 if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to flush all outstanding messages "
                                     "within the transaction timeout: "
-                                    "%d message(s) remaining",
-                                    rd_kafka_outq_len(rk));
+                                    "%d message(s) remaining%s",
+                                    rd_kafka_outq_len(rk),
+                                    (rk->rk_conf.enabled_events &
+                                     RD_KAFKA_EVENT_DR) ?
+                                    ": the event queue must be polled "
+                                    "for delivery report events in a separate "
+                                    "thread or prior to calling abort" : "");
+
                 else
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to flush outstanding messages: %s",

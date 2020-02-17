@@ -2554,7 +2554,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
         /* Call on_acknowledgement() interceptors */
         rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
 
-        if ((rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) &&
+        if (rk->rk_drmode != RD_KAFKA_DR_MODE_NONE &&
 	    (!rk->rk_conf.dr_err_only || err)) {
 		/* Pass all messages to application thread in one op. */
 		rd_kafka_op_t *rko;

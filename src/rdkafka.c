@@ -2060,7 +2060,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_kafka_coord_reqs_init(rk);
 
 	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
+                rk->rk_drmode = RD_KAFKA_DR_MODE_CB;
+        else if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR)
+                rk->rk_drmode = RD_KAFKA_DR_MODE_EVENT;
+        else
+                rk->rk_drmode = RD_KAFKA_DR_MODE_NONE;
+        if (rk->rk_drmode != RD_KAFKA_DR_MODE_NONE)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_DR;
+
 	if (rk->rk_conf.rebalance_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 	if (rk->rk_conf.offset_commit_cb)
@@ -3539,8 +3546,7 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                                                   rkmessage->err,
                                                   rk->rk_conf.opaque,
                                                   rkmessage->_private);
-                        } else if (rk->rk_conf.enabled_events &
-                                   RD_KAFKA_EVENT_DR) {
+                        } else if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                                 rd_kafka_log(rk, LOG_WARNING, "DRDROP",
                                              "Dropped delivery report for "
                                              "message to "
@@ -3986,7 +3992,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 
         rd_kafka_yield_thread = 0;
 
-        if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) {
+        if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                 /* Application wants delivery reports as events rather
                  * than callbacks, we must thus not serve this queue
                  * with rd_kafka_poll() since that would trigger non-existent

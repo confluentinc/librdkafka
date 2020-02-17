@@ -259,7 +259,6 @@ struct rd_kafka_s {
 	rd_kafkap_str_t *rk_client_id;
         rd_kafkap_str_t *rk_group_id;    /* Consumer group id */
 
-	int              rk_flags;
 	rd_atomic32_t    rk_terminate;   /**< Set to RD_KAFKA_DESTROY_F_..
                                           *   flags instance
                                           *   is being destroyed.
@@ -334,6 +333,13 @@ struct rd_kafka_s {
 
         char            *rk_clusterid;      /* ClusterId from metadata */
         int32_t          rk_controllerid;   /* ControllerId from metadata */
+
+        /**< Producer: Delivery report mode */
+        enum {
+                RD_KAFKA_DR_MODE_NONE,  /**< No delivery reports */
+                RD_KAFKA_DR_MODE_CB,    /**< Delivery reports through callback */
+                RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event API*/
+        } rk_drmode;
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,

@@ -648,7 +648,8 @@ rd_kafka_curr_msgs_sub (rd_kafka_t *rk, unsigned int cnt, size_t size) {
 
         /* If the subtraction would pass one of the thresholds
          * broadcast a wake-up to any waiting listeners. */
-        if ((rk->rk_curr_msgs.cnt >= rk->rk_curr_msgs.max_cnt &&
+        if ((rk->rk_curr_msgs.cnt - cnt == 0) ||
+            (rk->rk_curr_msgs.cnt >= rk->rk_curr_msgs.max_cnt &&
              rk->rk_curr_msgs.cnt - cnt < rk->rk_curr_msgs.max_cnt) ||
             (rk->rk_curr_msgs.size >= rk->rk_curr_msgs.max_size &&
              rk->rk_curr_msgs.size - size < rk->rk_curr_msgs.max_size))
@@ -690,6 +691,25 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 	return cnt;
 }
 
+/**
+ * @brief Wait until \p tspec for curr_msgs to reach 0.
+ *
+ * @returns remaining curr_msgs
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_curr_msgs_wait_zero (rd_kafka_t *rk, const struct timespec *tspec) {
+        int cnt;
+
+        mtx_lock(&rk->rk_curr_msgs.lock);
+        while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
+                cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
+                                  &rk->rk_curr_msgs.lock,
+                                  tspec);
+        }
+        mtx_unlock(&rk->rk_curr_msgs.lock);
+
+        return cnt;
+}
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);
 

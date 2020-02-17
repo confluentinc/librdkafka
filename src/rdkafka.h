@@ -3795,6 +3795,14 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * @remark This function will call rd_kafka_poll() and thus trigger callbacks.
  *
+ * @remark If RD_KAFKA_EVENT_DR has been enabled
+ *         (through rd_kafka_conf_set_events()) this function will not call
+ *         rd_kafka_poll() but instead wait for the librdkafka-handled
+ *         message count to reach zero. This requires the application to
+ *         serve the event queue in a separate thread.
+ *         In this mode only messages are counted, not other types of
+ *         queued events.
+ *
  * @returns RD_KAFKA_RESP_ERR__TIMED_OUT if \p timeout_ms was reached before all
  *          outstanding requests were completed, else RD_KAFKA_RESP_ERR_NO_ERROR
  *

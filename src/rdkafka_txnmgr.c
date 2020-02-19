@@ -1307,8 +1307,9 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                                                   errparts, sizeof(errparts),
                                                   RD_KAFKA_FMT_F_ONLY_ERR);
                 rd_snprintf(errstr, sizeof(errstr),
-                            "Failed to commit offsets to transaction: %s",
-                            errparts);
+                            "Failed to commit offsets to transaction: %s "
+                            "(after %dms)",
+                            errparts, (int)(rkbuf->rkbuf_ts_sent/1000));
         }
 
         goto done;
@@ -1774,10 +1775,7 @@ static void rd_kafka_txn_complete (rd_kafka_t *rk) {
                      "committed" : "aborted");
 
         /* Clear all transaction partition state */
-        mtx_lock(&rk->rk_eos.txn_pending_lock);
-        rd_assert(TAILQ_EMPTY(&rk->rk_eos.txn_pending_rktps));
-        mtx_unlock(&rk->rk_eos.txn_pending_lock);
-
+        rd_kafka_txn_clear_pending_partitions(rk);
         rd_kafka_txn_clear_partitions(rk);
 
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
@@ -2149,7 +2147,7 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
         if (!rk->rk_eos.txn_req_cnt) {
                 rd_kafka_dbg(rk, EOS, "TXNABORT",
                              "No partitions registered: not sending EndTxn");
-                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
+                rd_kafka_txn_complete(rk);
                 goto err;
         }
 

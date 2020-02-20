@@ -37,6 +37,57 @@
 
 
 /**
+ * @brief Produce messages using batch interface.
+ */
+void do_produce_batch (rd_kafka_t *rk, const char *topic, uint64_t testid,
+                       int32_t partition, int msg_base, int cnt) {
+        rd_kafka_message_t *messages;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, NULL);
+        int i;
+        int ret;
+        int remains = cnt;
+
+        TEST_SAY("Batch-producing %d messages to partition %"PRId32"\n",
+                 cnt, partition);
+
+        messages = rd_calloc(sizeof(*messages), cnt);
+        for (i = 0 ; i < cnt ; i++) {
+                char key[128];
+                char value[128];
+
+                test_prepare_msg(testid, partition, msg_base + i,
+                                 value, sizeof(value),
+                                 key, sizeof(key));
+                messages[i].key = rd_strdup(key);
+                messages[i].key_len = strlen(key);
+                messages[i].payload = rd_strdup(value);
+                messages[i].len = strlen(value);
+                messages[i]._private = &remains;
+        }
+
+        ret = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_COPY,
+                                     messages, cnt);
+
+        TEST_ASSERT(ret == cnt,
+                    "Failed to batch-produce: %d/%d messages produced",
+                    ret, cnt);
+
+        for (i = 0 ; i < cnt ; i++) {
+                TEST_ASSERT(!messages[i].err,
+                            "Failed to produce message: %s",
+                            rd_kafka_err2str(messages[i].err));
+                rd_free(messages[i].key);
+                rd_free(messages[i].payload);
+        }
+        rd_free(messages);
+
+        /* Wait for deliveries */
+        test_wait_delivery(rk, &remains);
+}
+
+
+
+/**
  * @brief Basic producer transaction testing without consumed input
  *        (only consumed output for verification).
  *        e.g., no consumer offsets to commit with transaction.
@@ -44,22 +95,29 @@
 static void do_test_basic_producer_txn (void) {
         const char *topic = test_mk_topic_name("0103_transactions", 1);
         const int partition_cnt = 4;
-#define _TXNCNT 4
+#define _TXNCNT 6
         struct {
                 const char *desc;
                 uint64_t testid;
                 int msgcnt;
                 rd_bool_t abort;
                 rd_bool_t sync;
+                rd_bool_t batch;
+                rd_bool_t batch_any;
         } txn[_TXNCNT] = {
                 { "Commit transaction, sync producing",
                   0, 100, rd_false, rd_true },
                 { "Commit transaction, async producing",
                   0, 1000, rd_false, rd_false },
+                { "Commit transaction, sync batch producing to any partition",
+                  0, 100, rd_false, rd_true, rd_true, rd_true },
                 { "Abort transaction, sync producing",
                   0, 500, rd_true, rd_true },
                 { "Abort transaction, async producing",
                   0, 5000, rd_true, rd_false },
+                { "Abort transaction, sync batch producing to one partition",
+                  0, 500, rd_true, rd_true, rd_true, rd_false },
+
         };
         rd_kafka_t *p, *c;
         rd_kafka_conf_t *conf, *p_conf, *c_conf;
@@ -116,15 +174,31 @@ static void do_test_basic_producer_txn (void) {
                          txn[i].sync ? "" : "a",
                          txn[i].testid);
 
-                if (txn[i].sync)
-                        test_produce_msgs2(p, topic, txn[i].testid,
-                                           RD_KAFKA_PARTITION_UA, 0,
-                                           txn[i].msgcnt, NULL, 0);
-                else
-                        test_produce_msgs2_nowait(p, topic, txn[i].testid,
-                                                  RD_KAFKA_PARTITION_UA, 0,
-                                                  txn[i].msgcnt, NULL, 0,
-                                                  &wait_msgcnt);
+                if (!txn[i].batch) {
+                        if (txn[i].sync)
+                                test_produce_msgs2(p, topic, txn[i].testid,
+                                                   RD_KAFKA_PARTITION_UA, 0,
+                                                   txn[i].msgcnt, NULL, 0);
+                        else
+                                test_produce_msgs2_nowait(p, topic,
+                                                          txn[i].testid,
+                                                          RD_KAFKA_PARTITION_UA,
+                                                          0,
+                                                          txn[i].msgcnt,
+                                                          NULL, 0,
+                                                          &wait_msgcnt);
+                } else if (txn[i].batch_any) {
+                        /* Batch: use any partition */
+                        do_produce_batch(p, topic, txn[i].testid,
+                                         RD_KAFKA_PARTITION_UA,
+                                         0, txn[i].msgcnt);
+                } else {
+                        /* Batch: specific partition */
+                        do_produce_batch(p, topic, txn[i].testid,
+                                         1 /* partition */,
+                                         0, txn[i].msgcnt);
+                }
+
 
                 /* Abort or commit transaction */
                 TEST_SAY("txn[%d]: %s" _C_CLR " transaction\n",

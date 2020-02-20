@@ -585,6 +585,10 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                 }
                                 rd_kafka_toppar_enq_msg(
                                         rd_kafka_toppar_s2i(s_rktp), rkm);
+				
+                                if (rd_kafka_is_transactional(rkt->rkt_rk))
+                                        /* Add partition to transaction */
+                                        rd_kafka_txn_add_partition(s_rktp);
                         }
 
                         if (unlikely(rkmessages[i].err)) {
@@ -608,6 +612,11 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         }
 
         rd_kafka_topic_rdunlock(rkt);
+	
+	if (!multiple_partitions && rd_kafka_is_transactional(rkt->rkt_rk))
+                /* Add single destination partition to transaction */
+                rd_kafka_txn_add_partition(s_rktp);
+	
         if (s_rktp != NULL)
                 rd_kafka_toppar_destroy(s_rktp);
 

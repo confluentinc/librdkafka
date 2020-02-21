@@ -689,8 +689,12 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                 /* Treat all other errors as abortable errors */
                 rd_kafka_txn_set_abortable_error(
                         rk, err,
-                        "Failed to add %d/%d partition(s) to transaction: %s",
-                        errcnt, errcnt + okcnt, rd_kafka_err2str(err));
+                        "Failed to add %d/%d partition(s) to transaction "
+                        "on broker %s: %s (after %d ms)",
+                        errcnt, errcnt + okcnt,
+                        rd_kafka_broker_name(rkb),
+                        rd_kafka_err2str(err),
+                        (int)(rkbuf->rkbuf_ts_sent/1000));
         }
 }
 
@@ -1330,8 +1334,10 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                                                   errparts, sizeof(errparts),
                                                   RD_KAFKA_FMT_F_ONLY_ERR);
                 rd_snprintf(errstr, sizeof(errstr),
-                            "Failed to commit offsets to transaction: %s "
+                            "Failed to commit offsets to transaction on "
+                            "broker %s: %s "
                             "(after %dms)",
+                            rd_kafka_broker_name(rkb),
                             errparts, (int)(rkbuf->rkbuf_ts_sent/1000));
         }
 
@@ -1394,7 +1400,8 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
                 rd_kafka_txn_set_fatal_error(rk, RD_DO_LOCK, err,
                                              "Failed to commit offsets to "
-                                             "transaction: %s",
+                                             "transaction on broker %s: %s",
+                                             rd_kafka_broker_name(rkb),
                                              rd_kafka_err2str(err));
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
@@ -1420,16 +1427,22 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
-                rd_kafka_txn_set_abortable_error(rk, err,
-                                                 "Failed to commit offsets to "
-                                                 "transaction: %s",
-                                                 rd_kafka_err2str(err));
+                rd_kafka_txn_set_abortable_error(
+                        rk, err,
+                        "Failed to commit offsets to "
+                        "transaction on broker %s: %s (after %d ms)",
+                        rd_kafka_broker_name(rkb),
+                        rd_kafka_err2str(err),
+                        (int)(rkbuf->rkbuf_ts_sent/1000));
 
         if (err)
                 rd_kafka_txn_curr_api_reply(
                         rd_kafka_q_keep(rko->rko_replyq.q), err,
-                        "Failed to commit offsets to transaction: %s",
-                        rd_kafka_err2str(err));
+                        "Failed to commit offsets to transaction "
+                        "on broker %s: %s (after %dms)",
+                        rd_kafka_broker_name(rkb),
+                        rd_kafka_err2str(err),
+                        (int)(rkbuf->rkbuf_ts_sent/1000));
         else
                 rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
                                             RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1632,10 +1645,14 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
-                rd_kafka_txn_set_abortable_error(rk, err,
-                                                 "Failed to add offsets to "
-                                                 "transaction: %s",
-                                                 rd_kafka_err2str(err));
+                rd_kafka_txn_set_abortable_error(
+                        rk, err,
+                        "Failed to add offsets to "
+                        "transaction on broker %s: "
+                        "%s (after %dms)",
+                        rd_kafka_broker_name(rkb),
+                        rd_kafka_err2str(err),
+                        (int)(rkbuf->rkbuf_ts_sent/1000));
 
         if (!err) {
                 /* Step 2: Commit offsets to transaction on the
@@ -1657,8 +1674,11 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
 
                 rd_kafka_txn_curr_api_reply(
                         rd_kafka_q_keep(rko->rko_replyq.q), err,
-                        "Failed to add offsets to transaction: %s",
-                        rd_kafka_err2str(err));
+                        "Failed to add offsets to transaction on broker %s: "
+                        "%s (after %dms)",
+                        rd_kafka_broker_name(rkb),
+                        rd_kafka_err2str(err),
+                        (int)(rkbuf->rkbuf_ts_sent/1000));
 
                 rd_kafka_op_destroy(rko);
         }

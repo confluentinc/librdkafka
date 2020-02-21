@@ -235,6 +235,9 @@ typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
+typedef struct rd_kafka_consumer_group_metadata_s
+rd_kafka_consumer_group_metadata_t;
+
 /* @endcond */
 
 
@@ -3595,6 +3598,41 @@ rd_kafka_position (rd_kafka_t *rk,
 		   rd_kafka_topic_partition_list_t *partitions);
 
 
+
+
+/**
+ * @returns the current consumer group metadata associated with this consumer,
+ *          or NULL if \p rk is not a consumer configured with a \c group.id.
+ *          This metadata object should be passed to the transactional
+ *          producer's rd_kafka_send_offsets_to_transaction() API.
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ *
+ * @sa rd_kafka_send_offsets_to_transaction()
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
+
+
+/**
+ * @brief Create a new consumer group metadata object.
+ *        This is typically only used for writing tests.
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new (const char *group_id);
+
+
+/**
+ * @brief Frees the consumer group metadata object as returned by
+ *        rd_kafka_consumer_group_metadata().
+ */
+RD_EXPORT void
+rd_kafka_consumer_group_metadata_destroy (rd_kafka_consumer_group_metadata_t *);
+
 /**@}*/
 
 
@@ -6467,7 +6505,9 @@ rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
  * @param offsets List of offsets to commit to the consumer group upon
  *                successful commit of the transaction. Offsets should be
  *                the next message to consume, e.g., last processed message + 1.
- * @param consumer_group_id The \c group.id of the consumer group.
+ * @param cgmetadata The current consumer group metadata as returned by
+ *                   rd_kafka_consumer_group_metadata() on the consumer
+ *                   instance the provided offsets were consumed from.
  * @param timeout_ms Maximum time allowed to register the offsets on the broker.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
@@ -6510,7 +6550,8 @@ rd_kafka_resp_err_t
 rd_kafka_send_offsets_to_transaction (
         rd_kafka_t *rk,
         const rd_kafka_topic_partition_list_t *offsets,
-        const char *consumer_group_id, int timeout_ms,
+        const rd_kafka_consumer_group_metadata_t *cgmetadata,
+        int timeout_ms,
         char *errstr, size_t errstr_size);
 
 

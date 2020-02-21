@@ -2228,6 +2228,17 @@ class RD_EXPORT Queue {
 
 /**@}*/
 
+/**
+ * @name ConsumerGroupMetadata holds a consumer instance's group metadata state.
+ * @{
+ *
+ */
+class RD_EXPORT ConsumerGroupMetadata {
+public:
+virtual ~ConsumerGroupMetadata () = 0;
+};
+
+/**@}*/
 
 /**
  * @name KafkaConsumer
@@ -2502,6 +2513,21 @@ public:
    *          RdKafka::ERR___INVALID_ARG if \c enable.auto.offset.store is true.
    */
   virtual ErrorCode offsets_store (std::vector<TopicPartition*> &offsets) = 0;
+
+
+  /**
+   * @returns the current consumer group metadata associated with this consumer,
+   *          or NULL if the consumer is configured with a \c group.id.
+   *          This metadata object should be passed to the transactional
+   *          producer's RdKafka::Producer::send_offsets_to_transaction() API.
+   *
+   * @remark The returned object must be deleted by the application.
+   *
+   * @sa RdKafka::Producer::send_offsets_to_transaction()
+   */
+  virtual ConsumerGroupMetadata *groupMetadata () = 0;
+
+
 };
 
 
@@ -2952,7 +2978,7 @@ class RD_EXPORT Producer : public virtual Handle {
    */
   virtual ErrorCode send_offsets_to_transaction (
           const std::vector<TopicPartition*> &offsets,
-          const std::string &group_id,
+          const ConsumerGroupMetadata *group_metadata,
           int timeout_ms,
           std::string &errstr) = 0;
 

@@ -1755,7 +1755,7 @@ rd_kafka_resp_err_t
 rd_kafka_send_offsets_to_transaction (
         rd_kafka_t *rk,
         const rd_kafka_topic_partition_list_t *offsets,
-        const char *consumer_group_id,
+        const rd_kafka_consumer_group_metadata_t *cgmetadata,
         int timeout_ms,
         char *errstr, size_t errstr_size) {
         rd_kafka_op_t *rko;
@@ -1765,10 +1765,9 @@ rd_kafka_send_offsets_to_transaction (
         if ((err = rd_kafka_ensure_transactional(rk, errstr, errstr_size)))
                 return err;
 
-        if (!consumer_group_id || !*consumer_group_id || !offsets) {
+        if (!cgmetadata || !offsets) {
                 rd_snprintf(errstr, errstr_size,
-                            "consumer_group_id and offsets "
-                            "are required parameters");
+                            "cgmetadata and offsets are required parameters");
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
@@ -1787,7 +1786,7 @@ rd_kafka_send_offsets_to_transaction (
         rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
                                  rd_kafka_txn_op_send_offsets_to_transaction);
         rko->rko_u.txn.offsets = valid_offsets;
-        rko->rko_u.txn.group_id = rd_strdup(consumer_group_id);
+        rko->rko_u.txn.group_id = rd_strdup(cgmetadata->group_id);
         if (timeout_ms > rk->rk_conf.eos.transaction_timeout_ms)
                 timeout_ms = rk->rk_conf.eos.transaction_timeout_ms;
         rko->rko_u.txn.abs_timeout = rd_timeout_init(timeout_ms);

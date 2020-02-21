@@ -1031,6 +1031,22 @@ public:
 };
 
 
+/**
+ * @class ConsumerGroupMetadata wraps the
+ *        C rd_kafka_consumer_group_metadata_t object.
+ */
+class ConsumerGroupMetadataImpl : public ConsumerGroupMetadata {
+ public:
+  ~ConsumerGroupMetadataImpl() {
+    rd_kafka_consumer_group_metadata_destroy(cgmetadata_);
+  }
+
+  ConsumerGroupMetadataImpl(rd_kafka_consumer_group_metadata_t *cgmetadata):
+      cgmetadata_(cgmetadata) {}
+
+  rd_kafka_consumer_group_metadata_t *cgmetadata_;
+};
+
 
 class KafkaConsumerImpl : virtual public KafkaConsumer, virtual public HandleImpl {
 public:
@@ -1106,6 +1122,16 @@ public:
 
   ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
   ErrorCode position (std::vector<TopicPartition*> &partitions);
+
+  ConsumerGroupMetadata *groupMetadata () {
+    rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+    cgmetadata = rd_kafka_consumer_group_metadata(rk_);
+    if (!cgmetadata)
+      return NULL;
+
+    return new ConsumerGroupMetadataImpl(cgmetadata);
+  }
 
   ErrorCode close ();
 
@@ -1266,15 +1292,17 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
   ErrorCode send_offsets_to_transaction (
       const std::vector<TopicPartition*> &offsets,
-      const std::string &group_id,
+      const ConsumerGroupMetadata *group_metadata,
       int timeout_ms,
       std::string &errstr) {
     rd_kafka_resp_err_t c_err;
     char errbuf[512];
+    const RdKafka::ConsumerGroupMetadataImpl *cgmdimpl =
+        dynamic_cast<const RdKafka::ConsumerGroupMetadataImpl *>(group_metadata);
     rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
 
     c_err = rd_kafka_send_offsets_to_transaction(rk_, c_offsets,
-                                                 group_id.c_str(),
+                                                 cgmdimpl->cgmetadata_,
                                                  timeout_ms,
                                                  errbuf, sizeof(errbuf));
 

@@ -307,4 +307,13 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
+
+struct rd_kafka_consumer_group_metadata_s {
+        char *group_id;
+};
+
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_dup (
+        const rd_kafka_consumer_group_metadata_t *cgmetadata);
+
 #endif /* _RDKAFKA_CGRP_H_ */

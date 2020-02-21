@@ -386,6 +386,8 @@ void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
              err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE))
                 rd_kafka_txn_coord_set(rk, NULL, "%s", errstr);
 
+        rk->rk_eos.txn_init_err = err;
+
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
 
         rd_kafka_wrunlock(rk);

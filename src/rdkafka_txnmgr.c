@@ -876,6 +876,25 @@ rd_kafka_txn_curr_api_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
                                     "Transactional operation timed out");
 }
 
+/**
+ * @brief Op timeout callback for init_transactions() that uses the
+ *        the last txn_init_err as error code.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void
+rd_kafka_txn_curr_api_init_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
+        rd_kafka_q_t *rkq = arg;
+        rd_kafka_resp_err_t err = rkts->rkts_rk->rk_eos.txn_init_err;
+
+        if (!err)
+                err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+        rd_kafka_txn_curr_api_reply(rkq, err,
+                                    "Failed to initialize Producer ID: %s",
+                                    rd_kafka_err2str(err));
+}
 
 
 
@@ -1000,9 +1019,11 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
                         &rk->rk_eos.txn_curr_api.tmr,
                         rd_false,
                         timeout_ms * 1000,
-                        flags & RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT ?
-                        rd_kafka_txn_curr_api_abort_timeout_cb :
-                        rd_kafka_txn_curr_api_timeout_cb,
+                        !strcmp(name, "init_transactions") ?
+                        rd_kafka_txn_curr_api_init_timeout_cb :
+                        (flags & RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT ?
+                         rd_kafka_txn_curr_api_abort_timeout_cb :
+                         rd_kafka_txn_curr_api_timeout_cb),
                         tmpq);
         }
         rd_kafka_wrunlock(rk);
@@ -1083,6 +1104,8 @@ rd_kafka_txn_op_init_transactions (rd_kafka_t *rk,
         rk->rk_eos.txn_init_rkq = rd_kafka_q_keep(rko->rko_replyq.q);
 
         rd_kafka_wrunlock(rk);
+
+        rk->rk_eos.txn_init_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         /* Start idempotent producer to acquire PID */
         rd_kafka_idemp_start(rk, rd_true/*immediately*/);

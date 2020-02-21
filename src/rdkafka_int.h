@@ -476,6 +476,9 @@ struct rd_kafka_s {
                 /**< Current transaction error string, if any. */
                 char               *txn_errstr;
 
+                /**< Last InitProducerIdRequest error. */
+                rd_kafka_resp_err_t txn_init_err;
+
                 /**< Waiting for transaction coordinator query response */
                 rd_bool_t           txn_wait_coord;
 

@@ -97,6 +97,7 @@ static void do_test_txn_recoverable_errors (void) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
         const char *groupid = "myGroupId";
         const char *txnid = "myTxnId";
 
@@ -178,10 +179,14 @@ static void do_test_txn_recoverable_errors (void) {
                 RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
                 RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
 
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
         TEST_CALL__(rd_kafka_send_offsets_to_transaction(
                             rk, offsets,
-                            "myGroupId", -1,
+                            cgmetadata, -1,
                             errstr, sizeof(errstr)));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
 
         /*
@@ -216,6 +221,7 @@ static void do_test_txn_abortable_errors (void) {
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
 
         TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
 
@@ -252,10 +258,14 @@ static void do_test_txn_abortable_errors (void) {
         offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
 
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
         err = rd_kafka_send_offsets_to_transaction(
                 rk, offsets,
-                "myGroupId", -1,
+                cgmetadata, -1,
                 errstr, sizeof(errstr));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
         TEST_ASSERT(err, "expected abortable error");
         TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
@@ -310,14 +320,16 @@ static void do_test_txn_abortable_errors (void) {
 
         offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
-        err = rd_kafka_send_offsets_to_transaction(rk, offsets, "mygroup", -1,
+        err = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1,
                                                    errstr, sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
                     "expected send_offsets_to_transaction() to fail with "
                     "group auth error: not %s",
                     rd_kafka_err2name(err));
 
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
 
 

@@ -257,3 +257,6 @@ RdKafka::KafkaConsumerImpl::close () {
 
 
 
+
+RdKafka::ConsumerGroupMetadata::~ConsumerGroupMetadata () {}
+

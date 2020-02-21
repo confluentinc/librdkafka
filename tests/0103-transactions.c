@@ -319,6 +319,7 @@ void do_test_consumer_producer_txn (void) {
                 rd_bool_t recreate_consumer = do_abort && txn == 3;
                 rd_kafka_topic_partition_list_t *offsets;
                 rd_kafka_resp_err_t err;
+                rd_kafka_consumer_group_metadata_t *c1_cgmetadata;
                 int remains = msgcnt;
 
                 TEST_SAY(_C_BLU "Begin transaction #%d/%d "
@@ -374,10 +375,16 @@ void do_test_consumer_producer_txn (void) {
                 TEST_ASSERT(!err, "failed to get consumer position: %s",
                             rd_kafka_err2str(err));
 
+                c1_cgmetadata = rd_kafka_consumer_group_metadata(c1);
+                TEST_ASSERT(c1_cgmetadata != NULL,
+                            "failed to get consumer group metadata");
+
                 TEST_CALL__(
                         rd_kafka_send_offsets_to_transaction(
-                                p2, offsets, c1_groupid, -1,
+                                p2, offsets, c1_cgmetadata, -1,
                                 errstr, sizeof(errstr)));
+
+                rd_kafka_consumer_group_metadata_destroy(c1_cgmetadata);
 
                 rd_kafka_topic_partition_list_destroy(offsets);
 

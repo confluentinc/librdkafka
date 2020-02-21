@@ -3612,3 +3612,48 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }
+
+
+
+
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new (const char *group_id) {
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        if (!group_id)
+                return NULL;
+
+        cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
+        cgmetadata->group_id = rd_strdup(group_id);
+
+        return cgmetadata;
+}
+
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata (rd_kafka_t *rk) {
+        if (rk->rk_type != RD_KAFKA_CONSUMER ||
+            !rk->rk_conf.group_id_str)
+                return NULL;
+
+        return rd_kafka_consumer_group_metadata_new(rk->rk_conf.group_id_str);
+}
+
+void
+rd_kafka_consumer_group_metadata_destroy (
+        rd_kafka_consumer_group_metadata_t *cgmetadata) {
+        rd_free(cgmetadata->group_id);
+        rd_free(cgmetadata);
+}
+
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_dup (
+        const rd_kafka_consumer_group_metadata_t *cgmetadata) {
+        rd_kafka_consumer_group_metadata_t *ret;
+
+        ret = rd_calloc(1, sizeof(*cgmetadata));
+        ret->group_id = rd_strdup(cgmetadata->group_id);
+
+        return ret;
+}
+
+

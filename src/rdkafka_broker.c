@@ -1564,6 +1564,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
         rkbuf->rkbuf_reqhdr = req->rkbuf_reqhdr;
         rkbuf->rkbuf_flags |= (req->rkbuf_flags &
                                RD_KAFKA_BUF_FLAGS_RESP_COPY_MASK);
+        rkbuf->rkbuf_ts_sent = req->rkbuf_ts_sent;  /* copy rtt */
 
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,

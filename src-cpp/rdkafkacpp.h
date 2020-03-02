@@ -187,9 +187,9 @@ enum ErrorCode {
 	/** Produced message timed out*/
 	ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. 
-	 * This event is disabled by default,
-	 * see the `enable.partition.eof` configuration property. */
+	 *  the broker. Not really an error.
+	 *  This event is disabled by default,
+	 *  see the `enable.partition.eof` configuration property. */
 	ERR__PARTITION_EOF = -191,
 	/** Permanent: Partition does not exist in cluster. */
 	ERR__UNKNOWN_PARTITION = -190,
@@ -521,6 +521,78 @@ class TopicPartition;
 class Metadata;
 class KafkaConsumer;
 /**@endcond*/
+
+
+/**
+ * @name Error class
+ * @{
+ *
+ */
+
+/**
+ * @brief The Error class is used as a return value from APIs to propagate
+ *        an error. The error consists of an error code which is to be used
+ *        programatically, an error string for showing to the user,
+ *        and various error flags that can be used programmatically to decide
+ *        how to handle the error; e.g., should the operation be retried,
+ *        was it a fatal error, etc.
+ *
+ * Error objects must be deleted explicitly to free its resources.
+ */
+class RD_EXPORT Error {
+ public:
+
+ /**
+  * @brief Create error object.
+  */
+ static Error *create (ErrorCode code, const std::string *errstr);
+
+ virtual ~Error () { }
+
+ /*
+  * Error accessor methods
+  */
+
+ /**
+  * @returns the error code, e.g., RdKafka::ERR_UNKNOWN_MEMBER_ID.
+  */
+ virtual ErrorCode code () const = 0;
+
+ /**
+  * @returns the error code name, e.g, "ERR_UNKNOWN_MEMBER_ID".
+  */
+ virtual std::string name () const = 0;
+
+  /**
+   * @returns a human readable error string.
+   */
+ virtual std::string str () const = 0;
+
+ /**
+  * @returns true if the error is a fatal error, indicating that the client
+  *          instance is no longer usable, else false.
+  */
+ virtual bool is_fatal () const = 0;
+
+ /**
+  * @returns true if the operation may be retried, else false.
+  */
+ virtual bool is_retriable () const = 0;
+
+ /**
+  * @returns true if the error is an abortable transaction error in which case
+  *          the application may call RdKafka::Producer::abort_transaction()
+  *          and start a new transaction with
+  *          RdKafka::Producer::begin_transaction().
+  *          Else returns false.
+  *
+  * @remark The return value of this method is only valid for errors returned
+  *         by the transactional API.
+  */
+ virtual bool is_txn_abortable () const = 0;
+};
+
+/**@}*/
 
 
 /**

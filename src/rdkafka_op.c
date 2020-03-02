@@ -342,6 +342,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.txn.group_id, rd_free);
                 RD_IF_FREE(rko->rko_u.txn.offsets,
                            rd_kafka_topic_partition_list_destroy);
+                RD_IF_FREE(rko->rko_u.txn.error, rd_kafka_error_destroy);
                 break;
 
 	default:

@@ -3162,15 +3162,12 @@ class RD_EXPORT Producer : public virtual Handle {
    *
    * @returns an RdKafka::Error object on error, or NULL on success.
    *          Check whether the returned error object permits retrying
-   *          by calling RdKafka::Error::is_retriable(), or whether an abortable
-   *          or fatal error has been raised by calling
-   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
-   *          respectively.
+   *          by calling RdKafka::Error::is_retriable(), or whether a
+   *          fatal error has been raised by calling RdKafka::Error::is_fatal().
    *
    * @remark The returned error object (if not NULL) must be deleted.
    *
    * See rd_kafka_abort_transaction() in rdkafka.h for more information.
-
    */
   virtual Error *abort_transaction (int timeout_ms) = 0;
 

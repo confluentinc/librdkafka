@@ -6455,17 +6455,44 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * fatal errors which the application needs to handle by shutting down the
  * producer and terminate. There is no way for a producer instance to recover
  * from fatal errors.
- *
  * Whether an error is fatal or not is detected by calling
  * rd_kafka_error_is_fatal() on the returned error object or by checking
  * the global rd_kafka_fatal_error() code.
- *
  * Fatal errors are raised by triggering the \c error_cb (see the
  * Fatal error chapter in INTRODUCTION.md for more information), and any
  * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
  * or have the fatal flag set (see rd_kafka_error_is_fatal()).
  * The originating fatal error code can be retrieved by calling
  * rd_kafka_fatal_error().
+ *
+ * @par Handling of other errors
+ * For errors that have neither retriable, abortable or the fatal flag set
+ * it is not always obvious how to handle them. While some of these errors
+ * may be indicative of bugs in the application code, such as when
+ * an invalid parameter is passed to a method, other errors might originate
+ * from the broker and be passed thru as-is to the application.
+ * The general recommendation is to treat these errors, that have
+ * neither the retriable or abortable flags set, as fatal.
+ *
+ * @par Error handling example
+ * @code
+ *     retry:
+ *        rd_kafka_error_t *error;
+ *
+ *        error = rd_kafka_commit_transaction(producer, 10*1000);
+ *        if (!error)
+ *            return success;
+ *        else if (rd_kafka_error_is_txn_abortable(error)) {
+ *            do_abort_transaction_and_reset_inputs();
+ *        } else if (rd_kafka_error_is_retriable(error)) {
+ *            rd_kafka_error_destroy(error);
+ *            goto retry;
+ *        } else { // treat all other errors as fatal errors
+ *            fatal_error(rd_kafka_error_string(error));
+ *        }
+ *        rd_kafka_error_destroy(error);
+ * @endcode
+ *
  *
  * @{
  */
@@ -6661,14 +6688,14 @@ rd_kafka_send_offsets_to_transaction (
  *
  *        If any of the outstanding messages fail permanently the current
  *        transaction will enter the abortable error state and this
- *        function will return FIXME, in this case the application
+ *        function will return an abortable error, in this case the application
  *        must call rd_kafka_abort_transaction() before attempting a new
  *        transaction with rd_kafka_begin_transaction().
  *
  * @param rk Producer instance.
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
- *                   and it is okay to call this function again. FIXME
+ *                   and it is okay to call this function again.
  *
  * @remark This function will block until all outstanding messages are
  *         delivered and the transaction commit request has been successfully
@@ -6740,9 +6767,8 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
- *          by calling rd_kafka_error_is_retriable(), or whether an abortable
- *          or fatal error has been raised by calling
- *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          by calling rd_kafka_error_is_retriable(), or whether a fatal error
+ *          has been raised by calling rd_kafka_error_is_fatal().
  *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be

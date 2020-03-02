@@ -47,13 +47,6 @@ static void
 rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error);
 
 
-
-/**
- * @returns a new error object with is_fatal or is_txn_abortable set
- *          according to the current transactional state.
- */
-
-
 /**
  * @brief Ensure client is configured as a transactional producer,
  *        else return error.
@@ -2299,7 +2292,7 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms) {
                                    rd_kafka_txn_op_begin_abort),
                 RD_POLL_INFINITE, /* begin_abort is immediate, no timeout */
                 RD_KAFKA_TXN_CURR_API_F_FOR_REUSE|
-                RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT);
+                RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT);
         if (error)
                 return error;
 

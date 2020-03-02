@@ -95,7 +95,6 @@ static void do_test_txn_recoverable_errors (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_resp_err_t err;
-        char errstr[512];
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
         const char *groupid = "myGroupId";
@@ -122,8 +121,7 @@ static void do_test_txn_recoverable_errors (void) {
                 RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
                 RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
 
-        TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
 
         (void)RD_UT_COVERAGE_CHECK(0); /* idemp_request_pid_failed(retry) */
         (void)RD_UT_COVERAGE_CHECK(1); /* txn_idemp_state_change(READY) */
@@ -131,7 +129,7 @@ static void do_test_txn_recoverable_errors (void) {
         /*
          * Start a transaction
          */
-        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         /*
          * Produce a message, let it first fail on a fatal idempotent error
@@ -181,10 +179,9 @@ static void do_test_txn_recoverable_errors (void) {
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
-        TEST_CALL__(rd_kafka_send_offsets_to_transaction(
-                            rk, offsets,
-                            cgmetadata, -1,
-                            errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(
+                                  rk, offsets,
+                                  cgmetadata, -1));
 
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
@@ -200,8 +197,7 @@ static void do_test_txn_recoverable_errors (void) {
                 RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
                 RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
 
-        TEST_CALL__(rd_kafka_commit_transaction(rk, 5000,
-                                                errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
 
         /* All done */
 
@@ -218,8 +214,8 @@ static void do_test_txn_recoverable_errors (void) {
 static void do_test_txn_abortable_errors (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
-        char errstr[512];
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
@@ -229,10 +225,9 @@ static void do_test_txn_abortable_errors (void) {
 
         test_curr->ignore_dr_err = rd_true;
 
-        TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
 
-        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         /*
          * 1. Fail on produce
@@ -260,25 +255,27 @@ static void do_test_txn_abortable_errors (void) {
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
-        err = rd_kafka_send_offsets_to_transaction(
-                rk, offsets,
-                cgmetadata, -1,
-                errstr, sizeof(errstr));
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                     cgmetadata, -1);
 
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
-        TEST_ASSERT(err, "expected abortable error");
-        TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
+        TEST_ASSERT(error, "expected error");
+        TEST_ASSERT(rd_kafka_error_is_txn_abortable(error),
+                    "expected abortable error, not %s",
+                    rd_kafka_error_string(error));
+        TEST_SAY("Error %s: %s\n",
+                 rd_kafka_error_name(error),
+                 rd_kafka_error_string(error));
 
-        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
 
         /*
          * 2. Restart transaction and fail on AddPartitionsToTxn
          */
         TEST_SAY("2. Fail on AddPartitionsToTxn\n");
 
-        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         rd_kafka_mock_push_request_errors(
                 mcluster,
@@ -292,19 +289,21 @@ static void do_test_txn_abortable_errors (void) {
                                 RD_KAFKA_V_END);
         TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
 
-        err = rd_kafka_commit_transaction(rk, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(err, "commit_transaction should have failed");
-        TEST_SAY("err %s: %s\n", rd_kafka_err2name(err), errstr);
+        error = rd_kafka_commit_transaction(rk, 5000);
+        TEST_ASSERT(error, "commit_transaction should have failed");
+        TEST_SAY("commit_transaction() error %s: %s\n",
+                 rd_kafka_error_name(error),
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
-        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
 
         /*
         * 3. Restart transaction and fail on AddOffsetsToTxn
         */
         TEST_SAY("3. Fail on AddOffsetsToTxn\n");
 
-        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         err = rd_kafka_producev(rk,
                                 RD_KAFKA_V_TOPIC("mytopic"),
@@ -322,22 +321,25 @@ static void do_test_txn_abortable_errors (void) {
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
-        err = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1,
-                                                   errstr, sizeof(errstr));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                     cgmetadata, -1);
+        TEST_ASSERT(error, "Expected send_offsets..() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
                     "expected send_offsets_to_transaction() to fail with "
                     "group auth error: not %s",
-                    rd_kafka_err2name(err));
+                    rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
 
 
-        err = rd_kafka_commit_transaction(rk, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(err, "commit_transaction should have failed");
+        error = rd_kafka_commit_transaction(rk, 5000);
+        TEST_ASSERT(error, "commit_transaction should have failed");
+        rd_kafka_error_destroy(error);
 
-        TEST_CALL__(rd_kafka_abort_transaction(rk, -1,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
 
         /* All done */
 
@@ -357,7 +359,6 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
         int32_t coord_id, leader_id, down_id;
         const char *down_what;
         rd_kafka_resp_err_t err;
-        char errstr[512];
         const char *topic = "test";
         const char *transactional_id = "txnid";
         int msgcnt = 1000;
@@ -391,10 +392,9 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
 
         /* Start transactioning */
         TEST_SAY("Starting transaction\n");
-        TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
 
-        TEST_CALL__(rd_kafka_begin_transaction(rk, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA,
                                   0, msgcnt / 2, NULL, 0, &remains);
@@ -413,8 +413,7 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
         TEST_SAY("Bringing up %s %"PRId32"\n", down_what, down_id);
         rd_kafka_mock_broker_set_up(mcluster, down_id);
 
-        TEST_CALL__(rd_kafka_commit_transaction(rk, -1,
-                                                errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
 
         TEST_ASSERT(remains == 0,
                     "%d message(s) were not produced\n", remains);
@@ -455,7 +454,6 @@ static void do_test_txn_switch_coordinator (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t coord_id;
-        char errstr[512];
         const char *topic = "test";
         const char *transactional_id = "txnid";
         const int broker_cnt = 5;
@@ -474,8 +472,7 @@ static void do_test_txn_switch_coordinator (void) {
 
         /* Start transactioning */
         TEST_SAY("Starting transaction\n");
-        TEST_CALL__(rd_kafka_init_transactions(rk, 5000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
 
         for (i = 0 ; i < iterations ; i++) {
                 const int msgcnt = 100;
@@ -484,8 +481,7 @@ static void do_test_txn_switch_coordinator (void) {
                 set_next_coord(mcluster, transactional_id,
                                broker_cnt, &coord_id);
 
-                TEST_CALL__(rd_kafka_begin_transaction(rk, errstr,
-                                                       sizeof(errstr)));
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
                 test_produce_msgs2(rk, topic, 0, RD_KAFKA_PARTITION_UA,
                                    0, msgcnt / 2, NULL, 0);
@@ -506,14 +502,11 @@ static void do_test_txn_switch_coordinator (void) {
 
                 if (!(i % 5)) {
                         test_curr->ignore_dr_err = rd_false;
-                        TEST_CALL__(rd_kafka_commit_transaction(
-                                            rk, -1,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
                 } else {
                         test_curr->ignore_dr_err = rd_true;
-                        TEST_CALL__(rd_kafka_abort_transaction(
-                                            rk, -1,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
                 }
         }
 
@@ -532,8 +525,8 @@ static void do_test_txns_not_supported (void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
-        char errstr[512];
 
         TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
 
@@ -556,15 +549,19 @@ static void do_test_txns_not_supported (void) {
 
 
 
-        *errstr = '\0';
-        err = rd_kafka_init_transactions(rk, 5*1000, errstr, sizeof(errstr));
+        error = rd_kafka_init_transactions(rk, 5*1000);
         TEST_SAY("init_transactions() returned %s: %s\n",
-                 rd_kafka_err2name(err),
-                 err ? errstr : "");
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                 error ? rd_kafka_error_name(error) : "success",
+                 error ? rd_kafka_error_string(error) : "success");
+
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
                     "Expected init_transactions() to fail with %s, not %s: %s",
                     rd_kafka_err2name(RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE),
-                    rd_kafka_err2name(err), errstr);
+                    rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         err = rd_kafka_producev(rk,
                                 RD_KAFKA_V_TOPIC("test"),

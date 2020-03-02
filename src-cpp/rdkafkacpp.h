@@ -3025,50 +3025,150 @@ class RD_EXPORT Producer : public virtual Handle {
   };
 
   /**
-   * Transactional API
+   * @name Transactional API
+   * @{
    *
    * Requires Kafka broker version v0.11.0 or later
    *
-   * FIXME: These docs will be updated when the rdkafka.h docs have settled.
+   * See the Transactional API documentation in rdkafka.h for more information.
    */
 
   /**
-   * @brief
+   * @brief Initialize transactions for the producer instance.
    *
-   * FIXME blocking?
+   * @param timeout_ms The maximum time to block. On timeout the operation
+   *                   may continue in the background, depending on state,
+   *                   and it is okay to call init_transactions() again.
+   *
+   * @returns an RdKafka::Error object on error, or NULL on success.
+   *          Check whether the returned error object permits retrying
+   *          by calling RdKafka::Error::is_retriable(), or whether a fatal
+   *          error has been raised by calling RdKafka::Error::is_fatal().
+   *
+   * @remark The returned error object (if not NULL) must be deleted.
+   *
+   * See rd_kafka_init_transactions() in rdkafka.h for more information.
+   *
    */
-  virtual ErrorCode init_transactions (int timeout_ms,
-                                       std::string &errstr) = 0;
+  virtual Error *init_transactions (int timeout_ms) = 0;
+
 
   /**
-   * FIXME blocking?
+   * @brief init_transactions() must have been called successfully
+   *        (once) before this function is called.
+   *
+   * @returns an RdKafka::Error object on error, or NULL on success.
+   *          Check whether a fatal error has been raised by calling
+   *          RdKafka::Error::is_fatal_error().
+   *
+   * @remark The returned error object (if not NULL) must be deleted.
+   *
+   * See rd_kafka_begin_transaction() in rdkafka.h for more information.
    */
-  virtual ErrorCode begin_transaction (std::string &errstr) = 0;
+  virtual Error *begin_transaction () = 0;
 
   /**
-   * FIXME blocking?
+   * @brief Sends a list of topic partition offsets to the consumer group
+   *        coordinator for \p group_metadata, and marks the offsets as part
+   *        part of the current transaction.
+   *        These offsets will be considered committed only if the transaction is
+   *        committed successfully.
+   *
+   *        The offsets should be the next message your application will consume,
+   *        i.e., the last processed message's offset + 1 for each partition.
+   *        Either track the offsets manually during processing or use
+   *        RdKafka::KafkaConsumer::position() (on the consumer) to get the
+   *        current offsets for
+   *        the partitions assigned to the consumer.
+   *
+   *        Use this method at the end of a consume-transform-produce loop prior
+   *        to committing the transaction with commit_transaction().
+   *
+   * @param offsets List of offsets to commit to the consumer group upon
+   *                successful commit of the transaction. Offsets should be
+   *                the next message to consume,
+   *                e.g., last processed message + 1.
+   * @param group_metadata The current consumer group metadata as returned by
+   *                   RdKafka::KafkaConsumer::groupMetadata() on the consumer
+   *                   instance the provided offsets were consumed from.
+   * @param timeout_ms Maximum time allowed to register the
+   *                   offsets on the broker.
+   *
+   * @remark This function must be called on the transactional producer instance,
+   *         not the consumer.
+   *
+   * @remark The consumer must disable auto commits
+   *         (set \c enable.auto.commit to false on the consumer).
+   *
+   * @returns an RdKafka::Error object on error, or NULL on success.
+   *          Check whether the returned error object permits retrying
+   *          by calling RdKafka::Error::is_retriable(), or whether an abortable
+   *          or fatal error has been raised by calling
+   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
+   *          respectively.
+   *
+   * @remark The returned error object (if not NULL) must be deleted.
+   *
+   * See rd_kafka_send_offsets_to_transaction() in rdkafka.h for
+   * more information.
    */
-  virtual ErrorCode send_offsets_to_transaction (
+  virtual Error *send_offsets_to_transaction (
           const std::vector<TopicPartition*> &offsets,
           const ConsumerGroupMetadata *group_metadata,
-          int timeout_ms,
-          std::string &errstr) = 0;
+          int timeout_ms) = 0;
 
   /**
-   * @brief
+   * @brief Commit the current transaction (as started with begin_transaction()).
    *
-   * FIXME blocking?
+   *        Any outstanding messages will be flushed (delivered) before actually
+   *        committing the transaction.
+   *
+   * @param timeout_ms The maximum time to block. On timeout the operation
+   *                   may continue in the background, depending on state,
+   *                   and it is okay to call this function again.
+   *
+   * @returns an RdKafka::Error object on error, or NULL on success.
+   *          Check whether the returned error object permits retrying
+   *          by calling RdKafka::Error::is_retriable(), or whether an abortable
+   *          or fatal error has been raised by calling
+   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
+   *          respectively.
+   *
+   * @remark The returned error object (if not NULL) must be deleted.
+   *
+   * See rd_kafka_commit_transaction() in rdkafka.h for more information.
    */
-  virtual ErrorCode commit_transaction (int timeout_ms,
-                                        std::string &errstr) = 0;
+  virtual Error *commit_transaction (int timeout_ms) = 0;
 
   /**
-   * @brief
+   * @brief Aborts the ongoing transaction.
    *
-   * FIXME blocking?
+   *        This function should also be used to recover from non-fatal abortable
+   *        transaction errors.
+   *
+   *        Any outstanding messages will be purged and fail with
+   *        RdKafka::ERR__PURGE_INFLIGHT or RdKafka::ERR__PURGE_QUEUE.
+   *        See RdKafka::Producer::purge() for details.
+   *
+   * @param timeout_ms The maximum time to block. On timeout the operation
+   *                   may continue in the background, depending on state,
+   *                   and it is okay to call this function again.
+   *
+   * @returns an RdKafka::Error object on error, or NULL on success.
+   *          Check whether the returned error object permits retrying
+   *          by calling RdKafka::Error::is_retriable(), or whether an abortable
+   *          or fatal error has been raised by calling
+   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
+   *          respectively.
+   *
+   * @remark The returned error object (if not NULL) must be deleted.
+   *
+   * See rd_kafka_abort_transaction() in rdkafka.h for more information.
+
    */
-  virtual ErrorCode abort_transaction (int timeout_ms,
-                                       std::string &errstr) = 0;
+  virtual Error *abort_transaction (int timeout_ms) = 0;
+
+  /**@}*/
 };
 
 /**@}*/

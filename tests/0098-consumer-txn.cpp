@@ -298,21 +298,24 @@ static void txn_producer_makeTestMessages (RdKafka::Producer *producer,
                                            TransactionType tt,
                                            bool do_flush) {
 
-  RdKafka::ErrorCode err;
-  std::string errstr;
+
+  RdKafka::Error *error;
 
   if (tt != TransactionType_None &&
       tt != TransactionType_ContinueOpen &&
       tt != TransactionType_ContinueCommit &&
       tt != TransactionType_ContinueAbort) {
-    err = producer->begin_transaction(errstr);
-    if (err)
-      Test::Fail("begin_transaction() failed: " + errstr);
+    error = producer->begin_transaction();
+    if (error) {
+      Test::Fail("begin_transaction() failed: " + error->str());
+      delete error;
+    }
   }
 
   for (int i = 0 ; i < msgcount ; i++) {
     char key[] = { (char)((i + idStart) & 0xff) };
     char payload[] = { 0x10, 0x20, 0x30, 0x40 };
+    RdKafka::ErrorCode err;
 
     err = producer->produce(topic, partition, producer->RK_MSG_COPY,
                            payload, sizeof(payload),
@@ -328,16 +331,20 @@ static void txn_producer_makeTestMessages (RdKafka::Producer *producer,
   switch (tt) {
   case TransactionType_BeginAbort:
   case TransactionType_ContinueAbort:
-    err = producer->abort_transaction(30*1000, errstr);
-    if (err)
-      Test::Fail("abort_transaction() failed: " + errstr);
+    error = producer->abort_transaction(30*1000);
+    if (error) {
+      Test::Fail("abort_transaction() failed: " + error->str());
+      delete error;
+    }
     break;
 
   case TransactionType_BeginCommit:
   case TransactionType_ContinueCommit:
-    err = producer->commit_transaction(30*1000, errstr);
-    if (err)
-      Test::Fail("commit_transaction() failed: " + errstr);
+    error = producer->commit_transaction(30*1000);
+    if (error) {
+      Test::Fail("commit_transaction() failed: " + error->str());
+      delete error;
+    }
     break;
 
   default:
@@ -430,10 +437,11 @@ static void txn_producer (const std::string &brokers, const std::string &topic,
 
         /* Init transactions if producer is transactional */
         if (txntype != TransactionType_None) {
-          RdKafka::ErrorCode err = producer->init_transactions(20*1000,
-                                                               errstr);
-          if (err)
-            Test::Fail("init_transactions() failed: " + errstr);
+          RdKafka::Error *error = producer->init_transactions(20*1000);
+          if (error) {
+            Test::Fail("init_transactions() failed: " + error->str());
+            delete error;
+          }
         }
 
 

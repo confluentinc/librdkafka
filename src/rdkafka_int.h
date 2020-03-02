@@ -409,8 +409,14 @@ struct rd_kafka_s {
                         int flags;            /**< Flags */
 #define RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT 0x1 /**< Set state to abortable
                                                       *   error on timeout,
-                                                      *   i.e., fail the txn */
-#define RD_KAFKA_TXN_CURR_API_F_FOR_REUSE 0x2        /**< Do not reset the
+                                                      *   i.e., fail the txn,
+                                                      *   and set txn_abortable
+                                                      *   on the returned error.
+                                                      */
+#define RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT 0x2 /**< Set retriable flag
+                                                          *   on the error
+                                                          *   on timeout. */
+#define RD_KAFKA_TXN_CURR_API_F_FOR_REUSE 0x4        /**< Do not reset the
                                                       *   current API when it
                                                       *   completes successfully
                                                       *   Instead keep it alive
@@ -418,7 +424,7 @@ struct rd_kafka_s {
                                                       *   .._F_REUSE, blocking
                                                       *   any non-F_REUSE
                                                       *   curr API calls. */
-#define RD_KAFKA_TXN_CURR_API_F_REUSE     0x4        /**< Reuse/continue with
+#define RD_KAFKA_TXN_CURR_API_F_REUSE     0x8        /**< Reuse/continue with
                                                       *   current API state.
                                                       *   This is used for
                                                       *   multi-stage APIs,

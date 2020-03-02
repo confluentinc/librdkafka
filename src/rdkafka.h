@@ -237,6 +237,7 @@ typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
 typedef struct rd_kafka_consumer_group_metadata_s
 rd_kafka_consumer_group_metadata_t;
+typedef struct rd_kafka_error_s rd_kafka_error_t;
 
 /* @endcond */
 
@@ -734,6 +735,78 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                            const char *reason);
+
+
+/**
+ * @returns the error code for \p error.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error);
+
+/**
+ * @returns the error code name for \p error, e.g, "ERR_UNKNOWN_MEMBER_ID".
+ *
+ * @remark The lifetime of the returned pointer is the same as the error object.
+ *
+ * @sa rd_kafka_err2name()
+ */
+RD_EXPORT
+const char *rd_kafka_error_name (const rd_kafka_error_t *error);
+
+/**
+ * @returns a human readable error string for \p error.
+ *
+ * @remark The lifetime of the returned pointer is the same as the error object.
+ */
+RD_EXPORT
+const char *rd_kafka_error_string (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the error is a fatal error, indicating that the client
+ *          instance is no longer usable, else 0.
+ */
+RD_EXPORT
+int rd_kafka_error_is_fatal (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the operation may be retried, else 0.
+ */
+RD_EXPORT
+int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the error is an abortable transaction error in which case
+ *          the application may call rd_kafka_abort_transaction() and
+ *          start a new transaction with rd_kafka_begin_transaction().
+ *          Else returns 0.
+ *
+ * @remark The return value of this method is only valid for errors returned
+ *         by the transactional API.
+ */
+RD_EXPORT
+int rd_kafka_error_is_txn_abortable (const rd_kafka_error_t *error);
+
+/**
+ * @brief Free and destroy an error object.
+ */
+RD_EXPORT
+void rd_kafka_error_destroy (rd_kafka_error_t *error);
+
+
+/**
+ * @brief Create a new error object with error \p code and optional
+ *        human readable error string in \p fmt.
+ *
+ * This method is mainly to be used for mocking errors in application test code.
+ *
+ * The returned object must be destroyed with rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
+                                      const char *fmt, ...);
 
 
 /**
@@ -6441,9 +6514,8 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  *          or \p timeout_ms is out of range.
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms,
-                            char *errstr, size_t errstr_size);
+rd_kafka_error_t *
+rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
 
 
 

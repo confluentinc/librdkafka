@@ -101,6 +101,53 @@ void update_partitions_from_c_parts (std::vector<TopicPartition*> &partitions,
                                      const rd_kafka_topic_partition_list_t *c_parts);
 
 
+class ErrorImpl : public Error {
+ public:
+  ~ErrorImpl () {
+    rd_kafka_error_destroy(c_error_);
+  };
+
+  ErrorImpl (ErrorCode code, const std::string *errstr) {
+    c_error_ = rd_kafka_error_new(static_cast<rd_kafka_resp_err_t>(code),
+                                  errstr ? "%s" : NULL,
+                                  errstr ? errstr->c_str() : NULL);
+  }
+
+  ErrorImpl (rd_kafka_error_t *c_error):
+      c_error_(c_error) {};
+
+  static Error *create (ErrorCode code, const std::string *errstr) {
+    return new ErrorImpl(code, errstr);
+  }
+
+  ErrorCode   code () const {
+    return static_cast<ErrorCode>(rd_kafka_error_code(c_error_));
+  }
+
+  std::string name () const {
+    return std::string(rd_kafka_error_name(c_error_));
+  }
+
+  std::string str () const {
+    return std::string(rd_kafka_error_string(c_error_));
+  }
+
+  bool is_fatal () const {
+    return rd_kafka_error_is_fatal(c_error_);
+  }
+
+  bool is_retriable () const {
+    return rd_kafka_error_is_retriable(c_error_);
+  }
+
+  bool is_txn_abortable () const {
+    return rd_kafka_error_is_txn_abortable(c_error_);
+  }
+
+  rd_kafka_error_t *c_error_;
+};
+
+
 class EventImpl : public Event {
  public:
   ~EventImpl () {};

@@ -485,7 +485,6 @@ struct rd_kafka_op_s {
 
                 struct {
                         rd_kafka_error_t *error; /**< Error object */
-                        char *errstr;   /**< Error string, if rko_err is set */
                         char *group_id; /**< Consumer group id for commits */
                         int   timeout_ms; /**< Operation timeout */
                         rd_ts_t abs_timeout; /**< Absolute time */

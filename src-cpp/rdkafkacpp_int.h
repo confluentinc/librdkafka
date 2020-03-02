@@ -1314,77 +1314,69 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                                                                 (int)purge_flags));
   }
 
-  ErrorCode init_transactions (int timeout_ms, std::string &errstr) {
-    rd_kafka_resp_err_t c_err;
-    char errbuf[512];
+  Error *init_transactions (int timeout_ms) {
+    rd_kafka_error_t *c_error;
 
-    c_err = rd_kafka_init_transactions(rk_, timeout_ms,
-                                       errbuf, sizeof(errbuf));
-    if (c_err)
-      errstr = errbuf;
+    c_error = rd_kafka_init_transactions(rk_, timeout_ms);
 
-    return static_cast<ErrorCode>(c_err);
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
   }
 
-  ErrorCode begin_transaction (std::string &errstr) {
-    rd_kafka_resp_err_t c_err;
-    char errbuf[512];
+  Error *begin_transaction () {
+    rd_kafka_error_t *c_error;
 
-    c_err = rd_kafka_begin_transaction(rk_, errbuf, sizeof(errbuf));
-    if (c_err)
-      errstr = errbuf;
+    c_error = rd_kafka_begin_transaction(rk_);
 
-    return static_cast<ErrorCode>(c_err);
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
   }
 
-  ErrorCode send_offsets_to_transaction (
+  Error *send_offsets_to_transaction (
       const std::vector<TopicPartition*> &offsets,
       const ConsumerGroupMetadata *group_metadata,
-      int timeout_ms,
-      std::string &errstr) {
-    rd_kafka_resp_err_t c_err;
-    char errbuf[512];
+      int timeout_ms) {
+    rd_kafka_error_t *c_error;
     const RdKafka::ConsumerGroupMetadataImpl *cgmdimpl =
         dynamic_cast<const RdKafka::ConsumerGroupMetadataImpl *>(group_metadata);
     rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
 
-    c_err = rd_kafka_send_offsets_to_transaction(rk_, c_offsets,
-                                                 cgmdimpl->cgmetadata_,
-                                                 timeout_ms,
-                                                 errbuf, sizeof(errbuf));
+    c_error = rd_kafka_send_offsets_to_transaction(rk_, c_offsets,
+                                                   cgmdimpl->cgmetadata_,
+                                                   timeout_ms);
 
     rd_kafka_topic_partition_list_destroy(c_offsets);
 
-    if (c_err)
-      errstr = errbuf;
-
-    return static_cast<ErrorCode>(c_err);
-
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
   }
 
-  ErrorCode commit_transaction (int timeout_ms, std::string &errstr) {
-    rd_kafka_resp_err_t c_err;
-    char errbuf[512];
+  Error *commit_transaction (int timeout_ms) {
+    rd_kafka_error_t *c_error;
 
-    c_err = rd_kafka_commit_transaction(rk_, timeout_ms,
-                                        errbuf, sizeof(errbuf));
-    if (c_err)
-      errstr = errbuf;
+    c_error = rd_kafka_commit_transaction(rk_, timeout_ms);
 
-    return static_cast<ErrorCode>(c_err);
-
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
   }
 
-  ErrorCode abort_transaction (int timeout_ms, std::string &errstr) {
-    rd_kafka_resp_err_t c_err;
-    char errbuf[512];
+  Error *abort_transaction (int timeout_ms) {
+    rd_kafka_error_t *c_error;
 
-    c_err = rd_kafka_abort_transaction(rk_, timeout_ms, errbuf, sizeof(errbuf));
-    if (c_err)
-      errstr = errbuf;
+    c_error = rd_kafka_abort_transaction(rk_, timeout_ms);
 
-    return static_cast<ErrorCode>(c_err);
-
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
   }
 
   static Producer *create (Conf *conf, std::string &errstr);

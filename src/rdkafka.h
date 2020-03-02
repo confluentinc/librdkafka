@@ -6427,6 +6427,14 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * After the current transaction has been committed or aborted a new
  * transaction may be started by calling rd_kafka_begin_transaction() again.
  *
+ * @par Retriable errors
+ * Some error cases allow the attempted operation to be retried, this is
+ * indicated by the error object having the retriable flag set which can
+ * be detected by calling rd_kafka_error_is_retriable().
+ * When this flag is set the application may retry the operation immediately
+ * or preferably after a shorter grace period (to avoid busy-looping).
+ * Retriable errors include timeouts, broker transport failures, etc.
+ *
  * @par Abortable errors
  * An ongoing transaction may fail permanently due to various errors,
  * such as transaction coordinator becoming unavailable, write failures to the
@@ -6434,6 +6442,8 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * At this point the producer application must abort the current transaction
  * using rd_kafka_abort_transaction() and optionally start a new transaction
  * by calling rd_kafka_begin_transaction().
+ * Whether an error is abortable or not is detected by calling
+ * rd_kafka_error_is_txn_abortable() on the returned error object.
  *
  * @par Fatal errors
  * While the underlying idempotent producer will typically only raise
@@ -6446,9 +6456,14 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * producer and terminate. There is no way for a producer instance to recover
  * from fatal errors.
  *
+ * Whether an error is fatal or not is detected by calling
+ * rd_kafka_error_is_fatal() on the returned error object or by checking
+ * the global rd_kafka_fatal_error() code.
+ *
  * Fatal errors are raised by triggering the \c error_cb (see the
  * Fatal error chapter in INTRODUCTION.md for more information), and any
- * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL.
+ * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
+ * or have the fatal flag set (see rd_kafka_error_is_fatal()).
  * The originating fatal error code can be retrieved by calling
  * rd_kafka_fatal_error().
  *
@@ -6486,20 +6501,20 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call init_transactions() again.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is a fatal error.
- * @param errstr_size Writable size in \p errstr.
  *
  * @remark This function may block up to \p timeout_ms milliseconds.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether a fatal
+ *          error has been raised by calling rd_kafka_error_is_fatal().
+ *          Error codes:
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction coordinator
- *          could be not be contacted within \p timeout_ms (retryable),
+ *          could be not be contacted within \p timeout_ms (retriable),
  *          RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE if the transaction
- *          coordinator is not available (retryable),
+ *          coordinator is not available (retriable),
  *          RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS if a previous transaction
- *          would not complete within \p timeout_ms (retryable),
+ *          would not complete within \p timeout_ms (retriable),
  *          RD_KAFKA_RESP_ERR__STATE if transactions have already been started
  *          or upon fatal error,
  *          RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE if the broker(s) do not
@@ -6512,6 +6527,11 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
  *          or \p timeout_ms is out of range.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
  */
 RD_EXPORT
 rd_kafka_error_t *
@@ -6533,33 +6553,35 @@ rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
  * abort the transaction by calling rd_kafka_abort_transaction().
  *
  * @param rk Producer instance.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is a fatal error.
- * @param errstr_size Writable size in \p errstr.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ * @returns NULL on success or an error object on failure.
+ *          Check whether a fatal error has been raised by
+ *          calling rd_kafka_error_is_fatal().
+ *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if a transaction is already in progress
  *          or upon fatal error,
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
  *
  * @remark With the transactional producer, rd_kafka_produce(),
  *         rd_kafka_producev(), et.al, are only allowed during an on-going
  *         transaction, as started with this function.
  *         Any produce call outside an on-going transaction, or for a failed
  *         transaction, will fail.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
-                                                char *errstr,
-                                                size_t errstr_size);
+rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
 
 
 /**
  * @brief Sends a list of topic partition offsets to the consumer group
- *        coordinator for \p consumer_group_id, and marks the offsets as part
+ *        coordinator for \p cgmetadata, and marks the offsets as part
  *        part of the current transaction.
  *        These offsets will be considered committed only if the transaction is
  *        committed successfully.
@@ -6581,10 +6603,6 @@ rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
  *                   rd_kafka_consumer_group_metadata() on the consumer
  *                   instance the provided offsets were consumed from.
  * @param timeout_ms Maximum time allowed to register the offsets on the broker.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is a fatal error.
- * @param errstr_size Writable size in \p errstr.
  *
  * @remark This function must be called on the transactional producer instance,
  *         not the consumer.
@@ -6597,11 +6615,16 @@ rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
  *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
  *         and no action will be taken.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether an abortable
+ *          or fatal error has been raised by calling
+ *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          respectively.
+ *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
  *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
  *          transaction has been fenced by a newer producer instance,
- *           ^ FIXME: or ERR__FENCED
  *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
  *          producer is no longer authorized to perform transactional
  *          operations,
@@ -6614,17 +6637,19 @@ rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
  *          or if the \p consumer_group_id or \p offsets are empty,
  *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous
  *          rd_kafka_send_offsets_to_transaction() call is still in progress.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
  *
- * FIXME: add more broker-induced error codes
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_resp_err_t
+rd_kafka_error_t *
 rd_kafka_send_offsets_to_transaction (
         rd_kafka_t *rk,
         const rd_kafka_topic_partition_list_t *offsets,
         const rd_kafka_consumer_group_metadata_t *cgmetadata,
-        int timeout_ms,
-        char *errstr, size_t errstr_size);
+        int timeout_ms);
 
 
 /**
@@ -6644,10 +6669,6 @@ rd_kafka_send_offsets_to_transaction (
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call this function again. FIXME
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is a fatal error.
- * @param errstr_size Writable size in \p errstr.
  *
  * @remark This function will block until all outstanding messages are
  *         delivered and the transaction commit request has been successfully
@@ -6662,27 +6683,34 @@ rd_kafka_send_offsets_to_transaction (
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether an abortable
+ *          or fatal error has been raised by calling
+ *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          respectively.
+ *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
- *          complete commmitted within \p timeout_ms, this is a retryable
+ *          complete commmitted within \p timeout_ms, this is a retriable
  *          error as the commit continues in the background,
  *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
  *          transaction has been fenced by a newer producer instance,
- *           ^ FIXME: or ERR__FENCED
  *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
  *          producer is no longer authorized to perform transactional
  *          operations,
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
  *
- * FIXME: more errors
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
-                             char *errstr, size_t errstr_size);
+rd_kafka_error_t *
+rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -6699,10 +6727,6 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call this function again.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written to if there is a fatal error.
- * @param errstr_size Writable size in \p errstr.
  *
  * @remark This function will block until all outstanding messages are purged
  *         and the transaction abort request has been successfully
@@ -6714,27 +6738,34 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
  *         will not serve delivery reports in this mode.
 
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether an abortable
+ *          or fatal error has been raised by calling
+ *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
- *          complete commmitted within \p timeout_ms, this is a retryable
+ *          complete commmitted within \p timeout_ms, this is a retriable
  *          error as the commit continues in the background,
  *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
  *          transaction has been fenced by a newer producer instance,
- *           ^ FIXME: or ERR__FENCED
  *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
  *          producer is no longer authorized to perform transactional
  *          operations,
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
  *
- * FIXME: more errors
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms,
-                            char *errstr, size_t errstr_size);
+rd_kafka_error_t *
+rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms);
+
 
 /**@}*/
 

@@ -64,7 +64,6 @@ static void do_test_basic_producer_txn (void) {
         rd_kafka_t *p, *c;
         rd_kafka_conf_t *conf, *p_conf, *c_conf;
         int i;
-        char errstr[256];
 
         test_conf_init(&conf, NULL, 30);
 
@@ -93,8 +92,7 @@ static void do_test_basic_producer_txn (void) {
         test_consumer_wait_assignment(c);
 
         /* Init transactions */
-        TEST_CALL__(rd_kafka_init_transactions(p, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30*1000));
 
         for (i = 0 ; i < _TXNCNT ; i++) {
                 int wait_msgcnt = 0;
@@ -103,9 +101,7 @@ static void do_test_basic_producer_txn (void) {
                          i, txn[i].desc);
 
                 /* Begin a transaction */
-                TEST_CALL__(rd_kafka_begin_transaction(p,
-                                                       errstr,
-                                                       sizeof(errstr)));
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
 
                 /* If the transaction is aborted it is okay if
                  * messages fail producing, since they'll be
@@ -135,14 +131,12 @@ static void do_test_basic_producer_txn (void) {
                          i, txn[i].abort ? _C_RED "Abort" : _C_GRN "Commit");
                 if (txn[i].abort) {
                         test_curr->ignore_dr_err = rd_true;
-                        TEST_CALL__(rd_kafka_abort_transaction(
-                                            p, 30*1000,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_abort_transaction(p,
+                                                                     30*1000));
                 } else {
                         test_curr->ignore_dr_err = rd_false;
-                        TEST_CALL__(rd_kafka_commit_transaction(
-                                            p, 30*1000,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_commit_transaction(p,
+                                                                      30*1000));
                 }
 
                 if (!txn[i].sync)
@@ -231,7 +225,6 @@ void do_test_consumer_producer_txn (void) {
         const int msgcnt = _MSGCNT;
         int txn;
         int committed_msgcnt = 0;
-        char errstr[512];
         test_msgver_t expect_mv, actual_mv;
 
         TEST_SAY(_C_BLU "[ Transactional test with %d transactions ]\n",
@@ -273,13 +266,12 @@ void do_test_consumer_producer_txn (void) {
         test_create_topic(p1, output_topic, 4, 3);
 
         /* Seed input topic with messages */
-        TEST_CALL__(rd_kafka_init_transactions(p1, 30*1000,
-                                               errstr, sizeof(errstr)));
-        TEST_CALL__(rd_kafka_begin_transaction(p1, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p1, 30*1000));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p1));
         test_produce_msgs2(p1, input_topic, testid, RD_KAFKA_PARTITION_UA,
                            0, msgcnt, NULL, 0);
-        TEST_CALL__(rd_kafka_commit_transaction(p1, 30*1000,
-                                                errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(p1, 30*1000));
+
         rd_kafka_destroy(p1);
 
         /* Create Consumer 1: reading msgs from input_topic (Producer 1) */
@@ -296,8 +288,7 @@ void do_test_consumer_producer_txn (void) {
         test_conf_set(tmpconf, "transactional.id", output_topic);
         rd_kafka_conf_set_dr_msg_cb(tmpconf, test_dr_msg_cb);
         p2 = test_create_handle(RD_KAFKA_PRODUCER, tmpconf);
-        TEST_CALL__(rd_kafka_init_transactions(p2, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p2, 30*1000));
 
         /* Create Consumer 2: reading msgs from output_topic (Producer 2) */
         tmpconf = rd_kafka_conf_dup(conf);
@@ -330,9 +321,8 @@ void do_test_consumer_producer_txn (void) {
 
                 consume_messages(c1, msgs, msgcnt);
 
-                TEST_CALL__(rd_kafka_begin_transaction(p2,
-                                                       errstr,
-                                                       sizeof(errstr)));
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(p2));
+
                 for (i = 0 ; i < msgcnt ; i++) {
                         rd_kafka_message_t *msg = msgs[i];
 
@@ -379,10 +369,10 @@ void do_test_consumer_producer_txn (void) {
                 TEST_ASSERT(c1_cgmetadata != NULL,
                             "failed to get consumer group metadata");
 
-                TEST_CALL__(
+                TEST_CALL_ERROR__(
                         rd_kafka_send_offsets_to_transaction(
-                                p2, offsets, c1_cgmetadata, -1,
-                                errstr, sizeof(errstr)));
+                                p2, offsets, c1_cgmetadata, -1));
+
 
                 rd_kafka_consumer_group_metadata_destroy(c1_cgmetadata);
 
@@ -391,14 +381,12 @@ void do_test_consumer_producer_txn (void) {
 
                 if (do_abort) {
                         test_curr->ignore_dr_err = rd_true;
-                        TEST_CALL__(rd_kafka_abort_transaction(
-                                            p2, 30*1000,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_abort_transaction(
+                                                  p2, 30*1000));
                 } else {
                         test_curr->ignore_dr_err = rd_false;
-                        TEST_CALL__(rd_kafka_commit_transaction(
-                                            p2, 30*1000,
-                                            errstr, sizeof(errstr)));
+                        TEST_CALL_ERROR__(rd_kafka_commit_transaction(
+                                                  p2, 30*1000));
                 }
 
                 TEST_ASSERT(remains == 0,
@@ -449,7 +437,8 @@ static void do_test_misuse_txn (void) {
         const char *topic = test_mk_topic_name("0103-test_misuse_txn", 1);
         rd_kafka_t *p;
         rd_kafka_conf_t *conf;
-        rd_kafka_resp_err_t err, fatal_err;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t fatal_err;
         char errstr[512];
         int i;
 
@@ -464,12 +453,16 @@ static void do_test_misuse_txn (void) {
 
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        err = rd_kafka_init_transactions(p, 10*1000, errstr, sizeof(errstr));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
+        error = rd_kafka_init_transactions(p, 10*1000);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
                     "Expected error ERR_INVALID_TRANSACTION_TIMEOUT, "
                     "not %s: %s",
-                    rd_kafka_err2name(err),
-                    err ? errstr : "");
+                    rd_kafka_error_name(error),
+                    error ? rd_kafka_error_string(error) : "");
+        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                    "Expected error to have is_fatal() set");
         /* Check that a fatal error is raised */
         fatal_err = rd_kafka_fatal_error(p, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
@@ -491,20 +484,21 @@ static void do_test_misuse_txn (void) {
 
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        TEST_CALL__(rd_kafka_init_transactions(p, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30*1000));
 
-        err = rd_kafka_init_transactions(p, 1, errstr, sizeof(errstr));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected STATE error, not %s", rd_kafka_err2name(err));
+        error = rd_kafka_init_transactions(p, 1);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected ERR__STATE error, not %s",
+                    rd_kafka_error_name(error));
 
-        TEST_CALL__(rd_kafka_begin_transaction(p, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
 
-        err = rd_kafka_init_transactions(p, 3*1000, errstr, sizeof(errstr));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected ERR__STATE, not %s: %s",
-                    rd_kafka_err2name(err),
-                    err ? errstr : "");
+        error = rd_kafka_init_transactions(p, 3*1000);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected ERR__STATE error, not %s",
+                    rd_kafka_error_name(error));
 
         rd_kafka_destroy(p);
 
@@ -519,16 +513,17 @@ static void do_test_misuse_txn (void) {
 
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        err = rd_kafka_init_transactions(p, 1, errstr, sizeof(errstr));
-        TEST_SAY("First init_transactions() returned %s\n",
-                 rd_kafka_err2name(err));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+        error = rd_kafka_init_transactions(p, 1);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_SAY("error: %s, %d\n", rd_kafka_error_string(error), rd_kafka_error_is_retriable(error));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "Expected ERR__TIMED_OUT, not %s: %s",
-                    rd_kafka_err2name(err),
-                    err ? errstr : "");
+                    rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected error to be retriable");
 
-        TEST_CALL__(rd_kafka_init_transactions(p, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30*1000));
 
         rd_kafka_destroy(p);
 
@@ -545,26 +540,36 @@ static void do_test_misuse_txn (void) {
 
         /* Call until init succeeds */
         for (i = 0 ; i < 5000 ; i++) {
-                if (!rd_kafka_init_transactions(p, 1, NULL, 0))
+                if (!(error = rd_kafka_init_transactions(p, 1)))
                         break;
 
-                err = rd_kafka_begin_transaction(p, NULL, 0);
-                TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                            "Expected error to be retriable");
+                rd_kafka_error_destroy(error);
+
+                error = rd_kafka_begin_transaction(p);
+                TEST_ASSERT(error, "Expected begin_transactions() to fail");
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                            RD_KAFKA_RESP_ERR__STATE,
                             "Expected begin_transactions() to fail "
                             "with STATE, not %s",
-                            rd_kafka_err2name(err));
+                            rd_kafka_error_name(error));
+
+                rd_kafka_error_destroy(error);
         }
 
         TEST_SAY("init_transactions() succeeded after %d call(s)\n", i+1);
 
         /* Make sure a sub-sequent init call fails. */
-        err = rd_kafka_init_transactions(p, 5*1000, errstr, sizeof(errstr));
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+        error = rd_kafka_init_transactions(p, 5*1000);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
                     "Expected init_transactions() to fail with STATE, not %s",
-                    rd_kafka_err2name(err));
+                    rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         /* But begin.. should work now */
-        TEST_CALL__(rd_kafka_begin_transaction(p, errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
 
         rd_kafka_destroy(p);
 }
@@ -591,8 +596,7 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
         const char *topic = test_mk_topic_name("0103_fenced_txn", 1);
         rd_kafka_conf_t *conf;
         rd_kafka_t *p1, *p2;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
+        rd_kafka_error_t *error;
         uint64_t testid;
 
         TEST_SAY(_C_BLU "[ Fenced producer transactions "
@@ -615,13 +619,10 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
         p2 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
         rd_kafka_conf_destroy(conf);
 
-        TEST_CALL__(rd_kafka_init_transactions(p1, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p1, 30*1000));
 
         /* Begin a transaction */
-        TEST_CALL__(rd_kafka_begin_transaction(p1,
-                                               errstr,
-                                               sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p1));
 
         /* Produce some messages */
         test_produce_msgs2(p1, topic, testid, RD_KAFKA_PARTITION_UA,
@@ -629,8 +630,7 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
 
         /* Initialize transactions on producer 2, this should
          * fence off producer 1. */
-        TEST_CALL__(rd_kafka_init_transactions(p2, 30*1000,
-                                               errstr, sizeof(errstr)));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p2, 30*1000));
 
         if (produce_after_fence) {
                 /* This will fail hard since the epoch was bumped. */
@@ -641,23 +641,36 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
         }
 
 
-        err = rd_kafka_commit_transaction(p1, 30*1000, errstr, sizeof(errstr));
+        error = rd_kafka_commit_transaction(p1, 30*1000);
 
         if (produce_after_fence) {
                 TEST_ASSERT(rd_kafka_fatal_error(p1, NULL, 0),
                             "Expected a fatal error to have been raised");
 
-                TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE /* FIXME ? */,
+                TEST_ASSERT(error, "Expected commit_transaction() to fail");
+                TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                            "Expected commit_transaction() to return a "
+                            "fatal error");
+                TEST_ASSERT(!rd_kafka_error_is_txn_abortable(error),
+                            "Expected commit_transaction() not to return an "
+                            "abortable error");
+                TEST_ASSERT(!rd_kafka_error_is_retriable(error),
+                            "Expected commit_transaction() not to return a "
+                            "retriable error");
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                            RD_KAFKA_RESP_ERR__STATE /* FIXME ? */,
                             "Expected commit_transaction() to return %s, "
                             "not %s: %s",
                             rd_kafka_err2name(RD_KAFKA_RESP_ERR__STATE),
-                            rd_kafka_err2name(err),
-                            err ? errstr : "");
+                            rd_kafka_error_name(error),
+                            rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
         } else {
-                TEST_ASSERT(!err,
+                TEST_ASSERT(!error,
                             "commit_transaction() should not have failed: "
                             "%s: %s",
-                            rd_kafka_err2name(err), errstr);
+                            rd_kafka_error_name(error),
+                            rd_kafka_error_string(error));
         }
 
 
@@ -694,8 +707,7 @@ int main_0103_transactions (int argc, char **argv) {
 static void do_test_txn_local (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *p;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
+        rd_kafka_error_t *error;
         test_timing_t t_init;
         int timeout_ms = 7 * 1000;
 
@@ -707,10 +719,13 @@ static void do_test_txn_local (void) {
 
         p = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        err = rd_kafka_init_transactions(p, 10, NULL, 0);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NOT_CONFIGURED,
+        error = rd_kafka_init_transactions(p, 10);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR__NOT_CONFIGURED,
                     "Expected ERR__NOT_CONFIGURED, not %s",
-                    rd_kafka_err2name(err));
+                    rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_destroy(p);
 
@@ -730,16 +745,19 @@ static void do_test_txn_local (void) {
         test_timeout_set((timeout_ms + 2000) / 1000);
 
         TIMING_START(&t_init, "init_transactions()");
-        err = rd_kafka_init_transactions(p, timeout_ms,
-                                         errstr, sizeof(errstr));
+        error = rd_kafka_init_transactions(p, timeout_ms);
         TIMING_STOP(&t_init);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "Expected RD_KAFKA_RESP_ERR__TIMED_OUT, "
                     "not %s: %s",
-                    rd_kafka_err2name(err), err ? errstr : "");
+                    rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
 
         TEST_SAY("init_transactions() failed as expected: %s\n",
-                 errstr);
+                 rd_kafka_error_string(error));
+
+        rd_kafka_error_destroy(error);
 
         TIMING_ASSERT(&t_init, timeout_ms - 2000, timeout_ms + 5000);
 

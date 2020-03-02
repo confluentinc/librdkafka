@@ -2301,13 +2301,19 @@ class RD_EXPORT Queue {
 /**@}*/
 
 /**
- * @name ConsumerGroupMetadata holds a consumer instance's group metadata state.
+ * @name ConsumerGroupMetadata
  * @{
  *
  */
+/**
+ * @brief ConsumerGroupMetadata holds a consumer instance's group
+ *        metadata state.
+ *
+ * This class currently does not have any public methods.
+ */
 class RD_EXPORT ConsumerGroupMetadata {
 public:
-virtual ~ConsumerGroupMetadata () = 0;
+  virtual ~ConsumerGroupMetadata () = 0;
 };
 
 /**@}*/

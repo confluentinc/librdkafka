@@ -569,10 +569,12 @@ void rd_kafka_broker_active_toppar_next (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *rktp);
+                                        rd_kafka_toppar_t *rktp,
+                                        const char *reason);
 
 void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *rktp);
+                                        rd_kafka_toppar_t *rktp,
+                                        const char *reason);
 
 
 void rd_kafka_broker_schedule_connection (rd_kafka_broker_t *rkb);

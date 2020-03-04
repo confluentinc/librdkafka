@@ -2043,9 +2043,11 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
                 if (should_fetch) {
 			rd_dassert(rktp->rktp_fetch_version > 0);
-                        rd_kafka_broker_active_toppar_add(rkb, rktp);
+                        rd_kafka_broker_active_toppar_add(rkb, rktp,
+                                                          *reason ? reason :
+                                                          "fetchable");
                 } else {
-                        rd_kafka_broker_active_toppar_del(rkb, rktp);
+                        rd_kafka_broker_active_toppar_del(rkb, rktp, reason);
                         /* Non-fetching partitions will have an
                          * indefinate backoff, unless explicitly specified. */
                         if (!ts_backoff)

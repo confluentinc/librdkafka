@@ -2906,7 +2906,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rd_kafka_broker_keep(rkb);
 
                 if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER) {
-                        rd_kafka_broker_active_toppar_add(rkb, rktp);
+                        rd_kafka_broker_active_toppar_add(rkb, rktp, "joining");
 
                         if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                                 /* Wait for all outstanding requests from
@@ -2986,7 +2986,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                           msg_order_cmp);
 
                 if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
-                        rd_kafka_broker_active_toppar_del(rkb, rktp);
+                        rd_kafka_broker_active_toppar_del(rkb, rktp, "leaving");
 
                 rd_kafka_broker_lock(rkb);
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
@@ -5995,7 +5995,8 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
  * @locks rktp_lock MUST be held
  */
 void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *rktp) {
+                                        rd_kafka_toppar_t *rktp,
+                                        const char *reason) {
         int is_consumer = rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER;
 
         if (is_consumer && rktp->rktp_fetch)
@@ -6012,12 +6013,13 @@ void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, TOPIC, "FETCHADD",
                    "Added %.*s [%"PRId32"] to %s list (%d entries, opv %d, "
-                   "%d messages queued)",
+                   "%d messages queued): %s",
                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                    rktp->rktp_partition,
                    is_consumer ? "fetch" : "active",
                    rkb->rkb_active_toppar_cnt, rktp->rktp_fetch_version,
-                   rd_kafka_msgq_len(&rktp->rktp_msgq));
+                   rd_kafka_msgq_len(&rktp->rktp_msgq),
+                   reason);
 }
 
 
@@ -6028,7 +6030,8 @@ void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
  * Locks: none
  */
 void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *rktp) {
+                                        rd_kafka_toppar_t *rktp,
+                                        const char *reason) {
         int is_consumer = rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER;
 
         if (is_consumer && !rktp->rktp_fetch)
@@ -6050,11 +6053,12 @@ void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, TOPIC, "FETCHADD",
                    "Removed %.*s [%"PRId32"] from %s list "
-                   "(%d entries, opv %d)",
+                   "(%d entries, opv %d): %s",
                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                    rktp->rktp_partition,
                    is_consumer ? "fetch" : "active",
-                   rkb->rkb_active_toppar_cnt, rktp->rktp_fetch_version);
+                   rkb->rkb_active_toppar_cnt, rktp->rktp_fetch_version,
+                   reason);
 
 }
 

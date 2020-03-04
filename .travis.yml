@@ -7,28 +7,6 @@ env:
   - ARCH=x64
 matrix:
  include:
- - name: "Linux GCC: +centos +debian"
-   os: linux
-   compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian"
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "Linux clang: +alpine"
-   os: linux
-   compiler: clang
-   env: ADDITIONAL_BUILDS="alpine"
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX GCC"
-   os: osx
-   compiler: gcc
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "OSX clang: +static"
-   os: osx
-   compiler: clang
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial
@@ -39,16 +17,8 @@ matrix:
     - sudo dpkg -i rapidjson-dev.deb
     - sudo pip install -r tests/requirements.txt
     - sudo apt update
-    - sudo apt install -y doxygen graphviz
+    - sudo apt install -y doxygen graphviz gdb
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
- - name: "Linux GCC: +devel +code-cov"
-   os: linux
-   dist: bionic
-   compiler: gcc
-   env: NO_ARTIFACTS=y
-   before_script:
-    - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
-    - ./packaging/tools/rdutcoverage.sh
 
 install:
  - ccache -s || echo "CCache is not available."
@@ -64,7 +34,9 @@ script:
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
 - if [[ $DOC_CHECK == y ]]; then make docs ; fi
-- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.3.0) ; fi
+- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ulimit -c unlimited && ./interactive_broker_version.py -c "make quick" 2.3.0) ; fi
+- ls tests/*core*
+- if [[ -f tests/core ]]; then LD_LIBRARY_PATH=src:src-cpp gdb -x gdbtr tests/test-runner tests/core ; fi
 
 deploy:
   provider: s3

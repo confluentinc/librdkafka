@@ -1,0 +1,8 @@
+bt full
+list
+up
+up
+up
+list
+thread apply all bt
+quit

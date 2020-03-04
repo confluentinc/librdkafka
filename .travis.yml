@@ -39,7 +39,7 @@ matrix:
     - sudo dpkg -i rapidjson-dev.deb
     - sudo pip install -r tests/requirements.txt
     - sudo apt update
-    - sudo apt install -y doxygen graphviz
+    - sudo apt install -y doxygen graphviz gdb
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "Linux GCC: +devel +code-cov"
    os: linux
@@ -65,6 +65,7 @@ script:
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
 - if [[ $DOC_CHECK == y ]]; then make docs ; fi
 - if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ./interactive_broker_version.py -c "make quick" 2.3.0) ; fi
+- if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
 
 deploy:
   provider: s3

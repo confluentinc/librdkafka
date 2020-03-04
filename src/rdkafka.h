@@ -3706,6 +3706,57 @@ rd_kafka_consumer_group_metadata_new (const char *group_id);
 RD_EXPORT void
 rd_kafka_consumer_group_metadata_destroy (rd_kafka_consumer_group_metadata_t *);
 
+
+/**
+ * @brief Serialize the consumer group metadata to a binary format.
+ *        This is mainly for client binding use and not for application use.
+ *
+ * @remark The serialized metadata format is private and is not compatible
+ *         across different versions or even builds of librdkafka.
+ *         It should only be used in the same process runtime and must only
+ *         be passed to rd_kafka_consumer_group_metadata_read().
+ *
+ * @param cgmd Metadata to be serialized.
+ * @param bufferp On success this pointer will be updated to point to na
+ *                allocated buffer containing the serialized metadata.
+ *                The buffer must be freed with rd_kafka_mem_free().
+ * @param sizep The pointed to size will be updated with the size of
+ *              the serialized buffer.
+ *
+ * @returns NULL on success or an error object on failure.
+ *
+ * @sa rd_kafka_consumer_group_metadata_read()
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_consumer_group_metadata_write (
+        const rd_kafka_consumer_group_metadata_t *cgmd,
+        void **bufferp, size_t *sizep);
+
+/**
+ * @brief Reads serialized consumer group metadata and returns a
+ *        consumer group metadata object.
+ *        This is mainly for client binding use and not for application use.
+ *
+ * @remark The serialized metadata format is private and is not compatible
+ *         across different versions or even builds of librdkafka.
+ *         It should only be used in the same process runtime and must only
+ *         be passed to rd_kafka_consumer_group_metadata_read().
+ *
+ * @param cgmdp On success this pointer will be updated to point to a new
+ *              consumer group metadata object which must be freed with
+ *              rd_kafka_consumer_group_metadata_destroy().
+ * @param buffer Pointer to the serialized data.
+ * @param size Size of the serialized data.
+ *
+ * @returns NULL on success or an error object on failure.
+ *
+ * @sa rd_kafka_consumer_group_metadata_write()
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_consumer_group_metadata_read (
+        rd_kafka_consumer_group_metadata_t **cgmdp,
+        const void *buffer, size_t size);
+
 /**@}*/
 
 

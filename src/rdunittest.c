@@ -436,6 +436,7 @@ static int unittest_rdclock (void) {
 
 /**@}*/
 
+extern int unittest_cgrp (void);
 
 int rd_unittest (void) {
         int fails = 0;
@@ -462,6 +463,7 @@ int rd_unittest (void) {
                 { "sasl_oauthbearer", unittest_sasl_oauthbearer },
 #endif
                 { "aborted_txns", unittest_aborted_txns },
+                { "cgrp", unittest_cgrp },
                 { NULL }
         };
         int i;

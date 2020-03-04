@@ -37,6 +37,10 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_interceptor.h"
 
+#include "rdunittest.h"
+
+#include <ctype.h>
+
 
 static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
                                                const char *reason);
@@ -3657,3 +3661,137 @@ rd_kafka_consumer_group_metadata_dup (
 }
 
 
+/*
+ * Consumer group metadata serialization format v1:
+ *  "CGMDv1:"<group_id>"\0"
+ * Where <group_id> is the group_id string.
+ */
+static const char rd_kafka_consumer_group_metadata_magic[7] = "CGMDv1:";
+
+rd_kafka_error_t *rd_kafka_consumer_group_metadata_write (
+        const rd_kafka_consumer_group_metadata_t *cgmd,
+        void **bufferp, size_t *sizep) {
+        char *buf;
+        size_t size;
+        size_t of = 0;
+        size_t magic_len = sizeof(rd_kafka_consumer_group_metadata_magic);
+        size_t groupid_len = strlen(cgmd->group_id) + 1;
+
+        size = magic_len + groupid_len;
+        buf = rd_malloc(size);
+
+        memcpy(buf, rd_kafka_consumer_group_metadata_magic, magic_len);
+        of += magic_len;
+
+        memcpy(buf+of, cgmd->group_id, groupid_len);
+
+        *bufferp = buf;
+        *sizep = size;
+
+        return NULL;
+}
+
+
+rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
+        rd_kafka_consumer_group_metadata_t **cgmdp,
+        const void *buffer, size_t size) {
+        size_t magic_len = sizeof(rd_kafka_consumer_group_metadata_magic);
+        const char *buf = (const char *)buffer;
+        const char *end = buf + size;
+        const char *group_id;
+        const char *s;
+
+        if (size < magic_len + 1 + 1)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__BAD_MSG,
+                                          "Input buffer is too short");
+
+        if (memcmp(buffer, rd_kafka_consumer_group_metadata_magic, magic_len))
+                return rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__BAD_MSG,
+                        "Input buffer is not a serialized "
+                        "consumer group metadata object");
+
+        group_id = buf + magic_len;
+
+        /* Check that group_id is safe */
+        for (s = group_id ; s < end - 1 ; s++) {
+                if (!isprint((int)*s))
+                        return rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__BAD_MSG,
+                                "Input buffer group id is not safe");
+        }
+
+        if (*s != '\0')
+                return rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__BAD_MSG,
+                        "Input buffer has invalid stop byte");
+
+        /* We now know that group_id is printable-safe and is nul-terminated. */
+        *cgmdp = rd_kafka_consumer_group_metadata_new(group_id);
+
+        return NULL;
+}
+
+
+static int unittest_consumer_group_metadata (void) {
+        rd_kafka_consumer_group_metadata_t *cgmd;
+        const char *group_ids[] = {
+                "mY. group id:.",
+                "0",
+                "2222222222222222222222221111111111111111111111111111112222",
+                NULL,
+        };
+        int i;
+
+        for (i = 0 ; group_ids[i] ; i++) {
+                const char *group_id = group_ids[i];
+                void *buffer, *buffer2;
+                size_t size, size2;
+                rd_kafka_error_t *error;
+
+                cgmd = rd_kafka_consumer_group_metadata_new(group_id);
+                RD_UT_ASSERT(cgmd != NULL, "failed to create metadata");
+
+                error = rd_kafka_consumer_group_metadata_write(cgmd, &buffer,
+                                                               &size);
+                RD_UT_ASSERT(!error, "metadata_write failed: %s",
+                             rd_kafka_error_string(error));
+
+                rd_kafka_consumer_group_metadata_destroy(cgmd);
+
+                cgmd = NULL;
+                error = rd_kafka_consumer_group_metadata_read(&cgmd, buffer,
+                                                              size);
+                RD_UT_ASSERT(!error, "metadata_read failed: %s",
+                             rd_kafka_error_string(error));
+
+                /* Serialize again and compare buffers */
+                error = rd_kafka_consumer_group_metadata_write(cgmd, &buffer2,
+                                                               &size2);
+                RD_UT_ASSERT(!error, "metadata_write failed: %s",
+                             rd_kafka_error_string(error));
+
+                RD_UT_ASSERT(size == size2 && !memcmp(buffer, buffer2, size),
+                             "metadata_read/write size or content mismatch: "
+                             "size %"PRIusz", size2 %"PRIusz,
+                             size, size2);
+
+                rd_kafka_consumer_group_metadata_destroy(cgmd);
+                rd_free(buffer);
+                rd_free(buffer2);
+        }
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Consumer group unit tests
+ */
+int unittest_cgrp (void) {
+        int fails = 0;
+
+        fails += unittest_consumer_group_metadata();
+
+        return fails;
+}

@@ -3304,6 +3304,10 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *         received, these messages are not exposed to the application but
  *         still enqueued on the consumer queue to make sure their
  *         offsets are stored.
+ *
+ * @deprecated This API is deprecated and subject for future removal.
+ *             There is no new callback-based consume interface, use the
+ *             poll/queue based alternatives.
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
@@ -3349,6 +3353,10 @@ ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
  * @brief Consume multiple messages from queue with callback
  *
  * @sa rd_kafka_consume_callback()
+ *
+ * @deprecated This API is deprecated and subject for future removal.
+ *             There is no new callback-based consume interface, use the
+ *             poll/queue based alternatives.
  */
 RD_EXPORT
 int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,

@@ -5703,6 +5703,7 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
 		rd_kafka_wrunlock(rk);
                 if (rkbp)
                         *rkbp = NULL;
+                return;
 	}
 
 	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id))) {

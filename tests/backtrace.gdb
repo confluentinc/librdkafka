@@ -1,8 +1,10 @@
+p test
+p *test
 bt full
 list
 up
 up
 up
-list
+up
 thread apply all bt
 quit

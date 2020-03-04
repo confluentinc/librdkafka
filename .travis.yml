@@ -36,7 +36,7 @@ script:
 - if [[ $DOC_CHECK == y ]]; then make docs ; fi
 - if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && ulimit -c unlimited && ./interactive_broker_version.py -c "make quick" 2.3.0) ; fi
 - ls tests/*core*
-- if [[ -f tests/core ]]; then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb -x gdbtr ./test-runner core) ; fi
+- if [[ -f tests/core ]]; then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
 
 deploy:
   provider: s3

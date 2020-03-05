@@ -2511,17 +2511,21 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 
 /**
- * Move buffers that have expired their retry backoff time from the 
+ * Move buffers that have expired their retry backoff time from the
  * retry queue to the outbuf.
  */
-static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
+static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb,
+                                             rd_ts_t *next_wakeup) {
 	rd_ts_t now = rd_clock();
 	rd_kafka_buf_t *rkbuf;
         int cnt = 0;
 
 	while ((rkbuf = TAILQ_FIRST(&rkb->rkb_retrybufs.rkbq_bufs))) {
-		if (rkbuf->rkbuf_ts_retry > now)
+		if (rkbuf->rkbuf_ts_retry > now) {
+                        if (rkbuf->rkbuf_ts_retry < *next_wakeup)
+                                *next_wakeup = rkbuf->rkbuf_ts_retry;
 			break;
+                }
 
 		rd_kafka_bufq_deq(&rkb->rkb_retrybufs, rkbuf);
 
@@ -3749,7 +3753,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb,
 
 		/* Check and move retry buffers */
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
-			rd_kafka_broker_retry_bufs_move(rkb);
+			rd_kafka_broker_retry_bufs_move(rkb, &next_wakeup);
 
                 rd_kafka_broker_ops_io_serve(rkb, next_wakeup);
 
@@ -4691,7 +4695,7 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb,
 
 		/* Check and move retry buffers */
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
-			rd_kafka_broker_retry_bufs_move(rkb);
+			rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
 
                 if (min_backoff > abs_timeout)
                         min_backoff = abs_timeout;

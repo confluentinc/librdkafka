@@ -3701,7 +3701,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
         const char *group_id;
         const char *s;
 
-        if (size < magic_len + 1 + 1)
+        if (size < magic_len + 1)
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__BAD_MSG,
                                           "Input buffer is too short");
 
@@ -3739,6 +3739,7 @@ static int unittest_consumer_group_metadata (void) {
                 "mY. group id:.",
                 "0",
                 "2222222222222222222222221111111111111111111111111111112222",
+                "",
                 NULL,
         };
         int i;

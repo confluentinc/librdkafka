@@ -207,7 +207,12 @@ find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
 if(WITH_SASL_CYRUS)
-  target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
+  if (TARGET PkgConfig::SASL)
+    target_link_libraries(rdkafka PUBLIC PkgConfig::SASL)
+  else()
+    target_include_directories(rdkafka PUBLIC ${SASL_INCLUDE_DIRS})
+    target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
+  endif()
 endif()
 
 if(WITH_LIBDL)

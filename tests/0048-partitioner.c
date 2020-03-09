@@ -268,6 +268,21 @@ static void do_test_partitioners (void) {
                                 0x4f7703da % part_cnt,
                                 0x5ec19395 % part_cnt
                         } },
+                { "fnv1a", {
+                                /* .. using https://play.golang.org/p/hRkA4xtYyJ6 */
+                                0x7ee3623b % part_cnt,
+                                0x7ee3623b % part_cnt,
+                                0x27e6f469 % part_cnt,
+                                0x155e3e5f % part_cnt,
+                                0x17b1e27a % part_cnt
+                        } },
+                { "fnv1a_random", {
+                                -1,
+                                0x7ee3623b % part_cnt,
+                                0x27e6f469 % part_cnt,
+                                0x155e3e5f % part_cnt,
+                                0x17b1e27a % part_cnt
+                        } },
                 { NULL }
         };
         int pi;

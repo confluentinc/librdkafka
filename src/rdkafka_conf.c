@@ -214,7 +214,9 @@ rd_kafka_conf_validate_partitioner (const struct rd_kafka_property *prop,
                 !strcmp(val, "consistent") ||
                 !strcmp(val, "consistent_random") ||
                 !strcmp(val, "murmur2") ||
-                !strcmp(val, "murmur2_random");
+                !strcmp(val, "murmur2_random") ||
+                !strcmp(val, "fnv1a") ||
+                !strcmp(val, "fnv1a_random");
 }
 
 
@@ -1288,7 +1290,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`consistent` - CRC32 hash of key (Empty and NULL keys are mapped to single partition), "
           "`consistent_random` - CRC32 hash of key (Empty and NULL keys are randomly partitioned), "
           "`murmur2` - Java Producer compatible Murmur2 hash of key (NULL keys are mapped to single partition), "
-          "`murmur2_random` - Java Producer compatible Murmur2 hash of key (NULL keys are randomly partitioned. This is functionally equivalent to the default partitioner in the Java Producer.).",
+          "`murmur2_random` - Java Producer compatible Murmur2 hash of key "
+          "(NULL keys are randomly partitioned. This is functionally equivalent "
+          "to the default partitioner in the Java Producer.), "
+          "`fnv1a` - FNV-1a hash of key (NULL keys are mapped to single partition), "
+          "`fnv1a_random` - FNV-1a hash of key (NULL keys are randomly partitioned).",
           .sdef = "consistent_random",
           .validate = rd_kafka_conf_validate_partitioner },
 	{ _RK_TOPIC|_RK_PRODUCER, "partitioner_cb", _RK_C_PTR,

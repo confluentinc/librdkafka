@@ -168,6 +168,7 @@
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
+    <ClCompile Include="..\src\rdfnv1a.c" />
     <ClCompile Include="..\src\rdgz.c" />
     <ClCompile Include="..\src\rdhdrhistogram.c" />
     <ClCompile Include="..\src\rdkafka.c" />

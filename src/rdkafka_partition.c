@@ -2773,12 +2773,33 @@ rd_kafka_topic_partition_list_upsert (
         return rd_kafka_topic_partition_list_add(rktparlist, topic, partition);
 }
 
+
+/**
+ * @brief Update \p dst with info from \p src.
+ */
+void rd_kafka_topic_partition_update (rd_kafka_topic_partition_t *dst,
+                                      const rd_kafka_topic_partition_t *src) {
+        rd_dassert(!strcmp(dst->topic, src->topic));
+        rd_dassert(dst->partition == src->partition);
+        rd_dassert(dst != src);
+
+        dst->offset = src->offset;
+        dst->opaque = src->opaque;
+        dst->err = src->err;
+
+        if (src->metadata_size > 0) {
+                dst->metadata = rd_malloc(src->metadata_size);
+                dst->metadata_size = src->metadata_size;;
+                memcpy(dst->metadata, src->metadata, dst->metadata_size);
+        }
+}
+
 /**
  * @brief Creates a copy of \p rktpar and adds it to \p rktparlist
  */
 void
-rd_kafka_topic_partition_copy (rd_kafka_topic_partition_list_t *rktparlist,
-                               const rd_kafka_topic_partition_t *rktpar) {
+rd_kafka_topic_partition_add_copy (rd_kafka_topic_partition_list_t *rktparlist,
+                                   const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_topic_partition_t *dst;
 
         dst = rd_kafka_topic_partition_list_add0(
@@ -2789,16 +2810,8 @@ rd_kafka_topic_partition_copy (rd_kafka_topic_partition_list_t *rktparlist,
                 rd_kafka_toppar_keep(
                         rd_kafka_toppar_s2i((shptr_rd_kafka_toppar_t *)
                                             rktpar->_private)) : NULL);
-        dst->offset = rktpar->offset;
-        dst->opaque = rktpar->opaque;
-        dst->err    = rktpar->err;
-        if (rktpar->metadata_size > 0) {
-                dst->metadata =
-                        rd_malloc(rktpar->metadata_size);
-                dst->metadata_size = rktpar->metadata_size;
-                memcpy((void *)dst->metadata, rktpar->metadata,
-                       rktpar->metadata_size);
-        }
+
+        rd_kafka_topic_partition_update(dst, rktpar);
 }
 
 
@@ -2814,7 +2827,7 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
         dst = rd_kafka_topic_partition_list_new(src->size);
 
         for (i = 0 ; i < src->cnt ; i++)
-                rd_kafka_topic_partition_copy(dst, &src->elems[i]);
+                rd_kafka_topic_partition_add_copy(dst, &src->elems[i]);
         return dst;
 }
 
@@ -3169,6 +3182,7 @@ rd_kafka_topic_partition_list_get_leaders (
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
+                rd_kafka_topic_partition_t *rktpar2;
                 rd_kafka_broker_t *rkb = NULL;
                 struct rd_kafka_partition_leader leader_skel;
                 struct rd_kafka_partition_leader *leader;
@@ -3232,7 +3246,17 @@ rd_kafka_topic_partition_list_get_leaders (
                         cnt++;
                 }
 
-                rd_kafka_topic_partition_copy(leader->partitions, rktpar);
+                rktpar2 = rd_kafka_topic_partition_list_find(leader->partitions,
+                                                             rktpar->topic,
+                                                             rktpar->partition);
+                if (rktpar2) {
+                        /* Already exists in partitions list, just update. */
+                        rd_kafka_topic_partition_update(rktpar2, rktpar);
+                } else {
+                        /* Make a copy of rktpar and add to partitions list */
+                        rd_kafka_topic_partition_add_copy(leader->partitions,
+                                                          rktpar);
+                }
 
                 rd_kafka_broker_destroy(rkb);    /* loose refcount */
         }
@@ -3424,7 +3448,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
                 if (!match(rktpar, opaque))
                         continue;
 
-                rd_kafka_topic_partition_copy(newlist, rktpar);
+                rd_kafka_topic_partition_add_copy(newlist, rktpar);
         }
 
         return newlist;

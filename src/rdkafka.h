@@ -2528,6 +2528,49 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
                                                  void *msg_opaque);
 
 
+/**
+ * @brief FNV-1a partitioner.
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using FNV-1a hashing.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_fnv1a (const rd_kafka_topic_t *rkt,
+                                        const void *key, size_t keylen,
+                                        int32_t partition_cnt,
+                                        void *rkt_opaque,
+                                        void *msg_opaque);
+
+
+/**
+ * @brief Consistent-Random FNV-1a partitioner.
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using FNV-1a hashing.
+ * Messages without keys will be assigned via the random partitioner.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
+                                               const void *key, size_t keylen,
+                                               int32_t partition_cnt,
+                                               void *rkt_opaque,
+                                               void *msg_opaque);
+
+
 /**@}*/
 
 

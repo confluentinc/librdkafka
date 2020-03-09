@@ -301,6 +301,10 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                           (void *)rd_kafka_msg_partitioner_murmur2 },
                         { "murmur2_random",
                           (void *)rd_kafka_msg_partitioner_murmur2_random },
+                        { "fnv1a",
+                          (void *)rd_kafka_msg_partitioner_fnv1a },
+                        { "fnv1a_random",
+                          (void *)rd_kafka_msg_partitioner_fnv1a_random },
                         { NULL }
                 };
                 int i;

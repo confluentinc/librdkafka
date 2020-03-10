@@ -1,7 +1,7 @@
 EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	rdkafka_complex_consumer_example rdkafka_complex_consumer_example_cpp \
 	kafkatest_verifiable_client \
-	producer consumer idempotent_producer
+	producer consumer idempotent_producer transactions
 
 all: $(EXAMPLES)
 
@@ -42,6 +42,10 @@ consumer: ../src/librdkafka.a consumer.c
 		../src/librdkafka.a $(LIBS)
 
 idempotent_producer: ../src/librdkafka.a idempotent_producer.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+transactions: ../src/librdkafka.a transactions.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

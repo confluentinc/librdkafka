@@ -60,9 +60,9 @@ msg_size | int gauge | | Current total size of messages in producer queues
 msg_max | int | | Threshold: maximum number of messages allowed allowed on the producer queues
 msg_size_max | int | | Threshold: maximum total size of messages allowed on the producer queues
 tx | int | | Total number of requests sent to Kafka brokers
-txbytes | int | | Total number of bytes transmitted to Kafka brokers
+tx_bytes | int | | Total number of bytes transmitted to Kafka brokers
 rx | int | | Total number of responses received from Kafka brokers
-rxbytes | int | | Total number of bytes received from Kafka brokers
+rx_bytes | int | | Total number of bytes received from Kafka brokers
 txmsgs | int | | Total number of messages transmitted (produced) to Kafka brokers
 txmsg_bytes | int | | Total number of message bytes (including framing, such as per-Message framing and MessageSet/batch framing) transmitted to Kafka brokers
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc), from Kafka brokers.

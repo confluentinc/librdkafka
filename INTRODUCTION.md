@@ -723,65 +723,27 @@ This method should be called by the application on delivery report error.
 
 Using the transactional producer simplifies error handling compared to the
 standard or idempotent producer, a transactional application will only need
-to care about two different types of errors:
+to care about these different types of errors:
 
- * Fatal errors - the application must cease operations and destroy the
-   producer instance if any of the transactional APIs return
-   `RD_KAFKA_RESP_ERR__FATAL`. This is an unrecoverable type of error.
+ * Retriable errors - the operation failed due to temporary problems,
+   such as network timeouts, the operation may be safely retried.
+   Use `rd_kafka_error_is_retriable()` to distinguish this case.
  * Abortable errors - if any of the transactional APIs return a non-fatal
    error code the current transaction has failed and the application
    must call `rd_kafka_abort_transaction()`, rewind its input to the
    point before the current transaction started, and attempt a new transaction
    by calling `rd_kafka_begin_transaction()`, etc.
+   Use `rd_kafka_error_is_txn_abortable()` to distinguish this case.
+ * Fatal errors - the application must cease operations and destroy the
+   producer instance.
+   Use `rd_kafka_error_is_fatal()` to distinguish this case.
+ * For all other errors returned from the transactional API: the current
+   recommendation is to treat any error that has neither retriable, abortable,
+   or fatal set, as a fatal error.
 
 While the application should log the actual fatal or abortable errors, there
 is no need for the application to handle the underlying errors specifically.
 
-For fatal errors use `rd_kafka_fatal_error()` to extract the underlying
-error code and reason.
-For abortable errors use the error code and error string returned by the
-transactional API that failed.
-
-This error handling logic roughly translates to the following pseudo code:
-
-```
-main() {
-
-    try {
-       init_transactions()
-
-       while (run) {
-
-           begin_transaction()
-
-           start_checkpoint = consumer.position()
-
-           for input in consumer.poll():
-
-               output = process(input)
-
-               stored_offsets.update(input.partition, input.offset)
-
-               produce(output)
-
-               if time_spent_in_txn > 10s:
-                    break
-
-           send_offsets_to_transaction(stored_offsets)
-
-           commit_transaction()
-
-    } except FatalError as ex {
-        log("Fatal exception: ", ex)
-        raise(ex)
-
-    } except Exception as ex {
-        log("Current transaction failed: ", ex)
-        abort_transaction()
-        consumer.seek(start_checkpoint)
-        continue
-    }
-```
 
 
 #### Old producer fencing
@@ -810,73 +772,8 @@ automatically.
 librdkafka supports Exactly One Semantics (EOS) as defined in [KIP-98](https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging).
 For more on the use of transactions, see [Transactions in Apache Kafka](https://www.confluent.io/blog/transactions-apache-kafka/).
 
-
-The transactional consume-process-produce loop roughly boils down to the
-following pseudo-code:
-
-```c
-    /* Producer */
-    rd_kafka_conf_t *pconf = rd_kafka_conf_new();
-    rd_kafka_conf_set(pconf, "bootstrap.servers", "mybroker");
-    rd_kafka_conf_set(pconf, "transactional.id", "my-transactional-id");
-    rd_kafka_t *producer = rd_kafka_new(RD_KAFKA_PRODUCER, pconf);
-
-    rd_kafka_init_transactions(producer);
-
-
-    /* Consumer */
-    rd_kafka_conf_t *cconf = rd_kafka_conf_new();
-    rd_kafka_conf_set(cconf, "bootstrap.servers", "mybroker");
-    rd_kafka_conf_set(cconf, "group.id", "my-group-id");
-    rd_kafka_conf_set(cconf, "enable.auto.commit", "false");
-    rd_kafka_t *consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cconf);
-    rd_kafka_poll_set_consumer(consumer);
-
-    rd_kafka_subscribe(consumer, "inputTopic");
-
-    /* Consume-Process-Produce loop */
-    while (run) {
-
-       /* Begin transaction */
-       rd_kafka_begin_transaction(producer);
-
-       while (some_limiting_factor) {
-           rd_kafka_message_t *in, *out;
-
-           /* Consume messages */
-           in = rd_kafka_consumer_poll(consumer, -1);
-
-           /* Process message, generating an output message */
-           out = process_msg(in);
-
-           /* Produce output message to output topic */
-           rd_kafka_produce(producer, "outputTopic", out);
-
-           /* FIXME: or perhaps */
-           rd_kafka_topic_partition_list_set_from_msg(processed, msg);
-           /* or */
-           rd_kafka_transaction_store_offset_from_msg(producer, msg);
-       }
-
-       /* Commit the consumer offset as part of the transaction */
-       rd_kafka_send_offsets_to_transaction(producer,
-                                            "my-group-id",
-                                            rd_kafka_position(consumer));
-                                            /* or processed */
-
-       /* Commit the transaction */
-       rd_kafka_commit_transaction(producer);
-   }
-
-   rd_kafka_consumer_close(consumer);
-   rd_kafka_destroy(consumer);
-   rd_kafka_destroy(producer);
-```
-
-**Note**: The above code is a logical representation of transactional
-          program flow and does not represent the exact API parameter usage.
-          A proper application will perform error handling, etc.
-          See [`examples/transactions.cpp`](examples/transactions.cpp) for a proper example.
+See [examples/transactions.c](examples/transactions.c) for an example
+transactional EOS application.
 
 
 ## Usage

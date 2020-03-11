@@ -992,7 +992,8 @@ static void rd_kafka_txn_curr_api_reset (rd_kafka_t *rk) {
                 rd_kafka_q_destroy(rkq);
         }
 
-        RD_MEMZERO(rk->rk_eos.txn_curr_api);
+        *rk->rk_eos.txn_curr_api.name = '\0';
+        rk->rk_eos.txn_curr_api.flags = 0;
 }
 
 

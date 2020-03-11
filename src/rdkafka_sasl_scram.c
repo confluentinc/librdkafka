@@ -340,7 +340,9 @@ static char *rd_kafka_sasl_safe_string (const char *str) {
                 const char *s;
                 for (s = str ; *s ; s++) {
                         if (pass == 0) {
-                                len += 1 + (*s == ',' || *s == '=');
+                                /* If this byte needs to be escaped then
+                                 * 3 output bytes are needed instead of 1. */
+                                len += (*s == ',' || *s == '=') ? 3 : 1;
                                 continue;
                         }
 

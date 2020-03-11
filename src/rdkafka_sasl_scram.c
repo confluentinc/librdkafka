@@ -88,7 +88,7 @@ static void rd_kafka_sasl_scram_generate_nonce (rd_chariov_t *dst) {
         dst->size = 32;
         dst->ptr = rd_malloc(dst->size+1);
         for (i = 0 ; i < (int)dst->size ; i++)
-                dst->ptr[i] = 'a'; // (char)rd_jitter(0x2d/*-*/, 0x7e/*~*/);
+                dst->ptr[i] = (char)rd_jitter(0x2d/*-*/, 0x7e/*~*/);
         dst->ptr[i] = 0;
 }
 

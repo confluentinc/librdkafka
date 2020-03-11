@@ -438,6 +438,9 @@ static int unittest_rdclock (void) {
 /**@}*/
 
 extern int unittest_cgrp (void);
+#if WITH_SASL_SCRAM
+extern int unittest_scram (void);
+#endif
 
 int rd_unittest (void) {
         int fails = 0;
@@ -466,6 +469,9 @@ int rd_unittest (void) {
 #endif
                 { "aborted_txns", unittest_aborted_txns },
                 { "cgrp", unittest_cgrp },
+#if WITH_SASL_SCRAM
+                { "scram", unittest_scram },
+#endif
                 { NULL }
         };
         int i;

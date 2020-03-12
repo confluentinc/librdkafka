@@ -105,10 +105,10 @@ If the version is out of date, please [create an issue or pull request](https://
 **NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
           enables encoding the original size in the compression frame header,
           which will speed up the consumer.
-          Use `STATIC_LIB_zstd=/path/to/libzstd.a ./configure --enable-static`
+          Use `STATIC_LIB_libzstd=/path/to/libzstd.a ./configure --enable-static`
           to enable static ZStd linking.
           MacOSX example:
-          `STATIC_LIB_zstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
+          `STATIC_LIB_libzstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
 
 
 ### Building

@@ -410,7 +410,7 @@ struct rd_kafka_s {
 #define RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT 0x1 /**< Set state to abortable
                                                       *   error on timeout,
                                                       *   i.e., fail the txn,
-                                                      *   and set txn_abortable
+                                                      *   and set txn_requires_abort
                                                       *   on the returned error.
                                                       */
 #define RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT 0x2 /**< Set retriable flag

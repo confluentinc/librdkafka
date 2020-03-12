@@ -725,7 +725,7 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
                 TEST_ASSERT(rd_kafka_error_is_fatal(error),
                             "Expected commit_transaction() to return a "
                             "fatal error");
-                TEST_ASSERT(!rd_kafka_error_is_txn_abortable(error),
+                TEST_ASSERT(!rd_kafka_error_txn_requires_abort(error),
                             "Expected commit_transaction() not to return an "
                             "abortable error");
                 TEST_ASSERT(!rd_kafka_error_is_retriable(error),

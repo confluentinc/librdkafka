@@ -779,15 +779,16 @@ int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
 
 /**
  * @returns 1 if the error is an abortable transaction error in which case
- *          the application may call rd_kafka_abort_transaction() and
- *          start a new transaction with rd_kafka_begin_transaction().
+ *          the application must call rd_kafka_abort_transaction() and
+ *          start a new transaction with rd_kafka_begin_transaction() if it
+ *          wishes to proceed with transactions.
  *          Else returns 0.
  *
  * @remark The return value of this method is only valid for errors returned
  *         by the transactional API.
  */
 RD_EXPORT
-int rd_kafka_error_is_txn_abortable (const rd_kafka_error_t *error);
+int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error);
 
 /**
  * @brief Free and destroy an error object.
@@ -6557,7 +6558,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * using rd_kafka_abort_transaction() and optionally start a new transaction
  * by calling rd_kafka_begin_transaction().
  * Whether an error is abortable or not is detected by calling
- * rd_kafka_error_is_txn_abortable() on the returned error object.
+ * rd_kafka_error_txn_requires_abort() on the returned error object.
  *
  * @par Fatal errors
  * While the underlying idempotent producer will typically only raise
@@ -6596,7 +6597,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  *        error = rd_kafka_commit_transaction(producer, 10*1000);
  *        if (!error)
  *            return success;
- *        else if (rd_kafka_error_is_txn_abortable(error)) {
+ *        else if (rd_kafka_error_txn_requires_abort(error)) {
  *            do_abort_transaction_and_reset_inputs();
  *        } else if (rd_kafka_error_is_retriable(error)) {
  *            rd_kafka_error_destroy(error);
@@ -6760,7 +6761,7 @@ rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
  *          Check whether the returned error object permits retrying
  *          by calling rd_kafka_error_is_retriable(), or whether an abortable
  *          or fatal error has been raised by calling
- *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
  *          respectively.
  *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
@@ -6828,7 +6829,7 @@ rd_kafka_send_offsets_to_transaction (
  *          Check whether the returned error object permits retrying
  *          by calling rd_kafka_error_is_retriable(), or whether an abortable
  *          or fatal error has been raised by calling
- *          rd_kafka_error_is_txn_abortable() or rd_kafka_error_is_fatal()
+ *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
  *          respectively.
  *          Error codes:
  *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,

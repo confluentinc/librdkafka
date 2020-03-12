@@ -62,7 +62,7 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
         error->code = code;
         error->fatal = rd_false;
         error->retriable = rd_false;
-        error->txn_abortable = rd_false;
+        error->txn_requires_abort = rd_false;
 
         if (strsz > 0) {
                 error->errstr = (char *)(error+1);
@@ -114,7 +114,7 @@ rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
         return error;
 }
 
-rd_kafka_error_t *rd_kafka_error_new_txn_abortable (rd_kafka_resp_err_t code,
+rd_kafka_error_t *rd_kafka_error_new_txn_requires_abort (rd_kafka_resp_err_t code,
                                                     const char *fmt, ...) {
         rd_kafka_error_t *error;
         va_list ap;
@@ -123,7 +123,7 @@ rd_kafka_error_t *rd_kafka_error_new_txn_abortable (rd_kafka_resp_err_t code,
         error = rd_kafka_error_new_v(code, fmt, ap);
         va_end(ap);
 
-        rd_kafka_error_set_txn_abortable(error);
+        rd_kafka_error_set_txn_requires_abort(error);
 
         return error;
 }
@@ -149,8 +149,8 @@ int rd_kafka_error_is_retriable (const rd_kafka_error_t *error) {
         return error->retriable ? 1 : 0;
 }
 
-int rd_kafka_error_is_txn_abortable (const rd_kafka_error_t *error) {
-        return error->txn_abortable ? 1 : 0;
+int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error) {
+        return error->txn_requires_abort ? 1 : 0;
 }
 
 
@@ -163,8 +163,8 @@ void rd_kafka_error_set_retriable (rd_kafka_error_t *error) {
         error->retriable = rd_true;
 }
 
-void rd_kafka_error_set_txn_abortable (rd_kafka_error_t *error) {
-        error->txn_abortable = rd_true;
+void rd_kafka_error_set_txn_requires_abort (rd_kafka_error_t *error) {
+        error->txn_requires_abort = rd_true;
 }
 
 

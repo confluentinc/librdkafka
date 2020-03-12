@@ -581,15 +581,16 @@ class RD_EXPORT Error {
 
  /**
   * @returns true if the error is an abortable transaction error in which case
-  *          the application may call RdKafka::Producer::abort_transaction()
+  *          the application must call RdKafka::Producer::abort_transaction()
   *          and start a new transaction with
-  *          RdKafka::Producer::begin_transaction().
+  *          RdKafka::Producer::begin_transaction() if it wishes to proceed
+  *          with transactions.
   *          Else returns false.
   *
   * @remark The return value of this method is only valid for errors returned
   *         by the transactional API.
   */
- virtual bool is_txn_abortable () const = 0;
+ virtual bool txn_requires_abort () const = 0;
 };
 
 /**@}*/
@@ -3127,7 +3128,7 @@ class RD_EXPORT Producer : public virtual Handle {
    *          Check whether the returned error object permits retrying
    *          by calling RdKafka::Error::is_retriable(), or whether an abortable
    *          or fatal error has been raised by calling
-   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
+   *          RdKafka::Error::txn_requires_abort() or RdKafka::Error::is_fatal()
    *          respectively.
    *
    * @remark The returned error object (if not NULL) must be deleted.
@@ -3154,7 +3155,7 @@ class RD_EXPORT Producer : public virtual Handle {
    *          Check whether the returned error object permits retrying
    *          by calling RdKafka::Error::is_retriable(), or whether an abortable
    *          or fatal error has been raised by calling
-   *          RdKafka::Error::is_txn_abortable() or RdKafka::Error::is_fatal()
+   *          RdKafka::Error::txn_requires_abort() or RdKafka::Error::is_fatal()
    *          respectively.
    *
    * @remark The returned error object (if not NULL) must be deleted.

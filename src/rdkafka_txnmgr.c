@@ -103,7 +103,7 @@ rd_kafka_txn_require_states0 (rd_kafka_t *rk,
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_FATAL_ERROR)
                 rd_kafka_error_set_fatal(error);
         else if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR)
-                rd_kafka_error_set_txn_abortable(error);
+                rd_kafka_error_set_txn_requires_abort(error);
 
         return error;
 }
@@ -901,7 +901,7 @@ rd_kafka_txn_curr_api_abort_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_txn_curr_api_reply_error(
                 rkq,
-                rd_kafka_error_new_txn_abortable(
+                rd_kafka_error_new_txn_requires_abort(
                         RD_KAFKA_RESP_ERR__TIMED_OUT,
                         "Transactional operation timed out"));
 }

@@ -105,6 +105,7 @@
     <ClCompile Include="..\..\tests\0013-null-msgs.c" />
     <ClCompile Include="..\..\tests\0014-reconsume-191.c" />
     <ClCompile Include="..\..\tests\0015-offset_seeks.c" />
+    <ClCompile Include="..\..\tests\0016-client_swname.c" />
     <ClCompile Include="..\..\tests\0017-compression.c" />
     <ClCompile Include="..\..\tests\0018-cgrp_term.c" />
     <ClCompile Include="..\..\tests\0019-list_groups.c" />
@@ -188,7 +189,6 @@
     <ClCompile Include="..\..\tests\0104-fetch_from_follower_mock.c" />
     <ClCompile Include="..\..\tests\0105-transactions_mock.c" />
     <ClCompile Include="..\..\tests\0106-cgrp_sess_timeout.c" />
-    <ClCompile Include="..\..\tests\0108-client_swname.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

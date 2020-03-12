@@ -106,7 +106,7 @@ static void do_test_swname (const char *broker,
                  swname ? swname : "NULL", swversion ? swversion : "NULL");
 }
 
-int main_0108_client_swname (int argc, char **argv) {
+int main_0016_client_swname (int argc, char **argv) {
         const char *broker;
         const char *kafka_path;
         const char *jmx_port;

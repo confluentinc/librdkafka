@@ -934,7 +934,7 @@ static int unittest_scram_nonce (void) {
         rd_kafka_sasl_scram_generate_nonce(&out2);
         RD_UT_ASSERT(out1.size == 32, "Wrong size %d", (int)out2.size);
 
-        RD_UT_ASSERT(memcmp(out1.ptr, out2.ptr, out1.size == 32) != 0,
+        RD_UT_ASSERT(memcmp(out1.ptr, out2.ptr, out1.size) != 0,
                      "Expected generate_nonce() to return a random nonce");
 
         rd_free(out1.ptr);

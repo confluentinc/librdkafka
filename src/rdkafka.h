@@ -3426,17 +3426,18 @@ int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
 
 
 /**
- * @brief Store offset \p offset for topic \p rkt partition \p partition.
+ * @brief Store offset \p offset + 1 for topic \p rkt partition \p partition.
  *
- * The offset will be committed (written) to the offset store according
+ * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
- * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
+rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
 					   int32_t partition, int64_t offset);
 
 
@@ -3449,16 +3450,20 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
  * Per-partition success/error status propagated through each partition's
  * \c .err field.
  *
- * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
+ * @remark The \c .offset field is stored as is, it will NOT be + 1.
+ *
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
  *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
  *          offsets could be stored, or
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store is true.
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
+ *          is true.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_offsets_store(rd_kafka_t *rk,
-                       rd_kafka_topic_partition_list_t *offsets);
+rd_kafka_offsets_store (rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *offsets);
 /**@}*/
 
 
@@ -3624,7 +3629,8 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * @brief Commit offsets on broker for the provided list of partitions.
  *
  * \p offsets should contain \c topic, \c partition, \c offset and possibly
- * \c metadata.
+ * \c metadata. The \c offset should be the offset where consumption will
+ * resume, i.e., the last processed offset + 1.
  * If \p offsets is NULL the current partition assignment will be used instead.
  *
  * If \p async is false this operation will block until the broker offset commit
@@ -3646,6 +3652,7 @@ rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
 
 /**
  * @brief Commit message's offset on broker for the message's partition.
+ *        The committed offset is the message's offset + 1.
  *
  * @sa rd_kafka_commit
  */

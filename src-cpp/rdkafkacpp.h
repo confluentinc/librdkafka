@@ -1780,11 +1780,12 @@ class RD_EXPORT Topic {
   virtual bool partition_available (int32_t partition) const = 0;
 
   /**
-   * @brief Store offset \p offset for topic partition \p partition.
-   * The offset will be committed (written) to the offset store according
-   * to \p auto.commit.interval.ms.
+   * @brief Store offset \p offset + 1 for topic partition \p partition.
+   * The offset will be committed (written) to the broker (or file) according
+   * to \p auto.commit.interval.ms or next manual offset-less commit call.
    *
-   * @remark \c enable.auto.offset.store must be set to \c false when using this API.
+   * @remark \c enable.auto.offset.store must be set to \c false when using
+   *         this API.
    *
    * @returns RdKafka::ERR_NO_ERROR on success or an error code if none of the
    *          offsets could be stored.
@@ -2452,6 +2453,8 @@ public:
   /**
    * @brief Commit offset for a single topic+partition based on \p message
    *
+   * @remark The offset committed will be the message's offset + 1.
+   *
    * @remark This is the synchronous variant.
    *
    * @sa RdKafka::KafkaConsummer::commitSync()
@@ -2460,6 +2463,8 @@ public:
 
   /**
    * @brief Commit offset for a single topic+partition based on \p message
+   *
+   * @remark The offset committed will be the message's offset + 1.
    *
    * @remark This is the asynchronous variant.
    *
@@ -2470,12 +2475,20 @@ public:
   /**
    * @brief Commit offsets for the provided list of partitions.
    *
+   * @remark The \c .offset of the partitions in \p offsets should be the
+   *         offset where consumption will resume, i.e., the last
+   *         processed offset + 1.
+   *
    * @remark This is the synchronous variant.
    */
   virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets) = 0;
 
   /**
    * @brief Commit offset for the provided list of partitions.
+   *
+   * @remark The \c .offset of the partitions in \p offsets should be the
+   *         offset where consumption will resume, i.e., the last
+   *         processed offset + 1.
    *
    * @remark This is the asynchronous variant.
    */
@@ -2583,7 +2596,10 @@ public:
    *
    * Per-partition success/error status propagated through TopicPartition.err()
    *
-   * @remark \c enable.auto.offset.store must be set to \c false when using this API.
+   * @remark The \c .offset field is stored as is, it will NOT be + 1.
+   *
+   * @remark \c enable.auto.offset.store must be set to \c false when using
+   *         this API.
    *
    * @returns RdKafka::ERR_NO_ERROR on success, or
    *          RdKafka::ERR___UNKNOWN_PARTITION if none of the offsets could
@@ -3077,10 +3093,11 @@ class RD_EXPORT Producer : public virtual Handle {
    * @brief Sends a list of topic partition offsets to the consumer group
    *        coordinator for \p group_metadata, and marks the offsets as part
    *        part of the current transaction.
-   *        These offsets will be considered committed only if the transaction is
-   *        committed successfully.
+   *        These offsets will be considered committed only if the transaction
+   *        is committed successfully.
    *
-   *        The offsets should be the next message your application will consume,
+   *        The offsets should be the next message your application will
+   *        consume,
    *        i.e., the last processed message's offset + 1 for each partition.
    *        Either track the offsets manually during processing or use
    *        RdKafka::KafkaConsumer::position() (on the consumer) to get the
@@ -3100,8 +3117,8 @@ class RD_EXPORT Producer : public virtual Handle {
    * @param timeout_ms Maximum time allowed to register the
    *                   offsets on the broker.
    *
-   * @remark This function must be called on the transactional producer instance,
-   *         not the consumer.
+   * @remark This function must be called on the transactional producer
+   *         instance, not the consumer.
    *
    * @remark The consumer must disable auto commits
    *         (set \c enable.auto.commit to false on the consumer).
@@ -3124,7 +3141,7 @@ class RD_EXPORT Producer : public virtual Handle {
           int timeout_ms) = 0;
 
   /**
-   * @brief Commit the current transaction (as started with begin_transaction()).
+   * @brief Commit the current transaction as started with begin_transaction().
    *
    *        Any outstanding messages will be flushed (delivered) before actually
    *        committing the transaction.

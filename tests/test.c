@@ -1503,8 +1503,10 @@ int main(int argc, char **argv) {
         test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
 
         /* Are we running on CI? */
-        if (test_getenv("CI", NULL))
+        if (test_getenv("CI", NULL)) {
                 test_on_ci = 1;
+                test_concurrent_max = 3;
+        }
 
 	test_conf_init(NULL, NULL, 10);
 

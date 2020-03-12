@@ -46,11 +46,11 @@ full: broker broker_idempotent sasl
 #
 quick:
 	@echo "Running quick(er) test suite (without sockem)"
-	./run-test.sh -p5 -Q -E
+	./run-test.sh -Q -E
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
-	./run-test.sh -p5
+	./run-test.sh
 
 run_seq: $(BIN)
 	@echo "Running tests sequentially"
@@ -58,17 +58,17 @@ run_seq: $(BIN)
 
 run_local: $(BIN)
 	@echo "Running local broker-less tests with idempotent producer"
-	./run-test.sh -p5 -l -P
+	./run-test.sh -l -P
 
 run_local_quick: $(BIN)
 	@echo "Running quick local broker-less tests with idempotent producer"
-	./run-test.sh -p5 -l -Q -P
+	./run-test.sh -l -Q -P
 
 idempotent_par: $(BIN)
-	./run-test.sh -p5 -P
+	./run-test.sh -P
 
 idempotent_seq: $(BIN)
-	./run-test.sh -p1 -P
+	./run-test.sh -P
 
 idempotent: idempotent_par
 

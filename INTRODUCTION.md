@@ -1674,7 +1674,7 @@ features rely on newer broker functionality.
 
 **Current defaults:**
  * `api.version.request=true`
- * `broker.version.fallback=0.9.0.0`
+ * `broker.version.fallback=0.10.0`
  * `api.version.fallback.ms=0` (never revert to `broker.version.fallback`)
 
 Depending on what broker version you are using, please configure your

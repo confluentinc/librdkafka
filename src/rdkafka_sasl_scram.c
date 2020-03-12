@@ -699,7 +699,7 @@ rd_kafka_sasl_scram_handle_server_final_message (
                  * but we need to verify the ServerSignature too. */
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                            "SCRAMAUTH",
-                           "SASL SCRAM authentication succesful on server: "
+                           "SASL SCRAM authentication successful on server: "
                            "verifying ServerSignature");
 
                 if (strcmp(attr_v, state->ServerSignatureB64)) {

@@ -1759,7 +1759,7 @@ rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
 
                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                              "Set %s [%"PRId32"] follower "
-                             "watermark offets to %"PRId64"..%"PRId64,
+                             "watermark offsets to %"PRId64"..%"PRId64,
                              rko->rko_u.mock.name, rko->rko_u.mock.partition,
                              rko->rko_u.mock.lo, rko->rko_u.mock.hi);
 

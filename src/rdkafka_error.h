@@ -43,7 +43,7 @@ struct rd_kafka_error_s {
                                    *   Possibly NULL. */
         rd_bool_t fatal;          /**< This error is a fatal error. */
         rd_bool_t retriable;      /**< Operation is retriable. */
-        rd_bool_t txn_abortable;  /**< This is an abortable transaction error.*/
+        rd_bool_t txn_requires_abort;  /**< This is an abortable transaction error.*/
 };
 
 
@@ -52,14 +52,14 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
 
 void rd_kafka_error_set_fatal (rd_kafka_error_t *error);
 void rd_kafka_error_set_retriable (rd_kafka_error_t *error);
-void rd_kafka_error_set_txn_abortable (rd_kafka_error_t *error);
+void rd_kafka_error_set_txn_requires_abort (rd_kafka_error_t *error);
 
 
 rd_kafka_error_t *rd_kafka_error_new_fatal (rd_kafka_resp_err_t code,
                                             const char *fmt, ...);
 rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
                                                 const char *fmt, ...);
-rd_kafka_error_t *rd_kafka_error_new_txn_abortable (rd_kafka_resp_err_t code,
+rd_kafka_error_t *rd_kafka_error_new_txn_requires_abort (rd_kafka_resp_err_t code,
                                                     const char *fmt, ...);
 
 

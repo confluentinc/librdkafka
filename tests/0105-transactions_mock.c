@@ -211,7 +211,7 @@ static void do_test_txn_recoverable_errors (void) {
  * @brief Test abortable errors using mock broker error injections
  *        and code coverage checks.
  */
-static void do_test_txn_abortable_errors (void) {
+static void do_test_txn_requires_abort_errors (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_error_t *error;
@@ -261,7 +261,7 @@ static void do_test_txn_abortable_errors (void) {
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
         TEST_ASSERT(error, "expected error");
-        TEST_ASSERT(rd_kafka_error_is_txn_abortable(error),
+        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
                     "expected abortable error, not %s",
                     rd_kafka_error_string(error));
         TEST_SAY("Error %s: %s\n",
@@ -584,7 +584,7 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         do_test_txn_recoverable_errors();
 
-        do_test_txn_abortable_errors();
+        do_test_txn_requires_abort_errors();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);

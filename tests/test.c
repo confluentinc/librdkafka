@@ -119,6 +119,7 @@ _TEST_DECL(0012_produce_consume);
 _TEST_DECL(0013_null_msgs);
 _TEST_DECL(0014_reconsume_191);
 _TEST_DECL(0015_offsets_seek);
+_TEST_DECL(0016_client_swname);
 _TEST_DECL(0017_compression);
 _TEST_DECL(0018_cgrp_term);
 _TEST_DECL(0019_list_groups);
@@ -210,7 +211,6 @@ _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
-_TEST_DECL(0108_client_swname);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -264,6 +264,7 @@ struct test tests[] = {
         _TEST(0013_null_msgs, 0),
         _TEST(0014_reconsume_191, 0),
         _TEST(0015_offsets_seek, 0),
+        _TEST(0016_client_swname, 0),
         _TEST(0017_compression, 0),
         _TEST(0018_cgrp_term, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0019_list_groups, 0, TEST_BRKVER(0,9,0,0)),
@@ -389,7 +390,6 @@ struct test tests[] = {
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
-        _TEST(0108_client_swname, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

@@ -15,6 +15,7 @@ set(
     0013-null-msgs.c
     0014-reconsume-191.c
     0015-offset_seeks.c
+    0016-client_swname.c
     0017-compression.c
     0018-cgrp_term.c
     0019-list_groups.c
@@ -98,7 +99,6 @@ set(
     0104-fetch_from_follower_mock.c
     0105-transactions_mock.c
     0106-cgrp_sess_timeout.c
-    0108-client_swname.c
     8000-idle.cpp
     test.c
     testcpp.cpp

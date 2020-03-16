@@ -910,7 +910,7 @@ public:
    *           consumer->unassign();
    *
    *         } else {
-   *           std::cerr << "Rebalancing error: <<
+   *           std::cerr << "Rebalancing error: " <<
    *                        RdKafka::err2str(err) << std::endl;
    *           consumer->unassign();
    *         }

@@ -311,7 +311,7 @@ static void commit_transaction_and_start_new (struct state *state) {
         rd_kafka_consumer_group_metadata_destroy(cgmd);
         rd_kafka_topic_partition_list_destroy(offset);
         if (error) {
-                if (rd_kafka_error_is_txn_abortable(error)) {
+                if (rd_kafka_error_txn_requires_abort(error)) {
                         fprintf(stderr,
                                 "WARNING: Failed to send offsets to "
                                 "transaction: %s: %s: aborting transaction\n",
@@ -329,7 +329,7 @@ static void commit_transaction_and_start_new (struct state *state) {
         /* Commit the transaction */
         error = rd_kafka_commit_transaction(state->producer, -1);
         if (error) {
-                if (rd_kafka_error_is_txn_abortable(error)) {
+                if (rd_kafka_error_txn_requires_abort(error)) {
                         fprintf(stderr,
                                 "WARNING: Failed to commit transaction: "
                                 "%s: %s: aborting transaction\n",

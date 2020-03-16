@@ -734,7 +734,7 @@ to care about these different types of errors:
    must call `rd_kafka_abort_transaction()`, rewind its input to the
    point before the current transaction started, and attempt a new transaction
    by calling `rd_kafka_begin_transaction()`, etc.
-   Use `rd_kafka_error_is_txn_abortable()` to distinguish this case.
+   Use `rd_kafka_error_txn_requires_abort()` to distinguish this case.
  * Fatal errors - the application must cease operations and destroy the
    producer instance.
    Use `rd_kafka_error_is_fatal()` to distinguish this case.

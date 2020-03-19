@@ -395,7 +395,7 @@ function mkl_dep_install_pkg {
         osx-*)
             method=brew
             pkgs=$(mkl_meta_get $name brew)
-            cmd="brew install $pkgs"
+            cmd="brew install -v $pkgs"
             ;;
 
         *)
@@ -410,7 +410,7 @@ function mkl_dep_install_pkg {
     fi
 
     mkl_check_begin --verb "installing dependencies ($cmd)" $iname "" no-cache "$name"
-    $cmd >>$MKL_OUTDBG 2>&1
+    $cmd #>>$MKL_OUTDBG 2>&1
     retcode=$?
 
     if [[ $retcode -eq 0 ]]; then

@@ -18,6 +18,11 @@ from collections import defaultdict
 import boto3
 from zfile import zfile
 
+if sys.version_info[0] < 3:
+    from urllib import unquote
+else:
+    from urllib.parse import unquote
+
 
 # Rename token values
 rename_vals = {'plat': {'windows': 'win'},
@@ -452,7 +457,7 @@ class NugetPackage (Package):
             print('Verifying %s:' % path)
 
             # Zipfiles may url-encode filenames, unquote them before matching.
-            pkgd = [urllib.unquote(x) for x in zf.getnames()]
+            pkgd = [unquote(x) for x in zf.getnames()]
             missing = [x for x in expect if x not in pkgd]
 
         if len(missing) > 0:
@@ -571,7 +576,7 @@ class StaticPackage (Package):
             print('Verifying %s:' % path)
 
             # Zipfiles may url-encode filenames, unquote them before matching.
-            pkgd = [urllib.unquote(x) for x in zf.getnames()]
+            pkgd = [unquote(x) for x in zf.getnames()]
             missing = [x for x in expect if x not in pkgd]
 
         if len(missing) > 0:

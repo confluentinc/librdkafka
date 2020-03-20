@@ -395,7 +395,7 @@ function mkl_dep_install_pkg {
         osx-*)
             method=brew
             pkgs=$(mkl_meta_get $name brew)
-            cmd="brew install -v $pkgs"
+            cmd="brew install $pkgs"
             ;;
 
         *)

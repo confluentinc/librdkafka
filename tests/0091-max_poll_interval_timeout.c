@@ -113,20 +113,18 @@ static void rebalance_cb (rd_kafka_t *rk,
 
 
 #define _CONSUMER_CNT 2
-int main_0091_max_poll_interval_timeout (int argc, char **argv) {
-        const char *topic = test_mk_topic_name("0091_max_poll_interval_tmout",
-                                               1);
+static void do_test_with_subscribe (const char *topic) {
         int64_t testid;
         const int msgcnt = 3;
         struct _consumer c[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_kafka_conf_t *conf;
 
+        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms with subscribe() ]\n");
+
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL,
                        10 + (int)(processing_time/1000000) * msgcnt);
-
-        test_create_topic(NULL, topic, 2, 1);
 
         /* Produce extra messages since we can't fully rely on the
          * random partitioner to provide exact distribution. */
@@ -193,6 +191,113 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
 
         rd_kafka_destroy(c[0].rk);
         rd_kafka_destroy(c[1].rk);
+
+        TEST_SAY(_C_GRN
+                 "[ Test max.poll.interval.ms with subscribe(): PASS ]\n");
+}
+
+
+/**
+ * @brief Verify that max.poll.interval.ms does NOT kick in
+ *        when just using assign() and not subscribe().
+ */
+static void do_test_with_assign (const char *topic) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *rkm;
+
+        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms with assign() ]\n");
+
+        test_conf_init(&conf, NULL, 60);
+
+        test_create_topic(NULL, topic, 2, 1);
+
+        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
+
+        rk = test_create_consumer(topic, NULL, conf, NULL);
+
+        test_consumer_assign_partition("ASSIGN", rk, topic, 0,
+                                       RD_KAFKA_OFFSET_END);
+
+
+        /* Sleep for longer than max.poll.interval.ms */
+        rd_sleep(10);
+
+        /* Make sure no error was raised */
+        while ((rkm = rd_kafka_consumer_poll(rk, 0))) {
+                TEST_ASSERT(!rkm->err,
+                            "Unexpected consumer error: %s: %s",
+                            rd_kafka_err2name(rkm->err),
+                            rd_kafka_message_errstr(rkm));
+
+                rd_kafka_message_destroy(rkm);
+        }
+
+
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN
+                 "[ Test max.poll.interval.ms with assign(): PASS ]\n");
+}
+
+
+/**
+ * @brief Verify that max.poll.interval.ms kicks in even if
+ *        the application hasn't called poll once.
+ */
+static void do_test_no_poll (const char *topic) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *rkm;
+        rd_bool_t raised = rd_false;
+
+        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms without calling poll ]\n");
+
+        test_conf_init(&conf, NULL, 60);
+
+        test_create_topic(NULL, topic, 2, 1);
+
+        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/);
+
+        rk = test_create_consumer(topic, NULL, conf, NULL);
+
+        test_consumer_subscribe(rk, topic);
+
+        /* Sleep for longer than max.poll.interval.ms */
+        rd_sleep(10);
+
+        /* Make sure the error is raised */
+        while ((rkm = rd_kafka_consumer_poll(rk, 0))) {
+                if (rkm->err == RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED)
+                        raised = rd_true;
+
+                rd_kafka_message_destroy(rkm);
+        }
+
+        TEST_ASSERT(raised, "Expected to have seen ERR__MAX_POLL_EXCEEDED");
+
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN
+                 "[ Test max.poll.interval.ms without calling poll: PASS ]\n");
+}
+
+
+int main_0091_max_poll_interval_timeout (int argc, char **argv) {
+        const char *topic = test_mk_topic_name("0091_max_poll_interval_tmout",
+                                               1);
+
+        test_create_topic(NULL, topic, 2, 1);
+
+        do_test_with_subscribe(topic);
+
+        do_test_with_assign(topic);
+
+        do_test_no_poll(topic);
 
         return 0;
 }

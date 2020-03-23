@@ -1884,18 +1884,21 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_STARTED);
 
-                /* Start a timer to enforce `max.poll.interval.ms`.
-                 * Instead of restarting the timer on each ...poll() call,
-                 * which would be costly (once per message), set up an
-                 * intervalled timer that checks a timestamp
-                 * (that is updated on ..poll()).
-                 * The timer interval is 2 hz. */
-
-                rd_kafka_timer_start(&rkcg->rkcg_rk->rk_timers,
-                             &rkcg->rkcg_max_poll_interval_tmr,
-                             500 * 1000ll /* 500ms */,
-                             rd_kafka_cgrp_max_poll_interval_check_tmr_cb,
-                             rkcg);
+                if (rkcg->rkcg_subscription) {
+                        /* If using subscribe(), start a timer to enforce
+                         * `max.poll.interval.ms`.
+                         * Instead of restarting the timer on each ...poll()
+                         * call, which would be costly (once per message),
+                         * set up an intervalled timer that checks a timestamp
+                         * (that is updated on ..poll()).
+                         * The timer interval is 2 hz. */
+                        rd_kafka_timer_start(
+                                &rkcg->rkcg_rk->rk_timers,
+                                &rkcg->rkcg_max_poll_interval_tmr,
+                                500 * 1000ll /* 500ms */,
+                                rd_kafka_cgrp_max_poll_interval_check_tmr_cb,
+                                rkcg);
+                }
 
                 for (i = 0 ; i < assignment->cnt ; i++) {
                         rd_kafka_topic_partition_t *rktpar =

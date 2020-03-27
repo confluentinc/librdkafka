@@ -2523,6 +2523,10 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
 void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
 			  void (*log_cb) (const rd_kafka_t *rk, int level,
                                           const char *fac, const char *buf)) {
+#if !WITH_SYSLOG
+        if (log_cb == rd_kafka_log_syslog)
+                rd_assert(!*"syslog support not enabled in this build");
+#endif
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "log_cb", log_cb);
 }
 

@@ -79,9 +79,9 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.0.2r
+        local ver=1.0.2u
 
-        local conf_args="--openssldir=/usr/lib/ssl zlib shared"
+        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
         if [[ $ver == 1.0.* ]]; then
             extra_conf_args="${extra_conf_args} no-krb5"
         fi
@@ -93,14 +93,11 @@ if [[ $MKL_DISTRO != osx ]]; then
                 tar xzf - --strip-components 1
         fi
 
-        if [[ ! -f config.log ]]; then
-            echo "### Configuring"
-            ./config --prefix="/usr" $conf_args || return $?
-            make -j clean
-        fi
+        echo "### Configuring"
+        ./config --prefix="/usr" $conf_args || return $?
 
         echo "### Building"
-        make -j
+        make
 
         echo "### Installing to $destdir"
         make INSTALL_PREFIX="$destdir" install_sw

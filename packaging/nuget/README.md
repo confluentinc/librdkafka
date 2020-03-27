@@ -51,3 +51,12 @@ The finalized nuget package maybe uploaded manually to NuGet.org
     $ ./release.py --upload "$(cat your-nuget-api.key)" v0.11.0
 
 
+
+## Other uses
+
+### Create static library bundles
+
+To create a bundle (tarball) of librdkafka self-contained static library
+builds, use the following command:
+
+    $ ./release.py --class StaticPackage v1.1.0

@@ -4,7 +4,7 @@
 mkl_meta_set "description" "name"      "librdkafka"
 mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
 mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
-mkl_meta_set "description" "copyright" "Copyright (c) 2012-2015 Magnus Edenhill"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2019 Magnus Edenhill"
 
 # Enable generation of pkg-config .pc file
 mkl_mkvar_set "" GEN_PKG_CONFIG y
@@ -16,6 +16,7 @@ mkl_require pic
 mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
+mkl_require zlib
 mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
@@ -41,6 +42,8 @@ mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for
 # This option allows disabling libc-based C11 threads and instead
 # use the builtin tinycthread alternative.
 mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "y"
+
+mkl_toggle_option "Feature" ENABLE_SYSLOG "--enable-syslog" "Enable logging to syslog" "y"
 
 
 function checks {
@@ -93,11 +96,7 @@ void foo (void) {
     fi
 
     # optional libs
-    mkl_meta_set "zlib" "deb" "zlib1g-dev"
-    mkl_meta_set "zlib" "apk" "zlib-dev"
-    mkl_meta_set "zlib" "static" "libz.a"
-    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
-                  "#include <zlib.h>"
+    mkl_check "zlib" disable
     mkl_check "libssl" disable
     mkl_check "libsasl2" disable
     mkl_check "libzstd" disable
@@ -107,11 +106,20 @@ void foo (void) {
         mkl_allvar_set WITH_HDRHISTOGRAM WITH_HDRHISTOGRAM y
     fi
 
-    # Use builtin lz4 if linking statically or if --disable-lz4 is used.
+    # Use builtin lz4 if linking statically or if --disable-lz4-ext is used.
     if [[ $MKL_SOURCE_DEPS_ONLY != y ]] && [[ $WITH_STATIC_LINKING != y ]] && [[ $ENABLE_LZ4_EXT == y ]]; then
         mkl_meta_set "liblz4" "static" "liblz4.a"
         mkl_lib_check "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
                       "#include <lz4frame.h>"
+    fi
+
+    if [[ $ENABLE_SYSLOG == y ]]; then
+        mkl_compile_check "syslog" "WITH_SYSLOG" disable CC "" \
+                          '
+#include <syslog.h>
+void foo (void) {
+    syslog(LOG_INFO, "test");
+}'
     fi
 
     # rapidjson (>=1.1.0) is used in tests to verify statistics data, not used

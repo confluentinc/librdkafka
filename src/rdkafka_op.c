@@ -332,6 +332,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_MOCK:
                 RD_IF_FREE(rko->rko_u.mock.name, rd_free);
+                RD_IF_FREE(rko->rko_u.mock.str, rd_free);
                 break;
 
         case RD_KAFKA_OP_BROKER_MONITOR:

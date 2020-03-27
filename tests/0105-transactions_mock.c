@@ -267,6 +267,7 @@ static void do_test_txn_requires_abort_errors (void) {
         TEST_SAY("Error %s: %s\n",
                  rd_kafka_error_name(error),
                  rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
 

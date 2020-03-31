@@ -94,6 +94,6 @@ if __name__ == '__main__':
 
     if args.upload is not None:
         print('Uploading %s to NuGet' % pkgfile)
-        r = os.system("./push-to-nuget.sh '{}' {}".format(args.upload, pkgfile))
+        r = os.system("./push-to-nuget.sh '%s' %s" % (args.upload, pkgfile))
         assert int(r) == 0, "NuGet upload failed with exit code {}, see previous errors".format(r)
-        print('{} successfully uploaded to NuGet' % pkgfile)
+        print('%s successfully uploaded to NuGet' % pkgfile)

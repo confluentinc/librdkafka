@@ -4,7 +4,8 @@ CHECK_FILES+=	CONFIGURATION.md \
 		examples/rdkafka_example examples/rdkafka_performance \
 		examples/rdkafka_example_cpp
 
-DOC_FILES+=	LICENSES.txt INTRODUCTION.md README.md CONFIGURATION.md STATISTICS.md
+DOC_FILES+=	LICENSE LICENSES.txt INTRODUCTION.md README.md \
+		CONFIGURATION.md STATISTICS.md
 
 PKGNAME?=	librdkafka
 VERSION?=	$(shell python packaging/get_version.py src/rdkafka.h)

@@ -74,6 +74,7 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka++.so.%{soname}
 %defattr(-,root,root)
 %doc %{_docdir}/librdkafka/README.md
+%doc %{_docdir}/librdkafka/LICENSE
 %doc %{_docdir}/librdkafka/CONFIGURATION.md
 %doc %{_docdir}/librdkafka/INTRODUCTION.md
 %doc %{_docdir}/librdkafka/STATISTICS.md

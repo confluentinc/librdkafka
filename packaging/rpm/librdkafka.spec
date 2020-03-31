@@ -90,7 +90,6 @@ rm -rf %{buildroot}
 %{_includedir}/librdkafka
 %defattr(444,root,root)
 %{_libdir}/librdkafka.a
-%{_libdir}/librdkafka-static.a
 %{_libdir}/librdkafka.so
 %{_libdir}/librdkafka++.a
 %{_libdir}/librdkafka++.so

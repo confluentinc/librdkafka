@@ -101,6 +101,8 @@ $(LIBNAME).a:	$(OBJS)
 
 ifeq ($(MKL_NO_SELFCONTAINED_STATIC_LIB),y)
 $(LIBNAME)-static.a:
+else ifneq ($(WITH_STATIC_LINKING),y)
+$(LIBNAME)-static.a:
 else
 $(LIBNAME)-static.a: $(LIBNAME).a
 ifneq ($(MKL_STATIC_LIBS),)

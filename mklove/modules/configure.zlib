@@ -38,7 +38,7 @@ function install_source {
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
-        curl -sL https://zlib.net/zlib-${ver}.tar.gz | \
+        curl -fL https://zlib.net/zlib-${ver}.tar.gz | \
             tar xzf - --strip-components 1
     fi
 

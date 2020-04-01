@@ -43,7 +43,7 @@ function install_source {
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
-        curl -sL https://github.com/facebook/zstd/releases/download/v${ver}/zstd-${ver}.tar.gz | \
+        curl -fL https://github.com/facebook/zstd/releases/download/v${ver}/zstd-${ver}.tar.gz | \
             tar xzf - --strip-components 1
     fi
 

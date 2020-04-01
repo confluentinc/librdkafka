@@ -80,17 +80,17 @@ if [[ $MKL_DISTRO != osx ]]; then
         local name=$1
         local destdir=$2
         local ver=1.0.2u
+        local url=https://www.openssl.org/source/old/1.0.2/openssl-1.0.2u.tar.gz
 
         local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
         if [[ $ver == 1.0.* ]]; then
             extra_conf_args="${extra_conf_args} no-krb5"
         fi
 
-        echo "### Installing $name $ver from source to $destdir"
+        echo "### Installing $name $ver from source ($url) to $destdir"
         if [[ ! -f config ]]; then
             echo "### Downloading"
-            curl -sL https://www.openssl.org/source/openssl-${ver}.tar.gz | \
-                tar xzf - --strip-components 1
+            curl -fL $url | tar xzf - --strip-components 1
         fi
 
         echo "### Configuring"

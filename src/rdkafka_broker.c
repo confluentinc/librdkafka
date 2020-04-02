@@ -4794,8 +4794,11 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
         /* rkb_persistconn.internal is the per broker_serve()
          * automatic counter that keeps track of anything
          * in the producer/consumer logic needs this broker connection
-         * to be up. */
-        rkb->rkb_persistconn.internal = 0;
+         * to be up.
+         * The value is reset here on each serve(). If there are queued
+         * requests we know right away that a connection is needed. */
+        rkb->rkb_persistconn.internal =
+                rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0;
 
         if (rkb->rkb_source == RD_KAFKA_INTERNAL)
                 rd_kafka_broker_internal_serve(rkb, abs_timeout);

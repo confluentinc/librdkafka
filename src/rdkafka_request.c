@@ -945,8 +945,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 
 	/* If all partitions failed use error code
 	 * from last partition as the global error. */
-	if (offsets && errcnt == partcnt)
+	if (offsets && errcnt == partcnt) {
 		err = last_ErrorCode;
+                if (err)
+                        goto err;
+        }
+
 	goto done;
 
  err_parse:

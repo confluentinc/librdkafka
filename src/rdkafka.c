@@ -66,6 +66,7 @@
 
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
+static once_flag rd_kafka_global_srand_once = ONCE_FLAG_INIT;
 
 /**
  * @brief Global counter+lock for all active librdkafka instances
@@ -152,6 +153,19 @@ static void rd_kafka_global_init0 (void) {
 void rd_kafka_global_init (void) {
         call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
 }
+
+
+/**
+ * @brief Seed the PRNG with current_time.milliseconds
+ */
+static void rd_kafka_global_srand (void) {
+	struct timeval tv;
+
+	rd_gettimeofday(&tv, NULL);
+
+        srand((unsigned int)(tv.tv_usec / 1000));
+}
+
 
 /**
  * @returns the current number of active librdkafka instances
@@ -2022,6 +2036,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                 * rk_conf just above. Those fields are
                                 * freed from rd_kafka_destroy_internal()
                                 * as the rk itself is destroyed. */
+
+        /* Seed PRNG */
+        if (rk->rk_conf.enable_random_seed)
+                call_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
 
         /* Call on_new() interceptors */
         rd_kafka_interceptors_on_new(rk, &rk->rk_conf);

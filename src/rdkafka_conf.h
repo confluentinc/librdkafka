@@ -156,7 +156,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*26)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*27)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -426,6 +426,9 @@ struct rd_kafka_conf_s {
         int    log_queue;
         int    log_thread_name;
         int    log_connection_close;
+
+        /* PRNG seeding */
+        int    enable_random_seed;
 
         /* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,

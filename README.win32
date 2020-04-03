@@ -6,7 +6,7 @@ Requirements:
    but probably requires the NuGet VS extension.
  * OpenSSL-win32 must be installed in C:\OpenSSL-win32 and C:\OpenSSL-Win64
    depending on your architecture.
-   Download and install the latest v1.0.2 non-light package from:
+   Download and install the latest v1.1.1 non-light package from:
    https://slproweb.com/products/Win32OpenSSL.html
    (This would be using NuGet too but the current
     OpenSSL packages are outdated and with broken

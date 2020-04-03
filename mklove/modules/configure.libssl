@@ -82,8 +82,8 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.0.2u
-        local url=https://www.openssl.org/source/old/1.0.2/openssl-1.0.2u.tar.gz
+        local ver=1.1.1f
+        local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
         local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
         if [[ $ver == 1.0.* ]]; then

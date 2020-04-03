@@ -520,6 +520,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Print internal thread name in log messages "
 	  "(useful for debugging librdkafka internals)",
 	  0, 1, 1 },
+        { _RK_GLOBAL, "enable.random.seed", _RK_C_BOOL,
+          _RK(enable_random_seed),
+          "If enabled librdkafka will initialize the POSIX PRNG "
+          "with srand(current_time.milliseconds) on the first invocation of "
+          "rd_kafka_new(). If disabled the application must call srand() "
+          "prior to calling rd_kafka_new().",
+          0, 1, 1 },
 	{ _RK_GLOBAL, "log.connection.close", _RK_C_BOOL,
 	  _RK(log_connection_close),
 	  "Log broker disconnects. "

@@ -4,15 +4,17 @@ pull_requests:
 image: Visual Studio 2013
 configuration: Release
 environment:
+  global:
+    OPENSSL_VERSION: 1.1.1f
   matrix:
   - platform: x64
   - platform: win32
 install:
-- ps: "& .\\win32\\install-openssl.ps1"
+- ps: "& .\\win32\\install-openssl.ps1 $env:OPENSSL_VERSION"
 - ps: "& .\\win32\\install-coapp.ps1"
 cache:
-- c:\OpenSSL-Win32
-- c:\OpenSSL-Win64
+- c:\OpenSSL-Win32-%OPENSSL_VERSION%
+- c:\OpenSSL-Win64-%OPENSSL_VERSION%
 nuget:
   account_feed: true
   project_feed: true

@@ -97,13 +97,21 @@ if [[ $MKL_DISTRO != osx ]]; then
         fi
 
         echo "### Configuring"
-        ./config --prefix="/usr" $conf_args || return $?
+        if [[ $ver == 1.0.* ]]; then
+            ./config --prefix="/usr" $conf_args || return $?
+        else
+            ./config --prefix="$destdir/usr" $conf_args || return $?
+        fi
 
         echo "### Building"
         make
 
         echo "### Installing to $destdir"
-        make INSTALL_PREFIX="$destdir" install_sw
+        if [[ $ver == 1.0.* ]]; then
+            make INSTALL_PREFIX="$destdir" install_sw
+        else
+            make install_sw
+        fi
 
         return $?
     }

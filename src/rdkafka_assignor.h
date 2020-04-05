@@ -63,13 +63,10 @@ int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b);
 
 
 typedef struct rd_kafka_assignor_s {
-        rd_kafkap_str_t   *rkas_protocol_type;
         rd_kafkap_str_t   *rkas_protocol_name;
 
         const void        *rkas_userdata;
         size_t             rkas_userdata_size;
-
-	int                rkas_enabled;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,

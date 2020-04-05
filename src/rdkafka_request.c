@@ -1399,8 +1399,6 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 
         RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
                 rd_kafkap_bytes_t *member_metadata;
-		if (!rkas->rkas_enabled)
-			continue;
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(rkas, topics);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);

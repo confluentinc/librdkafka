@@ -1334,7 +1334,7 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_JoinGroupRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id,
                                   rkcg->rkcg_member_id,
                                   rkcg->rkcg_group_instance_id,
-                                  rkcg->rkcg_rk->rk_conf.group_protocol_type,
+                                  "consumer",
                                   rkcg->rkcg_subscribed_topics,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                   rd_kafka_cgrp_handle_JoinGroup, rkcg);

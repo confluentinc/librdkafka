@@ -293,8 +293,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
         rd_list_t eligible_topics;
         int j;
 
-	if (!(rkas = rd_kafka_assignor_find(rkcg->rkcg_rk, protocol_name)) ||
-	    !rkas->rkas_enabled) {
+	if (!(rkas = rd_kafka_assignor_find(rkcg->rkcg_rk, protocol_name))) {
 		rd_snprintf(errstr, errstr_size,
 			    "Unsupported assignor \"%s\"", protocol_name);
 		return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
@@ -415,7 +414,6 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol) {
  * Destroys an assignor (but does not unlink).
  */
 static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
-        rd_kafkap_str_destroy(rkas->rkas_protocol_type);
         rd_kafkap_str_destroy(rkas->rkas_protocol_name);
         rd_free(rkas);
 }
@@ -427,8 +425,6 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
  */
 static rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
-		       rd_kafka_assignor_t **rkasp,
-                       const char *protocol_type,
                        const char *protocol_name,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
@@ -440,35 +436,25 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                                rd_kafka_assignor_topic_t **eligible_topics,
                                size_t eligible_topic_cnt,
                                char *errstr, size_t errstr_size, void *opaque),
-                       void *opaque) {
+                       void *opaque, char *errstr, size_t errstr_size) {
         rd_kafka_assignor_t *rkas;
 
-	if (rkasp)
-		*rkasp = NULL;
-
-        if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
-                                  protocol_type))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
-
-        /* Dont overwrite application assignors */
+        /* Dont allow assignors to be specified twice */
         if ((rkas = rd_kafka_assignor_find(rk, protocol_name))) {
-		if (rkasp)
-			*rkasp = rkas;
+                rd_snprintf(errstr, errstr_size,
+			"Duplicate partition.assignment.strategy:"
+			" %s", protocol_name);
 		return RD_KAFKA_RESP_ERR__CONFLICT;
-	}
+        }
 
         rkas = rd_calloc(1, sizeof(*rkas));
 
         rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
-        rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
         rkas->rkas_assign_cb        = assign_cb;
         rkas->rkas_get_metadata_cb  = rd_kafka_assignor_get_metadata;
         rkas->rkas_opaque = opaque;
 
         rd_list_add(&rk->rk_conf.partition_assignors, rkas);
-
-	if (rkasp)
-		*rkasp = rkas;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -491,7 +477,9 @@ static void rtrim (char *s) {
 /**
  * Initialize assignor list based on configuration.
  */
-int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+rd_kafka_resp_err_t
+rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+        rd_kafka_resp_err_t err;
 	char *wanted;
 	char *s;
 
@@ -502,7 +490,6 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 	s = wanted;
 	while (*s) {
-		rd_kafka_assignor_t *rkas = NULL;
 		char *t;
 
 		/* Left trim */
@@ -519,35 +506,33 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Right trim */
 		rtrim(s);
 
-		/* Match builtin consumer assignors */
-		if (!strcmp(s, "range"))
-			rd_kafka_assignor_add(
-				rk, &rkas, "consumer", "range",
+		/* Match builtin assignors */
+		if (!strcmp(s, "range")) {
+			err = rd_kafka_assignor_add(rk, "range",
 				rd_kafka_range_assignor_assign_cb,
-				NULL);
-		else if (!strcmp(s, "roundrobin"))
-			rd_kafka_assignor_add(
-				rk, &rkas, "consumer", "roundrobin",
+				NULL, errstr, errstr_size);
+                }
+		else if (!strcmp(s, "roundrobin")) {
+			err = rd_kafka_assignor_add(rk, "roundrobin",
 				rd_kafka_roundrobin_assignor_assign_cb,
-				NULL);
+				NULL, errstr, errstr_size);
+                }
 		else {
 			rd_snprintf(errstr, errstr_size,
 				    "Unsupported partition.assignment.strategy:"
 				    " %s", s);
-			return -1;
+			return RD_KAFKA_RESP_ERR__INVALID_ARG;
 		}
 
-		if (rkas) {
-			if (!rkas->rkas_enabled) {
-				rkas->rkas_enabled = 1;
-				rk->rk_conf.enabled_assignor_cnt++;
-			}
-		}
+                if (!err)
+			return err;
+
+		rk->rk_conf.enabled_assignor_cnt++;
 
 		s = t;
 	}
 
-	return 0;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

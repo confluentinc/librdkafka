@@ -924,7 +924,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(group_heartbeat_intvl_ms),
           "Group session keepalive heartbeat interval.",
           1, 3600*1000, 3*1000 },
-        { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
+        { _RK_GLOBAL|_RK_CGRP|_RK_DEPRECATED, "group.protocol.type", _RK_C_KSTR,
           _RK(group_protocol_type),
           "Group protocol type",
           .sdef = "consumer" },

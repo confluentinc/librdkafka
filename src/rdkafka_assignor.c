@@ -486,7 +486,6 @@ static void rtrim (char *s) {
  */
 rd_kafka_resp_err_t
 rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
-        rd_kafka_resp_err_t err;
 	char *wanted;
 	char *s;
 
@@ -497,6 +496,7 @@ rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 	s = wanted;
 	while (*s) {
+                rd_kafka_resp_err_t err;
 		char *t;
 
 		/* Left trim */
@@ -513,6 +513,7 @@ rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Right trim */
 		rtrim(s);
 
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
 		if (!strcmp(s, "range"))
 			err = rd_kafka_assignor_add(rk,
                                 "consumer", "range",
@@ -530,7 +531,7 @@ rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 			return RD_KAFKA_RESP_ERR__INVALID_ARG;
 		}
 
-                if (!err)
+                if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
 			return err;
 
 		rk->rk_conf.enabled_assignor_cnt++;

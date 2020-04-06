@@ -57,6 +57,9 @@ extern int test_quick;
 #define TEST_BRKVER_X(V,I) \
         (((V) >> (24-((I)*8))) & 0xff)
 
+/** @brief Topic Admin API supported by this broker version and later */
+#define TEST_BRKVER_TOPIC_ADMINAPI TEST_BRKVER(0,10,2,0)
+
 extern int test_broker_version;
 extern int test_on_ci;
 

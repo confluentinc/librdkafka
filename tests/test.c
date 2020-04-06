@@ -211,6 +211,7 @@ _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
+_TEST_DECL(0107_topic_recreate);
 _TEST_DECL(0110_batch_size);
 
 /* Manual tests */
@@ -391,6 +392,8 @@ struct test tests[] = {
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
+        _TEST(0107_topic_recreate, 0, TEST_BRKVER_TOPIC_ADMINAPI,
+              .scenario = "noautocreate"),
         _TEST(0110_batch_size, 0),
 
         /* Manual tests */
@@ -518,26 +521,31 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
         if (test_curr->is_fatal_cb && !test_curr->is_fatal_cb(rk, err, reason)) {
-                TEST_SAY(_C_YEL "rdkafka error (non-testfatal): %s: %s\n",
-                         rd_kafka_err2str(err), reason);
+                TEST_SAY(_C_YEL "%s rdkafka error (non-testfatal): %s: %s\n",
+                         rd_kafka_name(rk), rd_kafka_err2str(err), reason);
         } else {
                 if (err == RD_KAFKA_RESP_ERR__FATAL) {
                         char errstr[512];
-                        TEST_SAY(_C_RED "Fatal error: %s\n", reason);
+                        TEST_SAY(_C_RED "%s Fatal error: %s\n",
+                                 rd_kafka_name(rk), reason);
 
                         err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
 
                         if (test_curr->is_fatal_cb &&
                             !test_curr->is_fatal_cb(rk,  err, reason))
-                                TEST_SAY(_C_YEL "rdkafka ignored FATAL error: "
+                                TEST_SAY(_C_YEL
+                                         "%s rdkafka ignored FATAL error: "
                                          "%s: %s\n",
+                                         rd_kafka_name(rk),
                                          rd_kafka_err2str(err), errstr);
                         else
-                                TEST_FAIL("rdkafka FATAL error: %s: %s",
+                                TEST_FAIL("%s rdkafka FATAL error: %s: %s",
+                                          rd_kafka_name(rk),
                                           rd_kafka_err2str(err), errstr);
 
                 } else {
-                        TEST_FAIL("rdkafka error: %s: %s",
+                        TEST_FAIL("%s rdkafka error: %s: %s",
+                                  rd_kafka_name(rk),
                                   rd_kafka_err2str(err), reason);
                 }
         }
@@ -1757,14 +1765,19 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                 [RD_KAFKA_MSG_STATUS_PERSISTED] = "Persisted"
         };
 
-        TEST_SAYL(4, "Delivery report: %s (%s)\n",
+        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"]\n",
                   rd_kafka_err2str(rkmessage->err),
-                  status_names[rd_kafka_message_status(rkmessage)]);
+                  status_names[rd_kafka_message_status(rkmessage)],
+                  rd_kafka_topic_name(rkmessage->rkt),
+                  rkmessage->partition);
 
         if (!test_curr->produce_sync) {
                 if (!test_curr->ignore_dr_err &&
                     rkmessage->err != test_curr->exp_dr_err)
-                        TEST_FAIL("Message delivery failed: expected %s, got %s",
+                        TEST_FAIL("Message delivery (to %s [%"PRId32"]) "
+                                  "failed: expected %s, got %s",
+                                  rd_kafka_topic_name(rkmessage->rkt),
+                                  rkmessage->partition,
                                   rd_kafka_err2str(test_curr->exp_dr_err),
                                   rd_kafka_err2str(rkmessage->err));
 

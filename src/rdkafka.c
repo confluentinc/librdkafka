@@ -2160,18 +2160,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 }
         }
 
-        /* The only supported group protocol type is "consumer" */
+        /* Currently, the only supported group protocol type is "consumer" */
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
-                                  "consumer")) {
+                                  "consumer") != 0) {
                 rd_snprintf(errstr, errstr_size,
-                        "Unsupported group protocol type: %s",
-                        rk->rk_conf.group_protocol_type);
+                        "Unsupported group protocol type: %.*s",
+                        RD_KAFKAP_STR_PR((rk->rk_conf.group_protocol_type)));
                 ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;
         }
 
-        if (rd_kafka_assignors_init(rk, errstr, errstr_size)) {
+        if (rd_kafka_assignors_init(rk, errstr, errstr_size) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR) {
                 ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;

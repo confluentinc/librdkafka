@@ -339,7 +339,7 @@ struct rd_kafka_conf_s {
         int auto_commit_interval_ms;
         int group_session_timeout_ms;
         int group_heartbeat_intvl_ms;
-        rd_kafkap_str_t *group_protocol_type;     /* depreciated */
+        rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
 	int enabled_assignor_cnt;

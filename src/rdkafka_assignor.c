@@ -414,6 +414,7 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol) {
  * Destroys an assignor (but does not unlink).
  */
 static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
+        rd_kafkap_str_destroy(rkas->rkas_protocol_type);
         rd_kafkap_str_destroy(rkas->rkas_protocol_name);
         rd_free(rkas);
 }
@@ -425,6 +426,7 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
  */
 static rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
+                       const char *protocol_type,
                        const char *protocol_name,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
@@ -439,6 +441,10 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        void *opaque, char *errstr, size_t errstr_size) {
         rd_kafka_assignor_t *rkas;
 
+        if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
+                                  protocol_type))
+                return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
+
         /* Dont allow assignors to be specified twice */
         if ((rkas = rd_kafka_assignor_find(rk, protocol_name))) {
                 rd_snprintf(errstr, errstr_size,
@@ -450,6 +456,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         rkas = rd_calloc(1, sizeof(*rkas));
 
         rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
+        rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
         rkas->rkas_assign_cb        = assign_cb;
         rkas->rkas_get_metadata_cb  = rd_kafka_assignor_get_metadata;
         rkas->rkas_opaque = opaque;
@@ -506,17 +513,16 @@ rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Right trim */
 		rtrim(s);
 
-		/* Match builtin assignors */
-		if (!strcmp(s, "range")) {
-			err = rd_kafka_assignor_add(rk, "range",
+		if (!strcmp(s, "range"))
+			err = rd_kafka_assignor_add(rk,
+                                "consumer", "range",
 				rd_kafka_range_assignor_assign_cb,
 				NULL, errstr, errstr_size);
-                }
-		else if (!strcmp(s, "roundrobin")) {
-			err = rd_kafka_assignor_add(rk, "roundrobin",
+		else if (!strcmp(s, "roundrobin"))
+			err = rd_kafka_assignor_add(rk,
+                                "consumer", "roundrobin",
 				rd_kafka_roundrobin_assignor_assign_cb,
 				NULL, errstr, errstr_size);
-                }
 		else {
 			rd_snprintf(errstr, errstr_size,
 				    "Unsupported partition.assignment.strategy:"

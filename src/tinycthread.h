@@ -181,16 +181,20 @@ int _tthread_timespec_get(struct timespec *ts, int base);
 #endif
 
 /* Function return values */
-#define thrd_error    0 /**< The requested operation failed */
-#define thrd_success  1 /**< The requested operation succeeded */
-#define thrd_timedout 2 /**< The time specified in the call was reached without acquiring the requested resource */
-#define thrd_busy     3 /**< The requested operation failed because a tesource requested by a test and return function is already in use */
-#define thrd_nomem    4 /**< The requested operation failed because it was unable to allocate memory */
+/* Note: The values are unspecified by C11 but match glibc and musl to make
+ * sure they're compatible for the case where librdkafka was built with
+ * tinycthreads but the runtime libc also provides C11 threads.
+ * The *BSD values are notably different. */
+#define thrd_success  0 /**< The requested operation succeeded */
+#define thrd_busy     1 /**< The requested operation failed because a tesource requested by a test and return function is already in use */
+#define thrd_error    2 /**< The requested operation failed */
+#define thrd_nomem    3 /**< The requested operation failed because it was unable to allocate memory */
+#define thrd_timedout 4 /**< The time specified in the call was reached without acquiring the requested resource */
 
 /* Mutex types */
 #define mtx_plain     0
-#define mtx_timed     1
-#define mtx_recursive 2
+#define mtx_recursive 1
+#define mtx_timed     2
 
 /* Mutex */
 #if defined(_TTHREAD_WIN32_)

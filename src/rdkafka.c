@@ -871,7 +871,7 @@ int rd_kafka_set_fatal_error0 (rd_kafka_t *rk, rd_dolock_t do_lock,
 rd_kafka_resp_err_t
 rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                            const char *reason) {
-        if (rd_kafka_set_fatal_error(rk, err, "test_fatal_error: %s", reason))
+        if (!rd_kafka_set_fatal_error(rk, err, "test_fatal_error: %s", reason))
                 return RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS;
         else
                 return RD_KAFKA_RESP_ERR_NO_ERROR;

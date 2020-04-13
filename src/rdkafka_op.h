@@ -347,6 +347,7 @@ struct rd_kafka_op_s {
                         char fac[64];
                         int  level;
                         char *str;
+                        int  ctx;
                 } log;
 
                 struct {

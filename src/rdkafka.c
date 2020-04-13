@@ -227,7 +227,7 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 }
 
 static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
-                              const rd_kafka_t *rk, int level, const char *fac,
+                              const rd_kafka_t *rk, int level, int ctx, const char *fac,
                               const char *buf) {
         if (level > conf->log_level)
                 return;
@@ -242,6 +242,7 @@ static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
                 rko->rko_u.log.level = level;
                 rd_strlcpy(rko->rko_u.log.fac, fac, sizeof(rko->rko_u.log.fac));
                 rko->rko_u.log.str = rd_strdup(buf);
+                rko->rko_u.log.ctx = ctx;
                 rd_kafka_q_enq(rk->rk_logq, rko);
 
         } else if (conf->log_cb) {
@@ -256,7 +257,7 @@ static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
  */
 void rd_kafka_log0 (const rd_kafka_conf_t *conf,
                     const rd_kafka_t *rk,
-                    const char *extra, int level,
+                    const char *extra, int level, int ctx,
                     const char *fac, const char *fmt, ...) {
 	char buf[2048];
 	va_list ap;
@@ -285,7 +286,7 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
 	rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
-        rd_kafka_log_buf(conf, rk, level, fac, buf);
+        rd_kafka_log_buf(conf, rk, level, ctx, fac, buf);
 }
 
 rd_kafka_resp_err_t

@@ -140,6 +140,7 @@ _TEST_DECL(0036_partial_fetch);
 _TEST_DECL(0037_destroy_hang_local);
 _TEST_DECL(0038_performance);
 _TEST_DECL(0039_event_dr);
+_TEST_DECL(0039_event_log);
 _TEST_DECL(0039_event);
 _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
@@ -292,6 +293,7 @@ struct test tests[] = {
               /* Produces and consumes a lot of messages */
               _THRES(.ucpu = 150.0, .scpu = 10)),
 	_TEST(0039_event_dr, 0),
+        _TEST(0039_event_log, TEST_F_LOCAL),
         _TEST(0039_event, TEST_F_LOCAL),
 	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0041_fetch_max_bytes, 0,

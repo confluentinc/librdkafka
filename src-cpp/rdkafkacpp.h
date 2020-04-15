@@ -2383,6 +2383,16 @@ public:
    * Regex pattern matching automatically performed for topics prefixed
    * with \c \"^\" (e.g. \c \"^myPfx[0-9]_.*\"
    *
+   * @remark A consumer error will be raised for each unavailable topic in the
+   *  \p topics. The error will be ERR_UNKNOWN_TOPIC_OR_PART
+   *  for non-existent topics, and
+   *  ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+   *  The consumer error will be raised through consume() (et.al.)
+   *  with the \c RdKafka::Message::err() returning one of the
+   *  error codes mentioned above.
+   *  The subscribe function itself is asynchronous and will not return
+   *  an error on unavailable topics.
+   *
    * @returns an error if the provided list of topics is invalid.
    */
   virtual ErrorCode subscribe (const std::vector<std::string> &topics) = 0;

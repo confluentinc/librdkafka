@@ -256,6 +256,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                                 rkb->rkb_name, rkb_namelen);
         rd_kafka_broker_unlock(rkb);
 
+        if (ApiVersion >= 3)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         /* Read Brokers */
         rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
         if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
@@ -633,8 +636,12 @@ done:
 
 /**
  * @brief Add all topics in current cached full metadata
- *        to \p tinfos (rd_kafka_topic_info_t *)
  *        that matches the topics in \p match
+ *        to \p tinfos (rd_kafka_topic_info_t *).
+ *
+ * @param errored Any topic or wildcard pattern that did not match
+ *                an available topic will be added to this list with
+ *                the appropriate error set.
  *
  * @returns the number of topics matched and added to \p list
  *
@@ -643,11 +650,12 @@ done:
  */
 size_t
 rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match) {
-        int ti;
+                               const rd_kafka_topic_partition_list_t *match,
+                               rd_kafka_topic_partition_list_t *errored) {
+        int ti, i;
         size_t cnt = 0;
         const struct rd_kafka_metadata *metadata;
-
+        rd_kafka_topic_partition_list_t *unmatched;
 
         rd_kafka_rdlock(rk);
         metadata = rk->rk_full_metadata;
@@ -656,11 +664,18 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
                 return 0;
         }
 
+        /* To keep track of which patterns and topics in `match` that
+         * did not match any topic (or matched an errored topic), we
+         * create a set of all topics to match in `unmatched` and then
+         * remove from this set as a match is found.
+         * Whatever remains in `unmatched` after all matching is performed
+         * are the topics and patterns that did not match a topic. */
+        unmatched = rd_kafka_topic_partition_list_copy(match);
+
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
         for (ti = 0 ; ti < metadata->topic_cnt ; ti++) {
                 const char *topic = metadata->topics[ti].topic;
-                int i;
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -673,17 +688,41 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
                                                   match->elems[i].topic, topic))
                                 continue;
 
-                        if (metadata->topics[ti].err)
+                        /* Remove from unmatched */
+                        rd_kafka_topic_partition_list_del(
+                                unmatched, match->elems[i].topic,
+                                RD_KAFKA_PARTITION_UA);
+
+                        if (metadata->topics[ti].err) {
+                                rd_kafka_topic_partition_list_add(
+                                        errored, topic,
+                                        RD_KAFKA_PARTITION_UA)->err =
+                                        metadata->topics[ti].err;
                                 continue; /* Skip errored topics */
+                        }
 
                         rd_list_add(tinfos,
                                     rd_kafka_topic_info_new(
                                             topic,
                                             metadata->topics[ti].partition_cnt));
+
                         cnt++;
                 }
         }
         rd_kafka_rdunlock(rk);
+
+        /* Any topics/patterns still in unmatched did not match any
+         * existing topics, add them to `errored`. */
+        for (i = 0 ; i < unmatched->cnt ; i++) {
+                rd_kafka_topic_partition_t *elem = &unmatched->elems[i];
+
+                rd_kafka_topic_partition_list_add(errored,
+                                                  elem->topic,
+                                                  RD_KAFKA_PARTITION_UA)->err =
+                        RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        }
+
+        rd_kafka_topic_partition_list_destroy(unmatched);
 
         return cnt;
 }
@@ -694,12 +733,16 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
  * @remark MUST NOT be used with wildcard topics,
  *         see rd_kafka_metadata_topic_match() for that.
  *
+ * @param errored Non-existent and unauthorized topics are added to this
+ *                list with the appropriate error code.
+ *
  * @returns the number of topics matched and added to \p tinfos
  * @locks none
  */
 size_t
 rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match) {
+                                const rd_kafka_topic_partition_list_t *match,
+                                rd_kafka_topic_partition_list_t *errored) {
         int i;
         size_t cnt = 0;
 
@@ -716,7 +759,16 @@ rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
 
                 mtopic = rd_kafka_metadata_cache_topic_get(rk, topic,
                                                            1/*valid*/);
-                if (mtopic && !mtopic->err) {
+
+                if (!mtopic)
+                        rd_kafka_topic_partition_list_add(
+                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
+                                RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+                else if (mtopic->err)
+                        rd_kafka_topic_partition_list_add(
+                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
+                                mtopic->err;
+                else {
                         rd_list_add(tinfos,
                                     rd_kafka_topic_info_new(
                                             topic, mtopic->partition_cnt));

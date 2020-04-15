@@ -48,6 +48,7 @@ static void do_test_empty_topic_consumer () {
   Test::conf_init(&conf, NULL, 0);
 
   Test::conf_set(conf, "enable.partition.eof", "true");
+  Test::conf_set(conf, "allow.auto.create.topics", "true");
 
   /* Create simple consumer */
   RdKafka::Consumer *consumer = RdKafka::Consumer::create(conf, errstr);
@@ -100,6 +101,7 @@ static void do_test_empty_topic_consumer () {
   Test::conf_set(conf, "group.id", topic);
 
   Test::conf_set(conf, "enable.partition.eof", "true");
+  Test::conf_set(conf, "allow.auto.create.topics", "true");
 
   RdKafka::KafkaConsumer *kconsumer = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!kconsumer)

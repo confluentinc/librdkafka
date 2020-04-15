@@ -70,6 +70,7 @@ librdkafka also provides a native C++ interface.
         - [Consumer groups](#consumer-groups)
             - [Static consumer groups](#static-consumer-groups)
         - [Topics](#topics)
+            - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
             - [Topic auto creation](#topic-auto-creation)
         - [Metadata](#metadata)
             - [< 0.9.3](#-093)
@@ -1435,10 +1436,41 @@ To read more about static group membership, see [KIP-345](https://cwiki.apache.o
 
 ### Topics
 
+#### Unknown or unauthorized topics
+
+If a consumer application subscribes to non-existent or unauthorized topics
+a consumer error will be propagated for each unavailable topic with the
+error code set to either `RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC` or a
+broker-specific error code, such as
+`RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED`.
+
+As the topic metadata is refreshed every `topic.metadata.refresh.interval.ms`
+the unavailable topics are re-checked for availability, but the same error
+will not be raised again for the same topic.
+
+
 #### Topic auto creation
 
-Topic auto creation is supported by librdkafka.
-The broker needs to be configured with `auto.create.topics.enable=true`.
+Topic auto creation is supported by librdkafka, if a non-existent topic is
+referenced by the client (by produce to, or consuming from, the topic, etc)
+the broker will automatically create the topic (with default partition counts
+and replication factor) if the broker configuration property
+`auto.create.topics.enable=true` is set.
+
+*Note*: A topic that is undergoing automatic creation may be reported as
+unavailable, with e.g., `RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART`, during the
+time the topic is being created and partition leaders are elected.
+
+While topic auto creation may be useful for producer applications, it is not
+particularily valuable for consumer applications since even if the topic
+to consume is auto created there is nothing writing messages to the topic.
+To avoid consumers automatically creating topics the
+`allow.auto.create.topics` consumer configuration property is set to
+`false` by default, preventing the consumer to trigger automatic topic
+creation on the broker. This requires broker version v0.11.0.0 or later.
+The `allow.auto.create.topics` property may be set to `true` to allow
+auto topic creation, which also requires `auto.create.topics.enable=true` to
+be configured on the broker.
 
 
 
@@ -1719,7 +1751,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-357 - AdminAPI: list ACLs per principal                              | 2.1.0                                     | Not supported                                                                                 |
 | KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0                                     | Not supported                                                                                 |
 | KIP-360 - Improve handling of unknown Idempotent Producer                | 2.4.0                                     | Not supported                                                                                 |
-| KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                                     | Not supported                                                                                 |
+| KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                                     | Supported                                                                                     |
 | KIP-368 - SASL period reauth                                             | 2.2.0                                     | Not supported                                                                                 |
 | KIP-369 - Always roundRobin partitioner                                  | 2.4.0                                     | Not supported                                                                                 |
 | KIP-389 - Consumer group max size                                        | 2.2.0                                     | Supported (error is propagated to application, but the consumer does not raise a fatal error) |

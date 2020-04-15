@@ -1080,6 +1080,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "on-disk corruption to the messages occurred. This check comes "
           "at slightly increased CPU usage.",
           0, 1, 0 },
+        { _RK_GLOBAL|_RK_CONSUMER, "allow.auto.create.topics", _RK_C_BOOL,
+          _RK(allow_auto_create_topics),
+          "Allow automatic topic creation on the broker when subscribing to "
+          "or assigning non-existent topics. "
+          "The broker must also be configured with "
+          "`auto.create.topics.enable=true` for this configuraiton to "
+          "take effect. "
+          "Note: The default value (false) is different from the "
+          "Java consumer (true). "
+          "Requires broker version >= 0.11.0.0, for older broker versions "
+          "only the broker configuration applies.",
+          0, 1, 0 },
         { _RK_GLOBAL, "client.rack", _RK_C_KSTR,
           _RK(client_rack),
           "A rack identifier for this client. This can be any string value "
@@ -1484,8 +1496,8 @@ rd_kafka_conf_prop_find (int scope, const char *name) {
  * @returns rd_true if property has been set/modified, else rd_false.
  *          If \p name is unknown 0 is returned.
  */
-static rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
-                                            const char *name) {
+rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
+                                     const char *name) {
         const struct rd_kafka_property *prop;
 
         if (!(prop = rd_kafka_conf_prop_find(_RK_GLOBAL, name)))

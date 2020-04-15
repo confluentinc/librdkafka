@@ -1773,11 +1773,11 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
                                                           RD_KAFKAP_Metadata,
-                                                          0, 2,
+                                                          0, 4,
                                                           &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
-                                         4 + (50 * topic_cnt));
+                                         4 + (50 * topic_cnt) + 1);
 
         if (!reason)
                 reason = "";
@@ -1854,6 +1854,29 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
 
         }
+
+        if (ApiVersion >= 4) {
+                /* AllowAutoTopicCreation (only used by consumer) */
+                rd_kafka_buf_write_bool(
+                        rkbuf,
+                        rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER ?
+                        rkb->rkb_rk->rk_conf.allow_auto_create_topics :
+                        rd_true /*producer*/);
+        } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER &&
+                   !rkb->rkb_rk->rk_conf.allow_auto_create_topics &&
+                   rd_kafka_conf_is_modified(&rkb->rkb_rk->rk_conf,
+                                             "allow.auto.create.topics") &&
+                   rd_interval(&rkb->rkb_rk->rk_suppress.
+                               allow_auto_create_topics,
+                               30 * 60 * 1000 /* every 30 minutes */, 0) >= 0) {
+                /* Let user know we can't obey allow.auto.create.topics */
+                rd_rkb_log(rkb, LOG_WARNING, "AUTOCREATE",
+                           "allow.auto.create.topics=false not supported "
+                           "by broker: requires broker version >= 0.11.0.0: "
+                           "requested topic(s) may be auto created depending "
+                           "on broker auto.create.topics.enable configuration");
+        }
+
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

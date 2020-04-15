@@ -189,6 +189,7 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
         rd_free(rkcg);
 }
 
@@ -245,6 +246,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
         rd_interval_init(&rkcg->rkcg_timeout_scan_intvl);
+
+        rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
         /* Create a logical group coordinator broker to provide
          * a dedicated connection for group coordination.
@@ -1064,8 +1067,19 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         rd_kafka_cgrp_assignor_handle_Metadata_op);
                 rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
 
-                rd_kafka_MetadataRequest(rkb, &topics,
-                                         "partition assignor", rko);
+                rd_kafka_MetadataRequest(
+                        rkb, &topics,
+                        "partition assignor",
+                        /* cgrp_update=false:
+                         * Since the subscription list may not be identical
+                         * across all members of the group and thus the
+                         * Metadata response may not be identical to this
+                         * consumer's subscription list, we want to
+                         * avoid trigger a rejoin or error propagation
+                         * on receiving the response since some topics
+                         * may be missing. */
+                        rd_false,
+                        rko);
                 rd_list_destroy(&topics);
 
         } else {
@@ -3512,15 +3526,11 @@ rd_kafka_propagate_consumer_topic_errors (
                 if (prev && prev->err == topic->err)
                         continue; /* This topic already reported same error */
 
-                rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
-                                                    topic),
                 /* Send consumer error to application */
-                rd_kafka_q_op_err(
+                rd_kafka_q_op_topic_err(
                         rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
                         topic->err, 0,
-                        rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
-                                                            topic),
-                        RD_KAFKA_OFFSET_INVALID,
+                        topic->topic,
                         "%s: %s: %s",
                         error_prefix, topic->topic,
                         rd_kafka_err2str(topic->err));
@@ -3542,11 +3552,17 @@ rd_kafka_propagate_consumer_topic_errors (
  */
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
         rd_list_t *tinfos;
+        rd_kafka_topic_partition_list_t *errored;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
+
+        /*
+         * Unmatched topics will be added to the errored list.
+         */
+        errored = rd_kafka_topic_partition_list_new(0);
 
         /*
          * Create a list of the topics in metadata that matches our subscription
@@ -3556,12 +3572,21 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 rd_kafka_metadata_topic_match(rkcg->rkcg_rk,
-                                              tinfos, rkcg->rkcg_subscription);
+                                              tinfos, rkcg->rkcg_subscription,
+                                              errored);
         else
                 rd_kafka_metadata_topic_filter(rkcg->rkcg_rk,
                                                tinfos,
-                                               rkcg->rkcg_subscription);
+                                               rkcg->rkcg_subscription,
+                                               errored);
 
+
+        /*
+         * Propagate consumer errors for any non-existent or errored topics.
+         * The function takes ownership of errored.
+         */
+        rd_kafka_propagate_consumer_topic_errors(
+                rkcg, errored, "Subscribed topic not available");
 
         /*
          * Update (takes ownership of \c tinfos)

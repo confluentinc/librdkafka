@@ -3505,6 +3505,16 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
+ * @remark A consumer error will be raised for each unavailable topic in the
+ *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
+ *         for non-existent topics, and
+ *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+ *         The consumer error will be raised through rd_kafka_consumer_poll()
+ *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
+ *         error codes mentioned above.
+ *         The subscribe function itself is asynchronous and will not return
+ *         an error on unavailable topics.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
  *          topics or regexes,

@@ -41,10 +41,12 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *md, size_t size);
 
 size_t
 rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match);
+                               const rd_kafka_topic_partition_list_t *match,
+                               rd_kafka_topic_partition_list_t *errored);
 size_t
 rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
-                                const rd_kafka_topic_partition_list_t *match);
+                                const rd_kafka_topic_partition_list_t *match,
+                                rd_kafka_topic_partition_list_t *errored);
 
 void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
                             const struct rd_kafka_metadata *md);

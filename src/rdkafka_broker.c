@@ -503,14 +503,6 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
 			   rkb->rkb_toppar_cnt);
 		rd_kafka_bufq_dump(rkb, "BRKOUTBUFS", &rkb->rkb_outbufs);
-#if ENABLE_SHAREDPTR_DEBUG
-		if (rd_refcnt_get(&rkb->rkb_refcnt) > 1) {
-			rd_rkb_dbg(rkb, BROKER, "BRKTERM",
-				   "Dumping shared pointers: "
-				   "this broker is %p", rkb);
-			rd_shared_ptrs_dump();
-		}
-#endif
 	}
 
 
@@ -599,8 +591,7 @@ rd_kafka_broker_bufq_purge_by_toppar (rd_kafka_broker_t *rkb,
         TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
                 if (rkbuf->rkbuf_reqhdr.ApiKey != ApiKey ||
-                    rd_kafka_toppar_s2i(rkbuf->rkbuf_u.Produce.
-                                        batch.s_rktp) != rktp||
+                    rkbuf->rkbuf_u.Produce.batch.rktp != rktp ||
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
@@ -2548,7 +2539,7 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb,
  * To avoid extra iterations, the \p err and \p status are set on
  * the message as they are popped off the OP_DR msgq in rd_kafka_poll() et.al
  */
-void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
+void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq,
                        rd_kafka_resp_err_t err) {
         rd_kafka_t *rk = rkt->rkt_rk;
@@ -2566,7 +2557,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 
 		rko = rd_kafka_op_new(RD_KAFKA_OP_DR);
 		rko->rko_err = err;
-		rko->rko_u.dr.s_rkt = rd_kafka_topic_keep(rkt);
+		rko->rko_u.dr.rkt = rd_kafka_topic_keep(rkt);
 		rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
 
 		/* Move all messages to op's msgq */
@@ -2646,7 +2637,7 @@ void rd_kafka_dr_implicit_ack (rd_kafka_broker_t *rkb,
  */
 static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rkb->rkb_rk;
-        rd_kafka_itopic_t *rkt;
+        rd_kafka_topic_t *rkt;
         int cnt = 0;
 
         if (rkb->rkb_nodeid == -1)
@@ -2658,8 +2649,7 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
 
                 rd_kafka_topic_wrlock(rkt);
                 for (i = 0 ; i < rkt->rkt_partition_cnt ; i++) {
-                        shptr_rd_kafka_toppar_t *s_rktp = rkt->rkt_p[i];
-                        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+                        rd_kafka_toppar_t *rktp = rkt->rkt_p[i];
 
                         /* Only map undelegated partitions matching this broker*/
                         rd_kafka_toppar_lock(rktp);
@@ -2732,7 +2722,6 @@ static void rd_kafka_broker_prepare_destroy (rd_kafka_broker_t *rkb) {
  */
 static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				      rd_kafka_op_t *rko) {
-        shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
         int ret = 1;
 
@@ -2845,7 +2834,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 /*
 		 * Add partition to broker toppars
 		 */
-                rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+                rktp = rko->rko_rktp;
                 rd_kafka_toppar_lock(rktp);
 
                 /* Abort join if instance is terminating */
@@ -2879,14 +2868,14 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                         /* Need temporary refcount so we can safely unlock
                          * after q_enq(). */
-                        s_rktp = rd_kafka_toppar_keep(rktp);
+                        rd_kafka_toppar_keep(rktp);
 
                         /* No, forward this op to the new next broker. */
                         rd_kafka_q_enq(rktp->rktp_next_broker->rkb_ops, rko);
                         rko = NULL;
 
                         rd_kafka_toppar_unlock(rktp);
-                        rd_kafka_toppar_destroy(s_rktp);
+                        rd_kafka_toppar_destroy(rktp);
 
                         break;
                 }
@@ -2898,8 +2887,10 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                            rktp->rktp_partition, rktp,
                            rd_kafka_msgq_len(&rktp->rktp_msgq));
 
-                rd_kafka_assert(NULL, rktp->rktp_s_for_rkb == NULL);
-		rktp->rktp_s_for_rkb = rd_kafka_toppar_keep(rktp);
+                rd_kafka_assert(NULL,
+                                !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB));
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_RKB;
+                rd_kafka_toppar_keep(rktp);
                 rd_kafka_broker_lock(rkb);
 		TAILQ_INSERT_TAIL(&rkb->rkb_toppars, rktp, rktp_rkblink);
 		rkb->rkb_toppar_cnt++;
@@ -2936,7 +2927,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 /*
 		 * Remove partition from broker toppars
 		 */
-                rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+                rktp = rko->rko_rktp;
 
 		rd_kafka_toppar_lock(rktp);
 
@@ -3003,10 +2994,8 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 }
 		rktp->rktp_broker = NULL;
 
-                /* Need to hold on to a refcount past q_enq() and
-                 * unlock() below */
-                s_rktp = rktp->rktp_s_for_rkb;
-                rktp->rktp_s_for_rkb = NULL;
+                rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB);
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_RKB;
 
                 if (rktp->rktp_next_broker) {
                         /* There is a next broker we need to migrate to. */
@@ -3029,7 +3018,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		}
 
                 rd_kafka_toppar_unlock(rktp);
-                rd_kafka_toppar_destroy(s_rktp);
+                rd_kafka_toppar_destroy(rktp); /* from JOIN */
 
 		rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
                 break;
@@ -3900,7 +3889,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = LOG_ERR;
-        shptr_rd_kafka_itopic_t *s_rkt = NULL;
+        rd_kafka_topic_t *rkt = NULL;
         int16_t ErrorCode = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 	if (rd_kafka_buf_ApiVersion(request) >= 1) {
@@ -3933,12 +3922,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_read_str(rkbuf, &topic);
 		rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
-                s_rkt = rd_kafka_topic_find0(rkb->rkb_rk, &topic);
+                rkt = rd_kafka_topic_find0(rkb->rkb_rk, &topic);
 
 		for (j = 0 ; j < PartitionArrayCnt ; j++) {
 			struct rd_kafka_toppar_ver *tver, tver_skel;
-                        rd_kafka_toppar_t *rktp;
-                        shptr_rd_kafka_toppar_t *s_rktp = NULL;
+                        rd_kafka_toppar_t *rktp = NULL;
                         rd_kafka_aborted_txns_t *aborted_txns = NULL;
                         rd_slice_t save_slice;
                         struct {
@@ -4042,16 +4030,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                         hdr.MessageSetSize);
 
 			/* Look up topic+partition */
-                        if (likely(s_rkt != NULL)) {
-                                rd_kafka_itopic_t *rkt;
-                                rkt = rd_kafka_topic_s2i(s_rkt);
+                        if (likely(rkt != NULL)) {
                                 rd_kafka_topic_rdlock(rkt);
-                                s_rktp = rd_kafka_toppar_get(
+                                rktp = rd_kafka_toppar_get(
                                         rkt, hdr.Partition, 0/*no ua-on-miss*/);
                                 rd_kafka_topic_rdunlock(rkt);
                         }
 
-			if (unlikely(!s_rkt || !s_rktp)) {
+			if (unlikely(!rkt || !rktp)) {
 				rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
 					   "Received Fetch response "
 					   "(error %hu) for unknown topic "
@@ -4065,8 +4051,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 aborted_txns);
 				continue;
 			}
-
-                        rktp = rd_kafka_toppar_s2i(s_rktp);
 
                         rd_kafka_toppar_lock(rktp);
                         rktp->rktp_lo_offset = hdr.LogStartOffset;
@@ -4103,7 +4087,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 if (aborted_txns)
                                         rd_kafka_aborted_txns_destroy(
                                                 aborted_txns);
-                                rd_kafka_toppar_destroy(s_rktp); /* from get */
+                                rd_kafka_toppar_destroy(rktp); /* from get */
                                 continue;
                         }
 
@@ -4119,7 +4103,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                            "discarding fetch response",
                                            RD_KAFKAP_STR_PR(&topic),
                                            hdr.Partition);
-                                rd_kafka_toppar_destroy(s_rktp); /* from get */
+                                rd_kafka_toppar_destroy(rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                                 if (aborted_txns)
                                         rd_kafka_aborted_txns_destroy(
@@ -4134,12 +4118,12 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                          * created (due to partition count decreasing and
                          * then increasing again, which can happen in
                          * desynchronized clusters): if so ignore it. */
-			tver_skel.s_rktp = s_rktp;
+			tver_skel.rktp = rktp;
 			tver = rd_list_find(request->rkbuf_rktp_vers,
 					    &tver_skel,
 					    rd_kafka_toppar_ver_cmp);
 			rd_kafka_assert(NULL, tver);
-                        if (rd_kafka_toppar_s2i(tver->s_rktp) != rktp ||
+                        if (tver->rktp != rktp ||
                             tver->version < fetch_version) {
                                 rd_rkb_dbg(rkb, MSG, "DROP",
                                            "%s [%"PRId32"]: "
@@ -4149,7 +4133,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                            rktp->rktp_partition,
                                            tver->version, fetch_version);
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
-                                rd_kafka_toppar_destroy(s_rktp); /* from get */
+                                rd_kafka_toppar_destroy(rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                                 if (aborted_txns)
                                         rd_kafka_aborted_txns_destroy(
@@ -4294,7 +4278,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_kafka_toppar_fetch_backoff(rkb, rktp,
                                                               hdr.ErrorCode);
 
-				rd_kafka_toppar_destroy(s_rktp);/* from get()*/
+				rd_kafka_toppar_destroy(rktp);/* from get()*/
 
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 
@@ -4305,7 +4289,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			}
 
 			if (unlikely(hdr.MessageSetSize <= 0)) {
-				rd_kafka_toppar_destroy(s_rktp); /*from get()*/
+				rd_kafka_toppar_destroy(rktp); /*from get()*/
                                 if (aborted_txns)
                                         rd_kafka_aborted_txns_destroy(
                                                 aborted_txns);
@@ -4338,12 +4322,12 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         if (unlikely(err))
                                 rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
 
-                        rd_kafka_toppar_destroy(s_rktp); /* from get */
+                        rd_kafka_toppar_destroy(rktp); /* from get */
                 }
 
-                if (s_rkt) {
-                        rd_kafka_topic_destroy0(s_rkt);
-                        s_rkt = NULL;
+                if (rkt) {
+                        rd_kafka_topic_destroy0(rkt);
+                        rkt = NULL;
                 }
 	}
 
@@ -4358,8 +4342,8 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 	return 0;
 
 err_parse:
-        if (s_rkt)
-                rd_kafka_topic_destroy0(s_rkt);
+        if (rkt)
+                rd_kafka_topic_destroy0(rkt);
 	rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message (Fetch v%d): "
 		   "is broker.version.fallback incorrectly set?",
 		   (int)request->rkbuf_reqhdr.ApiVersion);
@@ -4444,7 +4428,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	int TopicArrayCnt = 0;
 	size_t of_PartitionArrayCnt = 0;
 	int PartitionArrayCnt = 0;
-	rd_kafka_itopic_t *rkt_last = NULL;
+	rd_kafka_topic_t *rkt_last = NULL;
         int16_t ApiVersion = 0;
 
 	/* Create buffer and segments:
@@ -4577,7 +4561,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
 		/* Add toppar + op version mapping. */
 		tver = rd_list_add(rkbuf->rkbuf_rktp_vers, NULL);
-		tver->s_rktp = rd_kafka_toppar_keep(rktp);
+		tver->rktp = rd_kafka_toppar_keep(rktp);
 		tver->version = rktp->rktp_fetch_version;
 
 		cnt++;

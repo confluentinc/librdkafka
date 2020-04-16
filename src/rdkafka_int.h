@@ -55,7 +55,7 @@ typedef int mode_t;
 
 
 
-typedef struct rd_kafka_itopic_s rd_kafka_itopic_t;
+typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_ikafka_s rd_ikafka_t;
 
 
@@ -74,14 +74,10 @@ rd_kafka_crash (const char *file, int line, const char *function,
 
 /* Forward declarations */
 struct rd_kafka_s;
-struct rd_kafka_itopic_s;
+struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
-
-typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_toppar_s) shptr_rd_kafka_toppar_t;
-typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
-
 
 
 #include "rdkafka_op.h"
@@ -214,8 +210,6 @@ rd_kafka_txn_state2str (rd_kafka_txn_state_t state) {
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
 
-typedef RD_SHARED_PTR_TYPE(shptr_rd_ikafka_s, rd_ikafka_t) shptr_rd_ikafka_t;
-
 struct rd_kafka_s {
 	rd_kafka_q_t *rk_rep;   /* kafka -> application reply queue */
 	rd_kafka_q_t *rk_ops;   /* any -> rdkafka main thread ops */
@@ -247,7 +241,7 @@ struct rd_kafka_s {
          * state changes. Protected by rk_broker_state_change_lock. */
         rd_list_t rk_broker_state_change_waiters; /**< (rd_kafka_enq_once_t*) */
 
-	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;
+	TAILQ_HEAD(, rd_kafka_topic_s)  rk_topics;
 	int              rk_topic_cnt;
 
         struct rd_kafka_cgrp_s *rk_cgrp;
@@ -909,7 +903,7 @@ rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque);
 
-rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
+rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_topic_t *rkt);
 
 
 /**

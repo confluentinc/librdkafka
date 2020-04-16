@@ -249,8 +249,7 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev) {
 	if (unlikely(!rkev->rko_rktp))
 		return NULL;
 
-	rktpar = rd_kafka_topic_partition_new_from_rktp(
-		rd_kafka_toppar_s2i(rkev->rko_rktp));
+	rktpar = rd_kafka_topic_partition_new_from_rktp(rkev->rko_rktp);
 
 	switch (rkev->rko_type)
 	{

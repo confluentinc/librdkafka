@@ -219,7 +219,7 @@ struct rd_kafka_op_s {
         rd_kafka_prio_t       rko_prio;   /**< In-queue priority.
                                            *   Higher value means higher prio*/
 
-	shptr_rd_kafka_toppar_t *rko_rktp;
+	rd_kafka_toppar_t    *rko_rktp;
 
         /*
 	 * Generic fields
@@ -317,7 +317,7 @@ struct rd_kafka_op_s {
                 } metadata;
 
 		struct {
-			shptr_rd_kafka_itopic_t *s_rkt;
+			rd_kafka_topic_t *rkt;
 			rd_kafka_msgq_t msgq;
 			rd_kafka_msgq_t msgq2;
 			int do_purge2;

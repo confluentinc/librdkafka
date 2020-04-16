@@ -177,7 +177,7 @@ static void do_test_txn_recoverable_errors (void) {
                 RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
                 RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
 
-        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid", 0);
 
         TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(
                                   rk, offsets,
@@ -253,7 +253,7 @@ static void do_test_txn_requires_abort_errors (void) {
         offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
 
-        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid", 0);
 
         error = rd_kafka_send_offsets_to_transaction(rk, offsets,
                                                      cgmetadata, -1);
@@ -320,7 +320,7 @@ static void do_test_txn_requires_abort_errors (void) {
 
         offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid", 0);
 
         error = rd_kafka_send_offsets_to_transaction(rk, offsets,
                                                      cgmetadata, -1);

@@ -186,11 +186,16 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 /**
  * @brief Read a list of topic+partitions+extra from \p rkbuf.
  *
+ * @param rkbuf buffer to read from
+ * @param estimated_part_cnt estimated number of partitions to read.
+ * @param read_part_errs whether or not to read an error per partition.
+ *
  * @returns a newly allocated list on success, or NULL on parse error.
  */
 rd_kafka_topic_partition_list_t *
 rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
-                                    size_t estimated_part_cnt) {
+                                    size_t estimated_part_cnt,
+                                    rd_bool_t read_part_errs) {
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
@@ -201,7 +206,6 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
                 rd_kafka_buf_parse_fail(rkbuf,
                                         "TopicArrayCnt %"PRId32" out of range",
                                         TopicArrayCnt);
-
 
         parts = rd_kafka_topic_partition_list_new(
                 RD_MAX(TopicArrayCnt, (int)estimated_part_cnt));
@@ -221,11 +225,14 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
                         rktpar = rd_kafka_topic_partition_list_add(
                                 parts, topic, Partition);
-                        rktpar->err = ErrorCode;
+
+                        if (read_part_errs) {
+                                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                                rktpar->err = ErrorCode;
+                        }
                 }
         }
 
@@ -237,6 +244,55 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
 
         return NULL;
 }
+
+
+/**
+ * @brief Write a list of topic+partitions to \p rkbuf
+ *
+ * @remark The \p assignment list MUST be sorted.
+ */
+void
+rd_kafka_buf_write_assignment (rd_kafka_buf_t *rkbuf,
+                               const rd_kafka_topic_partition_list_t
+                               *assignment) {
+        int i;
+        size_t of_TopicCnt;
+        const char *last_topic = NULL;
+        ssize_t of_PartCnt = -1;
+        int TopicCnt = 0;
+        int PartCnt = 0;
+
+        rd_assert(assignment != NULL);
+
+        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
+        for (i = 0 ; i < assignment->cnt ; i++) {
+                const rd_kafka_topic_partition_t *rktpar;
+
+                rktpar = &assignment->elems[i];
+
+                if (!last_topic || strcmp(last_topic,
+                                          rktpar->topic)) {
+                        if (last_topic)
+                                /* Finalize previous PartitionCnt */
+                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
+                                                        PartCnt);
+                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
+                        /* Updated later */
+                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+                        PartCnt = 0;
+                        last_topic = rktpar->topic;
+                        TopicCnt++;
+                }
+
+                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
+                PartCnt++;
+        }
+
+        if (of_PartCnt != -1)
+                rd_kafka_buf_update_i32(rkbuf, of_PartCnt, PartCnt);
+        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
+}
+
 
 /**
  * @brief Write a list of topic+partitions+offsets+extra to \p rkbuf
@@ -1173,44 +1229,12 @@ static void rd_kafka_group_MemberState_consumer_write (
         rd_kafka_buf_t *env_rkbuf,
         const rd_kafka_group_member_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
-        int i;
-        const char *last_topic = NULL;
-        size_t of_TopicCnt;
-        ssize_t of_PartCnt = -1;
-        int TopicCnt = 0;
-        int PartCnt = 0;
         rd_slice_t slice;
 
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
-        for (i = 0 ; i < rkgm->rkgm_assignment->cnt ; i++) {
-                const rd_kafka_topic_partition_t *rktpar;
-
-                rktpar = &rkgm->rkgm_assignment->elems[i];
-
-                if (!last_topic || strcmp(last_topic,
-                                          rktpar->topic)) {
-                        if (last_topic)
-                                /* Finalize previous PartitionCnt */
-                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
-                                                        PartCnt);
-                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
-                        /* Updated later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-                        PartCnt = 0;
-                        last_topic = rktpar->topic;
-                        TopicCnt++;
-                }
-
-                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
-                PartCnt++;
-        }
-
-        if (of_PartCnt != -1)
-                rd_kafka_buf_update_i32(rkbuf, of_PartCnt, PartCnt);
-        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
-
+        rd_assert(rkgm->rkgm_assignment);
+        rd_kafka_buf_write_assignment(rkbuf, rkgm->rkgm_assignment);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */
@@ -1407,7 +1431,9 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 		if (!rkas->rkas_enabled)
 			continue;
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
-                member_metadata = rkas->rkas_get_metadata_cb(rkas, topics);
+                member_metadata = rkas->rkas_get_metadata_cb(
+                        rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
+                        rk->rk_cgrp->rkcg_assignment);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }

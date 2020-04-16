@@ -103,6 +103,7 @@ set(
     0109-auto_create_topics.cpp
     0110-batch_size.cpp
     0111-delay_create_topics.cpp
+    0112-cooperative_rebalance.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

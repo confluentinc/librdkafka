@@ -27,6 +27,7 @@
  */
 #include "rdkafka_int.h"
 #include "rdkafka_assignor.h"
+#include "rdkafka_request.h"
 #include "rdunittest.h"
 
 #include <ctype.h>
@@ -35,6 +36,9 @@
  * Clear out and free any memory used by the member, but not the rkgm itself.
  */
 void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm) {
+        if (rkgm->rkgm_owned)
+                rd_kafka_topic_partition_list_destroy(rkgm->rkgm_owned);
+
         if (rkgm->rkgm_subscription)
                 rd_kafka_topic_partition_list_destroy(rkgm->rkgm_subscription);
 
@@ -101,11 +105,12 @@ rd_kafka_group_member_find_subscription (rd_kafka_t *rk,
 }
 
 
-
-static rd_kafkap_bytes_t *
+rd_kafkap_bytes_t *
 rd_kafka_consumer_protocol_member_metadata_new (
 	const rd_list_t *topics,
-        const void *userdata, size_t userdata_size) {
+        const void *userdata, size_t userdata_size,
+        const rd_kafka_topic_partition_list_t *owned_partitions) {
+
         rd_kafka_buf_t *rkbuf;
         rd_kafkap_bytes_t *kbytes;
         int i;
@@ -115,22 +120,35 @@ rd_kafka_consumer_protocol_member_metadata_new (
 
         /*
          * MemberMetadata => Version Subscription AssignmentStrategies
-         *   Version      => int16
+         *   Version => int16
          *   Subscription => Topics UserData
-         *     Topics     => [String]
-         *     UserData     => Bytes
+         *     Topics => [String]
+         *     UserData => Bytes
+         *   OwnedPartitions => [Topic Partitions] // added in v1
+         *     Topic => string
+         *     Partitions => [int32]
          */
 
         rkbuf = rd_kafka_buf_new(1, 100 + (topic_cnt * 100) + userdata_size);
 
-        rd_kafka_buf_write_i16(rkbuf, 0);
+        /* Version */
+        rd_kafka_buf_write_i16(rkbuf, 1);
         rd_kafka_buf_write_i32(rkbuf, topic_cnt);
 	RD_LIST_FOREACH(tinfo, topics, i)
                 rd_kafka_buf_write_str(rkbuf, tinfo->topic, -1);
-	if (userdata)
-		rd_kafka_buf_write_bytes(rkbuf, userdata, userdata_size);
-	else /* Kafka 0.9.0.0 cant parse NULL bytes, so we provide empty. */
-		rd_kafka_buf_write_bytes(rkbuf, "", 0);
+        if (userdata)
+                rd_kafka_buf_write_bytes(rkbuf, userdata, userdata_size);
+        else /* Kafka 0.9.0.0 can't parse NULL bytes, so we provide empty,
+              * which is compatible with all of the built-in Java client
+              * assignors at the present time (up to and including v2.5) */
+                rd_kafka_buf_write_bytes(rkbuf, "", 0);
+        /* Following data is ignored by v0 consumers */
+        if (!owned_partitions)
+                /* If there are no owned partitions, this is specified as an
+                 * empty array, not NULL. */
+                rd_kafka_buf_write_i32(rkbuf, 0); /* Topic count */
+        else
+                rd_kafka_buf_write_assignment(rkbuf, owned_partitions);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
@@ -140,21 +158,20 @@ rd_kafka_consumer_protocol_member_metadata_new (
         rd_kafka_buf_destroy(rkbuf);
 
         return kbytes;
-
 }
 
 
 
 
 rd_kafkap_bytes_t *
-rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkas,
-				const rd_list_t *topics) {
+rd_kafka_assignor_get_metadata_with_empty_userdata (rd_kafka_assignor_t *rkas,
+                                                    void *assignor_state,
+                                                    const rd_list_t *topics,
+                                                    const rd_kafka_topic_partition_list_t
+                                                    *owned_partitions) {
         return rd_kafka_consumer_protocol_member_metadata_new(
-                topics, rkas->rkas_userdata,
-                rkas->rkas_userdata_size);
+                topics, NULL, 0, owned_partitions);
 }
-
-
 
 
 
@@ -282,25 +299,16 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
 
 rd_kafka_resp_err_t
 rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
-                       const char *protocol_name,
+                       rd_kafka_assignor_t *rkas,
                        rd_kafka_metadata_t *metadata,
                        rd_kafka_group_member_t *members,
                        int member_cnt,
                        char *errstr, size_t errstr_size) {
         rd_kafka_resp_err_t err;
-        rd_kafka_assignor_t *rkas;
         rd_ts_t ts_start = rd_clock();
         int i;
         rd_list_t eligible_topics;
         int j;
-
-	if (!(rkas = rd_kafka_assignor_find(rkcg->rkcg_rk, protocol_name)) ||
-	    !rkas->rkas_enabled) {
-		rd_snprintf(errstr, errstr_size,
-			    "Unsupported assignor \"%s\"", protocol_name);
-		return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
-	}
-
 
         /* Map available topics to subscribing members */
         rd_kafka_member_subscriptions_map(rkcg, &eligible_topics, metadata,
@@ -311,7 +319,8 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
                              "Group \"%s\" running %s assignment for "
                              "%d member(s):",
-                             rkcg->rkcg_group_id->str, protocol_name,
+                             rkcg->rkcg_group_id->str,
+                             rkas->rkas_protocol_name->str,
                              member_cnt);
 
                 for (i = 0 ; i < member_cnt ; i++) {
@@ -338,27 +347,29 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
         }
 
         /* Call assignors assign callback */
-        err = rkas->rkas_assign_cb(rkcg->rkcg_rk,
-                                    rkcg->rkcg_member_id->str,
-                                    protocol_name, metadata,
-                                    members, member_cnt,
-                                    (rd_kafka_assignor_topic_t **)
-                                    eligible_topics.rl_elems,
-                                    eligible_topics.rl_cnt,
-                                    errstr, errstr_size,
-                                    rkas->rkas_opaque);
+        err = rkas->rkas_assign_cb(rkas, rkcg->rkcg_rk,
+                                   rkcg->rkcg_member_id->str,
+                                   metadata,
+                                   members, member_cnt,
+                                   (rd_kafka_assignor_topic_t **)
+                                   eligible_topics.rl_elems,
+                                   eligible_topics.rl_cnt,
+                                   errstr, errstr_size,
+                                   rkas->rkas_opaque);
 
         if (err) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
                              "Group \"%s\" %s assignment failed "
                              "for %d member(s): %s",
-                             rkcg->rkcg_group_id->str, protocol_name,
+                             rkcg->rkcg_group_id->str,
+                             rkas->rkas_protocol_name->str,
                              (int)member_cnt, errstr);
         } else if (rkcg->rkcg_rk->rk_conf.debug & RD_KAFKA_DBG_CGRP) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
                              "Group \"%s\" %s assignment for %d member(s) "
                              "finished in %.3fms:",
-                             rkcg->rkcg_group_id->str, protocol_name,
+                             rkcg->rkcg_group_id->str,
+                             rkas->rkas_protocol_name->str,
                              (int)member_cnt,
                              (float)(rd_clock() - ts_start)/1000.0f);
                 for (i = 0 ; i < member_cnt ; i++) {
@@ -422,7 +433,6 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 }
 
 
-
 /**
  * Add an assignor, overwriting any previous one with the same protocol_name.
  */
@@ -432,15 +442,28 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        const char *protocol_type,
                        const char *protocol_name,
                        rd_kafka_resp_err_t (*assign_cb) (
+                               struct rd_kafka_assignor_s *rkas,
                                rd_kafka_t *rk,
                                const char *member_id,
-                               const char *protocol_name,
                                const rd_kafka_metadata_t *metadata,
                                rd_kafka_group_member_t *members,
                                size_t member_cnt,
                                rd_kafka_assignor_topic_t **eligible_topics,
                                size_t eligible_topic_cnt,
                                char *errstr, size_t errstr_size, void *opaque),
+                       rd_kafkap_bytes_t *(*get_metadata_cb) (
+                               struct rd_kafka_assignor_s *rkas,
+                               void *assignor_state,
+                               const rd_list_t *topics,
+                               const rd_kafka_topic_partition_list_t
+                               *owned_partitions),
+                       void (*on_assignment_cb) (
+                               const struct rd_kafka_assignor_s *rkas,
+                               void **assignor_state,
+                               const rd_kafka_topic_partition_list_t *assignment,
+                               const rd_kafkap_bytes_t *userdata,
+                               const rd_kafka_consumer_group_metadata_t *rkcgm),
+                       void (*destroy_state) (void *assignor_state),
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
 
@@ -463,7 +486,9 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
         rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
         rkas->rkas_assign_cb        = assign_cb;
-        rkas->rkas_get_metadata_cb  = rd_kafka_assignor_get_metadata;
+        rkas->rkas_get_metadata_cb  = get_metadata_cb;
+        rkas->rkas_on_assignment_cb = on_assignment_cb;
+        rkas->rkas_destroy_state    = destroy_state;
         rkas->rkas_opaque = opaque;
 
         rd_list_add(&rk->rk_conf.partition_assignors, rkas);
@@ -523,14 +548,23 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Match builtin consumer assignors */
 		if (!strcmp(s, "range"))
 			rd_kafka_assignor_add(
-				rk, &rkas, "consumer", "range",
-				rd_kafka_range_assignor_assign_cb,
-				NULL);
+                                rk, &rkas, "consumer", "range",
+                                rd_kafka_range_assignor_assign_cb,
+                                rd_kafka_assignor_get_metadata_with_empty_userdata,
+                                NULL, NULL, NULL);
 		else if (!strcmp(s, "roundrobin"))
 			rd_kafka_assignor_add(
-				rk, &rkas, "consumer", "roundrobin",
-				rd_kafka_roundrobin_assignor_assign_cb,
-				NULL);
+                                rk, &rkas, "consumer", "roundrobin",
+                                rd_kafka_roundrobin_assignor_assign_cb,
+                                rd_kafka_assignor_get_metadata_with_empty_userdata,
+                                NULL, NULL, NULL);
+                else if (!strcmp(s, "sticky"))
+			rd_kafka_assignor_add(
+                                rk, &rkas, "consumer", "sticky",
+                                rd_kafka_sticky_assignor_assign_cb,
+                                rd_kafka_sticky_assignor_get_metadata,
+                                rd_kafka_sticky_assignor_on_assignment_cb,
+                                rd_kafka_sticky_assignor_state_destroy, NULL);
 		else {
 			rd_snprintf(errstr, errstr_size,
 				    "Unsupported partition.assignment.strategy:"
@@ -855,15 +889,24 @@ int unittest_assignors (void) {
                 for (ie = 0 ; ie < tests[i].expect_cnt ; ie++) {
                         rd_kafka_resp_err_t err;
                         char errstr[256];
+                        rd_kafka_assignor_t *rkas;
 
                         RD_UT_SAY("Test case %s: %s assignor",
                                   tests[i].name,
                                   tests[i].expect[ie].protocol_name);
 
+                        if (!(rkas = rd_kafka_assignor_find(rk,
+                                        tests[i].expect[ie].protocol_name))) {
+                                RD_UT_ASSERT(!err,
+                                             "Assignor case %s for %s failed: "
+                                             "assignor not found",
+                                             tests[i].name,
+                                             tests[i].expect[ie].protocol_name);
+                        }
+
                         /* Run assignor */
                         err = rd_kafka_assignor_run(
-                                rk->rk_cgrp,
-                                tests[i].expect[ie].protocol_name,
+                                rk->rk_cgrp, rkas,
                                 &metadata,
                                 members, tests[i].member_cnt,
                                 errstr, sizeof(errstr));

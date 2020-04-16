@@ -55,9 +55,15 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 const rd_kafka_buf_t *request, ...);
 
 
+void
+rd_kafka_buf_write_assignment (rd_kafka_buf_t *rkbuf, 
+                               const rd_kafka_topic_partition_list_t
+                               *assignment);
+
 rd_kafka_topic_partition_list_t *
 rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
-                                    size_t estimated_part_cnt);
+                                    size_t estimated_part_cnt,
+                                    rd_bool_t read_part_errs);
 int rd_kafka_buf_write_topic_partitions (
         rd_kafka_buf_t *rkbuf,
         const rd_kafka_topic_partition_list_t *parts,

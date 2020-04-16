@@ -193,6 +193,7 @@
     <ClCompile Include="..\..\tests\0109-auto_create_topics.cpp" />
     <ClCompile Include="..\..\tests\0110-batch_size.cpp" />
     <ClCompile Include="..\..\tests\0111-delay_create_topics.cpp" />
+    <ClCompile Include="..\..\tests\0112-cooperative_rebalance.cpp" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

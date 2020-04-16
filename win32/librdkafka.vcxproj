@@ -188,6 +188,7 @@
     <ClCompile Include="..\src\rdkafka_queue.c" />
     <ClCompile Include="..\src\rdkafka_range_assignor.c" />
     <ClCompile Include="..\src\rdkafka_roundrobin_assignor.c" />
+    <ClCompile Include="..\src\rdkafka_sticky_assignor.c" />
     <ClCompile Include="..\src\rdkafka_request.c" />
     <ClCompile Include="..\src\rdkafka_sasl.c" />
     <ClCompile Include="..\src\rdkafka_sasl_win32.c" />

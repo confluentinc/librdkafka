@@ -32,6 +32,7 @@ set(
     rdkafka_roundrobin_assignor.c
     rdkafka_sasl.c
     rdkafka_sasl_plain.c
+    rdkafka_sticky_assignor.c
     rdkafka_subscription.c
     rdkafka_timer.c
     rdkafka_topic.c

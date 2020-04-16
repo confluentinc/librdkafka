@@ -3600,10 +3600,11 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 return 0;
         }
 
-        /* Attempt to fill the batch size, but limit
-         * our waiting to queue.buffering.max.ms
-         * and batch.num.messages. */
-        if (r < rkb->rkb_rk->rk_conf.batch_num_messages) {
+        /* Attempt to fill the batch size, but limit our waiting
+         * to queue.buffering.max.ms, batch.num.messages, and batch.size. */
+        if (r < rkb->rkb_rk->rk_conf.batch_num_messages &&
+            rktp->rktp_xmit_msgq.rkmq_msg_bytes <
+            (int64_t)rkb->rkb_rk->rk_conf.batch_size) {
                 rd_ts_t wait_max;
 
                 /* Calculate maximum wait-time to honour

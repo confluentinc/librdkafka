@@ -109,8 +109,9 @@ or if a low latency service is required, or a balance between the two, all
 through the configuration property interface.
 
 The single most important configuration properties for performance tuning is
-`linger.ms` - how long to wait for `batch.num.messages` to fill up in the
-local per-partition queue before sending the batch of messages to the broker.
+`linger.ms` - how long to wait for `batch.num.messages` or `batch.size` to
+fill up in the local per-partition queue before sending the batch of messages
+to the broker.
 
 In low throughput scenarios, a lower value improves latency.
 As throughput increases, the cost of each broker request becomes significant
@@ -130,8 +131,8 @@ overhead and eliminates the adverse effect of the round trip time (rtt).
 
 `linger.ms` (also called `queue.buffering.max.ms`) allows librdkafka to
 wait up to the specified amount of time to accumulate up to
-`batch.num.messages` in a single batch (MessageSet) before sending
-to the broker. The larger the batch the higher the throughput.
+`batch.num.messages` or `batch.size` in a single batch (MessageSet) before
+sending to the broker. The larger the batch the higher the throughput.
 Enabling `msg` debugging (set `debug` property to `msg`) will emit log
 messages for the accumulation process which lets you see what batch sizes
 are being produced.
@@ -245,8 +246,8 @@ configuration property.
 
 Compression is performed on the batch of messages in the local queue, the
 larger the batch the higher likelyhood of a higher compression ratio.
-The local batch queue size is controlled through the `batch.num.messages` and
-`linger.ms` configuration properties as described in the
+The local batch queue size is controlled through the `batch.num.messages`,
+`batch.size`, and `linger.ms` configuration properties as described in the
 **High throughput** chapter above.
 
 

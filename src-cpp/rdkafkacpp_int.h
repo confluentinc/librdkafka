@@ -133,15 +133,15 @@ class ErrorImpl : public Error {
   }
 
   bool is_fatal () const {
-    return rd_kafka_error_is_fatal(c_error_);
+    return !!rd_kafka_error_is_fatal(c_error_);
   }
 
   bool is_retriable () const {
-    return rd_kafka_error_is_retriable(c_error_);
+    return !!rd_kafka_error_is_retriable(c_error_);
   }
 
   bool txn_requires_abort () const {
-    return rd_kafka_error_txn_requires_abort(c_error_);
+    return !!rd_kafka_error_txn_requires_abort(c_error_);
   }
 
   rd_kafka_error_t *c_error_;

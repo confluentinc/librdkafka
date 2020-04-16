@@ -1265,7 +1265,13 @@ int main (int argc, char **argv) {
 
 #ifndef _MSC_VER
                 if (stats_cmd) {
-                        if (!(stats_fp = popen(stats_cmd, "we"))) {
+                        if (!(stats_fp = popen(stats_cmd,
+#ifdef __linux__
+                                               "we"
+#else
+                                               "w"
+#endif
+                                               ))) {
                                 fprintf(stderr,
                                         "%% Failed to start stats command: "
                                         "%s: %s", stats_cmd, strerror(errno));

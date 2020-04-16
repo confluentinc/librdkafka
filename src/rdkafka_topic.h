@@ -34,8 +34,65 @@
 extern const char *rd_kafka_topic_state_names[];
 
 
-/* rd_kafka_topic_t: internal representation of a topic */
+/**
+ * @struct Light-weight topic object which only contains the topic name.
+ *
+ * For use in outgoing APIs (like rd_kafka_message_t) when there is
+ * no proper topic object available.
+ *
+ * @remark lrkt_magic[4] MUST be the first field and be set to "LRKT".
+ */
+struct rd_kafka_lwtopic_s {
+        char  lrkt_magic[4];     /**< "LRKT" */
+        rd_kafka_t *lrkt_rk;     /**< Pointer to the client instance. */
+        rd_refcnt_t lrkt_refcnt; /**< Refcount */
+        char *lrkt_topic;        /**< Points past this struct, allocated
+                                  *   along with the struct. */
+};
+
+/** Casts a topic_t to a light-weight lwtopic_t */
+#define rd_kafka_rkt_lw(rkt)                    \
+        ((rd_kafka_lwtopic_t *)rkt)
+
+#define rd_kafka_rkt_lw_const(rkt)              \
+        ((const rd_kafka_lwtopic_t *)rkt)
+
+/**
+ * @returns true if the topic object is a light-weight topic, else false.
+ */
+static RD_UNUSED RD_INLINE
+rd_bool_t rd_kafka_rkt_is_lw (const rd_kafka_topic_t *app_rkt) {
+        const rd_kafka_lwtopic_t *lrkt = rd_kafka_rkt_lw_const(app_rkt);
+        return !memcmp(lrkt->lrkt_magic, "LRKT", 4);
+}
+
+/** @returns the lwtopic_t if \p rkt is a light-weight topic, else NULL. */
+static RD_UNUSED RD_INLINE
+rd_kafka_lwtopic_t *rd_kafka_rkt_get_lw (rd_kafka_topic_t *rkt) {
+        if (rd_kafka_rkt_is_lw(rkt))
+                return rd_kafka_rkt_lw(rkt);
+        return NULL;
+}
+
+void rd_kafka_lwtopic_destroy (rd_kafka_lwtopic_t *lrkt);
+rd_kafka_lwtopic_t *rd_kafka_lwtopic_new (rd_kafka_t *rk, const char *topic);
+
+static RD_UNUSED RD_INLINE
+void rd_kafka_lwtopic_keep (rd_kafka_lwtopic_t *lrkt) {
+        rd_refcnt_add(&lrkt->lrkt_refcnt);
+}
+
+
+
+
+/*
+ * @struct Internal representation of a topic.
+ *
+ * @remark rkt_magic[4] MUST be the first field and be set to "IRKT".
+ */
 struct rd_kafka_topic_s {
+        char  rkt_magic[4];  /**< "IRKT" */
+
 	TAILQ_ENTRY(rd_kafka_topic_s) rkt_link;
 
 	rd_refcnt_t        rkt_refcnt;
@@ -85,13 +142,20 @@ struct rd_kafka_topic_s {
 /**
  * @brief Increase refcount and return topic object.
  */
-static RD_UNUSED RD_INLINE
+static RD_INLINE RD_UNUSED
 rd_kafka_topic_t *rd_kafka_topic_keep (rd_kafka_topic_t *rkt) {
-        rd_refcnt_add(&rkt->rkt_refcnt);
+        rd_kafka_lwtopic_t *lrkt;
+        if (unlikely((lrkt = rd_kafka_rkt_get_lw(rkt)) != NULL))
+                rd_kafka_lwtopic_keep(lrkt);
+        else
+                rd_refcnt_add(&rkt->rkt_refcnt);
         return rkt;
 }
 
 void rd_kafka_topic_destroy_final (rd_kafka_topic_t *rkt);
+
+rd_kafka_topic_t *rd_kafka_topic_proper (rd_kafka_topic_t *app_rkt);
+
 
 
 /**
@@ -99,7 +163,10 @@ void rd_kafka_topic_destroy_final (rd_kafka_topic_t *rkt);
  */
 static RD_INLINE RD_UNUSED void
 rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
-        if (unlikely(rd_refcnt_sub(&rkt->rkt_refcnt) == 0))
+        rd_kafka_lwtopic_t *lrkt;
+        if (unlikely((lrkt = rd_kafka_rkt_get_lw(rkt)) != NULL))
+                rd_kafka_lwtopic_destroy(lrkt);
+        else if (unlikely(rd_refcnt_sub(&rkt->rkt_refcnt) == 0))
                 rd_kafka_topic_destroy_final(rkt);
 }
 

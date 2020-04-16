@@ -289,6 +289,7 @@ struct rd_kafka_op_s {
 			int64_t offset;
 			char *errstr;
 			rd_kafka_msg_t rkm;
+                        rd_kafka_topic_t *rkt;
                         int fatal;  /**< This was a ERR__FATAL error that has
                                      *   been translated to the fatal error
                                      *   code. */
@@ -533,6 +534,9 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
                         rd_kafka_resp_err_t err, int32_t version,
                         rd_kafka_toppar_t *rktp, int64_t offset,
 			const char *fmt, ...);
+ void rd_kafka_q_op_topic_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
+                               rd_kafka_resp_err_t err, int32_t version,
+                               const char *topic, const char *fmt, ...);
 rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_q_t *recvq,
                                  rd_kafka_op_t *rko,

@@ -646,7 +646,7 @@ rd_kafka_resp_err_t rd_kafka_offset_sync (rd_kafka_toppar_t *rktp) {
  */
 rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 					   int32_t partition, int64_t offset) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 
 	/* Find toppar */

@@ -1,7 +1,6 @@
 #cmakedefine01 WITHOUT_OPTIMIZATION
 #cmakedefine01 ENABLE_DEVEL
 #cmakedefine01 ENABLE_REFCNT_DEBUG
-#cmakedefine01 ENABLE_SHAREDPTR_DEBUG
 
 #cmakedefine01 HAVE_ATOMICS_32
 #cmakedefine01 HAVE_ATOMICS_32_SYNC

@@ -442,7 +442,7 @@ rd_kafka_msgset_writer_write_Produce_header (rd_kafka_msgset_writer_t *msetw) {
 
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
         rd_kafka_t *rk = msetw->msetw_rkb->rkb_rk;
-        rd_kafka_itopic_t *rkt = msetw->msetw_rktp->rktp_rkt;
+        rd_kafka_topic_t *rkt = msetw->msetw_rktp->rktp_rkt;
 
         /* V3: TransactionalId */
         if (msetw->msetw_ApiVersion >= 3)

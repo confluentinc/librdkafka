@@ -16,7 +16,6 @@ option(WITHOUT_OPTIMIZATION "Disable optimization" OFF)
 
 option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
-option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
 set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 set(BUILT_WITH "CMAKE")
 
@@ -195,7 +194,6 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # * WITHOUT_OPTIMIZATION
 # * ENABLE_DEVEL
 # * ENABLE_REFCNT_DEBUG
-# * ENABLE_SHAREDPTR_DEBUG
 # * HAVE_ATOMICS_32
 # * HAVE_ATOMICS_32_SYNC
 # * HAVE_ATOMICS_64

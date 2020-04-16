@@ -114,12 +114,12 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 #endif
 			);
 	if (rko->rko_rktp) {
-		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 		fprintf(fp, "%s ((rd_kafka_toppar_t*)%p) "
-			"%s [%"PRId32"] v%d (shptr %p)\n",
-			prefix, rktp, rktp->rktp_rkt->rkt_topic->str,
-			rktp->rktp_partition,
-			rd_atomic32_get(&rktp->rktp_version), rko->rko_rktp);
+			"%s [%"PRId32"] v%d\n",
+			prefix, rko->rko_rktp,
+                        rko->rko_rktp->rktp_rkt->rkt_topic->str,
+			rko->rko_rktp->rktp_partition,
+			rd_atomic32_get(&rko->rko_rktp->rktp_version));
 	}
 
 	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
@@ -138,9 +138,8 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_DR:
 		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
 			rko->rko_u.dr.msgq.rkmq_msg_cnt,
-			rko->rko_u.dr.s_rkt ?
-			rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt)->
-			rkt_topic->str : "(n/a)");
+			rko->rko_u.dr.rkt ?
+			rko->rko_u.dr.rkt->rkt_topic->str : "(n/a)");
 		break;
 	case RD_KAFKA_OP_OFFSET_COMMIT:
 		fprintf(fp, "%s Callback: %p (opaque %p)\n",
@@ -300,8 +299,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		if (rko->rko_u.dr.do_purge2)
 			rd_kafka_msgq_purge(rko->rko_rk, &rko->rko_u.dr.msgq2);
 
-		if (rko->rko_u.dr.s_rkt)
-			rd_kafka_topic_destroy0(rko->rko_u.dr.s_rkt);
+		if (rko->rko_u.dr.rkt)
+			rd_kafka_topic_destroy0(rko->rko_u.dr.rkt);
 		break;
 
 	case RD_KAFKA_OP_OFFSET_RESET:
@@ -425,8 +424,7 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_err     = err;
 	if (rko_orig->rko_rktp)
-		rko->rko_rktp = rd_kafka_toppar_keep(
-			rd_kafka_toppar_s2i(rko_orig->rko_rktp));
+		rko->rko_rktp = rd_kafka_toppar_keep(rko_orig->rko_rktp);
 
         return rko;
 }
@@ -740,7 +738,7 @@ void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
 		return;
 
-	rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+	rktp = rko->rko_rktp;
 
 	if (unlikely(!rk))
 		rk = rktp->rktp_rkt->rkt_rk;

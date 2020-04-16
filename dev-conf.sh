@@ -105,9 +105,6 @@ OPTS="$OPTS --disable-optimization"
 # disable cyrus-sasl
 #OPTS="$OPTS --disable-sasl"
 
-# enable sharedptr debugging
-#OPTS="$OPTS --enable-sharedptr-debug"
-
 #enable refcnt debugging
 #OPTS="$OPTS --enable-refcnt-debug"
 

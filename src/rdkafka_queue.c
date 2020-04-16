@@ -218,7 +218,7 @@ void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
         /* Move ops to temporary queue and then destroy them from there
          * without locks to avoid lock-ordering problems in op_destroy() */
         while ((rko = TAILQ_FIRST(&rkq->rkq_q)) && rko->rko_rktp &&
-               rd_kafka_toppar_s2i(rko->rko_rktp) == rktp &&
+               rko->rko_rktp == rktp &&
                rko->rko_version < version) {
                 TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
                 TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
@@ -674,24 +674,22 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk) {
 rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
                                                 const char *topic,
                                                 int32_t partition) {
-        shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
         rd_kafka_queue_t *result;
 
         if (rk->rk_type == RD_KAFKA_PRODUCER)
                 return NULL;
 
-        s_rktp = rd_kafka_toppar_get2(rk, topic,
-                                      partition,
-                                      0, /* no ua_on_miss */
-                                      1 /* create_on_miss */);
+        rktp = rd_kafka_toppar_get2(rk, topic,
+                                    partition,
+                                    0, /* no ua_on_miss */
+                                    1 /* create_on_miss */);
 
-        if (!s_rktp)
+        if (!rktp)
                 return NULL;
 
-        rktp = rd_kafka_toppar_s2i(s_rktp);
         result = rd_kafka_queue_new0(rk, rktp->rktp_fetchq);
-        rd_kafka_toppar_destroy(s_rktp);
+        rd_kafka_toppar_destroy(rktp);
 
         return result;
 }

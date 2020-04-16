@@ -545,7 +545,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
 
         while (TopicCnt-- > 0) {
                 rd_kafkap_str_t Topic;
-                rd_kafka_itopic_t *rkt;
+                rd_kafka_topic_t *rkt;
                 int32_t PartCnt;
                 int p_actions = 0;
 
@@ -557,8 +557,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                         rd_kafka_topic_rdlock(rkt); /* for toppar_get() */
 
                 while (PartCnt-- > 0) {
-                        shptr_rd_kafka_toppar_t *s_rktp = NULL;
-                        rd_kafka_toppar_t *rktp;
+                        rd_kafka_toppar_t *rktp = NULL;
                         int32_t Partition;
                         int16_t ErrorCode;
 
@@ -566,11 +565,11 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
                         if (rkt)
-                                s_rktp = rd_kafka_toppar_get(rkt,
-                                                             Partition,
-                                                             rd_false);
+                                rktp = rd_kafka_toppar_get(rkt,
+                                                           Partition,
+                                                           rd_false);
 
-                        if (!s_rktp) {
+                        if (!rktp) {
                                 rd_rkb_dbg(rkb, EOS|RD_KAFKA_DBG_PROTOCOL,
                                            "ADDPARTS",
                                            "Unknown partition \"%.*s\" "
@@ -580,8 +579,6 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                            Partition);
                                 continue;
                         }
-
-                        rktp = rd_kafka_toppar_s2i(s_rktp);
 
                         switch (ErrorCode)
                         {
@@ -660,7 +657,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                 okcnt++;
                         }
 
-                        rd_kafka_toppar_destroy(s_rktp);
+                        rd_kafka_toppar_destroy(rktp);
                 }
 
                 if (rkt) {

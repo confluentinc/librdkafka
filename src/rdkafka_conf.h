@@ -388,6 +388,7 @@ struct rd_kafka_conf_s {
 	int    max_retries;
 	int    retry_backoff_ms;
 	int    batch_num_messages;
+        int    batch_size;
 	rd_kafka_compression_t compression_codec;
 	int    dr_err_only;
 

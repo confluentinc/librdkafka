@@ -1217,8 +1217,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "batch.num.messages", _RK_C_INT,
 	  _RK(batch_num_messages),
 	  "Maximum number of messages batched in one MessageSet. "
-	  "The total MessageSet size is also limited by message.max.bytes.",
+	  "The total MessageSet size is also limited by batch.size and "
+          "message.max.bytes.",
 	  1, 1000000, 10000 },
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "batch.size", _RK_C_INT,
+	  _RK(batch_size),
+	  "Maximum size (in bytes) of all messages batched in one MessageSet, "
+          "including protocol framing overhead. "
+          "This limit is applied after the first message has been added "
+          "to the batch, regardless of the first message's size, this is to "
+          "ensure that messages that exceed batch.size are produced. "
+	  "The total MessageSet size is also limited by batch.num.messages and "
+          "message.max.bytes.",
+	  1, INT_MAX, 1000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "delivery.report.only.error", _RK_C_BOOL,
 	  _RK(dr_err_only),
 	  "Only provide delivery reports for failed messages.",

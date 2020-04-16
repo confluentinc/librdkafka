@@ -836,8 +836,10 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         rd_kafka_broker_t *rkb = msetw->msetw_rkb;
         size_t len = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf);
-        size_t max_msg_size = (size_t)msetw->msetw_rkb->rkb_rk->
-                rk_conf.max_msg_size;
+        size_t max_msg_size = RD_MIN((size_t)msetw->msetw_rkb->rkb_rk->
+                                     rk_conf.max_msg_size,
+                                     (size_t)msetw->msetw_rkb->rkb_rk->
+                                     rk_conf.batch_size);
         rd_ts_t int_latency_base;
         rd_ts_t MaxTimestamp = 0;
         rd_kafka_msg_t *rkm;

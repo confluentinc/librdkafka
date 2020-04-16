@@ -211,6 +211,7 @@ _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
+_TEST_DECL(0110_batch_size);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -390,6 +391,7 @@ struct test tests[] = {
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
+        _TEST(0110_batch_size, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

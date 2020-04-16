@@ -704,7 +704,6 @@ int main (int argc, char **argv) {
 
 		if (get_wmarks) {
 			int64_t lo, hi;
-                        rd_kafka_resp_err_t err;
 
 			/* Only query for hi&lo partition watermarks */
 
@@ -731,7 +730,7 @@ int main (int argc, char **argv) {
 
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
-			rd_kafka_resp_err_t err = rd_kafka_last_error();
+			err = rd_kafka_last_error();
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
 				rd_kafka_err2str(err));
                         if (err == RD_KAFKA_RESP_ERR__INVALID_ARG)
@@ -744,7 +743,6 @@ int main (int argc, char **argv) {
 
 		while (run) {
 			rd_kafka_message_t *rkmessage;
-                        rd_kafka_resp_err_t err;
 
                         /* Poll for errors, etc. */
                         rd_kafka_poll(rk, 0);
@@ -787,7 +785,7 @@ int main (int argc, char **argv) {
 		rd_kafka_destroy(rk);
 
         } else if (mode == 'L') {
-                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,

@@ -1527,7 +1527,6 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 
         if (prop->set) {
                 /* Custom setter */
-                rd_kafka_conf_res_t res;
 
                 res = prop->set(scope, conf, prop->name, istr,
                                 _RK_PTR(void *, conf, prop->offset),

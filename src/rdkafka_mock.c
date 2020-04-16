@@ -2030,7 +2030,6 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         mcluster->bootstraps = rd_malloc(bootstraps_len + 1);
         of = 0;
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
-                int r;
                 r = rd_snprintf(&mcluster->bootstraps[of],
                                 bootstraps_len - of,
                                 "%s%s:%d",

@@ -398,7 +398,6 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
         if (rkb) {
                 if (rd_kafka_broker_is_up(rkb)) {
                         /* Cached coordinator is up, send request */
-                        rd_kafka_resp_err_t err;
                         rd_kafka_replyq_t replyq;
 
                         rd_kafka_replyq_copy(&replyq, &creq->creq_replyq);

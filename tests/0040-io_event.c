@@ -102,7 +102,7 @@ int main_0040_io_event (int argc, char **argv) {
 #endif
         if (r == -1)
 		TEST_FAIL("pipe() failed: %s\n", strerror(errno));
-	
+
 	rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
 
 	pfd.fd = fds[0];
@@ -121,8 +121,6 @@ int main_0040_io_event (int argc, char **argv) {
 	 * 9) Done.
 	 */
 	while (recvd < msgcnt) {
-		int r;
-
 #ifndef _MSC_VER
 		r = poll(&pfd, 1, 1000 * wait_multiplier);
 #else
@@ -130,7 +128,7 @@ int main_0040_io_event (int argc, char **argv) {
 #endif
 		if (r == -1) {
 			TEST_FAIL("poll() failed: %s", strerror(errno));
-			
+
 		} else if (r == 1) {
 			rd_kafka_event_t *rkev;
 			char b;

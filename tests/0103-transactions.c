@@ -377,7 +377,7 @@ void do_test_consumer_producer_txn (void) {
         test_msgver_init(&expect_mv, testid);
 
         for (txn = 0 ; txn < txncnt ; txn++) {
-                int msgcnt = 10 * (1 + (txn % 3));
+                int msgcnt2 = 10 * (1 + (txn % 3));
                 rd_kafka_message_t *msgs[_MSGCNT];
                 int i;
                 rd_bool_t do_abort = !(txn % 3);
@@ -385,19 +385,19 @@ void do_test_consumer_producer_txn (void) {
                 rd_kafka_topic_partition_list_t *offsets;
                 rd_kafka_resp_err_t err;
                 rd_kafka_consumer_group_metadata_t *c1_cgmetadata;
-                int remains = msgcnt;
+                int remains = msgcnt2;
 
                 TEST_SAY(_C_BLU "Begin transaction #%d/%d "
                          "(msgcnt=%d, do_abort=%s, recreate_consumer=%s)\n",
-                         txn, txncnt, msgcnt,
+                         txn, txncnt, msgcnt2,
                          do_abort ? "true":"false",
                          recreate_consumer ? "true":"false");
 
-                consume_messages(c1, msgs, msgcnt);
+                consume_messages(c1, msgs, msgcnt2);
 
                 TEST_CALL_ERROR__(rd_kafka_begin_transaction(p2));
 
-                for (i = 0 ; i < msgcnt ; i++) {
+                for (i = 0 ; i < msgcnt2 ; i++) {
                         rd_kafka_message_t *msg = msgs[i];
 
                         if (!do_abort) {
@@ -429,7 +429,7 @@ void do_test_consumer_producer_txn (void) {
                         rd_kafka_poll(p2, 0);
                 }
 
-                destroy_messages(msgs, msgcnt);
+                destroy_messages(msgs, msgcnt2);
 
                 err = rd_kafka_assignment(c1, &offsets);
                 TEST_ASSERT(!err, "failed to get consumer assignment: %s",

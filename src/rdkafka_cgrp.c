@@ -3481,6 +3481,55 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
 
 
 
+/**
+ * @brief Generate consumer errors for each topic in the list.
+ *
+ * Also replaces the list of last reported topic errors so that repeated
+ * errors are silenced.
+ *
+ * @param errored Errored topics.
+ * @param error_prefix Error message prefix.
+ *
+ * @remark Assumes ownership of \p errored.
+ */
+static void
+rd_kafka_propagate_consumer_topic_errors (
+        rd_kafka_cgrp_t *rkcg, rd_kafka_topic_partition_list_t *errored,
+        const char *error_prefix) {
+        int i;
+
+        for (i = 0 ; i < errored->cnt ; i++) {
+                rd_kafka_topic_partition_t *topic = &errored->elems[i];
+                rd_kafka_topic_partition_t *prev;
+
+                rd_assert(topic->err);
+
+                /* Check if this topic errored previously */
+                prev = rd_kafka_topic_partition_list_find(
+                        rkcg->rkcg_errored_topics, topic->topic,
+                        RD_KAFKA_PARTITION_UA);
+
+                if (prev && prev->err == topic->err)
+                        continue; /* This topic already reported same error */
+
+                rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
+                                                    topic),
+                /* Send consumer error to application */
+                rd_kafka_q_op_err(
+                        rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
+                        topic->err, 0,
+                        rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
+                                                            topic),
+                        RD_KAFKA_OFFSET_INVALID,
+                        "%s: %s: %s",
+                        error_prefix, topic->topic,
+                        rd_kafka_err2str(topic->err));
+        }
+
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
+        rkcg->rkcg_errored_topics = errored;
+}
+
 
 /**
  * @brief Check if the latest metadata affects the current subscription:

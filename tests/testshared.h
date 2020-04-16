@@ -73,6 +73,8 @@ void test_delete_topic (rd_kafka_t *use_rk, const char *topicname);
 void test_create_topic (rd_kafka_t *use_rk, const char *topicname,
                         int partition_cnt, int replication_factor);
 
+void test_kafka_cmd (const char *fmt, ...);
+
 uint64_t
 test_produce_msgs_easy_size (const char *topic, uint64_t testid,
                              int32_t partition, int msgcnt, size_t size);

@@ -1210,7 +1210,7 @@ rd_kafka_CreateTopicsResponse_parse (rd_kafka_op_t *rko_req,
                 rd_kafkap_str_t ktopic;
                 int16_t error_code;
                 rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
-                char *errstr = NULL;
+                char *this_errstr = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
                 int orig_pos;
@@ -1231,23 +1231,22 @@ rd_kafka_CreateTopicsResponse_parse (rd_kafka_op_t *rko_req,
                                              admin_request.options.
                                              operation_timeout) <= 0) {
                         error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
-                        errstr = NULL;
+                        this_errstr = NULL;
                 }
 
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
                             RD_KAFKAP_STR_LEN(&error_msg) == 0)
-                                errstr = (char *)rd_kafka_err2str(error_code);
+                                this_errstr =
+                                        (char *)rd_kafka_err2str(error_code);
                         else
-                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
 
-                } else {
-                        errstr = NULL;
                 }
 
                 terr = rd_kafka_topic_result_new(ktopic.str,
                                                  RD_KAFKAP_STR_LEN(&ktopic),
-                                                 error_code, errstr);
+                                                 error_code, this_errstr);
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker
@@ -1722,7 +1721,7 @@ rd_kafka_CreatePartitionsResponse_parse (rd_kafka_op_t *rko_req,
         for (i = 0 ; i < (int)topic_cnt ; i++) {
                 rd_kafkap_str_t ktopic;
                 int16_t error_code;
-                char *errstr = NULL;
+                char *this_errstr = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
                 rd_kafkap_str_t error_msg;
@@ -1747,15 +1746,17 @@ rd_kafka_CreatePartitionsResponse_parse (rd_kafka_op_t *rko_req,
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
                             RD_KAFKAP_STR_LEN(&error_msg) == 0)
-                                errstr = (char *)rd_kafka_err2str(error_code);
+                                this_errstr =
+                                        (char *)rd_kafka_err2str(error_code);
                         else
-                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
                 }
 
                 terr = rd_kafka_topic_result_new(ktopic.str,
                                                  RD_KAFKAP_STR_LEN(&ktopic),
                                                  error_code,
-                                                 error_code ? errstr : NULL);
+                                                 error_code ?
+                                                 this_errstr : NULL);
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker
@@ -2290,7 +2291,7 @@ rd_kafka_AlterConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 int8_t res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
-                char *errstr = NULL;
+                char *this_errstr = NULL;
                 rd_kafka_ConfigResource_t *config;
                 rd_kafka_ConfigResource_t skel;
                 int orig_pos;
@@ -2304,9 +2305,10 @@ rd_kafka_AlterConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
                             RD_KAFKAP_STR_LEN(&error_msg) == 0)
-                                errstr = (char *)rd_kafka_err2str(error_code);
+                                this_errstr =
+                                        (char *)rd_kafka_err2str(error_code);
                         else
-                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
                 }
 
                 config = rd_kafka_ConfigResource_new(res_type, res_name);
@@ -2320,8 +2322,8 @@ rd_kafka_AlterConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 }
 
                 config->err = error_code;
-                if (errstr)
-                        config->errstr = rd_strdup(errstr);
+                if (this_errstr)
+                        config->errstr = rd_strdup(this_errstr);
 
                 /* As a convenience to the application we insert result
                  * in the same order as they were requested. The broker
@@ -2483,7 +2485,7 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 int8_t res_type;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
-                char *errstr = NULL;
+                char *this_errstr = NULL;
                 rd_kafka_ConfigResource_t skel;
                 int orig_pos;
                 int32_t entry_cnt;
@@ -2498,9 +2500,10 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
                             RD_KAFKAP_STR_LEN(&error_msg) == 0)
-                                errstr = (char *)rd_kafka_err2str(error_code);
+                                this_errstr =
+                                        (char *)rd_kafka_err2str(error_code);
                         else
-                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
                 }
 
                 config = rd_kafka_ConfigResource_new(res_type, res_name);
@@ -2514,8 +2517,8 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                 }
 
                 config->err = error_code;
-                if (errstr)
-                        config->errstr = rd_strdup(errstr);
+                if (this_errstr)
+                        config->errstr = rd_strdup(this_errstr);
 
                 /* #config_entries */
                 rd_kafka_buf_read_i32(reply, &entry_cnt);

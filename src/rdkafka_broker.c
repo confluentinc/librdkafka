@@ -4956,8 +4956,6 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         /* Handle is terminating: fail the send+retry queue
                          * to speed up termination, otherwise we'll
                          * need to wait for request timeouts. */
-                        int r;
-
                         r = rd_kafka_broker_bufq_timeout_scan(
                                 rkb, 0, &rkb->rkb_outbufs, NULL, -1,
                                 RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);

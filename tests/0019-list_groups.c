@@ -198,7 +198,7 @@ int main_0019_list_groups (int argc, char **argv) {
         TIMING_START(&t_grps, "WAIT.GROUPS");
         /* Query groups again until both groups are seen. */
         while (1) {
-                int groups_seen = list_groups(rk, (char **)groups, _CONS_CNT,
+                groups_seen = list_groups(rk, (char **)groups, _CONS_CNT,
                                               "should see my groups");
                 if (groups_seen == _CONS_CNT)
                         break;

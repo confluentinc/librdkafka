@@ -1549,7 +1549,6 @@ int main (int argc, char **argv) {
 			fetch_latency = rd_clock();
 
 			if (batch_size) {
-				int i;
 				int partition = partitions ? partitions[0] :
 				    RD_KAFKA_PARTITION_UA;
 
@@ -1559,7 +1558,7 @@ int main (int argc, char **argv) {
 							   rkmessages,
 							   batch_size);
 				if (r != -1) {
-					for (i = 0 ; i < r ; i++) {
+					for (i = 0 ; (ssize_t)i < r ; i++) {
 						msg_consume(rkmessages[i],
 							NULL);
 						rd_kafka_message_destroy(
@@ -1617,7 +1616,6 @@ int main (int argc, char **argv) {
 		/*
 		 * High-level balanced Consumer
 		 */
-		rd_kafka_resp_err_t err;
 
 		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 		rd_kafka_conf_set_default_topic_conf(conf, topic_conf);

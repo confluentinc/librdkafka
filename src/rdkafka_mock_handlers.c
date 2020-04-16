@@ -882,7 +882,6 @@ static int rd_kafka_mock_handle_Metadata (rd_kafka_mock_connection_t *mconn,
         const rd_kafka_mock_broker_t *mrkb;
         rd_kafka_topic_partition_list_t *requested_topics = NULL;
         rd_bool_t list_all_topics = rd_false;
-        rd_kafka_mock_topic_t *mtopic;
         int32_t TopicsCnt;
         int i;
 
@@ -949,6 +948,7 @@ static int rd_kafka_mock_handle_Metadata (rd_kafka_mock_connection_t *mconn,
         }
 
         if (list_all_topics) {
+                rd_kafka_mock_topic_t *mtopic;
                 /* Response: #Topics */
                 rd_kafka_buf_write_i32(resp, mcluster->topic_cnt);
 

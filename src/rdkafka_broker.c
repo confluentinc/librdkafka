@@ -1959,8 +1959,13 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
 	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_i32(rkbuf, &MechCnt);
 
+        if (MechCnt < 0 || MechCnt > 100)
+                rd_kafka_buf_parse_fail(rkbuf,
+                                        "Invalid MechanismCount %"PRId32,
+                                        MechCnt);
+
 	/* Build a CSV string of supported mechanisms. */
-	msz = RD_MIN(511, MechCnt * 32);
+	msz = RD_MIN(511, 1 + (MechCnt * 32));
 	mechs = rd_alloca(msz);
 	*mechs = '\0';
 

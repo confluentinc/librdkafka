@@ -48,6 +48,7 @@ int test_level = 2;
 int test_seed = 0;
 
 char test_mode[64] = "bare";
+char test_scenario[64] = "default";
 static volatile sig_atomic_t test_exit = 0;
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
@@ -616,6 +617,8 @@ static void test_init (void) {
                 test_level = atoi(tmp);
         if ((tmp = test_getenv("TEST_MODE", NULL)))
                 strncpy(test_mode, tmp, sizeof(test_mode)-1);
+        if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
+                strncpy(test_scenario, tmp, sizeof(test_scenario)-1);
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
         if ((tmp = test_getenv("TEST_SEED", NULL)))
@@ -1156,6 +1159,8 @@ static void run_tests (int argc, char **argv) {
                 const char *skip_reason = NULL;
                 rd_bool_t skip_silent = rd_false;
 		char tmp[128];
+                const char *scenario =
+                        test->scenario ? test->scenario : "default";
 
                 if (!test->mainfunc)
                         continue;
@@ -1183,6 +1188,13 @@ static void run_tests (int argc, char **argv) {
 				    TEST_BRKVER_X(test_broker_version, 3));
 			skip_reason = tmp;
 		}
+
+                if (strcmp(scenario, test_scenario)) {
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "requires test scenario %s", scenario);
+                        skip_silent = rd_true;
+                        skip_reason = tmp;
+                }
 
                 if (tests_to_run && !strstr(tests_to_run, testnum)) {
                         skip_reason = "not included in TESTS list";
@@ -1252,11 +1264,12 @@ static int test_summary (int do_lock) {
         else
                 fprintf(report_fp,
                         "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
+                        "\"scenario\": \"%s\", "
 			"\"date\": \"%s\", "
 			"\"git_version\": \"%s\", "
 			"\"broker_version\": \"%s\", "
 			"\"tests\": {",
-			datestr, test_mode, test_mode, datestr,
+			datestr, test_mode, test_mode, test_scenario, datestr,
 			test_git_version,
 			test_broker_version_str);
 
@@ -1281,9 +1294,9 @@ static int test_summary (int do_lock) {
 	}
 
 	if (show_summary)
-		printf("TEST %s (%s) SUMMARY\n"
+		printf("TEST %s (%s, scenario %s) SUMMARY\n"
 		       "#==================================================================#\n",
-		       datestr, test_mode);
+		       datestr, test_mode, test_scenario);
 
         for (test = tests ; test->name ; test++) {
                 const char *color;
@@ -1543,6 +1556,9 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_SOCKEM;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
+                else if (!strcmp(argv[i], "-s") && i+1 < argc)
+                        strncpy(test_scenario, argv[i],
+                                sizeof(test_scenario)-1);
 		else if (!strcmp(argv[i], "-S"))
 			show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
@@ -1577,6 +1593,7 @@ int main(int argc, char **argv) {
                                "  -E     Don't run sockem tests\n"
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
+                               "  -s <scenario> Test scenario.\n"
 			       "  -V <N.N.N.N> Broker version.\n"
                                "  -D     Delete all test topics between each test (-p1) or after all tests\n"
                                "  -P     Run all tests with `enable.idempotency=true`\n"
@@ -1590,6 +1607,7 @@ int main(int argc, char **argv) {
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
 			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
+                               "  TEST_SCENARIO - Test scenario\n"
 			       "  TEST_LEVEL - Test verbosity level\n"
 			       "  TEST_MODE - bare, helgrind, valgrind\n"
 			       "  TEST_SEED - random seed\n"
@@ -1658,9 +1676,10 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
-	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
-	TEST_SAY("Test mode   : %s%s\n", test_quick ? "quick, ":"", test_mode);
-        TEST_SAY("Test filter : %s\n",
+	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
+	TEST_SAY("Test mode    : %s%s\n", test_quick ? "quick, ":"", test_mode);
+        TEST_SAY("Test scenario: %s\n", test_scenario);
+        TEST_SAY("Test filter  : %s\n",
                  (test_flags & TEST_F_LOCAL) ? "local tests only" : "no filter");
         TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
@@ -5013,7 +5032,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
  * @param useq Makes the call async and posts the response in this queue.
  *             If NULL this call will be synchronous and return the error
  *             result.
- *             
+ *
  * @remark Fails the current test on failure.
  */
 

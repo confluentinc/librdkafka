@@ -255,9 +255,9 @@ static int get_broker_rack_count (std::vector<int> &replica_ids)
 
     for (size_t j = 0; j<entry_cnt; ++j) {
       const rd_kafka_ConfigEntry_t *e = entries[j];
-      const char * name = rd_kafka_ConfigEntry_name(e);
-      if (!strcmp(name, "broker.rack")) {
-        const char * val = rd_kafka_ConfigEntry_value(e) ? rd_kafka_ConfigEntry_value(e) : "(NULL)";
+      const char *cname = rd_kafka_ConfigEntry_name(e);
+      if (!strcmp(cname, "broker.rack")) {
+        const char *val = rd_kafka_ConfigEntry_value(e) ? rd_kafka_ConfigEntry_value(e) : "(NULL)";
         racks.insert(std::string(val));
       }
     }

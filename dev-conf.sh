@@ -81,11 +81,12 @@ case "$1" in
 esac
 
 
-export CFLAGS="-Wshadow=compatible-local -Wshadow=local"
+export CFLAGS="$CFLAGS -std=c99 -Wshadow=compatible-local -Wshadow=local"
+export CXXFLAGS="$CXXFLAGS -std=c++98 -Wshadow=compatible-local -Wshadow=local"
 
 # enable pedantic
-#export CFLAGS='-std=c99 -pedantic -Wshadow'
-#export CXXFLAGS='-std=c++98 -pedantic'
+#export CFLAGS='-pedantic'
+#export CXXFLAGS='-pedantic'
 
 if [[ ! -z $FSAN ]]; then
     export CPPFLAGS="$CPPFLAGS $FSAN"

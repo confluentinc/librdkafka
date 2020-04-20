@@ -39,6 +39,7 @@
  * the idempotent guarantees can't be satisfied.
  */
 
+#define _BSD_SOURCE  /** vsnprintf() */
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>

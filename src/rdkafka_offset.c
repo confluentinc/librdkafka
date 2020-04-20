@@ -819,7 +819,8 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
            BEGINNING / END logical offsets. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 		rd_kafka_toppar_offset_request(rktp,
-                                               rktp->rktp_query_offset, 0);
+                                               rktp->rktp_query_offset,
+                                               err ? 100 : 0);
 }
 
 

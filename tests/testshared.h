@@ -44,6 +44,9 @@ typedef struct rd_kafka_s rd_kafka_t;
 #define _C_CYA "\033[36m"
 
 
+/** Test scenario */
+extern char test_scenario[64];
+
 /** @returns the \p msecs timeout multiplied by the test timeout multiplier */
 extern int tmout_multip (int msecs);
 

@@ -19,7 +19,7 @@ class LibrdkafkaTestApp(App):
     """ Sets up and executes the librdkafka regression tests.
         Assumes tests are in the current directory.
         Must be instantiated after ZookeeperApp and KafkaBrokerApp """
-    def __init__(self, cluster, version, conf=None, tests=None):
+    def __init__(self, cluster, version, conf=None, tests=None, scenario="default"):
         super(LibrdkafkaTestApp, self).__init__(cluster, conf=conf)
 
         self.appid = UuidAllocator(self.cluster).next(self, trunc=8)
@@ -131,6 +131,7 @@ class LibrdkafkaTestApp(App):
         f.write(('\n'.join(conf_blob)).encode('ascii'))
         f.close()
 
+        self.env_add('TEST_SCENARIO', scenario)
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
         self.env_add('TEST_KAFKA_VERSION', version)
         self.env_add('TRIVUP_ROOT', cluster.instance_path())

@@ -122,6 +122,8 @@ struct test {
 
 	const char *extra;   /**< Extra information to print in test_summary. */
 
+        const char *scenario; /**< Test scenario */
+
 	char **report_arr;   /**< Test-specific reporting, JSON array of objects. */
 	int report_cnt;
 	int report_size;

@@ -4270,7 +4270,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 						hdr.ErrorCode, tver->version,
 						rktp,
 						rktp->rktp_offsets.fetch_offset,
-						"%s",
+						"Fetch failed: %s",
 						rd_kafka_err2str(hdr.ErrorCode));
 					break;
 				}

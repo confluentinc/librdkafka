@@ -1690,7 +1690,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 /**
  * @brief Add partition to this cgrp management
  *
- * @locks rktp_lock MUST be held.
+ * @locks none
  */
 static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
                                          rd_kafka_toppar_t *rktp) {
@@ -1700,8 +1700,11 @@ static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition);
 
+        rd_kafka_toppar_lock(rktp);
         rd_assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP));
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_CGRP;
+        rd_kafka_toppar_unlock(rktp);
+
         rd_kafka_toppar_keep(rktp);
         rd_list_add(&rkcg->rkcg_toppars, rktp);
 }
@@ -1709,7 +1712,7 @@ static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
 /**
  * @brief Remove partition from this cgrp management
  *
- * @locks rktp_lock MUST be held.
+ * @locks none
  */
 static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
                                          rd_kafka_toppar_t *rktp) {
@@ -1719,8 +1722,11 @@ static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition);
 
+        rd_kafka_toppar_lock(rktp);
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
+        rd_kafka_toppar_unlock(rktp);
+
         rd_list_remove(&rkcg->rkcg_toppars, rktp);
         rd_kafka_toppar_destroy(rktp); /* refcnt from _add above */
 

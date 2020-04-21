@@ -441,7 +441,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rk->rk_topic_cnt++;
 
         /* Populate from metadata cache. */
-        if ((rkmce = rd_kafka_metadata_cache_find(rk, topic, 1/*valid*/))) {
+        if ((rkmce = rd_kafka_metadata_cache_find(rk, topic, 1/*valid*/)) &&
+            !rkmce->rkmce_mtopic.err) {
                 if (existing)
                         *existing = 1;
 

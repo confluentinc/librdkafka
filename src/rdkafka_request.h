@@ -196,6 +196,7 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                           const rd_list_t *topics, const char *reason,
+                          rd_bool_t cgrp_update,
                           rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t

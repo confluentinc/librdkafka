@@ -3518,6 +3518,14 @@ rd_kafka_propagate_consumer_topic_errors (
 
                 rd_assert(topic->err);
 
+                /* Normalize error codes, unknown topic may be
+                 * reported by the broker, or the lack of a topic in
+                 * metadata response is figured out by the client.
+                 * Make sure the application only sees one error code
+                 * for both these cases. */
+                if (topic->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+                        topic->err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
                 /* Check if this topic errored previously */
                 prev = rd_kafka_topic_partition_list_find(
                         rkcg->rkcg_errored_topics, topic->topic,
@@ -3525,6 +3533,12 @@ rd_kafka_propagate_consumer_topic_errors (
 
                 if (prev && prev->err == topic->err)
                         continue; /* This topic already reported same error */
+
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_TOPIC,
+                             "TOPICERR",
+                             "%s: %s: %s",
+                             error_prefix, topic->topic,
+                             rd_kafka_err2str(topic->err));
 
                 /* Send consumer error to application */
                 rd_kafka_q_op_topic_err(

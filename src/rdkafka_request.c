@@ -1751,6 +1751,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
  *  topics.cnt >0   - only specified topics are requested
  *
  * @param reason    - metadata request reason
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
@@ -1764,6 +1765,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                           const rd_list_t *topics, const char *reason,
+                          rd_bool_t cgrp_update,
                           rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -1783,6 +1785,7 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                 reason = "";
 
         rkbuf->rkbuf_u.Metadata.reason = rd_strdup(reason);
+        rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
 
         if (!topics && ApiVersion >= 1) {
                 /* a null(0) array (in the protocol) represents no topics */

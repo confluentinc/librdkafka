@@ -1440,7 +1440,7 @@ To read more about static group membership, see [KIP-345](https://cwiki.apache.o
 
 If a consumer application subscribes to non-existent or unauthorized topics
 a consumer error will be propagated for each unavailable topic with the
-error code set to either `RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC` or a
+error code set to either `RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART` or a
 broker-specific error code, such as
 `RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED`.
 

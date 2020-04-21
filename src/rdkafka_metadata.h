@@ -152,9 +152,6 @@ int rd_kafka_metadata_cache_topic_partition_get (
 int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
                                                  const rd_list_t *topics,
                                                  int *metadata_agep);
-int rd_kafka_metadata_cache_topics_filter_hinted (rd_kafka_t *rk,
-                                                  rd_list_t *dst,
-                                                  const rd_list_t *src);
 
 void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk);
 

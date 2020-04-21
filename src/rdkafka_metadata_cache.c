@@ -300,10 +300,18 @@ void rd_kafka_metadata_cache_expiry_start (rd_kafka_t *rk) {
 /**
  * @brief Update the metadata cache for a single topic
  *        with the provided metadata.
- *        If the topic has an error the existing entry is removed
- *        and no new entry is added, which avoids the topic to be
- *        suppressed in upcoming metadata requests because being in the cache.
- *        In other words: we want to re-query errored topics.
+ *
+ * If the topic has a temporary error the existing entry is removed
+ * and no new entry is added, which avoids the topic to be
+ * suppressed in upcoming metadata requests because being in the cache.
+ * In other words: we want to re-query errored topics.
+ * If the broker reports ERR_UNKNOWN_TOPIC_OR_PART we add a negative cache
+ * entry with an low expiry time, this is so that client code (cgrp) knows
+ * the topic has been queried but did not exist, otherwise it would wait
+ * forever for the unknown topic to surface.
+ *
+ * For permanent errors (authorization failures), we keep
+ * the entry cached for metadata.max.age.ms.
  *
  * @remark The cache expiry timer will not be updated/started,
  *         call rd_kafka_metadata_cache_expiry_start() instead.
@@ -317,7 +325,14 @@ rd_kafka_metadata_cache_topic_update (rd_kafka_t *rk,
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
         int changed = 1;
 
-        if (!mdt->err)
+        /* Cache unknown topics for a short while (100ms) to allow the cgrp
+         * logic to find negative cache hits. */
+        if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                ts_expires = RD_MIN(ts_expires, now + (100 * 1000));
+
+        if (!mdt->err ||
+            mdt->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED ||
+            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
                 rd_kafka_metadata_cache_insert(rk, mdt, now, ts_expires);
         else
                 changed = rd_kafka_metadata_cache_delete_by_name(rk,
@@ -588,6 +603,8 @@ rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic,
 /**
  * @brief Looks up the shared metadata for a partition along with its topic.
  *
+ * Cache entries with errors (such as auth errors) will not be returned.
+ *
  * @param mtopicp: pointer to topic metadata
  * @param mpartp: pointer to partition metadata
  * @param valid: only return valid entries (no hints)
@@ -611,6 +628,9 @@ int rd_kafka_metadata_cache_topic_partition_get (
         *mpartp = NULL;
 
         if (!(mtopic = rd_kafka_metadata_cache_topic_get(rk, topic, valid)))
+                return -1;
+
+        if (mtopic->err)
                 return -1;
 
         *mtopicp = mtopic;
@@ -666,38 +686,6 @@ int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
 
 }
 
-
-/**
- * @brief Copies any topics in \p src to \p dst that have a valid cache
- *        entry, or not in the cache at all.
- *
- *        In other words; hinted non-valid topics will not copied to \p dst.
- *
- * @returns the number of topics copied
- *
- * @locks rd_kafka_*lock()
- */
-int rd_kafka_metadata_cache_topics_filter_hinted (rd_kafka_t *rk,
-                                                  rd_list_t *dst,
-                                                  const rd_list_t *src) {
-        const char *topic;
-        int i;
-        int cnt = 0;
-
-
-        RD_LIST_FOREACH(topic, src, i) {
-                const struct rd_kafka_metadata_cache_entry *rkmce;
-
-                rkmce = rd_kafka_metadata_cache_find(rk, topic, 0/*any sort*/);
-                if (rkmce && !RD_KAFKA_METADATA_CACHE_VALID(rkmce))
-                        continue;
-
-                rd_list_add(dst, rd_strdup(topic));
-                cnt++;
-        }
-
-        return cnt;
-}
 
 
 

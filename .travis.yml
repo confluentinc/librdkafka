@@ -26,7 +26,7 @@ matrix:
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
  - name: "Linux clang: +static +alpine-static"
    os: linux
    compiler: clang
@@ -38,7 +38,7 @@ matrix:
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
  - name: "OSX clang: +static"
    os: osx
    # Use an older image to disable syslog and for broader compatibility

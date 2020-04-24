@@ -632,6 +632,8 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
                                 " (install ca-certificates package)"
 #endif
                                 ;
+                else if (!strcmp(errstr, "Disconnected"))
+                        extra = ": connecting to a PLAINTEXT broker listener?";
 
                 rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__SSL,
                                      "SSL handshake failed: %s%s", errstr,

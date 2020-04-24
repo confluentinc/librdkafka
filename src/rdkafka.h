@@ -6649,7 +6649,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * transactional messages issued by this producer instance.
  *
  * Upon successful return from this function the application has to perform at
- * least one of the following operations within \c transactional.timeout.ms to
+ * least one of the following operations within \c transaction.timeout.ms to
  * avoid timing out the transaction on the broker:
  *   * rd_kafka_produce() (et.al)
  *   * rd_kafka_send_offsets_to_transaction()

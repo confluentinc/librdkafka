@@ -367,6 +367,8 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
         char extra[128];
         size_t of, ofe;
         rd_bool_t identical, suppress;
+        int state_duration_ms = (int)((rd_clock() - rkb->rkb_ts_state)/1000);
+
 
         of = (size_t)rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
         if (of > sizeof(errstr))
@@ -375,11 +377,12 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
         /* Provide more meaningful error messages in certain cases */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
             !strcmp(errstr, "Disconnected")) {
-                /* A disconnect while requesting ApiVersion typically
-                 * means we're connecting to a SSL-listener as
-                 * PLAINTEXT, but may also be caused by connecting to
-                 * a broker that does not support ApiVersion (<0.10). */
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
+                        /* A disconnect while requesting ApiVersion typically
+                         * means we're connecting to a SSL-listener as
+                         * PLAINTEXT, but may also be caused by connecting to
+                         * a broker that does not support ApiVersion (<0.10). */
+
                         if (rkb->rkb_proto != RD_KAFKA_PROTO_SSL &&
                             rkb->rkb_proto != RD_KAFKA_PROTO_SASL_SSL)
                                 rd_kafka_broker_set_error(
@@ -400,6 +403,24 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
                                         "< 0.10 (see api.version.request)",
                                         ap/*ignored*/);
                         return;
+
+                } else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP &&
+                           state_duration_ms < 2000/*2s*/ &&
+                           rkb->rkb_rk->rk_conf.security_protocol !=
+                           RD_KAFKA_PROTO_SASL_SSL &&
+                           rkb->rkb_rk->rk_conf.security_protocol !=
+                           RD_KAFKA_PROTO_SASL_PLAINTEXT) {
+                        /* If disconnected shortly after transitioning to UP
+                         * state it typically means the broker listener is
+                         * configured for SASL authentication but the client
+                         * is not. */
+                        rd_kafka_broker_set_error(
+                                rkb, level, err,
+                                "Disconnected: verify that security.protocol "
+                                "is correctly configured, broker might "
+                                "require SASL authentication",
+                                ap/*ignored*/);
+                        return;
                 }
         }
 
@@ -419,8 +440,8 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
 
         /* Time since last state change to help debug connection issues */
         ofe = rd_snprintf(extra, sizeof(extra),
-                          "after %"PRId64"ms in state %s",
-                          (rd_clock() - rkb->rkb_ts_state)/1000,
+                          "after %dms in state %s",
+                          state_duration_ms,
                           rd_kafka_broker_state_names[rkb->rkb_state]);
 
         /* Number of suppressed identical logs */
@@ -451,11 +472,12 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
         else
                 rkb->rkb_last_err.cnt++;
 
-        rd_rkb_dbg(rkb, BROKER, "FAIL", "%s (%s)%s",
+        rd_rkb_dbg(rkb, BROKER, "FAIL", "%s (%s)%s%s",
                    errstr, rd_kafka_err2name(err),
+                   identical ? ": identical to last error" : "",
                    suppress ? ": error log suppressed" : "");
 
-        if (level != LOG_DEBUG && !suppress) {
+        if (level != LOG_DEBUG && (level <= LOG_CRIT || !suppress)) {
                 /* Don't log if an error callback is registered,
                  * or the error event is enabled. */
                 if (!(rkb->rkb_rk->rk_conf.enabled_events &
@@ -463,7 +485,7 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
                         rd_kafka_log(rkb->rkb_rk, level, "FAIL",
                                      "%s: %s", rkb->rkb_name, errstr);
 
-                /* Send ERR op back to application for processing. */
+                /* Send ERR op to application for processing. */
                 rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, RD_KAFKA_OP_ERR,
                                   err, 0, NULL, 0, "%s: %s",
                                   rkb->rkb_name, errstr);
@@ -1965,7 +1987,6 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 
 	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
-        rkb->rkb_last_err.err = 0;
 
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);

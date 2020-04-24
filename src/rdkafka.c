@@ -34,8 +34,10 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#if !_WIN32
 #include <sys/types.h>
 #include <dirent.h>
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -3497,24 +3499,11 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 			rk->rk_conf.error_cb(rk, rko->rko_err,
 					     rko->rko_u.err.errstr,
                                              rk->rk_conf.opaque);
-                else {
-                        /* If error string already contains
-                         * the err2str then skip including err2str in
-                         * the printout */
-                        if (rko->rko_u.err.errstr &&
-                            strstr(rko->rko_u.err.errstr,
-                                   rd_kafka_err2str(rko->rko_err)))
-                                rd_kafka_log(rk, LOG_ERR, "ERROR",
-                                             "%s: %s",
-                                             rk->rk_name,
-                                             rko->rko_u.err.errstr);
-                        else
-                                rd_kafka_log(rk, LOG_ERR, "ERROR",
-                                             "%s: %s: %s",
-                                             rk->rk_name,
-                                             rko->rko_u.err.errstr,
-                                             rd_kafka_err2str(rko->rko_err));
-                }
+                else
+                        rd_kafka_log(rk, LOG_ERR, "ERROR",
+                                     "%s: %s",
+                                     rk->rk_name,
+                                     rko->rko_u.err.errstr);
                 break;
 
 	case RD_KAFKA_OP_DR:

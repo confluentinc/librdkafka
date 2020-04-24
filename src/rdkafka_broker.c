@@ -291,12 +291,9 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 	if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
 		/* no-op */
 	} else if (state == RD_KAFKA_BROKER_STATE_DOWN &&
-		   !rkb->rkb_down_reported &&
-		   rkb->rkb_state != RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
+		   !rkb->rkb_down_reported) {
 		/* Propagate ALL_BROKERS_DOWN event if all brokers are
-		 * now down, unless we're terminating.
-		 * Dont do this if we're querying for ApiVersion since it
-		 * is bound to fail once on older brokers. */
+		 * now down, unless we're terminating. */
 		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
 		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                     rd_atomic32_get(&rkb->rkb_rk->rk_broker_addrless_cnt) &&
@@ -2194,14 +2191,14 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 
 
 	if (err) {
-		rd_kafka_broker_fail(rkb, LOG_DEBUG,
-				     RD_KAFKA_RESP_ERR__TRANSPORT,
-				     "ApiVersionRequest failed: %s: "
-				     "probably due to incorrect "
-                                     "security.protocol "
-                                     "or broker version is < 0.10 "
-                                     "(see api.version.request)",
-				     rd_kafka_err2str(err));
+                if (rkb->rkb_transport)
+                        rd_kafka_broker_fail(
+                                rkb, LOG_WARNING,
+                                RD_KAFKA_RESP_ERR__TRANSPORT,
+                                "ApiVersionRequest failed: %s: "
+                                "probably due to broker version < 0.10 "
+                                "(see api.version.request configuration)",
+                                rd_kafka_err2str(err));
 		return;
 	}
 

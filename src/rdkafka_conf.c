@@ -3741,6 +3741,12 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
                              "may only contain 'a-zA-Z0-9.-', other characters "
                              "will be replaced with '-'");
 
+        if (rd_atomic32_get(&rk->rk_broker_cnt) == 0)
+                rd_kafka_log(rk, LOG_NOTICE, "CONFWARN",
+                             "No `bootstrap.servers` configured: "
+                             "client will not be able to connect "
+                             "to Kafka cluster");
+
         return cnt;
 }
 

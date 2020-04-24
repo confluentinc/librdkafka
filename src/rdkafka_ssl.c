@@ -798,6 +798,10 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
                 "/usr/local/share/certs/ca-root-nss.crt",
                 "/etc/openssl/certs/ca-certificates.crt",
 #ifdef __APPLE__
+                "/private/etc/ssl/cert.pem",
+                "/private/etc/ssl/certs",
+                "/usr/local/etc/openssl@1.1/cert.pem",
+                "/usr/local/etc/openssl@1.0/cert.pem",
                 "/System/Library/OpenSSL",
 #endif
 #ifdef _AIX

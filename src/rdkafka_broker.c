@@ -348,32 +348,147 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 
 
 /**
- * Failure propagation to application.
- * Will tear down connection to broker and trigger a reconnect.
+ * @brief Set, log and propagate broker fail error.
  *
- * If 'fmt' is NULL nothing will be logged or propagated to the application.
+ * The caller may omit the format if it thinks this is a recurring
+ * failure, in which case the following things are omitted:
+ *  - log message
+ *  - application OP_ERR
+ *
+ * Dont log anything if this was the termination signal.
+ *
+ * @locks none
+ * @locality broker thread
+ */
+static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
+                                       rd_kafka_resp_err_t err,
+                                       const char *fmt, va_list ap) {
+        char errstr[512];
+        char extra[128];
+        size_t of, ofe;
+        rd_bool_t identical, suppress;
+
+        of = (size_t)rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
+        if (of > sizeof(errstr))
+                of = sizeof(errstr);
+
+        /* Provide more meaningful error messages in certain cases */
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
+            !strcmp(errstr, "Disconnected")) {
+                /* A disconnect while requesting ApiVersion typically
+                 * means we're connecting to a SSL-listener as
+                 * PLAINTEXT, but may also be caused by connecting to
+                 * a broker that does not support ApiVersion (<0.10). */
+                if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
+                        if (rkb->rkb_proto != RD_KAFKA_PROTO_SSL &&
+                            rkb->rkb_proto != RD_KAFKA_PROTO_SASL_SSL)
+                                rd_kafka_broker_set_error(
+                                        rkb, level, err,
+                                        "Disconnected while requesting "
+                                        "ApiVersion: "
+                                        "might be caused by incorrect "
+                                        "security.protocol configuration or "
+                                        "broker version is < 0.10 "
+                                        "(see api.version.request)",
+                                        ap/*ignored*/);
+                        else
+                                rd_kafka_broker_set_error(
+                                        rkb, level, err,
+                                        "Disconnected while requesting "
+                                        "ApiVersion: "
+                                        "might be caused by broker version "
+                                        "< 0.10 (see api.version.request)",
+                                        ap/*ignored*/);
+                        return;
+                }
+        }
+
+        /* Check if error is identical to last error (prior to appending
+         * the variable suffix "after Xms in state Y"), if so we should
+         * suppress it. */
+        identical = err == rkb->rkb_last_err.err &&
+                !strcmp(rkb->rkb_last_err.errstr, errstr);
+        suppress = identical &&
+                rd_interval(&rkb->rkb_suppress.fail_error,
+                            30 * 1000 * 1000 /*30s*/, 0) <= 0;
+
+        /* Copy last error prior to adding extras */
+        rkb->rkb_last_err.err = err;
+        rd_strlcpy(rkb->rkb_last_err.errstr, errstr,
+                   sizeof(rkb->rkb_last_err.errstr));
+
+        /* Time since last state change to help debug connection issues */
+        ofe = rd_snprintf(extra, sizeof(extra),
+                          "after %"PRId64"ms in state %s",
+                          (rd_clock() - rkb->rkb_ts_state)/1000,
+                          rd_kafka_broker_state_names[rkb->rkb_state]);
+
+        /* Number of suppressed identical logs */
+        if (identical && !suppress && rkb->rkb_last_err.cnt >= 1 &&
+            ofe + 30 < sizeof(extra)) {
+                size_t r = (size_t)rd_snprintf(
+                        extra+ofe, sizeof(extra)-ofe,
+                        ", %d identical error(s) suppressed",
+                        rkb->rkb_last_err.cnt);
+                if (r < sizeof(extra)-ofe)
+                        ofe += r;
+                else
+                        ofe = sizeof(extra);
+        }
+
+        /* Append the extra info if there is enough room */
+        if (ofe > 0 && of + ofe + 4 < sizeof(errstr))
+                rd_snprintf(errstr+of, sizeof(errstr)-of,
+                            " (%s)", extra);
+
+        /* Don't log interrupt-wakeups when terminating */
+        if (err == RD_KAFKA_RESP_ERR__INTR &&
+            rd_kafka_terminating(rkb->rkb_rk))
+                suppress = rd_true;
+
+        if (!suppress)
+                rkb->rkb_last_err.cnt = 1;
+        else
+                rkb->rkb_last_err.cnt++;
+
+        rd_rkb_dbg(rkb, BROKER, "FAIL", "%s (%s)%s",
+                   errstr, rd_kafka_err2name(err),
+                   suppress ? ": error log suppressed" : "");
+
+        if (level != LOG_DEBUG && !suppress) {
+                /* Don't log if an error callback is registered,
+                 * or the error event is enabled. */
+                if (!(rkb->rkb_rk->rk_conf.enabled_events &
+                      RD_KAFKA_EVENT_ERROR))
+                        rd_kafka_log(rkb->rkb_rk, level, "FAIL",
+                                     "%s: %s", rkb->rkb_name, errstr);
+
+                /* Send ERR op back to application for processing. */
+                rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, RD_KAFKA_OP_ERR,
+                                  err, 0, NULL, 0, "%s: %s",
+                                  rkb->rkb_name, errstr);
+        }
+}
+
+
+/**
+ * @brief Failure propagation to application.
+ *
+ * Will tear down connection to broker and trigger a reconnect.
  *
  * \p level is the log level, <=LOG_INFO will be logged while =LOG_DEBUG will
  * be debug-logged.
- * 
- * Locality: Broker thread
+ *
+ * @locality broker thread
  */
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
                            int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...) {
 	va_list ap;
-	int errno_save = errno;
 	rd_kafka_bufq_t tmpq_waitresp, tmpq;
         int old_state;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-
-	rd_kafka_dbg(rkb->rkb_rk, BROKER | RD_KAFKA_DBG_PROTOCOL, "BROKERFAIL",
-		     "%s: failed: err: %s: (errno: %s)",
-		     rkb->rkb_name, rd_kafka_err2str(err),
-		     rd_strerror(errno_save));
-
-	rkb->rkb_err.err = errno_save;
 
 	if (rkb->rkb_transport) {
 		rd_kafka_transport_close(rkb->rkb_transport);
@@ -390,60 +505,11 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_recv_buf = NULL;
 	}
 
+        va_start(ap, fmt);
+        rd_kafka_broker_set_error(rkb, level, err, fmt, ap);
+        va_end(ap);
+
 	rd_kafka_broker_lock(rkb);
-
-	/* The caller may omit the format if it thinks this is a recurring
-	 * failure, in which case the following things are omitted:
-	 *  - log message
-	 *  - application OP_ERR
-	 *  - metadata request
-	 *
-	 * Dont log anything if this was the termination signal, or if the
-	 * socket disconnected while trying ApiVersionRequest.
-	 */
-	if (fmt &&
-	    !(errno_save == EINTR &&
-	      rd_kafka_terminating(rkb->rkb_rk)) &&
-	    !(err == RD_KAFKA_RESP_ERR__TRANSPORT &&
-	      rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)) {
-		int of;
-
-		/* Insert broker name in log message if it fits. */
-		of = rd_snprintf(rkb->rkb_err.msg, sizeof(rkb->rkb_err.msg),
-			      "%s: ", rkb->rkb_name);
-		if (of >= (int)sizeof(rkb->rkb_err.msg))
-			of = 0;
-		va_start(ap, fmt);
-		rd_vsnprintf(rkb->rkb_err.msg+of,
-			  sizeof(rkb->rkb_err.msg)-of, fmt, ap);
-		va_end(ap);
-
-                /* Append time since last state change
-                 * to help debug connection issues */
-                of = (int)strlen(rkb->rkb_err.msg);
-                if (of + 30 < (int)sizeof(rkb->rkb_err.msg))
-                        rd_snprintf(rkb->rkb_err.msg+of,
-                                    sizeof(rkb->rkb_err.msg)-of,
-                                    " (after %"PRId64"ms in state %s)",
-                                    (rd_clock() - rkb->rkb_ts_state)/1000,
-                                    rd_kafka_broker_state_names[rkb->
-                                                                rkb_state]);
-
-                if (level >= LOG_DEBUG)
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "FAIL",
-                                     "%s", rkb->rkb_err.msg);
-                else {
-                        /* Don't log if an error callback is registered,
-                         * or the error event is enabled. */
-                        if (!(rkb->rkb_rk->rk_conf.enabled_events &
-                              RD_KAFKA_EVENT_ERROR))
-                                rd_kafka_log(rkb->rkb_rk, level, "FAIL",
-                                             "%s", rkb->rkb_err.msg);
-                        /* Send ERR op back to application for processing. */
-                        rd_kafka_op_err(rkb->rkb_rk, err,
-                                        "%s", rkb->rkb_err.msg);
-                }
-	}
 
 	/* If we're currently asking for ApiVersion and the connection
 	 * went down it probably means the broker does not support that request
@@ -504,7 +570,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 
         /* Query for topic leaders to quickly pick up on failover. */
-        if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY &&
+        if (err != RD_KAFKA_RESP_ERR__DESTROY &&
             old_state >= RD_KAFKA_BROKER_STATE_UP)
                 rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk, NULL,
                                                        1/*force*/,
@@ -760,7 +826,6 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
                                                     1000.0f));
                         else
                                 rttinfo[0] = 0;
-                        errno = ETIMEDOUT;
                         rd_kafka_broker_fail(rkb, LOG_ERR,
                                              RD_KAFKA_RESP_ERR__TIMED_OUT,
                                              "%i request(s) timed out: "
@@ -836,9 +901,6 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
 		if (!rkb->rkb_rsal) {
                         rd_kafka_broker_fail(rkb, LOG_ERR,
                                              RD_KAFKA_RESP_ERR__RESOLVE,
-                                             /* Avoid duplicate log messages */
-                                             rkb->rkb_err.err == errno ?
-                                             NULL :
                                              "Failed to resolve '%s': %s",
                                              nodename, errstr);
 			return -1;
@@ -1882,16 +1944,11 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(rkb->rkb_rk, !rkb->rkb_transport);
 
-	if (!(rkb->rkb_transport = rd_kafka_transport_connect(rkb, sinx,
-		errstr, sizeof(errstr)))) {
-		/* Avoid duplicate log messages */
-		if (rkb->rkb_err.err == errno)
-			rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                             RD_KAFKA_RESP_ERR__FAIL, NULL);
-		else
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-                                             RD_KAFKA_RESP_ERR__TRANSPORT,
-					     "%s", errstr);
+	if (!(rkb->rkb_transport =
+              rd_kafka_transport_connect(rkb, sinx, errstr, sizeof(errstr)))) {
+                rd_kafka_broker_fail(rkb, LOG_ERR,
+                                     RD_KAFKA_RESP_ERR__TRANSPORT,
+                                     "%s", errstr);
 		return -1;
 	}
 
@@ -1908,7 +1965,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 
 	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
-        rkb->rkb_err.err = 0;
+        rkb->rkb_last_err.err = 0;
 
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
@@ -2048,7 +2105,6 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 			if (rd_kafka_sasl_client_new(
 				    rkb->rkb_transport, sasl_errstr,
 				    sizeof(sasl_errstr)) == -1) {
-				errno = EINVAL;
 				rd_kafka_broker_fail(
 					rkb, LOG_ERR,
 					RD_KAFKA_RESP_ERR__AUTHENTICATION,
@@ -2218,10 +2274,7 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	if (errstr) {
 		/* Connect failed */
-                rd_kafka_broker_fail(rkb,
-                                     errno != 0 && rkb->rkb_err.err == errno ?
-                                     LOG_DEBUG : LOG_ERR,
-                                     RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
                                      "%s", errstr);
 		return;
 	}
@@ -2230,7 +2283,6 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	rkb->rkb_connid++;
 	rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL,
 		   "CONNECTED", "Connected (#%d)", rkb->rkb_connid);
-	rkb->rkb_err.err = 0;
 	rkb->rkb_max_inflight = 1; /* Hold back other requests until
 				    * ApiVersion, SaslHandshake, etc
 				    * are done. */
@@ -4986,7 +5038,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 		rd_kafka_wrunlock(rkb->rkb_rk);
 	}
 
-	rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY, NULL);
+	rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY,
+                             "Broker handle is terminating");
 
         /* Disable and drain ops queue.
          * Simply purging the ops queue risks leaving dangling references
@@ -5166,6 +5219,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
         rd_interval_init(&rkb->rkb_suppress.unsupported_compression);
         rd_interval_init(&rkb->rkb_suppress.unsupported_kip62);
+        rd_interval_init(&rkb->rkb_suppress.fail_error);
 
         /* Set next intervalled metadata refresh, offset by a random
          * value to avoid all brokers to be queried simultaneously. */
@@ -5226,17 +5280,14 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
 	if (thrd_create(&rkb->rkb_thread,
 			rd_kafka_broker_thread_main, rkb) != thrd_success) {
-		char tmp[512];
-		rd_snprintf(tmp, sizeof(tmp),
-			 "Unable to create broker thread: %s (%i)",
-			 rd_strerror(errno), errno);
-		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
-
 		rd_kafka_broker_unlock(rkb);
+
+                rd_kafka_log(rk, LOG_CRIT, "THREAD",
+                             "Unable to create broker thread");
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-				"%s", tmp);
+				"Unable to create broker thread");
 
 		rd_free(rkb);
 
@@ -5938,7 +5989,7 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
                         rd_kafka_broker_fail(
                                 rkb, LOG_NOTICE,
                                 RD_KAFKA_RESP_ERR__PURGE_QUEUE,
-                                "purged %d partially sent request: "
+                                "Purged %d partially sent request: "
                                 "forcing disconnect", partial_cnt);
         }
 

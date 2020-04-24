@@ -259,13 +259,10 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size, "Disconnected");
-                        errno = ECONNRESET;
                         return -1;
                 } else if (r == -1) {
-                        int errno_save = errno;
                         rd_snprintf(errstr, errstr_size, "%s",
                                     rd_strerror(errno));
-                        errno = errno_save;
                         return -1;
                 }
         }
@@ -300,19 +297,15 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          0);
 
                 if (unlikely(r == RD_SOCKET_ERROR)) {
-                        int errno_save = rd_socket_errno;
-                        if (errno_save == EAGAIN
+                        if (rd_socket_errno == EAGAIN
 #ifdef _MSC_VER
-                            || errno_save == WSAEWOULDBLOCK
+                            || rd_socket_errno == WSAEWOULDBLOCK
 #endif
                                 )
                                 return sum;
                         else {
                                 rd_snprintf(errstr, errstr_size, "%s",
-                                            rd_socket_strerror(errno_save));
-#ifndef _MSC_VER
-                                errno = errno_save;
-#endif
+                                            rd_socket_strerror(rd_socket_errno));
                                 return -1;
                         }
                 } else if (unlikely(r == 0)) {
@@ -320,9 +313,6 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size,
                                     "Disconnected");
-#ifndef _MSC_VER
-                        errno = ECONNRESET;
-#endif
                         return -1;
                 }
 
@@ -705,7 +695,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                                 rd_strerror(rd_socket_errno));
 		} else if (r != 0) {
 			/* Connect failed */
-                        errno = r;
 			rd_snprintf(errstr, sizeof(errstr),
 				    "Connect to %s failed: %s",
                                     rd_sockaddr2str(rkb->rkb_addr_last,
@@ -727,7 +716,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                 if (rd_kafka_sasl_io_event(rktrans, events,
                                            errstr,
                                            sizeof(errstr)) == -1) {
-                        errno = EINVAL;
                         rd_kafka_broker_fail(
                                 rkb, LOG_ERR,
                                 RD_KAFKA_RESP_ERR__AUTHENTICATION,
@@ -737,7 +725,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                 }
 
                 if (events & POLLHUP) {
-                        errno = EINVAL;
                         rd_kafka_broker_fail(
                                 rkb, LOG_ERR,
                                 RD_KAFKA_RESP_ERR__AUTHENTICATION,
@@ -925,7 +912,7 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 
         if (r != 0) {
 		rd_rkb_dbg(rkb, BROKER, "CONNECT",
-			   "couldn't connect to %s: %s (%i)",
+			   "Couldn't connect to %s: %s (%i)",
 			   rd_sockaddr2str(sinx,
 					   RD_SOCKADDR2STR_F_PORT |
 					   RD_SOCKADDR2STR_F_FAMILY),
@@ -996,7 +983,6 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 								  &r) == -1 ||
 			      r != 0))) {
 			char errstr[512];
-			errno = r;
 			rd_snprintf(errstr, sizeof(errstr),
 				    "Connect to %s failed: %s",
 				    rd_sockaddr2str(rktrans->rktrans_rkb->

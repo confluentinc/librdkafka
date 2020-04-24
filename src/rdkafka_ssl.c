@@ -42,9 +42,11 @@
 
 #include <openssl/x509.h>
 
+#if !_WIN32
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 
 #if WITH_VALGRIND
@@ -128,7 +130,11 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         int line, flags;
         int cnt = 0;
 
-        while ((l = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0) {
+        if (!rk)
+                rk = rkb->rkb_rk;
+
+        while ((l = ERR_get_error_line_data(&file, &line,
+                                            &data, &flags)) != 0) {
                 char buf[256];
 
                 if (cnt++ > 0) {
@@ -141,13 +147,25 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
                 ERR_error_string_n(l, buf, sizeof(buf));
 
-                rd_snprintf(errstr, errstr_size, "%s:%d: %s: %s",
-                            file, line, buf, (flags & ERR_TXT_STRING) ? data : "");
+                if (!(flags & ERR_TXT_STRING) || !data || !*data)
+                        data = NULL;
 
+                /* Include openssl file:line if debugging is enabled */
+                if (rk->rk_conf.log_level >= LOG_DEBUG)
+                        rd_snprintf(errstr, errstr_size, "%s:%d: %s%s%s",
+                                    file, line, buf,
+                                    data ? ": " : "",
+                                    data ? data : "");
+                else
+                        rd_snprintf(errstr, errstr_size, "%s%s%s",
+                                    buf,
+                                    data ? ": " : "",
+                                    data ? data : "");
         }
 
         if (cnt == 0)
-                rd_snprintf(errstr, errstr_size, "No error");
+                rd_snprintf(errstr, errstr_size,
+                            "No further error information available");
 
         return errstr;
 }
@@ -590,11 +608,36 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
         } else if (rd_kafka_transport_ssl_io_update(rktrans, r,
                                                     errstr,
                                                     sizeof(errstr)) == -1) {
+                const char *extra = "";
+
+                if (strstr(errstr, "unexpected message"))
+                        extra = ": client SSL authentication might be "
+                                "required (see ssl.key.location and "
+                                "ssl.certificate.location and consult the "
+                                "broker logs for more information)";
+                else if (strstr(errstr, "tls_process_server_certificate:"
+                                "certificate verify failed") ||
+                         strstr(errstr, "get_server_certificate:"
+                                "certificate verify failed"))
+                        extra = ": broker certificate could not be verified, "
+                                "verify that ssl.ca.location is correctly "
+                                "configured or root CA certificates are "
+                                "installed"
+#ifdef __APPLE__
+                                " (brew install openssl)"
+#elif defined(_WIN32)
+                                " (add broker's CA certificate to the Windows "
+                                "Root certificate store)"
+#else
+                                " (install ca-certificates package)"
+#endif
+                                ;
+                else if (!strcmp(errstr, "Disconnected"))
+                        extra = ": connecting to a PLAINTEXT broker listener?";
+
                 rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__SSL,
                                      "SSL handshake failed: %s%s", errstr,
-                                     strstr(errstr, "unexpected message") ?
-                                     ": client authentication might be "
-                                     "required (see broker log)" : "");
+                                     extra);
                 return -1;
         }
 
@@ -772,20 +815,14 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
         int i;
 
         for (i = 0 ; (path = paths[i]) ; i++) {
+                struct stat st;
                 rd_bool_t is_dir;
                 int r;
-#ifdef _MSC_VER
-                struct _stat st;
-                if (_stat(path, &st) != 0)
-                        continue;
-                is_dir = !!(st.st_mode & S_IFDIR);
-#else
-                struct stat st;
+
                 if (stat(path, &st) != 0)
                         continue;
 
                 is_dir = S_ISDIR(st.st_mode);
-#endif
 
                 if (is_dir && rd_kafka_dir_is_empty(path))
                         continue;

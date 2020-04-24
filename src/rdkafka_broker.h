@@ -308,12 +308,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
                 /**< Log: KIP-345 not supported by broker. */
                 rd_interval_t unsupported_kip345;
+
+                /**< Log & Error: identical broker_fail() errors. */
+                rd_interval_t fail_error;
         } rkb_suppress;
 
-	struct {
-		char msg[512];
-		int  err;  /* errno */
-	} rkb_err;
+        /** Last error. This is used to suppress repeated logs. */
+        struct {
+                char errstr[512];        /**< Last error string */
+                rd_kafka_resp_err_t err; /**< Last error code */
+                int  cnt;                /**< Number of identical errors */
+        } rkb_last_err;
 };
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)

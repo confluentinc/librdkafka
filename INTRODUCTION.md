@@ -1045,9 +1045,11 @@ from connecting to rogue brokers.
 The CA root certificate defaults are system specific:
  * On Linux, Mac OSX, and other Unix-like system the OpenSSL default
    CA path will be used, also called the OPENSSLDIR,  which is typically
-   `/usr/lib/ssl` (on Linux, typcially in the `ca-certificates` package) and
+   `/etc/ssl/certs` (on Linux, typcially in the `ca-certificates` package) and
    `/usr/local/etc/openssl` on Mac OSX (Homebrew).
  * On Windows the Root certificate store is used.
+ * If OpenSSL is linked statically, librdkafka will set the default CA
+   location to the first of a series of probed paths (see below).
 
 If the system-provided default CA root certificates are not sufficient to
 verify the broker's certificate, such as when a self-signed certificate
@@ -1061,6 +1063,26 @@ It is also possible to disable broker certificate verification completely
 by setting `enable.ssl.certificate.verification=false`, but this is not
 recommended since it allows for rogue brokers and man-in-the-middle attacks,
 and should only be used for testing and troubleshooting purposes.
+
+CA location probe paths (see [rdkafka_ssl.c](src/rdkafka_ssl.c) for full list)
+used when OpenSSL is statically linked:
+
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/certs/ca-bundle.crt",
+    "/etc/pki/tls/certs/ca-bundle.trust.crt",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/ssl/ca-bundle.pem",
+    "/etc/pki/tls/cacert.pem",
+    "/etc/ssl/cert.pem",
+    "/etc/ssl/cacert.pem",
+    "/etc/certs/ca-certificates.crt",
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/ssl/certs",
+    "/usr/local/etc/ssl/cert.pem",
+    "/usr/local/etc/ssl/cacert.pem",
+    "/usr/local/etc/ssl/certs/cert.pem",
+    "/usr/local/etc/ssl/certs/cacert.pem",
+    etc..
 
 
 #### Sparse connections

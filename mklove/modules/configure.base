@@ -523,6 +523,7 @@ function mkl_resolve_static_libs {
 
     if [[ -z $stlibfnames || -n "${!stlibvar}" ]]; then
         mkl_dbg "$name: not resolving static libraries (stlibfnames=$stlibfnames, $stlibvar=${!stlibvar})"
+        mkl_allvar_set "$name" "WITH_STATIC_LIB_$name" y
         return 1
     fi
 
@@ -542,6 +543,7 @@ function mkl_resolve_static_libs {
     if [[ -n $stlibs ]]; then
         mkl_dbg "$name: $stlibvar: found static libs: $stlibs"
         mkl_var_set $stlibvar "$stlibs" "cache"
+        mkl_allvar_set "$name" "WITH_STATIC_LIB_$name" y
         return 0
     else
         mkl_dbg "$name: did not find any static libraries for $stlibfnames in ${scandir}"

@@ -902,6 +902,7 @@ void rd_kafka_set_thread_name (const char *fmt, ...);
 void rd_kafka_set_thread_sysname (const char *fmt, ...);
 
 int rd_kafka_path_is_dir (const char *path);
+rd_bool_t rd_kafka_dir_is_empty (const char *path);
 
 rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,

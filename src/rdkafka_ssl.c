@@ -42,6 +42,9 @@
 
 #include <openssl/x509.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 #if WITH_VALGRIND
@@ -734,6 +737,106 @@ static int rd_kafka_ssl_win_load_root_certs (rd_kafka_t *rk, SSL_CTX *ctx) {
 }
 #endif /* MSC_VER */
 
+
+#if WITH_STATIC_LIB_libcrypto
+/**
+ * @brief Probe for the system's CA certificate location and if found set it
+ *        on the \p CTX.
+ *
+ * @returns 0 if CA location was set, else -1.
+ */
+static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
+                                                           SSL_CTX *ctx) {
+#if _WIN32
+        /* No standard location on Windows, CA certs are in the ROOT store. */
+        return -1;
+#endif
+        /* The probe paths are based on:
+         * https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
+         * Golang's crypto probing paths:
+         *   https://golang.org/search?q=certFiles   and certDirectories
+         */
+        static const char *paths[] = {
+                "/etc/pki/tls/certs/ca-bundle.crt",
+                "/etc/ssl/certs/ca-bundle.crt",
+                "/etc/pki/tls/certs/ca-bundle.trust.crt",
+                "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+
+                "/etc/ssl/ca-bundle.pem",
+                "/etc/pki/tls/cacert.pem",
+                "/etc/ssl/cert.pem",
+                "/etc/ssl/cacert.pem",
+
+                "/etc/certs/ca-certificates.crt",
+                "/etc/ssl/certs/ca-certificates.crt",
+
+                "/etc/ssl/certs",
+
+                "/usr/local/etc/ssl/cert.pem",
+                "/usr/local/etc/ssl/cacert.pem",
+
+                "/usr/local/etc/ssl/certs/cert.pem",
+                "/usr/local/etc/ssl/certs/cacert.pem",
+
+                /* BSD */
+                "/usr/local/share/certs/ca-root-nss.crt",
+                "/etc/openssl/certs/ca-certificates.crt",
+#ifdef __APPLE__
+                "/System/Library/OpenSSL",
+#endif
+#ifdef _AIX
+                "/var/ssl/certs/ca-bundle.crt",
+#endif
+                NULL,
+        };
+        const char *path = NULL;
+        int i;
+
+        for (i = 0 ; (path = paths[i]) ; i++) {
+                rd_bool_t is_dir;
+                int r;
+#ifdef _MSC_VER
+                struct _stat st;
+                if (_stat(path, &st) != 0)
+                        continue;
+                is_dir = !!(st.st_mode & S_IFDIR);
+#else
+                struct stat st;
+                if (stat(path, &st) != 0)
+                        continue;
+
+                is_dir = S_ISDIR(st.st_mode);
+#endif
+
+                if (is_dir && rd_kafka_dir_is_empty(path))
+                        continue;
+
+                rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                             "Setting default CA certificate location "
+                             "to %s, override with ssl.ca.location", path);
+
+                r = SSL_CTX_load_verify_locations(ctx,
+                                                  is_dir ? NULL : path,
+                                                  is_dir ? path : NULL);
+                if (r != 1) {
+                        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                                     "Failed to set default CA certificate "
+                                     "location to %s %s: skipping",
+                                     is_dir ? "directory" : "file", path);
+                        continue;
+                }
+
+                return 0;
+        }
+
+        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                     "Unable to find any standard CA certificate"
+                     "paths: is the ca-certificates package installed?");
+        return -1;
+}
+#endif
+
+
 /**
  * @brief Registers certificates, keys, etc, on the SSL_CTX
  *
@@ -789,14 +892,32 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
 #else
                 r = -1;
 #endif
+
+#if WITH_STATIC_LIB_libcrypto
                 if (r == -1) {
-                        /* Use default CA certificate paths: ignore failures */
+                        /* If OpenSSL was linked statically there is a risk
+                         * that the system installed CA certificate path
+                         * doesn't match the cert path of OpenSSL.
+                         * To circumvent this we check for the existence
+                         * of standard CA certificate paths and use the
+                         * first one that is found.
+                         * Ignore failures. */
+                        r = rd_kafka_ssl_probe_and_set_default_ca_location(
+                                rk, ctx);
+                }
+#endif
+
+                if (r == -1) {
+                        /* Use default CA certificate paths from linked OpenSSL:
+                         * ignore failures */
+
                         r = SSL_CTX_set_default_verify_paths(ctx);
                         if (r != 1)
                                 rd_kafka_dbg(
                                         rk, SECURITY, "SSL",
                                         "SSL_CTX_set_default_verify_paths() "
                                         "failed: ignoring");
+                        r = 0;
                 }
         }
 

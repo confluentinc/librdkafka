@@ -697,7 +697,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
           _RK(ssl.ca_location),
           "File or directory path to CA certificate(s) for verifying "
-          "the broker's key."
+          "the broker's key. "
+          "Defaults: "
+          "On Windows the system's CA certificates are automatically looked "
+          "up in the Windows Root certificate store. "
+          "On Mac OSX it is recommended to install openssl using Homebrew, "
+          "to provide CA certificates. "
+          "On Linux install the distribution's ca-certificates package. "
+          "If OpenSSL is statically linked or `ssl.ca.location` is set to "
+          "`probe` a list of standard paths will be probed and the first one "
+          "found will be used as the default CA certificate location path. "
+          "If OpenSSL is dynamically linked the OpenSSL library's default "
+          "path will be used (see `OPENSSLDIR` in `openssl version -a`)."
         },
         { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
           _RK(ssl.ca),

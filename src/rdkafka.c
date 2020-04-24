@@ -34,6 +34,8 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -4529,6 +4531,40 @@ int rd_kafka_path_is_dir (const char *path) {
 #else
 	struct stat st;
 	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+#endif
+}
+
+
+/**
+ * @returns true if directory is empty or can't be accessed, else false.
+ */
+rd_bool_t rd_kafka_dir_is_empty (const char *path) {
+#if _WIN32
+        /* FIXME: Unsupported */
+        return rd_true;
+#else
+        DIR *dir;
+        struct dirent *d;
+
+        dir = opendir(path);
+        if (!dir)
+                return rd_true;
+
+        while ((d = readdir(dir))) {
+
+                if (!strcmp(d->d_name, ".") ||
+                    !strcmp(d->d_name, ".."))
+                        continue;
+
+                if (d->d_type == DT_REG || d->d_type == DT_LNK ||
+                    d->d_type == DT_DIR) {
+                        closedir(dir);
+                        return rd_false;
+                }
+        }
+
+        closedir(dir);
+        return rd_true;
 #endif
 }
 

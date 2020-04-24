@@ -507,7 +507,7 @@ struct rd_kafka_conf_s {
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
 int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
                                 void *opaque);
-#ifndef _MSC_VER
+#ifndef _WIN32
 int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
                             void *opaque);
 #endif

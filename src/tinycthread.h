@@ -26,7 +26,7 @@ freely, subject to the following restrictions:
 #define _TINYCTHREAD_H_
 
 /* Include config to know if C11 threads are available */
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "win32_config.h"
 #else
 #include "../config.h"

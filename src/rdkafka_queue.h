@@ -32,7 +32,7 @@
 #include "rdkafka_op.h"
 #include "rdkafka_int.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <io.h> /* for _write() */
 #endif
 

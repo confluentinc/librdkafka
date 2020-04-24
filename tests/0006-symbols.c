@@ -63,7 +63,7 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_conf_set_throttle_cb(NULL, NULL);
 		rd_kafka_conf_set_default_topic_conf(NULL, NULL);
 		rd_kafka_conf_get(NULL, NULL, NULL, NULL);
-#ifndef _MSC_VER
+#ifndef _WIN32
 		rd_kafka_conf_set_open_cb(NULL, NULL);
 #endif
 		rd_kafka_conf_set_opaque(NULL, NULL);
@@ -108,7 +108,7 @@ int main_0006_symbols (int argc, char **argv) {
                 /* DEPRECATED: rd_kafka_set_logger(NULL, NULL); */
                 rd_kafka_set_log_level(NULL, 0);
                 rd_kafka_log_print(NULL, 0, NULL, NULL);
-#ifndef _MSC_VER
+#ifndef _WIN32
                 rd_kafka_log_syslog(NULL, 0, NULL, NULL);
 #endif
                 rd_kafka_outq_len(NULL);

@@ -167,12 +167,22 @@ if(NOT RDKAFKA_BUILD_STATIC)
   set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
 endif()
 
+if(MINGW_BUILD)
+  # Target Windows 8.1 to match the VS projects (MinGW defaults to an older WinAPI version)
+  list(APPEND rdkafka_compile_definitions WINVER=0x0603 _WIN32_WINNT=0x0603 UNICODE)
+endif(MINGW_BUILD)
+
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
 target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
+
+if(MINGW_BUILD)
+  # MinGW ignores `#pragma comment(lib, ...)` so we need to specify link libs
+  target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
+endif(MINGW_BUILD)
 
 if(WIN32)  
   if(RDKAFKA_BUILD_STATIC)

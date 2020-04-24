@@ -29,13 +29,13 @@
 #ifndef _RDADDR_H_
 #define _RDADDR_H_
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #else
 #define WIN32_MEAN_AND_LEAN
-#include <WinSock2.h>
+#include <winsock2.h>
 #include <ws2ipdef.h>
 #endif
 

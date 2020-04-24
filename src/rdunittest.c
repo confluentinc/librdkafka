@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define RD_UNITTEST_QPC_OVERRIDES 1
 #endif
 
@@ -458,7 +458,7 @@ int rd_unittest (void) {
 #if WITH_HDRHISTOGRAM
                 { "rdhdrhistogram", unittest_rdhdrhistogram },
 #endif
-#ifdef _MSC_VER
+#ifdef _WIN32
                 { "rdclock", unittest_rdclock },
 #endif
                 { "conf", unittest_conf },

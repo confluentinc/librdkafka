@@ -360,7 +360,7 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 
         if (!strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
                 /* GSSAPI / Kerberos */
-#ifdef _MSC_VER
+#ifdef _WIN32
                 provider = &rd_kafka_sasl_win32_provider;
 #elif WITH_SASL_CYRUS
                 provider = &rd_kafka_sasl_cyrus_provider;
@@ -394,13 +394,13 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size,
                             "No provider for SASL mechanism %s"
                             ": recompile librdkafka with "
-#ifndef _MSC_VER
+#ifndef _WIN32
                             "libsasl2 or "
 #endif
                             "openssl support. "
                             "Current build options:"
                             " PLAIN"
-#ifdef _MSC_VER
+#ifdef _WIN32
                             " WindowsSSPI(GSSAPI)"
 #endif
 #if WITH_SASL_CYRUS

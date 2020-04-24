@@ -29,7 +29,7 @@
 #ifndef _RDKAFKA_TRANSPORT_H_
 #define _RDKAFKA_TRANSPORT_H_
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <poll.h>
 #endif
 

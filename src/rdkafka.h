@@ -55,12 +55,12 @@ extern "C" {
 #endif
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <basetsd.h>
 #ifndef WIN32_MEAN_AND_LEAN
 #define WIN32_MEAN_AND_LEAN
 #endif
-#include <Winsock2.h>  /* for sockaddr, .. */
+#include <winsock2.h>  /* for sockaddr, .. */
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
@@ -2022,7 +2022,7 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
 
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * @brief Set open callback.
  *

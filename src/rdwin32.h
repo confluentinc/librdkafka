@@ -32,14 +32,14 @@
 #ifndef _RDWIN32_H_
 #define _RDWIN32_H_
 
-
 #include <stdlib.h>
 #include <inttypes.h>
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
+
 #define WIN32_MEAN_AND_LEAN
-#include <Winsock2.h>  /* for struct timeval */
+#include <winsock2.h>  /* for struct timeval */
 #include <io.h>
 #include <fcntl.h>
 
@@ -76,7 +76,13 @@ struct msghdr {
 #define RD_WARN_UNUSED_RESULT
 #define RD_NORETURN __declspec(noreturn)
 #define RD_IS_CONSTANT(p)  (0)
+#ifdef _MSC_VER
 #define RD_TLS __declspec(thread)
+#elif defined(__MINGW32__)
+#define RD_TLS __thread
+#else
+#error Unknown Windows compiler, cannot set RD_TLS (thread-local-storage attribute)
+#endif
 
 
 /**
@@ -253,7 +259,7 @@ typedef WSAPOLLFD rd_pollfd_t;
  * @returns 0 on success or -1 on failure (see rd_kafka_rd_socket_errno)
  */
 static RD_UNUSED int rd_fd_set_nonblocking (rd_socket_t fd) {
-        int on = 1;
+        u_long on = 1;
         if (ioctlsocket(fd, FIONBIO, &on) == SOCKET_ERROR)
                 return (int)WSAGetLastError();
         return 0;

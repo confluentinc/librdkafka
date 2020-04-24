@@ -33,7 +33,7 @@
 #include "rdkafkacpp.h"
 
 extern "C" {
-#ifdef _MSC_VER
+#ifdef _WIN32
 /* Win32/Visual Studio */
 #include "../src/win32_config.h"
 #include "../src/rdwin32.h"

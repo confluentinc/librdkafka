@@ -36,7 +36,7 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_cert.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #pragma comment (lib, "crypt32.lib")
 #endif
 
@@ -76,7 +76,7 @@ void rd_kafka_transport_ssl_close (rd_kafka_transport_t *rktrans) {
 static RD_INLINE void
 rd_kafka_transport_ssl_clear_error (rd_kafka_transport_t *rktrans) {
         ERR_clear_error();
-#ifdef _MSC_VER
+#ifdef _WIN32
         WSASetLastError(0);
 #else
         rd_set_errno(0);
@@ -643,7 +643,7 @@ static X509 *rd_kafka_ssl_X509_from_string (rd_kafka_t *rk, const char *str) {
 }
 
 
-#if _MSC_VER
+#ifdef _WIN32
 
 /**
  * @brief Attempt load CA certificates from the Windows Certificate Root store.
@@ -757,7 +757,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 }
 
         } else {
-#if _MSC_VER
+#ifdef _WIN32
                 /* Attempt to load CA root certificates from the
                  * Windows crypto Root cert store. */
                 r = rd_kafka_ssl_win_load_root_certs(rk, ctx);
@@ -1146,7 +1146,7 @@ rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
 #endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
-#ifdef _MSC_VER
+#ifdef _WIN32
         /* Windows makes a distinction between thread handle
          * and thread id, which means we can't use the
          * thrd_current() API that returns the handle. */

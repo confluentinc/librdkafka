@@ -55,7 +55,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #ifndef ssize_t
 #ifndef _BASETSD_H_
 #include <basetsd.h>

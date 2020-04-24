@@ -101,7 +101,7 @@ def print_test_report_summary (name, report):
     print('%6s  %-50s: %s' % (resstr, name, report.get('REASON', 'n/a')))
     if not passed:
         # Print test details
-        for name,test in report.get('tests', {}).iteritems():
+        for name,test in report.get('tests', {}).items():
             testres = test.get('state', '')
             if testres == 'SKIPPED':
                 continue
@@ -119,7 +119,7 @@ def print_report_summary (fullreport):
     suites = fullreport.get('suites', list())
     print('#### Full test suite report (%d suite(s))' % len(suites))
     for suite in suites:
-        for version,report in suite.get('version', {}).iteritems():
+        for version,report in suite.get('version', {}).items():
             print_test_report_summary('%s @ %s' % \
                                       (suite.get('name','n/a'), version),
                                       report)

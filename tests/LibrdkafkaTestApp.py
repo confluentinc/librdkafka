@@ -97,13 +97,13 @@ class LibrdkafkaTestApp(App):
 
             # Some tests need fine-grained access to various cert files,
             # set up the env vars accordingly.
-            for k, v in ssl.ca.iteritems():
+            for k, v in ssl.ca.items():
                 self.env_add('RDK_SSL_ca_{}'.format(k), v)
 
             # Set envs for all generated keys so tests can find them.
-            for k, v in key.iteritems():
+            for k, v in key.items():
                 if type(v) is dict:
-                    for k2, v2 in v.iteritems():
+                    for k2, v2 in v.items():
                         # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
                         self.env_add('RDK_SSL_{}_{}'.format(k, k2), v2)
                 else:

@@ -110,13 +110,13 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         os.write(fd, ('ssl.key.location=%s\n' % key['priv']['pem']).encode('ascii'))
         os.write(fd, ('ssl.key.password=%s\n' % key['password']).encode('ascii'))
 
-        for k, v in ssl.ca.iteritems():
+        for k, v in ssl.ca.items():
             cmd_env['RDK_SSL_ca_{}'.format(k)] = v
 
         # Set envs for all generated keys so tests can find them.
-        for k, v in key.iteritems():
+        for k, v in key.items():
             if type(v) is dict:
-                for k2, v2 in v.iteritems():
+                for k2, v2 in v.items():
                     # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
                     cmd_env['RDK_SSL_{}_{}'.format(k, k2)] = v2
             else:

@@ -42,9 +42,11 @@
 
 #include <openssl/x509.h>
 
+#if !_WIN32
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 
 #if WITH_VALGRIND
@@ -774,18 +776,11 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
         for (i = 0 ; (path = paths[i]) ; i++) {
                 rd_bool_t is_dir;
                 int r;
-#ifdef _MSC_VER
-                struct _stat st;
-                if (_stat(path, &st) != 0)
-                        continue;
-                is_dir = !!(st.st_mode & S_IFDIR);
-#else
                 struct stat st;
                 if (stat(path, &st) != 0)
                         continue;
 
                 is_dir = S_ISDIR(st.st_mode);
-#endif
 
                 if (is_dir && rd_kafka_dir_is_empty(path))
                         continue;

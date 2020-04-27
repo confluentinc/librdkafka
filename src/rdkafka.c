@@ -34,8 +34,10 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#if !_WIN32
 #include <sys/types.h>
 #include <dirent.h>
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"

@@ -236,6 +236,11 @@ static void do_test_unknown_follower (void) {
 
 int main_0104_fetch_from_follower_mock (int argc, char **argv) {
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
+
         do_test_offset_reset("earliest");
         do_test_offset_reset("latest");
 

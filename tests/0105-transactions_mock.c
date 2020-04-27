@@ -583,6 +583,11 @@ static void do_test_txns_not_supported (void) {
 
 int main_0105_transactions_mock (int argc, char **argv) {
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
+
         do_test_txn_recoverable_errors();
 
         do_test_txn_requires_abort_errors();

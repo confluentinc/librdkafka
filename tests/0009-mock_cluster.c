@@ -46,6 +46,11 @@ int main_0009_mock_cluster (int argc, char **argv) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *parts;
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
+
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
 

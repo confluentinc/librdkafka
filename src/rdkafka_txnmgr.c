@@ -2573,18 +2573,19 @@ rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         char buf[256];
         va_list ap;
 
+        va_start(ap, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+
         if (rk->rk_eos.txn_curr_coord == rkb) {
                 if (!rkb) {
+                        rd_kafka_dbg(rk, EOS, "TXNCOORD", "%s", buf);
                         /* Keep querying for the coordinator */
                         rd_kafka_txn_coord_timer_restart(rk, 500);
                 }
                 return rd_false;
         }
-
-        va_start(ap, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, ap);
-        va_end(ap);
-
 
         rd_kafka_dbg(rk, EOS, "TXNCOORD",
                      "Transaction coordinator changed from %s -> %s: %s",

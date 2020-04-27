@@ -3920,7 +3920,12 @@ rd_kafka_consumer_group_metadata_read (
  *                               partition, either set manually or by the
  *                               configured partitioner.
  *
- *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *    .._F_FREE and .._F_COPY are mutually exclusive. If neither of these are
+ *    set, the caller must ensure that the memory backing \p payload remains
+ *    valid and is not modified or reused until the delivery callback is
+ *    invoked. Other buffers passed to `rd_kafka_produce()` don't have this
+ *    restriction on reuse, i.e. the memory backing the key or the topic name
+ *    may be reused as soon as `rd_kafka_produce()` returns.
  *
  *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
  *    the memory associated with the payload is still the caller's

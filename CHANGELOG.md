@@ -16,7 +16,7 @@ librdkafka.
  * Prefer least idle connection for periodic metadata refreshes, et.al.,
    to allow truly idle connections to time out and to avoid load-balancer-killed
    idle connection errors (#2845)
- * Added rd_kafka_event_debug_contexts() to get the debug contexts for
+ * Added `rd_kafka_event_debug_contexts()` to get the debug contexts for
    a debug log line (by @wolfchimneyrock).
  * Added Test scenarios which define the cluster configuration.
  * Added MinGW-w64 builds (@ed-alertedh, #2553)
@@ -39,6 +39,12 @@ librdkafka.
  * Consumer will no longer trigger auto creation of topics,
    `allow.auto.create.topics=true` may be used to re-enable the old deprecated
    functionality.
+ * The default consumer pre-fetch queue threshold `queued.max.messages.kbytes`
+   has been decreased from 1GB to 64MB to avoid excessive network usage for low
+   and medium throughput consumer applications. High throughput consumer
+   applications may need to manually set this property to a higher value.
+ * The default consumer Fetch wait time has been increased from 100ms to 500ms
+   to avoid excessive network usage for low throughput topics.
  * If OpenSSL is linked statically, or `ssl.ca.location=probe` is configured,
    librdkafka will probe known CA certificate paths and automatically use the
    first one found. This should alleviate the need to configure

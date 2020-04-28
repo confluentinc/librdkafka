@@ -39,11 +39,7 @@
 #include <assert.h>
 
 #define WIN32_MEAN_AND_LEAN
-#ifdef _MSC_VER
-#include <winsock2.h>  /* for struct timeval */
-#elif defined(__MINGW32__)
-#include <sys/time.h>
-#endif
+#include <winsock2.h>  /* for sockets + struct timeval */
 #include <io.h>
 #include <fcntl.h>
 

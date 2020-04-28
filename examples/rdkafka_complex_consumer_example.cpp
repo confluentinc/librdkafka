@@ -90,7 +90,7 @@ static void print_time () {
         // %Y-%m-%d %H:%M:%S.xxx:
         fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%03d: ",
             lt.wYear, lt.wMonth, lt.wDay,
-            lt.wHour, lt.wMinute, lt.wSecond, (int)(lt.Milliseconds/1000));
+            lt.wHour, lt.wMinute, lt.wSecond, (int)(lt.wMilliseconds / 1000));
 #endif
 }
 class ExampleEventCb : public RdKafka::EventCb {

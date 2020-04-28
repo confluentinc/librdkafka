@@ -1011,16 +1011,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "queued.max.messages.kbytes",
           _RK_C_INT,
 	  _RK(queued_max_msg_kbytes),
-          "Maximum number of kilobytes per topic+partition in the "
-          "local consumer queue. "
+          "Maximum number of kilobytes of queued pre-fetched messages "
+          "in the local consumer queue. "
+          "If using the high-level consumer this setting applies to the "
+          "single consumer queue, regardless of the number of partitions. "
+          "When using the legacy simple consumer or when separate "
+          "partition queues are used this setting applies per partition. "
 	  "This value may be overshot by fetch.message.max.bytes. "
 	  "This property has higher priority than queued.min.messages.",
-          1, INT_MAX/1024, 0x100000/*1GB*/ },
+          1, INT_MAX/1024, 0x10000/*64MB*/ },
         { _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
-	  "Maximum time the broker may wait to fill the response "
-	  "with fetch.min.bytes.",
-	  0, 300*1000, 100 },
+	  "Maximum time the broker may wait to fill the Fetch response "
+	  "with fetch.min.bytes of messages.",
+	  0, 300*1000, 500 },
         { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.message.max.bytes",
           _RK_C_INT,
           _RK(fetch_msg_max_bytes),
@@ -3455,14 +3459,17 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
                 /* Automatically adjust `fetch.max.bytes` to be >=
-                 * `message.max.bytes` unless set by user. */
+                 * `message.max.bytes` and <= `queued.max.message.kbytes`
+                 * unless set by user. */
                 if (rd_kafka_conf_is_modified(conf, "fetch.max.bytes")) {
                         if (conf->fetch_max_bytes < conf->max_msg_size)
                                 return "`fetch.max.bytes` must be >= "
                                         "`message.max.bytes`";
                 } else {
-                        conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
-                                                       conf->max_msg_size);
+                        conf->fetch_max_bytes = RD_MAX(
+                                RD_MIN(conf->fetch_max_bytes,
+                                       conf->queued_max_msg_kbytes * 1024),
+                                conf->max_msg_size);
                 }
 
                 /* Automatically adjust 'receive.message.max.bytes' to

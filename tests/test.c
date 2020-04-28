@@ -5517,7 +5517,7 @@ void test_fail0 (const char *file, int line, const char *function,
         time_t tnow = time(NULL);
 
 #ifdef __MINGW32__
-        strftime(timestr, sizeof(timestr), "%a %b %d %H:%M:%S %Y\n", localtime(&tnow));
+        strftime(timestr, sizeof(timestr), "%a %b %d %H:%M:%S %Y", localtime(&tnow));
 #elif defined(_WIN32)
         ctime_s(timestr, sizeof(timestr), &tnow);
 #else

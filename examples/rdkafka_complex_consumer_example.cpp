@@ -81,7 +81,7 @@ static void print_time () {
         struct timeval tv;
         char buf[64];
         gettimeofday(&tv, NULL);
-        strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", localtime((time_t *)&tv.tv_sec));
+        strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
         fprintf(stderr, "%s.%03d: ", buf, (int)(tv.tv_usec / 1000));
 #else
         std::wcerr << CTime::GetCurrentTime().Format(_T("%Y-%m-%d %H:%M:%S")).GetString()

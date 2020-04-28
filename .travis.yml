@@ -54,9 +54,9 @@ matrix:
    env:
     - SKIP_MAKE=y
    before_install:
-    - source ./packaging/mingw-w64/travis-before-install.sh 1>&2
+    - source ./packaging/mingw-w64/travis-before-install.sh
    before_script:
-    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh 1>&2
+    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial

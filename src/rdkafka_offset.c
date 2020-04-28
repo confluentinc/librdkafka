@@ -65,10 +65,6 @@
 #include <shlwapi.h>
 #endif
 
-#ifdef _MSC_VER
-typedef int mode_t;
-#endif
-
 
 /**
  * Convert an absolute or logical offset to string.

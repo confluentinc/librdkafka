@@ -20,4 +20,5 @@ $mingw64 mingw32-make
 $mingw64 mingw32-make install
 
 export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
-./tests/test-runner.exe -l -Q -p1
+cd tests
+./test-runner.exe -l -Q -p1

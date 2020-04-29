@@ -10,6 +10,9 @@ env:
 addons:
   apt:
     packages:
+    - python3
+    - python3-pip
+    - python3-setuptools
     # required by openssl installer
     - perl
 
@@ -65,7 +68,7 @@ matrix:
    before_script:
     - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
     - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip install -r tests/requirements.txt
+    - sudo pip3 install -r tests/requirements.txt
     - sudo apt update
     - sudo apt install -y doxygen graphviz gdb
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"

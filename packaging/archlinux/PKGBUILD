@@ -8,7 +8,7 @@ arch=('x86_64')
 source=('git+https://github.com/edenhill/librdkafka#branch=master')
 sha256sums=('SKIP')
 depends=(glibc libsasl lz4 openssl zlib zstd)
-makedepends=(bash git python)
+makedepends=(bash git python3)
 
 pkgver() {
 	cd "$pkgname"

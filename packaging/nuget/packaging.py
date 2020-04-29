@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # NuGet packaging script.
 # Assembles a NuGet package using CI artifacts in S3

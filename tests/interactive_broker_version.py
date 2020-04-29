@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Run librdkafka regression tests on different supported broker versions.

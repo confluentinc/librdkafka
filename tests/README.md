@@ -25,7 +25,7 @@ to alternate directory, e.g., `TRIVUP_ROOT=$HOME/trivup make full`.
 
 First install trivup:
 
-    $ pip install trivup
+    $ pip3 install trivup
 
 Bring up a Kafka cluster (with the specified version) and start an interactive
 shell, when the shell is exited the cluster is brought down and deleted.

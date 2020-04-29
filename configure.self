@@ -266,10 +266,10 @@ void foo (void) {
 	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'
     fi
 
-    # The linker-script generator (lds-gen.py) requires python
+    # The linker-script generator (lds-gen.py) requires python3
     if [[ $WITH_LDS == y ]]; then
-        if ! mkl_command_check python "HAVE_PYTHON" "disable" "python -V"; then
-            mkl_err "disabling linker-script since python is not available"
+        if ! mkl_command_check python3 "HAVE_PYTHON" "disable" "python3 -V"; then
+            mkl_err "disabling linker-script since python3 is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
     fi

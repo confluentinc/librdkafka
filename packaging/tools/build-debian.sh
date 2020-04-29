@@ -25,7 +25,7 @@ fi
 set -u
 
 apt-get update
-apt-get install -y gcc g++ zlib1g-dev python2.7 git-core make
+apt-get install -y gcc g++ zlib1g-dev python3 git-core make
 
 
 # Copy the librdkafka git archive to a new location to avoid messing

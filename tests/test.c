@@ -4391,6 +4391,7 @@ int test_waitpid (int pid) {
                   __FUNCTION__);
         return -1;
 #else
+
         pid_t r;
         int status = 0;
 

@@ -21,7 +21,7 @@ pushd tests
 source _venv/bin/activate
 
 # Install trivup that is used to bring up a cluster.
-pip install -U trivup
+pip3 install -U trivup
 
 # Run tests that automatically spin up their clusters
 export KAFKA_VERSION

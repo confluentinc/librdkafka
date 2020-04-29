@@ -1,7 +1,7 @@
 language: c
 dist: trusty
 sudo: false
-cache: ccache
+cache: false
 
 env:
  global:

@@ -2431,6 +2431,9 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
 	} else {
+                /* Skip the join backoff */
+                rd_interval_reset(&rkcg->rkcg_join_intvl);
+
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
 	}
@@ -2642,6 +2645,9 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
 	} else {
+                /* Skip the join backoff */
+                rd_interval_reset(&rkcg->rkcg_join_intvl);
+
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
 	}

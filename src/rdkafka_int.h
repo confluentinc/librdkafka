@@ -58,10 +58,6 @@ typedef int mode_t;
 
 
 
-typedef struct rd_kafka_topic_s rd_kafka_topic_t;
-typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
-
-
 #define rd_kafka_assert(rk, cond) do {                                  \
                 if (unlikely(!(cond)))                                  \
                         rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
@@ -81,6 +77,8 @@ struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
+
+typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
 #include "rdkafka_op.h"

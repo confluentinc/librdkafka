@@ -28,7 +28,7 @@ if [[ ! -f /.dockerenv ]]; then
 
 else
 
-    yum install -y python mock make git
+    yum install -y python3 mock make git
 
     cfg_file=/etc/mock/${MOCK_CONFIG}.cfg
     ls -la /etc/mock

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Run librdkafka regression tests on with different SASL parameters
@@ -11,9 +11,6 @@
 from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary, read_scenario_conf
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
-
-import time
-import tempfile
 import os
 import sys
 import argparse
@@ -225,7 +222,7 @@ if __name__ == '__main__':
             else:
                 tests_to_run = tests
             report = test_it(version, tests=tests_to_run, conf=_conf, rdkconf=_rdkconf,
-                             debug=args.debug, scenario=scenario)
+                             debug=args.debug, scenario=args.scenario)
 
             # Handle test report
             report['version'] = version

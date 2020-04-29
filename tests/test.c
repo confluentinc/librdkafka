@@ -48,6 +48,7 @@ int test_level = 2;
 int test_seed = 0;
 
 char test_mode[64] = "bare";
+char test_scenario[64] = "default";
 static volatile sig_atomic_t test_exit = 0;
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
@@ -211,6 +212,8 @@ _TEST_DECL(0103_transactions);
 _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
+_TEST_DECL(0107_topic_recreate);
+_TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 
 /* Manual tests */
@@ -391,6 +394,9 @@ struct test tests[] = {
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
+        _TEST(0107_topic_recreate, 0, TEST_BRKVER_TOPIC_ADMINAPI,
+              .scenario = "noautocreate"),
+        _TEST(0109_auto_create_topics, 0),
         _TEST(0110_batch_size, 0),
 
         /* Manual tests */
@@ -518,26 +524,31 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
         if (test_curr->is_fatal_cb && !test_curr->is_fatal_cb(rk, err, reason)) {
-                TEST_SAY(_C_YEL "rdkafka error (non-testfatal): %s: %s\n",
-                         rd_kafka_err2str(err), reason);
+                TEST_SAY(_C_YEL "%s rdkafka error (non-testfatal): %s: %s\n",
+                         rd_kafka_name(rk), rd_kafka_err2str(err), reason);
         } else {
                 if (err == RD_KAFKA_RESP_ERR__FATAL) {
                         char errstr[512];
-                        TEST_SAY(_C_RED "Fatal error: %s\n", reason);
+                        TEST_SAY(_C_RED "%s Fatal error: %s\n",
+                                 rd_kafka_name(rk), reason);
 
                         err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
 
                         if (test_curr->is_fatal_cb &&
                             !test_curr->is_fatal_cb(rk,  err, reason))
-                                TEST_SAY(_C_YEL "rdkafka ignored FATAL error: "
+                                TEST_SAY(_C_YEL
+                                         "%s rdkafka ignored FATAL error: "
                                          "%s: %s\n",
+                                         rd_kafka_name(rk),
                                          rd_kafka_err2str(err), errstr);
                         else
-                                TEST_FAIL("rdkafka FATAL error: %s: %s",
+                                TEST_FAIL("%s rdkafka FATAL error: %s: %s",
+                                          rd_kafka_name(rk),
                                           rd_kafka_err2str(err), errstr);
 
                 } else {
-                        TEST_FAIL("rdkafka error: %s: %s",
+                        TEST_FAIL("%s rdkafka error: %s: %s",
+                                  rd_kafka_name(rk),
                                   rd_kafka_err2str(err), reason);
                 }
         }
@@ -608,6 +619,8 @@ static void test_init (void) {
                 test_level = atoi(tmp);
         if ((tmp = test_getenv("TEST_MODE", NULL)))
                 strncpy(test_mode, tmp, sizeof(test_mode)-1);
+        if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
+                strncpy(test_scenario, tmp, sizeof(test_scenario)-1);
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
         if ((tmp = test_getenv("TEST_SEED", NULL)))
@@ -1148,6 +1161,8 @@ static void run_tests (int argc, char **argv) {
                 const char *skip_reason = NULL;
                 rd_bool_t skip_silent = rd_false;
 		char tmp[128];
+                const char *scenario =
+                        test->scenario ? test->scenario : "default";
 
                 if (!test->mainfunc)
                         continue;
@@ -1175,6 +1190,13 @@ static void run_tests (int argc, char **argv) {
 				    TEST_BRKVER_X(test_broker_version, 3));
 			skip_reason = tmp;
 		}
+
+                if (strcmp(scenario, test_scenario)) {
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "requires test scenario %s", scenario);
+                        skip_silent = rd_true;
+                        skip_reason = tmp;
+                }
 
                 if (tests_to_run && !strstr(tests_to_run, testnum)) {
                         skip_reason = "not included in TESTS list";
@@ -1244,11 +1266,12 @@ static int test_summary (int do_lock) {
         else
                 fprintf(report_fp,
                         "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
+                        "\"scenario\": \"%s\", "
 			"\"date\": \"%s\", "
 			"\"git_version\": \"%s\", "
 			"\"broker_version\": \"%s\", "
 			"\"tests\": {",
-			datestr, test_mode, test_mode, datestr,
+			datestr, test_mode, test_mode, test_scenario, datestr,
 			test_git_version,
 			test_broker_version_str);
 
@@ -1273,9 +1296,9 @@ static int test_summary (int do_lock) {
 	}
 
 	if (show_summary)
-		printf("TEST %s (%s) SUMMARY\n"
+		printf("TEST %s (%s, scenario %s) SUMMARY\n"
 		       "#==================================================================#\n",
-		       datestr, test_mode);
+		       datestr, test_mode, test_scenario);
 
         for (test = tests ; test->name ; test++) {
                 const char *color;
@@ -1535,6 +1558,9 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_SOCKEM;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
+                else if (!strcmp(argv[i], "-s") && i+1 < argc)
+                        strncpy(test_scenario, argv[i],
+                                sizeof(test_scenario)-1);
 		else if (!strcmp(argv[i], "-S"))
 			show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
@@ -1569,6 +1595,7 @@ int main(int argc, char **argv) {
                                "  -E     Don't run sockem tests\n"
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
+                               "  -s <scenario> Test scenario.\n"
 			       "  -V <N.N.N.N> Broker version.\n"
                                "  -D     Delete all test topics between each test (-p1) or after all tests\n"
                                "  -P     Run all tests with `enable.idempotency=true`\n"
@@ -1582,6 +1609,7 @@ int main(int argc, char **argv) {
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
 			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
+                               "  TEST_SCENARIO - Test scenario\n"
 			       "  TEST_LEVEL - Test verbosity level\n"
 			       "  TEST_MODE - bare, helgrind, valgrind\n"
 			       "  TEST_SEED - random seed\n"
@@ -1650,9 +1678,10 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
-	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
-	TEST_SAY("Test mode   : %s%s\n", test_quick ? "quick, ":"", test_mode);
-        TEST_SAY("Test filter : %s\n",
+	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
+	TEST_SAY("Test mode    : %s%s\n", test_quick ? "quick, ":"", test_mode);
+        TEST_SAY("Test scenario: %s\n", test_scenario);
+        TEST_SAY("Test filter  : %s\n",
                  (test_flags & TEST_F_LOCAL) ? "local tests only" : "no filter");
         TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
@@ -1757,14 +1786,19 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                 [RD_KAFKA_MSG_STATUS_PERSISTED] = "Persisted"
         };
 
-        TEST_SAYL(4, "Delivery report: %s (%s)\n",
+        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"]\n",
                   rd_kafka_err2str(rkmessage->err),
-                  status_names[rd_kafka_message_status(rkmessage)]);
+                  status_names[rd_kafka_message_status(rkmessage)],
+                  rd_kafka_topic_name(rkmessage->rkt),
+                  rkmessage->partition);
 
         if (!test_curr->produce_sync) {
                 if (!test_curr->ignore_dr_err &&
                     rkmessage->err != test_curr->exp_dr_err)
-                        TEST_FAIL("Message delivery failed: expected %s, got %s",
+                        TEST_FAIL("Message delivery (to %s [%"PRId32"]) "
+                                  "failed: expected %s, got %s",
+                                  rd_kafka_topic_name(rkmessage->rkt),
+                                  rkmessage->partition,
                                   rd_kafka_err2str(test_curr->exp_dr_err),
                                   rd_kafka_err2str(rkmessage->err));
 
@@ -3831,6 +3865,50 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
         }
 }
 
+
+/**
+ * @brief Execute script from the Kafka distribution bin/ path.
+ */
+void test_kafka_cmd (const char *fmt, ...) {
+#ifdef _MSC_VER
+	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
+#else
+	char cmd[1024];
+	int r;
+	va_list ap;
+	test_timing_t t_cmd;
+	const char *kpath;
+
+	kpath = test_getenv("KAFKA_PATH", NULL);
+
+	if (!kpath)
+		TEST_FAIL("%s: KAFKA_PATH must be set",
+			  __FUNCTION__);
+
+	r = rd_snprintf(cmd, sizeof(cmd),
+			"%s/bin/", kpath);
+	TEST_ASSERT(r < (int)sizeof(cmd));
+
+	va_start(ap, fmt);
+	rd_vsnprintf(cmd+r, sizeof(cmd)-r, fmt, ap);
+	va_end(ap);
+
+	TEST_SAY("Executing: %s\n", cmd);
+	TIMING_START(&t_cmd, "exec");
+	r = system(cmd);
+	TIMING_STOP(&t_cmd);
+
+	if (r == -1)
+		TEST_FAIL("system(\"%s\") failed: %s", cmd, strerror(errno));
+	else if (WIFSIGNALED(r))
+		TEST_FAIL("system(\"%s\") terminated by signal %d\n", cmd,
+			  WTERMSIG(r));
+	else if (WEXITSTATUS(r))
+		TEST_FAIL("system(\"%s\") failed with exit status %d\n",
+			  cmd, WEXITSTATUS(r));
+#endif
+}
+
 /**
  * @brief Execute kafka-topics.sh from the Kafka distribution.
  */
@@ -5001,7 +5079,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
  * @param useq Makes the call async and posts the response in this queue.
  *             If NULL this call will be synchronous and return the error
  *             result.
- *             
+ *
  * @remark Fails the current test on failure.
  */
 

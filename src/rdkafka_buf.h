@@ -687,7 +687,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         char *reason;       /* Textual reason */
                         rd_kafka_op_t *rko; /* Originating rko with replyq
                                              * (if any) */
-                        int all_topics;     /* Full/All topics requested */
+                        rd_bool_t all_topics; /**< Full/All topics requested */
+                        rd_bool_t cgrp_update; /**< Update cgrp with topic
+                                                *   status from response. */
 
                         int *decr;          /* Decrement this integer by one
                                              * when request is complete:

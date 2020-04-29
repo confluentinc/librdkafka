@@ -41,10 +41,12 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *md, size_t size);
 
 size_t
 rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match);
+                               const rd_kafka_topic_partition_list_t *match,
+                               rd_kafka_topic_partition_list_t *errored);
 size_t
 rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
-                                const rd_kafka_topic_partition_list_t *match);
+                                const rd_kafka_topic_partition_list_t *match,
+                                rd_kafka_topic_partition_list_t *errored);
 
 void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
                             const struct rd_kafka_metadata *md);
@@ -150,9 +152,6 @@ int rd_kafka_metadata_cache_topic_partition_get (
 int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
                                                  const rd_list_t *topics,
                                                  int *metadata_agep);
-int rd_kafka_metadata_cache_topics_filter_hinted (rd_kafka_t *rk,
-                                                  rd_list_t *dst,
-                                                  const rd_list_t *src);
 
 void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk);
 

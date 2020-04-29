@@ -59,7 +59,7 @@ typedef int mode_t;
 
 
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
-typedef struct rd_ikafka_s rd_ikafka_t;
+typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
 #define rd_kafka_assert(rk, cond) do {                                  \
@@ -563,6 +563,10 @@ struct rd_kafka_s {
                  *   but no more often than every 10s.
                  *   No locks: only accessed by rdkafka main thread. */
                 rd_interval_t broker_metadata_refresh;
+
+                /**< Suppression for allow.auto.create.topics=false not being
+                 *   supported by the broker. */
+                rd_interval_t allow_auto_create_topics;
         } rk_suppress;
 
         struct {

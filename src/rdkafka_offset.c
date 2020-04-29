@@ -645,7 +645,7 @@ rd_kafka_resp_err_t rd_kafka_offset_sync (rd_kafka_toppar_t *rktp) {
  */
 rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 					   int32_t partition, int64_t offset) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 
 	/* Find toppar */
@@ -818,7 +818,8 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
            BEGINNING / END logical offsets. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 		rd_kafka_toppar_offset_request(rktp,
-                                               rktp->rktp_query_offset, 0);
+                                               rktp->rktp_query_offset,
+                                               err ? 100 : 0);
 }
 
 

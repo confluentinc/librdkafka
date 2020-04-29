@@ -2531,7 +2531,7 @@ int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 
 int rd_kafka_consume_start (rd_kafka_topic_t *app_rkt, int32_t partition,
 			    int64_t offset) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "START",
                      "Start consuming partition %"PRId32,partition);
  	return rd_kafka_consume_start0(rkt, partition, offset, NULL);
@@ -2539,7 +2539,7 @@ int rd_kafka_consume_start (rd_kafka_topic_t *app_rkt, int32_t partition,
 
 int rd_kafka_consume_start_queue (rd_kafka_topic_t *app_rkt, int32_t partition,
 				  int64_t offset, rd_kafka_queue_t *rkqu) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 
  	return rd_kafka_consume_start0(rkt, partition, offset, rkqu->rkqu_q);
 }
@@ -2572,7 +2572,7 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
 
 
 int rd_kafka_consume_stop (rd_kafka_topic_t *app_rkt, int32_t partition) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
         int r;
 
@@ -2605,7 +2605,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                                    int32_t partition,
                                    int64_t offset,
                                    int timeout_ms) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
         rd_kafka_resp_err_t err;
@@ -2663,7 +2663,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 				int timeout_ms,
 				rd_kafka_message_t **rkmessages,
 				size_t rkmessages_size) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	ssize_t cnt;
 
@@ -2765,7 +2765,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *app_rkt, int32_t partition,
 						   *rkmessage,
 						   void *opaque),
 			       void *opaque) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	int r;
 
@@ -2876,7 +2876,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
                                       int32_t partition,
 				      int timeout_ms) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_message_t *rkmessage;
 

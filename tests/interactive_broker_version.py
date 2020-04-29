@@ -13,6 +13,8 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 
+from cluster_testing import read_scenario_conf
+
 import subprocess
 import time
 import tempfile
@@ -28,7 +30,7 @@ def version_as_number (version):
     return float('%s.%s' % (tokens[0], tokens[1]))
 
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
-                  root_path='tmp', broker_cnt=3):
+                  root_path='tmp', broker_cnt=3, scenario='default'):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -50,7 +52,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
         KerberosKdcApp(cluster, 'MYREALM').start()
 
-    defconf = {'replication_factor': min(int(conf.get('replication_factor', broker_cnt)), 3), 'num_partitions': 4, 'version': version}
+    defconf = {'version': version}
     defconf.update(conf)
 
     print('conf: ', defconf)
@@ -153,6 +155,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cmd_env['BROKERS'] = bootstrap_servers
     cmd_env['TEST_KAFKA_VERSION'] = version
     cmd_env['TRIVUP_ROOT'] = cluster.instance_path()
+    cmd_env['TEST_SCENARIO'] = scenario
 
     # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
@@ -196,6 +199,8 @@ if __name__ == '__main__':
                         help='Dont deploy applications, assume already deployed.')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='JSON config object (not file)')
+    parser.add_argument('--scenario', type=str, dest='scenario', default='default',
+                        help='Test scenario (see scenarios/ directory)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
     parser.add_argument('-n', type=int, dest='exec_cnt', default=1,
@@ -216,6 +221,8 @@ if __name__ == '__main__':
     else:
         args.conf = {}
 
+    args.conf.update(read_scenario_conf(args.scenario))
+
     if args.port is not None:
         args.conf['port_base'] = int(args.port)
     if args.kafka_path is not None:
@@ -233,7 +240,8 @@ if __name__ == '__main__':
     for version in args.versions:
         r = test_version(version, cmd=args.cmd, deploy=args.deploy,
                          conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
-                         root_path=args.root, broker_cnt=args.broker_cnt)
+                         root_path=args.root, broker_cnt=args.broker_cnt,
+                         scenario=args.scenario)
         if not r:
             retcode = 2
 

@@ -44,6 +44,9 @@ typedef struct rd_kafka_s rd_kafka_t;
 #define _C_CYA "\033[36m"
 
 
+/** Test scenario */
+extern char test_scenario[64];
+
 /** @returns the \p msecs timeout multiplied by the test timeout multiplier */
 extern int tmout_multip (int msecs);
 
@@ -57,6 +60,9 @@ extern int test_quick;
 #define TEST_BRKVER_X(V,I) \
         (((V) >> (24-((I)*8))) & 0xff)
 
+/** @brief Topic Admin API supported by this broker version and later */
+#define TEST_BRKVER_TOPIC_ADMINAPI TEST_BRKVER(0,10,2,0)
+
 extern int test_broker_version;
 extern int test_on_ci;
 
@@ -66,6 +72,8 @@ void test_delete_topic (rd_kafka_t *use_rk, const char *topicname);
 
 void test_create_topic (rd_kafka_t *use_rk, const char *topicname,
                         int partition_cnt, int replication_factor);
+
+void test_kafka_cmd (const char *fmt, ...);
 
 uint64_t
 test_produce_msgs_easy_size (const char *topic, uint64_t testid,

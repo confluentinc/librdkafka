@@ -189,6 +189,8 @@
     <ClCompile Include="..\..\tests\0104-fetch_from_follower_mock.c" />
     <ClCompile Include="..\..\tests\0105-transactions_mock.c" />
     <ClCompile Include="..\..\tests\0106-cgrp_sess_timeout.c" />
+    <ClCompile Include="..\..\tests\0107-topic_recreate.c" />
+    <ClCompile Include="..\..\tests\0109-auto_create_topics.cpp" />
     <ClCompile Include="..\..\tests\0110-batch_size.cpp" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />

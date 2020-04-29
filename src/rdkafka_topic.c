@@ -51,7 +51,6 @@ const char *rd_kafka_topic_state_names[] = {
 };
 
 
-
 static int
 rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
                                 const struct rd_kafka_metadata_topic *mdt,
@@ -79,6 +78,8 @@ static void rd_kafka_topic_keep_app (rd_kafka_topic_t *rkt) {
  */
 static void rd_kafka_topic_destroy_app (rd_kafka_topic_t *app_rkt) {
 	rd_kafka_topic_t *rkt = app_rkt;
+
+        rd_assert(!rd_kafka_rkt_is_lw(app_rkt));
 
         if (unlikely(rd_refcnt_sub(&rkt->rkt_app_refcnt) == 0))
                 rd_kafka_topic_destroy0(rkt); /* final app reference lost,
@@ -121,7 +122,11 @@ void rd_kafka_topic_destroy_final (rd_kafka_topic_t *rkt) {
  * Application destroy
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *app_rkt) {
-	rd_kafka_topic_destroy_app(app_rkt);
+        rd_kafka_lwtopic_t *lrkt;
+        if (unlikely((lrkt = rd_kafka_rkt_get_lw(app_rkt)) != NULL))
+                rd_kafka_lwtopic_destroy(lrkt);
+        else
+                rd_kafka_topic_destroy_app(app_rkt);
 }
 
 
@@ -188,15 +193,73 @@ int rd_kafka_topic_cmp_rkt (const void *_a, const void *_b) {
 
 
 /**
+ * @brief Destroy/free a light-weight topic object.
+ */
+void rd_kafka_lwtopic_destroy (rd_kafka_lwtopic_t *lrkt) {
+        rd_assert(rd_kafka_rkt_is_lw((const rd_kafka_topic_t *)lrkt));
+        if (rd_refcnt_sub(&lrkt->lrkt_refcnt) > 0)
+                return;
+
+        rd_refcnt_destroy(&lrkt->lrkt_refcnt);
+        rd_free(lrkt);
+}
+
+
+/**
+ * @brief Create a new light-weight topic name-only handle.
+ *
+ * This type of object is a light-weight non-linked alternative
+ * to the proper rd_kafka_itopic_t for outgoing APIs
+ * (such as rd_kafka_message_t) when there is no full topic object available.
+ */
+rd_kafka_lwtopic_t *rd_kafka_lwtopic_new (rd_kafka_t *rk, const char *topic) {
+        rd_kafka_lwtopic_t *lrkt;
+        size_t topic_len = strlen(topic);
+
+        lrkt = rd_malloc(sizeof(*lrkt) + topic_len + 1);
+
+        memcpy(lrkt->lrkt_magic, "LRKT", 4);
+        lrkt->lrkt_rk = rk;
+        rd_refcnt_init(&lrkt->lrkt_refcnt, 1);
+        lrkt->lrkt_topic = (char *)(lrkt+1);
+        memcpy(lrkt->lrkt_topic, topic, topic_len+1);
+
+        return lrkt;
+}
+
+
+/**
+ * @returns a proper rd_kafka_topic_t object (not light-weight)
+ *          based on the input rd_kafka_topic_t app object which may
+ *          either be a proper topic (which is then returned) or a light-weight
+ *          topic in which case it will look up or create the proper topic
+ *          object.
+ *
+ *          This allows the application to (unknowingly) pass a light-weight
+ *          topic object to any proper-aware public API.
+ */
+rd_kafka_topic_t *rd_kafka_topic_proper (rd_kafka_topic_t *app_rkt) {
+        rd_kafka_lwtopic_t *lrkt;
+
+        if (likely(!(lrkt = rd_kafka_rkt_get_lw(app_rkt))))
+                return app_rkt;
+
+        /* Create proper topic object */
+        return rd_kafka_topic_new0(lrkt->lrkt_rk, lrkt->lrkt_topic,
+                                   NULL, NULL, 0);
+}
+
+
+/**
  * @brief Create new topic handle.
  *
  * @locality any
  */
 rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
-                                        const char *topic,
-                                        rd_kafka_topic_conf_t *conf,
-                                        int *existing,
-                                        int do_lock) {
+                                       const char *topic,
+                                       rd_kafka_topic_conf_t *conf,
+                                       int *existing,
+                                       int do_lock) {
 	rd_kafka_topic_t *rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
         const char *conf_err;
@@ -251,6 +314,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                 *existing = 0;
 
 	rkt = rd_calloc(1, sizeof(*rkt));
+
+        memcpy(rkt->rkt_magic, "IRKT", 4);
 
 	rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 	rkt->rkt_rk        = rk;
@@ -376,7 +441,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rk->rk_topic_cnt++;
 
         /* Populate from metadata cache. */
-        if ((rkmce = rd_kafka_metadata_cache_find(rk, topic, 1/*valid*/))) {
+        if ((rkmce = rd_kafka_metadata_cache_find(rk, topic, 1/*valid*/)) &&
+            !rkmce->rkmce_mtopic.err) {
                 if (existing)
                         *existing = 1;
 
@@ -447,7 +513,10 @@ static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
  *   This is not true for Kafka Strings read from the network.
  */
 const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
-	return app_rkt->rkt_topic->str;
+        if (rd_kafka_rkt_is_lw(app_rkt))
+                return rd_kafka_rkt_lw_const(app_rkt)->lrkt_topic;
+        else
+                return app_rkt->rkt_topic->str;
 }
 
 
@@ -545,6 +614,8 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
         rd_kafka_toppar_lock(rktp);
 
         if (leader != NULL &&
+            rktp->rktp_broker != NULL &&
+            rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
             rktp->rktp_broker != leader &&
             rktp->rktp_leader_id == leader_id) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
@@ -618,9 +689,12 @@ int rd_kafka_toppar_delegate_to_leader (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Update the number of partitions for a topic and takes according actions.
- * Returns 1 if the partition count changed, else 0.
- * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held.
+ * @brief Update the number of partitions for a topic and takes actions
+ *        accordingly.
+ *
+ * @returns 1 if the partition count changed, else 0.
+ *
+ * @locks rd_kafka_topic_wrlock(rkt) MUST be held.
  */
 static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 						int32_t partition_cnt) {
@@ -891,7 +965,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
  *          topic is unknown.
 
  *
- * @locks rd_kafka*lock()
+ * @locks rd_kafka_*lock() MUST be held.
  */
 static int
 rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
@@ -1345,6 +1419,10 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
         rd_kafka_toppar_t *rktp;
         rd_kafka_broker_t *rkb;
 
+        /* This API must only be called from a partitioner and the
+         * partitioner is always passed a proper topic */
+        rd_assert(!rd_kafka_rkt_is_lw(app_rkt));
+
 	rktp = rd_kafka_toppar_get(app_rkt, partition, 0/*no ua-on-miss*/);
 	if (unlikely(!rktp))
 		return 0;
@@ -1359,6 +1437,24 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 
 
 void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
+        const rd_kafka_lwtopic_t *lrkt;
+
+        lrkt = rd_kafka_rkt_get_lw((rd_kafka_topic_t *)app_rkt);
+        if (unlikely(lrkt != NULL)) {
+                void *opaque;
+                rd_kafka_topic_t *rkt;
+
+                if (!(rkt = rd_kafka_topic_find(lrkt->lrkt_rk,
+                                                lrkt->lrkt_topic, 1/*lock*/)))
+                        return NULL;
+
+                opaque = rkt->rkt_conf.opaque;
+
+                rd_kafka_topic_destroy(rkt); /* loose refcnt from find() */
+
+                return opaque;
+        }
+
         return app_rkt->rkt_conf.opaque;
 }
 

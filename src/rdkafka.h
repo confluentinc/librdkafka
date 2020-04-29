@@ -3505,6 +3505,16 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
+ * @remark A consumer error will be raised for each unavailable topic in the
+ *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
+ *         for non-existent topics, and
+ *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+ *         The consumer error will be raised through rd_kafka_consumer_poll()
+ *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
+ *         error codes mentioned above.
+ *         The subscribe function itself is asynchronous and will not return
+ *         an error on unavailable topics.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
  *          topics or regexes,
@@ -3910,7 +3920,12 @@ rd_kafka_consumer_group_metadata_read (
  *                               partition, either set manually or by the
  *                               configured partitioner.
  *
- *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *    .._F_FREE and .._F_COPY are mutually exclusive. If neither of these are
+ *    set, the caller must ensure that the memory backing \p payload remains
+ *    valid and is not modified or reused until the delivery callback is
+ *    invoked. Other buffers passed to `rd_kafka_produce()` don't have this
+ *    restriction on reuse, i.e. the memory backing the key or the topic name
+ *    may be reused as soon as `rd_kafka_produce()` returns.
  *
  *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
  *    the memory associated with the payload is still the caller's

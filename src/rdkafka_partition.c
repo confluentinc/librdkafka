@@ -1339,8 +1339,6 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
         if (err) {
-                rd_kafka_op_t *rko;
-
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                            "Offset reply error for "
                            "topic %.*s [%"PRId32"] (v%d): %s",
@@ -1377,19 +1375,24 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                 /* Signal error back to application,
                  * unless this is an intermittent problem
                  * (e.g.,connection lost) */
-                rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
-                rko->rko_err = err;
-                if (rktp->rktp_query_offset <=
-                    RD_KAFKA_OFFSET_TAIL_BASE)
-                        rko->rko_u.err.offset =
-                                rktp->rktp_query_offset -
-                                RD_KAFKA_OFFSET_TAIL_BASE;
-                else
-                        rko->rko_u.err.offset = rktp->rktp_query_offset;
+                if (!(err == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
+                      err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE ||
+                      err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+                      err == RD_KAFKA_RESP_ERR__TIMED_OUT)) {
+                        rd_kafka_q_op_err(
+                                rktp->rktp_fetchq,
+                                RD_KAFKA_OP_CONSUMER_ERR,
+                                err, 0, rktp,
+                                (rktp->rktp_query_offset <=
+                                 RD_KAFKA_OFFSET_TAIL_BASE ?
+                                 rktp->rktp_query_offset -
+                                 RD_KAFKA_OFFSET_TAIL_BASE :
+                                 rktp->rktp_query_offset),
+                                "Failed to query logical offset %s: %s",
+                                rd_kafka_offset2str(rktp->rktp_query_offset),
+                                rd_kafka_err2str(err));
+                }
                 rd_kafka_toppar_unlock(rktp);
-                rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-
-                rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 
                 rd_kafka_toppar_destroy(rktp); /* from request.opaque */
                 return;

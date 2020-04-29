@@ -39,6 +39,8 @@
  * the idempotent guarantees can't be satisfied.
  */
 
+#define _DEFAULT_SOURCE /* avoid glibc deprecation warning of _BSD_SOURCE */
+#define _BSD_SOURCE     /* vsnprintf() */
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>

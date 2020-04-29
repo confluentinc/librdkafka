@@ -73,7 +73,8 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_op_set_replyq(rko, rkq, 0);
         rko->rko_u.metadata.force = 1; /* Force metadata request regardless
                                         * of outstanding metadata requests. */
-        rd_kafka_MetadataRequest(rkb, &topics, "application requested", rko);
+        rd_kafka_MetadataRequest(rkb, &topics, "application requested",
+                                 rd_true, rko);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -221,7 +222,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         const int log_decode_errors = LOG_ERR;
         rd_list_t *missing_topics = NULL;
         const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
-        int all_topics = request->rkbuf_u.Metadata.all_topics;
+        rd_bool_t all_topics = request->rkbuf_u.Metadata.all_topics;
+        rd_bool_t cgrp_update = request->rkbuf_u.Metadata.cgrp_update &&
+                rk->rk_cgrp;
         const char *reason = request->rkbuf_u.Metadata.reason ?
                 request->rkbuf_u.Metadata.reason : "(no reason)";
         int ApiVersion = request->rkbuf_reqhdr.ApiVersion;
@@ -255,6 +258,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         md->orig_broker_name = rd_tmpabuf_write(&tbuf,
                                                 rkb->rkb_name, rkb_namelen);
         rd_kafka_broker_unlock(rkb);
+
+        if (ApiVersion >= 3)
+                rd_kafka_buf_read_throttle_time(rkbuf);
 
         /* Read Brokers */
         rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
@@ -477,18 +483,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                    "topic %s (PartCnt %i): %s: ignoring",
                                    mdt->topic, mdt->partition_cnt,
                                    rd_kafka_err2str(mdt->err));
-                        if (missing_topics)
-                                rd_list_free_cb(
-                                        missing_topics,
-                                        rd_list_remove_cmp(missing_topics,
-                                                           mdt->topic,
-                                                           (void *)strcmp));
-                        continue;
+                } else {
+                        /* Update local topic & partition state based
+                         * on metadata */
+                        rd_kafka_topic_metadata_update2(rkb, mdt);
                 }
-
-
-                /* Update local topic & partition state based on metadata */
-                rd_kafka_topic_metadata_update2(rkb, mdt);
 
                 if (requested_topics) {
                         rd_list_free_cb(missing_topics,
@@ -584,8 +583,12 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         /* Check if cgrp effective subscription is affected by
          * new topic metadata.
-         * Ignore if this was a broker-only refresh (no topics) */
-        if ((requested_topics || all_topics) && rkb->rkb_rk->rk_cgrp)
+         * Ignore if this was a broker-only refresh (no topics), or
+         * the request was from the partition assignor (!cgrp_update)
+         * which may contain only a sub-set of the subscribed topics (namely
+         * the effective subscription of available topics) as to not
+         * propagate non-included topics as non-existent. */
+        if (cgrp_update && (requested_topics || all_topics))
                 rd_kafka_cgrp_metadata_update_check(
                         rkb->rkb_rk->rk_cgrp, 1/*do join*/);
 
@@ -633,8 +636,12 @@ done:
 
 /**
  * @brief Add all topics in current cached full metadata
- *        to \p tinfos (rd_kafka_topic_info_t *)
  *        that matches the topics in \p match
+ *        to \p tinfos (rd_kafka_topic_info_t *).
+ *
+ * @param errored Any topic or wildcard pattern that did not match
+ *                an available topic will be added to this list with
+ *                the appropriate error set.
  *
  * @returns the number of topics matched and added to \p list
  *
@@ -643,11 +650,12 @@ done:
  */
 size_t
 rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match) {
-        int ti;
+                               const rd_kafka_topic_partition_list_t *match,
+                               rd_kafka_topic_partition_list_t *errored) {
+        int ti, i;
         size_t cnt = 0;
         const struct rd_kafka_metadata *metadata;
-
+        rd_kafka_topic_partition_list_t *unmatched;
 
         rd_kafka_rdlock(rk);
         metadata = rk->rk_full_metadata;
@@ -656,11 +664,18 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
                 return 0;
         }
 
+        /* To keep track of which patterns and topics in `match` that
+         * did not match any topic (or matched an errored topic), we
+         * create a set of all topics to match in `unmatched` and then
+         * remove from this set as a match is found.
+         * Whatever remains in `unmatched` after all matching is performed
+         * are the topics and patterns that did not match a topic. */
+        unmatched = rd_kafka_topic_partition_list_copy(match);
+
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
         for (ti = 0 ; ti < metadata->topic_cnt ; ti++) {
                 const char *topic = metadata->topics[ti].topic;
-                int i;
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -673,17 +688,41 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
                                                   match->elems[i].topic, topic))
                                 continue;
 
-                        if (metadata->topics[ti].err)
+                        /* Remove from unmatched */
+                        rd_kafka_topic_partition_list_del(
+                                unmatched, match->elems[i].topic,
+                                RD_KAFKA_PARTITION_UA);
+
+                        if (metadata->topics[ti].err) {
+                                rd_kafka_topic_partition_list_add(
+                                        errored, topic,
+                                        RD_KAFKA_PARTITION_UA)->err =
+                                        metadata->topics[ti].err;
                                 continue; /* Skip errored topics */
+                        }
 
                         rd_list_add(tinfos,
                                     rd_kafka_topic_info_new(
                                             topic,
                                             metadata->topics[ti].partition_cnt));
+
                         cnt++;
                 }
         }
         rd_kafka_rdunlock(rk);
+
+        /* Any topics/patterns still in unmatched did not match any
+         * existing topics, add them to `errored`. */
+        for (i = 0 ; i < unmatched->cnt ; i++) {
+                rd_kafka_topic_partition_t *elem = &unmatched->elems[i];
+
+                rd_kafka_topic_partition_list_add(errored,
+                                                  elem->topic,
+                                                  RD_KAFKA_PARTITION_UA)->err =
+                        RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        }
+
+        rd_kafka_topic_partition_list_destroy(unmatched);
 
         return cnt;
 }
@@ -694,12 +733,16 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
  * @remark MUST NOT be used with wildcard topics,
  *         see rd_kafka_metadata_topic_match() for that.
  *
+ * @param errored Non-existent and unauthorized topics are added to this
+ *                list with the appropriate error code.
+ *
  * @returns the number of topics matched and added to \p tinfos
  * @locks none
  */
 size_t
 rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match) {
+                                const rd_kafka_topic_partition_list_t *match,
+                                rd_kafka_topic_partition_list_t *errored) {
         int i;
         size_t cnt = 0;
 
@@ -716,7 +759,16 @@ rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
 
                 mtopic = rd_kafka_metadata_cache_topic_get(rk, topic,
                                                            1/*valid*/);
-                if (mtopic && !mtopic->err) {
+
+                if (!mtopic)
+                        rd_kafka_topic_partition_list_add(
+                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
+                                RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+                else if (mtopic->err)
+                        rd_kafka_topic_partition_list_add(
+                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
+                                mtopic->err;
+                else {
                         rd_list_add(tinfos,
                                     rd_kafka_topic_info_new(
                                             topic, mtopic->partition_cnt));
@@ -831,7 +883,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                      "Requesting metadata for %d/%d topics: %s",
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
-        rd_kafka_MetadataRequest(rkb, &q_topics, reason, NULL);
+        rd_kafka_MetadataRequest(rkb, &q_topics, reason, rd_true, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -926,7 +978,7 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         }
 
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
-        rd_kafka_MetadataRequest(rkb, &topics, reason, NULL);
+        rd_kafka_MetadataRequest(rkb, &topics, reason, rd_true, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -957,7 +1009,7 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 destroy_rkb = 1;
         }
 
-        rd_kafka_MetadataRequest(rkb, topics, reason, rko);
+        rd_kafka_MetadataRequest(rkb, topics, reason, rd_true, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);

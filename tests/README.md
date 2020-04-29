@@ -127,6 +127,20 @@ Some additional guidelines:
    values to non-test functions, e.g, `rd_kafka_poll(rk, tmout_multip(3000))`.
 
 
+## Test scenarios
+
+A test scenario defines the cluster configuration used by tests.
+The majority of tests use the "default" scenario which matches the
+Apache Kafka default broker configuration (topic auto creation enabled, etc).
+
+If a test relies on cluster configuration that is mutually exclusive with
+the default configuration an alternate scenario must be defined in
+`scenarios/<scenario>.json` which is a configuration object which
+is passed to [trivup](https://github.com/edenhill/trivup).
+
+Try to reuse an existing test scenario as far as possible to speed up
+test times, since each new scenario will require a new cluster incarnation.
+
 
 ## A guide to testing, verifying, and troubleshooting, librdkafka
 

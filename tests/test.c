@@ -3870,7 +3870,7 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
  * @brief Execute script from the Kafka distribution bin/ path.
  */
 void test_kafka_cmd (const char *fmt, ...) {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
 #else
 	char cmd[1024];

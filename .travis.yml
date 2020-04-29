@@ -13,6 +13,7 @@ addons:
     # required by openssl installer
     - perl
 
+
 matrix:
  include:
  - name: "Linux GCC: +centos +debian"
@@ -48,6 +49,14 @@ matrix:
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog
+ - name: "Windows MinGW-w64"
+   os: windows
+   env:
+    - SKIP_MAKE=y
+   before_install:
+    - source ./packaging/mingw-w64/travis-before-install.sh
+   before_script:
+    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial
@@ -74,11 +83,14 @@ install:
  - rm -rf artifacts dest
  - mkdir dest artifacts
 
+before_cache:
+ - if [[ $TRAVIS_OS_NAME == windows ]]; then $msys2 pacman --sync --clean --noconfirm ; fi
+
 before_script:
 script:
-- make -j2 all examples check && make -j2 -C tests build
-- if [[ $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
-- make install
+- if [[ $SKIP_MAKE != y ]]; then make -j2 all examples check && make -j2 -C tests build ; fi
+- if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
+- if [[ $SKIP_MAKE != y ]]; then make install ; fi
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi

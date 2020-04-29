@@ -84,7 +84,7 @@ static RD_INLINE rd_ts_t rd_clock (void) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
-#elif defined(_MSC_VER)
+#elif defined(_WIN32)
         LARGE_INTEGER now;
         static RD_TLS double freq = 0.0;
         if (!freq) {
@@ -124,7 +124,7 @@ static RD_INLINE const char *rd_ctime (const time_t *t) RD_UNUSED;
 static RD_INLINE const char *rd_ctime (const time_t *t) {
 	static RD_TLS char ret[27];
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	ctime_r(t, ret);
 #else
 	ctime_s(ret, sizeof(ret), t);

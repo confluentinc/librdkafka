@@ -25,7 +25,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifdef _MSC_VER
+#ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
 #endif
 
@@ -96,11 +96,7 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 }
 
 
-
-
-
-
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * @brief sendmsg() abstraction, converting a list of segments to iovecs.
  * @remark should only be called if the number of segments is > 1.
@@ -164,14 +160,14 @@ rd_kafka_transport_socket_send0 (rd_kafka_transport_t *rktrans,
                 size_t r2;
 
                 r = send(rktrans->rktrans_s, p,
-#ifdef _MSC_VER
+#ifdef _WIN32
                          (int)rlen, (int)0
 #else
                          rlen, 0
 #endif
                 );
 
-#ifdef _MSC_VER
+#ifdef _WIN32
                 if (unlikely(r == RD_SOCKET_ERROR)) {
                         if (sum > 0 || rd_socket_errno == WSAEWOULDBLOCK)
                                 return sum;
@@ -213,7 +209,7 @@ static ssize_t
 rd_kafka_transport_socket_send (rd_kafka_transport_t *rktrans,
                                 rd_slice_t *slice,
                                 char *errstr, size_t errstr_size) {
-#ifndef _MSC_VER
+#ifndef _WIN32
         /* FIXME: Use sendmsg() with iovecs if there's more than one segment
          * remaining, otherwise (or if platform does not have sendmsg)
          * use plain send(). */
@@ -226,7 +222,7 @@ rd_kafka_transport_socket_send (rd_kafka_transport_t *rktrans,
 
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * @brief recvmsg() abstraction, converting a list of segments to iovecs.
  * @remark should only be called if the number of segments is > 1.
@@ -293,7 +289,7 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                 ssize_t r;
 
                 r = recv(rktrans->rktrans_s, p,
-#ifdef _MSC_VER
+#ifdef _WIN32
                          (int)
 #endif
                          len,
@@ -302,7 +298,7 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                 if (unlikely(r == RD_SOCKET_ERROR)) {
                         int errno_save = rd_socket_errno;
                         if (errno_save == EAGAIN
-#ifdef _MSC_VER
+#ifdef _WIN32
                             || errno_save == WSAEWOULDBLOCK
 #endif
                                 )
@@ -310,7 +306,7 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                         else {
                                 rd_snprintf(errstr, errstr_size, "%s",
                                             rd_socket_strerror(errno_save));
-#ifndef _MSC_VER
+#ifndef _WIN32
                                 errno = errno_save;
 #endif
                                 return -1;
@@ -320,7 +316,7 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size,
                                     "Disconnected");
-#ifndef _MSC_VER
+#ifndef _WIN32
                         errno = ECONNRESET;
 #endif
                         return -1;
@@ -344,7 +340,7 @@ static ssize_t
 rd_kafka_transport_socket_recv (rd_kafka_transport_t *rktrans,
                                 rd_buf_t *buf,
                                 char *errstr, size_t errstr_size) {
-#ifndef _MSC_VER
+#ifndef _WIN32
         return rd_kafka_transport_socket_recvmsg(rktrans, buf,
                                                  errstr, errstr_size);
 #endif
@@ -914,7 +910,7 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
                 if (connect(s, (struct sockaddr *)sinx,
                             RD_SOCKADDR_INX_LEN(sinx)) == RD_SOCKET_ERROR &&
                     (rd_socket_errno != EINPROGRESS
-#ifdef _MSC_VER
+#ifdef _WIN32
                      && rd_socket_errno != WSAEWOULDBLOCK
 #endif
                             ))
@@ -978,7 +974,7 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         int r;
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	r = poll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
 	if (r <= 0)
 		return r;
@@ -1036,14 +1032,14 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
  * in its own code. This means we might leak some memory on exit.
  */
 void rd_kafka_transport_term (void) {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	(void)WSACleanup(); /* FIXME: dangerous */
 #endif
 }
 #endif
 
 void rd_kafka_transport_init (void) {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	WSADATA d;
 	(void)WSAStartup(MAKEWORD(2, 2), &d);
 #endif

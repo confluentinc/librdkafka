@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <errno.h>
@@ -56,8 +56,7 @@
 #endif
 
 #include "testshared.h"
-
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define sscanf(...) sscanf_s(__VA_ARGS__)
 #endif
 
@@ -162,7 +161,7 @@ struct test {
 };
 
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define TEST_F_KNOWN_ISSUE_WIN32  TEST_F_KNOWN_ISSUE
 #else
 #define TEST_F_KNOWN_ISSUE_WIN32 0

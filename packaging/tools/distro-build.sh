@@ -11,6 +11,7 @@ distro=$1
 case $distro in
     centos)
         packaging/rpm/mock-on-docker.sh
+        packaging/rpm/tests/test-on-docker.sh
         ;;
     debian)
         docker run -it -v "$PWD:/v" microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz

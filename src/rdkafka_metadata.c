@@ -520,7 +520,16 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                         rkt = rd_kafka_topic_find(rkb->rkb_rk,
                                                   topic, 1/*lock*/);
                         if (rkt) {
-                                rd_kafka_topic_metadata_none(rkt);
+                                /* Received metadata response contained no
+                                 * information about topic 'rkt' and thus
+                                 * indicates the topic is not available in the
+                                 *  cluster.
+                                 * Mark the topic as non-existent */
+                                rd_kafka_topic_wrlock(rkt);
+                                rd_kafka_topic_set_notexists(
+                                        rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                rd_kafka_topic_wrunlock(rkt);
+
                                 rd_kafka_topic_destroy0(rkt);
                         }
                 }

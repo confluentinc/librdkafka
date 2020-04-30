@@ -368,6 +368,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",
           0, 1, 1 },
+        { _RK_GLOBAL, "topic.metadata.propagation.max.ms", _RK_C_INT,
+          _RK(metadata_propagation_max_ms),
+          "Apache Kafka topic creation is asynchronous and it takes some "
+          "time for a new topic to propagate throughout the cluster to all "
+          "brokers. "
+          "If a client requests topic metadata after manual topic creation but "
+          "before the topic has been fully propagated to the broker the "
+          "client is requesting metadata from, the topic will seem to be "
+          "non-existent and the client will mark the topic as such, "
+          "failing queued produced messages with `ERR__UNKNOWN_TOPIC`. "
+          "This setting delays marking a topic as non-existent until the "
+          "configured propagation max time has passed. "
+          "The maximum propagation time is calculated from the time the "
+          "topic is first referenced in the client, e.g., on produce().",
+          0, 60*60*1000, 30*1000 },
         { _RK_GLOBAL, "topic.blacklist", _RK_C_PATLIST,
           _RK(topic_blacklist),
           "Topic blacklist, a comma-separated list of regular expressions "

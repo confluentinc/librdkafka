@@ -1470,6 +1470,34 @@ As the topic metadata is refreshed every `topic.metadata.refresh.interval.ms`
 the unavailable topics are re-checked for availability, but the same error
 will not be raised again for the same topic.
 
+#### Topic metadata propagation for newly created topics
+
+Due to the asynchronous nature of topic creation in Apache Kafka it may
+take some time for a newly created topic to be known by all brokers in the
+cluster.
+If a client tries to use a topic after topic creation but before the topic
+has been fully propagated in the cluster it will seem as if the topic does not
+exist which would raise `RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC` (et.al)
+errors to the application.
+To avoid these temporary errors being raised, the client will not flag
+a topic as non-existent until a propagation time has elapsed, this propagation
+defaults to 30 seconds and can be configured with
+`topic.metadata.propagation.max.ms`.
+The per-topic max propagation time starts ticking as soon as the topic is
+referenced (e.g., by produce()).
+
+If messages are produced to unknown topics during the propagation time, the
+messages will be queued for later delivery to the broker when the topic
+metadata has propagated.
+Should the topic propagation time expire without the topic being seen the
+produced messages will fail with `RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC`.
+
+**Note**: The propagation time will not take affect if a topic is known to
+          the client and then deleted, in this case the topic will immediately
+          be marked as non-existent and remain non-existent until a topic
+          metadata refresh sees the topic again (after the topic has been
+          re-created).
+
 
 #### Topic auto creation
 

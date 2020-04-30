@@ -1657,10 +1657,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		rd_kafka_topic_rdlock(rkt);
 		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
+                           "\"age\":%"PRId64", "
 			   "\"metadata_age\":%"PRId64", ",
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                           (now - rkt->rkt_ts_create)/1000,
 			   rkt->rkt_ts_metadata ?
 			   (now - rkt->rkt_ts_metadata)/1000 : 0);
 

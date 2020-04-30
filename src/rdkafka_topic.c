@@ -320,6 +320,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 	rkt->rkt_rk        = rk;
 
+        rkt->rkt_ts_create = rd_clock();
+
 	rkt->rkt_conf = *conf;
 	rd_free(conf); /* explicitly not rd_kafka_topic_destroy()
                         * since we dont want to rd_free internal members,
@@ -924,36 +926,61 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt,
 
 
 /**
- * Received metadata request contained no information about topic 'rkt'
- * and thus indicates the topic is not available in the cluster.
+ * @brief Mark topic as non-existent, unless metadata propagation configuration
+ *        disallows it.
+ *
+ * @param err Propagate non-existent topic using this error code.
+ *            If \p err is RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION it means the
+ *            topic is invalid and no propagation delay will be used.
+ *
+ * @returns true if the topic was marked as non-existent, else false.
+ *
+ * @locks topic_wrlock() MUST be held.
  */
-void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
-	rd_kafka_topic_wrlock(rkt);
+rd_bool_t rd_kafka_topic_set_notexists (rd_kafka_topic_t *rkt,
+                                        rd_kafka_resp_err_t err) {
+        rd_ts_t remains_us;
+        rd_bool_t permanent = err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
 
-	if (unlikely(rd_kafka_terminating(rkt->rkt_rk))) {
-		/* Dont update metadata while terminating, do this
-		 * after acquiring lock for proper synchronisation */
-		rd_kafka_topic_wrunlock(rkt);
-		return;
-	}
+        if (unlikely(rd_kafka_terminating(rkt->rkt_rk))) {
+                /* Dont update metadata while terminating. */
+                return rd_false;
+        }
 
-	rkt->rkt_ts_metadata = rd_clock();
+        rd_assert(err != RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        remains_us =
+                (rkt->rkt_ts_create +
+                 (rkt->rkt_rk->rk_conf.metadata_propagation_max_ms * 1000)) -
+                rkt->rkt_ts_metadata;
+
+        if (!permanent &&
+            rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN && remains_us > 0) {
+                /* Still allowing topic metadata to propagate. */
+                rd_kafka_dbg(rkt->rkt_rk, TOPIC|RD_KAFKA_DBG_METADATA,
+                             "TOPICPROP",
+                             "Topic %.*s does not exist, allowing %dms "
+                             "for metadata propagation before marking topic "
+                             "as non-existent",
+                             RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                             (int)(remains_us / 1000));
+                return rd_false;
+        }
 
         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
 
         rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
-	/* Update number of partitions */
-	rd_kafka_topic_partition_cnt_update(rkt, 0);
+        /* Update number of partitions */
+        rd_kafka_topic_partition_cnt_update(rkt, 0);
 
         /* Purge messages with forced partition */
-        rd_kafka_topic_assign_uas(rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+        rd_kafka_topic_assign_uas(rkt, err);
 
         /* Propagate nonexistent topic info */
-        rd_kafka_topic_propagate_notexists(rkt,
-                                           RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+        rd_kafka_topic_propagate_notexists(rkt, err);
 
-	rd_kafka_topic_wrunlock(rkt);
+        return rd_true;
 }
 
 
@@ -1012,11 +1039,11 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
         old_state = rkt->rkt_state;
 	rkt->rkt_ts_metadata = ts_age;
 
-	/* Set topic state.
+        /* Set topic state.
          * UNKNOWN_TOPIC_OR_PART may indicate that auto.create.topics failed */
-	if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
-            mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION/*invalid topic*/)
-                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
+        if (mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION/*invalid topic*/ ||
+            mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
@@ -1087,18 +1114,12 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
                 }
         }
 
-	/* Try to assign unassigned messages to new partitions, or fail them */
-	if (upd > 0 || rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
-		rd_kafka_topic_assign_uas(rkt, mdt->err ?
+        /* If there was an update to the partitionts try to assign
+         * unassigned messages to new partitions, or fail them */
+        if (upd > 0)
+                rd_kafka_topic_assign_uas(rkt, mdt->err ?
                                           mdt->err :
                                           RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
-
-        /* Trigger notexists propagation */
-        if (old_state != (int)rkt->rkt_state &&
-            rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
-                rd_kafka_topic_propagate_notexists(
-                        rkt,
-                        mdt->err ? mdt->err : RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
 	rd_kafka_topic_wrunlock(rkt);
 

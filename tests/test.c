@@ -215,6 +215,7 @@ _TEST_DECL(0106_cgrp_sess_timeout);
 _TEST_DECL(0107_topic_recreate);
 _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
+_TEST_DECL(0111_delay_create_topics);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -398,6 +399,8 @@ struct test tests[] = {
               .scenario = "noautocreate"),
         _TEST(0109_auto_create_topics, 0),
         _TEST(0110_batch_size, 0),
+        _TEST(0111_delay_create_topics, 0, TEST_BRKVER_TOPIC_ADMINAPI,
+              .scenario = "noautocreate"),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

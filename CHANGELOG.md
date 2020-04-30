@@ -9,6 +9,10 @@ librdkafka.
    hints on the cause of the problem.
  * Consumer: Propagate errors when subscribing to unavailable topics (#1540)
  * Producer: Add `batch.size` producer configuration property (#638)
+ * Add `topic.metadata.propagation.max.ms` to allow newly manually created
+   topics to be propagated throughout the cluster before reporting them
+   as non-existent. This fixes race issues where CreateTopics() is
+   quickly followed by produce().
  * Added Test scenarios which define the cluster configuration
  * Add MinGW-w64 builds (@ed-alertedh, #2553)
  * `./configure --enable-XYZ` now requires the XYZ check to pass,

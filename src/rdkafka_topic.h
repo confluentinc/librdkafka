@@ -108,6 +108,7 @@ struct rd_kafka_topic_s {
                                                    * that are not yet seen
                                                    * in the cluster. */
 
+        rd_ts_t            rkt_ts_create;   /**< Topic object creation time. */
 	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
 					     * update for this topic. */
 
@@ -190,7 +191,8 @@ int rd_kafka_topic_cmp_rkt (const void *_a, const void *_b);
 
 void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt);
 
-void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt);
+rd_bool_t rd_kafka_topic_set_notexists (rd_kafka_topic_t *rkt,
+                                        rd_kafka_resp_err_t err);
 
 int rd_kafka_topic_metadata_update2 (rd_kafka_broker_t *rkb,
                                      const struct rd_kafka_metadata_topic *mdt);

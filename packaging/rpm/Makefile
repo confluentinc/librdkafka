@@ -8,6 +8,9 @@ MOCK_CONFIG?=default
 
 RESULT_DIR?=pkgs-$(VERSION)-$(BUILD_NUMBER)-$(MOCK_CONFIG)
 
+# Where built packages are copied with `make copy-artifacts`
+ARTIFACTS_DIR?=../../artifacts
+
 all: rpm
 
 
@@ -30,8 +33,10 @@ srpm: build_prepare
 		-r $(MOCK_CONFIG) \
 		--define "__version $(VERSION)" \
 		--define "__release $(BUILD_NUMBER)" \
+		--enable-network \
 		--resultdir=$(RESULT_DIR) \
 		--no-clean --no-cleanup-after \
+		--install epel-release \
 		--buildsrpm \
 		--spec=librdkafka.spec \
 		--sources=SOURCES || \
@@ -43,6 +48,7 @@ rpm: srpm
 		-r $(MOCK_CONFIG) \
 		--define "__version $(VERSION)"\
 		--define "__release $(BUILD_NUMBER)"\
+		--enable-network \
 		--resultdir=$(RESULT_DIR) \
 		--no-clean --no-cleanup-after \
 		--rebuild $(RESULT_DIR)/$(PACKAGE_NAME)*.src.rpm || \
@@ -50,7 +56,7 @@ rpm: srpm
 	@echo "======= Binary RPMs now available in $(RESULT_DIR) ======="
 
 copy-artifacts:
-	cp $(RESULT_DIR)/*rpm ../../artifacts/
+	cp $(RESULT_DIR)/*rpm $(ARTIFACTS_DIR)
 
 clean:
 	rm -rf SOURCES
@@ -74,7 +80,10 @@ prepare_ubuntu:
 	addgroup --system mock || true
 	adduser $$(whoami) mock
 	/usr/bin/mock -r $(MOCK_CONFIG) --init
-	/usr/bin/mock -r $(MOCK_CONFIG) --no-cleanup-after --install epel-release shadow-utils
+	/usr/bin/mock -r $(MOCK_CONFIG) \
+		--enable-network \
+		--no-cleanup-after \
+		--install epel-release shadow-utils
 
 prepare_centos:
 	yum install -y -q mock make git

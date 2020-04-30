@@ -9,7 +9,7 @@ License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
 Source:	 librdkafka-%{version}.tar.gz
 
-BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus-sasl-devel python3
+BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus-sasl-devel
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %define _source_payload w9.gzdio
@@ -26,8 +26,12 @@ Requires: zlib libstdc++ cyrus-sasl
 # openssl libraries were extract to openssl-libs in RHEL7
 %if 0%{?rhel} >= 7
 Requires: openssl-libs
+BuildRequires: python3
 %else
 Requires: openssl
+# python34 is provided from epel-release, but that package needs to be installed
+# prior to rpmbuild working out these dependencies (such as from mock).
+BuildRequires: python34
 %endif
 
 %description -n %{name}%{soname}

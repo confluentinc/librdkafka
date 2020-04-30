@@ -18,12 +18,16 @@ addons:
 
 matrix:
  include:
- - name: "Linux GCC: +centos +debian"
+ - name: "Linux GCC: +Debian packages"
    os: linux
    compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian" LINKAGE=std
+   env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "RPM packages"
+   os: linux
+   compiler: gcc
+   env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
  - name: "Linux clang: +alpine"
    os: linux
    compiler: clang

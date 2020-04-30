@@ -1331,18 +1331,8 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  *
  * @remark This function MUST NOT be used with the producer.
  */
-static RD_INLINE const char *
-RD_UNUSED
-rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
-		return NULL;
-
-	if (rkmessage->payload)
-		return (const char *)rkmessage->payload;
-
-	return rd_kafka_err2str(rkmessage->err);
-}
-
+RD_EXPORT
+const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage);
 
 
 /**

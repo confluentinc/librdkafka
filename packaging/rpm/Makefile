@@ -8,6 +8,9 @@ MOCK_CONFIG?=default
 
 RESULT_DIR?=pkgs-$(VERSION)-$(BUILD_NUMBER)-$(MOCK_CONFIG)
 
+# Where built packages are copied with `make copy-artifacts`
+ARTIFACTS_DIR?=../../artifacts
+
 all: rpm
 
 
@@ -32,6 +35,7 @@ srpm: build_prepare
 		--define "__release $(BUILD_NUMBER)" \
 		--resultdir=$(RESULT_DIR) \
 		--no-clean --no-cleanup-after \
+		--install epel-release \
 		--buildsrpm \
 		--spec=librdkafka.spec \
 		--sources=SOURCES || \
@@ -50,7 +54,7 @@ rpm: srpm
 	@echo "======= Binary RPMs now available in $(RESULT_DIR) ======="
 
 copy-artifacts:
-	cp $(RESULT_DIR)/*rpm ../../artifacts/
+	cp $(RESULT_DIR)/*rpm $(ARTIFACTS_DIR)
 
 clean:
 	rm -rf SOURCES

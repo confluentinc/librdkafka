@@ -46,6 +46,17 @@
 #include <stdarg.h>
 
 
+const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
+        if (!rkmessage->err)
+                return NULL;
+
+        if (rkmessage->payload)
+                return (const char *)rkmessage->payload;
+
+        return rd_kafka_err2str(rkmessage->err);
+}
+
+
 /**
  * @brief Check if producing is allowed.
  *

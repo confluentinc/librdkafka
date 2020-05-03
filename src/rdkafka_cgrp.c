@@ -529,6 +529,9 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {
+		/* Reset the interval because there were no brokers. When a
+		 * broker becomes available, we want to query it immediately. */
+		rd_interval_reset(&rkcg->rkcg_coord_query_intvl);
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPQUERY",
 			     "Group \"%.*s\": "
 			     "no broker available for coordinator query: %s",

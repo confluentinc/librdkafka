@@ -39,7 +39,7 @@ if [[ $on_builder == 0 ]]; then
 
     mkdir -p ${PWD}/packaging/rpm/cache/mock
 
-    docker run --cap-add=SYS_ADMIN \
+    docker run \
            --privileged \
            -t \
            -v ${PWD}/packaging/rpm/cache/mock:/var/cache/mock \

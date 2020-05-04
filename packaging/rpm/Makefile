@@ -31,6 +31,7 @@ build_prepare: archive
 srpm: build_prepare
 	/usr/bin/mock \
 		-r $(MOCK_CONFIG) \
+		$(MOCK_OPTIONS) \
 		--define "__version $(VERSION)" \
 		--define "__release $(BUILD_NUMBER)" \
 		--enable-network \
@@ -46,6 +47,7 @@ srpm: build_prepare
 rpm: srpm
 	/usr/bin/mock \
 		-r $(MOCK_CONFIG) \
+		$(MOCK_OPTIONS) \
 		--define "__version $(VERSION)"\
 		--define "__release $(BUILD_NUMBER)"\
 		--enable-network \

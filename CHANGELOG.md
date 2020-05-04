@@ -11,6 +11,8 @@ librdkafka.
  * Producer: Add `batch.size` producer configuration property (#638)
  * Added Test scenarios which define the cluster configuration
  * Add MinGW-w64 builds (@ed-alertedh, #2553)
+ * `./configure --enable-XYZ` now requires the XYZ check to pass,
+   and `--disable-XYZ` disables the feature altogether (@benesch)
 
 
 ## Upgrade considerations
@@ -38,10 +40,14 @@ librdkafka.
 
 ### Consumer fixes
 
+ * Initial consumer group joins should now be a couple of seconds quicker
+   thanks expedited query intervals (@benesch).
  * Don't propagate temporary offset lookup errors to application
  * Reset the stored offset when partitions are un-assign()ed (fixes #2782)
 
 ### Producer fixes
+
+
 
 
 # librdkafka v1.4.2
@@ -57,7 +63,8 @@ v1.4.2 is a maintenance release with the following fixes and enhancements:
  * Probe known CA cert paths and set default `ssl.ca.location` accordingly
    if OpenSSL is statically linked or `ssl.ca.location` is set to `probe`.
  * Per-partition OffsetCommit errors were unhandled (fixes #2791)
- * Seed the PRNG (random number generator) by default, allow application to override with `enable.random.seed=false` (#2795)
+ * Seed the PRNG (random number generator) by default, allow application to
+   override with `enable.random.seed=false` (#2795)
  * Fix stack overwrite (of 1 byte) when SaslHandshake MechCnt is zero
  * Align bundled c11 threads (tinycthreads) constants to glibc and musl (#2681)
  * Fix return value of rd_kafka_test_fatal_error() (by @ckb42)

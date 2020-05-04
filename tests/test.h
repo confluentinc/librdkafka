@@ -328,7 +328,7 @@ struct test_mv_vs {
 
         /* Correct msgver for comparison */
         test_msgver_t *corr;
-} vs;
+};
 
 
 void test_msgver_init (test_msgver_t *mv, uint64_t testid);

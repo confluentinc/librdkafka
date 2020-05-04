@@ -441,6 +441,7 @@ extern int unittest_cgrp (void);
 #if WITH_SASL_SCRAM
 extern int unittest_scram (void);
 #endif
+extern int unittest_assignors (void);
 
 int rd_unittest (void) {
         int fails = 0;
@@ -472,10 +473,12 @@ int rd_unittest (void) {
 #if WITH_SASL_SCRAM
                 { "scram", unittest_scram },
 #endif
+                { "assignors", unittest_assignors },
                 { NULL }
         };
         int i;
         const char *match = rd_getenv("RD_UT_TEST", NULL);
+        int cnt = 0;
 
         if (rd_getenv("RD_UT_ASSERT", NULL))
                 rd_unittest_assert_on_failure = rd_true;
@@ -505,6 +508,7 @@ int rd_unittest (void) {
                           unittests[i].name,
                           f ? "\033[31mFAIL" : "\033[32mPASS");
                 fails += f;
+                cnt++;
         }
 
 #if ENABLE_CODECOV
@@ -524,6 +528,9 @@ int rd_unittest (void) {
         }
 #endif
 #endif
+
+        if (!cnt && match)
+                RD_UT_WARN("No unittests matching \"%s\"", match);
 
         return fails;
 }

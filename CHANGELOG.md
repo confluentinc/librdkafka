@@ -34,6 +34,7 @@ librdkafka.
    Users on Brokers 0.9.x or older should already be configuring
    `api.version.request=false` and `broker.version.fallback=...` so there
    should be no functional change.
+ * librdkafka's build tooling now requires Python 3.x (python3 interpreter).
 
 
 ## Fixes

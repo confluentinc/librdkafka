@@ -16,7 +16,7 @@ v1.4.2 is a maintenance release with the following fixes and enhancements:
  * Align bundled c11 threads (tinycthreads) constants to glibc and musl (#2681)
  * Fix return value of rd_kafka_test_fatal_error() (by @ckb42)
  * Ensure CMake sets disabled defines to zero on Windows (@benesch)
-
+ * librdkafka's build tooling now requires Python 3.x (python3 interpreter).
 
 *Note: there was no v1.4.1 librdkafka release*
 

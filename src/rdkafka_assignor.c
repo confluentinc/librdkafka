@@ -209,7 +209,7 @@ int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b) {
         const rd_kafka_assignor_topic_t *b =
                 *(const rd_kafka_assignor_topic_t * const *)_b;
 
-        return !strcmp(a->metadata->topic, b->metadata->topic);
+        return strcmp(a->metadata->topic, b->metadata->topic);
 }
 
 /**

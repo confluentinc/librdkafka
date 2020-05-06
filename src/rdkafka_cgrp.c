@@ -521,12 +521,11 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_broker_t *rkb;
         rd_kafka_resp_err_t err;
 
-	rd_kafka_rdlock(rkcg->rkcg_rk);
-        rkb = rd_kafka_broker_any_up(rkcg->rkcg_rk,
-                                     NULL,
-                                     rd_kafka_broker_filter_can_coord_query,
-                                     NULL, "coordinator query");
-	rd_kafka_rdunlock(rkcg->rkcg_rk);
+        rkb = rd_kafka_broker_any_usable(rkcg->rkcg_rk,
+                                         RD_POLL_NOWAIT,
+                                         RD_DO_LOCK,
+                                         RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
+                                         "coordinator query");
 
 	if (!rkb) {
 		/* Reset the interval because there were no brokers. When a

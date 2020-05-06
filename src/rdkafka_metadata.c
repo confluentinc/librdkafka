@@ -52,7 +52,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
-        rkb = rd_kafka_broker_any_usable(rk, timeout_ms, 1,
+        rkb = rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
                                          "application metadata request");
 	if (!rkb)
 		return RD_KAFKA_RESP_ERR__TRANSPORT;
@@ -847,7 +847,8 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rk);
 
         if (!rkb) {
-                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 0,
+                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
+                                                       RD_DONT_LOCK, 0,
                                                        reason))) {
                         rd_kafka_wrunlock(rk);
                         rd_kafka_dbg(rk, METADATA, "METADATA",
@@ -980,7 +981,8 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 rk = rkb->rkb_rk;
 
         if (!rkb) {
-                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 1,
+                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
+                                                       RD_DO_LOCK, 0,
                                                        reason)))
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 destroy_rkb = 1;
@@ -1012,7 +1014,8 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         int destroy_rkb = 0;
 
         if (!rkb) {
-                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 1,
+                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
+                                                       RD_DO_LOCK, 0,
                                                        reason)))
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 destroy_rkb = 1;

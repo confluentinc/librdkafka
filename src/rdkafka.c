@@ -1816,9 +1816,9 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
         int sparse = 1;
 
-        /* Dont do sparse requests if there is a consumer group with an
-         * active subscription since subscriptions need to be able to match
-         * on all topics. */
+        /* Dont do sparse requests if there is a consumer group with an active
+         * wildcard subscription since it needs to be able to match on all
+         * topics. */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 sparse = 0;

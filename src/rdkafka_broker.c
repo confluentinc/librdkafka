@@ -481,12 +481,8 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
                    suppress ? ": error log suppressed" : "");
 
         if (level != LOG_DEBUG && (level <= LOG_CRIT || !suppress)) {
-                /* Don't log if an error callback is registered,
-                 * or the error event is enabled. */
-                if (!(rkb->rkb_rk->rk_conf.enabled_events &
-                      RD_KAFKA_EVENT_ERROR))
-                        rd_kafka_log(rkb->rkb_rk, level, "FAIL",
-                                     "%s: %s", rkb->rkb_name, errstr);
+                rd_kafka_log(rkb->rkb_rk, level, "FAIL",
+                             "%s: %s", rkb->rkb_name, errstr);
 
                 /* Send ERR op to application for processing. */
                 rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, RD_KAFKA_OP_ERR,

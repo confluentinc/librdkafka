@@ -1682,7 +1682,10 @@ int main(int argc, char **argv) {
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
-	TEST_SAY("Test mode    : %s%s\n", test_quick ? "quick, ":"", test_mode);
+        TEST_SAY("Test mode    : %s%s%s\n",
+                 test_quick ? "quick, ":"",
+                 test_mode,
+                 test_on_ci ? ", CI":"");
         TEST_SAY("Test scenario: %s\n", test_scenario);
         TEST_SAY("Test filter  : %s\n",
                  (test_flags & TEST_F_LOCAL) ? "local tests only" : "no filter");

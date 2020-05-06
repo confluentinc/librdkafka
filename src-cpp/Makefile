@@ -15,11 +15,11 @@ OBJS=		$(CXXSRCS:%.cpp=%.o)
 
 all: lib check
 
+# No linker script/symbol hiding for C++ library
+DISABLE_LDS=y
+
 MKL_NO_SELFCONTAINED_STATIC_LIB=y
 include ../mklove/Makefile.base
-
-# No linker script/symbol hiding for C++ library
-WITH_LDS=n
 
 # OSX and Cygwin requires linking required libraries
 ifeq ($(_UNAME_S),Darwin)

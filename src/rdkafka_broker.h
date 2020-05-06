@@ -190,9 +190,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         rd_ts_t             rkb_ts_tx_last;    /**< Timestamp of last
                                                 *   transmitted requested */
 
-	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
-	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
-							 * metadata polls. */
 	thrd_t              rkb_thread;
 
 	rd_refcnt_t         rkb_refcnt;

@@ -5269,16 +5269,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_interval_init(&rkb->rkb_suppress.unsupported_kip62);
         rd_interval_init(&rkb->rkb_suppress.fail_error);
 
-        /* Set next intervalled metadata refresh, offset by a random
-         * value to avoid all brokers to be queried simultaneously. */
-        if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)
-                rkb->rkb_ts_metadata_poll = rd_clock() +
-                        ((rd_ts_t)rkb->rkb_rk->rk_conf.
-                         metadata_refresh_interval_ms * 1000) +
-                        (rd_jitter(500,1500) * 1000);
-        else /* disabled */
-                rkb->rkb_ts_metadata_poll = UINT64_MAX;
-
 #ifndef _WIN32
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling

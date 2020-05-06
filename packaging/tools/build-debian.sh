@@ -43,7 +43,7 @@ mkdir -p $DEST_DIR
 ./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR
 make -j
 examples/rdkafka_example -X builtin.features
-make -C tests run_local_quick
+CI=true make -C tests run_local_quick
 make install
 
 # Tar up the output directory

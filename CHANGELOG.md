@@ -13,6 +13,9 @@ librdkafka.
    topics to be propagated throughout the cluster before reporting them
    as non-existent. This fixes race issues where CreateTopics() is
    quickly followed by produce().
+ * Prefer least idle connection for periodic metadata refreshes, et.al.,
+   to allow truly idle connections to time out and to avoid load-balancer-killed
+   idle connection errors (#2845)
  * Added Test scenarios which define the cluster configuration
  * Add MinGW-w64 builds (@ed-alertedh, #2553)
  * `./configure --enable-XYZ` now requires the XYZ check to pass,

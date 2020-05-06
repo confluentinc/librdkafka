@@ -19,8 +19,6 @@ _RPMDIR=artifacts
 
 if [[ -n $1 ]]; then
     _RPMDIR="$1"
-    echo "Usage: $0 <path/to/rpmdirectory>"
-    exit 1
 fi
 
 _RPMDIR=$(readlink -f $_RPMDIR)

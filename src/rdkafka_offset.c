@@ -785,16 +785,12 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
         } else if (offset == RD_KAFKA_OFFSET_BEGINNING &&
                    rktp->rktp_lo_offset >= 0) {
-                /* Use cached log start from last Fetch if available */
+                /* Use cached log start from last Fetch if available.
+                 * Note: The cached end offset (rktp_ls_offset) can't be
+                 *       used here since the End offset is a constantly moving
+                 *       target as new messages are produced. */
                 extra = "cached BEGINNING offset ";
                 offset = rktp->rktp_lo_offset;
-                rd_kafka_toppar_next_offset_handle(rktp, offset);
-
-        } else if (offset == RD_KAFKA_OFFSET_END &&
-                   rktp->rktp_ls_offset >= 0) {
-                /* Use cached log start from last Fetch if available */
-                extra = "cached END offset ";
-                offset = rktp->rktp_ls_offset;
                 rd_kafka_toppar_next_offset_handle(rktp, offset);
 
         } else {

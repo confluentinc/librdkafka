@@ -1,4 +1,4 @@
-param([String]$OpenSSLVersion="1.1.1f")
+param([String]$OpenSSLVersion="1.1.1g")
 
 $ErrorActionPreference = "stop"
 

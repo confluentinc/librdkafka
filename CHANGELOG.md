@@ -43,6 +43,12 @@ librdkafka.
 
 ## Fixes
 
+### General fixes
+
+ * The client could crash in rare circumstances on ApiVersion or
+   SaslHandshake request timeouts (#2326)
+
+
 ### Consumer fixes
 
  * The roundrobin partition assignor could crash if subscriptions

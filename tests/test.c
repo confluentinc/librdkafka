@@ -4899,8 +4899,6 @@ void test_wait_metadata_update (rd_kafka_t *rk,
 
         abs_timeout = test_clock() + (tmout * 1000);
 
-        test_timeout_set(10 + (tmout/1000));
-
         TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
 
         TIMING_START(&t_md, "METADATA.WAIT");
@@ -4925,6 +4923,15 @@ void test_wait_metadata_update (rd_kafka_t *rk,
 
         if (abs_timeout)
                 TEST_FAIL("Expected topics not seen in given time.");
+}
+
+/**
+ * @brief Wait for topic to be available in metadata
+ */
+void test_wait_topic_exists (rd_kafka_t *rk, const char *topic, int tmout) {
+        rd_kafka_metadata_topic_t topics = { .topic = (char *)topic };
+
+        test_wait_metadata_update(rk, &topics, 1, NULL, 0, tmout);
 }
 
 

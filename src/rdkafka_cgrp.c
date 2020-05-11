@@ -866,7 +866,6 @@ rd_kafka_group_MemberMetadata_consumer_read (
         rd_kafkap_bytes_t UserData;
         const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__BAD_MSG;
-        rd_kafka_topic_partition_list_t *assignment = NULL;
 
         /* Create a shadow-buffer pointing to the metadata to ease parsing. */
         rkbuf = rd_kafka_buf_new_shadow(MemberMetadata->data,
@@ -3669,7 +3668,6 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         rd_kafka_topic_partition_list_t *assignment = NULL;
         const int log_decode_errors = LOG_ERR;
         int16_t Version;
-        int32_t TopicCnt;
         rd_kafkap_bytes_t UserData;
 
 	/* Dont handle new assignments when terminating */

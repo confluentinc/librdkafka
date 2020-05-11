@@ -4638,17 +4638,14 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
                 rkb, RD_KAFKAP_Fetch, 0, 11, NULL);
 
-        if (ApiVersion == 11)
-                rd_kafka_buf_ApiVersion_set(rkbuf, 11,
-                                            RD_KAFKA_FEATURE_MSGVER2);
-        else if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
-                rd_kafka_buf_ApiVersion_set(rkbuf, 4,
+        if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
+                rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion,
                                             RD_KAFKA_FEATURE_MSGVER2);
         else if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
-                rd_kafka_buf_ApiVersion_set(rkbuf, 2,
+                rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion,
                                             RD_KAFKA_FEATURE_MSGVER1);
         else if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-                rd_kafka_buf_ApiVersion_set(rkbuf, 1,
+                rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion,
                                             RD_KAFKA_FEATURE_THROTTLETIME);
 
 
@@ -4660,13 +4657,15 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	/* MinBytes */
 	rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.fetch_min_bytes);
 
-        if (rd_kafka_buf_ApiVersion(rkbuf) >= 4) {
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 3)
                 /* MaxBytes */
                 rd_kafka_buf_write_i32(rkbuf,
                                        rkb->rkb_rk->rk_conf.fetch_max_bytes);
+
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 4)
                 /* IsolationLevel */
-                rd_kafka_buf_write_i8(rkbuf, rkb->rkb_rk->rk_conf.isolation_level);
-        }
+                rd_kafka_buf_write_i8(rkbuf,
+                                      rkb->rkb_rk->rk_conf.isolation_level);
 
         if (rd_kafka_buf_ApiVersion(rkbuf) >= 7) {
                 /* SessionId */
@@ -4711,18 +4710,21 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 		}
 
 		PartitionArrayCnt++;
+
 		/* Partition */
 		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
-                if (rd_kafka_buf_ApiVersion(rkbuf) >= 9) {
+
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 9)
                         /* CurrentLeaderEpoch */
                         rd_kafka_buf_write_i32(rkbuf, -1);
-                }
+
 		/* FetchOffset */
 		rd_kafka_buf_write_i64(rkbuf, rktp->rktp_offsets.fetch_offset);
-                if (rd_kafka_buf_ApiVersion(rkbuf) >= 5) {
+
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 5)
                         /* LogStartOffset - only used by follower replica */
                         rd_kafka_buf_write_i64(rkbuf, -1);
-                }
+
 		/* MaxBytes */
 		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_fetch_msg_max_bytes);
 
@@ -4747,18 +4749,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                                            rktp, rktp_activelink)) !=
                  rkb->rkb_active_toppar_next);
 
-        if (rd_kafka_buf_ApiVersion(rkbuf) >= 7) {
-                /* Length of the ForgottenTopics list (KIP-227). Broker
-                 * use only - not used by the consumer. */
-                rd_kafka_buf_write_i32(rkbuf, 0);
-        }
-
-        if (rd_kafka_buf_ApiVersion(rkbuf) >= 11) {
-                /* RackId */
-                rd_kafka_buf_write_kstr(rkbuf,
-                        rkb->rkb_rk->rk_conf.client_rack);
-        }
-
         /* Update next toppar to fetch in round-robin list. */
         rd_kafka_broker_active_toppar_next(
                 rkb,
@@ -4782,6 +4772,17 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
 	/* Update TopicArrayCnt */
 	rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+
+
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 7)
+                /* Length of the ForgottenTopics list (KIP-227). Broker
+                 * use only - not used by the consumer. */
+                rd_kafka_buf_write_i32(rkbuf, 0);
+
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 11)
+                /* RackId */
+                rd_kafka_buf_write_kstr(rkbuf,
+                        rkb->rkb_rk->rk_conf.client_rack);
 
         /* Consider Fetch requests blocking if fetch.wait.max.ms >= 1s */
         if (rkb->rkb_rk->rk_conf.fetch_wait_max_ms >= 1000)

@@ -1835,7 +1835,7 @@ release of librdkafka.
 | ApiKey  | Request name            | Kafka max   | librdkafka max          |
 | ------- | -------------------     | ----------- | ----------------------- |
 | 0       | Produce                 | 7           | 7                       |
-| 1       | Fetch                   | 11          | 4                       |
+| 1       | Fetch                   | 11          | 11                      |
 | 2       | ListOffsets             | 5           | 1                       |
 | 3       | Metadata                | 8           | 2                       |
 | 4       | LeaderAndIsr            | 2           | -                       |

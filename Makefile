@@ -83,6 +83,17 @@ LICENSES.txt: .PHONY
 	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
 
 
+TAGS: .PHONY
+	@(if which etags >/dev/null 2>&1 ; then \
+		echo "Using etags to generate $@" ; \
+		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
+			etags -f $@ - ; \
+	 else \
+		echo "Using ctags to generate $@" ; \
+		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
+			ctags -e -f $@ -L- ; \
+	fi)
+
 coverity: Makefile.config
 	@(which cov-build >/dev/null 2>&1 || echo "Make sure coverity../bin is in your PATH")
 	@(cd src && \

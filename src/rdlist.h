@@ -277,6 +277,11 @@ int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
  */
 int rd_list_cmp_ptr (const void *a, const void *b);
 
+/**
+ * @brief strcmp comparator where the list elements are strings.
+ */
+int rd_list_cmp_str (const void *a, const void *b);
+
 
 /**
  * @brief Apply \p cb to each element in list, if \p cb returns 0

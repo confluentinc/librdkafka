@@ -1815,33 +1815,34 @@ static void rd_kafka_stats_emit_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
  */
 static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
-        int sparse = 1;
+        rd_kafka_resp_err_t err;
 
-        /* Dont do sparse requests if there is a consumer group with an active
-         * wildcard subscription since it needs to be able to match on all
-         * topics. */
-        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
-            rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
-                sparse = 0;
+        /* High-level consumer:
+         * We need to query both locally known topics and subscribed topics
+         * so that we can detect locally known topics changing partition
+         * count or disappearing, as well as detect previously non-existent
+         * subscribed topics now being available in the cluster. */
+        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
+                err = rd_kafka_metadata_refresh_consumer_topics(
+                        rk, NULL,
+                        "periodic topic and broker list refresh");
+        else
+                err = rd_kafka_metadata_refresh_known_topics(
+                        rk, NULL, rd_true/*force*/,
+                        "periodic topic and broker list refresh");
 
-        if (sparse) {
-                if (rd_kafka_metadata_refresh_known_topics(
-                            rk, NULL, 1/*force*/,
-                            "periodic topic and broker list refresh") ==
-                    RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC &&
-                    rd_interval(&rk->rk_suppress.broker_metadata_refresh,
-                                10*1000*1000 /*10s*/, 0) > 0) {
-                        /* If there are no (locally referenced) topics
-                         * to query, refresh the broker list.
-                         * This avoids getting idle-disconnected for clients
-                         * that have not yet referenced a topic and makes
-                         * sure such a client has an up to date broker list. */
-                        rd_kafka_metadata_refresh_brokers(
-                                rk, NULL,
-                                "periodic broker list refresh");
-                }
-        } else
-                rd_kafka_metadata_refresh_all(rk, NULL, "periodic refresh");
+
+        if (err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC &&
+            rd_interval(&rk->rk_suppress.broker_metadata_refresh,
+                        10*1000*1000 /*10s*/, 0) > 0) {
+                /* If there are no (locally referenced) topics
+                 * to query, refresh the broker list.
+                 * This avoids getting idle-disconnected for clients
+                 * that have not yet referenced a topic and makes
+                 * sure such a client has an up to date broker list. */
+                rd_kafka_metadata_refresh_brokers(
+                        rk, NULL, "periodic broker list refresh");
+        }
 }
 
 

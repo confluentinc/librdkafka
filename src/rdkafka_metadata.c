@@ -74,7 +74,14 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rko->rko_u.metadata.force = 1; /* Force metadata request regardless
                                         * of outstanding metadata requests. */
         rd_kafka_MetadataRequest(rkb, &topics, "application requested",
-                                 rd_true, rko);
+                                 /* cgrp_update:
+                                  * Only update consumer group state
+                                  * on response if this lists all
+                                  * topics in the cluster, since a
+                                  * partial request may make it seem
+                                  * like some subscribed topics are missing. */
+                                 all_topics ? rd_true : rd_false,
+                                 rko);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -828,6 +835,7 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  * @param rk: used to look up usable broker if \p rkb is NULL.
  * @param rkb: use this broker, unless NULL then any usable broker from \p rk
  * @param force: force refresh even if topics are up-to-date in cache
+ * @param cgrp_update: Allow consumer group state update on response.
  *
  * @returns an error code
  *
@@ -836,7 +844,8 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  */
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const rd_list_t *topics, int force,
+                                  const rd_list_t *topics, rd_bool_t force,
+                                  rd_bool_t cgrp_update,
                                   const char *reason) {
         rd_list_t q_topics;
         int destroy_rkb = 0;
@@ -893,7 +902,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                      "Requesting metadata for %d/%d topics: %s",
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
-        rd_kafka_MetadataRequest(rkb, &q_topics, reason, rd_true, NULL);
+        rd_kafka_MetadataRequest(rkb, &q_topics, reason, cgrp_update, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -918,7 +927,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  */
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                        int force, const char *reason) {
+                                        rd_bool_t force, const char *reason) {
         rd_list_t topics;
         rd_kafka_resp_err_t err;
 
@@ -932,7 +941,69 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
                 err = rd_kafka_metadata_refresh_topics(rk, rkb,
-                                                       &topics, force, reason);
+                                                       &topics, force,
+                                                       rd_false/*!cgrp_update*/,
+                                                       reason);
+
+        rd_list_destroy(&topics);
+
+        return err;
+}
+
+
+/**
+ * @brief Refresh metadata for known and subscribed topics.
+ *
+ * @param rk used to look up usable broker if \p rkb is NULL..
+ * @param rkb use this broker, unless NULL then any usable broker from \p rk.
+ * @param reason reason of refresh, used in debug logs.
+ *
+ * @returns an error code (ERR__UNKNOWN_TOPIC if no topics are desired).
+ *
+ * @locality rdkafka main thread
+ * @locks_required none
+ * @locks_acquired rk(read)
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
+                                           rd_kafka_broker_t *rkb,
+                                           const char *reason) {
+        rd_list_t topics;
+        rd_kafka_resp_err_t err;
+        rd_kafka_cgrp_t *rkcg;
+
+        if (!rk)
+                rk = rkb->rkb_rk;
+
+        rkcg = rk->rk_cgrp;
+        rd_assert(rkcg != NULL);
+
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
+                /* If there is a wildcard subscription we need to request
+                 * all topics in the cluster so that we can perform
+                 * regexp matching. */
+                return rd_kafka_metadata_refresh_all(rk, rkb, reason);
+        }
+
+        rd_list_init(&topics, 8, rd_free);
+
+        /* Add locally known topics, i.e., those that are currently
+         * being consumed or otherwise referenced through topic_t objects. */
+        rd_kafka_local_topics_to_list(rk, &topics);
+
+        /* Add subscribed (non-wildcard) topics, if any. */
+        if (rkcg->rkcg_subscription)
+                rd_kafka_topic_partition_list_get_topic_names(
+                        rkcg->rkcg_subscription, &topics,
+                        rd_false/*no wildcards*/);
+
+        if (rd_list_cnt(&topics) == 0)
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        else
+                err = rd_kafka_metadata_refresh_topics(rk, rkb, &topics,
+                                                       rd_true/*force*/,
+                                                       rd_true/*cgrp_update*/,
+                                                       reason);
 
         rd_list_destroy(&topics);
 
@@ -958,6 +1029,7 @@ rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                    const char *reason) {
         return rd_kafka_metadata_request(rk, rkb, NULL /*brokers only*/,
+                                         rd_false/*no cgrp update */,
                                          reason, NULL);
 }
 
@@ -1004,12 +1076,15 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @brief Lower-level Metadata request that takes a callback (with replyq set)
  *        which will be triggered after parsing is complete.
  *
+ * @param cgrp_update Allow consumer group updates from the response.
+ *
  * @locks none
  * @locality any
  */
 rd_kafka_resp_err_t
 rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                            const rd_list_t *topics,
+                           rd_bool_t cgrp_update,
                            const char *reason, rd_kafka_op_t *rko) {
         int destroy_rkb = 0;
 
@@ -1021,7 +1096,7 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 destroy_rkb = 1;
         }
 
-        rd_kafka_MetadataRequest(rkb, topics, reason, rd_true, rko);
+        rd_kafka_MetadataRequest(rkb, topics, reason, cgrp_update, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);
@@ -1080,7 +1155,9 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 /* No leader-less topics+partitions, stop the timer. */
                 rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
         } else {
-                rd_kafka_metadata_refresh_topics(rk, NULL, &topics, 1/*force*/,
+                rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
+                                                 rd_true/*force*/,
+                                                 rd_false/*!cgrp_update*/,
                                                  "partition leader query");
                 /* Back off next query exponentially until we reach
                  * the standard query interval - then stop the timer

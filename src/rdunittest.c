@@ -492,6 +492,8 @@ int rd_unittest (void) {
                 rd_unittest_slow = rd_true;
         }
 
+        rd_kafka_global_init();
+
 #if ENABLE_CODECOV
         for (i = 0 ; i < RD_UT_COVNR_MAX+1 ; i++)
                 rd_atomic64_init(&rd_ut_covnrs[i], 0);

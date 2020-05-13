@@ -350,6 +350,9 @@ int rd_list_cmp_ptr (const void *a, const void *b) {
         return RD_CMP(a, b);
 }
 
+int rd_list_cmp_str (const void *a, const void *b) {
+        return strcmp((const char *)a, (const char *)b);
+}
 
 void rd_list_apply (rd_list_t *rl,
                     int (*cb) (void *elem, void *opaque), void *opaque) {

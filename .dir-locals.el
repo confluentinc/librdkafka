@@ -5,3 +5,6 @@
   (tab-width . 8)
   (indent-tabs-mode . nil))
 )
+
+(if (file-exists-p (concat (dir-locals-find-file "./") "TAGS"))
+    (visit-tags-table (concat (dir-locals-find-file "./") "TAGS")))

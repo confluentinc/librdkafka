@@ -1424,8 +1424,9 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
         if (!rd_list_empty(&query_topics))
                 rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
-                                                 1/*force even if cached
-                                                    * info exists*/,
+                                                 rd_true/*force even if cached
+                                                          * info exists*/,
+                                                 rd_false/*!cgrp_update*/,
                                                  "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 }
@@ -1561,7 +1562,9 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
         rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
 
         rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
-                                         0/*dont force*/, "leader query");
+                                         rd_false/*dont force*/,
+                                         rd_false/*!cgrp_update*/,
+                                         "leader query");
 
         rd_list_destroy(&topics);
 }

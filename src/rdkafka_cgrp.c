@@ -1077,7 +1077,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                          * across all members of the group and thus the
                          * Metadata response may not be identical to this
                          * consumer's subscription list, we want to
-                         * avoid trigger a rejoin or error propagation
+                         * avoid triggering a rejoin or error propagation
                          * on receiving the response since some topics
                          * may be missing. */
                         rd_false,
@@ -1264,6 +1264,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
         err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
+                                        rd_true/*cgrp_update*/,
                                         reason, rko);
         if (err) {
                 rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,

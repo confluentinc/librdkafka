@@ -462,8 +462,8 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                 rd_snprintf(tmp, sizeof(tmp),
                             "OffsetRequest failed: %s",
                             rd_kafka_err2str(ErrorCode));
-                rd_kafka_metadata_refresh_known_topics(rk, NULL, 1/*force*/,
-                                                       tmp);
+                rd_kafka_metadata_refresh_known_topics(rk, NULL,
+                                                       rd_true/*force*/, tmp);
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {

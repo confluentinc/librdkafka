@@ -4240,9 +4240,13 @@ typedef struct rd_kafka_metadata {
  *                   with rd_kafka_metadata_destroy().
  *  - \p timeout_ms  maximum response time before failing.
  *
- * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
- * will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
- * other error code on error.
+ * @remark Consumer: If \p all_topics is non-zero the Metadata response
+ *         information may trigger a re-join if any subscribed topics
+ *         have changed partition count or existence state.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
+ *          will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
+ *          other error code on error.
  */
 RD_EXPORT
 rd_kafka_resp_err_t

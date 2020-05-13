@@ -55,11 +55,16 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
 
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const rd_list_t *topics, int force,
+                                  const rd_list_t *topics, rd_bool_t force,
+                                  rd_bool_t cgrp_update,
                                   const char *reason);
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                        int force, const char *reason);
+                                        rd_bool_t force, const char *reason);
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
+                                           rd_kafka_broker_t *rkb,
+                                           const char *reason);
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                    const char *reason);
@@ -69,7 +74,7 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                           const rd_list_t *topics,
+                           const rd_list_t *topics, rd_bool_t cgrp_update,
                            const char *reason, rd_kafka_op_t *rko);
 
 

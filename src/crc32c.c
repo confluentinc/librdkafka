@@ -400,8 +400,6 @@ int unittest_crc32c (void) {
         uint32_t crc;
         const char *how;
 
-        crc32c_global_init();
-
 #if WITH_CRC32C_HW
         if (sse42)
                 how = "hardware (SSE42)";

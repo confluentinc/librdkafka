@@ -226,6 +226,7 @@
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />
     <ClCompile Include="..\src\rdvarint.c" />
+    <ClCompile Include="..\src\rdmap.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\tinycthread_extra.c" />

@@ -58,6 +58,7 @@ set(
     rdstring.c
     rdunittest.c
     rdvarint.c
+    rdmap.c
     snappy.c
     tinycthread.c
     tinycthread_extra.c

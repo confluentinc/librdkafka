@@ -442,6 +442,7 @@ extern int unittest_cgrp (void);
 extern int unittest_scram (void);
 #endif
 extern int unittest_assignors (void);
+extern int unittest_map (void);
 
 int rd_unittest (void) {
         int fails = 0;
@@ -450,6 +451,7 @@ int rd_unittest (void) {
                 int (*call) (void);
         } unittests[] = {
                 { "sysqueue",   unittest_sysqueue },
+                { "map",        unittest_map },
                 { "rdbuf",      unittest_rdbuf },
                 { "rdvarint",   unittest_rdvarint },
                 { "crc32c",     unittest_crc32c },

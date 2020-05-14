@@ -242,3 +242,41 @@ char *rd_flags2str (char *dst, size_t size,
 
         return dst;
 }
+
+
+
+/**
+ * @returns a djb2 hash of \p str.
+ *
+ * @param len If -1 the \p str will be hashed until nul is encountered,
+ *            else up to the \p len.
+ */
+unsigned int rd_string_hash (const char *str, ssize_t len) {
+        unsigned int hash = 5381;
+        ssize_t i;
+
+        if (len == -1) {
+                for (i = 0 ; str[i] != '\0' ; i++)
+                        hash = ((hash << 5) + hash) + str[i];
+        } else {
+                for (i = 0 ; i < len ; i++)
+                        hash = ((hash << 5) + hash) + str[i];
+        }
+
+        return hash;
+}
+
+
+/**
+ * @brief Same as strcmp() but handles NULL values.
+ */
+int rd_strcmp (const char *a, const char *b) {
+        if (a == b)
+                return 0;
+        else if (!a && b)
+                return -1;
+        else if (!b)
+                return 1;
+        else
+                return strcmp(a, b);
+}

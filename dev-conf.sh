@@ -72,10 +72,14 @@ case "$1" in
     ubsan)
         FSAN='-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer'
         ;;
+    gprof)
+        # gprof
+        OPTS="$OPTS --enable-profiling"
+        ;;
     "")
         ;;
     *)
-        echo "Usage: $0 [clean|asan|tsan]"
+        echo "Usage: $0 [clean|asan|tsan|gprof]"
         exit 1
         ;;
 esac
@@ -99,9 +103,6 @@ OPTS="$OPTS --enable-devel"
 
 # disable optimizations
 OPTS="$OPTS --disable-optimization"
-
-# gprof
-#OPTS="$OPTS --enable-profiling --disable-optimization"
 
 # disable lz4
 #OPTS="$OPTS --disable-lz4"

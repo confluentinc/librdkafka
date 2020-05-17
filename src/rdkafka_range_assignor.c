@@ -50,8 +50,8 @@
  */
 
 rd_kafka_resp_err_t
-rd_kafka_range_assignor_assign_cb (rd_kafka_assignor_t *rkas,
-                                   rd_kafka_t *rk,
+rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
+                                   const rd_kafka_assignor_t *rkas,
                                    const char *member_id,
                                    const rd_kafka_metadata_t *metadata,
                                    rd_kafka_group_member_t *members,

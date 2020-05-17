@@ -247,54 +247,6 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
 
 
 /**
- * @brief Write a list of topic+partitions to \p rkbuf
- *
- * @remark The \p assignment list MUST be sorted.
- */
-void
-rd_kafka_buf_write_assignment (rd_kafka_buf_t *rkbuf,
-                               const rd_kafka_topic_partition_list_t
-                               *assignment) {
-        int i;
-        size_t of_TopicCnt;
-        const char *last_topic = NULL;
-        ssize_t of_PartCnt = -1;
-        int TopicCnt = 0;
-        int PartCnt = 0;
-
-        rd_assert(assignment != NULL);
-
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
-        for (i = 0 ; i < assignment->cnt ; i++) {
-                const rd_kafka_topic_partition_t *rktpar;
-
-                rktpar = &assignment->elems[i];
-
-                if (!last_topic || strcmp(last_topic,
-                                          rktpar->topic)) {
-                        if (last_topic)
-                                /* Finalize previous PartitionCnt */
-                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
-                                                        PartCnt);
-                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
-                        /* Updated later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-                        PartCnt = 0;
-                        last_topic = rktpar->topic;
-                        TopicCnt++;
-                }
-
-                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
-                PartCnt++;
-        }
-
-        if (of_PartCnt != -1)
-                rd_kafka_buf_update_i32(rkbuf, of_PartCnt, PartCnt);
-        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
-}
-
-
-/**
  * @brief Write a list of topic+partitions+offsets+extra to \p rkbuf
  *
  * @returns the number of partitions written to buffer.
@@ -305,6 +257,7 @@ int rd_kafka_buf_write_topic_partitions (
         rd_kafka_buf_t *rkbuf,
         const rd_kafka_topic_partition_list_t *parts,
         rd_bool_t skip_invalid_offsets,
+        rd_bool_t write_Offset,
         rd_bool_t write_Epoch,
         rd_bool_t write_Metadata) {
         size_t of_TopicArrayCnt;
@@ -346,10 +299,12 @@ int rd_kafka_buf_write_topic_partitions (
                 PartArrayCnt++;
 
                 /* Time/Offset */
-                if (rktpar->offset >= 0)
-                        rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
-                else
-                        rd_kafka_buf_write_i64(rkbuf, -1);
+                if (write_Offset) {
+                        if (rktpar->offset >= 0)
+                                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+                        else
+                                rd_kafka_buf_write_i64(rkbuf, -1);
+                }
 
                 if (write_Epoch) {
                         /* CommittedLeaderEpoch */
@@ -1234,7 +1189,13 @@ static void rd_kafka_group_MemberState_consumer_write (
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
         rd_assert(rkgm->rkgm_assignment);
-        rd_kafka_buf_write_assignment(rkbuf, rkgm->rkgm_assignment);
+        rd_kafka_buf_write_topic_partitions(
+                rkbuf,
+                rkgm->rkgm_assignment,
+                rd_false /*skip invalid offsets*/,
+                rd_false /*write offsets*/,
+                rd_false /*write epoch*/,
+                rd_false /*write metadata*/);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */

@@ -978,9 +978,9 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 /* Protocol not set, we will not be able to find
                  * a matching assignor so error out early. */
                 ErrorCode = RD_KAFKA_RESP_ERR__BAD_MSG;
-        }
-	else if (!ErrorCode) {
-                char *protocol_name = RD_KAFKAP_STR_DUP(&Protocol);
+        } else if (!ErrorCode) {
+                char *protocol_name;
+                RD_KAFKAP_STR_DUPA(&protocol_name, &Protocol);
                 if (!(rkas = rd_kafka_assignor_find(rkcg->rkcg_rk,
                                                     protocol_name)) ||
                     !rkas->rkas_enabled) {
@@ -996,7 +996,6 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         }
                         ErrorCode = RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
                 }
-                rd_free(protocol_name);
 	}
 
         rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
@@ -3748,10 +3747,23 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
 
 
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new (const char *group_id) {
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        if (!group_id)
+                return NULL;
+
+        cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
+        cgmetadata->group_id = rd_strdup(group_id);
+        cgmetadata->generation_id = -1;
+
+        return cgmetadata;
+}
 
 rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata_new (const char *group_id,
-                                      int32_t generation_id) {
+rd_kafka_consumer_group_metadata_new2 (const char *group_id,
+                                       int32_t generation_id) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
         if (!group_id)
@@ -3775,7 +3787,7 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk) {
         if (rk->rk_cgrp)
                 generation_id = rk->rk_cgrp->rkcg_generation_id;
 
-        return rd_kafka_consumer_group_metadata_new(
+        return rd_kafka_consumer_group_metadata_new2(
                 rk->rk_conf.group_id_str,
                 generation_id);
 }
@@ -3823,7 +3835,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_write (
         memcpy(buf, rd_kafka_consumer_group_metadata_magic, magic_len);
         of += magic_len;
 
-        *(int32_t *)(buf+of) = htole32(cgmd->generation_id);
+        memcpy(buf+of, &cgmd->generation_id, generationid_len);
         of += generationid_len;
 
         memcpy(buf+of, cgmd->group_id, groupid_len);
@@ -3856,7 +3868,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
                         "Input buffer is not a serialized "
                         "consumer group metadata object");
 
-        generation_id = le32toh(*(int32_t *)(buf+magic_len));
+        memcpy(&generation_id, buf+magic_len, sizeof(generation_id));
 
         group_id = buf + magic_len + generationid_len;
 
@@ -3873,8 +3885,8 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
                         RD_KAFKA_RESP_ERR__BAD_MSG,
                         "Input buffer has invalid stop byte");
 
-        /* We now know that group_id is printable-safe and is null-terminated. */
-        *cgmdp = rd_kafka_consumer_group_metadata_new(group_id, generation_id);
+        /* We now know that group_id is printable-safe and is nul-terminated. */
+        *cgmdp = rd_kafka_consumer_group_metadata_new2(group_id, generation_id);
 
         return NULL;
 }
@@ -3897,7 +3909,7 @@ static int unittest_consumer_group_metadata (void) {
                 size_t size, size2;
                 rd_kafka_error_t *error;
 
-                cgmd = rd_kafka_consumer_group_metadata_new(group_id, 42);
+                cgmd = rd_kafka_consumer_group_metadata_new(group_id);
                 RD_UT_ASSERT(cgmd != NULL, "failed to create metadata");
 
                 error = rd_kafka_consumer_group_metadata_write(cgmd, &buffer,

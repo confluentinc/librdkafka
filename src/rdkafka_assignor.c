@@ -148,7 +148,13 @@ rd_kafka_consumer_protocol_member_metadata_new (
                  * empty array, not NULL. */
                 rd_kafka_buf_write_i32(rkbuf, 0); /* Topic count */
         else
-                rd_kafka_buf_write_assignment(rkbuf, owned_partitions);
+                rd_kafka_buf_write_topic_partitions(
+                        rkbuf,
+                        owned_partitions,
+                        rd_false /*skip invalid offsets*/,
+                        rd_false /*write offsets*/,
+                        rd_false /*write epoch*/,
+                        rd_false /*write metadata*/);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
@@ -164,7 +170,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
 
 
 rd_kafkap_bytes_t *
-rd_kafka_assignor_get_metadata_with_empty_userdata (rd_kafka_assignor_t *rkas,
+rd_kafka_assignor_get_metadata_with_empty_userdata (const rd_kafka_assignor_t *rkas,
                                                     void *assignor_state,
                                                     const rd_list_t *topics,
                                                     const rd_kafka_topic_partition_list_t
@@ -299,7 +305,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
 
 rd_kafka_resp_err_t
 rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
-                       rd_kafka_assignor_t *rkas,
+                       const rd_kafka_assignor_t *rkas,
                        rd_kafka_metadata_t *metadata,
                        rd_kafka_group_member_t *members,
                        int member_cnt,
@@ -347,7 +353,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
         }
 
         /* Call assignors assign callback */
-        err = rkas->rkas_assign_cb(rkas, rkcg->rkcg_rk,
+        err = rkas->rkas_assign_cb(rkcg->rkcg_rk, rkas,
                                    rkcg->rkcg_member_id->str,
                                    metadata,
                                    members, member_cnt,
@@ -442,8 +448,8 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        const char *protocol_type,
                        const char *protocol_name,
                        rd_kafka_resp_err_t (*assign_cb) (
-                               struct rd_kafka_assignor_s *rkas,
                                rd_kafka_t *rk,
+                               const struct rd_kafka_assignor_s *rkas,
                                const char *member_id,
                                const rd_kafka_metadata_t *metadata,
                                rd_kafka_group_member_t *members,
@@ -452,7 +458,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                                size_t eligible_topic_cnt,
                                char *errstr, size_t errstr_size, void *opaque),
                        rd_kafkap_bytes_t *(*get_metadata_cb) (
-                               struct rd_kafka_assignor_s *rkas,
+                               const struct rd_kafka_assignor_s *rkas,
                                void *assignor_state,
                                const rd_list_t *topics,
                                const rd_kafka_topic_partition_list_t

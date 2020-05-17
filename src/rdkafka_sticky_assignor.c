@@ -39,8 +39,8 @@
 // NOTE: Currently the Range assignor implementation.
 
 rd_kafka_resp_err_t
-rd_kafka_sticky_assignor_assign_cb (rd_kafka_assignor_t *rkas,
-				    rd_kafka_t *rk,
+rd_kafka_sticky_assignor_assign_cb (rd_kafka_t *rk,
+				    const rd_kafka_assignor_t *rkas,
 				    const char *member_id,
 				    const rd_kafka_metadata_t *metadata,
 				    rd_kafka_group_member_t *members,
@@ -132,7 +132,7 @@ void rd_kafka_sticky_assignor_on_assignment_cb (
 
 
 rd_kafkap_bytes_t *
-rd_kafka_sticky_assignor_get_metadata (rd_kafka_assignor_t *rkas,
+rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
 				       void *assignor_state,
 				       const rd_list_t *topics,
 				       const rd_kafka_topic_partition_list_t
@@ -162,7 +162,13 @@ rd_kafka_sticky_assignor_get_metadata (rd_kafka_assignor_t *rkas,
 
         rkbuf = rd_kafka_buf_new(1, 100);
 	rd_assert(state->prev_assignment != NULL);
-	rd_kafka_buf_write_assignment(rkbuf, state->prev_assignment);
+	rd_kafka_buf_write_topic_partitions(
+                rkbuf,
+                state->prev_assignment,
+                rd_false /*skip invalid offsets*/,
+                rd_false /*write offsets*/,
+                rd_false /*write epoch*/,
+                rd_false /*write metadata*/);
         rd_kafka_buf_write_i32(rkbuf, state->generation_id);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */

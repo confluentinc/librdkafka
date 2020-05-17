@@ -39,9 +39,9 @@
 
 
 extern "C" {
-  int main_0111_cooperative_rebalance (int argc, char **argv) {
+  int main_0112_cooperative_rebalance (int argc, char **argv) {
 
-    std::string topic_str = Test::mk_topic_name("0111-cooperative_rebalance", 1);
+    std::string topic_str = Test::mk_topic_name("0112-cooperative_rebalance", 1);
 
     /* Create consumer 1 */
     RdKafka::Conf *conf;
@@ -84,6 +84,14 @@ extern "C" {
     int cnt = 0;
     while (run) {
       RdKafka::Message *msg = c1->consume(tmout_multip(1000));
+      cnt += 1;
+      if (cnt == 5) {
+        /*
+          * Consumer #2 subscribe
+          */
+        if ((err = c2->subscribe(topics)))
+          Test::Fail("consumer 2 subscribe failed: " + RdKafka::err2str(err));
+      }
       switch (msg->err())
         {
         case RdKafka::ERR__TIMED_OUT:
@@ -93,14 +101,6 @@ extern "C" {
         // case RdKafka::ERR__PARTITION_EOF:
         //   run = false;
         //   break;
-        default:
-          if (cnt == 5) {
-                /*
-                 * Consumer #2 subscribe
-                 */
-                if ((err = c2->subscribe(topics)))
-                  Test::Fail("consumer 2 subscribe failed: " + RdKafka::err2str(err));
-          }
         }
     }
 

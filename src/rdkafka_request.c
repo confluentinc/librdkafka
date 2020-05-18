@@ -448,8 +448,11 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                 RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_REFRESH,
                 RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
 
                 RD_KAFKA_ERR_ACTION_END);
 
@@ -943,8 +946,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 
 	/* If all partitions failed use error code
 	 * from last partition as the global error. */
-	if (offsets && errcnt == partcnt)
+	if (offsets && errcnt == partcnt) {
 		err = last_ErrorCode;
+                if (err)
+                        goto err;
+        }
+
 	goto done;
 
  err_parse:
@@ -1744,6 +1751,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
  *  topics.cnt >0   - only specified topics are requested
  *
  * @param reason    - metadata request reason
+ * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
@@ -1757,6 +1765,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                           const rd_list_t *topics, const char *reason,
+                          rd_bool_t cgrp_update,
                           rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -1766,16 +1775,17 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
                                                           RD_KAFKAP_Metadata,
-                                                          0, 2,
+                                                          0, 4,
                                                           &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
-                                         4 + (50 * topic_cnt));
+                                         4 + (50 * topic_cnt) + 1);
 
         if (!reason)
                 reason = "";
 
         rkbuf->rkbuf_u.Metadata.reason = rd_strdup(reason);
+        rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
 
         if (!topics && ApiVersion >= 1) {
                 /* a null(0) array (in the protocol) represents no topics */
@@ -1847,6 +1857,29 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
 
         }
+
+        if (ApiVersion >= 4) {
+                /* AllowAutoTopicCreation (only used by consumer) */
+                rd_kafka_buf_write_bool(
+                        rkbuf,
+                        rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER ?
+                        rkb->rkb_rk->rk_conf.allow_auto_create_topics :
+                        rd_true /*producer*/);
+        } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER &&
+                   !rkb->rkb_rk->rk_conf.allow_auto_create_topics &&
+                   rd_kafka_conf_is_modified(&rkb->rkb_rk->rk_conf,
+                                             "allow.auto.create.topics") &&
+                   rd_interval(&rkb->rkb_rk->rk_suppress.
+                               allow_auto_create_topics,
+                               30 * 60 * 1000 /* every 30 minutes */, 0) >= 0) {
+                /* Let user know we can't obey allow.auto.create.topics */
+                rd_rkb_log(rkb, LOG_WARNING, "AUTOCREATE",
+                           "allow.auto.create.topics=false not supported "
+                           "by broker: requires broker version >= 0.11.0.0: "
+                           "requested topic(s) may be auto created depending "
+                           "on broker auto.create.topics.enable configuration");
+        }
+
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

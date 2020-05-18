@@ -529,7 +529,7 @@ static void NTAPI _tinycthread_tss_callback(PVOID h, DWORD dwReason, PVOID pv)
   }
 }
 
-#if defined(_MSC_VER)
+#ifdef _WIN32
   #ifdef _M_X64
     #pragma const_seg(".CRT$XLB")
   #else

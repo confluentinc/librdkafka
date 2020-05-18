@@ -77,7 +77,8 @@ extern rd_bool_t rd_unittest_slow;
 #define RD_UT_ASSERT(expr,...) do {                                     \
         if (!(expr)) {                                                  \
                 fprintf(stderr,                                         \
-                        "\033[31mRDUT: FAIL: %s:%d: %s: assert failed: " # expr ": ", \
+                        "\033[31mRDUT: FAIL: %s:%d: %s: "               \
+                        "assert failed: " # expr ": ",                  \
                         __FILE__, __LINE__, __FUNCTION__);              \
                 fprintf(stderr, __VA_ARGS__);                           \
                 fprintf(stderr, "\033[0m\n");                           \

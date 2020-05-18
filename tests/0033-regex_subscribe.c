@@ -154,6 +154,43 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 }
 
 
+/**
+ * @brief Poll the consumer once.
+ */
+static void consumer_poll_once (rd_kafka_t *rk) {
+	rd_kafka_message_t *rkmessage;
+
+	rkmessage = rd_kafka_consumer_poll(rk, 1000);
+	if (!rkmessage)
+                return;
+
+	if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+		TEST_SAY("%s [%"PRId32"] reached EOF at "
+			 "offset %"PRId64"\n",
+			 rd_kafka_topic_name(rkmessage->rkt),
+			 rkmessage->partition,
+			 rkmessage->offset);
+
+        } else if (rkmessage->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+                if (strstr(rd_kafka_topic_name(rkmessage->rkt), "NONEXIST"))
+                        TEST_SAY("%s: %s: error is expected for this topic\n",
+                                 rd_kafka_topic_name(rkmessage->rkt),
+                                 rd_kafka_message_errstr(rkmessage));
+                else
+                        TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64"): %s",
+                                  rkmessage->rkt ?
+                                  rd_kafka_topic_name(rkmessage->rkt) :
+                                  "(no-topic)",
+                                  rkmessage->partition,
+                                  rkmessage->offset,
+                                  rd_kafka_message_errstr(rkmessage));
+	}
+
+	rd_kafka_message_destroy(rkmessage);
+}
+
+
+
 static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	rd_kafka_resp_err_t err;
 	rd_kafka_topic_partition_list_t *tlist;
@@ -189,7 +226,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		TEST_SAY("%s: waiting for assignment\n", exp->name);
 		TIMING_START(&t_assign, "assignment");
 		while (exp->result == _EXP_ASSIGN)
-			test_consumer_poll_once(rk, NULL, 1000);
+			consumer_poll_once(rk);
 		TIMING_STOP(&t_assign);
 		TEST_ASSERT(exp->result == _EXP_ASSIGNED,
 			    "got %d instead of assignment", exp->result);
@@ -199,7 +236,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		int64_t ts_end = test_clock() + 5000;
 		exp->result = _EXP_NONE; /* Not expecting a rebalance */
 		while (exp->result == _EXP_NONE && test_clock() < ts_end)
-			test_consumer_poll_once(rk, NULL, 1000);
+			consumer_poll_once(rk);
 		TEST_ASSERT(exp->result == _EXP_NONE);
 	}
 
@@ -217,7 +254,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		exp->result = _EXP_REVOKE;
 		TIMING_START(&t_assign, "revoke");
 		while (exp->result != _EXP_REVOKED)
-			test_consumer_poll_once(rk, NULL, 1000);
+			consumer_poll_once(rk);
 		TIMING_STOP(&t_assign);
 		TEST_ASSERT(exp->result == _EXP_REVOKED,
 			    "got %d instead of revoke", exp->result);
@@ -226,7 +263,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		int64_t ts_end = test_clock() + 5000;
 		exp->result = _EXP_NONE; /* Not expecting a rebalance */
 		while (exp->result == _EXP_NONE && test_clock() < ts_end)
-			test_consumer_poll_once(rk, NULL, 1000);
+			consumer_poll_once(rk);
 		TEST_ASSERT(exp->result == _EXP_NONE);
 	}
 
@@ -285,6 +322,7 @@ static int do_test (const char *assignor) {
 	test_conf_set(conf, "partition.assignment.strategy", assignor);
 	/* Speed up propagation of new topics */
 	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
+        test_conf_set(conf, "allow.auto.create.topics", "true");
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */

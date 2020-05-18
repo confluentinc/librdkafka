@@ -39,7 +39,7 @@
 #include <openssl/pkcs12.h>
 #endif
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #endif

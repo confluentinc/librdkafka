@@ -33,6 +33,12 @@
 #error "rdkafka_mock.h must be included after rdkafka.h"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#if 0
+} /* Restore indent */
+#endif
+#endif
 
 
 /**
@@ -265,4 +271,7 @@ rd_kafka_mock_set_apiversion (rd_kafka_mock_cluster_t *mcluster,
 
 /**@}*/
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* _RDKAFKA_MOCK_H_ */

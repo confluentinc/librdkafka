@@ -32,7 +32,7 @@
 #if WITH_LIBDL
 #include <dlfcn.h>
 
-#elif defined( _MSC_VER)
+#elif defined(_WIN32)
 
 #else
 #error "Dynamic library loading not supported on this platform"
@@ -59,7 +59,7 @@ static char *rd_dl_error (void) {
 
         return errstr;
 
-#elif defined(_MSC_VER)
+#elif defined(_WIN32)
         char buf[1024];
         rd_strerror_w32(GetLastError(), buf, sizeof(buf));
         return rd_strdup(buf);
@@ -78,7 +78,7 @@ rd_dl_open0 (const char *path, char *errstr, size_t errstr_size) {
 #if WITH_LIBDL
         loadfunc = "dlopen()";
         handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-#elif defined(_MSC_VER)
+#elif defined(_WIN32)
         loadfunc = "LoadLibrary()";
         handle = (void *)LoadLibraryA(path);
 #endif
@@ -116,7 +116,7 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         /* Get filename and filename extension.
          * We can't rely on basename(3) since it is not portable */
         fname = strrchr(path, '/');
-#ifdef _MSC_VER
+#ifdef _WIN32
         td = strrchr(path, '\\');
         if (td > fname)
                 fname = td;
@@ -149,7 +149,7 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
 void rd_dl_close (rd_dl_hnd_t *handle) {
 #if WITH_LIBDL
         dlclose((void *)handle);
-#elif defined(_MSC_VER)
+#elif defined(_WIN32)
         FreeLibrary((HMODULE)handle);
 #endif
 }
@@ -164,7 +164,7 @@ rd_dl_sym (rd_dl_hnd_t *handle, const char *symbol,
         void *func;
 #if WITH_LIBDL
         func = dlsym((void *)handle, symbol);
-#elif defined(_MSC_VER)
+#elif defined(_WIN32)
         func = GetProcAddress((HMODULE)handle, symbol);
 #endif
         if (!func) {

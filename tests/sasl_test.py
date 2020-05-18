@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Run librdkafka regression tests on with different SASL parameters
@@ -8,28 +8,27 @@
 #  trivup python module
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary
+from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary, read_scenario_conf
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
-
-import time
-import tempfile
 import os
 import sys
 import argparse
 import json
 import tempfile
 
-def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False):
+def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False,
+             scenario="default"):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
 
-    cluster = LibrdkafkaTestCluster(version, conf, debug=debug)
+    cluster = LibrdkafkaTestCluster(version, conf, debug=debug, scenario=scenario)
 
     # librdkafka's regression tests, as an App.
-    rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests)
+    rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests,
+                                scenario=scenario)
     rdkafka.do_cleanup = False
     rdkafka.local_tests = False
 
@@ -92,6 +91,9 @@ if __name__ == '__main__':
                         help='trivup JSON config object (not file)')
     parser.add_argument('--rdkconf', type=str, dest='rdkconf', default=None,
                         help='trivup JSON config object (not file) for LibrdkafkaTestApp')
+    parser.add_argument('--scenario', type=str, dest='scenario',
+                        default='default',
+                        help='Test scenario (see scenarios/ directory)')
     parser.add_argument('--tests', type=str, dest='tests', default=None,
                         help='Test to run (e.g., "0002")')
     parser.add_argument('--no-ssl', action='store_false', dest='ssl', default=True,
@@ -120,6 +122,8 @@ if __name__ == '__main__':
         tests = args.tests.split(',')
     else:
         tests = None
+
+    conf.update(read_scenario_conf(args.scenario))
 
     # Test version,supported mechs + suite matrix
     versions = list()
@@ -218,7 +222,7 @@ if __name__ == '__main__':
             else:
                 tests_to_run = tests
             report = test_it(version, tests=tests_to_run, conf=_conf, rdkconf=_rdkconf,
-                             debug=args.debug)
+                             debug=args.debug, scenario=args.scenario)
 
             # Handle test report
             report['version'] = version

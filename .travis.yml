@@ -10,23 +10,31 @@ env:
 addons:
   apt:
     packages:
+    - python3
+    - python3-pip
+    - python3-setuptools
     # required by openssl installer
     - perl
 
+
 matrix:
  include:
- - name: "Linux GCC: +centos +debian"
+ - name: "Linux GCC: +Debian packages"
    os: linux
    compiler: gcc
-   env: ADDITIONAL_BUILDS="centos debian" LINKAGE=std
+   env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+ - name: "RPM packages"
+   os: linux
+   compiler: gcc
+   env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
  - name: "Linux clang: +alpine"
    os: linux
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
  - name: "Linux clang: +static +alpine-static"
    os: linux
    compiler: clang
@@ -38,7 +46,7 @@ matrix:
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
  - name: "OSX clang: +static"
    os: osx
    # Use an older image to disable syslog and for broader compatibility
@@ -48,6 +56,14 @@ matrix:
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog
+ - name: "Windows MinGW-w64"
+   os: windows
+   env:
+    - SKIP_MAKE=y
+   before_install:
+    - source ./packaging/mingw-w64/travis-before-install.sh
+   before_script:
+    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial
@@ -56,7 +72,7 @@ matrix:
    before_script:
     - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
     - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip install -r tests/requirements.txt
+    - sudo pip3 install -r tests/requirements.txt
     - sudo apt update
     - sudo apt install -y doxygen graphviz gdb
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest"
@@ -74,11 +90,14 @@ install:
  - rm -rf artifacts dest
  - mkdir dest artifacts
 
+before_cache:
+ - if [[ $TRAVIS_OS_NAME == windows ]]; then $msys2 pacman --sync --clean --noconfirm ; fi
+
 before_script:
 script:
-- make -j2 all examples check && make -j2 -C tests build
-- if [[ $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
-- make install
+- if [[ $SKIP_MAKE != y ]]; then make -j2 all examples check && make -j2 -C tests build ; fi
+- if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
+- if [[ $SKIP_MAKE != y ]]; then make install ; fi
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi

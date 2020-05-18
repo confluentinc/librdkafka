@@ -39,13 +39,14 @@
 #include <csignal>
 #include <cstring>
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include <windows.h> /* for GetLocalTime */
 #endif
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
-#include <atltime.h>
 #elif _AIX
 #include <unistd.h>
 #else
@@ -77,15 +78,19 @@ static void sigterm (int sig) {
  * @brief format a string timestamp from the current time
  */
 static void print_time () {
-#ifndef _MSC_VER
+#ifndef _WIN32
         struct timeval tv;
         char buf[64];
         gettimeofday(&tv, NULL);
         strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
         fprintf(stderr, "%s.%03d: ", buf, (int)(tv.tv_usec / 1000));
 #else
-        std::wcerr << CTime::GetCurrentTime().Format(_T("%Y-%m-%d %H:%M:%S")).GetString()
-                << ": ";
+        SYSTEMTIME lt = {0};
+        GetLocalTime(&lt);
+        // %Y-%m-%d %H:%M:%S.xxx:
+        fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%03d: ",
+            lt.wYear, lt.wMonth, lt.wDay,
+            lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds);
 #endif
 }
 class ExampleEventCb : public RdKafka::EventCb {
@@ -433,7 +438,7 @@ int main (int argc, char **argv) {
     delete msg;
   }
 
-#ifndef _MSC_VER
+#ifndef _WIN32
   alarm(10);
 #endif
 

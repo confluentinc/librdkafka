@@ -409,6 +409,33 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
 }
 
 
+/**
+ * @brief Propagate a topic error event to the application on a specific queue.
+ * \p optype should be RD_KAFKA_OP_ERR for generic errors and
+ * RD_KAFKA_OP_CONSUMER_ERR for consumer errors.
+ */
+ void rd_kafka_q_op_topic_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
+                               rd_kafka_resp_err_t err, int32_t version,
+                               const char *topic, const char *fmt, ...) {
+	va_list ap;
+	char buf[2048];
+	rd_kafka_op_t *rko;
+
+	va_start(ap, fmt);
+	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	rko = rd_kafka_op_new(optype);
+	rko->rko_version = version;
+	rko->rko_err = err;
+	rko->rko_u.err.errstr = rd_strdup(buf);
+        rko->rko_u.err.rkm.rkm_rkmessage.rkt =
+                (rd_kafka_topic_t *)rd_kafka_lwtopic_new(rkq->rkq_rk, topic);
+
+	rd_kafka_q_enq(rkq, rko);
+}
+
+
 
 /**
  * Creates a reply op based on 'rko_orig'.

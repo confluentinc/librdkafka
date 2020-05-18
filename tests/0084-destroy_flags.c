@@ -184,6 +184,11 @@ static void destroy_flags (int local_mode) {
                 test_broker_version >= TEST_BRKVER(0,9,0,0);
         int i, j;
 
+        /* Create the topic to avoid not-yet-auto-created-topics being
+         * subscribed to (and thus raising an error). */
+        if (!local_mode)
+                test_create_topic(NULL, topic, 3, 1);
+
         for (i = 0 ; i < (int)RD_ARRAYSIZE(args) ; i++) {
                 for (j = 0 ; j < (int)RD_ARRAYSIZE(flag_combos) ; j++) {
                         if (!can_subscribe &&

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Cluster testing helper
@@ -14,29 +14,42 @@ from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 
 import os, sys, json, argparse, re
+from jsoncomment import JsonComment
+
 
 def version_as_list (version):
     if version == 'trunk':
         return [sys.maxint]
     return [int(a) for a in re.findall('\d+', version)][0:3]
 
+def read_scenario_conf(scenario):
+    """ Read scenario configuration from scenarios/<scenario>.json """
+    parser = JsonComment(json)
+    with open(os.path.join('scenarios', scenario + '.json'), 'r') as f:
+        return parser.load(f)
+
 class LibrdkafkaTestCluster(Cluster):
-    def __init__(self, version, conf={}, num_brokers=3, debug=False):
+    def __init__(self, version, conf={}, num_brokers=3, debug=False,
+                 scenario="default"):
         """
         @brief Create, deploy and start a Kafka cluster using Kafka \p version
-        
+
         Supported \p conf keys:
          * security.protocol - PLAINTEXT, SASL_PLAINTEXT, SASL_SSL
-    
+
         \p conf dict is passed to KafkaBrokerApp classes, etc.
         """
 
         super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__,
                                                     os.environ.get('TRIVUP_ROOT', 'tmp'), debug=debug)
 
+        # Read trivup config from scenario definition.
+        defconf = read_scenario_conf(scenario)
+        defconf.update(conf)
+
         # Enable SSL if desired
         if 'SSL' in conf.get('security.protocol', ''):
-            self.ssl = SslApp(self, conf)
+            self.ssl = SslApp(self, defconf)
 
         self.brokers = list()
 
@@ -44,16 +57,16 @@ class LibrdkafkaTestCluster(Cluster):
         ZookeeperApp(self)
 
         # Start Kerberos KDC if GSSAPI (Kerberos) is configured
-        if 'GSSAPI' in conf.get('sasl_mechanisms', []):
+        if 'GSSAPI' in defconf.get('sasl_mechanisms', []):
             kdc = KerberosKdcApp(self, 'MYREALM')
             # Kerberos needs to be started prior to Kafka so that principals
             # and keytabs are available at the time of Kafka config generation.
             kdc.start()
 
         # Brokers
-        defconf = {'replication_factor': min(num_brokers, 3), 'num_partitions': 4, 'version': version,
-                   'security.protocol': 'PLAINTEXT'}
-        defconf.update(conf)
+        defconf.update({'replication_factor': min(num_brokers, 3),
+                        'version': version,
+                        'security.protocol': 'PLAINTEXT'})
         self.conf = defconf
 
         for n in range(0, num_brokers):
@@ -76,7 +89,6 @@ def result2color (res):
         return '\033[41m'
     else:
         return ''
-        
 
 def print_test_report_summary (name, report):
     """ Print summary for a test run. """
@@ -89,7 +101,7 @@ def print_test_report_summary (name, report):
     print('%6s  %-50s: %s' % (resstr, name, report.get('REASON', 'n/a')))
     if not passed:
         # Print test details
-        for name,test in report.get('tests', {}).iteritems():
+        for name,test in report.get('tests', {}).items():
             testres = test.get('state', '')
             if testres == 'SKIPPED':
                 continue
@@ -107,7 +119,7 @@ def print_report_summary (fullreport):
     suites = fullreport.get('suites', list())
     print('#### Full test suite report (%d suite(s))' % len(suites))
     for suite in suites:
-        for version,report in suite.get('version', {}).iteritems():
+        for version,report in suite.get('version', {}).items():
             print_test_report_summary('%s @ %s' % \
                                       (suite.get('name','n/a'), version),
                                       report)
@@ -130,7 +142,7 @@ def print_report_summary (fullreport):
 
 
 if __name__ == '__main__':
-    
+
     parser = argparse.ArgumentParser(description='Show test suite report')
     parser.add_argument('report', type=str, nargs=1,
                         help='Show summary from test suites report file')

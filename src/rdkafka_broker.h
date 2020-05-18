@@ -187,12 +187,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         int                 rkb_req_timeouts;  /* Current value */
 
-        rd_ts_t             rkb_ts_tx_last;    /**< Timestamp of last
+        rd_atomic64_t       rkb_ts_tx_last;    /**< Timestamp of last
                                                 *   transmitted requested */
 
-	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
-	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
-							 * metadata polls. */
 	thrd_t              rkb_thread;
 
 	rd_refcnt_t         rkb_refcnt;
@@ -308,12 +305,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
                 /**< Log: KIP-345 not supported by broker. */
                 rd_interval_t unsupported_kip345;
+
+                /**< Log & Error: identical broker_fail() errors. */
+                rd_interval_t fail_error;
         } rkb_suppress;
 
-	struct {
-		char msg[512];
-		int  err;  /* errno */
-	} rkb_err;
+        /** Last error. This is used to suppress repeated logs. */
+        struct {
+                char errstr[512];        /**< Last error string */
+                rd_kafka_resp_err_t err; /**< Last error code */
+                int  cnt;                /**< Number of identical errors */
+        } rkb_last_err;
 };
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -407,14 +409,6 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl (const char *func,
 #define rd_kafka_broker_find_by_nodeid(rk,nodeid) \
         rd_kafka_broker_find_by_nodeid0(rk,nodeid,-1,rd_false)
 
-/**
- * Filter out brokers that are currently in a blocking request.
- */
-static RD_INLINE RD_UNUSED int
-rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
-        return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
-}
-
 
 /**
  * Filter out brokers that don't support Idempotent Producer.
@@ -424,16 +418,6 @@ rd_kafka_broker_filter_non_idempotent (rd_kafka_broker_t *rkb, void *opaque) {
         return !(rkb->rkb_features & RD_KAFKA_FEATURE_IDEMPOTENT_PRODUCER);
 }
 
-
-/**
- * Filter out brokers that cant do FindCoordinator requests for
- * groups right now.
- */
-static RD_INLINE RD_UNUSED int
-rd_kafka_broker_filter_can_coord_query (rd_kafka_broker_t *rkb, void *opaque) {
-        return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0 ||
-                !(rkb->rkb_features & RD_KAFKA_FEATURE_BROKER_GROUP_COORD);
-}
 
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                         int (*filter) (rd_kafka_broker_t *rkb,
@@ -446,7 +430,9 @@ rd_kafka_broker_any_up (rd_kafka_t *rk,
                                        void *opaque),
                         void *opaque, const char *reason);
 rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
-                                               int do_lock, const char *reason);
+                                               rd_dolock_t do_lock,
+                                               int features,
+                                               const char *reason);
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
                                            int state);

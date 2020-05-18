@@ -295,7 +295,7 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   }
 
   if (confimpl->open_cb_) {
-#ifndef _MSC_VER
+#ifndef _WIN32
     rd_kafka_conf_set_open_cb(confimpl->rk_conf_, RdKafka::open_cb_trampoline);
     open_cb_ = confimpl->open_cb_;
 #endif

@@ -44,7 +44,7 @@
 #endif
 #include "rdunittest.h"
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <netinet/tcp.h>
 #else
 
@@ -243,7 +243,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 { 0x8, "sasl" },
 		{ 0x10, "regex" },
 		{ 0x20, "lz4" },
-#if defined(_MSC_VER) || WITH_SASL_CYRUS
+#if defined(_WIN32) || WITH_SASL_CYRUS
                 { 0x40, "sasl_gssapi" },
 #endif
                 { 0x80, "sasl_plain" },
@@ -368,6 +368,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",
           0, 1, 1 },
+        { _RK_GLOBAL, "topic.metadata.propagation.max.ms", _RK_C_INT,
+          _RK(metadata_propagation_max_ms),
+          "Apache Kafka topic creation is asynchronous and it takes some "
+          "time for a new topic to propagate throughout the cluster to all "
+          "brokers. "
+          "If a client requests topic metadata after manual topic creation but "
+          "before the topic has been fully propagated to the broker the "
+          "client is requesting metadata from, the topic will seem to be "
+          "non-existent and the client will mark the topic as such, "
+          "failing queued produced messages with `ERR__UNKNOWN_TOPIC`. "
+          "This setting delays marking a topic as non-existent until the "
+          "configured propagation max time has passed. "
+          "The maximum propagation time is calculated from the time the "
+          "topic is first referenced in the client, e.g., on produce().",
+          0, 60*60*1000, 30*1000 },
         { _RK_GLOBAL, "topic.blacklist", _RK_C_PATLIST,
           _RK(topic_blacklist),
           "Topic blacklist, a comma-separated list of regular expressions "
@@ -697,7 +712,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
           _RK(ssl.ca_location),
           "File or directory path to CA certificate(s) for verifying "
-          "the broker's key."
+          "the broker's key. "
+          "Defaults: "
+          "On Windows the system's CA certificates are automatically looked "
+          "up in the Windows Root certificate store. "
+          "On Mac OSX it is recommended to install openssl using Homebrew, "
+          "to provide CA certificates. "
+          "On Linux install the distribution's ca-certificates package. "
+          "If OpenSSL is statically linked or `ssl.ca.location` is set to "
+          "`probe` a list of standard paths will be probed and the first one "
+          "found will be used as the default CA certificate location path. "
+          "If OpenSSL is dynamically linked the OpenSSL library's default "
+          "path will be used (see `OPENSSLDIR` in `openssl version -a`)."
         },
         { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
           _RK(ssl.ca),
@@ -780,7 +806,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "This client's Kerberos principal name. "
           "(Not supported on Windows, will use the logon user's principal).",
 	  .sdef = "kafkaclient" },
-#ifndef _MSC_VER
+#ifndef _WIN32
         { _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
           _RK(sasl.kinit_cmd),
           "Shell command to refresh or acquire the client's Kerberos ticket. "
@@ -1079,6 +1105,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Verify CRC32 of consumed messages, ensuring no on-the-wire or "
           "on-disk corruption to the messages occurred. This check comes "
           "at slightly increased CPU usage.",
+          0, 1, 0 },
+        { _RK_GLOBAL|_RK_CONSUMER, "allow.auto.create.topics", _RK_C_BOOL,
+          _RK(allow_auto_create_topics),
+          "Allow automatic topic creation on the broker when subscribing to "
+          "or assigning non-existent topics. "
+          "The broker must also be configured with "
+          "`auto.create.topics.enable=true` for this configuraiton to "
+          "take effect. "
+          "Note: The default value (false) is different from the "
+          "Java consumer (true). "
+          "Requires broker version >= 0.11.0.0, for older broker versions "
+          "only the broker configuration applies.",
           0, 1, 0 },
         { _RK_GLOBAL, "client.rack", _RK_C_KSTR,
           _RK(client_rack),
@@ -1484,8 +1522,8 @@ rd_kafka_conf_prop_find (int scope, const char *name) {
  * @returns rd_true if property has been set/modified, else rd_false.
  *          If \p name is unknown 0 is returned.
  */
-static rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
-                                            const char *name) {
+rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
+                                     const char *name) {
         const struct rd_kafka_property *prop;
 
         if (!(prop = rd_kafka_conf_prop_find(_RK_GLOBAL, name)))
@@ -2134,7 +2172,7 @@ void rd_kafka_desensitize_str (char *str) {
         size_t len;
         static const char redacted[] = "(REDACTED)";
 
-#ifdef _MSC_VER
+#ifdef _WIN32
         len = strlen(str);
         SecureZeroMemory(str, len);
 #else
@@ -2596,7 +2634,7 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
 
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
                                                 int flags, mode_t mode,
@@ -3717,6 +3755,12 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
                              "Configuration property `client.software.verison` "
                              "may only contain 'a-zA-Z0-9.-', other characters "
                              "will be replaced with '-'");
+
+        if (rd_atomic32_get(&rk->rk_broker_cnt) == 0)
+                rd_kafka_log(rk, LOG_NOTICE, "CONFWARN",
+                             "No `bootstrap.servers` configured: "
+                             "client will not be able to connect "
+                             "to Kafka cluster");
 
         return cnt;
 }

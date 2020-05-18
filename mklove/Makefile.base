@@ -25,6 +25,10 @@ ifndef MKL_MAKEFILE_CONFIG
 -include $(TOPDIR)/Makefile.config
 endif
 
+# Use C compiler as default linker.
+# C++ libraries will need to override this CXX after including Makefile.base
+CC_LD?=$(CC)
+
 _UNAME_S := $(shell uname -s)
 ifeq ($(_UNAME_S),Darwin)
 	LIBFILENAME=$(LIBNAME).$(LIBVER)$(SOLIB_EXT)
@@ -72,6 +76,12 @@ man6dir?=	$(mandir)/man6
 man7dir?=	$(mandir)/man7
 man8dir?=	$(mandir)/man8
 
+# An application Makefile should set DISABLE_LDS=y prior to
+# including Makefile.base if it does not wish to have a linker-script.
+ifeq ($(WITH_LDS)-$(DISABLE_LDS),y-)
+# linker-script file
+LIBNAME_LDS?=$(LIBNAME).lds
+endif
 
 # Checks that mklove is set up and ready for building
 mklove-check:
@@ -89,11 +99,12 @@ mklove-check:
 
 lib: $(LIBFILENAME) $(LIBNAME).a $(LIBNAME)-static.a $(LIBFILENAMELINK) lib-gen-pkg-config
 
-$(LIBNAME).lds: #overridable
+# Linker-script (if WITH_LDS=y): overridable by application Makefile
+$(LIBNAME_LDS):
 
-$(LIBFILENAME): $(OBJS) $(LIBNAME).lds
+$(LIBFILENAME): $(OBJS) $(LIBNAME_LDS)
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
-	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
+	$(CC_LD) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
@@ -189,7 +200,7 @@ endif
 
 $(BIN): $(OBJS)
 	@printf "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)\n"
-	$(CC) $(CPPFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(LIBS)
+	$(CC_LD) $(CPPFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(LIBS)
 
 
 file-check:
@@ -277,7 +288,7 @@ generic-clean:
 
 lib-clean: generic-clean lib-clean-pkg-config
 	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMELINK) \
-		$(LIBNAME).lds
+		$(LIBNAME_LDS)
 
 bin-clean: generic-clean
 	rm -f $(BIN)

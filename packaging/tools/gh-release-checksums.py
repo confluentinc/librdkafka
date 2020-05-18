@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Calculate checksums for GitHub release artifacts/assets.
 #

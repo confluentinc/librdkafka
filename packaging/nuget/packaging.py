@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # NuGet packaging script.
 # Assembles a NuGet package using CI artifacts in S3
@@ -336,7 +336,7 @@ class NugetPackage (Package):
             # Travis Ubuntu 14.04 build
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
             # Travis CentOS 7 RPM build
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka1*.x86_64.rpm'}, './usr/lib64/librdkafka.so.1', 'runtimes/linux-x64/native/centos7-librdkafka.so'],
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka1*el7.x86_64.rpm'}, './usr/lib64/librdkafka.so.1', 'runtimes/linux-x64/native/centos7-librdkafka.so'],
             # Alpine build
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'alpine-librdkafka.tgz'}, 'librdkafka.so.1', 'runtimes/linux-x64/native/alpine-librdkafka.so'],
 

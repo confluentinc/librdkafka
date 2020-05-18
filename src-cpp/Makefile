@@ -15,11 +15,14 @@ OBJS=		$(CXXSRCS:%.cpp=%.o)
 
 all: lib check
 
+# No linker script/symbol hiding for C++ library
+DISABLE_LDS=y
+
 MKL_NO_SELFCONTAINED_STATIC_LIB=y
 include ../mklove/Makefile.base
 
-# No linker script/symbol hiding for C++ library
-WITH_LDS=n
+# Use C++ compiler as linker rather than the default C compiler
+CC_LD=$(CXX)
 
 # OSX and Cygwin requires linking required libraries
 ifeq ($(_UNAME_S),Darwin)
@@ -34,7 +37,7 @@ endif
 
 # Ignore previously defined library dependencies for the C library,
 # we'll get those dependencies through the C library linkage.
-LIBS := -L../src -lrdkafka -lstdc++
+LIBS := -L../src -lrdkafka
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 

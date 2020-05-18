@@ -55,12 +55,12 @@ extern "C" {
 #endif
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <basetsd.h>
 #ifndef WIN32_MEAN_AND_LEAN
 #define WIN32_MEAN_AND_LEAN
 #endif
-#include <Winsock2.h>  /* for sockaddr, .. */
+#include <winsock2.h>  /* for sockaddr, .. */
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010400ff
+#define RD_KAFKA_VERSION  0x01050001
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1331,18 +1331,8 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  *
  * @remark This function MUST NOT be used with the producer.
  */
-static RD_INLINE const char *
-RD_UNUSED
-rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
-		return NULL;
-
-	if (rkmessage->payload)
-		return (const char *)rkmessage->payload;
-
-	return rd_kafka_err2str(rkmessage->err);
-}
-
+RD_EXPORT
+const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage);
 
 
 /**
@@ -2022,7 +2012,7 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
 
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * @brief Set open callback.
  *
@@ -3505,6 +3495,16 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
+ * @remark A consumer error will be raised for each unavailable topic in the
+ *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
+ *         for non-existent topics, and
+ *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+ *         The consumer error will be raised through rd_kafka_consumer_poll()
+ *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
+ *         error codes mentioned above.
+ *         The subscribe function itself is asynchronous and will not return
+ *         an error on unavailable topics.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
  *          topics or regexes,
@@ -3910,7 +3910,12 @@ rd_kafka_consumer_group_metadata_read (
  *                               partition, either set manually or by the
  *                               configured partitioner.
  *
- *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *    .._F_FREE and .._F_COPY are mutually exclusive. If neither of these are
+ *    set, the caller must ensure that the memory backing \p payload remains
+ *    valid and is not modified or reused until the delivery callback is
+ *    invoked. Other buffers passed to `rd_kafka_produce()` don't have this
+ *    restriction on reuse, i.e. the memory backing the key or the topic name
+ *    may be reused as soon as `rd_kafka_produce()` returns.
  *
  *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
  *    the memory associated with the payload is still the caller's
@@ -6651,7 +6656,7 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * transactional messages issued by this producer instance.
  *
  * Upon successful return from this function the application has to perform at
- * least one of the following operations within \c transactional.timeout.ms to
+ * least one of the following operations within \c transaction.timeout.ms to
  * avoid timing out the transaction on the broker:
  *   * rd_kafka_produce() (et.al)
  *   * rd_kafka_send_offsets_to_transaction()

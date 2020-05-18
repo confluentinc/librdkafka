@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 #include <errno.h>
@@ -56,8 +56,7 @@
 #endif
 
 #include "testshared.h"
-
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define sscanf(...) sscanf_s(__VA_ARGS__)
 #endif
 
@@ -122,6 +121,8 @@ struct test {
 
 	const char *extra;   /**< Extra information to print in test_summary. */
 
+        const char *scenario; /**< Test scenario */
+
 	char **report_arr;   /**< Test-specific reporting, JSON array of objects. */
 	int report_cnt;
 	int report_size;
@@ -160,7 +161,7 @@ struct test {
 };
 
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define TEST_F_KNOWN_ISSUE_WIN32  TEST_F_KNOWN_ISSUE
 #else
 #define TEST_F_KNOWN_ISSUE_WIN32 0
@@ -326,7 +327,7 @@ struct test_mv_vs {
 
         /* Correct msgver for comparison */
         test_msgver_t *corr;
-} vs;
+};
 
 
 void test_msgver_init (test_msgver_t *mv, uint64_t testid);

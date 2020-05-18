@@ -58,12 +58,11 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <io.h>
 #include <share.h>
 #include <sys/stat.h>
-#include <Shlwapi.h>
-typedef int mode_t;
+#include <shlwapi.h>
 #endif
 
 
@@ -104,7 +103,7 @@ static void rd_kafka_offset_file_close (rd_kafka_toppar_t *rktp) {
 }
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * Linux version of open callback providing racefree CLOEXEC.
  */
@@ -124,7 +123,7 @@ int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
  */
 int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
                               void *opaque) {
-#ifndef _MSC_VER
+#ifndef _WIN32
 	int fd;
         int on = 1;
         fd = open(pathname, flags, mode);
@@ -147,7 +146,7 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int fd;
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	mode_t mode = 0644;
 #else
 	mode_t mode = _S_IREAD|_S_IWRITE;
@@ -166,7 +165,7 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
 	}
 
 	rktp->rktp_offset_fp =
-#ifndef _MSC_VER
+#ifndef _WIN32
 		fdopen(fd, "r+");
 #else
 		_fdopen(fd, "r+");
@@ -242,7 +241,7 @@ static int rd_kafka_offset_file_sync (rd_kafka_toppar_t *rktp) {
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	(void)fflush(rktp->rktp_offset_fp);
 	(void)fsync(fileno(rktp->rktp_offset_fp)); // FIXME
 #else
@@ -309,7 +308,7 @@ rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp) {
                 (void)fflush(rktp->rktp_offset_fp);
 
 		/* Truncate file */
-#ifdef _MSC_VER
+#ifdef _WIN32
 		if (_chsize_s(_fileno(rktp->rktp_offset_fp), len) == -1)
 			; /* Ignore truncate failures */
 #else
@@ -646,7 +645,7 @@ rd_kafka_resp_err_t rd_kafka_offset_sync (rd_kafka_toppar_t *rktp) {
  */
 rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 					   int32_t partition, int64_t offset) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 
 	/* Find toppar */
@@ -786,16 +785,12 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
         } else if (offset == RD_KAFKA_OFFSET_BEGINNING &&
                    rktp->rktp_lo_offset >= 0) {
-                /* Use cached log start from last Fetch if available */
+                /* Use cached log start from last Fetch if available.
+                 * Note: The cached end offset (rktp_ls_offset) can't be
+                 *       used here since the End offset is a constantly moving
+                 *       target as new messages are produced. */
                 extra = "cached BEGINNING offset ";
                 offset = rktp->rktp_lo_offset;
-                rd_kafka_toppar_next_offset_handle(rktp, offset);
-
-        } else if (offset == RD_KAFKA_OFFSET_END &&
-                   rktp->rktp_ls_offset >= 0) {
-                /* Use cached log start from last Fetch if available */
-                extra = "cached END offset ";
-                offset = rktp->rktp_ls_offset;
                 rd_kafka_toppar_next_offset_handle(rktp, offset);
 
         } else {
@@ -819,7 +814,8 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
            BEGINNING / END logical offsets. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 		rd_kafka_toppar_offset_request(rktp,
-                                               rktp->rktp_query_offset, 0);
+                                               rktp->rktp_query_offset,
+                                               err ? 100 : 0);
 }
 
 

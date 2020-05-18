@@ -424,6 +424,7 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
 
         /* Get any usable broker to look up the coordinator */
         rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, RD_DO_LOCK,
+                                         RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
                                          "broker to look up coordinator");
 
         if (!rkb) {

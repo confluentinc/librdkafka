@@ -29,11 +29,14 @@
 #ifndef _RDKAFKA_INT_H_
 #define _RDKAFKA_INT_H_
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #define _GNU_SOURCE  /* for strndup() */
-#else
+#endif
+
+#ifdef _MSC_VER
 typedef int mode_t;
 #endif
+
 #include <fcntl.h>
 
 
@@ -55,10 +58,6 @@ typedef int mode_t;
 
 
 
-typedef struct rd_kafka_topic_s rd_kafka_topic_t;
-typedef struct rd_ikafka_s rd_ikafka_t;
-
-
 #define rd_kafka_assert(rk, cond) do {                                  \
                 if (unlikely(!(cond)))                                  \
                         rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
@@ -78,6 +77,8 @@ struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 struct rd_kafka_toppar_s;
+
+typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
 #include "rdkafka_op.h"
@@ -560,6 +561,10 @@ struct rd_kafka_s {
                  *   but no more often than every 10s.
                  *   No locks: only accessed by rdkafka main thread. */
                 rd_interval_t broker_metadata_refresh;
+
+                /**< Suppression for allow.auto.create.topics=false not being
+                 *   supported by the broker. */
+                rd_interval_t allow_auto_create_topics;
         } rk_suppress;
 
         struct {
@@ -904,6 +909,7 @@ void rd_kafka_set_thread_name (const char *fmt, ...);
 void rd_kafka_set_thread_sysname (const char *fmt, ...);
 
 int rd_kafka_path_is_dir (const char *path);
+rd_bool_t rd_kafka_dir_is_empty (const char *path);
 
 rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,

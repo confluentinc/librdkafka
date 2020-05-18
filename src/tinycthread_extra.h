@@ -36,7 +36,7 @@
 #define _TINYCTHREAD_EXTRA_H_
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <pthread.h> /* needed for rwlock_t */
 #endif
 
@@ -85,8 +85,8 @@ int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec);
 #if defined(_TTHREAD_WIN32_)
 typedef struct rwlock_t {
         SRWLOCK  lock;
-        int       rcnt;
-        int       wcnt;
+        LONG     rcnt;
+        LONG     wcnt;
 } rwlock_t;
 #define rwlock_init(rwl)    do { (rwl)->rcnt = (rwl)->wcnt = 0; InitializeSRWLock(&(rwl)->lock); } while (0)
 #define rwlock_destroy(rwl)

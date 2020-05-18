@@ -189,6 +189,7 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
         rd_free(rkcg);
 }
 
@@ -245,6 +246,8 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
         rd_interval_init(&rkcg->rkcg_timeout_scan_intvl);
+
+        rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
         /* Create a logical group coordinator broker to provide
          * a dedicated connection for group coordination.
@@ -518,14 +521,16 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_broker_t *rkb;
         rd_kafka_resp_err_t err;
 
-	rd_kafka_rdlock(rkcg->rkcg_rk);
-        rkb = rd_kafka_broker_any_up(rkcg->rkcg_rk,
-                                     NULL,
-                                     rd_kafka_broker_filter_can_coord_query,
-                                     NULL, "coordinator query");
-	rd_kafka_rdunlock(rkcg->rkcg_rk);
+        rkb = rd_kafka_broker_any_usable(rkcg->rkcg_rk,
+                                         RD_POLL_NOWAIT,
+                                         RD_DO_LOCK,
+                                         RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
+                                         "coordinator query");
 
 	if (!rkb) {
+		/* Reset the interval because there were no brokers. When a
+		 * broker becomes available, we want to query it immediately. */
+		rd_interval_reset(&rkcg->rkcg_coord_query_intvl);
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPQUERY",
 			     "Group \"%.*s\": "
 			     "no broker available for coordinator query: %s",
@@ -1064,8 +1069,19 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         rd_kafka_cgrp_assignor_handle_Metadata_op);
                 rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
 
-                rd_kafka_MetadataRequest(rkb, &topics,
-                                         "partition assignor", rko);
+                rd_kafka_MetadataRequest(
+                        rkb, &topics,
+                        "partition assignor",
+                        /* cgrp_update=false:
+                         * Since the subscription list may not be identical
+                         * across all members of the group and thus the
+                         * Metadata response may not be identical to this
+                         * consumer's subscription list, we want to
+                         * avoid trigger a rejoin or error propagation
+                         * on receiving the response since some topics
+                         * may be missing. */
+                        rd_false,
+                        rko);
                 rd_list_destroy(&topics);
 
         } else {
@@ -1690,7 +1706,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 /**
  * @brief Add partition to this cgrp management
  *
- * @locks rktp_lock MUST be held.
+ * @locks none
  */
 static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
                                          rd_kafka_toppar_t *rktp) {
@@ -1700,8 +1716,11 @@ static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition);
 
+        rd_kafka_toppar_lock(rktp);
         rd_assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP));
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_CGRP;
+        rd_kafka_toppar_unlock(rktp);
+
         rd_kafka_toppar_keep(rktp);
         rd_list_add(&rkcg->rkcg_toppars, rktp);
 }
@@ -1709,7 +1728,7 @@ static void rd_kafka_cgrp_partition_add (rd_kafka_cgrp_t *rkcg,
 /**
  * @brief Remove partition from this cgrp management
  *
- * @locks rktp_lock MUST be held.
+ * @locks none
  */
 static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
                                          rd_kafka_toppar_t *rktp) {
@@ -1719,8 +1738,11 @@ static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition);
 
+        rd_kafka_toppar_lock(rktp);
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
+        rd_kafka_toppar_unlock(rktp);
+
         rd_list_remove(&rkcg->rkcg_toppars, rktp);
         rd_kafka_toppar_destroy(rktp); /* refcnt from _add above */
 
@@ -2411,6 +2433,9 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
 	} else {
+                /* Skip the join backoff */
+                rd_interval_reset(&rkcg->rkcg_join_intvl);
+
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
 	}
@@ -2505,6 +2530,12 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 }
 
                 rd_kafka_toppar_lock(rktp);
+                /* Reset the stored offset to invalid so that
+                 * a manual offset-less commit() or the auto-committer
+                 * will not commit a stored offset from a previous
+                 * assignment (issue #2782). */
+                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID,
+                                       RD_DONT_LOCK);
                 rd_kafka_toppar_desired_del(rktp);
                 rd_kafka_toppar_unlock(rktp);
         }
@@ -2616,6 +2647,9 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
 	} else {
+                /* Skip the join backoff */
+                rd_interval_reset(&rkcg->rkcg_join_intvl);
+
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
 	}
@@ -3469,6 +3503,65 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
 
 
 
+/**
+ * @brief Generate consumer errors for each topic in the list.
+ *
+ * Also replaces the list of last reported topic errors so that repeated
+ * errors are silenced.
+ *
+ * @param errored Errored topics.
+ * @param error_prefix Error message prefix.
+ *
+ * @remark Assumes ownership of \p errored.
+ */
+static void
+rd_kafka_propagate_consumer_topic_errors (
+        rd_kafka_cgrp_t *rkcg, rd_kafka_topic_partition_list_t *errored,
+        const char *error_prefix) {
+        int i;
+
+        for (i = 0 ; i < errored->cnt ; i++) {
+                rd_kafka_topic_partition_t *topic = &errored->elems[i];
+                rd_kafka_topic_partition_t *prev;
+
+                rd_assert(topic->err);
+
+                /* Normalize error codes, unknown topic may be
+                 * reported by the broker, or the lack of a topic in
+                 * metadata response is figured out by the client.
+                 * Make sure the application only sees one error code
+                 * for both these cases. */
+                if (topic->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+                        topic->err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                /* Check if this topic errored previously */
+                prev = rd_kafka_topic_partition_list_find(
+                        rkcg->rkcg_errored_topics, topic->topic,
+                        RD_KAFKA_PARTITION_UA);
+
+                if (prev && prev->err == topic->err)
+                        continue; /* This topic already reported same error */
+
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_TOPIC,
+                             "TOPICERR",
+                             "%s: %s: %s",
+                             error_prefix, topic->topic,
+                             rd_kafka_err2str(topic->err));
+
+                /* Send consumer error to application */
+                rd_kafka_q_op_topic_err(
+                        rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
+                        topic->err, 0,
+                        topic->topic,
+                        "%s: %s: %s",
+                        error_prefix, topic->topic,
+                        rd_kafka_err2str(topic->err));
+        }
+
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
+        rkcg->rkcg_errored_topics = errored;
+}
+
 
 /**
  * @brief Check if the latest metadata affects the current subscription:
@@ -3481,11 +3574,17 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
  */
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
         rd_list_t *tinfos;
+        rd_kafka_topic_partition_list_t *errored;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
+
+        /*
+         * Unmatched topics will be added to the errored list.
+         */
+        errored = rd_kafka_topic_partition_list_new(0);
 
         /*
          * Create a list of the topics in metadata that matches our subscription
@@ -3495,12 +3594,21 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 rd_kafka_metadata_topic_match(rkcg->rkcg_rk,
-                                              tinfos, rkcg->rkcg_subscription);
+                                              tinfos, rkcg->rkcg_subscription,
+                                              errored);
         else
                 rd_kafka_metadata_topic_filter(rkcg->rkcg_rk,
                                                tinfos,
-                                               rkcg->rkcg_subscription);
+                                               rkcg->rkcg_subscription,
+                                               errored);
 
+
+        /*
+         * Propagate consumer errors for any non-existent or errored topics.
+         * The function takes ownership of errored.
+         */
+        rd_kafka_propagate_consumer_topic_errors(
+                rkcg, errored, "Subscribed topic not available");
 
         /*
          * Update (takes ownership of \c tinfos)

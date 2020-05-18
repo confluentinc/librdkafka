@@ -200,10 +200,12 @@ typedef struct rd_kafka_cgrp_s {
                                                 *   Will be updated when the
                                                 *   coordinator changes. */
 
-        /* Current subscription */
+        /** Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
-	/* The actual topics subscribed (after metadata+wildcard matching) */
+	/** The actual topics subscribed (after metadata+wildcard matching) */
 	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
+        /** Subscribed topics that are errored/not available. */
+        rd_kafka_topic_partition_list_t *rkcg_errored_topics;
 
         /* Current assignment */
         rd_kafka_topic_partition_list_t *rkcg_assignment;

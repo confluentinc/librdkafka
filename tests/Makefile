@@ -3,7 +3,7 @@ TESTSRCS_CXX= $(wildcard [08]*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = test-runner
-LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
+LIBS	 += -lrdkafka++ -lrdkafka
 OBJS	 += test.o rusage.o testcpp.o \
 		tinycthread.o tinycthread_extra.o rdlist.o sockem.o \
 		sockem_ctrl.o
@@ -15,7 +15,14 @@ LDFLAGS += -rdynamic -L../src -L../src-cpp
 KAFKA_VERSION?=2.4.0
 # Kafka versions for compatibility tests
 COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 $(KAFKA_VERSION)
+
+# Non-default scenarios (FIXME: read from scenarios/*)
+SCENARIOS?=noautocreate
+
 -include ../Makefile.config
+
+# Use C++ compiler as linker
+CC_LD=$(CXX)
 
 all: $(BIN) run_par
 
@@ -150,10 +157,16 @@ compat:
 	./broker_version_tests.py --rdkconf '{"args": "-Q"}' \
 		$(COMPAT_KAFKA_VERSIONS)
 
+# Run non-default scenarios
+scenarios: .PHONY
+	@(for _SCENARIO in $(SCENARIOS) ; do \
+		./broker_version_tests.py --scenario "$$_SCENARIO" $(KAFKA_VERSION) ; \
+	done)
+
 
 # Run a full release / PR test.
 # (| is for not running suites in parallel)
-release-test: | asan tsan pristine-full compat
+release-test: | asan tsan pristine-full scenarios compat
 
 # Check resource usage (requires a running cluster environment)
 rusage:

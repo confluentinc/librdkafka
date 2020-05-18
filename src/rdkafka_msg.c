@@ -46,6 +46,17 @@
 #include <stdarg.h>
 
 
+const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
+        if (!rkmessage->err)
+                return NULL;
+
+        if (rkmessage->payload)
+                return (const char *)rkmessage->payload;
+
+        return rd_kafka_err2str(rkmessage->err);
+}
+
+
 /**
  * @brief Check if producing is allowed.
  *
@@ -71,7 +82,7 @@ static RD_INLINE rd_kafka_resp_err_t rd_kafka_check_produce (rd_kafka_t *rk) {
 
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
-
+//FIXME
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_ACCOUNT) {
 		rd_dassert(rk || rkm->rkm_rkmessage.rkt);
 		rd_kafka_curr_msgs_sub(
@@ -328,7 +339,6 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         };
         rd_kafka_msg_t *rkm = &s_rkm;
         rd_kafka_vtype_t vtype;
-        rd_kafka_topic_t *app_rkt;
         rd_kafka_topic_t *rkt = NULL;
         rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs = NULL;
@@ -349,8 +359,9 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
-                        app_rkt = va_arg(ap, rd_kafka_topic_t *);
-                        rkt = rd_kafka_topic_keep(app_rkt);
+                        rkt = rd_kafka_topic_proper(
+                                va_arg(ap, rd_kafka_topic_t *));
+                        rd_kafka_topic_keep(rkt);
                         break;
 
                 case RD_KAFKA_VTYPE_PARTITION:
@@ -505,7 +516,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int multiple_partitions = (partition == RD_KAFKA_PARTITION_UA ||
                                    (msgflags & RD_KAFKA_MSG_F_PARTITION));
         rd_kafka_resp_err_t all_err;
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
         rd_kafka_toppar_t *rktp = NULL;
 
         /* Propagated per-message below */

@@ -149,6 +149,7 @@ partition | int | 3 | Partition id
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 topic | string | `"myatopic"` | Topic name
+age   | int gauge | | Age of client's topic object (milliseconds)
 metadata_age | int gauge | | Age of metadata from broker for this topic (milliseconds)
 batchsize | object | | Batch sizes in bytes. See *Window stats*·
 batchcnt | object | | Batch message counts. See *Window stats*·

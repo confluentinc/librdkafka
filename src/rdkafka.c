@@ -34,6 +34,10 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#if !_WIN32
+#include <sys/types.h>
+#include <dirent.h>
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -58,7 +62,7 @@
 #include "crc32c.h"
 #include "rdunittest.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <sys/types.h>
 #include <sys/timeb.h>
 #endif
@@ -958,7 +962,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
         thrd_t thrd;
-#ifndef _MSC_VER
+#ifndef _WIN32
 	int term_sig = rk->rk_conf.term_sig;
 #endif
         int res;
@@ -1024,7 +1028,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
          * The op itself is (likely) ignored by the receiver. */
         rd_kafka_q_enq(rk->rk_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
-#ifndef _MSC_VER
+#ifndef _WIN32
         /* Interrupt main kafka thread to speed up termination. */
 	if (term_sig) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
@@ -1131,7 +1135,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_kafka_q_enq(rkb->rkb_ops,
                                rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
-#ifndef _MSC_VER
+#ifndef _WIN32
                 /* Interrupt IO threads to speed up termination. */
                 if (rk->rk_conf.term_sig)
 			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
@@ -1654,10 +1658,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		rd_kafka_topic_rdlock(rkt);
 		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
+                           "\"age\":%"PRId64", "
 			   "\"metadata_age\":%"PRId64", ",
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                           (now - rkt->rkt_ts_create)/1000,
 			   rkt->rkt_ts_metadata ?
 			   (now - rkt->rkt_ts_metadata)/1000 : 0);
 
@@ -1811,9 +1817,9 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
         int sparse = 1;
 
-        /* Dont do sparse requests if there is a consumer group with an
-         * active subscription since subscriptions need to be able to match
-         * on all topics. */
+        /* Dont do sparse requests if there is a consumer group with an active
+         * wildcard subscription since it needs to be able to match on all
+         * topics. */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
                 sparse = 0;
@@ -1966,7 +1972,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno = 0;
         const char *conf_err;
-#ifndef _MSC_VER
+#ifndef _WIN32
         sigset_t newset, oldset;
 #endif
         char builtin_features[128];
@@ -2224,7 +2230,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                         rd_kafkap_str_new(rk->rk_conf.eos.transactional_id,
                                           -1);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
         /* Block all signals in newly created threads.
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
@@ -2270,7 +2276,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                         rd_kafka_wrunlock(rk);
                         mtx_unlock(&rk->rk_init_lock);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
                         /* Restore sigmask of caller */
                         pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
@@ -2299,7 +2305,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 				    rd_strerror(errno), errno);
 		rd_kafka_wrunlock(rk);
                 mtx_unlock(&rk->rk_init_lock);
-#ifndef _MSC_VER
+#ifndef _WIN32
                 /* Restore sigmask of caller */
                 pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
@@ -2326,7 +2332,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 					"No brokers configured");
 	}
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	/* Restore sigmask of caller */
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
@@ -2532,7 +2538,7 @@ int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 
 int rd_kafka_consume_start (rd_kafka_topic_t *app_rkt, int32_t partition,
 			    int64_t offset) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "START",
                      "Start consuming partition %"PRId32,partition);
  	return rd_kafka_consume_start0(rkt, partition, offset, NULL);
@@ -2540,7 +2546,7 @@ int rd_kafka_consume_start (rd_kafka_topic_t *app_rkt, int32_t partition,
 
 int rd_kafka_consume_start_queue (rd_kafka_topic_t *app_rkt, int32_t partition,
 				  int64_t offset, rd_kafka_queue_t *rkqu) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 
  	return rd_kafka_consume_start0(rkt, partition, offset, rkqu->rkqu_q);
 }
@@ -2573,7 +2579,7 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
 
 
 int rd_kafka_consume_stop (rd_kafka_topic_t *app_rkt, int32_t partition) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
         int r;
 
@@ -2606,7 +2612,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                                    int32_t partition,
                                    int64_t offset,
                                    int timeout_ms) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
         rd_kafka_resp_err_t err;
@@ -2664,7 +2670,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 				int timeout_ms,
 				rd_kafka_message_t **rkmessages,
 				size_t rkmessages_size) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	ssize_t cnt;
 
@@ -2766,7 +2772,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *app_rkt, int32_t partition,
 						   *rkmessage,
 						   void *opaque),
 			       void *opaque) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	int r;
 
@@ -2877,7 +2883,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
                                       int32_t partition,
 				      int timeout_ms) {
-        rd_kafka_topic_t *rkt = app_rkt;
+        rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_message_t *rkmessage;
 
@@ -3496,24 +3502,11 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 			rk->rk_conf.error_cb(rk, rko->rko_err,
 					     rko->rko_u.err.errstr,
                                              rk->rk_conf.opaque);
-                else {
-                        /* If error string already contains
-                         * the err2str then skip including err2str in
-                         * the printout */
-                        if (rko->rko_u.err.errstr &&
-                            strstr(rko->rko_u.err.errstr,
-                                   rd_kafka_err2str(rko->rko_err)))
-                                rd_kafka_log(rk, LOG_ERR, "ERROR",
-                                             "%s: %s",
-                                             rk->rk_name,
-                                             rko->rko_u.err.errstr);
-                        else
-                                rd_kafka_log(rk, LOG_ERR, "ERROR",
-                                             "%s: %s: %s",
-                                             rk->rk_name,
-                                             rko->rko_u.err.errstr,
-                                             rd_kafka_err2str(rko->rko_err));
-                }
+                else
+                        rd_kafka_log(rk, LOG_ERR, "ERROR",
+                                     "%s: %s",
+                                     rk->rk_name,
+                                     rko->rko_u.err.errstr);
                 break;
 
 	case RD_KAFKA_OP_DR:
@@ -4524,12 +4517,46 @@ const char *rd_kafka_get_debug_contexts(void) {
 
 
 int rd_kafka_path_is_dir (const char *path) {
-#ifdef _MSC_VER
+#ifdef _WIN32
 	struct _stat st;
 	return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
 #else
 	struct stat st;
 	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+#endif
+}
+
+
+/**
+ * @returns true if directory is empty or can't be accessed, else false.
+ */
+rd_bool_t rd_kafka_dir_is_empty (const char *path) {
+#if _WIN32
+        /* FIXME: Unsupported */
+        return rd_true;
+#else
+        DIR *dir;
+        struct dirent *d;
+
+        dir = opendir(path);
+        if (!dir)
+                return rd_true;
+
+        while ((d = readdir(dir))) {
+
+                if (!strcmp(d->d_name, ".") ||
+                    !strcmp(d->d_name, ".."))
+                        continue;
+
+                if (d->d_type == DT_REG || d->d_type == DT_LNK ||
+                    d->d_type == DT_DIR) {
+                        closedir(dir);
+                        return rd_false;
+                }
+        }
+
+        closedir(dir);
+        return rd_true;
 #endif
 }
 

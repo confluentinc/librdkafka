@@ -945,7 +945,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         int32_t member_cnt;
         int actions;
         int i_am_leader = 0;
-        rd_kafka_assignor_t *rkas;
+        rd_kafka_assignor_t *rkas = NULL;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY)
                 return; /* Terminating */

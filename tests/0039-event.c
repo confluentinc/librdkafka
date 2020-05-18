@@ -175,7 +175,7 @@ int main_0039_event_log (int argc, char **argv) {
 
         const char *fac;
         const char *msg;
-        const char ctx[60];
+        char ctx[60];
         int level;
 
         conf = rd_kafka_conf_new();
@@ -189,15 +189,24 @@ int main_0039_event_log (int argc, char **argv) {
         rd_kafka_set_log_queue(rk, eventq);
 
         while (waitevent) {
+                /* reset ctx */
+                memset(ctx, '$', sizeof(ctx) - 2);
+                ctx[sizeof(ctx) - 1] = '\0';
+
                 rd_kafka_event_t *rkev;
                 rkev = rd_kafka_queue_poll(eventq, 1000);
                 switch (rd_kafka_event_type(rkev))
                 {
                 case RD_KAFKA_EVENT_LOG:
                         rd_kafka_event_log(rkev, &fac, &msg, &level);
-                        rd_kafka_event_debug_contexts(rkev, ctx, NULL, 64);
-                        TEST_SAY("Got log  event: level: %d ctx: %s fac: %s: msg: %s\n",
-                                level, ctx, fac, msg);
+                        rd_kafka_event_debug_contexts(rkev, ctx, sizeof(ctx));
+                        TEST_SAY("Got log  event: "
+                                 "level: %d ctx: %s fac: %s: msg: %s\n",
+                                 level, ctx, fac, msg);
+                        if (strchr(ctx, '$')) {
+                                TEST_FAIL("ctx was not set by "
+                                          "rd_kafka_event_debug_contexts()");
+                        }
                         waitevent = 0;
                         break;
                 default:

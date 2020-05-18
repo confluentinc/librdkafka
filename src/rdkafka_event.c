@@ -225,52 +225,34 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 }
 
 int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
-            const char *dst, const char **ctx_names, size_t dstsize) {
-    if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
-            return -1;
+            char *dst, size_t dstsize) {
+        if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
+                return -1;
 
-    static const char* names[] = {
-            "generic",
-            "broker",
-            "topic",
-            "metadata",
-            "feature",
-            "queue",
-            "msg",
-            "protocol",
-            "cgrp",
-            "security",
-            "fetch",
-            "interceptor",
-            "plugin",
-            "consumer",
-            "admin",
-            "eos",
-            "mock",
-            0
-    };
+        static const char *names[] = {
+                "generic",
+                "broker",
+                "topic",
+                "metadata",
+                "feature",
+                "queue",
+                "msg",
+                "protocol",
+                "cgrp",
+                "security",
+                "fetch",
+                "interceptor",
+                "plugin",
+                "consumer",
+                "admin",
+                "eos",
+                "mock",
+                NULL
+        };
 
-    int ctx = rkev->rko_u.log.ctx;
-	if (dst) {
-		rd_flags2str((char *)dst, dstsize, names, ctx);
-		return 0;
-	}
-	else if (ctx_names) {
-		const char **src = names;
-		size_t used = 1;
-		while (ctx && *src && used < dstsize) {
-			if (ctx & 1) {
-			    *ctx_names = *src;
-			    ctx_names++;
-			    used++;
-			}
-			ctx >>= 1;
-			src++;
-		}
-		*ctx_names = 0;
-		return used - 1;
-	}
-	return -1;
+        int ctx = rkev->rko_u.log.ctx;
+        rd_flags2str(dst, dstsize, names, ctx);
+        return 0;
 }
 
 const char *rd_kafka_event_stats (rd_kafka_event_t *rkev) {

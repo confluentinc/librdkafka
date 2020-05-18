@@ -231,8 +231,8 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 }
 
 static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
-                              const rd_kafka_t *rk, int level, int ctx, const char *fac,
-                              const char *buf) {
+                              const rd_kafka_t *rk, int level, int ctx,
+                              const char *fac, const char *buf) {
         if (level > conf->log_level)
                 return;
         else if (rk && conf->log_queue) {

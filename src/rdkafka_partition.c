@@ -1904,8 +1904,8 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
  * @locks none
  */
 rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
-				   rd_kafka_broker_t *rkb,
-				   int force_remove) {
+                                      rd_kafka_broker_t *rkb,
+                                      int force_remove) {
         int should_fetch = 1;
         const char *reason = "";
         int32_t version;
@@ -2039,14 +2039,15 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                                                           "fetchable");
                 } else {
                         rd_kafka_broker_active_toppar_del(rkb, rktp, reason);
-                        /* Non-fetching partitions will have an
-                         * indefinate backoff, unless explicitly specified. */
-                        if (!ts_backoff)
-                                ts_backoff = RD_TS_MAX;
                 }
         }
 
         rd_kafka_toppar_unlock(rktp);
+
+        /* Non-fetching partitions will have an
+         * indefinate backoff, unless explicitly specified. */
+        if (!should_fetch && !ts_backoff)
+                ts_backoff = RD_TS_MAX;
 
         return ts_backoff;
 }

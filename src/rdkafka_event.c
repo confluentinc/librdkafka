@@ -226,9 +226,6 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 
 int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
             char *dst, size_t dstsize) {
-        if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
-                return -1;
-
         static const char *names[] = {
                 "generic",
                 "broker",
@@ -249,9 +246,9 @@ int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
                 "mock",
                 NULL
         };
-
-        int ctx = rkev->rko_u.log.ctx;
-        rd_flags2str(dst, dstsize, names, ctx);
+        if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
+                return -1;
+        rd_flags2str(dst, dstsize, names, rkev->rko_u.log.ctx);
         return 0;
 }
 

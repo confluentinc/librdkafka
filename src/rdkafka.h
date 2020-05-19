@@ -4689,8 +4689,9 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev,
  * Event types:
  *  - RD_KAFKA_EVENT_LOG
  *
+ *  @param rkev the event to extract data from.
  *  @param dst destination string for comma separated list.
- *  @param dstsize size of provided dst buffer or ctx_names array.
+ *  @param dstsize size of provided dst buffer.
  *  @returns 0 on success or -1 if unsupported event type.
  */
 RD_EXPORT

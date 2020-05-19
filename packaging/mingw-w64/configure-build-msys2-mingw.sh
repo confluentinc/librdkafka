@@ -2,7 +2,9 @@
 
 set -e
 
-$mingw64 cmake -DCMAKE_MAKE_PROGRAM=mingw32-make -G "MinGW Makefiles" \
+$mingw64 cmake \
+      -G "MinGW Makefiles" \
+      -DCMAKE_MAKE_PROGRAM=mingw32-make \
       -DCMAKE_INSTALL_PREFIX=$PWD/dest/ \
       -DMINGW_BUILD:BOOL=ON \
       -DWITHOUT_WIN32_CONFIG:BOOL=ON \

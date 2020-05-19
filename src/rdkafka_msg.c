@@ -1056,6 +1056,7 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
         rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
+        rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
         return (rd_kafka_message_t *)rkm;
 }
 

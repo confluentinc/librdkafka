@@ -57,10 +57,11 @@ librdkafka.
  * The roundrobin partition assignor could crash if subscriptions
    where asymmetrical (different sets from different members of the group).
    Thanks to @ankon and @wilmai for identifying the root cause (#2121).
+ * The consumer would connect to all partition leaders of a topic even
+   for partitions that were not being consumed (#2826).
  * Initial consumer group joins should now be a couple of seconds quicker
    thanks expedited query intervals (@benesch).
  * Don't propagate temporary offset lookup errors to application
- * Reset the stored offset when partitions are un-assign()ed (fixes #2782)
 
 ### Producer fixes
 

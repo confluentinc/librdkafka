@@ -224,6 +224,34 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 	return 0;
 }
 
+int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
+            char *dst, size_t dstsize) {
+        static const char *names[] = {
+                "generic",
+                "broker",
+                "topic",
+                "metadata",
+                "feature",
+                "queue",
+                "msg",
+                "protocol",
+                "cgrp",
+                "security",
+                "fetch",
+                "interceptor",
+                "plugin",
+                "consumer",
+                "admin",
+                "eos",
+                "mock",
+                NULL
+        };
+        if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
+                return -1;
+        rd_flags2str(dst, dstsize, names, rkev->rko_u.log.ctx);
+        return 0;
+}
+
 const char *rd_kafka_event_stats (rd_kafka_event_t *rkev) {
 	return rkev->rko_u.stats.json;
 }

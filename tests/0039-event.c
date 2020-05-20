@@ -164,7 +164,65 @@ int main_0039_event_dr (int argc, char **argv) {
 	return 0;
 }
 
+/**
+ * @brief Local test: test log events
+ */
+int main_0039_event_log (int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *eventq;
+        int waitevent = 1;
 
+        const char *fac;
+        const char *msg;
+        char ctx[60];
+        int level;
+
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_set(conf, "bootstrap.servers", "0:65534", NULL, 0);
+        rd_kafka_conf_set(conf, "log.queue", "true", NULL, 0);
+        rd_kafka_conf_set(conf, "debug", "all", NULL, 0);
+        
+        /* Create kafka instance */
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        eventq = rd_kafka_queue_get_main(rk);
+        rd_kafka_set_log_queue(rk, eventq);
+
+        while (waitevent) {
+                /* reset ctx */
+                memset(ctx, '$', sizeof(ctx) - 2);
+                ctx[sizeof(ctx) - 1] = '\0';
+
+                rd_kafka_event_t *rkev;
+                rkev = rd_kafka_queue_poll(eventq, 1000);
+                switch (rd_kafka_event_type(rkev))
+                {
+                case RD_KAFKA_EVENT_LOG:
+                        rd_kafka_event_log(rkev, &fac, &msg, &level);
+                        rd_kafka_event_debug_contexts(rkev, ctx, sizeof(ctx));
+                        TEST_SAY("Got log  event: "
+                                 "level: %d ctx: %s fac: %s: msg: %s\n",
+                                 level, ctx, fac, msg);
+                        if (strchr(ctx, '$')) {
+                                TEST_FAIL("ctx was not set by "
+                                          "rd_kafka_event_debug_contexts()");
+                        }
+                        waitevent = 0;
+                        break;
+                default:
+                        TEST_SAY("Unhandled event: %s\n",
+                                 rd_kafka_event_name(rkev));
+                        break;
+                }
+                rd_kafka_event_destroy(rkev);
+        }
+        
+        /* Destroy rdkafka instance */
+        TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
+        rd_kafka_destroy(rk);
+
+        return 0;
+}
 
 /**
  * @brief Local test: test event generation

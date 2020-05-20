@@ -4684,6 +4684,22 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev,
 
 
 /**
+ * @brief Extract log debug context from event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_LOG
+ *
+ *  @param rkev the event to extract data from.
+ *  @param dst destination string for comma separated list.
+ *  @param dstsize size of provided dst buffer.
+ *  @returns 0 on success or -1 if unsupported event type.
+ */
+RD_EXPORT
+int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
+            char *dst, size_t dstsize);
+
+
+/**
  * @brief Extract stats from the event.
  *
  * Event types:

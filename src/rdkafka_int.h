@@ -815,44 +815,54 @@ const char *rd_kafka_purge_flags2str (int flags);
 #define RD_KAFKA_DBG_ALL            0xfffff
 #define RD_KAFKA_DBG_NONE           0x0
 
+
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk, const char *extra, int level,
+                   int ctx,
                    const char *fac, const char *fmt, ...) RD_FORMAT(printf,
-                                                                    6, 7);
+                                                                    7, 8);
 
-#define rd_kafka_log(rk,level,fac,...) \
-        rd_kafka_log0(&rk->rk_conf, rk, NULL, level, fac, __VA_ARGS__)
-#define rd_kafka_dbg(rk,ctx,fac,...) do {                               \
+#define rd_kafka_log(rk,level,fac,...)               \
+        rd_kafka_log0(&rk->rk_conf, rk, NULL, level, \
+                RD_KAFKA_DBG_NONE, fac, __VA_ARGS__)
+
+#define rd_kafka_dbg(rk,ctx,fac,...) do {                                   \
                 if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
-                        rd_kafka_log0(&rk->rk_conf,rk,NULL,             \
-                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+                        rd_kafka_log0(&rk->rk_conf,rk,NULL,                 \
+                                      LOG_DEBUG,(RD_KAFKA_DBG_ ## ctx),     \
+                                      fac,__VA_ARGS__);                     \
         } while (0)
 
 /* dbg() not requiring an rk, just the conf object, for early logging */
 #define rd_kafka_dbg0(conf,ctx,fac,...) do {                            \
                 if (unlikely((conf)->debug & (RD_KAFKA_DBG_ ## ctx)))   \
                         rd_kafka_log0(conf,NULL,NULL,                   \
-                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+                                      LOG_DEBUG,(RD_KAFKA_DBG_ ## ctx), \
+                                      fac,__VA_ARGS__);                 \
         } while (0)
 
 /* NOTE: The local copy of _logname is needed due rkb_logname_lock lock-ordering
  *       when logging another broker's name in the message. */
-#define rd_rkb_log(rkb,level,fac,...) do {				\
-		char _logname[RD_KAFKA_NODENAME_SIZE];			\
-                mtx_lock(&(rkb)->rkb_logname_lock);                     \
+#define rd_rkb_log0(rkb,level,ctx,fac,...) do {                           \
+        char _logname[RD_KAFKA_NODENAME_SIZE];                            \
+                mtx_lock(&(rkb)->rkb_logname_lock);                       \
                 rd_strlcpy(_logname, rkb->rkb_logname, sizeof(_logname)); \
-                mtx_unlock(&(rkb)->rkb_logname_lock);                   \
-		rd_kafka_log0(&(rkb)->rkb_rk->rk_conf, \
-                              (rkb)->rkb_rk, _logname,                  \
-                              level, fac, __VA_ARGS__);                 \
+                mtx_unlock(&(rkb)->rkb_logname_lock);                     \
+        rd_kafka_log0(&(rkb)->rkb_rk->rk_conf,                            \
+                              (rkb)->rkb_rk, _logname,                    \
+                              level, ctx, fac, __VA_ARGS__);              \
         } while (0)
 
-#define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
-		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
-			     (RD_KAFKA_DBG_ ## ctx))) {			\
-			rd_rkb_log(rkb, LOG_DEBUG, fac, __VA_ARGS__);	\
-                }                                                       \
-	} while (0)
+#define rd_rkb_log(rkb,level,fac,...) \
+        rd_rkb_log0(rkb,level,RD_KAFKA_DBG_NONE,fac, __VA_ARGS__)
+
+#define rd_rkb_dbg(rkb,ctx,fac,...) do {                       \
+        if (unlikely((rkb)->rkb_rk->rk_conf.debug &            \
+                 (RD_KAFKA_DBG_ ## ctx))) {                    \
+            rd_rkb_log0(rkb, LOG_DEBUG,(RD_KAFKA_DBG_ ## ctx), \
+                    fac, __VA_ARGS__);                         \
+                }                                              \
+        } while (0)
 
 
 

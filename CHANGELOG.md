@@ -16,8 +16,10 @@ librdkafka.
  * Prefer least idle connection for periodic metadata refreshes, et.al.,
    to allow truly idle connections to time out and to avoid load-balancer-killed
    idle connection errors (#2845)
- * Added Test scenarios which define the cluster configuration
- * Add MinGW-w64 builds (@ed-alertedh, #2553)
+ * Added rd_kafka_event_debug_contexts() to get the debug contexts for
+   a debug log line (by @wolfchimneyrock).
+ * Added Test scenarios which define the cluster configuration.
+ * Added MinGW-w64 builds (@ed-alertedh, #2553)
  * `./configure --enable-XYZ` now requires the XYZ check to pass,
    and `--disable-XYZ` disables the feature altogether (@benesch)
 

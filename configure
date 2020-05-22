@@ -81,7 +81,7 @@ while [[ ! -z $@ ]]; do
     shift
 
     if [[ $opt = *=* ]]; then
-        name="${opt%=*}"
+        name="${opt%%=*}"
         arg="${opt#*=}"
         eqarg=1
     else

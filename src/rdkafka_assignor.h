@@ -28,6 +28,9 @@
 #ifndef _RDKAFKA_ASSIGNOR_H_
 #define _RDKAFKA_ASSIGNOR_H_
 
+#define RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER 0x1
+#define RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE 0x2
+
 
 typedef struct rd_kafka_group_member_s {
         rd_kafka_topic_partition_list_t *rkgm_subscription;
@@ -67,6 +70,8 @@ typedef struct rd_kafka_assignor_s {
         rd_kafkap_str_t   *rkas_protocol_name;
 
 	int                rkas_enabled;
+
+        int                rkas_supported_protocols;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,

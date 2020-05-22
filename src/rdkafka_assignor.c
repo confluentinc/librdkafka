@@ -447,6 +447,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
 		       rd_kafka_assignor_t **rkasp,
                        const char *protocol_type,
                        const char *protocol_name,
+                       int supported_protocols,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
                                const struct rd_kafka_assignor_s *rkas,
@@ -491,6 +492,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
 
         rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
         rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
+        rkas->rkas_supported_protocols = supported_protocols;
         rkas->rkas_assign_cb        = assign_cb;
         rkas->rkas_get_metadata_cb  = get_metadata_cb;
         rkas->rkas_on_assignment_cb = on_assignment_cb;
@@ -555,18 +557,21 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		if (!strcmp(s, "range"))
 			rd_kafka_assignor_add(
                                 rk, &rkas, "consumer", "range",
+                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
                                 rd_kafka_range_assignor_assign_cb,
                                 rd_kafka_assignor_get_metadata_with_empty_userdata,
                                 NULL, NULL, NULL);
 		else if (!strcmp(s, "roundrobin"))
 			rd_kafka_assignor_add(
                                 rk, &rkas, "consumer", "roundrobin",
+                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
                                 rd_kafka_roundrobin_assignor_assign_cb,
                                 rd_kafka_assignor_get_metadata_with_empty_userdata,
                                 NULL, NULL, NULL);
                 else if (!strcmp(s, "sticky"))
 			rd_kafka_assignor_add(
                                 rk, &rkas, "consumer", "sticky",
+                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
                                 rd_kafka_sticky_assignor_assign_cb,
                                 rd_kafka_sticky_assignor_get_metadata,
                                 rd_kafka_sticky_assignor_on_assignment_cb,

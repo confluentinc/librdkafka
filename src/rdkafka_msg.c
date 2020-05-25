@@ -35,6 +35,7 @@
 #include "rdkafka_header.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_txnmgr.h"
+#include "rdkafka_error.h"
 #include "rdcrc32.h"
 #include "rdfnv1a.h"
 #include "rdmurmur2.h"
@@ -60,22 +61,45 @@ const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 /**
  * @brief Check if producing is allowed.
  *
+ * @param errorp If non-NULL and an producing is prohibited a new error_t
+ *               object will be allocated and returned in this pointer.
+ *
  * @returns an error if not allowed, else 0.
  *
  * @remarks Also sets the corresponding errno.
  */
-static RD_INLINE rd_kafka_resp_err_t rd_kafka_check_produce (rd_kafka_t *rk) {
+static RD_INLINE rd_kafka_resp_err_t
+rd_kafka_check_produce (rd_kafka_t *rk, rd_kafka_error_t **errorp) {
+        rd_kafka_resp_err_t err;
 
-        if (unlikely(rd_kafka_fatal_error_code(rk))) {
+        if (unlikely((err = rd_kafka_fatal_error_code(rk)))) {
                 rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__FATAL, ECANCELED);
+                if (errorp) {
+                        rd_kafka_rdlock(rk);
+                        *errorp = rd_kafka_error_new_fatal(
+                                err,
+                                "Producing not allowed since a previous fatal "
+                                "error was raised: %s",
+                                rk->rk_fatal.errstr);
+                        rd_kafka_rdunlock(rk);
+                }
                 return RD_KAFKA_RESP_ERR__FATAL;
         }
 
-        if (rd_kafka_txn_may_enq_msg(rk))
+        if (likely(rd_kafka_txn_may_enq_msg(rk)))
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         /* Transactional state forbids producing */
         rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__STATE, ENOEXEC);
+
+        if (errorp) {
+                rd_kafka_rdlock(rk);
+                *errorp = rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__STATE,
+                        "Producing not allowed in transactional state %s",
+                        rd_kafka_txn_state2str(rk->rk_eos.txn_state));
+                rd_kafka_rdunlock(rk);
+        }
 
         return RD_KAFKA_RESP_ERR__STATE;
 }
@@ -283,7 +307,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	rd_kafka_resp_err_t err;
 	int errnox;
 
-        if (unlikely((err = rd_kafka_check_produce(rkt->rkt_rk))))
+        if (unlikely((err = rd_kafka_check_produce(rkt->rkt_rk, NULL))))
                 return -1;
 
         /* Create message */
@@ -330,6 +354,188 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 }
 
 
+/** @remark Keep rd_kafka_produceva() and rd_kafka_producev() in synch */
+rd_kafka_error_t *rd_kafka_produceva (rd_kafka_t *rk,
+                                      const rd_kafka_vu_t *vus,
+                                      size_t cnt) {
+        rd_kafka_msg_t s_rkm = {
+                /* Message defaults */
+                .rkm_partition = RD_KAFKA_PARTITION_UA,
+                .rkm_timestamp = 0, /* current time */
+        };
+        rd_kafka_msg_t *rkm = &s_rkm;
+        rd_kafka_topic_t *rkt = NULL;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_error_t *error = NULL;
+        rd_kafka_headers_t *hdrs = NULL;
+        rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        size_t i;
+
+        if (unlikely(rd_kafka_check_produce(rk, &error)))
+                return error;
+
+        for (i = 0 ; i < cnt ; i++) {
+                const rd_kafka_vu_t *vu = &vus[i];
+                switch (vu->vtype)
+                {
+                case RD_KAFKA_VTYPE_TOPIC:
+                        rkt = rd_kafka_topic_new0(rk,
+                                                  vu->u.cstr,
+                                                  NULL, NULL, 1);
+                        break;
+
+                case RD_KAFKA_VTYPE_RKT:
+                        rkt = rd_kafka_topic_proper(vu->u.rkt);
+                        rd_kafka_topic_keep(rkt);
+                        break;
+
+                case RD_KAFKA_VTYPE_PARTITION:
+                        rkm->rkm_partition = vu->u.i32;
+                        break;
+
+                case RD_KAFKA_VTYPE_VALUE:
+                        rkm->rkm_payload = vu->u.mem.ptr;
+                        rkm->rkm_len = vu->u.mem.size;
+                        break;
+
+                case RD_KAFKA_VTYPE_KEY:
+                        rkm->rkm_key = vu->u.mem.ptr;
+                        rkm->rkm_key_len = vu->u.mem.size;
+                        break;
+
+                case RD_KAFKA_VTYPE_OPAQUE:
+                        rkm->rkm_opaque = vu->u.ptr;
+                        break;
+
+                case RD_KAFKA_VTYPE_MSGFLAGS:
+                        rkm->rkm_flags = vu->u.i;
+                        break;
+
+                case RD_KAFKA_VTYPE_TIMESTAMP:
+                        rkm->rkm_timestamp = vu->u.i64;
+                        break;
+
+                case RD_KAFKA_VTYPE_HEADER:
+                        if (unlikely(app_hdrs != NULL)) {
+                                error = rd_kafka_error_new(
+                                        RD_KAFKA_RESP_ERR__CONFLICT,
+                                        "VTYPE_HEADER and VTYPE_HEADERS "
+                                        "are mutually exclusive");
+                                goto err;
+                        }
+
+                        if (unlikely(!hdrs))
+                                hdrs = rd_kafka_headers_new(8);
+
+                        err = rd_kafka_header_add(hdrs,
+                                                  vu->u.header.name, -1,
+                                                  vu->u.header.val,
+                                                  vu->u.header.size);
+                        if (unlikely(err)) {
+                                error = rd_kafka_error_new(
+                                        err,
+                                        "Failed to add header: %s",
+                                        rd_kafka_err2str(err));
+                                goto err;
+                        }
+                        break;
+
+                case RD_KAFKA_VTYPE_HEADERS:
+                        if (unlikely(hdrs != NULL)) {
+                                error = rd_kafka_error_new(
+                                        RD_KAFKA_RESP_ERR__CONFLICT,
+                                        "VTYPE_HEADERS and VTYPE_HEADER "
+                                        "are mutually exclusive");
+                                goto err;
+                        }
+                        app_hdrs = vu->u.headers;
+                        break;
+
+                default:
+                        error = rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                "Unsupported VTYPE %d", (int)vu->vtype);
+                        goto err;
+                }
+        }
+
+        rd_assert(!error);
+
+        if (unlikely(!rkt)) {
+                error = rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__INVALID_ARG,
+                        "Topic name or object required");
+                goto err;
+        }
+
+        rkm = rd_kafka_msg_new0(rkt,
+                                rkm->rkm_partition,
+                                rkm->rkm_flags,
+                                rkm->rkm_payload, rkm->rkm_len,
+                                rkm->rkm_key, rkm->rkm_key_len,
+                                rkm->rkm_opaque,
+                                &err, NULL,
+                                app_hdrs ? app_hdrs : hdrs,
+                                rkm->rkm_timestamp,
+                                rd_clock());
+
+        if (unlikely(err)) {
+                error = rd_kafka_error_new(
+                        err,
+                        "Failed to produce message: %s",
+                        rd_kafka_err2str(err));
+                goto err;
+        }
+
+        /* Partition the message */
+        err = rd_kafka_msg_partitioner(rkt, rkm, 1);
+        if (unlikely(err)) {
+                /* Handle partitioner failures: it only fails when
+                 * the application attempts to force a destination
+                 * partition that does not exist in the cluster. */
+
+                /* Interceptors: Unroll on_send by on_ack.. */
+                rkm->rkm_err = err;
+                rd_kafka_interceptors_on_acknowledgement(rk,
+                                                         &rkm->rkm_rkmessage);
+
+                /* Note we must clear the RD_KAFKA_MSG_F_FREE
+                 * flag since our contract says we don't free the payload on
+                 * failure. */
+                rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
+
+                /* Deassociate application owned headers from message
+                 * since headers remain in application ownership
+                 * when producev() fails */
+                if (app_hdrs && app_hdrs == rkm->rkm_headers)
+                        rkm->rkm_headers = NULL;
+
+                rd_kafka_msg_destroy(rk, rkm);
+
+                error = rd_kafka_error_new(err,
+                                           "Failed to enqueue message: %s",
+                                           rd_kafka_err2str(err));
+                goto err;
+        }
+
+        rd_kafka_topic_destroy0(rkt);
+
+        return NULL;
+
+ err:
+        if (rkt)
+                rd_kafka_topic_destroy0(rkt);
+
+        if (hdrs)
+                rd_kafka_headers_destroy(hdrs);
+
+        rd_assert(error != NULL);
+        return error;
+}
+
+
+
+/** @remark Keep rd_kafka_produceva() and rd_kafka_producev() in synch */
 rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         va_list ap;
         rd_kafka_msg_t s_rkm = {
@@ -344,7 +550,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         rd_kafka_headers_t *hdrs = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
 
-        if (unlikely((err = rd_kafka_check_produce(rk))))
+        if (unlikely((err = rd_kafka_check_produce(rk, NULL))))
                 return err;
 
         va_start(ap, rk);
@@ -520,7 +726,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         rd_kafka_toppar_t *rktp = NULL;
 
         /* Propagated per-message below */
-        all_err = rd_kafka_check_produce(rkt->rkt_rk);
+        all_err = rd_kafka_check_produce(rkt->rkt_rk, NULL);
 
         rd_kafka_topic_rdlock(rkt);
         if (!multiple_partitions) {

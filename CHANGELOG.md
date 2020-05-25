@@ -22,6 +22,9 @@ librdkafka.
  * Added MinGW-w64 builds (@ed-alertedh, #2553)
  * `./configure --enable-XYZ` now requires the XYZ check to pass,
    and `--disable-XYZ` disables the feature altogether (@benesch)
+ * Added `rd_kafka_produceva()` which takes an array of produce arguments
+   for situations where the existing `rd_kafka_producev()` va-arg approach
+   can't be used.
 
 
 ## Upgrade considerations

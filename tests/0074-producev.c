@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2020, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,19 +30,20 @@
 #include "rdkafka.h"
 
 /**
- * @brief Simple producev() verification
+ * @brief Simple producev() and produceva() verification
  */
 
 /**
  * @brief Verify #1478: The internal shared rkt reference was not destroyed
  *        when producev() failed.
  */
-
 static void do_test_srkt_leak (void) {
         rd_kafka_conf_t *conf;
         char buf[2000];
         rd_kafka_t *rk;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        rd_kafka_vu_t vus[3];
 
         conf = rd_kafka_conf_new();
         test_conf_set(conf, "message.max.bytes", "1000");
@@ -56,6 +57,26 @@ static void do_test_srkt_leak (void) {
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
                     "expected MSG_SIZE_TOO_LARGE, not %s",
                     rd_kafka_err2str(err));
+
+        vus[0].vtype = RD_KAFKA_VTYPE_TOPIC;
+        vus[0].u.cstr = "test";
+        vus[1].vtype = RD_KAFKA_VTYPE_VALUE;
+        vus[1].u.mem.ptr = buf;
+        vus[1].u.mem.size = sizeof(buf);
+        vus[2].vtype = RD_KAFKA_VTYPE_HEADER;
+        vus[2].u.header.name = "testheader";
+        vus[2].u.header.val = "test value";
+        vus[2].u.header.size = -1;
+
+        error = rd_kafka_produceva(rk, vus, 3);
+        TEST_ASSERT(error, "expected failure");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+                    "expected MSG_SIZE_TOO_LARGE, not %s",
+                    rd_kafka_error_string(error));
+        TEST_SAY("produceva() error (expected): %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_destroy(rk);
 }

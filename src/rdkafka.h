@@ -238,7 +238,7 @@ typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
 typedef struct rd_kafka_consumer_group_metadata_s
 rd_kafka_consumer_group_metadata_t;
 typedef struct rd_kafka_error_s rd_kafka_error_t;
-
+typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 /* @endcond */
 
 
@@ -1038,6 +1038,35 @@ typedef enum rd_kafka_vtype_t {
 
 
 /**
+ * @struct VTYPE + argument container for use with rd_kafka_produce_va()
+ *
+ * See RD_KAFKA_V_..() macros below for which union field corresponds
+ * to which RD_KAFKA_VTYPE_...
+ */
+typedef struct rd_kafka_vu_s {
+        rd_kafka_vtype_t vtype;
+        union {
+                const char *cstr;
+                rd_kafka_topic_t *rkt;
+                int i;
+                int32_t i32;
+                int64_t i64;
+                struct {
+                        void *ptr;
+                        size_t size;
+                } mem;
+                struct {
+                        const char *name;
+                        const void *val;
+                        ssize_t size;
+                } header;
+                rd_kafka_headers_t *headers;
+                void *ptr;
+                char _pad[64];  /**< Padding size for future-proofness */
+        } u;
+} rd_kafka_vu_t;
+
+/**
  * @brief Convenience macros for rd_kafka_vtype_t that takes the
  *        correct arguments for each vtype.
  */
@@ -1049,30 +1078,40 @@ typedef enum rd_kafka_vtype_t {
 
 /*!
  * Topic name (const char *)
+ *
+ * rd_kafka_vu_t field: u.cstr
  */
 #define RD_KAFKA_V_TOPIC(topic)                                         \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic),      \
         (const char *)topic
 /*!
  * Topic object (rd_kafka_topic_t *)
+ *
+ * rd_kafka_vu_t field: u.rkt
  */
 #define RD_KAFKA_V_RKT(rkt)                                             \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt),    \
         (rd_kafka_topic_t *)rkt
 /*!
  * Partition (int32_t)
+ *
+ * rd_kafka_vu_t field: u.i32
  */
 #define RD_KAFKA_V_PARTITION(partition)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition),   \
         (int32_t)partition
 /*!
  * Message value/payload pointer and length (void *, size_t)
+ *
+ * rd_kafka_vu_t fields: u.mem.ptr, u.mem.size
  */
 #define RD_KAFKA_V_VALUE(VALUE,LEN)                                     \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN), \
         (void *)VALUE, (size_t)LEN
 /*!
  * Message key pointer and length (const void *, size_t)
+ *
+ * rd_kafka_vu_t field: u.mem.ptr, rd_kafka_vu.t.u.mem.size
  */
 #define RD_KAFKA_V_KEY(KEY,LEN)                                         \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
@@ -1081,6 +1120,8 @@ typedef enum rd_kafka_vtype_t {
  * Message opaque pointer (void *)
  * Same as \c msg_opaque, \c produce(.., msg_opaque),
  * and \c rkmessage->_private .
+ *
+ * rd_kafka_vu_t field: u.ptr
  */
 #define RD_KAFKA_V_OPAQUE(msg_opaque)                                   \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, msg_opaque),      \
@@ -1088,6 +1129,8 @@ typedef enum rd_kafka_vtype_t {
 /*!
  * Message flags (int)
  * @sa RD_KAFKA_MSG_F_COPY, et.al.
+ *
+ * rd_kafka_vu_t field: u.i
  */
 #define RD_KAFKA_V_MSGFLAGS(msgflags)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags),       \
@@ -1095,6 +1138,8 @@ typedef enum rd_kafka_vtype_t {
 /*!
  * Timestamp in milliseconds since epoch UTC (int64_t).
  * A value of 0 will use the current wall-clock time.
+ *
+ * rd_kafka_vu_t field: u.i64
  */
 #define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \
@@ -1104,6 +1149,8 @@ typedef enum rd_kafka_vtype_t {
  * @sa rd_kafka_header_add()
  * @remark RD_KAFKA_V_HEADER() and RD_KAFKA_V_HEADERS() MUST NOT be mixed
  *         in the same call to producev().
+ *
+ * rd_kafka_vu_t fields: u.header.name, u.header.val, u.header.size
  */
 #define RD_KAFKA_V_HEADER(NAME,VALUE,LEN)                               \
         _LRK_TYPECHECK3(RD_KAFKA_VTYPE_HEADER, const char *, NAME,      \
@@ -1118,6 +1165,8 @@ typedef enum rd_kafka_vtype_t {
  * @sa rd_kafka_message_set_headers()
  * @remark RD_KAFKA_V_HEADER() and RD_KAFKA_V_HEADERS() MUST NOT be mixed
  *         in the same call to producev().
+ *
+ * rd_kafka_vu_t fields: u.headers
  */
 #define RD_KAFKA_V_HEADERS(HDRS)                                        \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_HEADERS, rd_kafka_headers_t *, HDRS), \
@@ -1146,8 +1195,6 @@ typedef enum rd_kafka_vtype_t {
  *        Header operations are O(n).
  */
 
-/*! Message Headers list */
-typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 
 /**
  * @brief Create a new headers list.
@@ -3977,10 +4024,27 @@ int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
  *          \c RD_KAFKA_RESP_ERR__CONFLICT is returned if _V_HEADER and
  *          _V_HEADERS are mixed.
  *
- * @sa rd_kafka_produce, RD_KAFKA_V_END
+ * @sa rd_kafka_produce, rd_kafka_produceva, RD_KAFKA_V_END
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
+
+
+/**
+ * @brief Produce and send a single message to broker.
+ *
+ * The message is defined by an array of \c rd_kafka_vu_t of
+ * count \p cnt.
+ *
+ * @returns an error object on failure or NULL on success.
+ *          See rd_kafka_producev() for specific error codes.
+ *
+ * @sa rd_kafka_produce, rd_kafka_producev, RD_KAFKA_V_END
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_produceva (rd_kafka_t *rk,
+                                      const rd_kafka_vu_t *vus,
+                                      size_t cnt);
 
 
 /**

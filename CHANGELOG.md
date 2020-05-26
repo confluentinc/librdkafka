@@ -52,6 +52,10 @@ librdkafka.
 
  * The client could crash in rare circumstances on ApiVersion or
    SaslHandshake request timeouts (#2326)
+ * `./configure --LDFLAGS='a=b, c=d` with arguments containing = are now
+   supported (by @sky92zwq).
+ * `./configure` arguments now take precedence over cached `configure` variables
+   from previous invocation.
 
 
 ### Consumer fixes

@@ -1135,7 +1135,8 @@ function mkl_cache_read {
     IFS="$IFS="
     while read -r n v ; do
         [[ -z $n || $n = \#* || -z $v ]] && continue
-        mkl_var_set $n $v cache
+        # Don't let cache overwrite variables
+        [[ -n ${n+r} ]] || mkl_var_set $n $v cache
     done < config.cache
     IFS=$ORIG_IFS
 }

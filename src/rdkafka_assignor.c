@@ -151,10 +151,10 @@ rd_kafka_consumer_protocol_member_metadata_new (
                 rd_kafka_buf_write_topic_partitions(
                         rkbuf,
                         owned_partitions,
-                        rd_false /*skip invalid offsets*/,
-                        rd_false /*write offsets*/,
-                        rd_false /*write epoch*/,
-                        rd_false /*write metadata*/);
+                        rd_false /*don't skip invalid offsets*/,
+                        rd_false /*don't write offsets*/,
+                        rd_false /*don't write epoch*/,
+                        rd_false /*don't write metadata*/);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
@@ -470,7 +470,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                                const rd_kafka_topic_partition_list_t *assignment,
                                const rd_kafkap_bytes_t *userdata,
                                const rd_kafka_consumer_group_metadata_t *rkcgm),
-                       void (*destroy_state) (void *assignor_state),
+                       void (*destroy_state_cb) (void *assignor_state),
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
 
@@ -496,7 +496,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         rkas->rkas_assign_cb        = assign_cb;
         rkas->rkas_get_metadata_cb  = get_metadata_cb;
         rkas->rkas_on_assignment_cb = on_assignment_cb;
-        rkas->rkas_destroy_state    = destroy_state;
+        rkas->rkas_destroy_state_cb = destroy_state_cb;
         rkas->rkas_opaque = opaque;
 
         rd_list_add(&rk->rk_conf.partition_assignors, rkas);
@@ -909,7 +909,7 @@ int unittest_assignors (void) {
                         if (!(rkas = rd_kafka_assignor_find(rk,
                                         tests[i].expect[ie].protocol_name))) {
                                 RD_UT_ASSERT(!err,
-                                             "Assignor case %s for %s failed: "
+                                             "Assignor test case %s for %s failed: "
                                              "assignor not found",
                                              tests[i].name,
                                              tests[i].expect[ie].protocol_name);

@@ -183,7 +183,8 @@ typedef struct rd_kafka_cgrp_s {
         int32_t            rkcg_generation_id;      /* Current generation id */
 
         rd_kafka_assignor_t *rkcg_assignor;         /**< The current partition
-                                                     *   assignor. */
+                                                     *   assignor. used by both
+                                                     *   leader and members. */
         void              *rkcg_assignor_state;     /**< current partition
                                                      *   assignor state */
 

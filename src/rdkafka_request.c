@@ -1192,10 +1192,10 @@ static void rd_kafka_group_MemberState_consumer_write (
         rd_kafka_buf_write_topic_partitions(
                 rkbuf,
                 rkgm->rkgm_assignment,
-                rd_false /*skip invalid offsets*/,
-                rd_false /*write offsets*/,
-                rd_false /*write epoch*/,
-                rd_false /*write metadata*/);
+                rd_false /*don't skip invalid offsets*/,
+                rd_false /*don't write offsets*/,
+                rd_false /*don't write epoch*/,
+                rd_false /*don't write metadata*/);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */

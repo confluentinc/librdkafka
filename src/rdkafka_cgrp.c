@@ -190,8 +190,8 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
-        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state)
-                rkcg->rkcg_assignor->rkas_destroy_state(
+        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb)
+                rkcg->rkcg_assignor->rkas_destroy_state_cb(
                         rkcg->rkcg_assignor_state);
         rd_free(rkcg);
 }
@@ -894,10 +894,10 @@ rd_kafka_group_MemberMetadata_consumer_read (
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
-        if (Version >= 1)
-                if (!(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                                rkbuf, 0, rd_false)))
-                        goto err;
+        if (Version >= 1 &&
+            !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
+                        rkbuf, 0, rd_false)))
+                goto err;
 
         rd_kafka_buf_destroy(rkbuf);
 
@@ -988,8 +988,8 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                 "Unsupported assignment strategy \"%s\"",
                                 protocol_name);
                         if (rkcg->rkcg_assignor) {
-                                if (rkcg->rkcg_assignor->rkas_destroy_state)
-                                        rkcg->rkcg_assignor->rkas_destroy_state(
+                                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
+                                        rkcg->rkcg_assignor->rkas_destroy_state_cb(
                                                 rkcg->rkcg_assignor_state);
                                 rkcg->rkcg_assignor_state = NULL;
                                 rkcg->rkcg_assignor = NULL;
@@ -1022,8 +1022,8 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         }
 
         if (rkcg->rkcg_assignor && rkcg->rkcg_assignor != rkas) {
-                if (rkcg->rkcg_assignor->rkas_destroy_state)
-                        rkcg->rkcg_assignor->rkas_destroy_state(
+                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
+                        rkcg->rkcg_assignor->rkas_destroy_state_cb(
                                 rkcg->rkcg_assignor_state);
                 rkcg->rkcg_assignor_state = NULL;
         }
@@ -3696,7 +3696,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         if (!(assignment = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_false)))
-                goto err;
+                goto err_parse;
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
 
  done:
@@ -3762,15 +3762,11 @@ rd_kafka_consumer_group_metadata_new (const char *group_id) {
 }
 
 rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata_new2 (const char *group_id,
-                                       int32_t generation_id) {
+rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
+                                                 int32_t generation_id) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        if (!group_id)
-                return NULL;
-
-        cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
-        cgmetadata->group_id = rd_strdup(group_id);
+        cgmetadata = rd_kafka_consumer_group_metadata_new(group_id);
         cgmetadata->generation_id = generation_id;
 
         return cgmetadata;
@@ -3787,7 +3783,7 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk) {
         if (rk->rk_cgrp)
                 generation_id = rk->rk_cgrp->rkcg_generation_id;
 
-        return rd_kafka_consumer_group_metadata_new2(
+        return rd_kafka_consumer_group_metadata_new_with_genid(
                 rk->rk_conf.group_id_str,
                 generation_id);
 }
@@ -3827,7 +3823,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_write (
         size_t of = 0;
         size_t magic_len = sizeof(rd_kafka_consumer_group_metadata_magic);
         size_t groupid_len = strlen(cgmd->group_id) + 1;
-        size_t generationid_len = sizeof(int32_t);
+        size_t generationid_len = sizeof(cgmd->generation_id);
 
         size = magic_len + groupid_len + generationid_len;
         buf = rd_malloc(size);
@@ -3851,14 +3847,14 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
         rd_kafka_consumer_group_metadata_t **cgmdp,
         const void *buffer, size_t size) {
         size_t magic_len = sizeof(rd_kafka_consumer_group_metadata_magic);
-        size_t generationid_len = sizeof(int32_t);
+        int32_t generation_id;
+        size_t generationid_len = sizeof(generation_id);
         const char *buf = (const char *)buffer;
         const char *end = buf + size;
         const char *group_id;
         const char *s;
-        int32_t generation_id;
 
-        if (size < magic_len + 1)
+        if (size < magic_len + generationid_len + 1)
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__BAD_MSG,
                                           "Input buffer is too short");
 
@@ -3868,7 +3864,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
                         "Input buffer is not a serialized "
                         "consumer group metadata object");
 
-        memcpy(&generation_id, buf+magic_len, sizeof(generation_id));
+        memcpy(&generation_id, buf+magic_len, generationid_len);
 
         group_id = buf + magic_len + generationid_len;
 
@@ -3885,8 +3881,9 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
                         RD_KAFKA_RESP_ERR__BAD_MSG,
                         "Input buffer has invalid stop byte");
 
-        /* We now know that group_id is printable-safe and is nul-terminated. */
-        *cgmdp = rd_kafka_consumer_group_metadata_new2(group_id, generation_id);
+        /* We now know that group_id is printable-safe and is nul-terminated */
+        *cgmdp = rd_kafka_consumer_group_metadata_new_with_genid(group_id,
+                                                                 generation_id);
 
         return NULL;
 }

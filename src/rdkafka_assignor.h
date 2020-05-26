@@ -66,12 +66,12 @@ int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b);
 
 
 typedef struct rd_kafka_assignor_s {
-        rd_kafkap_str_t   *rkas_protocol_type;
-        rd_kafkap_str_t   *rkas_protocol_name;
+        rd_kafkap_str_t *rkas_protocol_type;
+        rd_kafkap_str_t *rkas_protocol_name;
 
-	int                rkas_enabled;
+	int rkas_enabled;
 
-        int                rkas_supported_protocols;
+        int rkas_supported_protocols; /**< RD_KAFKA_ASSIGNOR_PROTOCOL_... */
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,
@@ -99,7 +99,7 @@ typedef struct rd_kafka_assignor_s {
                 const rd_kafkap_bytes_t *assignment_userdata,
                 const rd_kafka_consumer_group_metadata_t *rkcgm);
 
-        void (*rkas_destroy_state) (void *assignor_state);
+        void (*rkas_destroy_state_cb) (void *assignor_state);
 
         void *rkas_opaque;
 } rd_kafka_assignor_t;

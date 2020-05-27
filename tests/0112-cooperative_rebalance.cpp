@@ -79,7 +79,7 @@ extern "C" {
       Test::Fail("consumer 1 subscribe failed: " + RdKafka::err2str(err));
 
     /* Start consuming until EOF is reached, which indicates that we have an
-    * assignment and any errors should have been reported. */
+     * assignment and any errors should have been reported. */
     bool run = true;
     int cnt = 0;
     while (run) {
@@ -98,6 +98,7 @@ extern "C" {
         case RdKafka::ERR_NO_ERROR:
           break;
         default:
+          run = false;
           break;
         }
     }

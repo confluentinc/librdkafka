@@ -3751,12 +3751,8 @@ rd_kafka_consumer_group_metadata_t *
 rd_kafka_consumer_group_metadata_new (const char *group_id) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        if (!group_id)
-                return NULL;
-
-        cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
-        cgmetadata->group_id = rd_strdup(group_id);
-        cgmetadata->generation_id = -1;
+        cgmetadata = rd_kafka_consumer_group_metadata_new_with_genid(group_id,
+                                                                     -1);
 
         return cgmetadata;
 }
@@ -3766,7 +3762,11 @@ rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
                                                  int32_t generation_id) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        cgmetadata = rd_kafka_consumer_group_metadata_new(group_id);
+        if (!group_id)
+                return NULL;
+
+        cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
+        cgmetadata->group_id = rd_strdup(group_id);
         cgmetadata->generation_id = generation_id;
 
         return cgmetadata;

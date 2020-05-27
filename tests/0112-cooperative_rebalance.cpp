@@ -97,10 +97,8 @@ extern "C" {
         case RdKafka::ERR__TIMED_OUT:
         case RdKafka::ERR_NO_ERROR:
           break;
-
-        // case RdKafka::ERR__PARTITION_EOF:
-        //   run = false;
-        //   break;
+        default:
+          break;
         }
     }
 

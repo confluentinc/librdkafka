@@ -1038,13 +1038,14 @@ typedef enum rd_kafka_vtype_t {
 
 
 /**
- * @struct VTYPE + argument container for use with rd_kafka_produce_va()
+ * @brief VTYPE + argument container for use with rd_kafka_produce_va()
  *
  * See RD_KAFKA_V_..() macros below for which union field corresponds
  * to which RD_KAFKA_VTYPE_...
  */
 typedef struct rd_kafka_vu_s {
-        rd_kafka_vtype_t vtype;
+        rd_kafka_vtype_t vtype;           /**< RD_KAFKA_VTYPE_.. */
+        /** Value union, see RD_KAFKA_V_.. macros for which field to use. */
         union {
                 const char *cstr;
                 rd_kafka_topic_t *rkt;

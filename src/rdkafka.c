@@ -886,8 +886,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_assignors_term(rk);
-
         rd_kafka_metadata_cache_destroy(rk);
 
         /* Terminate SASL provider */
@@ -906,6 +904,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                 rd_kafka_q_fwd_set(rk->rk_rep, NULL);
                 rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
         }
+
+        rd_kafka_assignors_term(rk);
 
 	/* Purge op-queues */
 	rd_kafka_q_destroy_owner(rk->rk_rep);

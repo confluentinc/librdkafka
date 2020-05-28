@@ -50,8 +50,8 @@
 
 rd_kafka_resp_err_t
 rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
+				        const rd_kafka_assignor_t *rkas,
 					const char *member_id,
-					const char *protocol_name,
 					const rd_kafka_metadata_t *metadata,
 					rd_kafka_group_member_t *members,
 					size_t member_cnt,

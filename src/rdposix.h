@@ -65,7 +65,7 @@
 /**
 * Allocation
 */
-#if !defined(__FreeBSD__)
+#if !defined(__FreeBSD__) && !defined(__OpenBSD__)
 /* alloca(3) is in stdlib on FreeBSD */
 #include <alloca.h>
 #endif
@@ -154,7 +154,7 @@ extern void __coverity_panic__(void);
 #define rd_assert(EXPR) do {                    \
                 if (!(EXPR))                    \
                         __coverity_panic__();   \
-        }
+        } while (0)
 #endif
 
 
@@ -177,6 +177,25 @@ const char *rd_getenv (const char *env, const char *def) {
  * Sockets, IO
  */
 
+ /** @brief Socket type */
+typedef int rd_socket_t;
+
+/** @brief Socket API error return value */
+#define RD_SOCKET_ERROR (-1)
+
+/** @brief Last socket error */
+#define rd_socket_errno errno
+
+
+/** @brief String representation of socket error */
+#define rd_socket_strerror(ERR) rd_strerror(ERR)
+
+/** @brief poll() struct type */
+typedef struct pollfd rd_pollfd_t;
+
+/** @brief poll(2) */
+#define rd_socket_poll(POLLFD,FDCNT,TIMEOUT_MS) poll(POLLFD,FDCNT,TIMEOUT_MS)
+
 /**
  * @brief Set socket to non-blocking
  * @returns 0 on success or errno on failure.
@@ -193,7 +212,7 @@ static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
  * @brief Create non-blocking pipe
  * @returns 0 on success or errno on failure
  */
-static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
+static RD_UNUSED int rd_pipe_nonblocking (rd_socket_t *fds) {
         if (pipe(fds) == -1 ||
             rd_fd_set_nonblocking(fds[0]) == -1 ||
             rd_fd_set_nonblocking(fds[1]))

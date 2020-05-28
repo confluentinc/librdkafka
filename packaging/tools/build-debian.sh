@@ -25,7 +25,7 @@ fi
 set -u
 
 apt-get update
-apt-get install -y gcc g++ zlib1g-dev python2.7 git-core make
+apt-get install -y gcc g++ zlib1g-dev python3 git-core make
 
 
 # Copy the librdkafka git archive to a new location to avoid messing
@@ -43,7 +43,7 @@ mkdir -p $DEST_DIR
 ./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR
 make -j
 examples/rdkafka_example -X builtin.features
-make -C tests run_local
+CI=true make -C tests run_local_quick
 make install
 
 # Tar up the output directory

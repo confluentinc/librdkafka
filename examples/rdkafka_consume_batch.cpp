@@ -44,11 +44,11 @@
 #include <csignal>
 #include <cstring>
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sys/time.h>
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "../win32/wingetopt.h"
 #include <atltime.h>
 #elif _AIX
@@ -66,10 +66,10 @@
 
 
 
-static bool run = true;
+static volatile sig_atomic_t run = 1;
 
 static void sigterm (int sig) {
-  run = false;
+  run = 0;
 }
 
 
@@ -78,7 +78,7 @@ static void sigterm (int sig) {
  * @returns the current wall-clock time in milliseconds
  */
 static int64_t now () {
-#ifndef _MSC_VER
+#ifndef _WIN32
         struct timeval tv;
         gettimeofday(&tv, NULL);
         return ((int64_t)tv.tv_sec * 1000) + (tv.tv_usec / 1000);
@@ -116,7 +116,7 @@ consume_batch (RdKafka::KafkaConsumer *consumer, size_t batch_size, int batch_tm
 
     default:
       std::cerr << "%% Consumer error: " << msg->errstr() << std::endl;
-      run = false;
+      run = 0;
       delete msg;
       return msgs;
     }

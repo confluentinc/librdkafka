@@ -18,7 +18,7 @@ SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
 
-SRCS_LZ4 = xxhash.c
+SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
 # Use built-in liblz4
 SRCS_LZ4 += lz4.c lz4frame.c lz4hc.c
@@ -39,7 +39,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_partition.c rdkafka_subscription.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_feature.c \
-		rdcrc32.c crc32c.c rdmurmur2.c rdaddr.c rdrand.c rdlist.c \
+		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c rdaddr.c rdrand.c rdlist.c \
 		tinycthread.c tinycthread_extra.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
 		rdregex.c rdports.c rdkafka_metadata_cache.c rdavl.c \
@@ -47,10 +47,13 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_msgset_writer.c rdkafka_msgset_reader.c \
 		rdkafka_header.c rdkafka_admin.c rdkafka_aux.c \
 		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
+		rdkafka_txnmgr.c rdkafka_coord.c \
 		rdvarint.c rdbuf.c rdunittest.c \
+		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
+		rdkafka_error.c \
 		$(SRCS_y)
 
-HDRS=		rdkafka.h
+HDRS=		rdkafka.h rdkafka_mock.h
 
 OBJS=		$(SRCS:.c=.o)
 
@@ -79,9 +82,9 @@ $(SRCS_LZ4:.c=.o): CFLAGS:=$(CFLAGS) -O3
 
 ifeq ($(WITH_LDS),y)
 # Enable linker script if supported by platform
-LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
+LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME_LDS)
 
-$(LIBNAME).lds: $(HDRS)
+$(LIBNAME_LDS): $(HDRS)
 	@(printf "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)\n" ; \
 	  cat $(HDRS) | ../lds-gen.py > $@)
 endif

@@ -523,6 +523,7 @@ function mkl_resolve_static_libs {
 
     if [[ -z $stlibfnames || -n "${!stlibvar}" ]]; then
         mkl_dbg "$name: not resolving static libraries (stlibfnames=$stlibfnames, $stlibvar=${!stlibvar})"
+        mkl_allvar_set "$name" "WITH_STATIC_LIB_$name" y
         return 1
     fi
 
@@ -542,6 +543,7 @@ function mkl_resolve_static_libs {
     if [[ -n $stlibs ]]; then
         mkl_dbg "$name: $stlibvar: found static libs: $stlibs"
         mkl_var_set $stlibvar "$stlibs" "cache"
+        mkl_allvar_set "$name" "WITH_STATIC_LIB_$name" y
         return 0
     else
         mkl_dbg "$name: did not find any static libraries for $stlibfnames in ${scandir}"
@@ -796,6 +798,19 @@ function mkl_generate_late_vars {
 # Generate output files.
 # Must be called following a succesful configure run.
 function mkl_generate {
+
+    # Generate MKL_STATIC_LIBS and MKL_DYNAMIC_LIBS from LIBS
+    local arg=
+    for arg in $LIBS ; do
+        if [[ $arg == -l* ]]; then
+            mkl_mkvar_append "" MKL_DYNAMIC_LIBS $arg
+        elif [[ $arg == *.a ]]; then
+            mkl_mkvar_append "" MKL_STATIC_LIBS $arg
+        else
+            mkl_dbg "Ignoring arg $arg from LIBS while building STATIC and DYNAMIC lists"
+        fi
+    done
+
     local mf=
     for mf in $MKL_GENERATORS ; do
         MKL_MODULE=${mf%:*}
@@ -897,7 +912,7 @@ Configuration summary:"
     local n=
     for n in $MKL_MKVARS ; do
         # Skip the boring booleans
-        if [[ $n == WITH_* || $n == WITHOUT_* || $n == HAVE_* || $n == def_* ]]; then
+        if [[ $n == ENABLE_* || $n == WITH_* || $n == WITHOUT_* || $n == HAVE_* || $n == def_* ]]; then
             continue
         fi
         printf "  %-24s %s\n" "$n" "${!n}"
@@ -1120,7 +1135,8 @@ function mkl_cache_read {
     IFS="$IFS="
     while read -r n v ; do
         [[ -z $n || $n = \#* || -z $v ]] && continue
-        mkl_var_set $n $v cache
+        # Don't let cache overwrite variables
+        [[ -n ${n+r} ]] || mkl_var_set $n $v cache
     done < config.cache
     IFS=$ORIG_IFS
 }
@@ -1231,10 +1247,8 @@ function mkl_check_begin {
 # certain call ordering, such as dependent library checks.
 #
 # Param 1: module name
-# Param 2: action
 function mkl_check {
     local modname=$1
-    local action=$2
 
     local func="${modname}_manual_checks"
     if ! mkl_func_exists "$func" ; then
@@ -1242,7 +1256,7 @@ function mkl_check {
         return 1
     fi
 
-    $func "$2"
+    $func
     return $?
 }
 
@@ -1366,7 +1380,7 @@ function mkl_link_check0 {
     echo "#include <stdio.h>
 int main () { FILE *fp = stderr; return fp ? 0 : 0; }" > ${srcfile}.c
 
-    local cmd="${CC} $(mkl_mkvar_get CFLAGS) $(mkl_mkvar_get LDFLAGS) -c ${srcfile}.c -o ${srcfile}_out $libs";
+    local cmd="${CC} $(mkl_mkvar_get CFLAGS) $(mkl_mkvar_get LDFLAGS) ${srcfile}.c -o ${srcfile}_out $libs";
     mkl_dbg "Link check for $1: $cmd"
 
     local output
@@ -1497,6 +1511,7 @@ function mkl_lib_check_static {
 #
 # Arguments:
 #  [--override-action=<action>]  (internal use, overrides action argument)
+#  [--no-static]  (do not attempt to link the library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name (library name (for pkg-config))
@@ -1508,19 +1523,27 @@ function mkl_lib_check_static {
 function mkl_lib_check0 {
 
     local override_action=
-    if [[ $1 == --override-action=* ]]; then
-        override_action=${1#*=}
-        shift
-    fi
-
-    local staticopt=$(mkl_meta_get $1 "static" "")
-
+    local nostaticopt=
     local libnameopt=
-    local libname=$1
-    if [[ $1 == --libname* ]]; then
-        libnameopt=$1
-        libname="${libnameopt#*=}"
+    local libname=
+
+    while [[ $1 == --* ]]; do
+        if [[ $1 == --override-action=* ]]; then
+            override_action=${1#*=}
+        elif [[ $1 == --no-static ]]; then
+            nostaticopt=$1
+        elif [[ $1 == --libname* ]]; then
+            libnameopt=$1
+            libname="${libnameopt#*=}"
+        else
+            mkl_err "mkl_lib_check: invalid option $1"
+            exit 1
+        fi
         shift
+    done
+
+    if [[ -z $libname ]]; then
+        libname=$1
     fi
 
     local action=$3
@@ -1533,13 +1556,16 @@ function mkl_lib_check0 {
     if [[ $WITH_PKGCONFIG == "y" ]]; then
         # Let pkg-config populate CFLAGS, et.al.
         # Return on success.
-        mkl_pkg_config_check $libnameopt "$1" "$2" cont "$4" "$6" && return $?
+        mkl_pkg_config_check $nostaticopt $libnameopt "$1" "$2" cont "$4" "$6" && return $?
     fi
 
     local libs="$5"
-    local stlibs=$(mkl_lib_check_static $1 "$libs")
-    if [[ -n $stlibs ]]; then
-        libs=$stlibs
+
+    if [[ -z $nostaticopt ]]; then
+        local stlibs=$(mkl_lib_check_static $1 "$libs")
+        if [[ -n $stlibs ]]; then
+            libs=$stlibs
+        fi
     fi
 
     if ! mkl_compile_check "$1" "$2" "$action" "$4" "$libs" "$6"; then
@@ -1593,7 +1619,7 @@ function mkl_lib_check {
     # being used is in-fact from the dependency builder (if supported),
     # rather than a system installed alternative, so skip the pre-check and
     # go directly to dependency installation/build below.
-    if [[ $MKL_SOURCE_DEPS_ONLY != y ]] || ! mkl_dep_has_builder $1 ; then
+    if [[ $MKL_SOURCE_DEPS_ONLY != y ]] || ! mkl_dep_has_builder $name ; then
         mkl_lib_check0 --override-action=cont "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8"
         retcode=$?
         if [[ $retcode -eq 0 ]]; then
@@ -1619,6 +1645,7 @@ function mkl_lib_check {
 # Check for library with pkg-config
 # Automatically sets CFLAGS and LIBS from pkg-config information.
 # Arguments:
+#  [--no-static]  (do not attempt to link the library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name
@@ -1627,6 +1654,12 @@ function mkl_lib_check {
 #  compiler (CC|CXX)
 #  source snippet
 function mkl_pkg_config_check {
+
+    local nostaticopt=
+    if [[ $1 == --no-static ]]; then
+        nostaticopt=$1
+        shift
+    fi
 
     local libname=$1
     if [[ $1 == --libname* ]]; then
@@ -1684,9 +1717,11 @@ $cflags"
 
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
-    local stlibs=$(mkl_lib_check_static $1 "$libs")
-    if [[ -n $stlibs ]]; then
-        libs=$stlibs
+    if [[ -z $nostaticopt ]]; then
+        local stlibs=$(mkl_lib_check_static $1 "$libs")
+        if [[ -n $stlibs ]]; then
+            libs=$stlibs
+        fi
     fi
 
     mkl_dbg "$1: from pkg-config: LIBS: prepend $libs"

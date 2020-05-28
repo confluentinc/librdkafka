@@ -106,7 +106,7 @@ static void my_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 
         if (rd_kafka_message_status(rkmessage) >=
             RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED)
-                test_msgver_add_msg(&counters.mv_delivered,
+                test_msgver_add_msg(rk, &counters.mv_delivered,
                                     (rd_kafka_message_t *)rkmessage);
 
         if (rkmessage->err) {

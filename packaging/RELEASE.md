@@ -138,13 +138,22 @@ On a Linux host with docker installed, this will also require S3 credentials
 to be set up.
 
     $ cd packaging/nuget
-    $ pip install -r requirements.txt  # if necessary
+    $ pip3 install -r requirements.txt  # if necessary
     $ ./release.py v0.11.1-RC1
 
 Test the generated librdkafka.redist.0.11.1-RC1.nupkg and
 then upload it to NuGet manually:
 
  * https://www.nuget.org/packages/manage/upload
+
+
+### Create static bundle (for Go)
+
+    $ cd packaging/nuget
+    $ ./release.py --class StaticPackage v0.11.1-RC1
+
+Follow the Go client release instructions for updating its bundled librdkafka
+version based on the tar ball created here.
 
 
 ### Homebrew recipe update

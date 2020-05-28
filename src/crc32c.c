@@ -50,7 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <unistd.h>
 #endif
 
@@ -105,16 +105,10 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
         len--;
     }
     while (len >= 8) {
-#if defined(__sparc) || defined(__sparc__) || defined(__APPLE__) || defined(__mips__) || defined(__arm__)
-        /* Alignment-safe alternative.
-         * This is also needed on Apple to avoid compilation warnings for
-         * non-appearant alignment reasons. */
+        /* Alignment-safe */
         uint64_t ncopy;
         memcpy(&ncopy, next, sizeof(ncopy));
         crc ^= le64toh(ncopy);
-#else
-        crc ^= le64toh(*(uint64_t *)next);
-#endif
         crc = crc32c_table[7][crc & 0xff] ^
               crc32c_table[6][(crc >> 8) & 0xff] ^
               crc32c_table[5][(crc >> 16) & 0xff] ^
@@ -405,8 +399,6 @@ int unittest_crc32c (void) {
         const uint32_t expected_crc = 0x7dcde113;
         uint32_t crc;
         const char *how;
-
-        crc32c_global_init();
 
 #if WITH_CRC32C_HW
         if (sse42)

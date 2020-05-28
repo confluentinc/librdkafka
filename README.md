@@ -1,7 +1,7 @@
 librdkafka - the Apache Kafka C/C++ client library
 ==================================================
 
-Copyright (c) 2012-2019, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2020, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -14,7 +14,8 @@ the producer and 3 million msgs/second for the consumer.
 **librdkafka** is licensed under the 2-clause BSD license.
 
 # Features #
-  * High-level producer
+  * Full Exactly-Once-Semantics (EOS) support
+  * High-level producer, including Idempotent and Transactional producers
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
   * Simple (legacy) consumer
   * Admin client
@@ -72,6 +73,25 @@ On Windows, reference [librdkafka.redist](https://www.nuget.org/packages/librdka
 For other platforms, follow the source building instructions below.
 
 
+## Installing librdkafka using vcpkg
+
+You can download and install librdkafka using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+
+```bash
+# Install vcpkg if not already installed
+$ git clone https://github.com/Microsoft/vcpkg.git
+$ cd vcpkg
+$ ./bootstrap-vcpkg.sh
+$ ./vcpkg integrate install
+
+# Install librdkafka
+$ vcpkg install librdkafka
+```
+
+The librdkafka paackage in vcpkg is kept up to date by Microsoft team members and community contributors.
+If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
+
+
 ## Build from source
 
 ### Requirements
@@ -86,10 +106,10 @@ For other platforms, follow the source building instructions below.
 **NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
           enables encoding the original size in the compression frame header,
           which will speed up the consumer.
-          Use `STATIC_LIB_zstd=/path/to/libzstd.a ./configure --enable-static`
+          Use `STATIC_LIB_libzstd=/path/to/libzstd.a ./configure --enable-static`
           to enable static ZStd linking.
           MacOSX example:
-          `STATIC_LIB_zstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
+          `STATIC_LIB_libzstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
 
 
 ### Building
@@ -152,6 +172,7 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * Node.js: [node-rdkafka](https://github.com/Blizzard/node-rdkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
+  * Perl: [Net::Kafka](https://github.com/bookingcom/perl-Net-Kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)

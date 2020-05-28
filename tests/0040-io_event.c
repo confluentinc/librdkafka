@@ -38,7 +38,7 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 #include <fcntl.h>
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <io.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
@@ -69,7 +69,7 @@ int main_0040_io_event (int argc, char **argv) {
 		_REBALANCE
 	} expecting_io = _REBALANCE;
 
-#ifdef _MSC_VER
+#ifdef _WIN32
         TEST_SKIP("WSAPoll and pipes are not reliable on Win32 (FIXME)\n");
         return 0;
 #endif
@@ -95,14 +95,14 @@ int main_0040_io_event (int argc, char **argv) {
 
 	test_consumer_subscribe(rk_c, topic);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
         r = pipe(fds);
 #else
         r = _pipe(fds, 2, _O_BINARY);
 #endif
         if (r == -1)
 		TEST_FAIL("pipe() failed: %s\n", strerror(errno));
-	
+
 	rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
 
 	pfd.fd = fds[0];
@@ -121,16 +121,14 @@ int main_0040_io_event (int argc, char **argv) {
 	 * 9) Done.
 	 */
 	while (recvd < msgcnt) {
-		int r;
-
-#ifndef _MSC_VER
+#ifndef _WIN32
 		r = poll(&pfd, 1, 1000 * wait_multiplier);
 #else
                 r = WSAPoll(&pfd, 1, 1000 * wait_multiplier);
 #endif
 		if (r == -1) {
 			TEST_FAIL("poll() failed: %s", strerror(errno));
-			
+
 		} else if (r == 1) {
 			rd_kafka_event_t *rkev;
 			char b;
@@ -146,7 +144,7 @@ int main_0040_io_event (int argc, char **argv) {
 			TEST_SAY("POLLIN\n");
                         /* Read signaling token to purge socket queue and
                          * eventually silence POLLIN */
-#ifndef _MSC_VER
+#ifndef _WIN32
 			r = read(pfd.fd, &b, 1);
 #else
 			r = _read((int)pfd.fd, &b, 1);
@@ -227,7 +225,7 @@ int main_0040_io_event (int argc, char **argv) {
 	rd_kafka_consumer_close(rk_c);
 	rd_kafka_destroy(rk_c);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 	close(fds[0]);
 	close(fds[1]);
 #else

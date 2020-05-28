@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Run librdkafka regression tests on with different SASL parameters
@@ -8,7 +8,7 @@
 #  trivup python module
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster, print_report_summary
+from cluster_testing import LibrdkafkaTestCluster, print_report_summary, read_scenario_conf
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
@@ -23,21 +23,21 @@ import json
 import tempfile
 
 def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
-             interact=False, debug=False):
-                  
+             interact=False, debug=False, scenario="default"):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
-    
+
     cluster = LibrdkafkaTestCluster(version, conf,
                                     num_brokers=int(conf.get('broker_cnt', 3)),
-                                    debug=debug)
+                                    debug=debug, scenario=scenario)
 
     # librdkafka's regression tests, as an App.
     _rdkconf = conf.copy() # Base rdkconf on cluster conf + rdkconf
     _rdkconf.update(rdkconf)
-    rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests)
+    rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests,
+                                scenario=scenario)
     rdkafka.do_cleanup = False
 
     if deploy:
@@ -95,7 +95,6 @@ def handle_report (report, version, suite):
             return (True, 'All %d/%d tests passed as expected' % (passed, test_cnt))
 
 
-        
 
 if __name__ == '__main__':
 
@@ -107,6 +106,8 @@ if __name__ == '__main__':
                         help='trivup JSON config object (not file)')
     parser.add_argument('--rdkconf', type=str, dest='rdkconf', default=None,
                         help='trivup JSON config object (not file) for LibrdkafkaTestApp')
+    parser.add_argument('--scenario', type=str, dest='scenario', default='default',
+                        help='Test scenario (see scenarios/ directory)')
     parser.add_argument('--tests', type=str, dest='tests', default=None,
                         help='Test to run (e.g., "0002")')
     parser.add_argument('--report', type=str, dest='report', default=None,
@@ -152,7 +153,7 @@ if __name__ == '__main__':
     if args.interactive:
         args.conf['test_mode'] = 'bash'
     args.conf['broker_cnt'] = args.broker_cnt
-    
+
     conf.update(args.conf)
     if args.rdkconf is not None:
         rdkconf.update(json.loads(args.rdkconf))
@@ -160,6 +161,8 @@ if __name__ == '__main__':
         tests = args.tests.split(',')
     else:
         tests = None
+
+    conf.update(read_scenario_conf(args.scenario))
 
     # Test version + suite matrix
     versions = args.versions
@@ -178,9 +181,11 @@ if __name__ == '__main__':
                 suite['version'] = dict()
 
             # Run tests
-            print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
+            print('#### Version %s, suite %s, scenario %s: STARTING' %
+                  (version, suite['name'], args.scenario))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
-                             interact=args.interact, debug=args.debug)
+                             interact=args.interact, debug=args.debug,
+                             scenario=args.scenario)
 
             if not report:
                 continue
@@ -190,7 +195,7 @@ if __name__ == '__main__':
             passed,reason = handle_report(report, version, suite)
             report['PASSED'] = passed
             report['REASON'] = reason
-            
+
             if passed:
                 print('\033[42m#### Version %s, suite %s: PASSED: %s\033[0m' %
                       (version, suite['name'], reason))

@@ -4,7 +4,7 @@
 mkl_meta_set "description" "name"      "librdkafka"
 mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
 mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
-mkl_meta_set "description" "copyright" "Copyright (c) 2012-2015 Magnus Edenhill"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2019 Magnus Edenhill"
 
 # Enable generation of pkg-config .pc file
 mkl_mkvar_set "" GEN_PKG_CONFIG y
@@ -16,6 +16,7 @@ mkl_require pic
 mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
+mkl_require zlib
 mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
@@ -32,15 +33,15 @@ mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-c
 
 mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
 
-mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
-
-mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support" "y"
+mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.2)" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
 # librdkafka with TSAN won't work with glibc C11 threads on Ubuntu 19.04.
 # This option allows disabling libc-based C11 threads and instead
 # use the builtin tinycthread alternative.
-mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "y"
+mkl_toggle_option "Feature" ENABLE_C11THREADS "--enable-c11threads" "Enable detection of C11 threads support in libc" "try"
+
+mkl_toggle_option "Feature" ENABLE_SYSLOG "--enable-syslog" "Enable logging to syslog" "y"
 
 
 function checks {
@@ -52,10 +53,15 @@ function checks {
     mkl_lib_check "libpthread" "" fail CC "-lpthread" \
                   "#include <pthread.h>"
 
-    if [[ $ENABLE_C11THREADS == "y" ]]; then
+    if [[ $ENABLE_C11THREADS != n ]]; then
+        case "$ENABLE_C11THREADS" in
+            y) local action=fail ;;
+            try) local action=disable ;;
+            *) mkl_err "mklove internal error: invalid value for ENABLE_C11THREADS: $ENABLE_C11THREADS"; exit 1 ;;
+        esac
         # Use internal tinycthread if C11 threads not available.
         # Requires -lpthread on glibc c11 threads, thus the use of $LIBS.
-        mkl_lib_check "c11threads" WITH_C11THREADS disable CC "$LIBS" \
+        mkl_lib_check "c11threads" WITH_C11THREADS $action CC "$LIBS" \
                       "
 #include <threads.h>
 
@@ -93,25 +99,30 @@ void foo (void) {
     fi
 
     # optional libs
-    mkl_meta_set "zlib" "deb" "zlib1g-dev"
-    mkl_meta_set "zlib" "apk" "zlib-dev"
-    mkl_meta_set "zlib" "static" "libz.a"
-    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
-                  "#include <zlib.h>"
-    mkl_check "libssl" disable
-    mkl_check "libsasl2" disable
-    mkl_check "libzstd" disable
+    mkl_check "zlib"
+    mkl_check "libssl"
+    mkl_check "libsasl2"
+    mkl_check "libzstd"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then
         mkl_allvar_set WITH_HDRHISTOGRAM WITH_HDRHISTOGRAM y
     fi
 
-    # Use builtin lz4 if linking statically or if --disable-lz4 is used.
+    # Use builtin lz4 if linking statically or if --disable-lz4-ext is used.
     if [[ $MKL_SOURCE_DEPS_ONLY != y ]] && [[ $WITH_STATIC_LINKING != y ]] && [[ $ENABLE_LZ4_EXT == y ]]; then
         mkl_meta_set "liblz4" "static" "liblz4.a"
         mkl_lib_check "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
                       "#include <lz4frame.h>"
+    fi
+
+    if [[ $ENABLE_SYSLOG == y ]]; then
+        mkl_compile_check "syslog" "WITH_SYSLOG" disable CC "" \
+                          '
+#include <syslog.h>
+void foo (void) {
+    syslog(LOG_INFO, "test");
+}'
     fi
 
     # rapidjson (>=1.1.0) is used in tests to verify statistics data, not used
@@ -124,15 +135,6 @@ void foo (void) {
 
     # Enable sockem (tests)
     mkl_allvar_set WITH_SOCKEM WITH_SOCKEM y
-
-    if [[ "$ENABLE_SASL" == "y" ]]; then
-        mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-        mkl_meta_set "libsasl2" "rpm" "cyrus-sasl"
-        if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
-            mkl_lib_check "libsasl" "WITH_SASL_CYRUS" disable CC "-lsasl" \
-                          "#include <sasl/sasl.h>"
-        fi
-    fi
 
     if [[ "$WITH_SSL" == "y" ]]; then
         # SASL SCRAM requires base64 encoding from OpenSSL
@@ -258,16 +260,16 @@ void foo (void) {
 	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'
     fi
 
-    # The linker-script generator (lds-gen.py) requires python
+    # The linker-script generator (lds-gen.py) requires python3
     if [[ $WITH_LDS == y ]]; then
-        if ! mkl_command_check python "HAVE_PYTHON" "disable" "python -V"; then
-            mkl_err "disabling linker-script since python is not available"
+        if ! mkl_command_check python3 "HAVE_PYTHON" "disable" "python3 -V"; then
+            mkl_err "disabling linker-script since python3 is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
     fi
 
     if [[ "$ENABLE_VALGRIND" == "y" ]]; then
-	mkl_compile_check valgrind WITH_VALGRIND disable CC "" \
+	mkl_compile_check valgrind WITH_VALGRIND fail CC "" \
 			  "#include <valgrind/memcheck.h>"
     fi
 

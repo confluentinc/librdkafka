@@ -43,8 +43,8 @@
 #include <ntsecapi.h>
 
 #define SECURITY_WIN32
-#pragma comment(lib, "Secur32.lib")
-#include <Sspi.h>
+#pragma comment(lib, "secur32.lib")
+#include <sspi.h>
 
 
 #define RD_KAFKA_SASL_SSPI_CTX_ATTRS \

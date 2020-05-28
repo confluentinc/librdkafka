@@ -148,7 +148,7 @@ $PASS
 EOF
 
 	echo "########### Signing key"
-	openssl x509 -req -passin "pass:$PASS" -in ${PFX}client.req -CA $CA_CERT -CAkey ${CA_CERT}.key -CAserial ${CA_CERT}.srl -out ${PFX}client.pem -days $VALIDITY
+	openssl x509 -req -passin "pass:$PASS" -in ${PFX}client.req -CA $CA_CERT -CAkey ${CA_CERT}.key -CAcreateserial -out ${PFX}client.pem -days $VALIDITY
 
     fi
 

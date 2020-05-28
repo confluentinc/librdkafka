@@ -1,26 +1,26 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2018 Magnus Edenhill
+ * Copyright (c) 2012-2020 Magnus Edenhill
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -55,12 +55,12 @@ extern "C" {
 #endif
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include <basetsd.h>
 #ifndef WIN32_MEAN_AND_LEAN
 #define WIN32_MEAN_AND_LEAN
 #endif
-#include <Winsock2.h>  /* for sockaddr, .. */
+#include <winsock2.h>  /* for sockaddr, .. */
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010202ff
+#define RD_KAFKA_VERSION  0x01050001
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -223,7 +223,7 @@ const char *rd_kafka_get_debug_contexts(void);
  *             Use rd_kafka_get_debug_contexts() instead.
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos"
+        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,mock"
 
 
 /* @cond NO_DOC */
@@ -235,6 +235,10 @@ typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
+typedef struct rd_kafka_consumer_group_metadata_s
+rd_kafka_consumer_group_metadata_t;
+typedef struct rd_kafka_error_s rd_kafka_error_t;
+typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 /* @endcond */
 
 
@@ -271,7 +275,7 @@ typedef enum {
 	/** Produced message timed out*/
 	RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. 
+	 * the broker. Not really an error.
 	 * This event is disabled by default,
 	 * see the `enable.partition.eof` configuration property. */
 	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191,
@@ -363,6 +367,14 @@ typedef enum {
         RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE = -148,
         /** Maximum poll interval exceeded */
         RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED = -147,
+        /** Unknown broker */
+        RD_KAFKA_RESP_ERR__UNKNOWN_BROKER = -146,
+        /** Functionality not configured */
+        RD_KAFKA_RESP_ERR__NOT_CONFIGURED = -145,
+        /** Instance has been fenced */
+        RD_KAFKA_RESP_ERR__FENCED = -144,
+        /** Application generated error */
+        RD_KAFKA_RESP_ERR__APPLICATION = -143,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -398,12 +410,21 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
 	/** Broker disconnected before response received */
 	RD_KAFKA_RESP_ERR_NETWORK_EXCEPTION = 13,
-	/** Group coordinator load in progress */
-        RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS = 14,
-	 /** Group coordinator not available */
-        RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE = 15,
-	/** Not coordinator for group */
-        RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP = 16,
+        /** Coordinator load in progress */
+        RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS = 14,
+        /** Group coordinator load in progress */
+#define RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS        \
+        RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS
+        /** Coordinator not available */
+        RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE = 15,
+        /** Group coordinator not available */
+#define RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE       \
+        RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE
+        /** Not coordinator */
+        RD_KAFKA_RESP_ERR_NOT_COORDINATOR = 16,
+        /** Not coordinator for group */
+#define RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP     \
+        RD_KAFKA_RESP_ERR_NOT_COORDINATOR
 	/** Invalid topic */
         RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION = 17,
 	/** Message batch larger than configured server segment size */
@@ -539,6 +560,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR_PREFERRED_LEADER_NOT_AVAILABLE = 80,
         /** Consumer group has reached maximum size */
         RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED = 81,
+        /** Static consumer fenced by other consumer with same
+         *  group.instance.id. */
+        RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID = 82,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -711,6 +735,79 @@ rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                            const char *reason);
+
+
+/**
+ * @returns the error code for \p error.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error);
+
+/**
+ * @returns the error code name for \p error, e.g, "ERR_UNKNOWN_MEMBER_ID".
+ *
+ * @remark The lifetime of the returned pointer is the same as the error object.
+ *
+ * @sa rd_kafka_err2name()
+ */
+RD_EXPORT
+const char *rd_kafka_error_name (const rd_kafka_error_t *error);
+
+/**
+ * @returns a human readable error string for \p error.
+ *
+ * @remark The lifetime of the returned pointer is the same as the error object.
+ */
+RD_EXPORT
+const char *rd_kafka_error_string (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the error is a fatal error, indicating that the client
+ *          instance is no longer usable, else 0.
+ */
+RD_EXPORT
+int rd_kafka_error_is_fatal (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the operation may be retried, else 0.
+ */
+RD_EXPORT
+int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
+
+
+/**
+ * @returns 1 if the error is an abortable transaction error in which case
+ *          the application must call rd_kafka_abort_transaction() and
+ *          start a new transaction with rd_kafka_begin_transaction() if it
+ *          wishes to proceed with transactions.
+ *          Else returns 0.
+ *
+ * @remark The return value of this method is only valid for errors returned
+ *         by the transactional API.
+ */
+RD_EXPORT
+int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error);
+
+/**
+ * @brief Free and destroy an error object.
+ */
+RD_EXPORT
+void rd_kafka_error_destroy (rd_kafka_error_t *error);
+
+
+/**
+ * @brief Create a new error object with error \p code and optional
+ *        human readable error string in \p fmt.
+ *
+ * This method is mainly to be used for mocking errors in application test code.
+ *
+ * The returned object must be destroyed with rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
+                                      const char *fmt, ...);
 
 
 /**
@@ -941,6 +1038,36 @@ typedef enum rd_kafka_vtype_t {
 
 
 /**
+ * @brief VTYPE + argument container for use with rd_kafka_produce_va()
+ *
+ * See RD_KAFKA_V_..() macros below for which union field corresponds
+ * to which RD_KAFKA_VTYPE_...
+ */
+typedef struct rd_kafka_vu_s {
+        rd_kafka_vtype_t vtype;           /**< RD_KAFKA_VTYPE_.. */
+        /** Value union, see RD_KAFKA_V_.. macros for which field to use. */
+        union {
+                const char *cstr;
+                rd_kafka_topic_t *rkt;
+                int i;
+                int32_t i32;
+                int64_t i64;
+                struct {
+                        void *ptr;
+                        size_t size;
+                } mem;
+                struct {
+                        const char *name;
+                        const void *val;
+                        ssize_t size;
+                } header;
+                rd_kafka_headers_t *headers;
+                void *ptr;
+                char _pad[64];  /**< Padding size for future-proofness */
+        } u;
+} rd_kafka_vu_t;
+
+/**
  * @brief Convenience macros for rd_kafka_vtype_t that takes the
  *        correct arguments for each vtype.
  */
@@ -952,30 +1079,40 @@ typedef enum rd_kafka_vtype_t {
 
 /*!
  * Topic name (const char *)
+ *
+ * rd_kafka_vu_t field: u.cstr
  */
 #define RD_KAFKA_V_TOPIC(topic)                                         \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic),      \
         (const char *)topic
 /*!
  * Topic object (rd_kafka_topic_t *)
+ *
+ * rd_kafka_vu_t field: u.rkt
  */
 #define RD_KAFKA_V_RKT(rkt)                                             \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt),    \
         (rd_kafka_topic_t *)rkt
 /*!
  * Partition (int32_t)
+ *
+ * rd_kafka_vu_t field: u.i32
  */
 #define RD_KAFKA_V_PARTITION(partition)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition),   \
         (int32_t)partition
 /*!
  * Message value/payload pointer and length (void *, size_t)
+ *
+ * rd_kafka_vu_t fields: u.mem.ptr, u.mem.size
  */
 #define RD_KAFKA_V_VALUE(VALUE,LEN)                                     \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN), \
         (void *)VALUE, (size_t)LEN
 /*!
  * Message key pointer and length (const void *, size_t)
+ *
+ * rd_kafka_vu_t field: u.mem.ptr, rd_kafka_vu.t.u.mem.size
  */
 #define RD_KAFKA_V_KEY(KEY,LEN)                                         \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
@@ -984,6 +1121,8 @@ typedef enum rd_kafka_vtype_t {
  * Message opaque pointer (void *)
  * Same as \c msg_opaque, \c produce(.., msg_opaque),
  * and \c rkmessage->_private .
+ *
+ * rd_kafka_vu_t field: u.ptr
  */
 #define RD_KAFKA_V_OPAQUE(msg_opaque)                                   \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, msg_opaque),      \
@@ -991,6 +1130,8 @@ typedef enum rd_kafka_vtype_t {
 /*!
  * Message flags (int)
  * @sa RD_KAFKA_MSG_F_COPY, et.al.
+ *
+ * rd_kafka_vu_t field: u.i
  */
 #define RD_KAFKA_V_MSGFLAGS(msgflags)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags),       \
@@ -998,6 +1139,8 @@ typedef enum rd_kafka_vtype_t {
 /*!
  * Timestamp in milliseconds since epoch UTC (int64_t).
  * A value of 0 will use the current wall-clock time.
+ *
+ * rd_kafka_vu_t field: u.i64
  */
 #define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \
@@ -1007,6 +1150,8 @@ typedef enum rd_kafka_vtype_t {
  * @sa rd_kafka_header_add()
  * @remark RD_KAFKA_V_HEADER() and RD_KAFKA_V_HEADERS() MUST NOT be mixed
  *         in the same call to producev().
+ *
+ * rd_kafka_vu_t fields: u.header.name, u.header.val, u.header.size
  */
 #define RD_KAFKA_V_HEADER(NAME,VALUE,LEN)                               \
         _LRK_TYPECHECK3(RD_KAFKA_VTYPE_HEADER, const char *, NAME,      \
@@ -1021,6 +1166,8 @@ typedef enum rd_kafka_vtype_t {
  * @sa rd_kafka_message_set_headers()
  * @remark RD_KAFKA_V_HEADER() and RD_KAFKA_V_HEADERS() MUST NOT be mixed
  *         in the same call to producev().
+ *
+ * rd_kafka_vu_t fields: u.headers
  */
 #define RD_KAFKA_V_HEADERS(HDRS)                                        \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_HEADERS, rd_kafka_headers_t *, HDRS), \
@@ -1049,8 +1196,6 @@ typedef enum rd_kafka_vtype_t {
  *        Header operations are O(n).
  */
 
-/*! Message Headers list */
-typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 
 /**
  * @brief Create a new headers list.
@@ -1234,18 +1379,8 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  *
  * @remark This function MUST NOT be used with the producer.
  */
-static RD_INLINE const char *
-RD_UNUSED 
-rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
-		return NULL;
-
-	if (rkmessage->payload)
-		return (const char *)rkmessage->payload;
-
-	return rd_kafka_err2str(rkmessage->err);
-}
-
+RD_EXPORT
+const char *rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage);
 
 
 /**
@@ -1342,17 +1477,19 @@ RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
  *        find out if a produced message was persisted in the topic log.
  */
 typedef enum {
-        /**< Message was never transmitted to the broker, or failed with
-         *   an error indicating it was not written to the log.
-         *   Application retry risks ordering, but not duplication. */
+        /** Message was never transmitted to the broker, or failed with
+         *  an error indicating it was not written to the log.
+         *  Application retry risks ordering, but not duplication. */
         RD_KAFKA_MSG_STATUS_NOT_PERSISTED = 0,
 
-        /**< Message was transmitted to broker, but no acknowledgement was
-         *   received.
-         *   Application retry risks ordering and duplication. */
+        /** Message was transmitted to broker, but no acknowledgement was
+         *  received.
+         *  Application retry risks ordering and duplication. */
         RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED = 1,
 
-        /**< Message was written to the log and acknowledged by the broker. */
+        /** Message was written to the log and acknowledged by the broker.
+         *  No reason for application to retry.
+         *  Note: this value should only be trusted with \c acks=all. */
         RD_KAFKA_MSG_STATUS_PERSISTED =  2
 } rd_kafka_msg_status_t;
 
@@ -1404,7 +1541,7 @@ typedef enum {
  *                           errstr, sizeof(errstr));
  *   if (res != RD_KAFKA_CONF_OK)
  *      die("%s\n", errstr);
- *   
+ *
  *   rk = rd_kafka_new(..., myconf);
  * @endcode
  *
@@ -1414,9 +1551,12 @@ typedef enum {
  * The properties are identical to the Apache Kafka configuration properties
  * whenever possible.
  *
+ * @remark A successful call to rd_kafka_new() will assume ownership of
+ * the conf object and rd_kafka_conf_destroy() must not be called.
+ *
  * @returns A new rd_kafka_conf_t object with defaults set.
  *
- * @sa rd_kafka_conf_set(), rd_kafka_conf_destroy()
+ * @sa rd_kafka_new(), rd_kafka_conf_set(), rd_kafka_conf_destroy()
  */
 RD_EXPORT
 rd_kafka_conf_t *rd_kafka_conf_new(void);
@@ -1552,7 +1692,7 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * The delivery report callback will be called once for each message
  * accepted by rd_kafka_produce() (et.al) with \p err set to indicate
  * the result of the produce request.
- * 
+ *
  * The callback is called when a message is succesfully produced or
  * if librdkafka encountered a permanent failure.
  * Delivery errors occur when the retry count is exceeded, when the
@@ -1640,7 +1780,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *         of the list (see `rd_kafka_topic_partition_list_copy()`).
  *         The result of `rd_kafka_position()` is typically outdated in
  *         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS.
- * 
+ *
  * The following example shows the application's responsibilities:
  * @code
  *    static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -1824,15 +1964,15 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *                           sasl.oauthbearer.config.
  *   \p opaque - Application-provided opaque set via
  *               rd_kafka_conf_set_opaque()
- * 
+ *
  * The SASL/OAUTHBEARER token refresh callback is triggered via rd_kafka_poll()
  * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
- * 
+ *
  * The callback should invoke rd_kafka_oauthbearer_set_token()
  * or rd_kafka_oauthbearer_set_token_failure() to indicate success
  * or failure, respectively.
- * 
+ *
  * The refresh operation is eventable and may be received via
  * rd_kafka_queue_poll() with an event type of
  * \c RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
@@ -1920,7 +2060,7 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
 
 
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 /**
  * @brief Set open callback.
  *
@@ -2437,6 +2577,49 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
                                                  void *msg_opaque);
 
 
+/**
+ * @brief FNV-1a partitioner.
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using FNV-1a hashing.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_fnv1a (const rd_kafka_topic_t *rkt,
+                                        const void *key, size_t keylen,
+                                        int32_t partition_cnt,
+                                        void *rkt_opaque,
+                                        void *msg_opaque);
+
+
+/**
+ * @brief Consistent-Random FNV-1a partitioner.
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using FNV-1a hashing.
+ * Messages without keys will be assigned via the random partitioner.
+ *
+ * The \p rkt_opaque argument is the opaque set by
+ * rd_kafka_topic_conf_set_opaque().
+ * The \p msg_opaque argument is the per-message opaque
+ * passed to produce().
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
+                                               const void *key, size_t keylen,
+                                               int32_t partition_cnt,
+                                               void *rkt_opaque,
+                                               void *msg_opaque);
+
+
 /**@}*/
 
 
@@ -2540,7 +2723,7 @@ rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk);
 
 
 /**
- * @brief Returns this client's broker-assigned group member id 
+ * @brief Returns this client's broker-assigned group member id.
  *
  * @remark This currently requires the high-level KafkaConsumer
  *
@@ -2880,7 +3063,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
  * Use rd_kafka_queue_destroy() to loose the reference.
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
- * 
+ *
  * @remark This function only works on consumers.
  */
 RD_EXPORT
@@ -2919,7 +3102,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_background (rd_kafka_t *rk);
  * If \p dst is \c NULL the forwarding is removed.
  *
  * The internal refcounts for both queues are increased.
- * 
+ *
  * @remark Regardless of whether \p dst is NULL or not, after calling this
  *         function, \p src will not forward it's fetch queue to the consumer
  *         queue.
@@ -3208,6 +3391,15 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * @remark on_consume() interceptors may be called from this function prior to
  *         passing message to application.
+ *
+ * @remark This function will return early if a transaction control message is
+ *         received, these messages are not exposed to the application but
+ *         still enqueued on the consumer queue to make sure their
+ *         offsets are stored.
+ *
+ * @deprecated This API is deprecated and subject for future removal.
+ *             There is no new callback-based consume interface, use the
+ *             poll/queue based alternatives.
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
@@ -3253,6 +3445,10 @@ ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
  * @brief Consume multiple messages from queue with callback
  *
  * @sa rd_kafka_consume_callback()
+ *
+ * @deprecated This API is deprecated and subject for future removal.
+ *             There is no new callback-based consume interface, use the
+ *             poll/queue based alternatives.
  */
 RD_EXPORT
 int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
@@ -3279,17 +3475,18 @@ int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
 
 
 /**
- * @brief Store offset \p offset for topic \p rkt partition \p partition.
+ * @brief Store offset \p offset + 1 for topic \p rkt partition \p partition.
  *
- * The offset will be committed (written) to the offset store according
+ * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
- * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
+rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
 					   int32_t partition, int64_t offset);
 
 
@@ -3302,16 +3499,20 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
  * Per-partition success/error status propagated through each partition's
  * \c .err field.
  *
- * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
+ * @remark The \c .offset field is stored as is, it will NOT be + 1.
+ *
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
  *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
  *          offsets could be stored, or
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store is true.
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
+ *          is true.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_offsets_store(rd_kafka_t *rk,
-                       rd_kafka_topic_partition_list_t *offsets);
+rd_kafka_offsets_store (rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *offsets);
 /**@}*/
 
 
@@ -3350,9 +3551,20 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
+ * @remark A consumer error will be raised for each unavailable topic in the
+ *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
+ *         for non-existent topics, and
+ *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+ *         The consumer error will be raised through rd_kafka_consumer_poll()
+ *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
+ *         error codes mentioned above.
+ *         The subscribe function itself is asynchronous and will not return
+ *         an error on unavailable topics.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes.
+ *          topics or regexes,
+ *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
@@ -3423,6 +3635,8 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  *
  * @remark The application still needs to call rd_kafka_destroy() after
  *         this call finishes to clean up the underlying handle resources.
@@ -3445,6 +3659,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  * A zero-length \p partitions will treat the partitions as a valid,
  * albeit empty, assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
+ *
+ * @returns An error code indicating if the new assignment was applied or not.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
@@ -3470,7 +3688,8 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * @brief Commit offsets on broker for the provided list of partitions.
  *
  * \p offsets should contain \c topic, \c partition, \c offset and possibly
- * \c metadata.
+ * \c metadata. The \c offset should be the offset where consumption will
+ * resume, i.e., the last processed offset + 1.
  * If \p offsets is NULL the current partition assignment will be used instead.
  *
  * If \p async is false this operation will block until the broker offset commit
@@ -3479,6 +3698,11 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
  * configured the callback will be enqueued for a future call to
  * rd_kafka_poll(), rd_kafka_consumer_poll() or similar.
+ *
+ * @returns An error code indiciating if the commit was successful,
+ *          or successfully scheduled if asynchronous, or failed.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
@@ -3487,6 +3711,7 @@ rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
 
 /**
  * @brief Commit message's offset on broker for the message's partition.
+ *        The committed offset is the message's offset + 1.
  *
  * @sa rd_kafka_commit
  */
@@ -3568,6 +3793,92 @@ rd_kafka_position (rd_kafka_t *rk,
 		   rd_kafka_topic_partition_list_t *partitions);
 
 
+
+
+/**
+ * @returns the current consumer group metadata associated with this consumer,
+ *          or NULL if \p rk is not a consumer configured with a \c group.id.
+ *          This metadata object should be passed to the transactional
+ *          producer's rd_kafka_send_offsets_to_transaction() API.
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ *
+ * @sa rd_kafka_send_offsets_to_transaction()
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
+
+
+/**
+ * @brief Create a new consumer group metadata object.
+ *        This is typically only used for writing tests.
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new (const char *group_id);
+
+
+/**
+ * @brief Frees the consumer group metadata object as returned by
+ *        rd_kafka_consumer_group_metadata().
+ */
+RD_EXPORT void
+rd_kafka_consumer_group_metadata_destroy (rd_kafka_consumer_group_metadata_t *);
+
+
+/**
+ * @brief Serialize the consumer group metadata to a binary format.
+ *        This is mainly for client binding use and not for application use.
+ *
+ * @remark The serialized metadata format is private and is not compatible
+ *         across different versions or even builds of librdkafka.
+ *         It should only be used in the same process runtime and must only
+ *         be passed to rd_kafka_consumer_group_metadata_read().
+ *
+ * @param cgmd Metadata to be serialized.
+ * @param bufferp On success this pointer will be updated to point to na
+ *                allocated buffer containing the serialized metadata.
+ *                The buffer must be freed with rd_kafka_mem_free().
+ * @param sizep The pointed to size will be updated with the size of
+ *              the serialized buffer.
+ *
+ * @returns NULL on success or an error object on failure.
+ *
+ * @sa rd_kafka_consumer_group_metadata_read()
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_consumer_group_metadata_write (
+        const rd_kafka_consumer_group_metadata_t *cgmd,
+        void **bufferp, size_t *sizep);
+
+/**
+ * @brief Reads serialized consumer group metadata and returns a
+ *        consumer group metadata object.
+ *        This is mainly for client binding use and not for application use.
+ *
+ * @remark The serialized metadata format is private and is not compatible
+ *         across different versions or even builds of librdkafka.
+ *         It should only be used in the same process runtime and must only
+ *         be passed to rd_kafka_consumer_group_metadata_read().
+ *
+ * @param cgmdp On success this pointer will be updated to point to a new
+ *              consumer group metadata object which must be freed with
+ *              rd_kafka_consumer_group_metadata_destroy().
+ * @param buffer Pointer to the serialized data.
+ * @param size Size of the serialized data.
+ *
+ * @returns NULL on success or an error object on failure.
+ *
+ * @sa rd_kafka_consumer_group_metadata_write()
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_consumer_group_metadata_read (
+        rd_kafka_consumer_group_metadata_t **cgmdp,
+        const void *buffer, size_t size);
+
 /**@}*/
 
 
@@ -3611,7 +3922,7 @@ rd_kafka_position (rd_kafka_t *rk,
  * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
  * once the delivery status (success or failure) is known. The delivery report
  * is trigged by the application calling `rd_kafka_poll()` (at regular
- * intervals) or `rd_kafka_flush()` (at termination). 
+ * intervals) or `rd_kafka_flush()` (at termination).
  *
  * Since producing is asynchronous, you should call `rd_kafka_flush()` before
  * you destroy the producer. Otherwise, any outstanding messages will be
@@ -3641,21 +3952,26 @@ rd_kafka_position (rd_kafka_t *rk,
  *                           Messages are considered in-queue from the point they
  *                           are accepted by produce() until their corresponding
  *                           delivery report callback/event returns.
- *                           It is thus a requirement to call 
+ *                           It is thus a requirement to call
  *                           rd_kafka_poll() (or equiv.) from a separate
  *                           thread when F_BLOCK is used.
  *                           See WARNING on \c RD_KAFKA_MSG_F_BLOCK above.
  *
  *    RD_KAFKA_MSG_F_FREE - rdkafka will free(3) \p payload when it is done
  *                          with it.
- *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
+ *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
  *    RD_KAFKA_MSG_F_PARTITION - produce_batch() will honour per-message
  *                               partition, either set manually or by the
  *                               configured partitioner.
  *
- *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *    .._F_FREE and .._F_COPY are mutually exclusive. If neither of these are
+ *    set, the caller must ensure that the memory backing \p payload remains
+ *    valid and is not modified or reused until the delivery callback is
+ *    invoked. Other buffers passed to `rd_kafka_produce()` don't have this
+ *    restriction on reuse, i.e. the memory backing the key or the topic name
+ *    may be reused as soon as `rd_kafka_produce()` returns.
  *
  *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
  *    the memory associated with the payload is still the caller's
@@ -3675,6 +3991,10 @@ rd_kafka_position (rd_kafka_t *rk,
  *         from this function. on_acknowledgement() will only be called if the
  *         message fails partitioning.
  *
+ * @remark If the producer is transactional (\c transactional.id is configured)
+ *         producing is only allowed during an on-going transaction, namely
+ *         after rd_kafka_begin_transaction() has been called.
+ *
  * @returns 0 on success or -1 on error in which case errno is set accordingly:
  *  - ENOBUFS  - maximum number of outstanding messages has been reached:
  *               "queue.buffering.max.messages"
@@ -3687,7 +4007,10 @@ rd_kafka_position (rd_kafka_t *rk,
  *  - ENOENT   - topic is unknown in the Kafka cluster.
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
  *  - ECANCELED - fatal error has been raised on producer, see
- *                rd_kafka_fatal_error().
+ *                rd_kafka_fatal_error(),
+ *               (RD_KAFKA_RESP_ERR__FATAL).
+ *  - ENOEXEC  - transactional state forbids producing
+ *               (RD_KAFKA_RESP_ERR__STATE)
  *
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.
  */
@@ -3705,14 +4028,32 @@ int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
  * The message is defined by a va-arg list using \c rd_kafka_vtype_t
  * tag tuples which must be terminated with a single \c RD_KAFKA_V_END.
  *
- * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code as
+ *          described in rd_kafka_produce().
  *          \c RD_KAFKA_RESP_ERR__CONFLICT is returned if _V_HEADER and
  *          _V_HEADERS are mixed.
  *
- * @sa rd_kafka_produce, RD_KAFKA_V_END
+ * @sa rd_kafka_produce, rd_kafka_produceva, RD_KAFKA_V_END
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
+
+
+/**
+ * @brief Produce and send a single message to broker.
+ *
+ * The message is defined by an array of \c rd_kafka_vu_t of
+ * count \p cnt.
+ *
+ * @returns an error object on failure or NULL on success.
+ *          See rd_kafka_producev() for specific error codes.
+ *
+ * @sa rd_kafka_produce, rd_kafka_producev, RD_KAFKA_V_END
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_produceva (rd_kafka_t *rk,
+                                      const rd_kafka_vu_t *vus,
+                                      size_t cnt);
 
 
 /**
@@ -3730,7 +4071,8 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
  *  - payload,len    Message payload and length
  *  - key,key_len    Optional message key
  *  - _private       Message opaque pointer (msg_opaque)
- *  - err            Will be set according to success or failure.
+ *  - err            Will be set according to success or failure, see
+ *                   rd_kafka_produce() for possible error codes.
  *                   Application only needs to check for errors if
  *                   return value != \p message_cnt.
  *
@@ -3758,6 +4100,14 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *        before terminating.
  *
  * @remark This function will call rd_kafka_poll() and thus trigger callbacks.
+ *
+ * @remark If RD_KAFKA_EVENT_DR has been enabled
+ *         (through rd_kafka_conf_set_events()) this function will not call
+ *         rd_kafka_poll() but instead wait for the librdkafka-handled
+ *         message count to reach zero. This requires the application to
+ *         serve the event queue in a separate thread.
+ *         In this mode only messages are counted, not other types of
+ *         queued events.
  *
  * @returns RD_KAFKA_RESP_ERR__TIMED_OUT if \p timeout_ms was reached before all
  *          outstanding requests were completed, else RD_KAFKA_RESP_ERR_NO_ERROR
@@ -3899,9 +4249,13 @@ typedef struct rd_kafka_metadata {
  *                   with rd_kafka_metadata_destroy().
  *  - \p timeout_ms  maximum response time before failing.
  *
- * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
- * will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
- * other error code on error.
+ * @remark Consumer: If \p all_topics is non-zero the Metadata response
+ *         information may trigger a re-join if any subscribed topics
+ *         have changed partition count or existence state.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
+ *          will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
+ *          other error code on error.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -4100,6 +4454,8 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 
 /**
  * @brief Builtin log sink: print to syslog.
+ * @remark This logger is only available if librdkafka was built
+ *         with syslog support.
  */
 RD_EXPORT
 void rd_kafka_log_syslog(const rd_kafka_t *rk, int level,
@@ -4402,6 +4758,22 @@ void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
 RD_EXPORT
 int rd_kafka_event_log (rd_kafka_event_t *rkev,
 			const char **fac, const char **str, int *level);
+
+
+/**
+ * @brief Extract log debug context from event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_LOG
+ *
+ *  @param rkev the event to extract data from.
+ *  @param dst destination string for comma separated list.
+ *  @param dstsize size of provided dst buffer.
+ *  @returns 0 on success or -1 if unsupported event type.
+ */
+RD_EXPORT
+int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
+            char *dst, size_t dstsize);
 
 
 /**
@@ -5210,7 +5582,7 @@ rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres);
 /**
  * @returns the name of the topic for the given topic result.
  * @remark lifetime of the returned string is the same as the \p topicres.
- *         
+ *
  */
 RD_EXPORT const char *
 rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
@@ -5221,7 +5593,6 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
 
 /**
  * @name Admin API
- *
  * @{
  *
  * @brief The Admin API enables applications to perform administrative
@@ -5363,7 +5734,7 @@ rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
  *          case an error string will be written \p errstr.
  *
- * @remark This option is valid for CreateTopics, DeleteTopics and 
+ * @remark This option is valid for CreateTopics, DeleteTopics and
  *         CreatePartitions.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -5441,13 +5812,13 @@ rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
 
 
 
-/**
- * @section CreateTopics - create topics in cluster
- *
+/*
+ * CreateTopics - create topics in cluster.
  *
  */
 
 
+/*! Defines a new topic to be created. */
 typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
 
 /**
@@ -5572,7 +5943,7 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
  *
  * The returned \p topics life-time is the same as the \p result object.
  *
- * @param result Result to get topics from. 
+ * @param result Result to get topics from.
  * @param cntp Updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_topic_result_t **
@@ -5584,12 +5955,12 @@ rd_kafka_CreateTopics_result_topics (
 
 
 
-/**
- * @section DeleteTopics - delete topics from cluster
- *
+/*
+ * DeleteTopics - delete topics from cluster
  *
  */
 
+/*! Represents a topic to be deleted. */
 typedef struct rd_kafka_DeleteTopic_s rd_kafka_DeleteTopic_t;
 
 /**
@@ -5665,12 +6036,11 @@ rd_kafka_DeleteTopics_result_topics (
 
 
 /**
- * @section CreatePartitions - add partitions to topic.
- *
+ * CreatePartitions - add partitions to topic.
  *
  */
 
-/*! NewPartitions */
+/*! Defines a new partition to be created. */
 typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
@@ -5789,36 +6159,38 @@ rd_kafka_CreatePartitions_result_topics (
 
 
 /**
- * @section Cluster, broker, topic configuration entries, sources, etc.
+ * Cluster, broker, topic configuration entries, sources, etc.
  *
- * These entities relate to the cluster, not the local client.
+ */
+
+/**
+ * @enum rd_kafka_ConfigSource_t
+ *
+ * @brief Apache Kafka config sources.
+ *
+ * @remark These entities relate to the cluster, not the local client.
  *
  * @sa rd_kafka_conf_set(), et.al. for local client configuration.
- *
- */
-
-/*!
- * Apache Kafka config sources
  */
 typedef enum rd_kafka_ConfigSource_t {
-        /**< Source unknown, e.g., in the ConfigEntry used for alter requests
-         *   where source is not set */
+        /** Source unknown, e.g., in the ConfigEntry used for alter requests
+         *  where source is not set */
         RD_KAFKA_CONFIG_SOURCE_UNKNOWN_CONFIG = 0,
-        /**< Dynamic topic config that is configured for a specific topic */
+        /** Dynamic topic config that is configured for a specific topic */
         RD_KAFKA_CONFIG_SOURCE_DYNAMIC_TOPIC_CONFIG = 1,
-        /**< Dynamic broker config that is configured for a specific broker */
+        /** Dynamic broker config that is configured for a specific broker */
         RD_KAFKA_CONFIG_SOURCE_DYNAMIC_BROKER_CONFIG = 2,
-        /**< Dynamic broker config that is configured as default for all
-         *   brokers in the cluster */
+        /** Dynamic broker config that is configured as default for all
+         *  brokers in the cluster */
         RD_KAFKA_CONFIG_SOURCE_DYNAMIC_DEFAULT_BROKER_CONFIG = 3,
-        /**< Static broker config provided as broker properties at startup
-         * (e.g. from server.properties file) */
+        /** Static broker config provided as broker properties at startup
+         *  (e.g. from server.properties file) */
         RD_KAFKA_CONFIG_SOURCE_STATIC_BROKER_CONFIG = 4,
-        /**< Built-in default configuration for configs that have a
-         *   default value */
+        /** Built-in default configuration for configs that have a
+         *  default value */
         RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 5,
 
-        /**< Number of source types defined */
+        /** Number of source types defined */
         RD_KAFKA_CONFIG_SOURCE__CNT,
 } rd_kafka_ConfigSource_t;
 
@@ -5830,7 +6202,7 @@ RD_EXPORT const char *
 rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource);
 
 
-/*! ConfigEntry */
+/*! Apache Kafka configuration entry. */
 typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
 
 /**
@@ -5917,7 +6289,7 @@ typedef enum rd_kafka_ResourceType_t {
 RD_EXPORT const char *
 rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
 
-/*! ConfigResource */
+/*! Apache Kafka configuration resource. */
 typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
 
 
@@ -6010,8 +6382,7 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
 
 
 /**
- * @section AlterConfigs - alter cluster configuration.
- *
+ * AlterConfigs - alter cluster configuration.
  *
  */
 
@@ -6073,8 +6444,7 @@ rd_kafka_AlterConfigs_result_resources (
 
 
 /**
- * @section DescribeConfigs - retrieve cluster configuration.
- *
+ * DescribeConfigs - retrieve cluster configuration.
  *
  */
 
@@ -6085,14 +6455,14 @@ rd_kafka_AlterConfigs_result_resources (
  * The returned configuration includes default values and the
  * rd_kafka_ConfigEntry_is_default() or rd_kafka_ConfigEntry_source()
  * methods may be used to distinguish them from user supplied values.
- * 
+ *
  * The value of config entries where rd_kafka_ConfigEntry_is_sensitive()
  * is true will always be NULL to avoid disclosing sensitive
  * information, such as security settings.
- * 
+ *
  * Configuration entries where rd_kafka_ConfigEntry_is_read_only()
  * is true can't be updated (with rd_kafka_AlterConfigs()).
- * 
+ *
  * Synonym configuration entries are returned if the broker supports
  * it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
  *
@@ -6216,6 +6586,427 @@ rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
 RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
+
+/**@}*/
+
+
+/**
+ * @name Transactional producer API
+ *
+ * The transactional producer operates on top of the idempotent producer,
+ * and provides full exactly-once semantics (EOS) for Apache Kafka when used
+ * with the transaction aware consumer (\c isolation.level=read_committed).
+ *
+ * A producer instance is configured for transactions by setting the
+ * \c transactional.id to an identifier unique for the application. This
+ * id will be used to fence stale transactions from previous instances of
+ * the application, typically following an outage or crash.
+ *
+ * After creating the transactional producer instance using rd_kafka_new()
+ * the transactional state must be initialized by calling
+ * rd_kafka_init_transactions(). This is a blocking call that will
+ * acquire a runtime producer id from the transaction coordinator broker
+ * as well as abort any stale transactions and fence any still running producer
+ * instances with the same \c transactional.id.
+ *
+ * Once transactions are initialized the application may begin a new
+ * transaction by calling rd_kafka_begin_transaction().
+ * A producer instance may only have one single on-going transaction.
+ *
+ * Any messages produced after the transaction has been started will
+ * belong to the ongoing transaction and will be committed or aborted
+ * atomically.
+ * It is not permitted to produce messages outside a transaction
+ * boundary, e.g., before rd_kafka_begin_transaction() or after
+ * rd_kafka_commit_transaction(), rd_kafka_abort_transaction(), or after
+ * the current transaction has failed.
+ *
+ * If consumed messages are used as input to the transaction, the consumer
+ * instance must be configured with \c enable.auto.commit set to \c false.
+ * To commit the consumed offsets along with the transaction pass the
+ * list of consumed partitions and the last offset processed + 1 to
+ * rd_kafka_send_offsets_to_transaction() prior to committing the transaction.
+ * This allows an aborted transaction to be restarted using the previously
+ * committed offsets.
+ *
+ * To commit the produced messages, and any consumed offsets, to the
+ * current transaction, call rd_kafka_commit_transaction().
+ * This call will block until the transaction has been fully committed or
+ * failed (typically due to fencing by a newer producer instance).
+ *
+ * Alternatively, if processing fails, or an abortable transaction error is
+ * raised, the transaction needs to be aborted by calling
+ * rd_kafka_abort_transaction() which marks any produced messages and
+ * offset commits as aborted.
+ *
+ * After the current transaction has been committed or aborted a new
+ * transaction may be started by calling rd_kafka_begin_transaction() again.
+ *
+ * @par Retriable errors
+ * Some error cases allow the attempted operation to be retried, this is
+ * indicated by the error object having the retriable flag set which can
+ * be detected by calling rd_kafka_error_is_retriable().
+ * When this flag is set the application may retry the operation immediately
+ * or preferably after a shorter grace period (to avoid busy-looping).
+ * Retriable errors include timeouts, broker transport failures, etc.
+ *
+ * @par Abortable errors
+ * An ongoing transaction may fail permanently due to various errors,
+ * such as transaction coordinator becoming unavailable, write failures to the
+ * Apache Kafka log, under-replicated partitions, etc.
+ * At this point the producer application must abort the current transaction
+ * using rd_kafka_abort_transaction() and optionally start a new transaction
+ * by calling rd_kafka_begin_transaction().
+ * Whether an error is abortable or not is detected by calling
+ * rd_kafka_error_txn_requires_abort() on the returned error object.
+ *
+ * @par Fatal errors
+ * While the underlying idempotent producer will typically only raise
+ * fatal errors for unrecoverable cluster errors where the idempotency
+ * guarantees can't be maintained, most of these are treated as abortable by
+ * the transactional producer since transactions may be aborted and retried
+ * in their entirety;
+ * The transactional producer on the other hand introduces a set of additional
+ * fatal errors which the application needs to handle by shutting down the
+ * producer and terminate. There is no way for a producer instance to recover
+ * from fatal errors.
+ * Whether an error is fatal or not is detected by calling
+ * rd_kafka_error_is_fatal() on the returned error object or by checking
+ * the global rd_kafka_fatal_error() code.
+ * Fatal errors are raised by triggering the \c error_cb (see the
+ * Fatal error chapter in INTRODUCTION.md for more information), and any
+ * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
+ * or have the fatal flag set (see rd_kafka_error_is_fatal()).
+ * The originating fatal error code can be retrieved by calling
+ * rd_kafka_fatal_error().
+ *
+ * @par Handling of other errors
+ * For errors that have neither retriable, abortable or the fatal flag set
+ * it is not always obvious how to handle them. While some of these errors
+ * may be indicative of bugs in the application code, such as when
+ * an invalid parameter is passed to a method, other errors might originate
+ * from the broker and be passed thru as-is to the application.
+ * The general recommendation is to treat these errors, that have
+ * neither the retriable or abortable flags set, as fatal.
+ *
+ * @par Error handling example
+ * @code
+ *     retry:
+ *        rd_kafka_error_t *error;
+ *
+ *        error = rd_kafka_commit_transaction(producer, 10*1000);
+ *        if (!error)
+ *            return success;
+ *        else if (rd_kafka_error_txn_requires_abort(error)) {
+ *            do_abort_transaction_and_reset_inputs();
+ *        } else if (rd_kafka_error_is_retriable(error)) {
+ *            rd_kafka_error_destroy(error);
+ *            goto retry;
+ *        } else { // treat all other errors as fatal errors
+ *            fatal_error(rd_kafka_error_string(error));
+ *        }
+ *        rd_kafka_error_destroy(error);
+ * @endcode
+ *
+ *
+ * @{
+ */
+
+
+/**
+ * @brief Initialize transactions for the producer instance.
+ *
+ * This function ensures any transactions initiated by previous instances
+ * of the producer with the same \c transactional.id are completed.
+ * If the previous instance failed with a transaction in progress the
+ * previous transaction will be aborted.
+ * This function needs to be called before any other transactional or
+ * produce functions are called when the \c transactional.id is configured.
+ *
+ * If the last transaction had begun completion (following transaction commit)
+ * but not yet finished, this function will await the previous transaction's
+ * completion.
+ *
+ * When any previous transactions have been fenced this function
+ * will acquire the internal producer id and epoch, used in all future
+ * transactional messages issued by this producer instance.
+ *
+ * Upon successful return from this function the application has to perform at
+ * least one of the following operations within \c transaction.timeout.ms to
+ * avoid timing out the transaction on the broker:
+ *   * rd_kafka_produce() (et.al)
+ *   * rd_kafka_send_offsets_to_transaction()
+ *   * rd_kafka_commit_transaction()
+ *   * rd_kafka_abort_transaction()
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call init_transactions() again.
+ *
+ * @remark This function may block up to \p timeout_ms milliseconds.
+ *
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether a fatal
+ *          error has been raised by calling rd_kafka_error_is_fatal().
+ *          Error codes:
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction coordinator
+ *          could be not be contacted within \p timeout_ms (retriable),
+ *          RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE if the transaction
+ *          coordinator is not available (retriable),
+ *          RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS if a previous transaction
+ *          would not complete within \p timeout_ms (retriable),
+ *          RD_KAFKA_RESP_ERR__STATE if transactions have already been started
+ *          or upon fatal error,
+ *          RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE if the broker(s) do not
+ *          support transactions (<Apache Kafka 0.11), this also raises a
+ *          fatal error,
+ *          RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT if the configured
+ *          \c transaction.timeout.ms is outside the broker-configured range,
+ *          this also raises a fatal error,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          or \p timeout_ms is out of range.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
+
+
+
+/**
+ * @brief Begin a new transaction.
+ *
+ * rd_kafka_init_transactions() must have been called successfully (once)
+ * before this function is called.
+ *
+ * Any messages produced, offsets sent (rd_kafka_send_offsets_to_transaction()),
+ * etc, after the successful return of this function will be part of
+ * the transaction and committed or aborted atomatically.
+ *
+ * Finish the transaction by calling rd_kafka_commit_transaction() or
+ * abort the transaction by calling rd_kafka_abort_transaction().
+ *
+ * @param rk Producer instance.
+ *
+ * @returns NULL on success or an error object on failure.
+ *          Check whether a fatal error has been raised by
+ *          calling rd_kafka_error_is_fatal().
+ *          Error codes:
+ *          RD_KAFKA_RESP_ERR__STATE if a transaction is already in progress
+ *          or upon fatal error,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark With the transactional producer, rd_kafka_produce(),
+ *         rd_kafka_producev(), et.al, are only allowed during an on-going
+ *         transaction, as started with this function.
+ *         Any produce call outside an on-going transaction, or for a failed
+ *         transaction, will fail.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk);
+
+
+/**
+ * @brief Sends a list of topic partition offsets to the consumer group
+ *        coordinator for \p cgmetadata, and marks the offsets as part
+ *        part of the current transaction.
+ *        These offsets will be considered committed only if the transaction is
+ *        committed successfully.
+ *
+ *        The offsets should be the next message your application will consume,
+ *        i.e., the last processed message's offset + 1 for each partition.
+ *        Either track the offsets manually during processing or use
+ *        rd_kafka_position() (on the consumer) to get the current offsets for
+ *        the partitions assigned to the consumer.
+ *
+ *        Use this method at the end of a consume-transform-produce loop prior
+ *        to committing the transaction with rd_kafka_commit_transaction().
+ *
+ * @param rk Producer instance.
+ * @param offsets List of offsets to commit to the consumer group upon
+ *                successful commit of the transaction. Offsets should be
+ *                the next message to consume, e.g., last processed message + 1.
+ * @param cgmetadata The current consumer group metadata as returned by
+ *                   rd_kafka_consumer_group_metadata() on the consumer
+ *                   instance the provided offsets were consumed from.
+ * @param timeout_ms Maximum time allowed to register the offsets on the broker.
+ *
+ * @remark This function must be called on the transactional producer instance,
+ *         not the consumer.
+ *
+ * @remark The consumer must disable auto commits
+ *         (set \c enable.auto.commit to false on the consumer).
+ *
+ * @remark Logical and invalid offsets (such as RD_KAFKA_OFFSET_INVALID) in
+ *         \p offsets will be ignored, if there are no valid offsets in
+ *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
+ *         and no action will be taken.
+ *
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether an abortable
+ *          or fatal error has been raised by calling
+ *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
+ *          respectively.
+ *          Error codes:
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED if the producer is
+ *          not authorized to write the consumer offsets to the group
+ *          coordinator,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          or if the \p consumer_group_id or \p offsets are empty,
+ *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous
+ *          rd_kafka_send_offsets_to_transaction() call is still in progress.
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_send_offsets_to_transaction (
+        rd_kafka_t *rk,
+        const rd_kafka_topic_partition_list_t *offsets,
+        const rd_kafka_consumer_group_metadata_t *cgmetadata,
+        int timeout_ms);
+
+
+/**
+ * @brief Commit the current transaction (as started with
+ *        rd_kafka_begin_transaction()).
+ *
+ *        Any outstanding messages will be flushed (delivered) before actually
+ *        committing the transaction.
+ *
+ *        If any of the outstanding messages fail permanently the current
+ *        transaction will enter the abortable error state and this
+ *        function will return an abortable error, in this case the application
+ *        must call rd_kafka_abort_transaction() before attempting a new
+ *        transaction with rd_kafka_begin_transaction().
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call this function again.
+ *
+ * @remark This function will block until all outstanding messages are
+ *         delivered and the transaction commit request has been successfully
+ *         handled by the transaction coordinator, or until \p timeout_ms
+ *         expires, which ever comes first. On timeout the application may
+ *         call the function again.
+ *
+ * @remark Will automatically call rd_kafka_flush() to ensure all queued
+ *         messages are delivered before attempting to commit the
+ *         transaction.
+ *         If the application has enabled RD_KAFKA_EVENT_DR it must
+ *         serve the event queue in a separate thread since rd_kafka_flush()
+ *         will not serve delivery reports in this mode.
+ *
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether an abortable
+ *          or fatal error has been raised by calling
+ *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
+ *          respectively.
+ *          Error codes:
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
+ *          complete commmitted within \p timeout_ms, this is a retriable
+ *          error as the commit continues in the background,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
+
+
+/**
+ * @brief Aborts the ongoing transaction.
+ *
+ *        This function should also be used to recover from non-fatal abortable
+ *        transaction errors.
+ *
+ *        Any outstanding messages will be purged and fail with
+ *        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT or RD_KAFKA_RESP_ERR__PURGE_QUEUE.
+ *        See rd_kafka_purge() for details.
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call this function again.
+ *
+ * @remark This function will block until all outstanding messages are purged
+ *         and the transaction abort request has been successfully
+ *         handled by the transaction coordinator, or until \p timeout_ms
+ *         expires, which ever comes first. On timeout the application may
+ *         call the function again.
+ *         If the application has enabled RD_KAFKA_EVENT_DR it must
+ *         serve the event queue in a separate thread since rd_kafka_flush()
+ *         will not serve delivery reports in this mode.
+
+ *
+ * @returns NULL on success or an error object on failure.
+ *          Check whether the returned error object permits retrying
+ *          by calling rd_kafka_error_is_retriable(), or whether a fatal error
+ *          has been raised by calling rd_kafka_error_is_fatal().
+ *          Error codes:
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
+ *          complete commmitted within \p timeout_ms, this is a retriable
+ *          error as the commit continues in the background,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          Other error codes not listed here may be returned, depending on
+ *          broker version.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms);
+
 
 /**@}*/
 

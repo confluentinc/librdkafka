@@ -96,7 +96,7 @@ rd_tmpabuf_alloc0 (const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
 	if (unlikely(tab->of + size > tab->size)) {
 		if (tab->assert_on_fail) {
 			fprintf(stderr,
-				"%s: %s:%d: requested size %zd + %zd > %zd\n",
+				"%s: %s:%d: requested size %"PRIusz" + %"PRIusz" > %"PRIusz"\n",
 				__FUNCTION__, func, line, tab->of, size,
 				tab->size);
 			assert(!*"rd_tmpabuf_alloc: not enough size in buffer");
@@ -164,9 +164,12 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 			rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);	\
                         rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
                                    "PROTOERR",                          \
-                                   "Protocol parse failure "            \
+                                   "Protocol parse failure for %s v%hd " \
                                    "at %"PRIusz"/%"PRIusz" (%s:%i) "    \
                                    "(incorrect broker.version.fallback?)", \
+                                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr. \
+                                                       ApiKey),         \
+                                   rkbuf->rkbuf_reqhdr.ApiVersion,      \
                                    rd_slice_offset(&rkbuf->rkbuf_reader), \
                                    rd_slice_size(&rkbuf->rkbuf_reader), \
                                    __FUNCTION__, __LINE__);             \
@@ -290,6 +293,13 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 *(dstptr) = be32toh(_v);                                \
         } while (0)
 
+#define rd_kafka_buf_peek_i32(rkbuf,of,dstptr) do {                     \
+                int32_t _v;                                             \
+                rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));          \
+                *(dstptr) = be32toh(_v);                                \
+        } while (0)
+
+
 /* Same as .._read_i32 but does a direct assignment.
  * dst is assumed to be a scalar, not pointer. */
 #define rd_kafka_buf_read_i32a(rkbuf, dst) do {				\
@@ -335,6 +345,21 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 *(dst) = _v;                                            \
         } while (0)
 
+
+/**
+ * @brief Read unsigned varint and store in uint64_t \p dst
+ */
+#define rd_kafka_buf_read_uvarint(rkbuf,dst) do {                       \
+                uint64_t _v;                                            \
+                size_t _r = rd_slice_read_uvarint(&(rkbuf)->rkbuf_reader, \
+                                                  &_v);                 \
+                if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
+                        rd_kafka_buf_underflow_fail(rkbuf, (size_t)0,   \
+                                                    "uvarint parsing failed"); \
+                *(dst) = _v;                                            \
+        } while (0)
+
+
 /* Read Kafka String representation (2+N).
  * The kstr data will be updated to point to the rkbuf. */
 #define rd_kafka_buf_read_str(rkbuf, kstr) do {                         \
@@ -368,6 +393,32 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 		_dst[_slen] = '\0';					\
 		dst = (void *)_dst;					\
 	} while (0)
+
+/**
+ * @brief Read Kafka COMPACT_STRING (VARINT+N) or
+ *        standard String representation (2+N).
+ *
+ * The kstr data will be updated to point to the rkbuf. */
+#define rd_kafka_buf_read_compact_str(rkbuf, kstr) do {                 \
+                int _klen;                                              \
+                if ((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {     \
+                        uint64_t _uva;                                  \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_uva);        \
+                        (kstr)->len = ((int32_t)_uva) - 1;              \
+                        _klen = (kstr)->len;                            \
+                } else {                                                \
+                        rd_kafka_buf_read_i16a(rkbuf, (kstr)->len);     \
+                        _klen = RD_KAFKAP_STR_LEN(kstr);                \
+                }                                                       \
+                if (RD_KAFKAP_STR_IS_NULL(kstr))                        \
+                        (kstr)->str = NULL;                             \
+                else if (RD_KAFKAP_STR_LEN(kstr) == 0)                  \
+                        (kstr)->str = "";                               \
+                else if (!((kstr)->str =                                \
+                           rd_slice_ensure_contig(&rkbuf->rkbuf_reader, \
+                                                  _klen)))              \
+                        rd_kafka_buf_check_len(rkbuf, _klen);           \
+        } while (0)
 
 /**
  * Skip a string.
@@ -445,6 +496,42 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 
 
 /**
+ * @brief Discard all KIP-482 Tags at the current position in the buffer.
+ */
+#define rd_kafka_buf_skip_tags(rkbuf) do {                              \
+        uint64_t _tagcnt;                                               \
+        if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))            \
+                break;                                                  \
+        rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);                     \
+        while (_tagcnt-- > 0) {                                         \
+               uint64_t _tagtype, _taglen;                              \
+               rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);             \
+               rd_kafka_buf_read_uvarint(rkbuf, &_taglen);              \
+               if (_taglen > 1)                                         \
+                       rd_kafka_buf_skip(rkbuf, (size_t)(_taglen - 1)); \
+        }                                                               \
+        } while (0)
+
+
+/**
+ * @brief Reads an ARRAY or COMPACT_ARRAY count depending on buffer type.
+ */
+#define rd_kafka_buf_read_arraycnt(rkbuf,arrcnt,maxval) do {            \
+        if ((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {             \
+                uint64_t _uva;                                          \
+                rd_kafka_buf_read_uvarint(rkbuf, &_uva);                \
+                *(arrcnt) = (int32_t)_uva - 1;                          \
+        } else {                                                        \
+                rd_kafka_buf_read_i32(rkbuf, arrcnt);                   \
+        }                                                               \
+        if (*(arrcnt) < 0 || ((maxval) != -1 && *(arrcnt) > (maxval)))  \
+                                rd_kafka_buf_parse_fail(rkbuf,          \
+                                                        "ApiArrayCnt %"PRId32" out of range", \
+                                                        *(arrcnt));     \
+        } while (0)
+
+
+/**
  * Response handling callback.
  *
  * NOTE: Callbacks must check for 'err == RD_KAFKA_RESP_ERR__DESTROY'
@@ -462,6 +549,19 @@ typedef void (rd_kafka_resp_cb_t) (rd_kafka_t *rk,
                                    rd_kafka_buf_t *request,
                                    void *opaque);
 
+
+/**
+ * @brief Sender callback. This callback is used to construct and send (enq)
+ *        a rkbuf on a particular broker.
+ */
+typedef rd_kafka_resp_err_t (rd_kafka_send_req_cb_t) (
+        rd_kafka_broker_t *rkb,
+        rd_kafka_op_t *rko,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_resp_cb_t *resp_cb,
+        void *reply_opaque);
+
+
 struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
 
@@ -470,6 +570,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_ts_t rkbuf_ts_retry;    /* Absolute send retry time */
 
 	int     rkbuf_flags; /* RD_KAFKA_OP_F */
+
+        /** What convenience flags to copy from request to response along
+         *  with the reqhdr. */
+#define RD_KAFKA_BUF_FLAGS_RESP_COPY_MASK  (RD_KAFKA_OP_F_FLEXVER)
 
         rd_kafka_prio_t rkbuf_prio; /**< Request priority */
 
@@ -514,8 +618,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_refcnt_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
-	int     rkbuf_retries;            /* Retries so far. */
-#define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
+        int     rkbuf_max_retries;        /**< Maximum retries to attempt. */
+#define RD_KAFKA_BUF_NO_RETRIES 0         /**< Do not retry */
+        int     rkbuf_retries;            /**< Retries so far. */
+
 
         int     rkbuf_features;   /* Required feature(s) that must be
                                    * supported by broker. */
@@ -581,7 +687,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         char *reason;       /* Textual reason */
                         rd_kafka_op_t *rko; /* Originating rko with replyq
                                              * (if any) */
-                        int all_topics;     /* Full/All topics requested */
+                        rd_bool_t all_topics; /**< Full/All topics requested */
+                        rd_bool_t cgrp_update; /**< Update cgrp with topic
+                                                *   status from response. */
 
                         int *decr;          /* Decrement this integer by one
                                              * when request is complete:
@@ -814,7 +922,7 @@ static RD_INLINE void rd_kafka_buf_update_i16 (rd_kafka_buf_t *rkbuf,
  */
 static RD_INLINE size_t rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf,
                                                int32_t v) {
-        v = htobe32(v);
+        v = (int32_t)htobe32(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
 }
 
@@ -872,15 +980,41 @@ rd_kafka_buf_write_varint (rd_kafka_buf_t *rkbuf, int64_t v) {
         return rd_kafka_buf_write(rkbuf, varint, sz);
 }
 
+/**
+ * @brief Write varint-encoded unsigned value to buffer.
+ */
+static RD_INLINE size_t
+rd_kafka_buf_write_uvarint (rd_kafka_buf_t *rkbuf, uint64_t v) {
+        char varint[RD_UVARINT_ENC_SIZEOF(v)];
+        size_t sz;
+
+        sz = rd_uvarint_enc_u64(varint, sizeof(varint), v);
+
+        return rd_kafka_buf_write(rkbuf, varint, sz);
+}
+
 
 /**
  * Write (copy) Kafka string to buffer.
  */
 static RD_INLINE size_t rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
                                                 const rd_kafkap_str_t *kstr) {
-        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_STR_SER(kstr),
-				  RD_KAFKAP_STR_SIZE(kstr));
+        size_t len;
+
+        if (!kstr || RD_KAFKAP_STR_IS_NULL(kstr))
+                return rd_kafka_buf_write_i16(rkbuf, -1);
+
+        if (RD_KAFKAP_STR_IS_SERIALIZED(kstr))
+                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_STR_SER(kstr),
+                                          RD_KAFKAP_STR_SIZE(kstr));
+
+        len = RD_KAFKAP_STR_LEN(kstr);
+        rd_kafka_buf_write_i16(rkbuf, (int16_t)len);
+        rd_kafka_buf_write(rkbuf, kstr->str, len);
+
+        return 2 + len;
 }
+
 
 /**
  * Write (copy) char * string to buffer.
@@ -898,6 +1032,36 @@ static RD_INLINE size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
         return r;
 }
 
+/**
+ * @brief Write KIP-482 COMPACT_STRING to buffer.
+ */
+static RD_INLINE size_t
+rd_kafka_buf_write_compact_str (rd_kafka_buf_t *rkbuf,
+                                const char *str, size_t len) {
+        size_t r;
+
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))
+                return rd_kafka_buf_write_str(rkbuf, str, len);
+
+        /* COMAPCT_STRING lengths are:
+         *  0   = NULL,
+         *  1   = empty
+         *  N.. = length + 1
+         */
+        if (!str)
+                len = 0;
+        else if (len == (size_t)-1)
+                len = strlen(str) + 1;
+        else
+                len++;
+
+        r = rd_kafka_buf_write_uvarint(rkbuf, (uint64_t)len);
+        if (len > 1)
+                rd_kafka_buf_write(rkbuf, str, len-1);
+        return r;
+}
+
+
 
 /**
  * Push (i.e., no copy) Kafka string to buffer iovec
@@ -913,10 +1077,23 @@ static RD_INLINE void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) Kafka bytes to buffer.
  */
-static RD_INLINE size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
-					          const rd_kafkap_bytes_t *kbytes){
-        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-                                  RD_KAFKAP_BYTES_SIZE(kbytes));
+static RD_INLINE size_t
+rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
+                           const rd_kafkap_bytes_t *kbytes) {
+        size_t len;
+
+        if (!kbytes || RD_KAFKAP_BYTES_IS_NULL(kbytes))
+                return rd_kafka_buf_write_i32(rkbuf, -1);
+
+        if (RD_KAFKAP_BYTES_IS_SERIALIZED(kbytes))
+                return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
+                                          RD_KAFKAP_BYTES_SIZE(kbytes));
+
+        len = RD_KAFKAP_BYTES_LEN(kbytes);
+        rd_kafka_buf_write_i32(rkbuf, (int32_t)len);
+        rd_kafka_buf_write(rkbuf, kbytes->data, len);
+
+        return 4 + len;
 }
 
 /**
@@ -943,6 +1120,13 @@ static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
 }
 
 
+/**
+ * @brief Write bool to buffer.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_bool (rd_kafka_buf_t *rkbuf,
+                                                 rd_bool_t v) {
+        return rd_kafka_buf_write_i8(rkbuf, (int8_t)v);
+}
 
 
 /**

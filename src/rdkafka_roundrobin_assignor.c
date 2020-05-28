@@ -61,7 +61,7 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 					char *errstr, size_t errstr_size,
 					void *opaque) {
         unsigned int ti;
-	int next = 0; /* Next member id */
+	int next = -1; /* Next member id */
 
 	/* Sort topics by name */
 	qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
@@ -82,12 +82,20 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 		     partition++) {
 			rd_kafka_group_member_t *rkgm;
 
+                        next = (next+1) % rd_list_cnt(&eligible_topic->members);
+
 			/* Scan through members until we find one with a
 			 * subscription to this topic. */
 			while (!rd_kafka_group_member_find_subscription(
 				       rk, &members[next],
-				       eligible_topic->metadata->topic))
-				next++;
+				       eligible_topic->metadata->topic)) {
+                                next++; /* The next-increment modulo check above
+                                         * ensures this increment does not
+                                         * run out of range. */
+                                rd_assert(next <
+                                          rd_list_cnt(&eligible_topic->
+                                                      members));
+                        }
 
 			rkgm = &members[next];
 
@@ -102,7 +110,6 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 				rkgm->rkgm_assignment,
 				eligible_topic->metadata->topic, partition);
 
-			next = (next+1) % rd_list_cnt(&eligible_topic->members);
 		}
 	}
 

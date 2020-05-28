@@ -33,7 +33,7 @@
 #include "rdkafkacpp.h"
 
 extern "C" {
-#ifdef _MSC_VER
+#ifdef _WIN32
 /* Win32/Visual Studio */
 #include "../src/win32_config.h"
 #include "../src/rdwin32.h"
@@ -72,10 +72,12 @@ namespace Test {
    */
 
   static RD_UNUSED void Fail (std::string str) {
-    test_FAIL(__FILE__, __LINE__, 1, str.c_str());
+   test_fail0(__FILE__, __LINE__, "", 1/*do-lock*/, 1/*now*/,
+              "%s", str.c_str());
   }
   static RD_UNUSED void FailLater (std::string str) {
-    test_FAIL(__FILE__, __LINE__, 0, str.c_str());
+   test_fail0(__FILE__, __LINE__, "", 1/*do-lock*/, 0/*later*/,
+              "%s", str.c_str());
   }
   static RD_UNUSED void Skip (std::string str) {
           test_SKIP(__FILE__, __LINE__, str.c_str());

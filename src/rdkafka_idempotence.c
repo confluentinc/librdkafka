@@ -28,7 +28,10 @@
 
 #include "rd.h"
 #include "rdkafka_int.h"
+#include "rdkafka_idempotence.h"
+#include "rdkafka_txnmgr.h"
 #include "rdkafka_request.h"
+#include "rdunittest.h"
 
 #include <stdarg.h>
 
@@ -36,11 +39,17 @@
  * @name Idempotent Producer logic
  *
  *
+ * Unrecoverable idempotent producer errors that could jeopardize the
+ * idempotency guarantees if the producer was to continue operating
+ * are treated as fatal errors, unless the producer is transactional in which
+ * case the current transaction will fail (also known as an abortable error)
+ * but the producer will not raise a fatal error.
  *
  */
 
-static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
-                                                    rd_bool_t immediate);
+static void rd_kafka_idemp_pid_timer_restart (rd_kafka_t *rk,
+                                              rd_bool_t immediate,
+                                              const char *reason);
 
 
 /**
@@ -53,6 +62,21 @@ void rd_kafka_idemp_set_state (rd_kafka_t *rk,
         if (rk->rk_eos.idemp_state == new_state)
                 return;
 
+        if (rd_kafka_fatal_error_code(rk) &&
+            new_state != RD_KAFKA_IDEMP_STATE_FATAL_ERROR &&
+            new_state != RD_KAFKA_IDEMP_STATE_TERM &&
+            new_state != RD_KAFKA_IDEMP_STATE_DRAIN_RESET &&
+            new_state != RD_KAFKA_IDEMP_STATE_DRAIN_BUMP) {
+                rd_kafka_dbg(rk, EOS, "IDEMPSTATE",
+                             "Denying state change %s -> %s since a "
+                             "fatal error has been raised",
+                             rd_kafka_idemp_state2str(rk->rk_eos.
+                                                      idemp_state),
+                             rd_kafka_idemp_state2str(new_state));
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_FATAL_ERROR);
+                return;
+        }
+
         rd_kafka_dbg(rk, EOS, "IDEMPSTATE",
                      "Idempotent producer state change %s -> %s",
                      rd_kafka_idemp_state2str(rk->rk_eos.
@@ -61,128 +85,247 @@ void rd_kafka_idemp_set_state (rd_kafka_t *rk,
 
         rk->rk_eos.idemp_state = new_state;
         rk->rk_eos.ts_idemp_state = rd_clock();
+
+        /* Inform transaction manager of state change */
+        if (rd_kafka_is_transactional(rk))
+                rd_kafka_txn_idemp_state_change(rk, new_state);
 }
 
 
 
 
 
+/**
+ * @brief Find a usable broker suitable for acquiring Pid
+ *        or Coordinator query.
+ *
+ * @locks rd_kafka_wrlock() MUST be held
+ *
+ * @returns a broker with increased refcount, or NULL on error.
+ */
+rd_kafka_broker_t *
+rd_kafka_idemp_broker_any (rd_kafka_t *rk,
+                           rd_kafka_resp_err_t *errp,
+                           char *errstr, size_t errstr_size) {
+        rd_kafka_broker_t *rkb;
+        int up_cnt;
+
+        rkb = rd_kafka_broker_any_up(rk, &up_cnt,
+                                     rd_kafka_broker_filter_non_idempotent,
+                                     NULL, "acquire ProducerID");
+        if (rkb)
+                return rkb;
+
+        if (up_cnt > 0) {
+                *errp = RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                rd_snprintf(errstr, errstr_size,
+                            "%s not supported by "
+                            "any of the %d connected broker(s): requires "
+                            "Apache Kafka broker version >= 0.11.0",
+                            rd_kafka_is_transactional(rk) ?
+                            "Transactions" : "Idempotent producer",
+                            up_cnt);
+        } else {
+                *errp = RD_KAFKA_RESP_ERR__TRANSPORT;
+                rd_snprintf(errstr, errstr_size,
+                            "No brokers available for %s (%d broker(s) known)",
+                            rd_kafka_is_transactional(rk) ?
+                            "Transactions" : "Idempotent producer",
+                            rd_atomic32_get(&rk->rk_broker_cnt));
+        }
+
+        rd_kafka_dbg(rk, EOS, "PIDBROKER", "%s", errstr);
+
+        return NULL;
+}
+
 
 
 /**
- * @brief Acquire Pid by looking up a suitable broker and then
- *        sending an InitProducerIdRequest to it.
+ * @brief Check if an error needs special attention, possibly
+ *        raising a fatal error.
  *
- * @param rkb may be set to specify a broker to use, otherwise a suitable
- *            one is looked up.
+ * @returns rd_true if a fatal error was triggered, else rd_false.
  *
- * @returns 1 if a request was enqueued, or 0 if no broker was available,
- *          incorrect state, or other error.
+ * @locks rd_kafka_wrlock() MUST be held
+ * @locality rdkafka main thread
+ */
+rd_bool_t rd_kafka_idemp_check_error (rd_kafka_t *rk,
+                                      rd_kafka_resp_err_t err,
+                                      const char *errstr) {
+        rd_bool_t is_fatal = rd_false;
+
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
+        case RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT:
+        case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+                if (rd_kafka_is_transactional(rk))
+                        rd_kafka_txn_set_fatal_error(rk, RD_DONT_LOCK,
+                                                     err, "%s", errstr);
+                else
+                        rd_kafka_set_fatal_error0(rk, RD_DONT_LOCK,
+                                                  err, "%s", errstr);
+
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_FATAL_ERROR);
+
+                is_fatal = rd_true;
+                break;
+        default:
+                break;
+        }
+
+        return is_fatal;
+}
+
+
+
+/**
+ * @brief State machine for PID acquisition for the idempotent
+ *        and transactional producers.
  *
  * @locality rdkafka main thread
- * @locks none
+ * @locks rd_kafka_wrlock() MUST be held.
  */
-int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                const char *reason) {
-
+void rd_kafka_idemp_pid_fsm (rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
-        char errstr[128];
+        char errstr[512];
+        rd_kafka_broker_t *rkb;
 
-        rd_assert(thrd_is_current(rk->rk_thread));
+        /* If a fatal error has been raised we do not
+         * attempt to acquire a PID. */
+        if (unlikely(rd_kafka_fatal_error_code(rk)))
+                return;
 
-        if (unlikely(rd_kafka_fatal_error_code(rk))) {
-                /* If a fatal error has been raised we do not
-                 * attempt to acquire a new PID. */
-                return 0;
-        }
+ redo:
+        switch (rk->rk_eos.idemp_state)
+        {
+        case RD_KAFKA_IDEMP_STATE_INIT:
+        case RD_KAFKA_IDEMP_STATE_TERM:
+        case RD_KAFKA_IDEMP_STATE_FATAL_ERROR:
+                break;
 
-        rd_kafka_wrlock(rk);
-        if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_REQ_PID) {
-                rd_kafka_wrunlock(rk);
-                return 0;
-        }
+        case RD_KAFKA_IDEMP_STATE_REQ_PID:
+                /* Request (new) PID */
 
-        if (!rkb) {
-                rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                          rd_kafka_broker_filter_non_idempotent,
-                                          NULL, "acquire ProducerID");
-                if (!rkb) {
-                        int up_cnt = rd_atomic32_get(&rk->rk_broker_up_cnt);
-                        int all_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
-                        int err_unsupported =
-                                up_cnt > 0 &&
-                                rd_interval(&rk->rk_suppress.no_idemp_brokers,
-                                            5*60*1000000/*5 minutes*/, 0) > 0;
-
-                        rd_kafka_wrunlock(rk);
-                        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
-
-                        if (err_unsupported)
-                                rd_kafka_op_err(
-                                        rk,
-                                        RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
-                                        "Idempotent Producer not supported by "
-                                        "any of the %d broker(s) in state UP: "
-                                        "requires broker version >= 0.11.0",
-                                        up_cnt);
-                        else if (up_cnt == 0)
-                                rd_kafka_dbg(rk, EOS, "PIDBROKER",
-                                             "No brokers available for "
-                                             "acquiring Producer ID: "
-                                             "no brokers are up");
-                        else
-                                rd_kafka_dbg(rk, EOS, "PIDBROKER",
-                                             "None of the %d/%d brokers in "
-                                             "state UP supports "
-                                             "the Idempotent Producer: "
-                                             "requires broker "
-                                             "version >= 0.11.0",
-                                             up_cnt, all_cnt);
-                        return 0;
+                /* The idempotent producer may ask any broker for a PID,
+                 * while the transactional producer needs to ask its
+                 * transaction coordinator for a PID. */
+                if (!rd_kafka_is_transactional(rk) ||
+                    rk->rk_eos.txn_curr_coord) {
+                        rd_kafka_idemp_set_state(
+                                rk, RD_KAFKA_IDEMP_STATE_WAIT_TRANSPORT);
+                        goto redo;
                 }
-        } else {
-                /* Increase passed broker's refcount so we don't
-                 * have to check if rkb should be destroyed or not below
-                 * (broker_any() returns a new reference). */
-                rd_kafka_broker_keep(rkb);
-        }
 
-        rd_rkb_dbg(rkb, EOS, "GETPID", "Acquiring ProducerId: %s", reason);
 
-        err = rd_kafka_InitProducerIdRequest(
-                rkb, NULL, -1,
-                errstr, sizeof(errstr),
-                RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                rd_kafka_handle_InitProducerId, NULL);
+                /*
+                 * Look up transaction coordinator.
+                 * When the coordinator is known this FSM will be called again.
+                 */
+                if (rd_kafka_txn_coord_query(rk, "Acquire PID"))
+                        return; /* Fatal error */
+                break;
 
-        if (!err) {
-                rd_kafka_idemp_set_state(rkb->rkb_rk,
-                                         RD_KAFKA_IDEMP_STATE_WAIT_PID);
-                rd_kafka_wrunlock(rk);
+        case RD_KAFKA_IDEMP_STATE_WAIT_TRANSPORT:
+                /* Waiting for broker/coordinator to become available */
+                if (rd_kafka_is_transactional(rk)) {
+                        /* Assert that a coordinator has been assigned by
+                         * inspecting txn_curr_coord (the real broker)
+                         * rather than txn_coord (the logical broker). */
+                        rd_assert(rk->rk_eos.txn_curr_coord);
+                        rkb = rk->rk_eos.txn_coord;
+                        rd_kafka_broker_keep(rkb);
+
+                } else {
+                        rkb = rd_kafka_idemp_broker_any(rk, &err,
+                                                        errstr, sizeof(errstr));
+
+                        if (!rkb &&
+                            rd_kafka_idemp_check_error(rk, err, errstr))
+                                return; /* Fatal error */
+                }
+
+                if (!rkb || !rd_kafka_broker_is_up(rkb)) {
+                        /* The coordinator broker monitor will re-trigger
+                         * the fsm sooner if txn_coord has a state change,
+                         * else rely on the timer to retry. */
+                        rd_kafka_idemp_pid_timer_restart(rk, rd_false,
+                                                         rkb ?
+                                                         "No broker available" :
+                                                         "Coordinator not up");
+
+                        if (rkb)
+                                rd_kafka_broker_destroy(rkb);
+                        return;
+                }
+
+                rd_rkb_dbg(rkb, EOS, "GETPID", "Acquiring ProducerId");
+
+                err = rd_kafka_InitProducerIdRequest(
+                        rkb,
+                        rk->rk_conf.eos.transactional_id,
+                        rd_kafka_is_transactional(rk) ?
+                        rk->rk_conf.eos.transaction_timeout_ms : -1,
+                        rd_kafka_pid_valid(rk->rk_eos.pid) ?
+                        &rk->rk_eos.pid : NULL,
+                        errstr, sizeof(errstr),
+                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                        rd_kafka_handle_InitProducerId, NULL);
+
                 rd_kafka_broker_destroy(rkb);
-                return 1;
+
+                if (err) {
+                        rd_rkb_dbg(rkb, EOS, "GETPID",
+                                   "Can't acquire ProducerId from "
+                                   "this broker: %s", errstr);
+
+                        if (rd_kafka_idemp_check_error(rk, err, errstr))
+                                return; /* Fatal error */
+
+                        /* The coordinator broker monitor will re-trigger
+                         * the fsm sooner if txn_coord has a state change,
+                         * else rely on the timer to retry. */
+                        rd_kafka_idemp_pid_timer_restart(rk, rd_false, errstr);
+                        return;
+                }
+
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_WAIT_PID);
+                break;
+
+        case RD_KAFKA_IDEMP_STATE_WAIT_PID:
+                /* PID requested, waiting for reply */
+                break;
+
+        case RD_KAFKA_IDEMP_STATE_ASSIGNED:
+                /* New PID assigned */
+                break;
+
+        case RD_KAFKA_IDEMP_STATE_DRAIN_RESET:
+                /* Wait for outstanding ProduceRequests to finish
+                 * before resetting and re-requesting a new PID. */
+                break;
+
+        case RD_KAFKA_IDEMP_STATE_DRAIN_BUMP:
+                /* Wait for outstanding ProduceRequests to finish
+                 * before bumping the current epoch. */
+                break;
         }
-
-        rd_kafka_wrunlock(rk);
-
-        rd_rkb_dbg(rkb, EOS, "GETPID",
-                   "Can't acquire ProducerId from this broker: %s", errstr);
-        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
-
-        rd_kafka_broker_destroy(rkb);
-
-        return 0;
 }
 
 
 /**
  * @brief Timed PID retrieval timer callback.
+ *
+ * @locality rdkafka main thread
+ * @locks none
  */
-static void rd_kafka_idemp_request_pid_tmr_cb (rd_kafka_timers_t *rkts,
-                                               void *arg) {
+static void rd_kafka_idemp_pid_timer_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = arg;
 
-        rd_kafka_idemp_request_pid(rk, NULL, "retry timer");
+        rd_kafka_wrlock(rk);
+        rd_kafka_idemp_pid_fsm(rk);
+        rd_kafka_wrunlock(rk);
 }
 
 
@@ -194,12 +337,15 @@ static void rd_kafka_idemp_request_pid_tmr_cb (rd_kafka_timers_t *rkts,
  * @locality any
  * @locks none
  */
-static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
-                                                    rd_bool_t immediate) {
+static void rd_kafka_idemp_pid_timer_restart (rd_kafka_t *rk,
+                                              rd_bool_t immediate,
+                                              const char *reason) {
+        rd_kafka_dbg(rk, EOS, "TXN", "Starting PID FSM timer%s: %s",
+                     immediate ? " (fire immediately)" : "", reason);
         rd_kafka_timer_start_oneshot(&rk->rk_timers,
-                                     &rk->rk_eos.request_pid_tmr,
+                                     &rk->rk_eos.pid_tmr, rd_true,
                                      1000 * (immediate ? 1 : 500/*500ms*/),
-                                     rd_kafka_idemp_request_pid_tmr_cb, rk);
+                                     rd_kafka_idemp_pid_timer_cb, rk);
 }
 
 
@@ -210,8 +356,9 @@ static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
  * @locks none
  */
 void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
-                                    rd_kafka_resp_err_t err) {
+                                        rd_kafka_resp_err_t err) {
         rd_kafka_t *rk = rkb->rkb_rk;
+        char errstr[512];
 
         rd_rkb_dbg(rkb, EOS, "GETPID",
                    "Failed to acquire PID: %s", rd_kafka_err2str(err));
@@ -221,11 +368,32 @@ void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
 
         rd_assert(thrd_is_current(rk->rk_thread));
 
-        /* FIXME: Handle special errors, maybe raise certain errors
-         *        to the application (such as UNSUPPORTED_FEATURE) */
+        rd_snprintf(errstr, sizeof(errstr),
+                    "Failed to acquire PID from broker %s: %s",
+                    rd_kafka_broker_name(rkb), rd_kafka_err2str(err));
 
-        /* Retry request after a short wait. */
-        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
+        rd_kafka_wrlock(rk);
+
+        if (rd_kafka_idemp_check_error(rk, err, errstr)) {
+                rd_kafka_wrunlock(rk);
+                return; /* Fatal error */
+        }
+
+        RD_UT_COVERAGE(0);
+
+        if (rd_kafka_is_transactional(rk) &&
+            (err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR ||
+             err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE))
+                rd_kafka_txn_coord_set(rk, NULL, "%s", errstr);
+
+        rk->rk_eos.txn_init_err = err;
+
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
+
+        rd_kafka_wrunlock(rk);
+
+        /* Restart acquisition after a short wait */
+        rd_kafka_idemp_pid_timer_restart(rk, rd_false, errstr);
 }
 
 
@@ -273,6 +441,8 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
         rk->rk_eos.pid = pid;
         rk->rk_eos.epoch_cnt++;
 
+        /* The idempotence state change will trigger the transaction manager,
+         * see rd_kafka_txn_idemp_state_change(). */
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_ASSIGNED);
 
         rd_kafka_wrunlock(rk);
@@ -313,7 +483,7 @@ static void rd_kafka_idemp_drain_done (rd_kafka_t *rk) {
 
         /* Restart timer to eventually trigger a re-request */
         if (restart_tmr)
-                rd_kafka_idemp_restart_request_pid_tmr(rk, rd_true);
+                rd_kafka_idemp_pid_timer_restart(rk, rd_true, "Drain done");
 
         /* Wake up all broker threads (that may have messages to send
          * that were waiting for a Producer ID). */
@@ -344,13 +514,14 @@ static RD_INLINE void rd_kafka_idemp_check_drain_done (rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
+void rd_kafka_idemp_drain_reset (rd_kafka_t *rk, const char *reason) {
         rd_kafka_wrlock(rk);
         rd_kafka_dbg(rk, EOS, "DRAIN",
                      "Beginning partition drain for %s reset "
-                     "for %d partition(s) with in-flight requests",
+                     "for %d partition(s) with in-flight requests: %s",
                      rd_kafka_pid2str(rk->rk_eos.pid),
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt),
+                     reason);
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_RESET);
         rd_kafka_wrunlock(rk);
 
@@ -378,6 +549,14 @@ void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...) {
         va_start(ap, fmt);
         rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
+
+        if (rd_kafka_is_transactional(rk)) {
+                /* Only the Idempotent Producer is allowed to bump its own
+                 * epoch, the Transactional Producer needs to ask the broker
+                 * to bump it. */
+                rd_kafka_idemp_drain_reset(rk, buf);
+                return;
+        }
 
         rd_kafka_wrlock(rk);
         rd_kafka_dbg(rk, EOS, "DRAIN",
@@ -444,28 +623,52 @@ void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,
 }
 
 
+
+/**
+ * @brief Start idempotent producer (asynchronously).
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+void rd_kafka_idemp_start (rd_kafka_t *rk, rd_bool_t immediate) {
+
+        if (rd_kafka_terminating(rk))
+                return;
+
+        rd_kafka_wrlock(rk);
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
+        rd_kafka_wrunlock(rk);
+
+        /* Schedule request timer */
+        rd_kafka_idemp_pid_timer_restart(rk, immediate,
+                                         "Starting idempotent producer");
+}
+
+
 /**
  * @brief Initialize the idempotent producer.
  *
  * @remark Must be called from rd_kafka_new() and only once.
- * @locality application thread
+ * @locality rdkafka main thread
  * @locks none / not needed from rd_kafka_new()
  */
 void rd_kafka_idemp_init (rd_kafka_t *rk) {
         rd_assert(thrd_is_current(rk->rk_thread));
 
         rd_atomic32_init(&rk->rk_eos.inflight_toppar_cnt, 0);
-
-        rd_kafka_wrlock(rk);
         rd_kafka_pid_reset(&rk->rk_eos.pid);
 
-        /* There are no available brokers this early, so just set
-         * the state to indicate that we want to acquire a PID as soon
-         * as possible and start the timer. */
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
-        rd_kafka_wrunlock(rk);
-
-        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
+        /* The transactional producer acquires the PID
+         * from init_transactions(), for non-transactional producers
+         * the PID can be acquired right away. */
+        if (rd_kafka_is_transactional(rk))
+                rd_kafka_txns_init(rk);
+        else
+                /* There are no available brokers this early,
+                 * so just set the state to indicate that we want to
+                 * acquire a PID as soon as possible and start
+                 * the timer. */
+                rd_kafka_idemp_start(rk, rd_false/*non-immediate*/);
 }
 
 
@@ -479,9 +682,11 @@ void rd_kafka_idemp_term (rd_kafka_t *rk) {
         rd_assert(thrd_is_current(rk->rk_thread));
 
         rd_kafka_wrlock(rk);
+        if (rd_kafka_is_transactional(rk))
+                rd_kafka_txns_term(rk);
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_TERM);
         rd_kafka_wrunlock(rk);
-        rd_kafka_timer_stop(&rk->rk_timers, &rk->rk_eos.request_pid_tmr, 1);
+        rd_kafka_timer_stop(&rk->rk_timers, &rk->rk_eos.pid_tmr, 1);
 }
 
 

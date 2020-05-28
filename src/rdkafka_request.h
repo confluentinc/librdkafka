@@ -41,6 +41,7 @@
 #define RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED 0x40 /* ProduceReq msg status */
 #define RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED 0x80 /* ProduceReq msg status */
 #define RD_KAFKA_ERR_ACTION_MSG_PERSISTED 0x100    /* ProduceReq msg status */
+#define RD_KAFKA_ERR_ACTION_FATAL    0x200 /**< Fatal error */
 #define RD_KAFKA_ERR_ACTION_END          0 /* var-arg sentinel */
 
 /** @macro bitmask of the message persistence flags */
@@ -54,11 +55,23 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 const rd_kafka_buf_t *request, ...);
 
 
-void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
-                                       const rd_kafkap_str_t *cgrp,
-                                       rd_kafka_replyq_t replyq,
-                                       rd_kafka_resp_cb_t *resp_cb,
-                                       void *opaque);
+rd_kafka_topic_partition_list_t *
+rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
+                                    size_t estimated_part_cnt);
+int rd_kafka_buf_write_topic_partitions (
+        rd_kafka_buf_t *rkbuf,
+        const rd_kafka_topic_partition_list_t *parts,
+        rd_bool_t skip_invalid_offsets,
+        rd_bool_t write_Epoch,
+        rd_bool_t write_Metadata);
+
+rd_kafka_resp_err_t
+rd_kafka_FindCoordinatorRequest (rd_kafka_broker_t *rkb,
+                                 rd_kafka_coordtype_t coordtype,
+                                 const char *coordkey,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 					    rd_kafka_broker_t *rkb,
@@ -109,7 +122,6 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 			      rd_kafka_topic_partition_list_t *offsets);
 int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 				  rd_kafka_cgrp_t *rkcg,
-				  int16_t api_version,
 				  rd_kafka_topic_partition_list_t *offsets,
 				  rd_kafka_replyq_t replyq,
 				  rd_kafka_resp_cb_t *resp_cb,
@@ -120,6 +132,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 const rd_kafkap_str_t *protocol_type,
 				const rd_list_t *topics,
                                 rd_kafka_replyq_t replyq,
@@ -130,6 +143,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                  const rd_kafkap_str_t *group_id,
                                  const rd_kafkap_str_t *member_id,
+                                 const rd_kafkap_str_t *group_instance_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque);
@@ -144,6 +158,7 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 const rd_kafka_group_member_t
                                 *assignments,
                                 int assignment_cnt,
@@ -173,6 +188,7 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,
                                 const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
@@ -180,6 +196,7 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                           const rd_list_t *topics, const char *reason,
+                          rd_bool_t cgrp_update,
                           rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t
@@ -191,6 +208,7 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 			    struct rd_kafka_ApiVersion **apis,
 			    size_t *api_cnt);
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+                                 int16_t ApiVersion,
 				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
 				 void *opaque);
@@ -274,11 +292,41 @@ rd_kafka_resp_err_t
 rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
                                 const char *transactional_id,
                                 int transaction_timeout_ms,
+                                const rd_kafka_pid_t *current_pid,
                                 char *errstr, size_t errstr_size,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
 
+rd_kafka_resp_err_t
+rd_kafka_AddPartitionsToTxnRequest (rd_kafka_broker_t *rkb,
+                                    const char *transactional_id,
+                                    rd_kafka_pid_t pid,
+                                    const rd_kafka_toppar_tqhead_t *rktps,
+                                    char *errstr, size_t errstr_size,
+                                    rd_kafka_replyq_t replyq,
+                                    rd_kafka_resp_cb_t *resp_cb,
+                                    void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_AddOffsetsToTxnRequest (rd_kafka_broker_t *rkb,
+                                 const char *transactional_id,
+                                 rd_kafka_pid_t pid,
+                                 const char *group_id,
+                                 char *errstr, size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_EndTxnRequest (rd_kafka_broker_t *rkb,
+                        const char *transactional_id,
+                        rd_kafka_pid_t pid,
+                        rd_bool_t committed,
+                        char *errstr, size_t errstr_size,
+                        rd_kafka_replyq_t replyq,
+                        rd_kafka_resp_cb_t *resp_cb,
+                        void *opaque);
 
 int unittest_request (void);
 

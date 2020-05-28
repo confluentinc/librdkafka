@@ -30,7 +30,7 @@
 #ifndef _RD_H_
 #define _RD_H_
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE  /* for strndup() */
 #endif
@@ -56,7 +56,7 @@
 #include "tinycthread.h"
 #include "rdsysqueue.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 /* Visual Studio */
 #include "win32_config.h"
 #else
@@ -64,7 +64,7 @@
 #include "../config.h" /* mklove output */
 #endif
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 /* Win32/Visual Studio */
 #include "rdwin32.h"
 
@@ -74,6 +74,19 @@
 #endif
 
 #include "rdtypes.h"
+
+#if WITH_SYSLOG
+#include <syslog.h>
+#else
+#define LOG_EMERG   0
+#define LOG_ALERT   1
+#define LOG_CRIT    2
+#define LOG_ERR     3
+#define LOG_WARNING 4
+#define LOG_NOTICE  5
+#define LOG_INFO    6
+#define LOG_DEBUG   7
+#endif
 
 
 /* Debug assert, only enabled with --enable-devel */
@@ -118,7 +131,7 @@ static RD_INLINE RD_UNUSED void rd_free(void *ptr) {
 }
 
 static RD_INLINE RD_UNUSED char *rd_strdup(const char *s) {
-#ifndef _MSC_VER
+#ifndef _WIN32
 	char *n = strdup(s);
 #else
 	char *n = _strdup(s);
@@ -132,7 +145,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 	char *n = strndup(s, len);
 	rd_assert(n);
 #else
-	char *n = malloc(len + 1);
+	char *n = (char *)malloc(len + 1);
 	rd_assert(n);
 	memcpy(n, s, len);
 	n[len] = '\0';
@@ -173,7 +186,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #ifdef __APPLE__
 /* Some versions of MacOSX dont have IOV_MAX */
 #define IOV_MAX 1024
-#elif defined(_MSC_VER) || defined(__GNU__)
+#elif defined(_WIN32) || defined(__GNU__)
 /* There is no IOV_MAX on MSVC or GNU but it is used internally in librdkafka */
 #define IOV_MAX 1024
 #else
@@ -344,19 +357,20 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
         } while (0)
 
 #if ENABLE_REFCNT_DEBUG
-#define rd_refcnt_add(R)                                                \
+#define rd_refcnt_add_fl(FUNC,LINE,R)                                   \
         (                                                               \
                 printf("REFCNT DEBUG: %-35s %d +1: %16p: %s:%d\n",      \
-                       #R, rd_refcnt_get(R), (R), __FUNCTION__,__LINE__), \
+                       #R, rd_refcnt_get(R), (R), (FUNC), (LINE)),      \
                 rd_refcnt_add0(R)                                       \
                 )
+
+#define rd_refcnt_add(R) rd_refcnt_add_fl(__FUNCTION__, __LINE__, (R))
 
 #define rd_refcnt_add2(R,WHAT)  do {                                        \
                 printf("REFCNT DEBUG: %-35s %d +1: %16p: %16s: %s:%d\n",      \
                        #R, rd_refcnt_get(R), (R), WHAT, __FUNCTION__,__LINE__), \
                 rd_refcnt_add0(R);                                      \
         } while (0)
-
 
 #define rd_refcnt_sub2(R,WHAT) (                                            \
                 printf("REFCNT DEBUG: %-35s %d -1: %16p: %16s: %s:%d\n",      \
@@ -369,92 +383,13 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
                 rd_refcnt_sub0(R) )
 
 #else
+#define rd_refcnt_add_fl(FUNC,LINE,R)  rd_refcnt_add0(R)
 #define rd_refcnt_add(R)  rd_refcnt_add0(R)
 #define rd_refcnt_sub(R)  rd_refcnt_sub0(R)
 #endif
 
 
 
-#if !ENABLE_SHAREDPTR_DEBUG
-
-/**
- * The non-debug version of shared_ptr is simply a reference counting interface
- * without any additional costs and no indirections.
- */
-
-#define RD_SHARED_PTR_TYPE(STRUCT_NAME,WRAPPED_TYPE) WRAPPED_TYPE
-
-
-#define rd_shared_ptr_get_src(FUNC,LINE,OBJ,REFCNT,SPTR_TYPE)	\
-        (rd_refcnt_add(REFCNT), (OBJ))
-#define rd_shared_ptr_get(OBJ,REFCNT,SPTR_TYPE)          \
-        (rd_refcnt_add(REFCNT), (OBJ))
-
-#define rd_shared_ptr_obj(SPTR) (SPTR)
-
-#define rd_shared_ptr_put(SPTR,REF,DESTRUCTOR)                  \
-                rd_refcnt_destroywrapper(REF,DESTRUCTOR)
-
-
-#else
-
-#define RD_SHARED_PTR_TYPE(STRUCT_NAME, WRAPPED_TYPE) \
-        struct STRUCT_NAME {                          \
-                LIST_ENTRY(rd_shptr0_s) link;         \
-                WRAPPED_TYPE *obj;                     \
-                rd_refcnt_t *ref;                     \
-                const char *typename;                 \
-                const char *func;                     \
-                int line;                             \
-        }
-
-
-
-/* Common backing struct compatible with RD_SHARED_PTR_TYPE() types */
-typedef RD_SHARED_PTR_TYPE(rd_shptr0_s, void) rd_shptr0_t;
-
-LIST_HEAD(rd_shptr0_head, rd_shptr0_s);
-extern struct rd_shptr0_head rd_shared_ptr_debug_list;
-extern mtx_t rd_shared_ptr_debug_mtx;
-
-static RD_INLINE RD_UNUSED RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
-rd_shptr0_t *rd_shared_ptr_get0 (const char *func, int line,
-                                 const char *typename,
-                                 rd_refcnt_t *ref, void *obj) {
-        rd_shptr0_t *sptr = rd_calloc(1, sizeof(*sptr));
-        sptr->obj = obj;
-        sptr->ref = ref;
-        sptr->typename = typename;
-        sptr->func = func;
-        sptr->line = line;
-
-        mtx_lock(&rd_shared_ptr_debug_mtx);
-        LIST_INSERT_HEAD(&rd_shared_ptr_debug_list, sptr, link);
-        mtx_unlock(&rd_shared_ptr_debug_mtx);
-        return sptr;
-}
-
-#define rd_shared_ptr_get_src(FUNC,LINE,OBJ,REF,SPTR_TYPE)		\
-        (rd_refcnt_add(REF),                                            \
-         (SPTR_TYPE *)rd_shared_ptr_get0(FUNC,LINE, #SPTR_TYPE,REF,OBJ))
-#define rd_shared_ptr_get(OBJ,REF,SPTR_TYPE)	\
-	rd_shared_ptr_get_src(__FUNCTION__, __LINE__, OBJ, REF, SPTR_TYPE)
-
-
-
-#define rd_shared_ptr_obj(SPTR) (SPTR)->obj
-
-#define rd_shared_ptr_put(SPTR,REF,DESTRUCTOR) do {               \
-                if (rd_refcnt_sub(REF) == 0)                      \
-                        DESTRUCTOR;                               \
-                mtx_lock(&rd_shared_ptr_debug_mtx);               \
-                LIST_REMOVE(SPTR, link);                          \
-                mtx_unlock(&rd_shared_ptr_debug_mtx);             \
-                rd_free(SPTR);                                    \
-        } while (0)
-
-void rd_shared_ptrs_dump (void);
-#endif
 
 
 #define RD_IF_FREE(PTR,FUNC) do { if ((PTR)) FUNC(PTR); } while (0)

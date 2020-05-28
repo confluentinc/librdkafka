@@ -39,18 +39,14 @@
 #include <openssl/pkcs12.h>
 #endif
 
-#ifdef _MSC_VER
-#define socket_errno WSAGetLastError()
-#else
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/tcp.h>
-#define socket_errno errno
-#define SOCKET_ERROR -1
 #endif
 
 struct rd_kafka_transport_s {
-	int rktrans_s;
-	rd_kafka_broker_t *rktrans_rkb;
+        rd_socket_t rktrans_s;
+        rd_kafka_broker_t *rktrans_rkb;    /* Not reference counted */
 
 #if WITH_SSL
 	SSL *rktrans_ssl;
@@ -81,11 +77,7 @@ struct rd_kafka_transport_s {
          * - TCP socket
          * - wake-up fd
          */
-#ifndef _MSC_VER
-        struct pollfd rktrans_pfd[2];
-#else
-        WSAPOLLFD rktrans_pfd[2];
-#endif
+        rd_pollfd_t rktrans_pfd[2];
         int rktrans_pfd_cnt;
 
         size_t rktrans_rcvbuf_size;    /**< Socket receive buffer size */

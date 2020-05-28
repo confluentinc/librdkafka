@@ -121,7 +121,7 @@ A short guide to how to write good commit messages.
 Example:
 
     cgrp: Restart query timer on all heartbeat failures (#10023)
-    
+
     If unhandled errors were received in HeartbeatResponse
     the cgrp could get stuck in a state where it would not
     refresh its coordinator.
@@ -135,6 +135,24 @@ Example:
 **Note**: Good PRs with bad commit messages or messy commit history
           such as "fixed review comment", will be squashed up in
           to a single commit with a proper commit message.
+
+
+### Add changelog
+
+If the changes in the PR affects the end user in any way, such as for a user
+visible bug fix, new feature, API or doc change, etc, a release changelog item
+needs to be added to [CHANGELOG.md](CHANGELOG.md) for the next release.
+
+Add a single line to the appropriate section (Enhancements, Fixes, ..)
+outlining the change, an issue number (if any), and your name or GitHub
+user id for attribution.
+
+E.g.:
+```
+## Enhancements
+ * Improve commit() async parameter documentation (Paul Nit, #123)
+```
+
 
 
 # librdkafka C style guide

@@ -28,7 +28,7 @@
 #define _RDKAFKA_MSGBATCH_H_
 
 typedef struct rd_kafka_msgbatch_s {
-        shptr_rd_kafka_toppar_t *s_rktp; /**< Reference to partition */
+        rd_kafka_toppar_t *rktp;    /**< Reference to partition */
 
         rd_kafka_msgq_t msgq;       /**< Messages in batch */
 

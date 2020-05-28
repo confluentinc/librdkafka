@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 #
 # Run librdkafka regression tests on different supported broker versions.
@@ -13,6 +13,8 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 
+from cluster_testing import read_scenario_conf
+
 import subprocess
 import time
 import tempfile
@@ -21,9 +23,14 @@ import sys
 import argparse
 import json
 
+def version_as_number (version):
+    if version == 'trunk':
+        return sys.maxint
+    tokens = version.split('.')
+    return float('%s.%s' % (tokens[0], tokens[1]))
 
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
-                  root_path='tmp', broker_cnt=3):
+                  root_path='tmp', broker_cnt=3, scenario='default'):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -45,13 +52,16 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
         KerberosKdcApp(cluster, 'MYREALM').start()
 
-    defconf = {'replication_factor': min(int(conf.get('replication_factor', broker_cnt)), 3), 'num_partitions': 4, 'version': version}
+    defconf = {'version': version}
     defconf.update(conf)
 
     print('conf: ', defconf)
 
     brokers = []
     for n in range(0, broker_cnt):
+        # Configure rack & replica selector if broker supports fetch-from-follower
+        if version_as_number(version) >= 2.4:
+            defconf.update({'conf': ['broker.rack=RACK${appid}', 'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()
@@ -61,10 +71,9 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
     os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
     os.write(fd, 'broker.address.family=v4\n'.encode('ascii'))
-    if version != 'trunk':
+    if version.startswith('0.9') or version.startswith('0.8'):
+        os.write(fd, 'api.version.request=false\n'.encode('ascii'))
         os.write(fd, ('broker.version.fallback=%s\n' % version).encode('ascii'))
-    else:
-        os.write(fd, 'api.version.request=true\n'.encode('ascii'))
     # SASL (only one mechanism supported)
     mech = defconf.get('sasl_mechanisms', '').split(',')[0]
     if mech != '':
@@ -101,13 +110,13 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         os.write(fd, ('ssl.key.location=%s\n' % key['priv']['pem']).encode('ascii'))
         os.write(fd, ('ssl.key.password=%s\n' % key['password']).encode('ascii'))
 
-        for k, v in ssl.ca.iteritems():
+        for k, v in ssl.ca.items():
             cmd_env['RDK_SSL_ca_{}'.format(k)] = v
 
         # Set envs for all generated keys so tests can find them.
-        for k, v in key.iteritems():
+        for k, v in key.items():
             if type(v) is dict:
-                for k2, v2 in v.iteritems():
+                for k2, v2 in v.items():
                     # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
                     cmd_env['RDK_SSL_{}_{}'.format(k, k2)] = v2
             else:
@@ -146,9 +155,17 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cmd_env['BROKERS'] = bootstrap_servers
     cmd_env['TEST_KAFKA_VERSION'] = version
     cmd_env['TRIVUP_ROOT'] = cluster.instance_path()
-    # Add each broker pid as an env so they can be killed indivdidually.
+    cmd_env['TEST_SCENARIO'] = scenario
+
+    # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
+        cmd_env['BROKER_ADDRESS_%d' % b.appid] = b.conf['address']
+        # Add each broker pid as an env so they can be killed indivdidually.
         cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
+        # JMX port, if available
+        jmx_port = b.conf.get('jmx_port', None)
+        if jmx_port is not None:
+            cmd_env['BROKER_JMX_PORT_%d' % b.appid] = str(jmx_port)
 
     if not cmd:
         cmd_env['PS1'] = '[TRIVUP:%s@%s] \\u@\\h:\w$ ' % (cluster.name, version)
@@ -182,6 +199,8 @@ if __name__ == '__main__':
                         help='Dont deploy applications, assume already deployed.')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='JSON config object (not file)')
+    parser.add_argument('--scenario', type=str, dest='scenario', default='default',
+                        help='Test scenario (see scenarios/ directory)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
     parser.add_argument('-n', type=int, dest='exec_cnt', default=1,
@@ -202,6 +221,8 @@ if __name__ == '__main__':
     else:
         args.conf = {}
 
+    args.conf.update(read_scenario_conf(args.scenario))
+
     if args.port is not None:
         args.conf['port_base'] = int(args.port)
     if args.kafka_path is not None:
@@ -219,7 +240,8 @@ if __name__ == '__main__':
     for version in args.versions:
         r = test_version(version, cmd=args.cmd, deploy=args.deploy,
                          conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
-                         root_path=args.root, broker_cnt=args.broker_cnt)
+                         root_path=args.root, broker_cnt=args.broker_cnt,
+                         scenario=args.scenario)
         if not r:
             retcode = 2
 

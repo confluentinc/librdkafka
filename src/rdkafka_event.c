@@ -109,7 +109,7 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 			return NULL;
 
 		/* Store offset */
-		rd_kafka_op_offset_store(NULL, rko, rkmessage);
+		rd_kafka_op_offset_store(NULL, rko);
 
 		return rkmessage;
 
@@ -131,11 +131,12 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 
 
 size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
-				     const rd_kafka_message_t **rkmessages, size_t size) {
+				     const rd_kafka_message_t **rkmessages,
+                                     size_t size) {
 	size_t cnt = 0;
 	const rd_kafka_message_t *rkmessage;
 
-	while ((rkmessage = rd_kafka_event_message_next(rkev)))
+	while (cnt < size && (rkmessage = rd_kafka_event_message_next(rkev)))
 		rkmessages[cnt++] = rkmessage;
 
 	return cnt;
@@ -223,6 +224,34 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 	return 0;
 }
 
+int rd_kafka_event_debug_contexts (rd_kafka_event_t *rkev,
+            char *dst, size_t dstsize) {
+        static const char *names[] = {
+                "generic",
+                "broker",
+                "topic",
+                "metadata",
+                "feature",
+                "queue",
+                "msg",
+                "protocol",
+                "cgrp",
+                "security",
+                "fetch",
+                "interceptor",
+                "plugin",
+                "consumer",
+                "admin",
+                "eos",
+                "mock",
+                NULL
+        };
+        if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
+                return -1;
+        rd_flags2str(dst, dstsize, names, rkev->rko_u.log.ctx);
+        return 0;
+}
+
 const char *rd_kafka_event_stats (rd_kafka_event_t *rkev) {
 	return rkev->rko_u.stats.json;
 }
@@ -248,8 +277,7 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev) {
 	if (unlikely(!rkev->rko_rktp))
 		return NULL;
 
-	rktpar = rd_kafka_topic_partition_new_from_rktp(
-		rd_kafka_toppar_s2i(rkev->rko_rktp));
+	rktpar = rd_kafka_topic_partition_new_from_rktp(rkev->rko_rktp);
 
 	switch (rkev->rko_type)
 	{

@@ -39,13 +39,14 @@
 #include <csignal>
 #include <cstring>
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include <windows.h> /* for GetLocalTime */
 #endif
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
-#include <atltime.h>
 #elif _AIX
 #include <unistd.h>
 #else
@@ -61,7 +62,7 @@
 
 
 
-static bool run = true;
+static volatile sig_atomic_t run = 1;
 static bool exit_eof = false;
 static int eof_cnt = 0;
 static int partition_cnt = 0;
@@ -69,7 +70,7 @@ static int verbosity = 1;
 static long msg_cnt = 0;
 static int64_t msg_bytes = 0;
 static void sigterm (int sig) {
-  run = false;
+  run = 0;
 }
 
 
@@ -77,15 +78,19 @@ static void sigterm (int sig) {
  * @brief format a string timestamp from the current time
  */
 static void print_time () {
-#ifndef _MSC_VER
+#ifndef _WIN32
         struct timeval tv;
         char buf[64];
         gettimeofday(&tv, NULL);
         strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
         fprintf(stderr, "%s.%03d: ", buf, (int)(tv.tv_usec / 1000));
 #else
-        std::wcerr << CTime::GetCurrentTime().Format(_T("%Y-%m-%d %H:%M:%S")).GetString()
-                << ": ";
+        SYSTEMTIME lt = {0};
+        GetLocalTime(&lt);
+        // %Y-%m-%d %H:%M:%S.xxx:
+        fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%03d: ",
+            lt.wYear, lt.wMonth, lt.wDay,
+            lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds);
 #endif
 }
 class ExampleEventCb : public RdKafka::EventCb {
@@ -99,7 +104,7 @@ class ExampleEventCb : public RdKafka::EventCb {
       case RdKafka::Event::EVENT_ERROR:
         if (event.fatal()) {
           std::cerr << "FATAL ";
-          run = false;
+          run = 0;
         }
         std::cerr << "ERROR (" << RdKafka::err2str(event.err()) << "): " <<
             event.str() << std::endl;
@@ -195,20 +200,20 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
       if (exit_eof && ++eof_cnt == partition_cnt) {
         std::cerr << "%% EOF reached for all " << partition_cnt <<
             " partition(s)" << std::endl;
-        run = false;
+        run = 0;
       }
       break;
 
     case RdKafka::ERR__UNKNOWN_TOPIC:
     case RdKafka::ERR__UNKNOWN_PARTITION:
       std::cerr << "Consume failed: " << message->errstr() << std::endl;
-      run = false;
+      run = 0;
       break;
 
     default:
       /* Errors */
       std::cerr << "Consume failed: " << message->errstr() << std::endl;
-      run = false;
+      run = 0;
   }
 }
 
@@ -433,7 +438,7 @@ int main (int argc, char **argv) {
     delete msg;
   }
 
-#ifndef _MSC_VER
+#ifndef _WIN32
   alarm(10);
 #endif
 

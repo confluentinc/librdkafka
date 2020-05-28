@@ -7,7 +7,7 @@
  * gettimeofday() for Win32 from http://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
  */
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 #include <stdint.h> // portable: uint64_t   MSVC: __int64 
 
 static int gettimeofday(struct timeval * tp, struct timezone * tzp)

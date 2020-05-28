@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # librdkafka test trivup app module
 #
@@ -19,7 +19,7 @@ class LibrdkafkaTestApp(App):
     """ Sets up and executes the librdkafka regression tests.
         Assumes tests are in the current directory.
         Must be instantiated after ZookeeperApp and KafkaBrokerApp """
-    def __init__(self, cluster, version, conf=None, tests=None):
+    def __init__(self, cluster, version, conf=None, tests=None, scenario="default"):
         super(LibrdkafkaTestApp, self).__init__(cluster, conf=conf)
 
         self.appid = UuidAllocator(self.cluster).next(self, trunc=8)
@@ -97,13 +97,13 @@ class LibrdkafkaTestApp(App):
 
             # Some tests need fine-grained access to various cert files,
             # set up the env vars accordingly.
-            for k, v in ssl.ca.iteritems():
+            for k, v in ssl.ca.items():
                 self.env_add('RDK_SSL_ca_{}'.format(k), v)
 
             # Set envs for all generated keys so tests can find them.
-            for k, v in key.iteritems():
+            for k, v in key.items():
                 if type(v) is dict:
-                    for k2, v2 in v.iteritems():
+                    for k2, v2 in v.items():
                         # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
                         self.env_add('RDK_SSL_{}_{}'.format(k, k2), v2)
                 else:
@@ -131,6 +131,7 @@ class LibrdkafkaTestApp(App):
         f.write(('\n'.join(conf_blob)).encode('ascii'))
         f.close()
 
+        self.env_add('TEST_SCENARIO', scenario)
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
         self.env_add('TEST_KAFKA_VERSION', version)
         self.env_add('TRIVUP_ROOT', cluster.instance_path())
@@ -146,6 +147,16 @@ class LibrdkafkaTestApp(App):
         self.env_add('KAFKA_PATH', self.cluster.get_all('destdir', '', KafkaBrokerApp)[0], False)
         self.env_add('ZK_ADDRESS', self.cluster.get_all('address', '', ZookeeperApp)[0], False)
         self.env_add('BROKERS', self.cluster.bootstrap_servers(), False)
+
+        # Per broker env vars
+        for b in [x for x in self.cluster.apps if isinstance(x, KafkaBrokerApp)]:
+            self.env_add('BROKER_ADDRESS_%d' % b.appid, b.conf['address'])
+            # Add each broker pid as an env so they can be killed indivdidually.
+            self.env_add('BROKER_PID_%d' % b.appid, str(b.proc.pid))
+            # JMX port, if available
+            jmx_port = b.conf.get('jmx_port', None)
+            if jmx_port is not None:
+                self.env_add('BROKER_JMX_PORT_%d' % b.appid, str(jmx_port))
 
         extra_args = list()
         if not self.local_tests:

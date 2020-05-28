@@ -27,7 +27,7 @@ build:
   parallel: true
   verbosity: normal
 test_script:
-- cmd: if exist DISABLED\win32\outdir\v140 ( win32\outdir\v140\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 ) else ( cd tests && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 -P && cd ..)
+- cmd: cd tests && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -Q -p1 && cd ..
 artifacts:
 - path: test_report*.json
   name: Test report

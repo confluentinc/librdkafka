@@ -53,6 +53,7 @@ extern const char *rd_kafka_cgrp_join_state_names[];
 typedef struct rd_kafka_cgrp_s {
         const rd_kafkap_str_t    *rkcg_group_id;
         rd_kafkap_str_t          *rkcg_member_id;  /* Last assigned MemberId */
+        rd_kafkap_str_t          *rkcg_group_instance_id;
         const rd_kafkap_str_t    *rkcg_client_id;
 
         enum {
@@ -165,6 +166,15 @@ typedef struct rd_kafka_cgrp_s {
         rd_interval_t      rkcg_join_intvl;         /* JoinGroup interval */
         rd_interval_t      rkcg_timeout_scan_intvl; /* Timeout scanner */
 
+        rd_ts_t            rkcg_ts_session_timeout; /**< Absolute session
+                                                     *   timeout enforced by
+                                                     *   the consumer, this
+                                                     *   value is updated on
+                                                     *   Heartbeat success,
+                                                     *   etc. */
+        rd_kafka_resp_err_t rkcg_last_heartbeat_err; /**< Last Heartbeat error,
+                                                      *   used for logging. */
+
         TAILQ_HEAD(, rd_kafka_topic_s)  rkcg_topics;/* Topics subscribed to */
 
         rd_list_t          rkcg_toppars;            /* Toppars subscribed to*/
@@ -190,10 +200,12 @@ typedef struct rd_kafka_cgrp_s {
                                                 *   Will be updated when the
                                                 *   coordinator changes. */
 
-        /* Current subscription */
+        /** Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
-	/* The actual topics subscribed (after metadata+wildcard matching) */
+	/** The actual topics subscribed (after metadata+wildcard matching) */
 	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
+        /** Subscribed topics that are errored/not available. */
+        rd_kafka_topic_partition_list_t *rkcg_errored_topics;
 
         /* Current assignment */
         rd_kafka_topic_partition_list_t *rkcg_assignment;
@@ -233,7 +245,7 @@ typedef struct rd_kafka_cgrp_s {
                                                         * last rebalance */
                 int                rebalance_cnt;      /* Number of
                                                           rebalances */
-                char               rebalance_reason[128]; /**< Last rebalance
+                char               rebalance_reason[256]; /**< Last rebalance
                                                            *   reason */
                 int                assignment_size;    /* Partition count
                                                         * of last rebalance
@@ -252,6 +264,12 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,rkb)          \
         ((rkcg)->rkcg_coord_id != -1 &&                  \
          (rkcg)->rkcg_coord_id == (rkb)->rkb_nodeid)
+
+/**
+ * @returns true if cgrp is using static group membership
+ */
+#define RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg) \
+        !RD_KAFKAP_STR_IS_NULL((rkcg)->rkcg_group_instance_id)
 
 extern const char *rd_kafka_cgrp_state_names[];
 extern const char *rd_kafka_cgrp_join_state_names[];
@@ -278,9 +296,6 @@ int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic);
 
 void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id);
 
-void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
-					   rd_kafka_resp_err_t err);
-
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
@@ -293,5 +308,14 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 			       const char *reason);
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
+
+
+struct rd_kafka_consumer_group_metadata_s {
+        char *group_id;
+};
+
+rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_dup (
+        const rd_kafka_consumer_group_metadata_t *cgmetadata);
 
 #endif /* _RDKAFKA_CGRP_H_ */

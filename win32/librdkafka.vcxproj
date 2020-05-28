@@ -111,6 +111,9 @@
     <ClInclude Include="..\src\rdkafka_event.h" />
     <ClInclude Include="..\src\rdkafka_feature.h" />
     <ClInclude Include="..\src\rdkafka_lz4.h" />
+    <ClInclude Include="..\src\rdkafka_mock.h" />
+    <ClInclude Include="..\src\rdkafka_mock_int.h" />
+    <ClInclude Include="..\src\rdkafka_error.h" />
     <ClInclude Include="..\src\rdkafka_msgset.h" />
     <ClInclude Include="..\src\rdkafka_op.h" />
     <ClInclude Include="..\src\rdkafka_partition.h" />
@@ -165,6 +168,7 @@
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
+    <ClCompile Include="..\src\rdfnv1a.c" />
     <ClCompile Include="..\src\rdgz.c" />
     <ClCompile Include="..\src\rdhdrhistogram.c" />
     <ClCompile Include="..\src\rdkafka.c" />
@@ -207,7 +211,13 @@
     <ClCompile Include="..\src\rdkafka_aux.c" />
     <ClCompile Include="..\src\rdkafka_background.c" />
     <ClCompile Include="..\src\rdkafka_idempotence.c" />
+    <ClCompile Include="..\src\rdkafka_txnmgr.c" />
+    <ClCompile Include="..\src\rdkafka_coord.c" />
     <ClCompile Include="..\src\rdkafka_zstd.c" />
+    <ClCompile Include="..\src\rdkafka_mock.c" />
+    <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
+    <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
+    <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
@@ -222,7 +232,7 @@
     <ClCompile Include="..\src\regexp.c" />
     <ClCompile Include="..\src\rdports.c" />
     <ClCompile Include="..\src\rdavl.c" />
-    <ClCompile Include="..\src\xxhash.c" />
+    <ClCompile Include="..\src\rdxxhash.c" />
     <ClCompile Include="..\src\lz4.c" />
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />

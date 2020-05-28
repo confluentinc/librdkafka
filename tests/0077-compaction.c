@@ -250,6 +250,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                                           cnt, (const char *)key,
                                           is_last, is_tombstone);
                                 test_msgver_add_msg00(__FUNCTION__, __LINE__,
+                                                      rd_kafka_name(rk),
                                                       &mv_correct, testid,
                                                       topic, partition,
                                                       offset,  -1, 0, cnt);

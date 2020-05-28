@@ -36,6 +36,8 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
 #include "rdrand.h"
+#include "rdunittest.h"
+
 
 #if WITH_SSL
 #include <openssl/hmac.h>
@@ -88,7 +90,7 @@ static void rd_kafka_sasl_scram_generate_nonce (rd_chariov_t *dst) {
         dst->size = 32;
         dst->ptr = rd_malloc(dst->size+1);
         for (i = 0 ; i < (int)dst->size ; i++)
-                dst->ptr[i] = 'a'; // (char)rd_jitter(0x2d/*-*/, 0x7e/*~*/);
+                dst->ptr[i] = (char)rd_jitter(0x2d/*-*/, 0x7e/*~*/);
         dst->ptr[i] = 0;
 }
 
@@ -340,7 +342,9 @@ static char *rd_kafka_sasl_safe_string (const char *str) {
                 const char *s;
                 for (s = str ; *s ; s++) {
                         if (pass == 0) {
-                                len += 1 + (*s == ',' || *s == '=');
+                                /* If this byte needs to be escaped then
+                                 * 3 output bytes are needed instead of 1. */
+                                len += (*s == ',' || *s == '=') ? 3 : 1;
                                 continue;
                         }
 
@@ -695,7 +699,7 @@ rd_kafka_sasl_scram_handle_server_final_message (
                  * but we need to verify the ServerSignature too. */
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                            "SCRAMAUTH",
-                           "SASL SCRAM authentication succesful on server: "
+                           "SASL SCRAM authentication successful on server: "
                            "verifying ServerSignature");
 
                 if (strcmp(attr_v, state->ServerSignatureB64)) {
@@ -910,3 +914,81 @@ const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider = {
         .close         = rd_kafka_sasl_scram_close,
         .conf_validate = rd_kafka_sasl_scram_conf_validate,
 };
+
+
+
+/**
+ * @name Unit tests
+ */
+
+/**
+ * @brief Verify that a random nonce is generated.
+ */
+static int unittest_scram_nonce (void) {
+        rd_chariov_t out1 = RD_ZERO_INIT;
+        rd_chariov_t out2 = RD_ZERO_INIT;
+
+        rd_kafka_sasl_scram_generate_nonce(&out1);
+        RD_UT_ASSERT(out1.size == 32, "Wrong size %d", (int)out1.size);
+
+        rd_kafka_sasl_scram_generate_nonce(&out2);
+        RD_UT_ASSERT(out1.size == 32, "Wrong size %d", (int)out2.size);
+
+        RD_UT_ASSERT(memcmp(out1.ptr, out2.ptr, out1.size) != 0,
+                     "Expected generate_nonce() to return a random nonce");
+
+        rd_free(out1.ptr);
+        rd_free(out2.ptr);
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Verify that the safe string function does not overwrite memory.
+ *        Needs to be run with ASAN (which is done in release-tests) for
+ *        proper verification.
+ */
+static int unittest_scram_safe (void) {
+        const char *inout[] = {
+                "just a string",
+                "just a string",
+
+                "another,one,that,needs=escaping!",
+                "another=2Cone=2Cthat=2Cneeds=3Descaping!",
+
+                "overflow?============================",
+                "overflow?=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D"
+                "=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D",
+
+                "=3D=3D=3D the mind boggles",
+                "=3D3D=3D3D=3D3D the mind boggles",
+
+                NULL,
+                NULL
+        };
+        int i;
+
+        for (i = 0 ; inout[i] ; i += 2) {
+                char *out = rd_kafka_sasl_safe_string(inout[i]);
+                const char *expected = inout[i+1];
+
+                RD_UT_ASSERT(!strcmp(out, expected),
+                             "Expected sasl_safe_string(%s) => %s, not %s\n",
+                             inout[i], expected, out);
+
+                rd_free(out);
+        }
+
+        RD_UT_PASS();
+}
+
+
+int unittest_scram (void) {
+        int fails = 0;
+
+        fails += unittest_scram_nonce();
+        fails += unittest_scram_safe();
+
+        return fails;
+}

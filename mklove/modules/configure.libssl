@@ -8,20 +8,23 @@
 #
 
 # And then call the following function from the correct place/order in checks:
-#   mkl_check libssl [<action>]
+#   mkl_check libssl
 #
 #
 # This module is a bit hacky since OpenSSL provides both libcrypto and libssl,
 # the latter depending on the former, but from a user perspective it is
 # SSL that is the feature, not crypto.
 
-mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
+mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "try"
 
 
 function manual_checks {
-    local action=${1:-disable}
-
-    [[ $ENABLE_SSL == y ]] || return 0
+    case "$ENABLE_SSL" in
+        n) return 0 ;;
+        y) local action=fail ;;
+        try) local action=disable ;;
+        *) mkl_err "mklove internal error: invalid value for ENABLE_SSL: $ENABLE_SSL"; exit 1 ;;
+    esac
 
     if [[ $MKL_DISTRO == "osx" ]]; then
         # Add brew's OpenSSL pkg-config path on OSX
@@ -79,28 +82,25 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.0.2r
+        local ver=1.0.2u
+        local url=https://www.openssl.org/source/old/1.0.2/openssl-1.0.2u.tar.gz
 
-        local conf_args="--openssldir=/usr/lib/ssl zlib shared"
+        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
         if [[ $ver == 1.0.* ]]; then
             extra_conf_args="${extra_conf_args} no-krb5"
         fi
 
-        echo "### Installing $name $ver from source to $destdir"
+        echo "### Installing $name $ver from source ($url) to $destdir"
         if [[ ! -f config ]]; then
             echo "### Downloading"
-            curl -sL https://www.openssl.org/source/openssl-${ver}.tar.gz | \
-                tar xzf - --strip-components 1
+            curl -fL $url | tar xzf - --strip-components 1
         fi
 
-        if [[ ! -f config.log ]]; then
-            echo "### Configuring"
-            ./config --prefix="/usr" $conf_args || return $?
-            make -j clean
-        fi
+        echo "### Configuring"
+        ./config --prefix="/usr" $conf_args || return $?
 
         echo "### Building"
-        make -j
+        make
 
         echo "### Installing to $destdir"
         make INSTALL_PREFIX="$destdir" install_sw

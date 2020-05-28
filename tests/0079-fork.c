@@ -29,7 +29,7 @@
 #include "test.h"
 #include "rdkafka.h"
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <unistd.h>
 #include <sys/wait.h>
 #endif
@@ -47,7 +47,7 @@ int main_0079_fork (int argc, char **argv) {
         TEST_SKIP("AddressSanitizer is enabled: this test leaks memory (due to fork())\n");
         return 0;
 #endif
-#ifdef _MSC_VER
+#ifdef _WIN32
         TEST_SKIP("No fork() support on Windows");
         return 0;
 #else

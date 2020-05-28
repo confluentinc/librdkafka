@@ -5,7 +5,7 @@
       "buildenv": "xenial-amd64",
       "builddeps": [
         "build-essential",
-        "python",
+        "python3",
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
@@ -17,7 +17,7 @@
           "make -C tests build"
       ],
       "testcmd": [
-          "make -C tests run_local"
+          "make -C tests run_local_quick"
       ],
     },
 
@@ -26,7 +26,7 @@
       "buildenv": "xenial-i386",
       "builddeps": [
         "build-essential",
-        "python",
+        "python3",
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
@@ -39,7 +39,7 @@
         "make -C tests build"
       ],
       "testcmd": [
-        "make -C tests run_local"
+        "make -C tests run_local_quick"
       ],
     },
 
@@ -48,7 +48,7 @@
       "buildenv": "xenial-armhf",
       "builddeps": [
         "build-essential",
-        "python",
+        "python3",
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
@@ -71,7 +71,7 @@
       "buildenv": "stretch-mips",
       "builddeps": [
         "build-essential",
-        "python",
+        "python3",
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
@@ -94,7 +94,7 @@
       "buildenv": "xenial-amd64",
       "builddeps": [
         "build-essential",
-        "python",
+        "python3",
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",

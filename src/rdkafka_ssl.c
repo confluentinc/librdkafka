@@ -36,13 +36,18 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_cert.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #pragma comment (lib, "crypt32.lib")
 #endif
 
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 
+#if !_WIN32
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 
 #if WITH_VALGRIND
@@ -77,7 +82,7 @@ void rd_kafka_transport_ssl_close (rd_kafka_transport_t *rktrans) {
 static RD_INLINE void
 rd_kafka_transport_ssl_clear_error (rd_kafka_transport_t *rktrans) {
         ERR_clear_error();
-#ifdef _MSC_VER
+#ifdef _WIN32
         WSASetLastError(0);
 #else
         rd_set_errno(0);
@@ -126,7 +131,11 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         int line, flags;
         int cnt = 0;
 
-        while ((l = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0) {
+        if (!rk)
+                rk = rkb->rkb_rk;
+
+        while ((l = ERR_get_error_line_data(&file, &line,
+                                            &data, &flags)) != 0) {
                 char buf[256];
 
                 if (cnt++ > 0) {
@@ -139,13 +148,25 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
                 ERR_error_string_n(l, buf, sizeof(buf));
 
-                rd_snprintf(errstr, errstr_size, "%s:%d: %s: %s",
-                            file, line, buf, (flags & ERR_TXT_STRING) ? data : "");
+                if (!(flags & ERR_TXT_STRING) || !data || !*data)
+                        data = NULL;
 
+                /* Include openssl file:line if debugging is enabled */
+                if (rk->rk_conf.log_level >= LOG_DEBUG)
+                        rd_snprintf(errstr, errstr_size, "%s:%d: %s%s%s",
+                                    file, line, buf,
+                                    data ? ": " : "",
+                                    data ? data : "");
+                else
+                        rd_snprintf(errstr, errstr_size, "%s%s%s",
+                                    buf,
+                                    data ? ": " : "",
+                                    data ? data : "");
         }
 
         if (cnt == 0)
-                rd_snprintf(errstr, errstr_size, "No error");
+                rd_snprintf(errstr, errstr_size,
+                            "No further error information available");
 
         return errstr;
 }
@@ -178,15 +199,15 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 
         case SSL_ERROR_SYSCALL:
                 serr2 = ERR_peek_error();
-                if (!serr2 && !socket_errno)
-                        rd_snprintf(errstr, errstr_size, "Disconnected");
-                else if (serr2)
+                if (serr2)
                         rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
                                            errstr, errstr_size);
+                else if (!rd_socket_errno || rd_socket_errno == ECONNRESET)
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
                 else
                         rd_snprintf(errstr, errstr_size,
                                     "SSL transport error: %s",
-                                    rd_strerror(socket_errno));
+                                    rd_strerror(rd_socket_errno));
                 return -1;
 
         case SSL_ERROR_ZERO_RETURN:
@@ -477,7 +498,7 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         if (!rktrans->rktrans_ssl)
                 goto fail;
 
-        if (!SSL_set_fd(rktrans->rktrans_ssl, rktrans->rktrans_s))
+        if (!SSL_set_fd(rktrans->rktrans_ssl, (int)rktrans->rktrans_s))
                 goto fail;
 
         if (rd_kafka_transport_ssl_set_endpoint_id(rktrans, errstr,
@@ -588,11 +609,36 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
         } else if (rd_kafka_transport_ssl_io_update(rktrans, r,
                                                     errstr,
                                                     sizeof(errstr)) == -1) {
+                const char *extra = "";
+
+                if (strstr(errstr, "unexpected message"))
+                        extra = ": client SSL authentication might be "
+                                "required (see ssl.key.location and "
+                                "ssl.certificate.location and consult the "
+                                "broker logs for more information)";
+                else if (strstr(errstr, "tls_process_server_certificate:"
+                                "certificate verify failed") ||
+                         strstr(errstr, "get_server_certificate:"
+                                "certificate verify failed"))
+                        extra = ": broker certificate could not be verified, "
+                                "verify that ssl.ca.location is correctly "
+                                "configured or root CA certificates are "
+                                "installed"
+#ifdef __APPLE__
+                                " (brew install openssl)"
+#elif defined(_WIN32)
+                                " (add broker's CA certificate to the Windows "
+                                "Root certificate store)"
+#else
+                                " (install ca-certificates package)"
+#endif
+                                ;
+                else if (!strcmp(errstr, "Disconnected"))
+                        extra = ": connecting to a PLAINTEXT broker listener?";
+
                 rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__SSL,
                                      "SSL handshake failed: %s%s", errstr,
-                                     strstr(errstr, "unexpected message") ?
-                                     ": client authentication might be "
-                                     "required (see broker log)" : "");
+                                     extra);
                 return -1;
         }
 
@@ -644,7 +690,7 @@ static X509 *rd_kafka_ssl_X509_from_string (rd_kafka_t *rk, const char *str) {
 }
 
 
-#if _MSC_VER
+#ifdef _WIN32
 
 /**
  * @brief Attempt load CA certificates from the Windows Certificate Root store.
@@ -710,6 +756,108 @@ static int rd_kafka_ssl_win_load_root_certs (rd_kafka_t *rk, SSL_CTX *ctx) {
 }
 #endif /* MSC_VER */
 
+
+/**
+ * @brief Probe for the system's CA certificate location and if found set it
+ *        on the \p CTX.
+ *
+ * @returns 0 if CA location was set, else -1.
+ */
+static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
+                                                           SSL_CTX *ctx) {
+#if _WIN32
+        /* No standard location on Windows, CA certs are in the ROOT store. */
+        return -1;
+#else
+        /* The probe paths are based on:
+         * https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
+         * Golang's crypto probing paths:
+         *   https://golang.org/search?q=certFiles   and certDirectories
+         */
+        static const char *paths[] = {
+                "/etc/pki/tls/certs/ca-bundle.crt",
+                "/etc/ssl/certs/ca-bundle.crt",
+                "/etc/pki/tls/certs/ca-bundle.trust.crt",
+                "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+
+                "/etc/ssl/ca-bundle.pem",
+                "/etc/pki/tls/cacert.pem",
+                "/etc/ssl/cert.pem",
+                "/etc/ssl/cacert.pem",
+
+                "/etc/certs/ca-certificates.crt",
+                "/etc/ssl/certs/ca-certificates.crt",
+
+                "/etc/ssl/certs",
+
+                "/usr/local/etc/ssl/cert.pem",
+                "/usr/local/etc/ssl/cacert.pem",
+
+                "/usr/local/etc/ssl/certs/cert.pem",
+                "/usr/local/etc/ssl/certs/cacert.pem",
+
+                /* BSD */
+                "/usr/local/share/certs/ca-root-nss.crt",
+                "/etc/openssl/certs/ca-certificates.crt",
+#ifdef __APPLE__
+                "/private/etc/ssl/cert.pem",
+                "/private/etc/ssl/certs",
+                "/usr/local/etc/openssl@1.1/cert.pem",
+                "/usr/local/etc/openssl@1.0/cert.pem",
+                "/usr/local/etc/openssl/certs",
+                "/System/Library/OpenSSL",
+#endif
+#ifdef _AIX
+                "/var/ssl/certs/ca-bundle.crt",
+#endif
+                NULL,
+        };
+        const char *path = NULL;
+        int i;
+
+        for (i = 0 ; (path = paths[i]) ; i++) {
+                struct stat st;
+                rd_bool_t is_dir;
+                int r;
+
+                if (stat(path, &st) != 0)
+                        continue;
+
+                is_dir = S_ISDIR(st.st_mode);
+
+                if (is_dir && rd_kafka_dir_is_empty(path))
+                        continue;
+
+                rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                             "Setting default CA certificate location "
+                             "to %s, override with ssl.ca.location", path);
+
+                r = SSL_CTX_load_verify_locations(ctx,
+                                                  is_dir ? NULL : path,
+                                                  is_dir ? path : NULL);
+                if (r != 1) {
+                        char errstr[512];
+                        /* Read error and clear the error stack */
+                        rd_kafka_ssl_error(rk, NULL, errstr, sizeof(errstr));
+                        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                                     "Failed to set default CA certificate "
+                                     "location to %s %s: %s: skipping",
+                                     is_dir ? "directory" : "file", path,
+                                     errstr);
+                        continue;
+                }
+
+                return 0;
+        }
+
+        rd_kafka_dbg(rk, SECURITY, "CACERTS",
+                     "Unable to find any standard CA certificate"
+                     "paths: is the ca-certificates package installed?");
+        return -1;
+#endif
+}
+
+
 /**
  * @brief Registers certificates, keys, etc, on the SSL_CTX
  *
@@ -734,7 +882,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 /* OpenSSL takes ownership of the store */
                 rk->rk_conf.ssl.ca->store = NULL;
 
-        } else if (rk->rk_conf.ssl.ca_location) {
+        } else if (rk->rk_conf.ssl.ca_location &&
+                   strcmp(rk->rk_conf.ssl.ca_location, "probe")) {
                 /* CA certificate location, either file or directory. */
                 int is_dir = rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
 
@@ -758,21 +907,47 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 }
 
         } else {
-#if _MSC_VER
+#ifdef _WIN32
                 /* Attempt to load CA root certificates from the
                  * Windows crypto Root cert store. */
                 r = rd_kafka_ssl_win_load_root_certs(rk, ctx);
 #else
                 r = -1;
 #endif
+
+                if ((rk->rk_conf.ssl.ca_location &&
+                     !strcmp(rk->rk_conf.ssl.ca_location, "probe"))
+#if WITH_STATIC_LIB_libcrypto
+                    || r == -1
+#endif
+                        ) {
+                        /* If OpenSSL was linked statically there is a risk
+                         * that the system installed CA certificate path
+                         * doesn't match the cert path of OpenSSL.
+                         * To circumvent this we check for the existence
+                         * of standard CA certificate paths and use the
+                         * first one that is found.
+                         * Ignore failures. */
+                        r = rd_kafka_ssl_probe_and_set_default_ca_location(
+                                rk, ctx);
+                }
+
                 if (r == -1) {
-                        /* Use default CA certificate paths: ignore failures */
+                        /* Use default CA certificate paths from linked OpenSSL:
+                         * ignore failures */
+
                         r = SSL_CTX_set_default_verify_paths(ctx);
-                        if (r != 1)
+                        if (r != 1) {
+                                char errstr2[512];
+                                /* Read error and clear the error stack. */
+                                rd_kafka_ssl_error(rk, NULL,
+                                                   errstr2, sizeof(errstr2));
                                 rd_kafka_dbg(
                                         rk, SECURITY, "SSL",
                                         "SSL_CTX_set_default_verify_paths() "
-                                        "failed: ignoring");
+                                        "failed: %s: ignoring", errstr2);
+                        }
+                        r = 0;
                 }
         }
 
@@ -1086,16 +1261,25 @@ void rd_kafka_ssl_ctx_term (rd_kafka_t *rk) {
 int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         int r;
         SSL_CTX *ctx;
+        const char *linking =
+#if WITH_STATIC_LIB_libcrypto
+                "statically linked "
+#else
+                ""
+#endif
+                ;
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-        rd_kafka_dbg(rk, SECURITY, "OPENSSL", "Using OpenSSL version %s "
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL", "Using %sOpenSSL version %s "
                      "(0x%lx, librdkafka built with 0x%lx)",
+                     linking,
                      OpenSSL_version(OPENSSL_VERSION),
                      OpenSSL_version_num(),
                      OPENSSL_VERSION_NUMBER);
 #else
-        rd_kafka_dbg(rk, SECURITY, "OPENSSL", "librdkafka built with OpenSSL "
-                     "version 0x%lx", OPENSSL_VERSION_NUMBER);
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL",
+                     "librdkafka built with %sOpenSSL version 0x%lx",
+                     linking, OPENSSL_VERSION_NUMBER);
 #endif
 
         if (errstr_size > 0)
@@ -1241,7 +1425,7 @@ rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
 #endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
-#ifdef _MSC_VER
+#ifdef _WIN32
         /* Windows makes a distinction between thread handle
          * and thread id, which means we can't use the
          * thrd_current() API that returns the handle. */

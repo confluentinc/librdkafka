@@ -197,6 +197,8 @@ typedef struct rd_kafka_msgset_reader_s {
                                          *   message set.
                                          *   Not freed (use const memory).
                                          *   Add trailing space. */
+
+        rd_kafka_compression_t msetr_compression; /**< Compression codec */
 } rd_kafka_msgset_reader_t;
 
 
@@ -264,6 +266,8 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
         int codec = Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_buf_t *rkbufz;
+
+        msetr->msetr_compression = codec;
 
         switch (codec)
         {
@@ -824,8 +828,8 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                                 rd_rkb_log(msetr->msetr_rkb, LOG_ERR, "TXN",
                                         "%s [%"PRId32"]: "
                                         "Abort txn ctrl msg bad order "
-                                        "at offset %"PRId64". Expected "
-                                        "before or at %"PRId64". Messages "
+                                        "at offset %"PRId64": expected "
+                                        "before or at %"PRId64": messages "
                                         "in aborted transactions may be "
                                         "delivered to the application",
                                         rktp->rktp_rkt->rkt_topic->str,
@@ -856,6 +860,12 @@ unexpected_abort_txn:
                                 ctrl_data.Type, hdr.Offset);
                         break;
                 }
+
+                rko = rd_kafka_op_new_ctrl_msg(
+                        rktp, msetr->msetr_tver->version,
+                        rkbuf, hdr.Offset);
+                rd_kafka_q_enq(&msetr->msetr_rkq, rko);
+                msetr->msetr_msgcnt++;
 
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
@@ -1069,17 +1079,6 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                               &save_slice, payload_size))
                         rd_kafka_buf_check_len(rkbuf, payload_size);
 
-                if (msetr->msetr_aborted_txns == NULL &&
-                    msetr->msetr_v2_hdr->Attributes &
-                    RD_KAFKA_MSGSET_V2_ATTR_CONTROL) {
-                        /* Since there are no aborted transactions,
-                         * the MessageSet must correspond to a commit marker.
-                         * These are ignored. */
-                        rd_kafka_buf_skip(rkbuf, payload_size);
-                        rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
-                        goto done;
-                }
-
                 if (msetr->msetr_aborted_txns != NULL &&
                     (msetr->msetr_v2_hdr->Attributes &
                      (RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL|
@@ -1099,10 +1098,12 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
                                            "%s [%"PRId32"]: "
                                            "Skipping %"PRId32" message(s) "
-                                           "in aborted transaction",
+                                           "in aborted transaction "
+                                           "at offset %"PRId64,
                                            rktp->rktp_rkt->rkt_topic->str,
                                            rktp->rktp_partition,
-                                           msetr->msetr_v2_hdr->RecordCount);
+                                           msetr->msetr_v2_hdr->RecordCount,
+                                           txn_start_offset);
                                 rd_kafka_buf_skip(rkbuf, payload_size);
                                 rd_slice_widen(&rkbuf->rkbuf_reader,
                                                &save_slice);
@@ -1359,14 +1360,17 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                    "Enqueue %i %smessage(s) (%"PRId64" bytes, %d ops) on "
                    "%s [%"PRId32"] "
                    "fetch queue (qlen %d, v%d, last_offset %"PRId64
-                   ", %d ctrl msgs)",
+                   ", %d ctrl msgs, %s)",
                    msetr->msetr_msgcnt, msetr->msetr_srcname,
                    msetr->msetr_msg_bytes,
                    rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
                    msetr->msetr_tver->version, last_offset,
-                   msetr->msetr_ctrl_cnt);
+                   msetr->msetr_ctrl_cnt,
+                   msetr->msetr_compression ?
+                   rd_kafka_compression2str(msetr->msetr_compression) :
+                   "uncompressed");
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */

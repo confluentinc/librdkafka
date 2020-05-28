@@ -188,7 +188,7 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
                 ssize_t r;
                 printf(_C_CYA "%s:%d: shutting down socket %d (%s)\n" _C_CLR,
                        __FILE__, __LINE__, sockfd, brokername);
-#ifdef _MSC_VER
+#ifdef _WIN32
                 closesocket(sockfd);
 #else
                 close(sockfd);
@@ -295,8 +295,14 @@ static void do_test_produce_retries_disconnect (const char *topic,
         rd_kafka_destroy(rk);
 
         TEST_SAY("Verifying messages with consumer\n");
-        test_consume_msgs_easy(NULL, topic, testid,
-                               partition_cnt, should_fail ? 0 : msgcnt, NULL);
+        test_consume_msgs_easy(NULL, topic, testid, partition_cnt,
+                               /* Since we don't know the number of
+                                * messages that got thru on the socket
+                                * before disconnect we can't let the
+                                * expected message count be 0 in case of
+                                * should_fail, so instead ignore the message
+                                * count (-1). */
+                               should_fail ? -1 : msgcnt, NULL);
 
         TEST_SAY(_C_GRN "Test produce retries by disconnect "
                  "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
@@ -306,22 +312,28 @@ static void do_test_produce_retries_disconnect (const char *topic,
 
 int main_0076_produce_retry (int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
+        const rd_bool_t has_idempotence =
+                test_broker_version >= TEST_BRKVER(0,11,0,0);
 
 #if WITH_SOCKEM
-        /* Idempotence, no try fail, should succeed. */
-        do_test_produce_retries(topic, 1, 0, 0);
+        if (has_idempotence) {
+                /* Idempotence, no try fail, should succeed. */
+                do_test_produce_retries(topic, 1, 0, 0);
+                /* Idempotence, try fail, should succeed. */
+                do_test_produce_retries(topic, 1, 1, 0);
+        }
         /* No idempotence, try fail, should fail. */
         do_test_produce_retries(topic, 0, 1, 1);
-        /* Idempotence, try fail, should succeed. */
-        do_test_produce_retries(topic, 1, 1, 0);
 #endif
 
-        /* Idempotence, no try fail, should succeed. */
-        do_test_produce_retries_disconnect(topic, 1, 0, 0);
+        if (has_idempotence) {
+                /* Idempotence, no try fail, should succeed. */
+                do_test_produce_retries_disconnect(topic, 1, 0, 0);
+                /* Idempotence, try fail, should succeed. */
+                do_test_produce_retries_disconnect(topic, 1, 1, 0);
+        }
         /* No idempotence, try fail, should fail. */
         do_test_produce_retries_disconnect(topic, 0, 1, 1);
-        /* Idempotence, try fail, should succeed. */
-        do_test_produce_retries_disconnect(topic, 1, 1, 0);
 
         return 0;
 }

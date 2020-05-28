@@ -85,7 +85,7 @@ rd_kafka_interceptor_failed (rd_kafka_t *rk,
                              "message on %s [%"PRId32"] @ %"PRId64
                              ": %s%s%s",
                              method->ic_name, method_name,
-                             rd_kafka_topic_a2i(rkmessage->rkt)->rkt_topic->str,
+                             rd_kafka_topic_name(rkmessage->rkt),
                              rkmessage->partition,
                              rkmessage->offset,
                              rd_kafka_err2str(err),

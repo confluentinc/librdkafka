@@ -25,7 +25,7 @@ to alternate directory, e.g., `TRIVUP_ROOT=$HOME/trivup make full`.
 
 First install trivup:
 
-    $ pip install trivup
+    $ pip3 install trivup
 
 Bring up a Kafka cluster (with the specified version) and start an interactive
 shell, when the shell is exited the cluster is brought down and deleted.
@@ -127,6 +127,20 @@ Some additional guidelines:
    values to non-test functions, e.g, `rd_kafka_poll(rk, tmout_multip(3000))`.
 
 
+## Test scenarios
+
+A test scenario defines the cluster configuration used by tests.
+The majority of tests use the "default" scenario which matches the
+Apache Kafka default broker configuration (topic auto creation enabled, etc).
+
+If a test relies on cluster configuration that is mutually exclusive with
+the default configuration an alternate scenario must be defined in
+`scenarios/<scenario>.json` which is a configuration object which
+is passed to [trivup](https://github.com/edenhill/trivup).
+
+Try to reuse an existing test scenario as far as possible to speed up
+test times, since each new scenario will require a new cluster incarnation.
+
 
 ## A guide to testing, verifying, and troubleshooting, librdkafka
 
@@ -157,6 +171,10 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
                       E.g.. `TEST_DEBUG=broker,protocol TESTS=0001 make`
  * `TEST_LEVEL=n` - controls the `TEST_SAY()` output level, a higher number
                       yields more test output. Default level is 2.
+ * `RD_UT_TEST=name` - only run the specific unittest, should be used with
+                          `TESTS=0000`.
+                          See [../src/rdunittest.c](../src/rdunittest.c) for
+                          unit test names.
 
 
 Let's say that you run the full test suite and get a failure in test 0061,

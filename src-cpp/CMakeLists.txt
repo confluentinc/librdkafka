@@ -54,7 +54,7 @@ set(PKG_CONFIG_LIBS
     "-L\${libdir} -lrdkafka++"
 )
 set(PKG_CONFIG_LIBS_PRIVATE
-    "-lrdkafka -lstdc++"
+    "-lrdkafka"
 )
 configure_file(
     "../packaging/cmake/rdkafka.pc.in"

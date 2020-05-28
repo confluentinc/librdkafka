@@ -46,7 +46,7 @@ static int verify_offset (const RdKafka::TopicPartition *tp,
     fails++;
   }
 
-  if (tp->offset() != exp_offset) {
+  if (!exp_err && tp->offset() != exp_offset) {
     Test::FailLater(tostr() << " " << tp->topic() <<
                     " [" << tp->partition() << "] " <<
                     "expected offset " << exp_offset << " for timestamp " <<
@@ -157,6 +157,42 @@ static void test_offset_time (void) {
     if (err != RdKafka::ERR__TIMED_OUT)
       Test::Fail("expected offsetsForTimes(timeout=0) to fail with TIMED_OUT, not " + RdKafka::err2str(err));
   }
+
+  /* Include non-existent partitions */
+  for (int ti = 0 ; ti < timestamp_cnt*2 ; ti += 2) {
+    RdKafka::TopicPartition::destroy(query_parts);
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 0,
+                                                          timestamps[ti]));
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 1,
+                                                          timestamps[ti]));
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 2,
+                                                          timestamps[ti]));
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 20,
+                                                          timestamps[ti]));
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 3,
+                                                          timestamps[ti]));
+    query_parts.push_back(RdKafka::TopicPartition::create(topic, 21,
+                                                          timestamps[ti]));
+    Test::Say("Attempting offsetsForTimes() with non-existent partitions\n");
+    err = p->offsetsForTimes(query_parts, -1);
+    Test::print_TopicPartitions("offsetsForTimes", query_parts);
+    if (err != RdKafka::ERR_NO_ERROR)
+      Test::Fail("expected offsetsForTimes(timeout=0) to succeed, not " +
+                 RdKafka::err2str(err));
+    fails += verify_offset(query_parts[0], timestamps[ti], timestamps[ti+1],
+                           RdKafka::ERR_NO_ERROR);
+    fails += verify_offset(query_parts[1], timestamps[ti], timestamps[ti+1],
+                           RdKafka::ERR_NO_ERROR);
+    fails += verify_offset(query_parts[2], timestamps[ti], -1,
+                           RdKafka::ERR_NO_ERROR);
+    fails += verify_offset(query_parts[3], timestamps[ti], -1,
+                           RdKafka::ERR__UNKNOWN_PARTITION);
+    fails += verify_offset(query_parts[4], timestamps[ti], -1,
+                           RdKafka::ERR_NO_ERROR);
+    fails += verify_offset(query_parts[5], timestamps[ti], -1,
+                           RdKafka::ERR__UNKNOWN_PARTITION);
+  }
+
 
   if (fails > 0)
     Test::Fail(tostr() << "See " << fails << " previous error(s)");

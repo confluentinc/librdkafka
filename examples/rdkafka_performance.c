@@ -52,13 +52,13 @@
 #include "rd.h"
 #include "rdtime.h"
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #include "../win32/wingetopt.h"
 #include "../win32/wintime.h"
 #endif
 
 
-static int run = 1;
+static volatile sig_atomic_t run = 1;
 static int forever = 1;
 static rd_ts_t dispintvl = 1000;
 static int do_seq = 0;
@@ -774,7 +774,7 @@ static rd_kafka_resp_err_t do_produce (rd_kafka_t *rk,
  */
 static void do_sleep (int sleep_us) {
         if (sleep_us > 100) {
-#ifdef _MSC_VER
+#ifdef _WIN32
                 Sleep(sleep_us / 1000);
 #else
                 usleep(sleep_us);
@@ -1263,9 +1263,15 @@ int main (int argc, char **argv) {
         if (stats_intvlstr) {
                 /* User enabled stats (-T) */
 
-#ifndef _MSC_VER
+#ifndef _WIN32
                 if (stats_cmd) {
-                        if (!(stats_fp = popen(stats_cmd, "we"))) {
+                        if (!(stats_fp = popen(stats_cmd,
+#ifdef __linux__
+                                               "we"
+#else
+                                               "w"
+#endif
+                                               ))) {
                                 fprintf(stderr,
                                         "%% Failed to start stats command: "
                                         "%s: %s", stats_cmd, strerror(errno));
@@ -1543,7 +1549,6 @@ int main (int argc, char **argv) {
 			fetch_latency = rd_clock();
 
 			if (batch_size) {
-				int i;
 				int partition = partitions ? partitions[0] :
 				    RD_KAFKA_PARTITION_UA;
 
@@ -1553,7 +1558,7 @@ int main (int argc, char **argv) {
 							   rkmessages,
 							   batch_size);
 				if (r != -1) {
-					for (i = 0 ; i < r ; i++) {
+					for (i = 0 ; (ssize_t)i < r ; i++) {
 						msg_consume(rkmessages[i],
 							NULL);
 						rd_kafka_message_destroy(
@@ -1611,7 +1616,6 @@ int main (int argc, char **argv) {
 		/*
 		 * High-level balanced Consumer
 		 */
-		rd_kafka_resp_err_t err;
 
 		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 		rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
@@ -1692,7 +1696,7 @@ int main (int argc, char **argv) {
 		fclose(latency_fp);
 
         if (stats_fp) {
-#ifndef _MSC_VER
+#ifndef _WIN32
                 pclose(stats_fp);
 #endif
                 stats_fp = NULL;

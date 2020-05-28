@@ -60,9 +60,9 @@ msg_size | int gauge | | Current total size of messages in producer queues
 msg_max | int | | Threshold: maximum number of messages allowed allowed on the producer queues
 msg_size_max | int | | Threshold: maximum total size of messages allowed on the producer queues
 tx | int | | Total number of requests sent to Kafka brokers
-txbytes | int | | Total number of bytes transmitted to Kafka brokers
+tx_bytes | int | | Total number of bytes transmitted to Kafka brokers
 rx | int | | Total number of responses received from Kafka brokers
-rxbytes | int | | Total number of bytes received from Kafka brokers
+rx_bytes | int | | Total number of bytes received from Kafka brokers
 txmsgs | int | | Total number of messages transmitted (produced) to Kafka brokers
 txmsg_bytes | int | | Total number of message bytes (including framing, such as per-Message framing and MessageSet/batch framing) transmitted to Kafka brokers
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc), from Kafka brokers.
@@ -149,6 +149,7 @@ partition | int | 3 | Partition id
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 topic | string | `"myatopic"` | Topic name
+age   | int gauge | | Age of client's topic object (milliseconds)
 metadata_age | int gauge | | Age of metadata from broker for this topic (milliseconds)
 batchsize | object | | Batch sizes in bytes. See *Window stats*·
 batchcnt | object | | Batch message counts. See *Window stats*·
@@ -160,6 +161,7 @@ partitions | object | | Partitions dict, key is partition id. See **partitions**
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 partition | int | 3 | Partition Id (-1 for internal UA/UnAssigned partition)
+broker | int | | The id of the broker that messages are currently being fetched from
 leader | int | | Current leader broker id
 desired | bool | | Partition is explicitly desired by application
 unknown | bool | | Partition not seen in topic metadata from broker
@@ -178,7 +180,8 @@ committed_offset | int gauge | | Last committed offset
 eof_offset | int gauge | | Last PARTITION_EOF signaled offset
 lo_offset | int gauge | | Partition's low watermark offset on broker
 hi_offset | int gauge | | Partition's high watermark offset on broker
-consumer_lag | int gauge | | Difference between hi_offset - max(app_offset, committed_offset)
+ls_offset | int gauge | | Partition's last stable offset on broker, or same as hi_offset is broker version is less than 0.11.0.0.
+consumer_lag | int gauge | | Difference between (hi_offset or ls_offset) - max(app_offset, committed_offset). hi_offset is used when isolation.level=read_uncommitted, otherwise ls_offset.
 txmsgs | int | | Total number of messages transmitted (produced)
 txbytes | int | | Total number of bytes transmitted for txmsgs
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc).
@@ -207,11 +210,14 @@ assignment_size | int gauge | | Current assignment's partition count.
 
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
-idemp_state | string | "Assigned" | Current idempotent producer id state
-idemp_stateage | int gauge | | Time elapsed since last idemp_state change (milliseconds)
-producer_id | int gauge | | The currently assigned Producer ID (or -1)
-producer_epoch | int gauge | | The current epoch (or -1)
-epoch_cnt | int | | The number of Producer ID assignments since start
+idemp_state | string | "Assigned" | Current idempotent producer id state.
+idemp_stateage | int gauge | | Time elapsed since last idemp_state change (milliseconds).
+txn_state | string | "InTransaction" | Current transactional producer state.
+txn_stateage | int gauge | | Time elapsed since last txn_state change (milliseconds).
+txn_may_enq | bool | | Transactional state allows enqueuing (producing) new messages.
+producer_id | int gauge | | The currently assigned Producer ID (or -1).
+producer_epoch | int gauge | | The current epoch (or -1).
+epoch_cnt | int | | The number of Producer ID assignments since start.
 
 
 # Example output
@@ -508,6 +514,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
       "partitions": {
         "0": {
           "partition": 0,
+          "broker": 3,
           "leader": 3,
           "desired": false,
           "unknown": false,
@@ -537,6 +544,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         },
         "1": {
           "partition": 1,
+          "broker": 2,
           "leader": 2,
           "desired": false,
           "unknown": false,
@@ -566,6 +574,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         },
         "-1": {
           "partition": -1,
+          "broker": -1,
           "leader": -1,
           "desired": false,
           "unknown": false,

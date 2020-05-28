@@ -42,7 +42,7 @@
 #include "rdkafka.h"
 
 
-static int run = 1;
+static volatile sig_atomic_t run = 1;
 
 /**
  * @brief Signal termination of program

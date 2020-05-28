@@ -113,7 +113,6 @@ typedef struct rd_kafka_cgrp_s {
 
         /* State when group leader */
         struct {
-                char *protocol;
                 rd_kafka_group_member_t *members;
                 int member_cnt;
         } rkcg_group_leader;
@@ -183,8 +182,11 @@ typedef struct rd_kafka_cgrp_s {
 
         int32_t            rkcg_generation_id;      /* Current generation id */
 
-        rd_kafka_assignor_t *rkcg_assignor;         /* Selected partition
-                                                     * assignor strategy. */
+        rd_kafka_assignor_t *rkcg_assignor;         /**< The current partition
+                                                     *   assignor. used by both
+                                                     *   leader and members. */
+        void              *rkcg_assignor_state;     /**< current partition
+                                                     *   assignor state */
 
         int32_t            rkcg_coord_id;      /**< Current coordinator id,
                                                 *   or -1 if not known. */
@@ -309,9 +311,9 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
-
 struct rd_kafka_consumer_group_metadata_s {
         char *group_id;
+        int32_t generation_id;
 };
 
 rd_kafka_consumer_group_metadata_t *

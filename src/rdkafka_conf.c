@@ -678,10 +678,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(ssl.keystore_location),
           "Path to client's keystore (PKCS#12) used for authentication."
         },
-        { _RK_GLOBAL, "openssl.engine.location", _RK_C_STR,
-          _RK(ssl.openssl_engine_location),
-          "Location of openssl engine dll"
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        { _RK_GLOBAL, "ssl.engine.location", _RK_C_STR,
+          _RK(ssl.engine_location),
+          "Path to openssl engine library. OpenSSL >= 1.1.0 required."
         },
+        { _RK_GLOBAL, "ssl.engine.id", _RK_C_STR,
+          _RK(ssl.engine_id),
+          "Openssl engine id. If parameter not provided along with ssl.engine.location, "
+          "behavior is defaulted to 'dynamic' for openssl engine id."
+        },
+        { _RK_GLOBAL, "ssl.engine.callback_data", _RK_C_PTR,
+          _RK(ssl.engine_callback_data),
+          "Openssl engine callback data (set with rd_kafka_conf_set_engine_callback_data())" 
+        },
+#endif
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
           _RK(ssl.keystore_password),
           "Client's keystore (PKCS#12) password."
@@ -2523,6 +2534,11 @@ rd_kafka_conf_set_ssl_cert_verify_cb (
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "opaque", opaque);
+}
+
+
+void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t* conf, const void* callback_data) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "ssl.engine.callback_data", callback_data);
 }
 
 

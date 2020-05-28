@@ -2311,6 +2311,14 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
                             char *errstr, size_t errstr_size);
 
 
+/** @brief Set callback_data for ssl engine
+ *
+ */
+RD_EXPORT
+void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf, 
+                                            const void *callback_data);
+
+
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
  *

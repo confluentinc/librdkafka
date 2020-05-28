@@ -231,9 +231,9 @@ struct rd_kafka_conf_s {
                 char *crl_location;
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
                 ENGINE *engine;
-                char *engine_location;
-                char *engine_id;
-                void *engine_callback_data;
+                char   *engine_location;
+                char   *engine_id;
+                void   *engine_callback_data;
 #endif
                 char *keystore_location;
                 char *keystore_password;

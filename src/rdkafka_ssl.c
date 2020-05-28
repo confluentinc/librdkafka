@@ -1013,17 +1013,17 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                             X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, i));
                         if (x509)
                                 sk_X509_NAME_push(cert_names, 
-                                X509_get_subject_name(x509));
+                                                  X509_get_subject_name(x509));
                 }
 
                 x509 = NULL;
                 r = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.engine, 
-                    NULL,
-                    cert_names,
-                    &x509,
-                    &pkey,
-                    NULL, NULL, 
-                    rk->rk_conf.ssl.engine_callback_data);
+                                                NULL,
+                                                cert_names,
+                                                &x509,
+                                                &pkey,
+                                                NULL, NULL, 
+                                                rk->rk_conf.ssl.engine_callback_data);
 
                 sk_X509_NAME_free(cert_names);
                 if (r == -1 || !x509 || !pkey) {
@@ -1036,7 +1036,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 X509_free(x509);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                            "Failed to use SSL_CTX_use_certificate with engine: ");
+                                    "Failed to use SSL_CTX_use_certificate with engine: ");
                         EVP_PKEY_free(pkey);
                         return -1;
                 }
@@ -1045,7 +1045,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 EVP_PKEY_free(pkey);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                            "Failed to use SSL_CTX_use_PrivateKey with engine: ");
+                                    "Failed to use SSL_CTX_use_PrivateKey with engine: ");
                         return -1;
                 }
 
@@ -1185,16 +1185,18 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
                 if (!engine_errstr && 
                     !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine,
-                        "SO_PATH", rk->rk_conf.ssl.engine_location, 0))
+                                            "SO_PATH", 
+                                            rk->rk_conf.ssl.engine_location, 0))
                         engine_errstr = "ENGINE_ctrl_cmd_string SO_PATH failed: ";
 
                 if (!engine_errstr && 
                     !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
-                        "1", 0))
+                                            "1", 0))
                         engine_errstr = "ENGINE_ctrl_cmd_string LIST_ADD failed: ";
 
                 if (!engine_errstr && 
-                    !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD", NULL, 0))
+                    !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
+                                            NULL, 0))
                         engine_errstr = "ENGINE_ctrl_cmd_string LOAD failed: ";
 
                 if (!engine_errstr && !ENGINE_init(rk->rk_conf.ssl.engine))

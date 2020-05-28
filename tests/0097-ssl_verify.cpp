@@ -34,6 +34,43 @@
 #include "testcpp.h"
 #include "tinycthread.h"
 
+static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] =
+  {
+   /* [RdKafka::CERT_PUBLIC_KEY] = */
+   {
+    "RDK_SSL_pkcs",
+    "RDK_SSL_pub_der",
+    "RDK_SSL_pub_pem",
+   },
+   /* [RdKafka::CERT_PRIVATE_KEY] = */
+   {
+    "RDK_SSL_pkcs",
+    "RDK_SSL_priv_der",
+    "RDK_SSL_priv_pem",
+   },
+   /* [RdKafka::CERT_CA] = */
+   {
+    "RDK_SSL_pkcs",
+    "RDK_SSL_ca_der",
+    "RDK_SSL_ca_pem",
+   }
+  };
+
+
+static std::vector<char> read_file (const std::string path) {
+  std::ifstream ifs(path.c_str(), std::ios::binary | std::ios::ate);
+  if (ifs.fail())
+    Test::Fail("Failed to open " + path + ": " + strerror(errno));
+  int size = (int)ifs.tellg();
+  ifs.seekg(0, std::ifstream::beg);
+  std::vector<char> buffer;
+  buffer.resize(size);
+  ifs.read(buffer.data(), size);
+  ifs.close();
+  return buffer;
+}
+
+
 /**
  * @name SslCertVerifyCb verification.
  *
@@ -121,23 +158,6 @@ static void conf_location_to_setter (RdKafka::Conf *conf,
                                      RdKafka::CertificateType cert_type,
                                      RdKafka::CertificateEncoding encoding) {
   std::string loc;
-  static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
-    /* [RdKafka::CERT_PUBLIC_KEY] = */ {
-      "SSL_pkcs",
-      "SSL_pub_der",
-      "SSL_pub_pem",
-    },
-    /* [RdKafka::CERT_PRIVATE_KEY] = */ {
-      "SSL_pkcs",
-      "SSL_priv_der",
-      "SSL_priv_pem",
-    },
-    /* [RdKafka::CERT_CA] = */ {
-      "SSL_pkcs",
-      "SSL_ca_der",
-      "SSL_ca_pem",
-    }
-  };
   static const std::string encnames[] = {
     "PKCS#12",
     "DER",
@@ -286,6 +306,63 @@ static void do_test_verify (const int line, bool verify_ok,
     Test::Say(_C_GRN "[ PASSED: " + teststr + " ]\n" _C_CLR);
 }
 
+
+/**
+ * @brief Verification that some bad combinations of calls behave as expected.
+ *        This is simply to verify #2904.
+ */
+static void do_test_bad_calls () {
+  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+  std::string errstr;
+
+  if (conf->set("enable.ssl.certificate.verification", "false", errstr))
+    Test::Fail(errstr);
+
+  if (conf->set("security.protocol", "SSL", errstr))
+    Test::Fail(errstr);
+
+  if (conf->set("ssl.key.password", test_getenv("RDK_SSL_password", NULL),
+                errstr))
+    Test::Fail(errstr);
+
+  std::vector<char> certBuffer =
+    read_file(test_getenv(envname[RdKafka::CERT_CA]
+                          [RdKafka::CERT_ENC_PEM].c_str(), NULL));
+
+  if (conf->set_ssl_cert(RdKafka::CERT_CA, RdKafka::CERT_ENC_PEM,
+                         certBuffer.data(), certBuffer.size(), errstr))
+    Test::Fail(errstr);
+
+  /* Set public-key as CA (over-writing the previous one) */
+  std::vector<char> userBuffer =
+    read_file(test_getenv(envname[RdKafka::CERT_PUBLIC_KEY]
+                          [RdKafka::CERT_ENC_PEM].c_str(), NULL));
+
+  if (conf->set_ssl_cert(RdKafka::CERT_CA, RdKafka::CERT_ENC_PEM,
+                        userBuffer.data(), userBuffer.size(), errstr))
+    Test::Fail(errstr);
+
+  std::vector<char> keyBuffer =
+    read_file(test_getenv(envname[RdKafka::CERT_PRIVATE_KEY]
+                          [RdKafka::CERT_ENC_PEM].c_str(), NULL));
+
+  if (conf->set_ssl_cert(RdKafka::CERT_PRIVATE_KEY, RdKafka::CERT_ENC_PEM,
+                          keyBuffer.data(), keyBuffer.size(), errstr))
+    Test::Fail(errstr);
+
+  // Create Kafka producer
+  RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+  delete conf;
+  if (producer)
+    Test::Fail("Expected producer creation to fail");
+
+  if (errstr.find("Private key check failed") == std::string::npos)
+    Test::Fail("Expected 'Private key check failed' error, not " + errstr);
+
+  Test::Say("Producer creation failed expectedly: " + errstr + "\n");
+}
+
 extern "C" {
   int main_0097_ssl_verify (int argc, char **argv) {
 
@@ -294,10 +371,13 @@ extern "C" {
       return 0;
     }
 
-    if (!test_getenv("SSL_pkcs", NULL)) {
+    if (!test_getenv("RDK_SSL_pkcs", NULL)) {
       Test::Skip("Test requires SSL_* env-vars set up by trivup\n");
       return 0;
     }
+
+    do_test_bad_calls();
+
 
     do_test_verify(__LINE__, true,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM,

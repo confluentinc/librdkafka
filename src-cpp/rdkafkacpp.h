@@ -1220,8 +1220,8 @@ class RD_EXPORT Conf {
    *
    * @returns CONF_OK on success, else CONF_INVALID.
    */
-  virtual Conf::ConfResult set_engine_callback_data(const void* value,
-                                                    std::string& errstr) = 0;
+  virtual Conf::ConfResult set_engine_callback_data(const void *value,
+                                                    std::string &errstr) = 0;
 
   /** @brief Query single configuration value
    *

@@ -1360,7 +1360,7 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                  * list, as per LIST_ADD command below. If engine already exists
                  * in internal list, it is supposed to be fetched using engine id. 
                  */
-                rk->rk_conf.ssl.engine = ENGINE_by_id(rk->rk_conf.ssl.ssl_engine_id);
+                rk->rk_conf.ssl.engine = ENGINE_by_id(rk->rk_conf.ssl.engine_id);
                 if (!rk->rk_conf.ssl.engine) {
                         rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
                         if (!rk->rk_conf.ssl.engine)

@@ -2686,8 +2686,8 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 }
 
 
-void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t* conf,
-                                            const void* callback_data) {
+void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf,
+                                            const void *callback_data) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
                                       "ssl.engine.callback_data",
                                       callback_data);

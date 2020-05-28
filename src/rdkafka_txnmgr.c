@@ -1388,7 +1388,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0);
+        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_true);
         if (!partitions)
                 goto err_parse;
 
@@ -1580,6 +1580,7 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
                 rkbuf,
                 rko->rko_u.txn.offsets,
                 rd_true /*skip invalid offsets*/,
+                rd_true /*write offsets*/,
                 rd_false/*dont write Epoch*/,
                 rd_true /*write Metadata*/);
 

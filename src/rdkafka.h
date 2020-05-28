@@ -3854,6 +3854,18 @@ rd_kafka_consumer_group_metadata_new (const char *group_id);
 
 
 /**
+ * @brief Create a new consumer group metadata object.
+ *        This is typically only used for writing tests.
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
+                                                 int32_t generation_id);
+
+
+/**
  * @brief Frees the consumer group metadata object as returned by
  *        rd_kafka_consumer_group_metadata().
  */

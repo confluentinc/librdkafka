@@ -60,7 +60,10 @@
 #ifndef _BASETSD_H_
 #include <basetsd.h>
 #endif
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
 typedef SSIZE_T ssize_t;
+#endif
 #endif
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB

@@ -47,7 +47,10 @@
 /**
  * Types
  */
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
 typedef SSIZE_T ssize_t;
+#endif
 typedef int socklen_t;
 
 struct iovec {

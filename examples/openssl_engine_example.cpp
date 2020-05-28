@@ -49,8 +49,8 @@
    */
 #include "rdkafkacpp.h"
 
-static void metadata_print(const std::string& topic,
-    const RdKafka::Metadata* metadata) {
+static void metadata_print(const std::string &topic,
+    const RdKafka::Metadata *metadata) {
     std::cout << "Metadata for " << (topic.empty() ? "" : "all topics")
         << "(from broker " << metadata->orig_broker_id()
         << ":" << metadata->orig_broker_name() << std::endl;
@@ -116,12 +116,13 @@ class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
     /* This SSL cert verification callback simply prints the incoming parameters.
      * It provides no validation, everything is ok. */
 public:
-    bool ssl_cert_verify_cb(const std::string& broker_name,
-        int32_t broker_id,
-        int* x509_error,
-        int depth,
-        const char* buf, size_t size,
-        std::string& errstr) {
+    bool ssl_cert_verify_cb(const std::string &broker_name,
+                            int32_t broker_id,
+                            int *x509_error,
+                            int depth,
+                            const char *buf, 
+                            size_t size,
+                            std::string &errstr) {
         std::cout << "ssl_cert_verify_cb :" << 
             ": broker_name=" << broker_name <<
             ", broker_id=" << broker_id <<
@@ -137,8 +138,8 @@ public:
 /**
 * @brief Print the brokers in the cluster.
 */
-static void print_brokers(RdKafka::Handle* handle,
-    const RdKafka::Metadata* md) {
+static void print_brokers(RdKafka::Handle *handle,
+    const RdKafka::Metadata *md) {
     std::cout << md->brokers()->size() << " broker(s) in cluster " <<
         handle->clusterid(0) << std::endl;
 
@@ -150,18 +151,18 @@ static void print_brokers(RdKafka::Handle* handle,
 
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     std::string brokers;
     std::string errstr;
-    std::string enginePath;
+    std::string engine_path;
     std::string ca_location;
     std::string topic_str;
 
     /*
      * Create configuration objects
      */
-    RdKafka::Conf* conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
     std::string engine_id;
     std::string engine_callback_data;
     int opt;
@@ -172,7 +173,7 @@ int main(int argc, char** argv) {
             brokers = optarg;
             break;
         case 'p':
-            enginePath = optarg;
+            engine_path = optarg;
             break;
         case 'c':
             ca_location = optarg;
@@ -193,7 +194,7 @@ int main(int argc, char** argv) {
             }
             break;
         case 'X': {
-            char* name, * val;
+            char *name, *val;
 
             name = optarg;
             if (!(val = strchr(name, '='))) {
@@ -217,7 +218,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (brokers.empty() || enginePath.empty() || topic_str.empty() || optind != argc) {
+    if (brokers.empty() || engine_path.empty() || topic_str.empty() || optind != argc) {
     usage:
         std::string features;
         conf->get("builtin.features", features);
@@ -256,7 +257,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    if (conf->set("ssl.engine.location", enginePath, errstr) != RdKafka::Conf::CONF_OK) {
+    if (conf->set("ssl.engine.location", engine_path, errstr) != RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -291,7 +292,7 @@ int main(int argc, char** argv) {
     /*
      * Create producer using accumulated global configuration.
      */
-    RdKafka::Producer* producer = RdKafka::Producer::create(conf, errstr);
+    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
     if (!producer) {
         std::cerr << "Failed to create producer: " << errstr << std::endl;
         exit(1);
@@ -302,7 +303,7 @@ int main(int argc, char** argv) {
     /*
      * Create topic handle.
      */
-    RdKafka::Topic* topic = NULL;
+    RdKafka::Topic *topic = NULL;
     if (!topic_str.empty()) {
         topic = RdKafka::Topic::create(producer, topic_str, tconf, errstr);
         if (!topic) {
@@ -311,7 +312,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    class RdKafka::Metadata* metadata;
+    class RdKafka::Metadata *metadata;
 
     /* Fetch metadata */
     RdKafka::ErrorCode err = producer->metadata(!topic, topic,

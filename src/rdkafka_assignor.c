@@ -908,11 +908,10 @@ int unittest_assignors (void) {
 
                         if (!(rkas = rd_kafka_assignor_find(rk,
                                         tests[i].expect[ie].protocol_name))) {
-                                RD_UT_ASSERT(!err,
-                                             "Assignor test case %s for %s failed: "
-                                             "assignor not found",
-                                             tests[i].name,
-                                             tests[i].expect[ie].protocol_name);
+                                RD_UT_FAIL("Assignor test case %s for %s failed: "
+                                            "assignor not found",
+                                            tests[i].name,
+                                            tests[i].expect[ie].protocol_name);
                         }
 
                         /* Run assignor */

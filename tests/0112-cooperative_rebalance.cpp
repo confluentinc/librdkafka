@@ -96,7 +96,6 @@ extern "C" {
         {
         case RdKafka::ERR__TIMED_OUT:
         case RdKafka::ERR_NO_ERROR:
-          break;
         default:
           run = false;
           break;

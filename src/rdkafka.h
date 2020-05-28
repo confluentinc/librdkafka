@@ -3688,6 +3688,17 @@ rd_kafka_assignment (rd_kafka_t *rk,
                      rd_kafka_topic_partition_list_t **partitions);
 
 
+/**
+ * @brief Check whether the consumer considers the current assignment to
+ *        have been lost involuntarily. This method is only useful when
+ *        called from within a group rebalance callback (rebalance_cb)
+ *        because lost assignments are revoked immediately.
+ *
+ * @returns Returns 1 if the current partition assignment is considered
+ *          lost, 0 otherwise.
+ */
+RD_EXPORT int
+rd_kafka_assignment_lost (rd_kafka_t *rk);
 
 
 /**

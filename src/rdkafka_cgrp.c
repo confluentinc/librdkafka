@@ -1575,10 +1575,12 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 rd_kafka_cgrp_set_member_id(rkcg, "");
                 rebalance_reason = "resetting member-id";
+                rkcg->rkcg_assignment_lost = rd_true;
                 break;
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
                 rebalance_reason = "group is rebalancing";
+                rkcg->rkcg_assignment_lost = rd_true;
                 break;
 
         case RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID:
@@ -1586,6 +1588,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                                          "Fatal consumer error: %s",
                                          rd_kafka_err2str(err));
                 rebalance_reason = "consumer fenced by newer instance";
+                rkcg->rkcg_assignment_lost = rd_true;
                 break;
 
         default:
@@ -2745,26 +2748,27 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * @brief Group is rebalancing, trigger rebalance callback to application,
+ * @brief Initiate a rebalance. Trigger rebalance callback to application,
  *        and transition to INIT state for (eventual) rejoin.
  */
 static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
                                      const char *reason) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REBALANCE",
-                     "Group \"%.*s\" is rebalancing in "
-                     "state %s (join-state %s) %s assignment: %s",
+                     "Group \"%.*s\" rebalance initiated in "
+                     "state %s (join-state %s) %s assignment%s: %s",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rkcg->rkcg_assignment ? "with" : "without",
+                     rkcg->rkcg_assignment_lost ? " (lost)" : "",
                      reason);
 
         rd_snprintf(rkcg->rkcg_c.rebalance_reason,
                     sizeof(rkcg->rkcg_c.rebalance_reason), "%s", reason);
 
         /* Remove assignment (async), if any. If there is already an
-         * unassign in progress we dont need to bother. */
+         * unassign in progress we don't need to bother. */
         if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
@@ -2831,6 +2835,7 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
         rd_kafka_cgrp_set_member_id(rkcg, "");
 
         /* Trigger rebalance */
+        rkcg->rkcg_assignment_lost = rd_true;
         rd_kafka_cgrp_rebalance(rkcg, "max.poll.interval.ms exceeded");
 }
 
@@ -3317,6 +3322,7 @@ rd_kafka_cgrp_session_timeout_check (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
         rd_kafka_cgrp_set_member_id(rkcg, "");
 
         /* Revoke and rebalance */
+        rkcg->rkcg_assignment_lost = rd_true;
         rd_kafka_cgrp_rebalance(rkcg, buf);
 
         return rd_true;

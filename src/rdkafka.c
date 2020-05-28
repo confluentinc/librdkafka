@@ -3458,15 +3458,16 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 break;
 
         case RD_KAFKA_OP_REBALANCE:
-                /* If EVENT_REBALANCE is enabled but rebalance_cb isnt
+                /* If EVENT_REBALANCE is enabled but rebalance_cb isn't
                  * we need to perform a dummy assign for the application.
                  * This might happen during termination with consumer_close() */
-                if (rk->rk_conf.rebalance_cb)
+                if (rk->rk_conf.rebalance_cb) {
                         rk->rk_conf.rebalance_cb(
                                 rk, rko->rko_err,
                                 rko->rko_u.rebalance.partitions,
                                 rk->rk_conf.opaque);
-                else {
+                        rk->rk_cgrp->rkcg_assignment_lost = rd_false;
+                } else {
                         rd_kafka_dbg(rk, CGRP, "UNASSIGN",
                                      "Forcing unassign of %d partition(s)",
                                      rko->rko_u.rebalance.partitions ?

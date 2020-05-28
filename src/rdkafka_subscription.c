@@ -112,6 +112,16 @@ rd_kafka_assign (rd_kafka_t *rk,
 
 
 
+int
+rd_kafka_assignment_lost (rd_kafka_t *rk) {
+        rd_kafka_cgrp_t *rkcg;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return 0;
+
+        return rkcg->rkcg_assignment_lost ? 1 : 0;
+}
+
 rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,
                      rd_kafka_topic_partition_list_t **partitions) {

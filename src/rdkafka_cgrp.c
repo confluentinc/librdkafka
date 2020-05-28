@@ -69,6 +69,7 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
 static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg);
 
 static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
+                                     rd_bool_t assignment_lost,
                                      const char *reason);
 
 static void
@@ -1411,7 +1412,7 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rkcg->rkcg_assignment ? "" : "out");
 
-        rd_kafka_cgrp_rebalance(rkcg, "group rejoin");
+        rd_kafka_cgrp_rebalance(rkcg, rd_false/*assignment not lost*/, "group rejoin");
 }
 
 /**
@@ -1497,6 +1498,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         int16_t ErrorCode = 0;
         int actions = 0;
         const char *rebalance_reason = NULL;
+        rd_bool_t assignment_lost = rd_false;
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
@@ -1575,12 +1577,12 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 rd_kafka_cgrp_set_member_id(rkcg, "");
                 rebalance_reason = "resetting member-id";
-                rkcg->rkcg_assignment_lost = rd_true;
+                assignment_lost = rd_true;
                 break;
 
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
                 rebalance_reason = "group is rebalancing";
-                rkcg->rkcg_assignment_lost = rd_true;
+                assignment_lost = rd_true;
                 break;
 
         case RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID:
@@ -1588,7 +1590,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                                          "Fatal consumer error: %s",
                                          rd_kafka_err2str(err));
                 rebalance_reason = "consumer fenced by newer instance";
-                rkcg->rkcg_assignment_lost = rd_true;
+                assignment_lost = rd_true;
                 break;
 
         default:
@@ -1611,7 +1613,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         }
 
         if (rebalance_reason)
-                rd_kafka_cgrp_rebalance(rkcg, rebalance_reason);
+                rd_kafka_cgrp_rebalance(rkcg, assignment_lost, rebalance_reason);
 }
 
 
@@ -2752,6 +2754,7 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
  *        and transition to INIT state for (eventual) rejoin.
  */
 static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
+                                     rd_bool_t assignment_lost,
                                      const char *reason) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REBALANCE",
@@ -2761,11 +2764,13 @@ static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rkcg->rkcg_assignment ? "with" : "without",
-                     rkcg->rkcg_assignment_lost ? " (lost)" : "",
+                     assignment_lost ? " (lost)" : "",
                      reason);
 
         rd_snprintf(rkcg->rkcg_c.rebalance_reason,
                     sizeof(rkcg->rkcg_c.rebalance_reason), "%s", reason);
+
+        rkcg->rkcg_assignment_lost = rd_true;
 
         /* Remove assignment (async), if any. If there is already an
          * unassign in progress we don't need to bother. */
@@ -2835,8 +2840,8 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
         rd_kafka_cgrp_set_member_id(rkcg, "");
 
         /* Trigger rebalance */
-        rkcg->rkcg_assignment_lost = rd_true;
-        rd_kafka_cgrp_rebalance(rkcg, "max.poll.interval.ms exceeded");
+        rd_kafka_cgrp_rebalance(rkcg, rd_true/*assignment lost*/,
+                                "max.poll.interval.ms exceeded");
 }
 
 
@@ -2875,7 +2880,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 
-        rd_kafka_cgrp_rebalance(rkcg, "unsubscribe");
+        rd_kafka_cgrp_rebalance(rkcg, rd_false/*assignment not lost*/,
+                                "unsubscribe");
 
         rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
                               RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
@@ -3322,8 +3328,7 @@ rd_kafka_cgrp_session_timeout_check (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
         rd_kafka_cgrp_set_member_id(rkcg, "");
 
         /* Revoke and rebalance */
-        rkcg->rkcg_assignment_lost = rd_true;
-        rd_kafka_cgrp_rebalance(rkcg, buf);
+        rd_kafka_cgrp_rebalance(rkcg, rd_true/*assignment lost*/, buf);
 
         return rd_true;
 }

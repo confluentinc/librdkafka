@@ -3473,7 +3473,6 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                                      rko->rko_u.rebalance.partitions->cnt : 0);
                         rd_kafka_assign(rk, NULL);
                 }
-                rk->rk_cgrp->rkcg_assignment_lost = rd_false;
                 break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:

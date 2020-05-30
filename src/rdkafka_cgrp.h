@@ -180,7 +180,7 @@ typedef struct rd_kafka_cgrp_s {
 
 	int                rkcg_assigned_cnt;       /* Assigned partitions */
 
-        rd_bool_t          rkcg_assignment_lost;    /* Assignment considered
+        rd_atomic32_t      rkcg_assignment_lost;    /* Assignment considered
                                                      * lost */
 
         int32_t            rkcg_generation_id;      /* Current generation id */

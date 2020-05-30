@@ -229,6 +229,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rkcg->rkcg_coord_id = -1;
         rkcg->rkcg_generation_id = -1;
 	rkcg->rkcg_version = 1;
+        rd_atomic32_init(&rkcg->rkcg_assignment_lost, rd_false);
 
         mtx_init(&rkcg->rkcg_lock, mtx_plain);
         rkcg->rkcg_ops = rd_kafka_q_new(rk);
@@ -1412,7 +1413,8 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rkcg->rkcg_assignment ? "" : "out");
 
-        rd_kafka_cgrp_rebalance(rkcg, rd_false/*assignment not lost*/, "group rejoin");
+        rd_kafka_cgrp_rebalance(rkcg, rd_false/*assignment not lost*/,
+                                "group rejoin");
 }
 
 /**
@@ -2619,6 +2621,9 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                      assignment ? assignment->cnt : 0,
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
 
+        /* A new assignment is never presumed lost. */
+        rd_atomic32_set(&rkcg->rkcg_assignment_lost, rd_false);
+
         /* Get toppar object for each partition.
          * This is to make sure the rktp stays alive during unassign(). */
         for (i = 0 ; assignment && i < assignment->cnt ; i++) {
@@ -2644,7 +2649,6 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
         rd_kafka_wrlock(rkcg->rkcg_rk);
         rkcg->rkcg_c.assignment_size = assignment ? assignment->cnt : 0;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
-
 
         /* Remove existing assignment (async operation) */
 	if (rkcg->rkcg_assignment)
@@ -2750,7 +2754,7 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * @brief Initiate a rebalance. Trigger rebalance callback to application,
+ * @brief Group is rebalancing, trigger rebalance callback to application,
  *        and transition to INIT state for (eventual) rejoin.
  */
 static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
@@ -2758,7 +2762,7 @@ static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
                                      const char *reason) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REBALANCE",
-                     "Group \"%.*s\" rebalance initiated in "
+                     "Group \"%.*s\" is rebalancing in "
                      "state %s (join-state %s) %s assignment%s: %s",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
@@ -2770,7 +2774,7 @@ static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
         rd_snprintf(rkcg->rkcg_c.rebalance_reason,
                     sizeof(rkcg->rkcg_c.rebalance_reason), "%s", reason);
 
-        rkcg->rkcg_assignment_lost = rd_true;
+        rd_atomic32_set(&rkcg->rkcg_assignment_lost, assignment_lost);
 
         /* Remove assignment (async), if any. If there is already an
          * unassign in progress we don't need to bother. */

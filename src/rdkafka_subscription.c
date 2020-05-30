@@ -119,7 +119,7 @@ rd_kafka_assignment_lost (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return 0;
 
-        return rkcg->rkcg_assignment_lost ? 1 : 0;
+        return rd_atomic32_get(&rkcg->rkcg_assignment_lost) ? 1 : 0;
 }
 
 rd_kafka_resp_err_t

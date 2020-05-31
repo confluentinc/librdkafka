@@ -26,15 +26,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_int.h"
+
 #include "rd.h"
 #include "rdgz.h"
 
 #include <zlib.h>
-
+#include "rdbuf.h"
 
 #define RD_GZ_CHUNK  262144
 
-void *rd_gz_decompress (const void *compressed, int compressed_len,
+void *rd_gz_decompress (rd_kafka_broker_t *rkb, const void *compressed, int compressed_len,
 			uint64_t *decompressed_lenp) {
 	int pass = 1;
 	char *decompressed = NULL;
@@ -57,13 +59,17 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 		int r;
 		
 		if ((r = inflateInit2(&strm, 15+32)) != Z_OK)
+		{
+			rd_rkb_log(rkb, LOG_ERR, "GZIP", "inflateInit2 failed %d",  r);
 			goto fail;
+		}
 
 		strm.next_in = (void *)compressed;
 		strm.avail_in = compressed_len;
 
 		if ((r = inflateGetHeader(&strm, &hdr)) != Z_OK) {
 			inflateEnd(&strm);
+			rd_rkb_log(rkb, LOG_ERR,  "GZIP", "inflateGetHeader failed %d",  r);
 			goto fail;
 		}
 
@@ -87,6 +93,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 			case Z_NEED_DICT:
 			case Z_DATA_ERROR:
 			case Z_MEM_ERROR:
+			    rd_rkb_log(rkb, LOG_ERR,  "GZIP", "inflate failed %d",  r);
 				inflateEnd(&strm);
 				goto fail;
 			}
@@ -104,6 +111,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 			*decompressed_lenp = strm.total_out;
 			if (!(decompressed = malloc((size_t)(*decompressed_lenp)+1))) {
 				inflateEnd(&strm);
+				rd_rkb_log(rkb, LOG_ERR, "GZIP", "malloc %zu failed", *decompressed_lenp+1);
 				return NULL;
 			}
 			/* For convenience of the caller we nul-terminate

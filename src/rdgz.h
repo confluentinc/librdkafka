@@ -39,7 +39,7 @@
  *
  * The decompressed length is returned in '*decompressed_lenp'.
  */
-void *rd_gz_decompress (const void *compressed, int compressed_len,
+void *rd_gz_decompress (rd_kafka_broker_t *rkb, const void *compressed, int compressed_len,
 			uint64_t *decompressed_lenp);
 
 #endif /* _RDGZ_H_ */

@@ -32,7 +32,6 @@
 #include "rdgz.h"
 
 #include <zlib.h>
-#include "rdbuf.h"
 
 #define RD_GZ_CHUNK  262144
 

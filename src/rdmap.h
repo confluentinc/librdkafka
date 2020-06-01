@@ -99,8 +99,10 @@ typedef struct rd_map_s {
  * The map assumes memory ownership of both the \p key and \p value and will
  * use the destroy_key and destroy_value functions (if set) to free
  * the key and value memory when the map is destroyed or element removed.
+ *
+ * @returns the map element.
  */
-void rd_map_set (rd_map_t *rmap, void *key, void *value);
+rd_map_elem_t *rd_map_set (rd_map_t *rmap, void *key, void *value);
 
 
 /**
@@ -119,6 +121,26 @@ void *rd_map_get (const rd_map_t *rmap, const void *key);
  * to free the key and value memory.
  */
 void rd_map_delete (rd_map_t *rmap, const void *key);
+
+
+/** Key or Value Copy function signature. */
+typedef void *(rd_map_copy_t) (const void *key_or_value);
+
+
+/**
+ * @brief Copy all elements from \p src to \p dst.
+ *        \p dst must be initialized and compatible with \p src.
+ *
+ * @param dst Destination map to copy to.
+ * @param src Source map to copy from.
+ * @param key_copy Key copy callback. If NULL the \p dst key will just
+ *                 reference the \p src key.
+ * @param value_copy Value copy callback. If NULL the \p dst value will just
+ *                   reference the \p src value.
+ */
+void rd_map_copy (rd_map_t *dst, const rd_map_t *src,
+                  rd_map_copy_t *key_copy,
+                  rd_map_copy_t *value_copy);
 
 
 /**
@@ -148,13 +170,13 @@ rd_bool_t rd_map_is_empty (const rd_map_t *rmap);
 /**
  * @brief Begin iterating \p rmap, first element is set in \p *elem.
  */
-void rd_map_iter_begin (const rd_map_t *rmap, rd_map_elem_t **elem);
+void rd_map_iter_begin (const rd_map_t *rmap, const rd_map_elem_t **elem);
 
 /**
  * @returns 1 if \p *elem is a valid iteration element, else 0.
  */
 static RD_INLINE RD_UNUSED
-int rd_map_iter (rd_map_elem_t **elem) {
+int rd_map_iter (const rd_map_elem_t **elem) {
         return *elem != NULL;
 }
 
@@ -162,7 +184,7 @@ int rd_map_iter (rd_map_elem_t **elem) {
  * @brief Advances the iteration to the next element.
  */
 static RD_INLINE RD_UNUSED
-void rd_map_iter_next (rd_map_elem_t **elem) {
+void rd_map_iter_next (const rd_map_elem_t **elem) {
         *elem = LIST_NEXT(*elem, link);
 }
 
@@ -200,11 +222,19 @@ struct rd_map_buckets rd_map_alloc_buckets (size_t expected_cnt);
 
 
 /**
+ * @brief Empty the map and free all elements.
+ */
+void rd_map_clear (rd_map_t *rmap);
+
+
+/**
  * @brief Free all elements in the map and free all memory associated
  *        with the map, but not the rd_map_t itself.
  *
  * The map is unusable after this call but can be re-initialized using
  * rd_map_init().
+ *
+ * @sa rd_map_clear()
  */
 void rd_map_destroy (rd_map_t *rmap);
 
@@ -229,6 +259,7 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * Typed hash maps provides a type-safe layer on top of the standard hash maps.
  */
+
 /**
  * @brief Define a typed map type which can later be used with
  *        RD_MAP_INITIALIZER() and typed RD_MAP_*() API.
@@ -238,7 +269,7 @@ unsigned int rd_map_str_hash (const void *a);
                 rd_map_t rmap;                     \
                 KEY_TYPE key;                      \
                 VALUE_TYPE value;                  \
-                rd_map_elem_t *elem;               \
+                const rd_map_elem_t *elem;         \
         }
 
 /**
@@ -291,7 +322,7 @@ unsigned int rd_map_str_hash (const void *a);
                 rd_map_t  rmap;                                         \
                 KEY_TYPE key;                                           \
                 VALUE_TYPE value;                                       \
-                rd_map_elem_t *elem;                                    \
+                const rd_map_elem_t *elem;                              \
         } RMAP = RD_MAP_INITIALIZER(EXPECTED_CNT,CMP,HASH,              \
                                     DESTROY_KEY,DESTROY_VALUE)
 
@@ -360,6 +391,32 @@ unsigned int rd_map_str_hash (const void *a);
 
 
 /**
+ * @brief Copy all elements from \p SRC to \p DST.
+ *        \p DST must be initialized and compatible with \p SRC.
+ *
+ * @param DST Destination map to copy to.
+ * @param SRC Source map to copy from.
+ * @param KEY_COPY Key copy callback. If NULL the \p DST key will just
+ *                 reference the \p SRC key.
+ * @param VALUE_COPY Value copy callback. If NULL the \p DST value will just
+ *                   reference the \p SRC value.
+ */
+#define RD_MAP_COPY(DST,SRC,KEY_COPY,VALUE_COPY) do {            \
+                if ((DST) != (SRC))/*implicit type-check*/       \
+                        rd_map_copy(&(DST)->rmap, &(SRC)->rmap,  \
+                                    KEY_COPY, VALUE_COPY);       \
+        } while (0)
+
+
+/**
+ * @brief Empty the map and free all elements.
+ *
+ * @sa rd_map_clear()
+ */
+#define RD_MAP_CLEAR(RMAP)  rd_map_clear(&(RMAP)->rmap)
+
+
+/**
  * @brief Typed hash map: Destroy hash map.
  *
  * @sa rd_map_destroy()
@@ -370,7 +427,16 @@ unsigned int rd_map_str_hash (const void *a);
 /**
  * @brief Typed hash map: Iterate over all elements in the map.
  *
- * @warning The map MUST NOT be modified during the loop.
+ * @warning The current or previous elements may be removed, but the next
+ *          element after the current one MUST NOT be modified during the loop.
+ *
+ * @warning RD_MAP_FOREACH() only supports one simultaneous invocation,
+ *          that is, special care must be taken not to call FOREACH() from
+ *          within a FOREACH() loop on the same map.
+ *          This is due to how RMAP->elem is used as the iterator.
+ *          This restriction is unfortunately not enforced at build or run time.
+ *
+ * @remark The \p RMAP may not be const.
  */
 #define RD_MAP_FOREACH(K,V,RMAP)                                        \
         for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
@@ -378,11 +444,9 @@ unsigned int rd_map_str_hash (const void *a);
                      ((RMAP)->key = (void *)(RMAP)->elem->key,          \
                       (K) = (RMAP)->key,                                \
                       (RMAP)->value = (void *)(RMAP)->elem->value,      \
-                      (V) = (RMAP)->value) ;                            \
-             rd_map_iter_next(&(RMAP)->elem))
-
-
-
+                      (V) = (RMAP)->value,                              \
+                      rd_map_iter_next(&(RMAP)->elem),                  \
+                      rd_true) ; )                                      \
 
 /**
  * @returns the number of elements in the map.

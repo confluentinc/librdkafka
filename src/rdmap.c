@@ -89,7 +89,7 @@ static rd_map_elem_t *rd_map_insert (rd_map_t *rmap, int bkt,
 }
 
 
-void rd_map_set (rd_map_t *rmap, void *key, void *value) {
+rd_map_elem_t *rd_map_set (rd_map_t *rmap, void *key, void *value) {
         rd_map_elem_t skel = { .key = key,
                                .hash = rmap->rmap_hash(key) };
         rd_map_elem_t *elem;
@@ -105,6 +105,8 @@ void rd_map_set (rd_map_t *rmap, void *key, void *value) {
         }
 
         elem->value = value; /* takes ownership of value */
+
+        return elem;
 }
 
 
@@ -132,7 +134,23 @@ void rd_map_delete (rd_map_t *rmap, const void *key) {
         rd_map_elem_destroy(rmap, elem);
 }
 
-void rd_map_iter_begin (const rd_map_t *rmap, rd_map_elem_t **elem) {
+
+void rd_map_copy (rd_map_t *dst, const rd_map_t *src,
+                  rd_map_copy_t *key_copy,
+                  rd_map_copy_t *value_copy) {
+        const rd_map_elem_t *elem;
+
+        RD_MAP_FOREACH_ELEM(elem, src) {
+                rd_map_set(dst,
+                           key_copy ?
+                           key_copy(elem->key) : (void *)elem->key,
+                           value_copy ?
+                           value_copy(elem->value) : (void *)elem->value);
+        }
+}
+
+
+void rd_map_iter_begin (const rd_map_t *rmap, const rd_map_elem_t **elem) {
         *elem = LIST_FIRST(&rmap->rmap_iter);
 }
 
@@ -210,12 +228,15 @@ void rd_map_init (rd_map_t *rmap, size_t expected_cnt,
         rmap->rmap_destroy_value = destroy_value;
 }
 
-void rd_map_destroy (rd_map_t *rmap) {
+void rd_map_clear (rd_map_t *rmap) {
         rd_map_elem_t *elem;
 
         while ((elem = LIST_FIRST(&rmap->rmap_iter)))
                 rd_map_elem_destroy(rmap, elem);
+}
 
+void rd_map_destroy (rd_map_t *rmap) {
+        rd_map_clear(rmap);
         rd_free(rmap->rmap_buckets.p);
 }
 
@@ -283,6 +304,8 @@ static int unittest_typed_map (void) {
         ut_my_typed_map_t rmap = RD_MAP_INITIALIZER(0,
                                                     mykey_cmp, mykey_hash,
                                                     NULL, NULL);
+        ut_my_typed_map_t dup = RD_MAP_INITIALIZER(0, mykey_cmp, mykey_hash,
+                                                   NULL, NULL);
         struct mykey k1 = { 1 };
         struct mykey k2 = { 2 };
         struct person v1 = { "Roy", "McPhearsome" };
@@ -301,11 +324,19 @@ static int unittest_typed_map (void) {
                           key->k, value->name, value->surname);
         }
 
+        RD_MAP_COPY(&dup, &rmap, NULL, NULL);
+
         RD_MAP_DELETE(&rmap, &k1);
         value = RD_MAP_GET(&rmap, &k1);
         RD_UT_ASSERT(value == NULL, "expected no k1");
 
+        value = RD_MAP_GET(&dup, &k1);
+        RD_UT_ASSERT(value == &v1, "copied map: k1 mismatch");
+        value = RD_MAP_GET(&dup, &k2);
+        RD_UT_ASSERT(value == &v2, "copied map: k2 mismatch");
+
         RD_MAP_DESTROY(&rmap);
+        RD_MAP_DESTROY(&dup);
 
         RD_UT_PASS();
 }
@@ -376,7 +407,7 @@ static int unittest_untyped_map (void) {
         int pass, i, r;
         int cnt = 100000;
         int exp_cnt = 0, get_cnt = 0, iter_cnt = 0;
-        rd_map_elem_t *elem;
+        const rd_map_elem_t *elem;
         rd_ts_t ts = rd_clock();
         rd_ts_t ts_get;
 

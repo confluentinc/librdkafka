@@ -227,6 +227,20 @@ int rd_list_remove_multi_cmp (rd_list_t *rl, void *match_elem,
 }
 
 
+void *rd_list_pop (rd_list_t *rl) {
+        void *elem;
+        int idx = rl->rl_cnt - 1;
+
+        if (idx < 0)
+                return NULL;
+
+        elem = rl->rl_elems[idx];
+        rd_list_remove_elem(rl, idx);
+
+        return elem;
+}
+
+
 /**
  * Trampoline to avoid the double pointers in callbacks.
  *
@@ -325,7 +339,21 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
 }
 
 
-int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
+void *rd_list_first (const rd_list_t *rl) {
+        if (rl->rl_cnt == 0)
+                return NULL;
+        return rl->rl_elems[0];
+}
+
+void *rd_list_last (const rd_list_t *rl) {
+        if (rl->rl_cnt == 0)
+                return NULL;
+        return rl->rl_elems[rl->rl_cnt-1];
+}
+
+
+
+int rd_list_cmp (const rd_list_t *a, const rd_list_t *b,
 		 int (*cmp) (const void *, const void *)) {
 	int i;
 

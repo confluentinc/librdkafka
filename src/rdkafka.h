@@ -983,8 +983,9 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
  */
 RD_EXPORT
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
-				    const char *topic, int32_t partition);
+rd_kafka_topic_partition_list_find (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition);
 
 
 /**

@@ -41,6 +41,7 @@ typedef struct rd_kafka_group_member_s {
         rd_kafkap_str_t                 *rkgm_group_instance_id;
         rd_kafkap_bytes_t               *rkgm_userdata;
         rd_kafkap_bytes_t               *rkgm_member_metadata;
+        int                              rkgm_generation;
 } rd_kafka_group_member_t;
 
 
@@ -175,6 +176,7 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 					char *errstr, size_t errstr_size,
 					void *opaque);
 
+
 /**
  * rd_kafka_sticky_assignor.c
  */
@@ -206,5 +208,7 @@ rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
                                        *owned_partitions);
 
 void rd_kafka_sticky_assignor_state_destroy (void *assignor_state);
+
+int rd_kafka_sticky_assignor_unittest (void);
 
 #endif /* _RDKAFKA_ASSIGNOR_H_ */

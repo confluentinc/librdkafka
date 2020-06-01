@@ -18,7 +18,7 @@ librdkafka v1.5.2 is a maintenance release.
    This change yields increased robustness for broker-side congestion.
 
 
-The v1.6.0 release is a feature release adding support for Incremental
+The v1.6.0 release is a feature release adding support for incremental
 rebalancing of consumer groups.
 
 ## Enhancements

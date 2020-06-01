@@ -2635,6 +2635,20 @@ rd_kafka_topic_partition_list_grow (rd_kafka_topic_partition_list_t *rktparlist,
                                        rktparlist->size);
 
 }
+
+
+/**
+ * @brief Initialize a list for fitting \p size partitions.
+ */
+void rd_kafka_topic_partition_list_init (
+        rd_kafka_topic_partition_list_t *rktparlist, int size) {
+        memset(rktparlist, 0, sizeof(*rktparlist));
+
+        if (size > 0)
+                rd_kafka_topic_partition_list_grow(rktparlist, size);
+}
+
+
 /**
  * Create a list for fitting 'size' topic_partitions (rktp).
  */
@@ -2699,6 +2713,10 @@ rd_kafka_topic_partition_destroy0 (rd_kafka_topic_partition_t *rktpar, int do_fr
 		rd_free(rktpar);
 }
 
+void rd_kafka_topic_partition_destroy_free (void *ptr) {
+        rd_kafka_topic_partition_destroy0(ptr, rd_true/*do_free*/);
+}
+
 void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
 	rd_kafka_topic_partition_destroy0(rktpar, 1);
 }
@@ -2719,6 +2737,16 @@ rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rktparli
                 rd_free(rktparlist->elems);
 
         rd_free(rktparlist);
+}
+
+
+/**
+ * @brief Wrapper for rd_kafka_topic_partition_list_destroy() that
+ *        matches the standard free(void *) signature, for callback use.
+ */
+void rd_kafka_topic_partition_list_destroy_free (void *ptr) {
+        rd_kafka_topic_partition_list_destroy(
+                (rd_kafka_topic_partition_list_t *)ptr);
 }
 
 
@@ -2842,6 +2870,44 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
         return dst;
 }
 
+
+/**
+ * @brief Compare two partition lists using partition comparator \p cmp.
+ *
+ * @warning This is an O(Na*Nb) operation.
+ */
+int
+rd_kafka_topic_partition_list_cmp (const void *_a, const void *_b,
+                                   int (*cmp) (const void *, const void *)) {
+        const rd_kafka_topic_partition_list_t *a = _a, *b = _b;
+        int r;
+        int i;
+
+        r = a->cnt - b->cnt;
+        if (r || a->cnt == 0)
+                return r;
+
+        /* Since the lists may not be sorted we need to scan all of B
+         * for each element in A.
+         * FIXME: If the list sizes are larger than X we could create a
+         *        temporary hash map instead. */
+        for (i = 0 ; i < a->cnt ; i++) {
+                int j;
+
+                for (j = 0 ; j < b->cnt ; j++) {
+                        r = cmp(&a->elems[i], &b->elems[j]);
+                        if (!r)
+                                break;
+                }
+
+                if (j == b->cnt)
+                        return 1;
+        }
+
+        return 0;
+}
+
+
 /**
  * @returns (and sets if necessary) the \p rktpar's _private / toppar.
  * @remark a new reference is returned.
@@ -2863,8 +2929,7 @@ rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
 }
 
 
-static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
-                                         void *opaque) {
+int rd_kafka_topic_partition_cmp (const void *_a, const void *_b) {
         const rd_kafka_topic_partition_t *a = _a;
         const rd_kafka_topic_partition_t *b = _b;
         int r = strcmp(a->topic, b->topic);
@@ -3022,7 +3087,7 @@ void rd_kafka_topic_partition_list_sort (
         void *opaque) {
 
         if (!cmp)
-                cmp = rd_kafka_topic_partition_cmp;
+                cmp = rd_kafka_topic_partition_cmp_opaque;
 
         rd_qsort_r(rktparlist->elems, rktparlist->cnt,
                    sizeof(*rktparlist->elems),
@@ -3033,7 +3098,8 @@ void rd_kafka_topic_partition_list_sort (
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist) {
         rd_kafka_topic_partition_list_sort(rktparlist,
-                                           rd_kafka_topic_partition_cmp, NULL);
+                                           rd_kafka_topic_partition_cmp_opaque,
+                                           NULL);
 }
 
 rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (

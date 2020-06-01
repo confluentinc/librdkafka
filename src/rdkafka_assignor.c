@@ -262,8 +262,9 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                     rd_kafka_pattern_match(rkcg->rkcg_rk->rk_conf.
                                            topic_blacklist,
                                            metadata->topics[ti].topic)) {
-                        rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "BLACKLIST",
-                                   "Assignor ignoring blacklisted "
+                        rd_kafka_dbg(rkcg->rkcg_rk, TOPIC|RD_KAFKA_DBG_ASSIGNOR,
+                                     "BLACKLIST",
+                                     "Assignor ignoring blacklisted "
                                      "topic \"%s\"",
                                      metadata->topics[ti].topic);
                         continue;
@@ -316,29 +317,38 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                                           members, member_cnt);
 
 
-        if (rkcg->rkcg_rk->rk_conf.debug & RD_KAFKA_DBG_CGRP) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+        if (rkcg->rkcg_rk->rk_conf.debug &
+            (RD_KAFKA_DBG_CGRP|RD_KAFKA_DBG_ASSIGNOR)) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                             "ASSIGN",
                              "Group \"%s\" running %s assignment for "
-                             "%d member(s):",
+                             "%d member(s) and "
+                             "%d eligible subscribed topic(s):",
                              rkcg->rkcg_group_id->str,
                              rkas->rkas_protocol_name->str,
-                             member_cnt);
+                             member_cnt,
+                             eligible_topics.rl_cnt);
 
                 for (i = 0 ; i < member_cnt ; i++) {
                         const rd_kafka_group_member_t *member = &members[i];
 
-                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                                     "ASSIGN",
                                      " Member \"%.*s\"%s with "
-                                     "%d subscription(s):",
+                                     "%d assigned partition(s) and "
+                                     "%d subscribed topic(s):",
                                      RD_KAFKAP_STR_PR(member->rkgm_member_id),
                                      !rd_kafkap_str_cmp(member->rkgm_member_id,
                                                         rkcg->rkcg_member_id) ?
                                      " (me)":"",
+                                     member->rkgm_assignment->cnt,
                                      member->rkgm_subscription->cnt);
                         for (j = 0 ; j < member->rkgm_subscription->cnt ; j++) {
                                 const rd_kafka_topic_partition_t *p =
                                         &member->rkgm_subscription->elems[j];
-                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                                rd_kafka_dbg(rkcg->rkcg_rk,
+                                             CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                                             "ASSIGN",
                                              "  %s [%"PRId32"]",
                                              p->topic, p->partition);
                         }
@@ -359,14 +369,17 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                                    rkas->rkas_opaque);
 
         if (err) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                             "ASSIGN",
                              "Group \"%s\" %s assignment failed "
                              "for %d member(s): %s",
                              rkcg->rkcg_group_id->str,
                              rkas->rkas_protocol_name->str,
                              (int)member_cnt, errstr);
-        } else if (rkcg->rkcg_rk->rk_conf.debug & RD_KAFKA_DBG_CGRP) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+        } else if (rkcg->rkcg_rk->rk_conf.debug &
+                   (RD_KAFKA_DBG_CGRP|RD_KAFKA_DBG_ASSIGNOR)) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                             "ASSIGN",
                              "Group \"%s\" %s assignment for %d member(s) "
                              "finished in %.3fms:",
                              rkcg->rkcg_group_id->str,
@@ -376,7 +389,8 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                 for (i = 0 ; i < member_cnt ; i++) {
                         const rd_kafka_group_member_t *member = &members[i];
 
-                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                                     "ASSIGN",
                                      " Member \"%.*s\"%s assigned "
                                      "%d partition(s):",
                                      RD_KAFKAP_STR_PR(member->rkgm_member_id),
@@ -387,7 +401,9 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                         for (j = 0 ; j < member->rkgm_assignment->cnt ; j++) {
                                 const rd_kafka_topic_partition_t *p =
                                         &member->rkgm_assignment->elems[j];
-                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                                rd_kafka_dbg(rkcg->rkcg_rk,
+                                             CGRP|RD_KAFKA_DBG_ASSIGNOR,
+                                             "ASSIGN",
                                              "  %s [%"PRId32"]",
                                              p->topic, p->partition);
                         }
@@ -437,7 +453,7 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 /**
  * Add an assignor, overwriting any previous one with the same protocol_name.
  */
-static rd_kafka_resp_err_t
+rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
 		       rd_kafka_assignor_t **rkasp,
                        const char *protocol_type,
@@ -563,10 +579,10 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                                 rd_kafka_roundrobin_assignor_assign_cb,
                                 rd_kafka_assignor_get_metadata_with_empty_userdata,
                                 NULL, NULL, NULL);
-                else if (!strcmp(s, "sticky"))
-			rd_kafka_assignor_add(
-                                rk, &rkas, "consumer", "sticky",
-                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
+                else if (!strcmp(s, "cooperative-sticky"))
+                        rd_kafka_assignor_add(
+                                rk, &rkas, "consumer", "cooperative-sticky",
+                                RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE,
                                 rd_kafka_sticky_assignor_assign_cb,
                                 rd_kafka_sticky_assignor_get_metadata,
                                 rd_kafka_sticky_assignor_on_assignment_cb,
@@ -605,7 +621,7 @@ void rd_kafka_assignors_term (rd_kafka_t *rk) {
 /**
  * @brief Unittest for assignors
  */
-int unittest_assignors (void) {
+static int ut_assignors (void) {
         const struct {
                 const char *name;
                 int topic_cnt;
@@ -1005,5 +1021,22 @@ int unittest_assignors (void) {
 
         rd_kafka_destroy(rk);
 
-        return fails ? 1 : 0;
+        if (fails)
+                return 1;
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Unit tests for assignors
+ */
+int unittest_assignors (void) {
+        int fails = 0;
+
+        fails += ut_assignors();
+
+        fails += rd_kafka_sticky_assignor_unittest();
+
+        return fails;
 }

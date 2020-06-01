@@ -1,6 +1,6 @@
 # librdkafka v1.6.0
 
-The v1.6.0 release is a feature release adding support for Incremental
+The v1.6.0 release is a feature release adding support for incremental
 rebalancing of consumer groups.
 
 

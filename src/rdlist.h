@@ -166,6 +166,13 @@ void rd_list_remove_elem (rd_list_t *rl, int idx);
 
 
 /**
+ * @brief Remove and return the last element in the list.
+ *
+ * @returns the last element, or NULL if list is empty. */
+void *rd_list_pop (rd_list_t *rl);
+
+
+/**
  * @brief Remove all elements matching comparator.
  *
  * @returns the number of elements removed.
@@ -177,7 +184,10 @@ int rd_list_remove_multi_cmp (rd_list_t *rl, void *match_elem,
 
 
 /**
- * Sort list using comparator
+ * @brief Sort list using comparator.
+ *
+ * To sort a list ascendingly the comparator should implement (a - b)
+ * and for descending order implement (b - a).
  */
 void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *));
 
@@ -263,13 +273,25 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
 
 
 /**
+ * @returns the first element of the list, or NULL if list is empty.
+ */
+void *rd_list_first (const rd_list_t *rl);
+
+/**
+ * @returns the last element of the list, or NULL if list is empty.
+ */
+void *rd_list_last (const rd_list_t *rl);
+
+
+
+/**
  * @brief Compare list \p a to \p b.
  *
  * @returns < 0 if a was "lesser" than b,
  *          > 0 if a was "greater" than b,
  *            0 if a and b are equal.
  */
-int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
+int rd_list_cmp (const rd_list_t *a, const rd_list_t *b,
                  int (*cmp) (const void *, const void *));
 
 /**

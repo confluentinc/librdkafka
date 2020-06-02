@@ -3,6 +3,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
 	delete_records
+	openssl_engine_example_cpp
 
 all: $(EXAMPLES)
 
@@ -116,6 +117,10 @@ rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
 	@echo "#"
 	@echo "# More usage options:"
 	@echo "./$@ -h"
+
+openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openssl_engine_example.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) openssl_engine_example.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
 clean:
 	rm -f $(EXAMPLES)

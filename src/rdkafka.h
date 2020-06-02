@@ -2323,7 +2323,7 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
  */
 RD_EXPORT
 void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf, 
-                                            const void *callback_data);
+                                            void *callback_data);
 
 
 /**

@@ -74,6 +74,10 @@ librdkafka.
 
 ### Producer fixes
 
+ * Transactional producer could crash on request timeout due to dereferencing
+   NULL pointer of non-existent response object (ESC-3009)
+ * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
+   errors as retriable (ESC-2998)
 
 
 

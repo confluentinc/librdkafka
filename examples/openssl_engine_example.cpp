@@ -33,12 +33,6 @@
 
 #include <iostream>
 #include <string>
-#include <cstdlib>
-#include <cstdio>
-#include <csignal>
-#include <cstring>
-#include <sstream>
-#include <chrono>
 
 #ifdef _WIN32
 #include "../win32/wingetopt.h"
@@ -136,22 +130,6 @@ public:
     }
 };
 
-
-/**
-* @brief Print the brokers in the cluster.
-*/
-static void print_brokers(RdKafka::Handle *handle,
-    const RdKafka::Metadata *md) {
-    std::cout << md->brokers()->size() << " broker(s) in cluster " <<
-        handle->clusterid(0) << std::endl;
-
-    /* Iterate brokers */
-    RdKafka::Metadata::BrokerMetadataIterator ib;
-    for (ib = md->brokers()->begin(); ib != md->brokers()->end(); ++ib)
-        std::cout << "  broker " << (*ib)->id() << " at "
-        << (*ib)->host() << ":" << (*ib)->port() << std::endl;
-
-}
 
 int main(int argc, char **argv) {
     std::string brokers;

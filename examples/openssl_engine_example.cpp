@@ -33,10 +33,6 @@
 
 #include <iostream>
 #include <string>
-#include <cstdlib>
-#include <cstdio>
-#include <csignal>
-#include <cstring>
 
 #ifdef _WIN32
 #include "../win32/wingetopt.h"

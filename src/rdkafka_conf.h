@@ -244,7 +244,7 @@ struct rd_kafka_conf_s {
                 ENGINE *engine;
                 char   *engine_location;
                 char   *engine_id;
-                const void *engine_callback_data;
+                void   *engine_callback_data;
 #endif
                 char *keystore_location;
                 char *keystore_password;

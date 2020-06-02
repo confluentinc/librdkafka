@@ -26,9 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- /**
-  * Example of utilizing the Windows Certificate store with SSL.
-  */
+/**
+ * OpenSSL engine integration example. This example fetches metadata
+ * over SSL channel with broker, established using OpenSSL engine.
+ */
 
 #include <iostream>
 #include <string>
@@ -39,19 +40,20 @@
 #include <sstream>
 #include <chrono>
 
+#ifdef _WIN32
 #include "../win32/wingetopt.h"
-#include <windows.h>
-#include <wincrypt.h>
+#elif !_AIX
+#include <getopt.h>
+#endif
 
-  /*
-   * Typically include path in a real application would be
-   * #include <librdkafka/rdkafkacpp.h>
-   */
+/*
+ * Typically include path in a real application would be
+ * #include <librdkafka/rdkafkacpp.h>
+ */
 #include "rdkafkacpp.h"
 
-static void metadata_print(const std::string &topic,
-    const RdKafka::Metadata *metadata) {
-    std::cout << "Metadata for " << (topic.empty() ? "" : "all topics")
+static void metadata_print(const RdKafka::Metadata *metadata) {
+    std::cout << "Metadata for all topics"
         << "(from broker " << metadata->orig_broker_id()
         << ":" << metadata->orig_broker_name() << std::endl;
 
@@ -156,13 +158,11 @@ int main(int argc, char **argv) {
     std::string errstr;
     std::string engine_path;
     std::string ca_location;
-    std::string topic_str;
 
     /*
      * Create configuration objects
      */
     RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
     std::string engine_id;
     std::string engine_callback_data;
     int opt;
@@ -183,9 +183,6 @@ int main(int argc, char **argv) {
             break;
         case 'e':
             engine_callback_data = optarg;
-            break;
-        case 't':
-            topic_str = optarg;
             break;
         case 'd':
             if (conf->set("debug", optarg, errstr) != RdKafka::Conf::CONF_OK) {
@@ -218,27 +215,27 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (brokers.empty() || engine_path.empty() || topic_str.empty() || optind != argc) {
+    if (brokers.empty() || engine_path.empty() || optind != argc) {
     usage:
         std::string features;
         conf->get("builtin.features", features);
         fprintf(stderr,
-            "Usage: %s [options] -b <brokers> -s <cert-subject> -p <priv-key-password>\n"
+            "Usage: %s [options] -b <brokers> -p <engine-path> \n"
             "\n"
-            "Openssl engine integration example. This example fetches metadata\n"
-            "over ssl channel with broker, established using openssl engine.\n"
+            "OpenSSL engine integration example. This example fetches metadata\n"
+            "over SSL channel with broker, established using OpenSSL engine.\n"
             "\n"
             "librdkafka version %s (0x%08x, builtin.features \"%s\")\n"
             "\n"
             " Options:\n"
             "  -b <brokers>          Broker address\n"
-            "  -p <engine path>      Path to openssl engine\n"
-            "  -c <ca cert location> File path to ca cert\n"
-            "  -i <engine id>        Openssl engine id\n"
-            "  -e <engine parameter> Openssl engine parameter\n"
-            "  -t <topic_name>       Topic to fetch / produce\n"
+            "  -p <engine-path>      Path to OpenSSL engine\n"
+            "  -i <engine-id>        OpenSSL engine id\n"
+            "  -e <engine-parameter> OpenSSL engine parameter\n"
+            "  -c <ca-cert-location> File path to ca cert\n"
             "  -d [facs..]           Enable debugging contexts: %s\n"
-            "  -X <prop=name>        Set arbitrary librdkafka configuration property\n"
+            "  -X <prop=name>        Set arbitrary librdkafka configuration"
+            " property\n"
             "\n",
             argv[0],
             RdKafka::version_str().c_str(), RdKafka::version(),
@@ -247,7 +244,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
+    if (conf->set("bootstrap.servers", brokers, errstr) != 
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -257,13 +255,15 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (conf->set("ssl.engine.location", engine_path, errstr) != RdKafka::Conf::CONF_OK) {
+    if (conf->set("ssl.engine.location", engine_path, errstr) != 
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
 
     if (ca_location.length() > 0 && 
-        conf->set("ssl.ca.location", ca_location, errstr) != RdKafka::Conf::CONF_OK) {
+        conf->set("ssl.ca.location", ca_location, errstr) != 
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -275,7 +275,8 @@ int main(int argc, char **argv) {
     }
 
     if (engine_callback_data.length() > 0 &&
-        conf->set_engine_callback_data((void *) engine_callback_data.c_str(), errstr) != RdKafka::Conf::CONF_OK) {
+        conf->set_engine_callback_data((void *) engine_callback_data.c_str(),
+                                       errstr) != RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -284,7 +285,8 @@ int main(int argc, char **argv) {
      * certificate name being used. */
     PrintingSSLVerifyCb ssl_verify_cb;
 
-    if (conf->set("ssl_cert_verify_cb", &ssl_verify_cb, errstr) != RdKafka::Conf::CONF_OK) {
+    if (conf->set("ssl_cert_verify_cb", &ssl_verify_cb, errstr) !=
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -300,31 +302,19 @@ int main(int argc, char **argv) {
 
     std::cout << "% Created producer " << producer->name() << std::endl;
 
-    /*
-     * Create topic handle.
-     */
-    RdKafka::Topic *topic = NULL;
-    if (!topic_str.empty()) {
-        topic = RdKafka::Topic::create(producer, topic_str, tconf, errstr);
-        if (!topic) {
-            std::cerr << "Failed to create topic: " << errstr << std::endl;
-            exit(1);
-        }
-    }
-
     class RdKafka::Metadata *metadata;
 
     /* Fetch metadata */
-    RdKafka::ErrorCode err = producer->metadata(!topic, topic,
+    RdKafka::ErrorCode err = producer->metadata(true, NULL,
         &metadata, 5000);
     if (err != RdKafka::ERR_NO_ERROR)
-        std::cerr << "%% Failed to acquire metadata: " << RdKafka::err2str(err) << std::endl;
+        std::cerr << "%% Failed to acquire metadata: " << 
+                     RdKafka::err2str(err) << std::endl;
 
-    metadata_print(topic_str, metadata);
+    metadata_print(metadata);
 
     delete metadata;
     delete conf;
-    delete tconf;
 
     /*
      * Wait for RdKafka to decommission.

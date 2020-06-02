@@ -1176,6 +1176,9 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
         }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
+        /*
+         * If applicable, use OpenSSL engine to fetch SSL certificate.
+         */
         if (rk->rk_conf.ssl.engine) {
                 STACK_OF(X509_NAME) *cert_names = sk_X509_NAME_new_null();
                 STACK_OF(X509_OBJECT) *roots = 
@@ -1211,7 +1214,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 X509_free(x509);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to use SSL_CTX_use_certificate with engine: ");
+                                    "Failed to use SSL_CTX_use_certificate "
+                                    "with engine: ");
                         EVP_PKEY_free(pkey);
                         return -1;
                 }
@@ -1220,7 +1224,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 EVP_PKEY_free(pkey);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to use SSL_CTX_use_PrivateKey with engine: ");
+                                    "Failed to use SSL_CTX_use_PrivateKey "
+                                    "with engine: ");
                         return -1;
                 }
 
@@ -1354,40 +1359,44 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
         if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
-                char *engine_errstr = NULL;
-
-                /* Openssl loads an engine as dynamic id and stores it in internal
+                /* OpenSSL loads an engine as dynamic id and stores it in internal
                  * list, as per LIST_ADD command below. If engine already exists
                  * in internal list, it is supposed to be fetched using engine id. 
                  */
                 rk->rk_conf.ssl.engine = ENGINE_by_id(rk->rk_conf.ssl.engine_id);
                 if (!rk->rk_conf.ssl.engine) {
                         rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
-                        if (!rk->rk_conf.ssl.engine)
-                                engine_errstr = "ENGINE_by_id failed";
+                        if (!rk->rk_conf.ssl.engine) {
+                                rd_snprintf(errstr, errstr_size, 
+                                            "ENGINE_by_id failed: ");
+                                goto fail;
+                        }
                 }
 
-                if (!engine_errstr && 
-                    !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine,
-                                            "SO_PATH", 
-                                            rk->rk_conf.ssl.engine_location, 0))
-                        engine_errstr = "ENGINE_ctrl_cmd_string SO_PATH failed: ";
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "SO_PATH",
+                                            rk->rk_conf.ssl.engine_location, 0)) {
+                        rd_snprintf(errstr, errstr_size, 
+                                    "ENGINE_ctrl_cmd_string SO_PATH failed: ");
+                        goto fail;
+                }
 
-                if (!engine_errstr && 
-                    !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
-                                            "1", 0))
-                        engine_errstr = "ENGINE_ctrl_cmd_string LIST_ADD failed: ";
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
+                                            "1", 0)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ENGINE_ctrl_cmd_string LIST_ADD failed: ");
+                        goto fail;
+                }
 
-                if (!engine_errstr && 
-                    !ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
-                                            NULL, 0))
-                        engine_errstr = "ENGINE_ctrl_cmd_string LOAD failed: ";
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
+                                            NULL, 0)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ENGINE_ctrl_cmd_string LOAD failed: ");
+                        goto fail;
+                }
 
-                if (!engine_errstr && !ENGINE_init(rk->rk_conf.ssl.engine))
-                        engine_errstr = "ENGINE_init failed: ";
-
-                if (engine_errstr) {
-                        rd_snprintf(errstr, errstr_size, engine_errstr);
+                if (!ENGINE_init(rk->rk_conf.ssl.engine)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ENGINE_init failed: ");
                         goto fail;
                 }
         }

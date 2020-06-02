@@ -33,6 +33,9 @@
 #include "../src/rdkafka_proto.h"
 #include "../src/rdunittest.h"
 
+#include <stdarg.h>
+
+
 /**
  * @name Producer transaction tests using the mock cluster
  *
@@ -58,13 +61,18 @@ static int error_is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 /**
  * @brief Create a transactional producer and a mock cluster.
+ *
+ * The var-arg list is a NULL-terminated list of
+ * (const char *key, const char *value) config properties.
  */
 static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp,
                                         const char *transactional_id,
-                                        int broker_cnt) {
+                                        int broker_cnt, ...) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         char numstr[8];
+        va_list ap;
+        const char *key;
 
         rd_snprintf(numstr, sizeof(numstr), "%d", broker_cnt);
 
@@ -75,6 +83,11 @@ static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp,
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         test_curr->ignore_dr_err = rd_false;
+
+        va_start(ap, broker_cnt);
+        while ((key = va_arg(ap, const char *)))
+                test_conf_set(conf, key, va_arg(ap, const char *));
+        va_end(ap);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
@@ -102,7 +115,7 @@ static void do_test_txn_recoverable_errors (void) {
 
         TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
 
-        rk = create_txn_producer(&mcluster, txnid, 3);
+        rk = create_txn_producer(&mcluster, txnid, 3, NULL);
 
         /* Make sure transaction and group coordinators are different.
          * This verifies that AddOffsetsToTxnRequest isn't sent to the
@@ -221,7 +234,7 @@ static void do_test_txn_requires_abort_errors (void) {
 
         TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
 
-        rk = create_txn_producer(&mcluster, "txnid", 3);
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
 
         test_curr->ignore_dr_err = rd_true;
 
@@ -378,7 +391,7 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
 
         TEST_SAY(_C_MAG "[ Test %s down ]\n", down_what);
 
-        rk = create_txn_producer(&mcluster, transactional_id, 3);
+        rk = create_txn_producer(&mcluster, transactional_id, 3, NULL);
 
         /* Broker down is not a test-failing error */
         allowed_error = RD_KAFKA_RESP_ERR__TRANSPORT;
@@ -465,7 +478,7 @@ static void do_test_txn_switch_coordinator (void) {
 
         TEST_SAY(_C_MAG "[ Test switching coordinators ]\n");
 
-        rk = create_txn_producer(&mcluster, transactional_id, broker_cnt);
+        rk = create_txn_producer(&mcluster, transactional_id, broker_cnt, NULL);
 
         coord_id = 1;
         rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
@@ -581,7 +594,178 @@ static void do_test_txns_not_supported (void) {
 }
 
 
+/**
+ * @brief CONCURRENT_TRANSACTION on AddOffsets.. should be marked as retriable.
+ */
+static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, 5000);
+
+
+        /*
+         * Have AddOffsetsToTxn fail.
+         */
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_AddOffsetsToTxn,
+                1+3,/* first request + number of internal retries */
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                     cgmetadata, -1);
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TEST_ASSERT(error, "expected error");
+        TEST_SAY("Error %s: %s\n",
+                 rd_kafka_error_name(error),
+                 rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "expected retriable error, not %s",
+                    rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
+
+        /* Retry */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                               cgmetadata, -1));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+}
+
+
+/**
+ * @brief Verify that request timeouts don't cause crash (#2913).
+ */
+static void do_test_txns_no_timeout_crash (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+
+        rk = create_txn_producer(&mcluster, "txnid", 3,
+                                 "socket.timeout.ms", "1000",
+                                 "transaction.timeout.ms", "5000",
+                                 NULL);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        test_flush(rk, -1);
+
+        /* Delay all broker connections */
+        if ((err = rd_kafka_mock_broker_set_rtt(mcluster, 1, 2000)) ||
+            (err = rd_kafka_mock_broker_set_rtt(mcluster, 2, 2000)) ||
+            (err = rd_kafka_mock_broker_set_rtt(mcluster, 3, 2000)))
+                TEST_FAIL("Failed to set broker RTT: %s",
+                          rd_kafka_err2str(err));
+
+        /* send_offsets..() should now time out */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                     cgmetadata, -1);
+        TEST_ASSERT(error, "Expected send_offsets..() to fail");
+        TEST_SAY("send_offsets..() failed with %serror: %s\n",
+                 rd_kafka_error_is_retriable(error) ? "retriable " : "",
+                 rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected send_offsets_to_transaction() to fail with "
+                    "timeout, not %s",
+                    rd_kafka_error_name(error));
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "expected send_offsets_to_transaction() to fail with "
+                    "a retriable error");
+        rd_kafka_error_destroy(error);
+
+        /* Reset delay and try again */
+        if ((err = rd_kafka_mock_broker_set_rtt(mcluster, 1, 0)) ||
+            (err = rd_kafka_mock_broker_set_rtt(mcluster, 2, 0)) ||
+            (err = rd_kafka_mock_broker_set_rtt(mcluster, 3, 0)))
+                TEST_FAIL("Failed to reset broker RTT: %s",
+                          rd_kafka_err2str(err));
+
+        TEST_SAY("Retrying send_offsets..()\n");
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                     cgmetadata, -1);
+        TEST_ASSERT(!error, "Expected send_offsets..() to succeed, got: %s",
+                    rd_kafka_error_string(error));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        /* All done */
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
+                return 0;
+        }
 
         do_test_txn_recoverable_errors();
 
@@ -595,11 +779,12 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         do_test_txns_not_supported();
 
-        if (!test_quick) {
-                /* Switch coordinator */
+        do_test_txns_send_offsets_concurrent_is_retriable();
+
+        do_test_txns_no_timeout_crash();
+
+        if (!test_quick)
                 do_test_txn_switch_coordinator();
-        }
 
         return 0;
 }
-

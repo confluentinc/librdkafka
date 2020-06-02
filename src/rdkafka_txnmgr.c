@@ -345,8 +345,7 @@ void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
  *
  * @param rkq is the queue to send the reply on, which may be NULL or disabled.
  *            The \p rkq refcount is decreased by this function.
- * @param err API error code.
- * @param errstr_fmt If err is set, a human readable error format string.
+ * @param error Optional error object, or NULL.
  *
  * @locality rdkafka main thread
  * @locks any
@@ -379,6 +378,9 @@ rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error) {
  *
  * @param rkq is the queue to send the reply on, which may be NULL or disabled.
  *            The \p rkq refcount is decreased by this function.
+ * @param actions Optional response actions (RD_KAFKA_ERR_ACTION_..).
+ *                If RD_KAFKA_ERR_ACTION_RETRY is set the error returned to
+ *                the application will be retriable.
  * @param err API error code.
  * @param errstr_fmt If err is set, a human readable error format string.
  *
@@ -387,6 +389,7 @@ rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error) {
  */
 static void
 rd_kafka_txn_curr_api_reply (rd_kafka_q_t *rkq,
+                             int actions,
                              rd_kafka_resp_err_t err,
                              const char *errstr_fmt, ...) {
         rd_kafka_error_t *error = NULL;
@@ -396,6 +399,11 @@ rd_kafka_txn_curr_api_reply (rd_kafka_q_t *rkq,
                 va_start(ap, errstr_fmt);
                 error = rd_kafka_error_new_v(err, errstr_fmt, ap);
                 va_end(ap);
+
+                if ((actions & (RD_KAFKA_ERR_ACTION_RETRY|
+                                RD_KAFKA_ERR_ACTION_PERMANENT)) ==
+                    RD_KAFKA_ERR_ACTION_RETRY)
+                        rd_kafka_error_set_retriable(error);
         }
 
         rd_kafka_txn_curr_api_reply_error(rkq, error);
@@ -421,7 +429,7 @@ void rd_kafka_txn_idemp_state_change (rd_kafka_t *rk,
                 if (rk->rk_eos.txn_init_rkq) {
                         /* Application has called init_transactions() and
                          * it is now complete, reply to the app. */
-                        rd_kafka_txn_curr_api_reply(rk->rk_eos.txn_init_rkq,
+                        rd_kafka_txn_curr_api_reply(rk->rk_eos.txn_init_rkq, 0,
                                                     RD_KAFKA_RESP_ERR_NO_ERROR,
                                                     NULL);
                         rk->rk_eos.txn_init_rkq = NULL;
@@ -935,7 +943,7 @@ static void
 rd_kafka_txn_curr_api_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_q_t *rkq = arg;
 
-        rd_kafka_txn_curr_api_reply(rkq, RD_KAFKA_RESP_ERR__TIMED_OUT,
+        rd_kafka_txn_curr_api_reply(rkq, 0, RD_KAFKA_RESP_ERR__TIMED_OUT,
                                     "Transactional operation timed out");
 }
 
@@ -960,7 +968,8 @@ rd_kafka_txn_curr_api_init_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
                                    rd_kafka_err2str(err));
 
         /* init_transactions() timeouts are retriable */
-        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
+            err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
                 rd_kafka_error_set_retriable(error);
 
         rd_kafka_txn_curr_api_reply_error(rkq, error);
@@ -1423,13 +1432,18 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR__DESTROY:
+                /* Producer is being terminated, ignore the response. */
         case RD_KAFKA_RESP_ERR__OUTDATED:
-                rd_kafka_op_destroy(rko);
+                /* Set a non-actionable actions flag so that curr_api_reply()
+                 * is called below, without other side-effects. */
+                actions = RD_KAFKA_ERR_ACTION_SPECIAL;
                 return;
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR__TRANSPORT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 /* Note: this is the group coordinator, not the
                  *       transaction coordinator. */
                 rd_kafka_coord_cache_evict(&rk->rk_coord_cache, rkb);
@@ -1492,10 +1506,11 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         if (err)
                 rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
-                                            err, "%s", errstr);
+                                            0, err, "%s", errstr);
         else
                 rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
-                                            RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
+                                            0, RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            NULL);
 
         rd_kafka_op_destroy(rko);
 }
@@ -1633,15 +1648,20 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR_NO_ERROR:
                 break;
 
-        case RD_KAFKA_RESP_ERR__OUTDATED:
         case RD_KAFKA_RESP_ERR__DESTROY:
                 /* Producer is being terminated, ignore the response. */
+        case RD_KAFKA_RESP_ERR__OUTDATED:
+                /* Set a non-actionable actions flag so that curr_api_reply()
+                 * is called below, without other side-effects. */
+                actions = RD_KAFKA_ERR_ACTION_SPECIAL;
                 break;
 
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR__TRANSPORT:
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY|
                         RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
@@ -1685,7 +1705,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                 if (!rd_timeout_expired(remains_ms) &&
                     rd_kafka_buf_retry(rk->rk_eos.txn_coord, request))
                         return;
-                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                /* Propagate as retriable error through api_reply() below */
 
         } else if (err) {
                 rd_rkb_log(rkb, LOG_ERR, "ADDOFFSETS",
@@ -1722,7 +1742,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
         } else {
 
                 rd_kafka_txn_curr_api_reply(
-                        rd_kafka_q_keep(rko->rko_replyq.q), err,
+                        rd_kafka_q_keep(rko->rko_replyq.q), actions, err,
                         "Failed to add offsets to transaction on broker %s: "
                         "%s (after %dms)",
                         rd_kafka_broker_name(rkb),
@@ -1847,7 +1867,7 @@ rd_kafka_send_offsets_to_transaction (
         return rd_kafka_txn_curr_api_req(
                 rk, __FUNCTION__, rko,
                 RD_POLL_INFINITE, /* rely on background code to time out */
-                0 /* no flags */);
+                RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT);
 }
 
 
@@ -1929,9 +1949,12 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                 rd_kafka_txn_complete(rk);
                 break;
 
-        case RD_KAFKA_RESP_ERR__OUTDATED:
         case RD_KAFKA_RESP_ERR__DESTROY:
                 /* Producer is being terminated, ignore the response. */
+        case RD_KAFKA_RESP_ERR__OUTDATED:
+                /* Set a non-actionable actions flag so that curr_api_reply()
+                 * is called below, without other side-effects. */
+                actions = RD_KAFKA_ERR_ACTION_SPECIAL;
                 break;
 
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
@@ -1976,11 +1999,11 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
         if (err)
                 rd_kafka_txn_curr_api_reply(
-                        rkq, err,
+                        rkq, 0, err,
                         "EndTxn %s failed: %s", is_commit ? "commit" : "abort",
                         rd_kafka_err2str(err));
         else
-                rd_kafka_txn_curr_api_reply(rkq, RD_KAFKA_RESP_ERR_NO_ERROR,
+                rd_kafka_txn_curr_api_reply(rkq, 0, RD_KAFKA_RESP_ERR_NO_ERROR,
                                             NULL);
 }
 

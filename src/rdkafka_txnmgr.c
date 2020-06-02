@@ -726,7 +726,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                         errcnt, errcnt + okcnt,
                         rd_kafka_broker_name(rkb),
                         rd_kafka_err2str(err),
-                        (int)(rkbuf->rkbuf_ts_sent/1000));
+                        (int)(request->rkbuf_ts_sent/1000));
         }
 }
 
@@ -1387,7 +1387,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                             "broker %s: %s "
                             "(after %dms)",
                             rd_kafka_broker_name(rkb),
-                            errparts, (int)(rkbuf->rkbuf_ts_sent/1000));
+                            errparts, (int)(request->rkbuf_ts_sent/1000));
         }
 
         goto done;
@@ -1406,7 +1406,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                                     "(after %d ms)",
                                     rd_kafka_broker_name(rkb),
                                     rd_kafka_err2str(err),
-                                    (int)(rkbuf->rkbuf_ts_sent/1000));
+                                    (int)(request->rkbuf_ts_sent/1000));
                 }
         }
 
@@ -1698,7 +1698,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                         "%s (after %dms)",
                         rd_kafka_broker_name(rkb),
                         rd_kafka_err2str(err),
-                        (int)(rkbuf->rkbuf_ts_sent/1000));
+                        (int)(request->rkbuf_ts_sent/1000));
 
         if (!err) {
                 /* Step 2: Commit offsets to transaction on the
@@ -1724,7 +1724,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                         "%s (after %dms)",
                         rd_kafka_broker_name(rkb),
                         rd_kafka_err2str(err),
-                        (int)(rkbuf->rkbuf_ts_sent/1000));
+                        (int)(request->rkbuf_ts_sent/1000));
 
                 rd_kafka_op_destroy(rko);
         }

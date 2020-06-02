@@ -1270,12 +1270,15 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
         }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-        if (rk->rk_conf.ssl.ptr_engine) {
-                STACK_OF(X509_NAME)* cert_names = sk_X509_NAME_new_null();
-                STACK_OF(X509_OBJECT)* roots = 
-                        X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
-                X509* x509 = NULL;
-                EVP_PKEY* pkey = NULL;
+        /*
+         * If applicable, use OpenSSL engine to fetch SSL certificate.
+         */
+        if (rk->rk_conf.ssl.engine) {
+                STACK_OF(X509_NAME) *cert_names = sk_X509_NAME_new_null();
+                STACK_OF(X509_OBJECT) *roots = 
+                    X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
+                X509 *x509 = NULL;
+                EVP_PKEY *pkey = NULL;
                 int i = 0;
                 for (i = 0; i < sk_X509_OBJECT_num(roots); i++) {
                         x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, 
@@ -1305,8 +1308,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 X509_free(x509);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to use SSL_CTX_use_certificate with engine: ");
-
+                                    "Failed to use SSL_CTX_use_certificate "
+                                    "with engine: ");
                         EVP_PKEY_free(pkey);
                         return -1;
                 }
@@ -1315,8 +1318,8 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 EVP_PKEY_free(pkey);
                 if (r != 1) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to use SSL_CTX_use_PrivateKey with engine: ");
-
+                                    "Failed to use SSL_CTX_use_PrivateKey "
+                                    "with engine: ");
                         return -1;
                 }
 

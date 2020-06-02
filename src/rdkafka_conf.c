@@ -829,14 +829,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Path to client's keystore (PKCS#12) used for authentication.",
           _UNSUPPORTED_SSL
         },
-        { _RK_GLOBAL, "openssl.engine.location", _RK_C_STR,
-          _RK(ssl.openssl_engine_location),
-          "Location of openssl engine dll"
-        },
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-        { _RK_GLOBAL, "openssl.engine.location", _RK_C_STR,
-          _RK(ssl.openssl_engine_location),
-          "Path to openssl engine dll. OpenSSL >= 1.1.0 required."
+        { _RK_GLOBAL, "ssl.engine.location", _RK_C_STR,
+          _RK(ssl.engine_location),
+          "Path to OpenSSL engine library. OpenSSL >= 1.1.0 required."
+        },
+        { _RK_GLOBAL, "ssl.engine.id", _RK_C_STR,
+          _RK(ssl.engine_id),
+          "OpenSSL engine id is name for loading engine. "
+          "Default value is \"dynamic\"."
+        },
+        { _RK_GLOBAL, "ssl.engine.callback_data", _RK_C_PTR,
+          _RK(ssl.engine_callback_data),
+          "OpenSSL engine callback data (set "
+          "with rd_kafka_conf_set_engine_callback_data())."
         },
 #endif
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,

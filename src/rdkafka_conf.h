@@ -31,8 +31,10 @@
 
 #include "rdlist.h"
 #include "rdkafka_cert.h"
-#include <openssl/engine.h>
 
+#if WITH_SSL
+#include <openssl/engine.h>
+#endif /* WITH_SSL */
 
 /**
  * Forward declarations
@@ -244,7 +246,7 @@ struct rd_kafka_conf_s {
                 ENGINE *engine;
                 char   *engine_location;
                 char   *engine_id;
-                void   *engine_callback_data;
+                const void *engine_callback_data;
 #endif
                 char *keystore_location;
                 char *keystore_password;

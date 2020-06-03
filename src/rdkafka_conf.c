@@ -746,7 +746,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_GLOBAL, "ssl.engine.id", _RK_C_STR,
           _RK(ssl.engine_id),
-          "OpenSSL engine id is name for loading engine. "
+          "OpenSSL engine id is the name used for loading engine. "
           "Default value is \"dynamic\"."
         },
         { _RK_GLOBAL, "ssl.engine.callback_data", _RK_C_PTR,

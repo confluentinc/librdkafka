@@ -1299,8 +1299,18 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                                                 rk->rk_conf.ssl.engine_callback_data);
 
                 if (r == -1 || !x509 || !pkey) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "ENGINE_load_ssl_client_cert failed");
+                        X509_free(x509);
+                        EVP_PKEY_free(pkey);
+                        if (r == -1)
+                                rd_snprintf(errstr, errstr_size,
+                                            "ENGINE_load_ssl_client_cert failed: ");
+                        else if (!x509)
+                                rd_snprintf(errstr, errstr_size,
+                                            "Engine failed to load certificate: ");
+                        else
+                                rd_snprintf(errstr, errstr_size,
+                                            "Engine failed to load private key: ");
+
                         return -1;
                 }
 

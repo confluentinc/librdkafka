@@ -5,7 +5,7 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/packaging/cmake/Modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
 

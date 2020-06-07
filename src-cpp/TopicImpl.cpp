@@ -76,9 +76,9 @@ static int32_t partitioner_kp_cb_trampoline (const rd_kafka_topic_t *rkt,
 
 RdKafka::Topic *RdKafka::Topic::create (Handle *base,
 					const std::string &topic_str,
-					Conf *conf,
+					const Conf *conf,
 					std::string &errstr) {
-  RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
+  const RdKafka::ConfImpl *confimpl = static_cast<const RdKafka::ConfImpl *>(conf);
   rd_kafka_topic_t *rkt;
   rd_kafka_topic_conf_t *rkt_conf;
   rd_kafka_t *rk = dynamic_cast<HandleImpl*>(base)->rk_;

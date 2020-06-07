@@ -1765,7 +1765,7 @@ class RD_EXPORT Topic {
    * @returns the new topic handle or NULL on error (see \p errstr).
    */
   static Topic *create (Handle *base, const std::string &topic_str,
-                        Conf *conf, std::string &errstr);
+                        const Conf *conf, std::string &errstr);
 
   virtual ~Topic () = 0;
 
@@ -2348,7 +2348,7 @@ public:
    * @sa CONFIGURATION.md for \c group.id, \c session.timeout.ms,
    *     \c partition.assignment.strategy, etc.
    */
-  static KafkaConsumer *create (Conf *conf, std::string &errstr);
+  static KafkaConsumer *create (const Conf *conf, std::string &errstr);
 
   virtual ~KafkaConsumer () = 0;
 
@@ -2662,7 +2662,7 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @returns the new handle on success or NULL on error in which case
    * \p errstr is set to a human readable error message.
    */
-  static Consumer *create (Conf *conf, std::string &errstr);
+  static Consumer *create (const Conf *conf, std::string &errstr);
 
   virtual ~Consumer () = 0;
 
@@ -2839,7 +2839,7 @@ class RD_EXPORT Producer : public virtual Handle {
    * @returns the new handle on success or NULL on error in which case
    *          \p errstr is set to a human readable error message.
    */
-  static Producer *create (Conf *conf, std::string &errstr);
+  static Producer *create (const Conf *conf, std::string &errstr);
 
 
   virtual ~Producer () = 0;

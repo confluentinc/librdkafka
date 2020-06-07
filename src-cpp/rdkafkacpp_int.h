@@ -875,7 +875,7 @@ class HandleImpl : virtual public Handle {
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 
-  void set_common_config (RdKafka::ConfImpl *confimpl);
+  void set_common_config (const RdKafka::ConfImpl *confimpl);
 
   RdKafka::ErrorCode metadata (bool all_topics,const Topic *only_rkt,
             Metadata **metadatap, int timeout_ms);

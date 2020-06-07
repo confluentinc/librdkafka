@@ -33,10 +33,10 @@
 
 RdKafka::KafkaConsumer::~KafkaConsumer () {}
 
-RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create (RdKafka::Conf *conf,
+RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create (const RdKafka::Conf *conf,
                                                         std::string &errstr) {
   char errbuf[512];
-  RdKafka::ConfImpl *confimpl = dynamic_cast<RdKafka::ConfImpl *>(conf);
+  const RdKafka::ConfImpl *confimpl = dynamic_cast<const RdKafka::ConfImpl *>(conf);
   RdKafka::KafkaConsumerImpl *rkc = new RdKafka::KafkaConsumerImpl();
   rd_kafka_conf_t *rk_conf = NULL;
   size_t grlen;

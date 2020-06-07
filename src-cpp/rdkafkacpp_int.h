@@ -936,7 +936,7 @@ class HandleImpl : virtual public Handle {
           return rd_kafka_controllerid(rk_, timeout_ms);
   }
 
-  ErrorCode fatal_error (std::string &errstr) {
+  ErrorCode fatal_error (std::string &errstr) const {
           char errbuf[512];
           RdKafka::ErrorCode err =
                   static_cast<RdKafka::ErrorCode>(

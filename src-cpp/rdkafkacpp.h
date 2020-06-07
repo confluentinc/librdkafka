@@ -1604,7 +1604,7 @@ class RD_EXPORT Handle {
    * @returns ERR_NO_ERROR if no fatal error has been raised, else
    *          any other error code.
    */
-  virtual ErrorCode fatal_error (std::string &errstr) = 0;
+  virtual ErrorCode fatal_error (std::string &errstr) const = 0;
 
   /**
    * @brief Set SASL/OAUTHBEARER token and metadata

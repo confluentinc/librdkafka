@@ -259,7 +259,7 @@ offset_commit_cb_trampoline (
 }
 
 
-void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
+void RdKafka::HandleImpl::set_common_config (const RdKafka::ConfImpl *confimpl) {
 
   rd_kafka_conf_set_opaque(confimpl->rk_conf_, this);
 

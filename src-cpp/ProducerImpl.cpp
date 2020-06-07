@@ -49,10 +49,10 @@ static void dr_msg_cb_trampoline (rd_kafka_t *rk,
 
 
 
-RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
+RdKafka::Producer *RdKafka::Producer::create (const RdKafka::Conf *conf,
                                               std::string &errstr) {
   char errbuf[512];
-  RdKafka::ConfImpl *confimpl = dynamic_cast<RdKafka::ConfImpl *>(conf);
+  const RdKafka::ConfImpl *confimpl = dynamic_cast<const RdKafka::ConfImpl *>(conf);
   RdKafka::ProducerImpl *rkp = new RdKafka::ProducerImpl();
   rd_kafka_conf_t *rk_conf = NULL;
 

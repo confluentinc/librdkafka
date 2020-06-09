@@ -340,9 +340,10 @@ unsigned int rd_map_str_hash (const void *a);
  *        entry is added using the DEFAULT_CODE.
  */
 #define RD_MAP_GET_OR_SET(RMAP,KEY,DEFAULT_CODE)                \
-        (RD_MAP_GET(RMAP,KEY) ? (RMAP)->value :                 \
-         RD_MAP_SET(RMAP, (RMAP)->key, DEFAULT_CODE),           \
-         (RMAP)->value)
+        (RD_MAP_GET(RMAP,KEY) ?                                 \
+        (RMAP)->value :                                         \
+        (RD_MAP_SET(RMAP, (RMAP)->key, DEFAULT_CODE),           \
+         (RMAP)->value))
 
 
 /**

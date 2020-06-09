@@ -18,6 +18,9 @@ librdkafka v1.5.2 is a maintenance release.
    This change yields increased robustness for broker-side congestion.
 
 
+The v1.6.0 release is a feature release adding support for Incremental
+rebalancing of consumer groups.
+
 ## Enhancements
 
  * The generated `CONFIGURATION.md` (through `rd_kafka_conf_properties_show())`)
@@ -27,6 +30,8 @@ librdkafka v1.5.2 is a maintenance release.
    a more useful error string saying why the property can't be set.
  * Consumer configs on producers and vice versa will now be logged with
    warning messages on client instantiation.
+ * Added `assignor` debug context for troubleshooting consumer partition
+   assignments.
 
 
 ## Fixes
@@ -87,6 +92,7 @@ librdkafka v1.5.2 is a maintenance release.
 
 
 *Note: there was no v1.5.1 librdkafka release*
+
 
 
 

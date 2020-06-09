@@ -1201,6 +1201,8 @@ plugin        | *        | Plugin loading debugging.
 consumer      | consumer | High-level consumer debugging.
 admin         | admin    | Admin API debugging.
 eos           | producer | Idempotent Producer debugging.
+mock          | *        | Mock cluster functionality debugging.
+assignor      | consumer | Detailed consumer group partition assignor debugging.
 all           | *        | All of the above.
 
 

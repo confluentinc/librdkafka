@@ -2663,6 +2663,18 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
 
 
 rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_copy (const rd_kafka_topic_partition_t *src) {
+        return rd_kafka_topic_partition_new(src->topic, src->partition);
+}
+
+
+/** Same as above but with generic void* signature */
+void *rd_kafka_topic_partition_copy_void (const void *src) {
+        return rd_kafka_topic_partition_copy(src);
+}
+
+
+rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_new_from_rktp (rd_kafka_toppar_t *rktp) {
 	rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
 
@@ -2862,14 +2874,36 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
                 return RD_CMP(a->partition, b->partition);
 }
 
+/** @brief Compare only the topic */
+int rd_kafka_topic_partition_cmp_topic (const void *_a, const void *_b) {
+        const rd_kafka_topic_partition_t *a = _a;
+        const rd_kafka_topic_partition_t *b = _b;
+        return strcmp(a->topic, b->topic);
+}
+
+static int rd_kafka_topic_partition_cmp_opaque (const void *_a, const void *_b,
+                                                void *opaque) {
+        return rd_kafka_topic_partition_cmp(_a, _b);
+}
+
+/** @returns a hash of the topic and partition */
+unsigned int rd_kafka_topic_partition_hash (const void *_a) {
+        const rd_kafka_topic_partition_t *a = _a;
+        int r = 31 * 17 + a->partition;
+        return 31 * r + rd_string_hash(a->topic, -1);
+}
+
+
 
 /**
  * @brief Search 'rktparlist' for 'topic' and 'partition'.
  * @returns the elems[] index or -1 on miss.
  */
-int
-rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist,
-				     const char *topic, int32_t partition) {
+static int
+rd_kafka_topic_partition_list_find0 (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition,
+        int (*cmp) (const void *, const void *)) {
         rd_kafka_topic_partition_t skel;
         int i;
 
@@ -2877,9 +2911,7 @@ rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist
         skel.partition = partition;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
-                if (!rd_kafka_topic_partition_cmp(&skel,
-                                                  &rktparlist->elems[i],
-                                                  NULL))
+                if (!cmp(&skel, &rktparlist->elems[i]))
                         return i;
         }
 
@@ -2887,14 +2919,31 @@ rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist
 }
 
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
-				     const char *topic, int32_t partition) {
-	int i = rd_kafka_topic_partition_list_find0(rktparlist,
-						    topic, partition);
-	if (i == -1)
-		return NULL;
-	else
-		return &rktparlist->elems[i];
+rd_kafka_topic_partition_list_find (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition) {
+        int i = rd_kafka_topic_partition_list_find0(
+                rktparlist, topic, partition, rd_kafka_topic_partition_cmp);
+        if (i == -1)
+                return NULL;
+        else
+                return &rktparlist->elems[i];
+}
+
+
+/**
+ * @returns the first element that matches \p topic, regardless of partition.
+ */
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find_topic (
+        const rd_kafka_topic_partition_list_t *rktparlist, const char *topic) {
+        int i = rd_kafka_topic_partition_list_find0(
+                rktparlist, topic, RD_KAFKA_PARTITION_UA,
+                rd_kafka_topic_partition_cmp_topic);
+        if (i == -1)
+                return NULL;
+        else
+                return &rktparlist->elems[i];
 }
 
 
@@ -2916,8 +2965,8 @@ rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktpa
 int
 rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
 				   const char *topic, int32_t partition) {
-	int i = rd_kafka_topic_partition_list_find0(rktparlist,
-						    topic, partition);
+        int i = rd_kafka_topic_partition_list_find0(
+                rktparlist, topic, partition, rd_kafka_topic_partition_cmp);
 	if (i == -1)
 		return 0;
 

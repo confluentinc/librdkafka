@@ -82,6 +82,11 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 int rd_kafka_metadata_partition_id_cmp (const void *_a,
                                         const void *_b);
 
+rd_kafka_metadata_t *
+rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
+                                  size_t topic_cnt);
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...);
+
 
 /**
  * @{

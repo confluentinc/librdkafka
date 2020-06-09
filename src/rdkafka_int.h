@@ -812,6 +812,7 @@ const char *rd_kafka_purge_flags2str (int flags);
 #define RD_KAFKA_DBG_ADMIN          0x4000
 #define RD_KAFKA_DBG_EOS            0x8000
 #define RD_KAFKA_DBG_MOCK           0x10000
+#define RD_KAFKA_DBG_ASSIGNOR       0x20000
 #define RD_KAFKA_DBG_ALL            0xfffff
 #define RD_KAFKA_DBG_NONE           0x0
 

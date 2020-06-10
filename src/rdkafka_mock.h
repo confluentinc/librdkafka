@@ -225,6 +225,12 @@ rd_kafka_mock_broker_set_up (rd_kafka_mock_cluster_t *mcluster,
                              int32_t broker_id);
 
 
+/**
+ * @brief Set broker round-trip-time delay in milliseconds.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_set_rtt (rd_kafka_mock_cluster_t *mcluster,
+                              int32_t broker_id, int rtt_ms);
 
 /**
  * @brief Sets the broker's rack as reported in Metadata to the client.

@@ -3505,7 +3505,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                         /* Make sure at least one request can be sent
                          * before the transaction times out. */
                         if (!rd_kafka_conf_is_modified(conf,
-                                                       "session.timeout.ms"))
+                                                       "socket.timeout.ms"))
                                 conf->socket_timeout_ms =
                                         RD_MAX(conf->eos.
                                                transaction_timeout_ms - 100,

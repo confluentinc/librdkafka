@@ -9,7 +9,7 @@ CCLR='\033[0m'
 if [[ $1 == -h ]]; then
     echo "Usage: $0 [-..] [modes..]"
     echo ""
-    echo "  Modes: bare valgrind helgrind drd gdb lldb bash"
+    echo "  Modes: bare valgrind helgrind cachegrind drd gdb lldb bash"
     echo "  Options:"
     echo "   -..    - test-runner command arguments (pass thru)"
     exit 0
@@ -70,6 +70,12 @@ for mode in $MODES; do
                      --sim-hints=no-nptl-pthread-stackcache \
                      $SUPP $GEN_SUPP \
 		$TEST	$ARGS
+	    RET=$?
+	    ;;
+	cachegrind|callgrind)
+	    valgrind $VALGRIND_ARGS --tool=$mode \
+		     $SUPP $GEN_SUPP \
+		$TEST $ARGS
 	    RET=$?
 	    ;;
 	drd)

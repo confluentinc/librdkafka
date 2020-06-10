@@ -669,6 +669,8 @@ static void rd_kafka_mock_connection_close (rd_kafka_mock_connection_t *mconn,
 void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
                                              rd_kafka_buf_t *resp) {
 
+        resp->rkbuf_ts_sent = rd_clock();
+
         resp->rkbuf_reshdr.Size =
                 (int32_t)(rd_buf_write_pos(&resp->rkbuf_buf) - 4);
 
@@ -939,18 +941,28 @@ static ssize_t
 rd_kafka_mock_connection_write_out (rd_kafka_mock_connection_t *mconn) {
         rd_kafka_buf_t *rkbuf;
         rd_ts_t now = rd_clock();
+        rd_ts_t rtt = mconn->broker->rtt;
 
         while ((rkbuf = TAILQ_FIRST(&mconn->outbufs.rkbq_bufs))) {
                 ssize_t r;
                 char errstr[128];
+                rd_ts_t ts_delay = 0;
 
-                if (rkbuf->rkbuf_ts_retry && rkbuf->rkbuf_ts_retry > now) {
-                        /* Response is being delayed */
+                /* Connection delay/rtt is set. */
+                if (rkbuf->rkbuf_ts_sent + rtt > now)
+                        ts_delay = rkbuf->rkbuf_ts_sent + rtt;
+
+                /* Response is being delayed */
+                if (rkbuf->rkbuf_ts_retry && rkbuf->rkbuf_ts_retry > now)
+                        ts_delay = rkbuf->rkbuf_ts_retry + rtt;
+
+                if (ts_delay) {
+                        /* Delay response */
                         rd_kafka_timer_start_oneshot(
                                 &mconn->broker->cluster->timers,
                                 &mconn->write_tmr,
                                 rd_false,
-                                rkbuf->rkbuf_ts_retry-now,
+                                ts_delay-now,
                                 rd_kafka_mock_connection_write_out_tmr_cb,
                                 mconn);
                         break;
@@ -1635,6 +1647,19 @@ rd_kafka_mock_broker_set_up (rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_broker_set_rtt (rd_kafka_mock_cluster_t *mcluster,
+                              int32_t broker_id, int rtt_ms) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.lo = rtt_ms;
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_BROKER_SET_RTT;
+
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_rack (rd_kafka_mock_cluster_t *mcluster,
                                int32_t broker_id, const char *rack) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
@@ -1790,6 +1815,15 @@ rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
 
                 if (!mrkb->up)
                         rd_kafka_mock_broker_close_all(mrkb, "Broker down");
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
+                mrkb = rd_kafka_mock_broker_find(mcluster,
+                                                 rko->rko_u.mock.broker_id);
+                if (!mrkb)
+                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+
+                mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
                 break;
 
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:

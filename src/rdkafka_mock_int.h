@@ -132,6 +132,7 @@ typedef struct rd_kafka_mock_broker_s {
         int     port;
         char   *rack;
         rd_bool_t up;
+        rd_ts_t rtt;  /**< RTT in microseconds */
 
         rd_socket_t  listen_s;   /**< listen() socket */
 

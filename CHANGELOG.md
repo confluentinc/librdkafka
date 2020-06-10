@@ -81,6 +81,20 @@ librdkafka.
 
 
 
+# librdkafka v1.4.4
+
+v1.4.4 is a maintenance release with the following fixes:
+
+ * Fix crash on certain transactional request timeouts.
+ * Mark `ERR_CONCURRENT_TRANSACTIONS` and timeouts as retriable in
+   `send_offsets_to_transaction()`.
+ * `socket.timeout.ms` was ignored when `transactional.id` was set.
+
+
+*Note: there was no v1.4.3 librdkafka release*
+
+
+
 # librdkafka v1.4.2
 
 v1.4.2 is a maintenance release with the following fixes and enhancements:

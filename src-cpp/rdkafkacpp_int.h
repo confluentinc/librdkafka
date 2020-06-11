@@ -1115,6 +1115,8 @@ public:
   ErrorCode unsubscribe ();
   ErrorCode assign (const std::vector<TopicPartition*> &partitions);
   ErrorCode unassign ();
+  Error *incremental_assign (const std::vector<TopicPartition*> &partitions);
+  Error *incremental_unassign (const std::vector<TopicPartition*> &partitions);
 
   Message *consume (int timeout_ms);
   ErrorCode commitSync () {

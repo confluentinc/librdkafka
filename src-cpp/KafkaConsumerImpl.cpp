@@ -144,7 +144,7 @@ RdKafka::KafkaConsumerImpl::assignment (std::vector<RdKafka::TopicPartition*> &p
 
 bool
 RdKafka::KafkaConsumerImpl::assignment_lost () {
-  return rd_kafka_assignment_lost(rk_);
+  return rd_kafka_assignment_lost(rk_) ? true : false;
 }
 
 

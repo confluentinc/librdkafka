@@ -3694,7 +3694,9 @@ rd_kafka_assignment (rd_kafka_t *rk,
  *        use with a high level subscribing consumer. Assignments are revoked
  *        immediately when determined to have been lost, so this method
  *        is only useful when reacting to a RD_KAFKA_EVENT_REBALANCE event
- *        or from within a rebalance_cb.
+ *        or from within a rebalance_cb. Partitions that have been lost may
+ *        already be owned by other members in the group and therefore
+ *        commiting offsets, for example, may fail.
  *
  * @remark Calling rd_kafka_assign(), rd_kafka_incremental_assign() or
  *         rd_kafka_incremental_unassign() resets this flag.

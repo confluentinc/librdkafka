@@ -97,6 +97,9 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for previous assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN,
 
+                /* all: waiting for assignment to partially decommission */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN,
+
                 /* all: waiting for application's rebalance_cb to assign() */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB,
 
@@ -125,8 +128,6 @@ typedef struct rd_kafka_cgrp_s {
 						     *  Rebalance delegation
 						     *  Assign/Unassign
 						     */
-        mtx_t              rkcg_lock;
-
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_WAIT_UNASSIGN 0x4           /* Waiting for unassign
@@ -262,8 +263,6 @@ typedef struct rd_kafka_cgrp_s {
 
 
 
-#define rd_kafka_cgrp_lock(rkcg)    mtx_lock(&(rkcg)->rkcg_lock)
-#define rd_kafka_cgrp_unlock(rkcg)  mtx_unlock(&(rkcg)->rkcg_lock)
 
 /* Check if broker is the coordinator */
 #define RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,rkb)          \
@@ -317,6 +316,8 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 struct rd_kafka_consumer_group_metadata_s {
         char *group_id;
         int32_t generation_id;
+        char *member_id;
+        char *group_instance_id;  /**< Optional (NULL) */
 };
 
 rd_kafka_consumer_group_metadata_t *

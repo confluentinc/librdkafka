@@ -2364,6 +2364,22 @@ public:
    *         RdKafka::KafkaConsumer::assign() */
   virtual ErrorCode assignment (std::vector<RdKafka::TopicPartition*> &partitions) = 0;
 
+
+  /** @brief Check whether the consumer considers the current assignment to
+   *         have been lost involuntarily. This method is only applicable for
+   *         use with a subscribing consumer. Assignments are revoked
+   *         immediately when determined to have been lost, so this method is
+   *         only useful within a rebalance callback.
+   *
+   * @remark Calling rd_kafka_assign(), rd_kafka_incremental_assign() or
+   *         rd_kafka_incremental_unassign() resets this flag.
+   *
+   * @returns Returns true if the current partition assignment is considered
+   *          lost, false otherwise.
+   */
+  virtual bool assignment_lost () = 0;
+
+
   /** @brief Returns the current subscription as set by
    *         RdKafka::KafkaConsumer::subscribe() */
   virtual ErrorCode subscription (std::vector<std::string> &topics) = 0;

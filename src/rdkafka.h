@@ -3690,9 +3690,14 @@ rd_kafka_assignment (rd_kafka_t *rk,
 
 /**
  * @brief Check whether the consumer considers the current assignment to
- *        have been lost involuntarily. This method is only useful when
- *        called from within a group rebalance callback (rebalance_cb)
- *        because lost assignments are revoked immediately.
+ *        have been lost involuntarily. This method is only applicable for
+ *        use with a high level subscribing consumer. Assignments are revoked
+ *        immediately when determined to have been lost, so this method
+ *        is only useful when reacting to a RD_KAFKA_EVENT_REBALANCE event
+ *        or from within a rebalance_cb.
+ *
+ * @remark Calling rd_kafka_assign(), rd_kafka_incremental_assign() or
+ *         rd_kafka_incremental_unassign() resets this flag.
  *
  * @returns Returns 1 if the current partition assignment is considered
  *          lost, 0 otherwise.

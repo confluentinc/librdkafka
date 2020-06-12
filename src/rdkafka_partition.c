@@ -3755,7 +3755,7 @@ int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
         rd_kafka_msgq_concat(&rkmq, &rktp->rktp_msgq);
         cnt = rd_kafka_msgq_len(&rkmq);
 
-        if (purge_flags & RD_KAFKA_PURGE_F_ABORT_TXN) {
+        if (cnt > 0 && purge_flags & RD_KAFKA_PURGE_F_ABORT_TXN) {
                 /* All messages in-queue are purged
                  * on abort_transaction(). Since these messages
                  * will not be produced (retried) we need to adjust the

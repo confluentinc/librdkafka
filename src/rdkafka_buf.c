@@ -381,6 +381,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
  */
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         rd_kafka_buf_t *request, *response;
+        rd_kafka_t *rk;
 
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
@@ -407,9 +408,12 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         response = request->rkbuf_response; /* May be NULL */
         request->rkbuf_response = NULL;
 
-        rd_kafka_buf_callback(request->rkbuf_rkb->rkb_rk,
-			      request->rkbuf_rkb, err,
-                              response, request);
+        if (!(rk = rko->rko_rk)) {
+                rd_assert(request->rkbuf_rkb != NULL);
+                rk = request->rkbuf_rkb->rkb_rk;
+        }
+
+        rd_kafka_buf_callback(rk, request->rkbuf_rkb, err, response, request);
 }
 
 

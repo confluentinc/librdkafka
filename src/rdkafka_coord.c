@@ -256,6 +256,8 @@ static void rd_kafka_coord_req_fail (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
         rd_kafka_buf_t *rkbuf;
 
         reply = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
+        reply->rko_rk = rk;  /* Set rk since the rkbuf will not have a rkb
+                              * to reach it. */
         reply->rko_err = err;
 
         /* Need a dummy rkbuf to pass state to the buf resp_cb */

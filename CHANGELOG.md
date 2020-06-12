@@ -25,6 +25,7 @@ librdkafka.
  * Added `rd_kafka_produceva()` which takes an array of produce arguments
    for situations where the existing `rd_kafka_producev()` va-arg approach
    can't be used.
+ * Added RTT/delay simulation to mock brokers.
 
 
 ## Upgrade considerations
@@ -59,6 +60,7 @@ librdkafka.
    supported (by @sky92zwq).
  * `./configure` arguments now take precedence over cached `configure` variables
    from previous invocation.
+ * Fix theoeretical crash on coord request failure.
 
 
 ### Consumer fixes
@@ -78,17 +80,19 @@ librdkafka.
    NULL pointer of non-existent response object (ESC-3009)
  * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
    errors as retriable (ESC-2998)
-
+ * `socket.timeout.ms` was ignored when `transactional.id` was set.
 
 
 # librdkafka v1.4.4
 
-v1.4.4 is a maintenance release with the following fixes:
+v1.4.4 is a maintenance release with the following fixes and enhancements:
 
- * Fix crash on certain transactional request timeouts.
- * Mark `ERR_CONCURRENT_TRANSACTIONS` and timeouts as retriable in
-   `send_offsets_to_transaction()`.
- * `socket.timeout.ms` was ignored when `transactional.id` was set.
+ * Transactional producer could crash on request timeout due to dereferencing
+   NULL pointer of non-existent response object (ESC-3009)
+ * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
+   errors as retriable (ESC-2998)
+ * Fix theoeretical crash on coord request failure.
+ * Added RTT/delay simulation to mock brokers.
 
 
 *Note: there was no v1.4.3 librdkafka release*

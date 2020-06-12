@@ -225,7 +225,7 @@ if __name__ == '__main__':
     full_report = {'suites': suites, 'pass_cnt': pass_cnt,
                    'fail_cnt': fail_cnt, 'total_cnt': pass_cnt+fail_cnt}
 
-    f.write(json.dumps(full_report).encode('ascii'))
+    f.write(json.dumps(full_report))
     f.close()
 
     print('\n\n\n')

@@ -1112,9 +1112,12 @@ class RD_EXPORT Conf {
    * If no \c default_topic_conf has been set one will be created.
    * Any sub-sequent set("default_topic_conf", ..) calls will
    * replace the current default topic configuration.
-
+   *
    * @returns CONF_OK on success, else writes a human readable error
    *          description to \p errstr on error.
+   *
+   * @remark \name and \p value are copied and will not be referenced after
+   *         this function returns.
    */
   virtual Conf::ConfResult set (const std::string &name,
                                 const std::string &value,

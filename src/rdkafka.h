@@ -1614,6 +1614,9 @@ const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
  * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
  * replace the current default topic configuration.
  *
+ * @remark \name and \p value are copied and will not be referenced after
+ *         this function returns.
+ *
  * @returns \c rd_kafka_conf_res_t to indicate success or failure.
  * In case of failure \p errstr is updated to contain a human readable
  * error string.

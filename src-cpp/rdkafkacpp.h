@@ -2649,8 +2649,8 @@ public:
    *         been lost may already be owned by other members in the group and
    *         therefore commiting offsets, for example, may fail.
    *
-   * @remark Calling rd_kafka_assign(), rd_kafka_incremental_assign() or
-   *         rd_kafka_incremental_unassign() resets this flag.
+   * @remark Calling assign(), incremental_assign() or incremental_unassign()
+   *         resets this flag.
    *
    * @returns Returns true if the current partition assignment is considered
    *          lost, false otherwise.

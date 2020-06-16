@@ -76,11 +76,6 @@ librdkafka.
 
 ### Producer fixes
 
- * Transactional producer could crash on request timeout due to dereferencing
-   NULL pointer of non-existent response object (ESC-3009)
- * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
-   errors as retriable (ESC-2998)
- * `socket.timeout.ms` was ignored when `transactional.id` was set.
 
 
 # librdkafka v1.4.4
@@ -92,8 +87,10 @@ v1.4.4 is a maintenance release with the following fixes and enhancements:
  * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
    errors as retriable (ESC-2998)
  * Fix theoeretical crash on coord request failure.
+ * Minimize broker re-connect delay when broker's connection is needed to
+   send requests.
+ * `socket.timeout.ms` was ignored when `transactional.id` was set.
  * Added RTT/delay simulation to mock brokers.
-
 
 *Note: there was no v1.4.3 librdkafka release*
 

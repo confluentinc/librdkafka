@@ -1912,7 +1912,8 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
 
 /**
  * @brief Update the reconnect backoff.
- *        Should be called when a connection is made.
+ *        Should be called when a connection is made, or all addresses
+ *        a broker resolves to has been exhausted without successful connect.
  *
  * @locality broker thread
  * @locks none
@@ -1940,7 +1941,7 @@ rd_kafka_broker_update_reconnect_backoff (rd_kafka_broker_t *rkb,
         /* Set time of next reconnect */
         rkb->rkb_ts_reconnect = now + (backoff * 1000);
         rkb->rkb_reconnect_backoff_ms =
-                RD_MIN(rkb->rkb_reconnect_backoff_ms* 2,
+                RD_MIN(rkb->rkb_reconnect_backoff_ms * 2,
                        conf->reconnect_backoff_max_ms);
 }
 
@@ -3265,6 +3266,9 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                         "Closing connection due to "
                                         "nodename change");
                 }
+
+                /* Expedite next reconnect */
+                rkb->rkb_ts_reconnect = 0;
                 break;
 
         default:
@@ -5104,18 +5108,17 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         /* Asynchronous connect in progress. */
                         rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
 
-			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN) {
-				/* Connect failure.
-				 * Try the next resolve result until we've
-				 * tried them all, in which case we sleep a
-				 * short while to avoid busy looping. */
-				if (!rkb->rkb_rsal ||
-                                    rkb->rkb_rsal->rsal_cnt == 0 ||
-                                    rkb->rkb_rsal->rsal_curr + 1 ==
-                                    rkb->rkb_rsal->rsal_cnt)
-                                        rd_kafka_broker_serve(
-                                                rkb, rd_kafka_max_block_ms);
-			}
+                        /* Connect failure.
+                         * Try the next resolve result until we've
+                         * tried them all, in which case we back off the next
+                         * connection attempt to avoid busy looping. */
+			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN &&
+                            (!rkb->rkb_rsal ||
+                             rkb->rkb_rsal->rsal_cnt == 0 ||
+                             rkb->rkb_rsal->rsal_curr + 1 ==
+                             rkb->rkb_rsal->rsal_cnt))
+                                rd_kafka_broker_update_reconnect_backoff(
+                                        rkb, &rkb->rkb_rk->rk_conf, rd_clock());
 			break;
 
                 case RD_KAFKA_BROKER_STATE_UPDATE:

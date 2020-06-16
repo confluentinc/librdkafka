@@ -86,7 +86,7 @@ v1.4.4 is a maintenance release with the following fixes and enhancements:
    NULL pointer of non-existent response object (ESC-3009)
  * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
    errors as retriable (ESC-2998)
- * Fix theoeretical crash on coord request failure.
+ * Failed transactional coordinator FindCoordinator requests could cause crash.
  * Minimize broker re-connect delay when broker's connection is needed to
    send requests.
  * `socket.timeout.ms` was ignored when `transactional.id` was set.

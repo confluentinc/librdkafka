@@ -235,6 +235,7 @@ void rd_kafka_coord_req (rd_kafka_t *rk,
         creq->creq_replyq = replyq;
         creq->creq_resp_cb = resp_cb;
         creq->creq_reply_opaque = reply_opaque;
+        creq->creq_refcnt = 1;
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
 
@@ -242,12 +243,27 @@ void rd_kafka_coord_req (rd_kafka_t *rk,
 }
 
 
-static void
+/**
+ * @brief Decrease refcount of creq and free it if no more references.
+ *
+ * @returns true if creq was destroyed, else false.
+ */
+static rd_bool_t
 rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
+        rd_assert(creq->creq_refcnt > 0);
+        if (--creq->creq_refcnt > 0)
+                return rd_false;
+
         rd_kafka_replyq_destroy(&creq->creq_replyq);
         TAILQ_REMOVE(&rk->rk_coord_reqs, creq, creq_link);
         rd_free(creq->creq_coordkey);
         rd_free(creq);
+
+        return rd_true;
+}
+
+static void rd_kafka_coord_req_keep (rd_kafka_coord_req_t *creq) {
+        creq->creq_refcnt++;
 }
 
 static void rd_kafka_coord_req_fail (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
@@ -288,6 +304,11 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         int actions;
         rd_kafka_broker_t *coord;
         rd_kafka_metadata_broker_t mdb = RD_ZERO_INIT;
+
+        /* Drop refcount from FindCoord.. in req_fsm().
+         * If this was the last refcount then we bail out. */
+        if (rd_kafka_coord_req_destroy(rk, creq))
+                return;
 
         if (err)
                 goto err;
@@ -438,6 +459,7 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
 
         /* Send FindCoordinator request, the handler will continue
          * the state machine. */
+        rd_kafka_coord_req_keep(creq);
         err = rd_kafka_FindCoordinatorRequest(
                 rkb, creq->creq_coordtype, creq->creq_coordkey,
                 RD_KAFKA_REPLYQ(rk->rk_ops, 0),
@@ -446,8 +468,10 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
 
         rd_kafka_broker_destroy(rkb);
 
-        if (err)
+        if (err) {
                 rd_kafka_coord_req_fail(rk, creq, err);
+                rd_kafka_coord_req_destroy(rk, creq); /* from keep() above */
+        }
 }
 
 

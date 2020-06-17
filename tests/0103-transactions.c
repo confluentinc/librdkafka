@@ -68,6 +68,8 @@ void do_produce_batch (rd_kafka_t *rk, const char *topic, uint64_t testid,
         ret = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_COPY,
                                      messages, cnt);
 
+        rd_kafka_topic_destroy(rkt);
+
         TEST_ASSERT(ret == cnt,
                     "Failed to batch-produce: %d/%d messages produced",
                     ret, cnt);
@@ -537,6 +539,7 @@ static void do_test_misuse_txn (void) {
                     error ? rd_kafka_error_string(error) : "");
         TEST_ASSERT(rd_kafka_error_is_fatal(error),
                     "Expected error to have is_fatal() set");
+        rd_kafka_error_destroy(error);
         /* Check that a fatal error is raised */
         fatal_err = rd_kafka_fatal_error(p, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
@@ -565,6 +568,7 @@ static void do_test_misuse_txn (void) {
         TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
                     "Expected ERR__STATE error, not %s",
                     rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
 
@@ -573,6 +577,7 @@ static void do_test_misuse_txn (void) {
         TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
                     "Expected ERR__STATE error, not %s",
                     rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_destroy(p);
 
@@ -596,6 +601,7 @@ static void do_test_misuse_txn (void) {
                     rd_kafka_error_string(error));
         TEST_ASSERT(rd_kafka_error_is_retriable(error),
                     "Expected error to be retriable");
+        rd_kafka_error_destroy(error);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30*1000));
 

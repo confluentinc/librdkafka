@@ -4977,7 +4977,19 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 }
 
 
-
+/**
+ * @returns true if all broker addresses have been tried.
+ *
+ * @locality broker thread
+ * @locks_required none
+ * @locks_acquired none
+ */
+static rd_bool_t
+rd_kafka_broker_addresses_exhausted (const rd_kafka_broker_t *rkb) {
+        return !rkb->rkb_rsal ||
+                rkb->rkb_rsal->rsal_cnt == 0 ||
+                rkb->rkb_rsal->rsal_curr + 1 == rkb->rkb_rsal->rsal_cnt;
+}
 
 
 static int rd_kafka_broker_thread_main (void *arg) {
@@ -5076,15 +5088,12 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			 * Only the host lookup is blocking here. */
                         r = rd_kafka_broker_connect(rkb);
                         if (r == -1) {
-				/* Immediate failure, most likely host
-				 * resolving failed.
-				 * Try the next resolve result until we've
-				 * tried them all, in which case we sleep a
-				 * short while to avoid busy looping. */
-				if (!rkb->rkb_rsal ||
-                                    rkb->rkb_rsal->rsal_cnt == 0 ||
-                                    rkb->rkb_rsal->rsal_curr + 1 ==
-                                    rkb->rkb_rsal->rsal_cnt)
+                                /* Immediate failure, most likely host
+                                 * resolving failed.
+                                 * Try the next resolve result until we've
+                                 * tried them all, in which case we sleep a
+                                 * short while to avoid busy looping. */
+                                if (rd_kafka_broker_addresses_exhausted(rkb))
                                         rd_kafka_broker_serve(
                                                 rkb, rd_kafka_max_block_ms);
 			} else if (r == 0) {
@@ -5112,11 +5121,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
                          * Try the next resolve result until we've
                          * tried them all, in which case we back off the next
                          * connection attempt to avoid busy looping. */
-			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN &&
-                            (!rkb->rkb_rsal ||
-                             rkb->rkb_rsal->rsal_cnt == 0 ||
-                             rkb->rkb_rsal->rsal_curr + 1 ==
-                             rkb->rkb_rsal->rsal_cnt))
+                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN &&
+                            rd_kafka_broker_addresses_exhausted(rkb))
                                 rd_kafka_broker_update_reconnect_backoff(
                                         rkb, &rkb->rkb_rk->rk_conf, rd_clock());
 			break;

@@ -392,7 +392,8 @@ struct rd_kafka_conf_s {
 	int    batch_num_messages;
         int    batch_size;
 	rd_kafka_compression_t compression_codec;
-	int    dr_err_only;
+        int    dr_err_only;
+        int    sticky_partition_linger_ms;
 
 	/* Message delivery report callback.
 	 * Called once for each produced message, either on

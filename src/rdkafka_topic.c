@@ -376,6 +376,9 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                 }
         }
 
+        /* Sticky partition assignment interval */
+        rd_interval_init(&rkt->rkt_sticky_intvl);
+
         if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgid;
         else

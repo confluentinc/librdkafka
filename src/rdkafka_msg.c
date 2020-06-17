@@ -1083,8 +1083,7 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
                                                  msg_opaque);
 }
 
-int32_t
-rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
+int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
                                   const void *key, size_t keylen,
                                   int32_t partition_cnt,
                                   void *rkt_opaque,
@@ -1132,6 +1131,32 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random (const rd_kafka_topic_t *rkt,
                 return rd_fnv1a(key, keylen) % partition_cnt;
 }
 
+int32_t rd_kafka_msg_sticky_partition (rd_kafka_topic_t *rkt,
+                                       const void *key, size_t keylen,
+                                       int32_t partition_cnt,
+                                       void *rkt_opaque,
+                                       void *msg_opaque) {
+        
+        if (!rd_kafka_topic_partition_available(rkt, 
+                                                rkt->rkt_sticky_partition))
+                rd_interval_expedite(&rkt->rkt_sticky_intvl, 0);
+
+        if (rd_interval(&rkt->rkt_sticky_intvl, 
+            rkt->rkt_rk->rk_conf.sticky_partition_linger_ms * 1000, 0) > 0){
+                rkt->rkt_sticky_partition = 
+                        rd_kafka_msg_partitioner_random(rkt,
+                                                        key,
+                                                        keylen,
+                                                        partition_cnt,
+                                                        rkt_opaque,
+                                                        msg_opaque);
+                rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PARTITIONER",
+		        "%s : new sticky partition - %"PRId32,
+		        rkt->rkt_topic->str, rkt->rkt_sticky_partition);
+        }
+        
+        return rkt->rkt_sticky_partition;
+}
 
 /**
  * @brief Assigns a message to a topic partition using a partitioner.
@@ -1183,13 +1208,34 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 
                 /* Partition not assigned, run partitioner. */
                 if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA) {
-                        partition = rkt->rkt_conf.
-                                partitioner(rkt,
-                                            rkm->rkm_key,
-					    rkm->rkm_key_len,
-                                            rkt->rkt_partition_cnt,
-                                            rkt->rkt_conf.opaque,
-                                            rkm->rkm_opaque);
+
+                        if (rkt->rkt_rk->rk_conf.sticky_partition_linger_ms > 0 &&
+                            (!rkm->rkm_key || (rkm->rkm_key_len == 0 && 
+                            rkt->rkt_conf.partitioner == 
+                            rd_kafka_msg_partitioner_consistent_random)) &&
+                            rkt->rkt_conf.partitioner != 
+                            rd_kafka_msg_partitioner_consistent &&
+                            rkt->rkt_conf.partitioner != 
+                            rd_kafka_msg_partitioner_murmur2 &&
+                            rkt->rkt_conf.partitioner != 
+                            rd_kafka_msg_partitioner_fnv1a){
+                                partition = 
+                                        rd_kafka_msg_sticky_partition(rkt,
+                                        rkm->rkm_key,
+                                        rkm->rkm_key_len,
+                                        rkt->rkt_partition_cnt,
+                                        rkt->rkt_conf.opaque,
+                                        rkm->rkm_opaque);
+                        }
+                        else{
+                                partition = rkt->rkt_conf.
+                                        partitioner(rkt,
+                                        rkm->rkm_key,
+                                        rkm->rkm_key_len,
+                                        rkt->rkt_partition_cnt,
+                                        rkt->rkt_conf.opaque,
+                                        rkm->rkm_opaque);
+                        }
                 } else
                         partition = rkm->rkm_partition;
 

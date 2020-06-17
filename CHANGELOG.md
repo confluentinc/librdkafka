@@ -39,6 +39,7 @@ librdkafka.
  * Added `rd_kafka_message_broker_id()` to see the broker that a message
    was produced or fetched from, or an error was associated with.
  * Added RTT/delay simulation to mock brokers.
+ * Added `sticky.partitioning.linger.ms` to improve batching of null-keyed messages
 
 
 ## Upgrade considerations

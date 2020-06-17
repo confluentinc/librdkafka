@@ -1282,7 +1282,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
-
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "sticky.partitioning.linger.ms", _RK_C_INT,
+          _RK(sticky_partition_linger_ms),
+          "Delay in milliseconds to wait to assign new sticky partitions for "
+          "each topic. "
+          "By default, set to double the time of linger.ms. To disable sticky "
+          "behavior, set to 0. "
+          "A higher value allows for more effective batching (less overhead) " 
+          "of null keyed messages at the expense of fine grain load balancing. "
+          "This behavior affects messages with the key NULL in all cases, and "
+          "messages with key lengths of zero when the consistent_random "
+          "partitioner is in use.",
+	  0, 900000, 10 },
+       
 
         /*
          * Topic properties
@@ -3571,6 +3583,11 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                 return "`enable.gapless.guarantee` requires "
                                         "`enable.idempotence` to be enabled";
                 }
+
+                if (!rd_kafka_conf_is_modified(
+                            conf, "sticky.partitioning.linger.ms"))
+                        conf->sticky_partition_linger_ms = RD_MIN(900000,
+                                (rd_ts_t) (2 * conf->buffering_max_ms_dbl));
         }
 
 

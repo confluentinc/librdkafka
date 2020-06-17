@@ -54,23 +54,26 @@ int32_t my_invalid_partitioner (const rd_kafka_topic_t *rkt,
  *        Still a useful test though. */
 static void do_test_failed_partitioning (void) {
 	rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_topic_conf_t *tconf;
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	int i;
         int msgcnt = test_quick ? 100 : 10000;
 
-	test_conf_init(NULL, &tconf, 0);
+        test_conf_init(&conf, &tconf, 0);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        test_conf_set(conf, "sticky.partitioning.linger.ms", "0");
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-	rk = test_create_producer();
-	rd_kafka_topic_conf_set_partitioner_cb(tconf, my_invalid_partitioner);
+      rd_kafka_topic_conf_set_partitioner_cb(tconf, my_invalid_partitioner);
 	test_topic_conf_set(tconf, "message.timeout.ms",
                             tsprintf("%d", tmout_multip(10000)));
 	rkt = rd_kafka_topic_new(rk, topic, tconf);
 	TEST_ASSERT(rkt != NULL, "%s", rd_kafka_err2str(rd_kafka_last_error()));
 
 	/* Produce some messages (to p 0) to create topic */
-	test_produce_msgs(rk, rkt, 0, 0, 0, 1, NULL, 0);
+	  test_produce_msgs(rk, rkt, 0, 0, 0, 2, NULL, 0);
 
 	/* Now use partitioner */
 	for (i = 0 ; i < msgcnt ; i++) {
@@ -127,6 +130,7 @@ static void do_test_partitioner (const char *topic, const char *partitioner,
         rd_kafka_conf_set_opaque(conf, &remains);
         rd_kafka_conf_set_dr_msg_cb(conf, part_dr_msg_cb);
         test_conf_set(conf, "partitioner", partitioner);
+        test_conf_set(conf, "sticky.partitioning.linger.ms", "0");
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 

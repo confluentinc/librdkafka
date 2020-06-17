@@ -105,6 +105,7 @@ set(
     0111-delay_create_topics.cpp
     0112-assign_unknown_part.c
     0113-cooperative_rebalance.cpp
+    0114-sticky_partitioning.cpp
     0115-producer_auth.cpp
     0116-kafkaconsumer_close.cpp
     0117-mock_errors.c

@@ -220,6 +220,7 @@ _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
 _TEST_DECL(0112_assign_unknown_part);
 _TEST_DECL(0113_cooperative_rebalance);
+_TEST_DECL(0114_sticky_partitioning);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
@@ -415,6 +416,7 @@ struct test tests[] = {
               .scenario = "noautocreate"),
         _TEST(0112_assign_unknown_part, 0),
         _TEST(0113_cooperative_rebalance, 0, TEST_BRKVER(2,4,0,0)),
+        _TEST(0114_sticky_partitioning, 0),
         _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
         _TEST(0117_mock_errors, TEST_F_LOCAL),

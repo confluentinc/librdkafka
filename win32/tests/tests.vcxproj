@@ -195,6 +195,7 @@
     <ClCompile Include="..\..\tests\0111-delay_create_topics.cpp" />
     <ClCompile Include="..\..\tests\0112-assign_unknown_part.c" />
     <ClCompile Include="..\..\tests\0113-cooperative_rebalance.cpp" />
+    <ClCompile Include="..\..\tests\0114-sticky_partitioning.cpp" />
     <ClCompile Include="..\..\tests\0115-producer_auth.cpp" />
     <ClCompile Include="..\..\tests\0116-kafkaconsumer_close.cpp" />
     <ClCompile Include="..\..\tests\0117-mock_errors.c" />

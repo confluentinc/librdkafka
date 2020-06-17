@@ -83,10 +83,10 @@ librdkafka.
 v1.4.4 is a maintenance release with the following fixes and enhancements:
 
  * Transactional producer could crash on request timeout due to dereferencing
-   NULL pointer of non-existent response object (ESC-3009)
+   NULL pointer of non-existent response object.
  * Mark `rd_kafka_send_offsets_to_transaction()` CONCURRENT_TRANSACTION (et.al)
-   errors as retriable (ESC-2998)
- * Failed transactional coordinator FindCoordinator requests could cause crash.
+   errors as retriable.
+ * Fix crash on transactional coordinator FindCoordinator request failure.
  * Minimize broker re-connect delay when broker's connection is needed to
    send requests.
  * `socket.timeout.ms` was ignored when `transactional.id` was set.

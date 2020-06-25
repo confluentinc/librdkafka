@@ -302,7 +302,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         rd_kafka_cgrp_t   *rktp_cgrp;            /* Belongs to this cgrp */
 
-        int                rktp_assigned;   /* Partition in cgrp assignment */
+        rd_bool_t          rktp_assigned;   /* Partition in cgrp assignment */
 
         rd_kafka_replyq_t  rktp_replyq; /* Current replyq+version
 					 * for propagating
@@ -578,7 +578,8 @@ void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist);
 
 void
-rd_kafka_topic_partition_list_reset_offsets (rd_kafka_topic_partition_list_t *rktparlist,
+rd_kafka_topic_partition_list_reset_offsets (rd_kafka_topic_partition_list_t
+                                             *rktparlist,
 					     int64_t offset);
 
 int rd_kafka_topic_partition_list_set_offsets (
@@ -663,6 +664,11 @@ rd_kafka_topic_partition_list_sum (
         const rd_kafka_topic_partition_list_t *rktparlist,
         size_t (*cb) (const rd_kafka_topic_partition_t *rktpar, void *opaque),
         void *opaque);
+
+rd_bool_t
+rd_kafka_topic_partition_list_has_duplicates (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_bool_t ignore_partition);
 
 void rd_kafka_topic_partition_list_set_err (
         rd_kafka_topic_partition_list_t *rktparlist,

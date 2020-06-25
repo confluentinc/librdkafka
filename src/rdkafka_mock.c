@@ -1545,6 +1545,18 @@ rd_kafka_mock_next_request_error (rd_kafka_mock_connection_t *mconn,
 }
 
 
+void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
+                                         int16_t ApiKey) {
+        rd_kafka_mock_error_stack_t *errstack;
+
+        mtx_lock(&mcluster->lock);
+
+        errstack = rd_kafka_mock_error_stack_find(&mcluster->errstacks, ApiKey);
+        if (errstack)
+                errstack->cnt = 0;
+
+        mtx_unlock(&mcluster->lock);
+}
 
 
 void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,

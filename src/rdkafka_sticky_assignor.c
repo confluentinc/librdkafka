@@ -1949,6 +1949,7 @@ rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
                                        *owned_partitions) {
         rd_kafka_sticky_assignor_state_t *state;
         rd_kafka_buf_t *rkbuf;
+        rd_kafkap_bytes_t *metadata;
         rd_kafkap_bytes_t *kbytes;
         size_t len;
 
@@ -1988,8 +1989,12 @@ rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
         rd_slice_read(&rkbuf->rkbuf_reader, (void *)kbytes->data, len);
         rd_kafka_buf_destroy(rkbuf);
 
-        return rd_kafka_consumer_protocol_member_metadata_new(
+        metadata = rd_kafka_consumer_protocol_member_metadata_new(
                 topics, kbytes->data, kbytes->len, owned_partitions);
+
+        rd_kafkap_bytes_destroy(kbytes);
+
+        return metadata;
 }
 
 
@@ -3504,7 +3509,7 @@ static int rd_kafka_sticky_assignor_unittest (void) {
 rd_kafka_resp_err_t rd_kafka_sticky_assignor_init (rd_kafka_t *rk) {
         return rd_kafka_assignor_add(
                 rk, "consumer", "cooperative-sticky",
-                RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE,
+                RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE,
                 rd_kafka_sticky_assignor_assign_cb,
                 rd_kafka_sticky_assignor_get_metadata,
                 rd_kafka_sticky_assignor_on_assignment_cb,

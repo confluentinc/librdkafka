@@ -1067,6 +1067,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
 
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
                         RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
@@ -1520,9 +1526,8 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
  * Send LeaveGroupRequest
  */
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
-                                 const rd_kafkap_str_t *group_id,
-                                 const rd_kafkap_str_t *member_id,
-                                 const rd_kafkap_str_t *group_instance_id,
+                                 const char *group_id,
+                                 const char *member_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
@@ -1536,11 +1541,10 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                                           &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup,
-                                         1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                         RD_KAFKAP_STR_SIZE(member_id));
-        rd_kafka_buf_write_kstr(rkbuf, group_id);
-        rd_kafka_buf_write_kstr(rkbuf, member_id);
+                                         1, 300);
+
+        rd_kafka_buf_write_str(rkbuf, group_id, -1);
+        rd_kafka_buf_write_str(rkbuf, member_id, -1);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

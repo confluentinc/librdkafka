@@ -3604,7 +3604,7 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes,
+ *          topics or regexes or duplicate entries,
  *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -3731,6 +3731,23 @@ RD_EXPORT rd_kafka_error_t *
 rd_kafka_incremental_unassign (rd_kafka_t *rk,
                                const rd_kafka_topic_partition_list_t
                                *partitions);
+
+
+/**
+ * @brief The rebalance protocol currently in use. This will be
+ *        "NONE" if the consumer has not (yet) joined a group, else it will
+ *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+ *        configured and selected assignor(s). All configured
+ *        assignors must have the same protocol type, meaning
+ *        online migration of a consumer group from using one
+ *        protocol to another (in particular upgading from EAGER
+ *        to COOPERATIVE) without a restart is not currently
+ *        supported.
+ *
+ * @returns NULL on error, or one of "NONE", "EAGER", "COOPERATIVE" on success.
+ */
+RD_EXPORT
+const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
 
 
 /**
@@ -6172,7 +6189,7 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
  * @brief Create a new NewPartitions. This object is later passed to
- *        rd_kafka_CreatePartitions() to increas the number of partitions
+ *        rd_kafka_CreatePartitions() to increase the number of partitions
  *        to \p new_total_cnt for an existing topic.
  *
  * @param topic Topic name to create more partitions for.

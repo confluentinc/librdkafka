@@ -236,9 +236,10 @@ int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b) {
 }
 
 /**
- * Maps the available topics to the group members' subscriptions
- * and updates the `member` map with the proper list of eligible topics,
- * the latter are returned in `eligible_topics`.
+ * Determine the complete set of topics that match at least one of
+ * the group member subscriptions. Associate with each of these the
+ * complete set of members that are subscribed to it. The result is
+ * returned in `eligible_topics`.
  */
 static void
 rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
@@ -312,7 +313,8 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
         rd_list_t eligible_topics;
         int j;
 
-        /* Map available topics to subscribing members */
+        /* Construct eligible_topics, a map of:
+         *    topic -> set of members that are subscribed to it. */
         rd_kafka_member_subscriptions_map(rkcg, &eligible_topics, metadata,
                                           members, member_cnt);
 
@@ -321,7 +323,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
             (RD_KAFKA_DBG_CGRP|RD_KAFKA_DBG_ASSIGNOR)) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
                              "ASSIGN",
-                             "Group \"%s\" running %s assignment for "
+                             "Group \"%s\" running %s assignor for "
                              "%d member(s) and "
                              "%d eligible subscribed topic(s):",
                              rkcg->rkcg_group_id->str,
@@ -451,13 +453,50 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 
 
 /**
+ * @brief Check that the rebalance protocol of all assignors matches
+ *        \p rebalance_protocol, or if \p rebalance_protocol is NONE,
+ *        that they are all consistent.
+ *
+ * @param rebalance_protocol The rebalance_protocol to check.
+ */
+rd_kafka_resp_err_t
+rd_kafka_assignor_rebalance_protocol_check(rd_kafka_conf_t *conf,
+                                           rd_kafka_rebalance_protocol_t
+                                           rebalance_protocol) {
+        rd_kafka_assignor_t *rkas;
+        int i;
+
+        RD_LIST_FOREACH(rkas, &conf->partition_assignors, i) {
+
+                if (i == 0 && rebalance_protocol ==
+                    RD_KAFKA_REBALANCE_PROTOCOL_NONE) {
+                        rebalance_protocol =
+                                rkas->rkas_protocol;
+                        if (rebalance_protocol !=
+                            RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
+                            rebalance_protocol !=
+                            RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE)
+                                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+                } else if (rkas->rkas_enabled) {
+                        if (rebalance_protocol !=
+                                rkas->rkas_protocol)
+                                return RD_KAFKA_RESP_ERR__CONFLICT;
+                }
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
  * @brief Add an assignor.
  */
 rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
                        const char *protocol_type,
                        const char *protocol_name,
-                       int supported_protocols,
+                       rd_kafka_rebalance_protocol_t rebalance_protocol,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
                                const struct rd_kafka_assignor_s *rkas,
@@ -484,6 +523,7 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        int (*unittest_cb) (void),
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
+        rd_kafka_resp_err_t err;
 
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
                                   protocol_type))
@@ -493,11 +533,16 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         if ((rkas = rd_kafka_assignor_find(rk, protocol_name)))
                 return RD_KAFKA_RESP_ERR__CONFLICT;
 
+        err = rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf,
+                                                         rebalance_protocol);
+        if (err)
+                return err;
+
         rkas = rd_calloc(1, sizeof(*rkas));
 
         rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
         rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
-        rkas->rkas_supported_protocols = supported_protocols;
+        rkas->rkas_protocol         = rebalance_protocol;
         rkas->rkas_assign_cb        = assign_cb;
         rkas->rkas_get_metadata_cb  = get_metadata_cb;
         rkas->rkas_on_assignment_cb = on_assignment_cb;

@@ -28,9 +28,6 @@
 #ifndef _RDKAFKA_ASSIGNOR_H_
 #define _RDKAFKA_ASSIGNOR_H_
 
-#define RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER 0x1
-#define RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE 0x2
-
 
 typedef struct rd_kafka_group_member_s {
         rd_kafka_topic_partition_list_t *rkgm_subscription;
@@ -72,7 +69,7 @@ typedef struct rd_kafka_assignor_s {
 
 	int rkas_enabled;
 
-        int rkas_supported_protocols; /**< RD_KAFKA_ASSIGNOR_PROTOCOL_... */
+        rd_kafka_rebalance_protocol_t rkas_protocol;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,
@@ -112,7 +109,7 @@ rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
                        const char *protocol_type,
                        const char *protocol_name,
-                       int supported_protocols,
+                       rd_kafka_rebalance_protocol_t rebalance_protocol,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
                                const struct rd_kafka_assignor_s *rkas,
@@ -138,6 +135,11 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        void (*destroy_state_cb) (void *assignor_state),
                        int (*unittest_cb) (void),
                        void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_assignor_rebalance_protocol_check(rd_kafka_conf_t *conf,
+                                           rd_kafka_rebalance_protocol_t
+                                           rebalance_protocol);
 
 rd_kafkap_bytes_t *
 rd_kafka_consumer_protocol_member_metadata_new (const rd_list_t *topics,

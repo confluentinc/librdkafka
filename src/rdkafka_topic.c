@@ -606,6 +606,7 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
                                           int32_t leader_id,
                                           rd_kafka_broker_t *leader) {
 	rd_kafka_toppar_t *rktp;
+        rd_bool_t fetching_from_follower;
 	int r;
 
 	rktp = rd_kafka_toppar_get(rkt, partition, 0);
@@ -623,10 +624,13 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
 
         rd_kafka_toppar_lock(rktp);
 
-        if (leader != NULL &&
-            rktp->rktp_broker != NULL &&
-            rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
-            rktp->rktp_broker != leader &&
+        fetching_from_follower = leader != NULL &&
+                                 rktp->rktp_broker != NULL &&
+                                 rktp->rktp_broker->rkb_source !=
+                                 RD_KAFKA_INTERNAL &&
+                                 rktp->rktp_broker != leader;
+
+        if (fetching_from_follower &&
             rktp->rktp_leader_id == leader_id) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
                         "Topic %s [%"PRId32"]: leader %"PRId32" unchanged, "
@@ -636,14 +640,19 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
                         leader_id, rktp->rktp_broker_id);
                 r = 0;
         } else {
-                rktp->rktp_leader_id = leader_id;
-                if (rktp->rktp_leader)
-                        rd_kafka_broker_destroy(rktp->rktp_leader);
-                if (leader)
-                        rd_kafka_broker_keep(leader);
-                rktp->rktp_leader = leader;
-                r = rd_kafka_toppar_broker_update(rktp, leader_id, leader,
-                                                  "leader updated");
+                if (rktp->rktp_leader_id != leader_id) {
+                        rktp->rktp_leader_id = leader_id;
+                        if (rktp->rktp_leader)
+                                rd_kafka_broker_destroy(rktp->rktp_leader);
+                        if (leader)
+                                rd_kafka_broker_keep(leader);
+                        rktp->rktp_leader = leader;
+
+                        r = rd_kafka_toppar_broker_update(rktp,
+                                                          leader_id,
+                                                          leader,
+                                                          "leader updated");
+                }
         }
 
         rd_kafka_toppar_unlock(rktp);
@@ -1568,6 +1577,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return app_rkt->rkt_conf.opaque;
 }
 
+
 int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 	const rd_kafka_topic_info_t *a = _a, *b = _b;
 	int r;
@@ -1576,6 +1586,13 @@ int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 		return r;
 
         return RD_CMP(a->partition_cnt, b->partition_cnt);
+}
+
+
+int rd_kafka_topic_info_topic_cmp (const void *_a, const void *_b) {
+        const rd_kafka_topic_info_t *b = _b;
+        const char *a = _a;
+        return strcmp(a, b->topic);
 }
 
 

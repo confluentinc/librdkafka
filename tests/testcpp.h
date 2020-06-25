@@ -99,6 +99,24 @@ namespace Test {
   }
 
   /**
+   * @brief Generate random test group name
+   */
+  static RD_UNUSED std::string mk_unique_group_name (std::string suffix) {
+    return test_mk_topic_name(suffix.c_str(), 1);
+  }
+
+  /**
+   * @brief Create partitions
+   */
+  static RD_UNUSED void create_partitions (RdKafka::Handle *use_handle, const char *topicname,
+                                           int new_partition_cnt) {
+    rd_kafka_t *use_rk = NULL;
+    if (use_handle != NULL)
+      use_rk = use_handle->c_ptr();
+    test_create_partitions(use_rk, topicname, new_partition_cnt);
+  }
+
+  /**
    * @brief Create a topic
    */
   static RD_UNUSED void create_topic (RdKafka::Handle *use_handle, const char *topicname,

@@ -38,6 +38,7 @@
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_assignor.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
@@ -3572,6 +3573,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */
@@ -3609,6 +3611,16 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
+
+                if (rd_kafka_assignor_rebalance_protocol_check(
+                                        conf,
+                                        RD_KAFKA_REBALANCE_PROTOCOL_NONE))
+                        return "All assignors must have "
+                               "the same protocol type. "
+                               "Online migration between "
+                               "assignors with different "
+                               "protocol types is not "
+                               "supported";
 
         } else if (cltype == RD_KAFKA_PRODUCER) {
                 if (conf->eos.transactional_id) {

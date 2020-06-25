@@ -2634,6 +2634,26 @@ void test_consumer_assign (const char *what, rd_kafka_t *rk,
 }
 
 
+void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,
+                                       rd_kafka_topic_partition_list_t
+                                       *partitions) {
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "INCREMENTAL.ASSIGN.PARTITIONS");
+        error = rd_kafka_incremental_assign(rk, partitions);
+        TIMING_STOP(&timing);
+        if (error) {
+                TEST_FAIL("%s: incremental assign of %d partition(s) failed: "
+                          "%s", what, partitions->cnt,
+                          rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else
+                TEST_SAY("%s: incremental assign of %d partition(s) done\n",
+                         what, partitions->cnt);
+}
+
+
 void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         test_timing_t timing;
@@ -2646,6 +2666,26 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
                           what, rd_kafka_err2str(err));
         else
                 TEST_SAY("%s: unassigned current partitions\n", what);
+}
+
+
+void test_consumer_incremental_unassign (const char *what, rd_kafka_t *rk,
+                                         rd_kafka_topic_partition_list_t
+                                         *partitions) {
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "INCREMENTAL.UNASSIGN.PARTITIONS");
+        error = rd_kafka_incremental_unassign(rk, partitions);
+        TIMING_STOP(&timing);
+        if (error) {
+                TEST_FAIL("%s: incremental unassign of %d partition(s) "
+                          "failed: %s", what, partitions->cnt,
+                          rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else
+                TEST_SAY("%s: incremental unassign of %d partition(s) done\n",
+                         what, partitions->cnt);
 }
 
 

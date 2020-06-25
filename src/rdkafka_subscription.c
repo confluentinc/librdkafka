@@ -74,6 +74,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
+        rd_kafka_topic_partition_list_t *topics_cpy;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
@@ -84,8 +85,15 @@ rd_kafka_subscribe (rd_kafka_t *rk,
                                               _invalid_topic_cb, NULL) > 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+        topics_cpy = rd_kafka_topic_partition_list_copy(topics);
+        if (rd_kafka_topic_partition_list_has_duplicates(topics_cpy,
+            rd_true/*ignore partition field*/)) {
+                rd_kafka_topic_partition_list_destroy(topics_cpy);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
         rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-	rko->rko_u.subscribe.topics = rd_kafka_topic_partition_list_copy(topics);
+	rko->rko_u.subscribe.topics = topics_cpy;
 
         return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
@@ -103,6 +111,27 @@ rd_kafka_assign0 (rd_kafka_t *rk,
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
                                           "Requires a consumer with group.id "
                                           "configured");
+
+        if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
+            RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
+            assign_method == RD_KAFKA_ASSIGN_METHOD_ASSIGN)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                          "Changes to the current assignment "
+                                          "must be made using "
+                                          "incremental_assign() or "
+                                          "incremental_unassign() "
+                                          "when rebalance protocol type is "
+                                          "COOPERATIVE");
+
+        if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
+             RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
+            (assign_method == RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN ||
+             assign_method == RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                          "Changes to the current assignment "
+                                          "must be made using "
+                                          "assign() when rebalance "
+                                          "protocol type is EAGER");
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
 
@@ -172,6 +201,33 @@ rd_kafka_assignment_lost (rd_kafka_t *rk) {
 
         return rd_atomic32_get(&rkcg->rkcg_assignment_lost) ? 1 : 0;
 }
+
+
+rd_kafka_rebalance_protocol_t
+rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
+        rd_kafka_op_t *rko;
+        rd_kafka_cgrp_t *rkcg;
+        rd_kafka_rebalance_protocol_t result;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
+
+        if (!rkcg->rkcg_assignor)
+                return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
+
+        rko = rd_kafka_op_req2(rkcg->rkcg_ops,
+                               RD_KAFKA_OP_GET_REBALANCE_PROTOCOL);
+
+        if (!rko || rko->rko_err)
+                result = RD_KAFKA_REBALANCE_PROTOCOL_NONE;
+        else {
+                result = rko->rko_u.rebalance_protocol.protocol;
+                rd_kafka_op_destroy(rko);
+        }
+
+        return result;
+}
+
 
 rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,

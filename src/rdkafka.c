@@ -68,6 +68,8 @@
 #endif
 
 
+rd_kafka_resp_err_t
+rd_kafka_rejoin (rd_kafka_t *rk);
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 static once_flag rd_kafka_global_srand_once = ONCE_FLAG_INIT;
@@ -3418,6 +3420,45 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
 }
 
 
+static void
+rd_kafka_handle_rebalance_op(rd_kafka_t *rk, rd_kafka_op_t *rko) {
+
+        if (!rk->rk_conf.rebalance_cb) {
+                /* If EVENT_REBALANCE is enabled but rebalance_cb isn't,
+                 * we need to perform a dummy assign for the application.
+                 * This might happen during termination with
+                 * consumer_close() */
+                rd_kafka_dbg(rk, CGRP, "UNASSIGN",
+                             "Forcing unassign of all partition(s)");
+                rd_kafka_assign(rk, NULL);
+                return;
+        }
+
+        rk->rk_conf.rebalance_cb(
+                rk, rko->rko_err,
+                rko->rko_u.rebalance.partitions,
+                rk->rk_conf.opaque);
+
+        if (rko->rko_u.rebalance.protocol ==
+            RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE &&
+            rko->rko_err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+                if (rko->rko_u.rebalance.rejoin) {
+                        rd_kafka_dbg(rk, CONSUMER, "CGRP",
+                                     "Group \"%s\": rejoining group "
+                                     "to redistribute previously "
+                                     "owned partitions",
+                                     rk->rk_conf.group_id_str);
+                        rd_kafka_rejoin(rk);
+                } else
+                        rd_kafka_dbg(rk, CONSUMER, "CGRP",
+                                     "Group \"%s\": no partitions "
+                                     "revoked in this rebalance, "
+                                     "not rejoining group",
+                                     rk->rk_conf.group_id_str);
+        }
+}
+
+
 /**
  * @brief rd_kafka_poll() (and similar) op callback handler.
  *        Will either call registered callback depending on cb_type and op type
@@ -3458,21 +3499,7 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 break;
 
         case RD_KAFKA_OP_REBALANCE:
-                /* If EVENT_REBALANCE is enabled but rebalance_cb isn't
-                 * we need to perform a dummy assign for the application.
-                 * This might happen during termination with consumer_close() */
-                if (rk->rk_conf.rebalance_cb)
-                        rk->rk_conf.rebalance_cb(
-                                rk, rko->rko_err,
-                                rko->rko_u.rebalance.partitions,
-                                rk->rk_conf.opaque);
-                else {
-                        rd_kafka_dbg(rk, CGRP, "UNASSIGN",
-                                     "Forcing unassign of %d partition(s)",
-                                     rko->rko_u.rebalance.partitions ?
-                                     rko->rko_u.rebalance.partitions->cnt : 0);
-                        rd_kafka_assign(rk, NULL);
-                }
+                rd_kafka_handle_rebalance_op(rk, rko);
                 break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:

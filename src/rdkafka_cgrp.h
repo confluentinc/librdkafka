@@ -216,6 +216,14 @@ typedef struct rd_kafka_cgrp_s {
         /* Current assignment */
         rd_kafka_topic_partition_list_t *rkcg_assignment;
 
+        /** During an incremental rebalance, the incremental assignment.
+         *  NULL if not rebalancing. */
+        rd_kafka_topic_partition_list_t *rkcg_incr_assign;
+
+        /** Whether or not to rejoin the group after an incremental
+         *  rebalance. */
+        rd_bool_t  rkcg_rejoin;
+
         int rkcg_wait_unassign_cnt;                 /* Waiting for this number
                                                      * of partitions to be
                                                      * unassigned and
@@ -312,6 +320,14 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 			       const char *reason);
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
+
+int
+rd_kafka_rebalance_op_cooperative (rd_kafka_cgrp_t *rkcg,
+                                   rd_kafka_resp_err_t err,
+                                   rd_kafka_topic_partition_list_t
+                                   *partitions,
+                                   const char *reason);
+
 
 struct rd_kafka_consumer_group_metadata_s {
         char *group_id;

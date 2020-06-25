@@ -69,6 +69,21 @@ static size_t _invalid_topic_cb (const rd_kafka_topic_partition_t *rktpar,
 
 
 rd_kafka_resp_err_t
+rd_kafka_rejoin (rd_kafka_t *rk) {
+        rd_kafka_op_t *rko;
+        rd_kafka_cgrp_t *rkcg;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_REJOIN);
+
+        return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+}
+
+
+rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
                     const rd_kafka_topic_partition_list_t *topics) {
 

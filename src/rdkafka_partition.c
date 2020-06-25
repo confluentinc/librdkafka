@@ -34,6 +34,8 @@
 #include "rdregex.h"
 #include "rdports.h"  /* rd_qsort_r() */
 
+#include "rdunittest.h"
+
 const char *rd_kafka_fetch_states[] = {
 	"none",
         "stopping",

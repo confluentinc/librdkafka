@@ -36,6 +36,8 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.2)" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
+mkl_toggle_option "Feature" ENABLE_REGEX_EXT "--enable-regex-ext" "Enable external (libc) regex (else use builtin)" "y"
+
 # librdkafka with TSAN won't work with glibc C11 threads on Ubuntu 19.04.
 # This option allows disabling libc-based C11 threads and instead
 # use the builtin tinycthread alternative.
@@ -176,7 +178,8 @@ void foo (void) {
 
 
     # Check for libc regex
-    mkl_compile_check "regex" "HAVE_REGEX" disable CC "" \
+    if [[ $ENABLE_REGEX_EXT == y ]]; then
+        mkl_compile_check "regex" "HAVE_REGEX" disable CC "" \
 "
 #include <stddef.h>
 #include <regex.h>
@@ -186,7 +189,7 @@ void foo (void) {
    regerror(0, NULL, NULL, 0);
    regfree(NULL);
 }"
-
+    fi
 
     # Older g++ (<=4.1?) gives invalid warnings for the C++ code.
     mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"

@@ -28,7 +28,7 @@ SRCS_y += rdkafka_lz4.c $(SRCS_LZ4)
 SRCS_$(WITH_LIBDL) += rddl.c
 SRCS_$(WITH_PLUGINS) += rdkafka_plugin.c
 
-ifeq ($(HAVE_REGEX), n)
+ifneq ($(HAVE_REGEX), y)
 SRCS_y += regexp.c
 endif
 

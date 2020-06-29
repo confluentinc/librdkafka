@@ -73,6 +73,9 @@ librdkafka.
  * Initial consumer group joins should now be a couple of seconds quicker
    thanks expedited query intervals (@benesch).
  * Don't propagate temporary offset lookup errors to application
+ * Fix crash and/or inconsistent subscriptions when using multiple consumers
+   (in the same process) with wildcard topics on Windows.
+
 
 ### Producer fixes
 

@@ -2173,11 +2173,13 @@ $1"
 # Arguments:
 #  option group ("Standard", "Cross-Compilation", etc..)
 #  variable name
-#  option ("--foo=feh")
+#  option ("--foo", "--foo=*", "--foo=args_required")
 #  help
 #  default (optional)
 #  assignvalue (optional, default:"y")
 #  function block (optional)
+#
+# If option takes the form --foo=* then arguments are optional.
 function mkl_option {
     local optgroup=$1
     local varname=$2
@@ -2209,6 +2211,10 @@ function mkl_option {
     if [[ $3 == *=* ]]; then
         optname="${optname%=*}"
         optval="${3#*=}"
+        if [[ $optval == '*' ]]; then
+            # Avoid globbing of --foo=* optional arguments
+            optval='\*'
+        fi
     fi
 
     safeopt=$(mkl_env_esc $optname)
@@ -2285,7 +2291,7 @@ function mkl_option {
 # Arguments:
 #  option group   ("Standard", ..)
 #  variable name  (WITH_FOO)
-#  option         (--enable-foo)
+#  option         (--enable-foo, --enable-foo=*, or --enable-foo=req)
 #  help           ("foo.." ("Enable" and "Disable" will be prepended))
 #  default        (y or n)
 

@@ -105,7 +105,7 @@ while [[ ! -z $@ ]]; do
             arg="$1"
             shift
 
-            if [[ -z $arg ]]; then
+            if [[ -z $arg && $reqarg != '\*' ]]; then
                 mkl_err "Missing argument to option --$name $reqarg"
                 exit 1
             fi

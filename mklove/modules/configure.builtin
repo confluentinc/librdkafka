@@ -50,6 +50,7 @@ mkl_option "Compatibility" "mk:COMPAT_DISABLE_DEP_TRACK" "--disable-dependency-t
 mkl_option "Compatibility" "mk:COMPAT_DISABLE_SILENT_RULES" "--disable-silent-rules" "Verbose build output (no-op)"
 mkl_option "Compatibility" "mk:COMPAT_SILENT" "--silent" "Less verbose build output (no-op)"
 mkl_toggle_option "Compatibility" "mk:COMPAT_ENABLE_SHARED" "--enable-shared" "Build shared library (no-op)"
+mkl_toggle_option "Compatibility" "mk:COMPAT_DISABLE_OPT_CHECK" '--enable-option-checking=*' "Disable configure option checking (no-op)"
 
 
 mkl_option "Dependency"  env:MKL_INSTALL_DEPS "--install-deps" "Attempt to install missing dependencies"

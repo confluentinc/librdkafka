@@ -253,7 +253,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                                                       rd_kafka_name(rk),
                                                       &mv_correct, testid,
                                                       topic, partition,
-                                                      offset,  -1, 0, cnt);
+                                                      offset, -1, -1, 0, cnt);
                         }
 
 

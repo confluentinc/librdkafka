@@ -48,15 +48,17 @@ static void handle_drs (rd_kafka_event_t *rkev) {
 	const rd_kafka_message_t *rkmessage;
 
 	while ((rkmessage = rd_kafka_event_message_next(rkev))) {
+                int32_t broker_id = rd_kafka_message_broker_id(rkmessage);
 		int msgid = *(int *)rkmessage->_private;
-
 		free(rkmessage->_private);
 
-		TEST_SAYL(3,"Got rkmessage %s [%"PRId32"] @ %"PRId64": %s\n",
+		TEST_SAYL(3,"Got rkmessage %s [%"PRId32"] @ %"PRId64": "
+                          "from broker %"PRId32": %s\n",
 			  rd_kafka_topic_name(rkmessage->rkt),
 			  rkmessage->partition, rkmessage->offset,
+                          broker_id,
 			  rd_kafka_err2str(rkmessage->err));
-			 
+
 
 		if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
 			TEST_FAIL("Message delivery failed: %s\n",
@@ -68,6 +70,9 @@ static void handle_drs (rd_kafka_event_t *rkev) {
 				  msgid, msgid_next);
 			return;
 		}
+
+                TEST_ASSERT(broker_id >= 0,
+                            "Message %d has no broker id set", msgid);
 
 		msgid_next = msgid+1;
 	}

@@ -189,6 +189,7 @@ static void do_test_unknown_follower (void) {
         const char *topic = "test";
         const int msgcnt = 1000;
         const size_t msgsize = 1000;
+        test_msgver_t mv;
 
         TEST_SAY(_C_MAG "[ Test unknown follower ]\n");
 
@@ -219,9 +220,17 @@ static void do_test_unknown_follower (void) {
 
         test_consumer_poll_no_msgs("unknown follower", c, 0, 5000);
 
-        /* Set a valid follower */
+        /* Set a valid follower (broker 3) */
         rd_kafka_mock_partition_set_follower(mcluster, topic, 0, 3);
-        test_consumer_poll("proper follower", c, 0, 1, 0, msgcnt, NULL);
+        test_msgver_init(&mv, 0);
+        test_consumer_poll("proper follower", c, 0, 1, 0, msgcnt, &mv);
+        /* Verify messages were indeed received from broker 3 */
+        test_msgver_verify0(__FUNCTION__, __LINE__, "broker_id",
+                            &mv, TEST_MSGVER_BY_BROKER_ID,
+                            (struct test_mv_vs){ .msg_base = 0,
+                                            .exp_cnt = msgcnt,
+                                            .broker_id = 3 });
+        test_msgver_clear(&mv);
 
         test_consumer_close(c);
 

@@ -437,6 +437,11 @@ class MessageImpl : public Message {
     return headers_;
   }
 
+  int32_t broker_id () const {
+    return rd_kafka_message_broker_id(rkmessage_);
+  }
+
+
   RdKafka::Topic *topic_;
   rd_kafka_message_t *rkmessage_;
   bool free_rkmessage_;

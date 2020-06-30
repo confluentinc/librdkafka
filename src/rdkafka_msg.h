@@ -100,6 +100,8 @@ typedef struct rd_kafka_msg_s {
                                            *   the ProduceResponse handler:
                                            *   this value is always up to date.
                                            */
+        int32_t rkm_broker_id;            /**< Broker message was produced to
+                                           *   or fetched from. */
 
         union {
                 struct {
@@ -494,7 +496,7 @@ rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
                                                     const void *),
                                         int *cntp, int64_t *bytesp);
 
-void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
+void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq, int32_t broker_id,
                                  int64_t base_offset, int64_t timestamp,
                                  rd_kafka_msg_status_t status);
 

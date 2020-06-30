@@ -25,6 +25,8 @@ librdkafka.
  * Added `rd_kafka_produceva()` which takes an array of produce arguments
    for situations where the existing `rd_kafka_producev()` va-arg approach
    can't be used.
+ * Added `rd_kafka_message_broker_id()` to see the broker that a message
+   was produced or fetched from, or an error was associated with.
  * Added RTT/delay simulation to mock brokers.
 
 

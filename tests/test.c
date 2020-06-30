@@ -2776,7 +2776,7 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
                            test_msgver_t *mv,
                            uint64_t testid,
                            const char *topic, int32_t partition,
-                           int64_t offset, int64_t timestamp,
+                           int64_t offset, int64_t timestamp, int32_t broker_id,
                            rd_kafka_resp_err_t err, int msgnum) {
         struct test_mv_p *p;
         struct test_mv_m *m;
@@ -2799,14 +2799,15 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
         m->offset = offset;
         m->msgid  = msgnum;
         m->timestamp = timestamp;
+        m->broker_id = broker_id;
 
         if (test_level > 2) {
                 TEST_SAY("%s:%d: %s: "
                          "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
-                         "timestamp %"PRId64"\n",
+                         "timestamp %"PRId64" broker %"PRId32"\n",
                          func, line, clientname,
                          p->topic, p->partition, m->offset, m->msgid,
-                         m->timestamp);
+                         m->timestamp, m->broker_id);
         }
 
         mv->msgcnt++;
@@ -2886,6 +2887,7 @@ int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
                                      rkmessage->partition,
                                      rkmessage->offset,
                                      rd_kafka_message_timestamp(rkmessage, NULL),
+                                     rd_kafka_message_broker_id(rkmessage),
                                      rkmessage->err,
                                      in_msgnum);
         return 1;
@@ -2926,8 +2928,20 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 				prev->offset, this->offset,
 				prev->msgid, this->msgid);
 			fails++;
-		}
-	}
+                } else if ((flags & TEST_MSGVER_BY_BROKER_ID) &&
+                           this->broker_id != vs->broker_id) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] msg rcvidx #%d/%d: "
+                                "broker id mismatch: expected %"PRId32
+                                ", not %"PRId32"\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                mi, mvec->cnt,
+                                vs->broker_id, this->broker_id);
+                        fails++;
+                }
+        }
 
 	return fails;
 }
@@ -2999,20 +3013,24 @@ static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
                     ((flags & TEST_MSGVER_BY_MSGID) &&
                      this->msgid != corr->msgid) ||
                     ((flags & TEST_MSGVER_BY_TIMESTAMP) &&
-                     this->timestamp != corr->timestamp)) {
+                     this->timestamp != corr->timestamp) ||
+                    ((flags & TEST_MSGVER_BY_BROKER_ID) &&
+                     this->broker_id != corr->broker_id)) {
                         TEST_MV_WARN(
                                 mv,
                                 " %s [%"PRId32"] msg rcvidx #%d/%d: "
                                 "did not match correct msg: "
                                 "offset %"PRId64" vs %"PRId64", "
                                 "msgid %d vs %d, "
-                                "timestamp %"PRId64" vs %"PRId64" (fl 0x%x)\n",
+                                "timestamp %"PRId64" vs %"PRId64", "
+                                "broker %"PRId32" vs %"PRId32" (fl 0x%x)\n",
                                 p ? p->topic : "*",
                                 p ? p->partition : -1,
                                 mi, mvec->cnt,
                                 this->offset, corr->offset,
                                 this->msgid, corr->msgid,
                                 this->timestamp, corr->timestamp,
+                                this->broker_id, corr->broker_id,
                                 flags);
                         fails++;
                 } else {
@@ -3166,6 +3184,20 @@ static int test_mv_mvec_verify_range (test_msgver_t *mv, int flags,
                                         vs->timestamp_min, vs->timestamp_max);
                                 fails++;
                         }
+                }
+
+                if ((flags & TEST_MSGVER_BY_BROKER_ID) &&
+                    this->broker_id != vs->broker_id) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] range check: "
+                                "msgid #%d (at mi %d): "
+                                "expected broker id %"PRId32", not %"PRId32"\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                this->msgid, mi,
+                                vs->broker_id, this->broker_id);
+                                fails++;
                 }
 
                 if (cnt++ == 0) {

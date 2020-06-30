@@ -107,15 +107,18 @@ static void logger (const rd_kafka_t *rk, int level,
 static void msg_delivered (rd_kafka_t *rk,
                            const rd_kafka_message_t *rkmessage, void *opaque) {
         if (rkmessage->err)
-		fprintf(stderr, "%% Message delivery failed: %s\n",
+                fprintf(stderr,
+                        "%% Message delivery failed (broker %"PRId32"): %s\n",
+                        rd_kafka_message_broker_id(rkmessage),
                         rd_kafka_err2str(rkmessage->err));
-	else if (!quiet)
-		fprintf(stderr,
+        else if (!quiet)
+                fprintf(stderr,
                         "%% Message delivered (%zd bytes, offset %"PRId64", "
-                        "partition %"PRId32"): %.*s\n",
+                        "partition %"PRId32", broker %"PRId32"): %.*s\n",
                         rkmessage->len, rkmessage->offset,
-			rkmessage->partition,
-			(int)rkmessage->len, (const char *)rkmessage->payload);
+                        rkmessage->partition,
+                        rd_kafka_message_broker_id(rkmessage),
+                        (int)rkmessage->len, (const char *)rkmessage->payload);
 }
 
 
@@ -153,8 +156,11 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 		int64_t timestamp;
                 rd_kafka_headers_t *hdrs;
 
-		fprintf(stdout, "%% Message (offset %"PRId64", %zd bytes):\n",
-			rkmessage->offset, rkmessage->len);
+                fprintf(stdout,
+                        "%% Message (offset %"PRId64", %zd bytes, "
+                        "broker %"PRId32"):\n",
+                        rkmessage->offset, rkmessage->len,
+                        rd_kafka_message_broker_id(rkmessage));
 
 		timestamp = rd_kafka_message_timestamp(rkmessage, &tstype);
 		if (tstype != RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {

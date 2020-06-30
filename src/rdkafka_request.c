@@ -3186,6 +3186,7 @@ rd_kafka_msgbatch_handle_Produce_result (
         if (likely(rd_kafka_msgq_len(&batch->msgq) > 0)) {
                 /* Set offset, timestamp and status for each message. */
                 rd_kafka_msgq_set_metadata(&batch->msgq,
+                                           rkb->rkb_nodeid,
                                            presult->offset,
                                            presult->timestamp,
                                            status);

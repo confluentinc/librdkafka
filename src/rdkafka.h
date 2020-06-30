@@ -1414,6 +1414,16 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage);
 
 
 /**
+ * @brief Returns the broker id of the broker the message was produced to
+ *        or fetched from.
+ *
+ * @returns a broker id if known, else -1.
+ */
+RD_EXPORT
+int32_t rd_kafka_message_broker_id (const rd_kafka_message_t *rkmessage);
+
+
+/**
  * @brief Get the message header list.
  *
  * The returned pointer in \p *hdrsp is associated with the \p rkmessage and

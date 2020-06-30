@@ -165,6 +165,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_topic_t *rkt,
 	rkm->rkm_opaque     = msg_opaque;
 	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep(rkt);
 
+        rkm->rkm_broker_id  = -1;
 	rkm->rkm_partition  = partition;
         rkm->rkm_offset     = RD_KAFKA_OFFSET_INVALID;
 	rkm->rkm_timestamp  = 0;
@@ -991,12 +992,13 @@ void rd_kafka_msgq_split (rd_kafka_msgq_t *leftq, rd_kafka_msgq_t *rightq,
 /**
  * @brief Set per-message metadata for all messages in \p rkmq
  */
-void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
+void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq, int32_t broker_id,
                                  int64_t base_offset, int64_t timestamp,
                                  rd_kafka_msg_status_t status) {
         rd_kafka_msg_t *rkm;
 
         TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                rkm->rkm_broker_id = broker_id;
                 rkm->rkm_offset = base_offset++;
                 if (timestamp != -1) {
                         rkm->rkm_timestamp = timestamp;
@@ -1263,6 +1265,7 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 rd_kafka_message_t *rd_kafka_message_new (void) {
         rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
         rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
+        rkm->rkm_broker_id  = -1;
         return (rd_kafka_message_t *)rkm;
 }
 
@@ -1392,6 +1395,15 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
                 return -1;
 
         return rd_clock() - rkm->rkm_ts_enq;
+}
+
+
+int32_t rd_kafka_message_broker_id (const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        return rkm->rkm_broker_id;
 }
 
 

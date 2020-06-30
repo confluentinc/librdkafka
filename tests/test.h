@@ -294,6 +294,7 @@ struct test_mv_m {
         int64_t offset;    /* Message offset */
         int     msgid;     /* Message id */
         int64_t timestamp; /* Message timestamp */
+        int32_t broker_id; /* Message broker id */
 };
 
 
@@ -323,6 +324,9 @@ struct test_mv_vs {
         int64_t timestamp_min;
         int64_t timestamp_max;
 
+        /* used by verify_broker_id */
+        int32_t broker_id;
+
 	struct test_mv_mvec mvec;
 
         /* Correct msgver for comparison */
@@ -336,7 +340,7 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
                            test_msgver_t *mv,
                            uint64_t testid,
                            const char *topic, int32_t partition,
-                           int64_t offset, int64_t timestamp,
+                           int64_t offset, int64_t timestamp, int32_t broker_id,
                            rd_kafka_resp_err_t err, int msgnum);
 int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
                           test_msgver_t *mv, rd_kafka_message_t *rkm,
@@ -357,6 +361,7 @@ int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
 #define TEST_MSGVER_BY_MSGID  0x10000 /* Verify by msgid (unique in testid) */
 #define TEST_MSGVER_BY_OFFSET 0x20000 /* Verify by offset (unique in partition)*/
 #define TEST_MSGVER_BY_TIMESTAMP 0x40000 /* Verify by timestamp range */
+#define TEST_MSGVER_BY_BROKER_ID 0x80000 /* Verify by broker id */
 
 #define TEST_MSGVER_SUBSET 0x100000  /* verify_compare: allow correct mv to be
                                       * a subset of mv. */

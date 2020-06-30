@@ -165,6 +165,7 @@ typedef struct rd_kafka_msgset_reader_s {
         const struct rd_kafka_toppar_ver *msetr_tver; /**< Toppar op version of
                                                        *   request. */
 
+        int32_t            msetr_broker_id; /**< Broker id (of msetr_rkb) */
         rd_kafka_broker_t *msetr_rkb;    /* @warning Not a refcounted
                                           *          reference! */
         rd_kafka_toppar_t *msetr_rktp;   /* @warning Not a refcounted
@@ -224,6 +225,7 @@ rd_kafka_msgset_reader_init (rd_kafka_msgset_reader_t *msetr,
         memset(msetr, 0, sizeof(*msetr));
 
         msetr->msetr_rkb        = rkbuf->rkbuf_rkb;
+        msetr->msetr_broker_id  = rd_kafka_broker_id(msetr->msetr_rkb);
         msetr->msetr_rktp       = rktp;
         msetr->msetr_aborted_txns = aborted_txns;
         msetr->msetr_tver       = tver;
@@ -677,6 +679,8 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
                                         RD_KAFKAP_BYTES_IS_NULL(&Value) ?
                                         NULL : Value.data);
 
+        rkm->rkm_broker_id = msetr->msetr_broker_id;
+
         /* Assign message timestamp.
          * If message was in a compressed MessageSet and the outer/wrapper
          * Message.Attribute had a LOG_APPEND_TIME set, use the
@@ -893,6 +897,8 @@ unexpected_abort_txn:
                                         (size_t)RD_KAFKAP_BYTES_LEN(&hdr.Value),
                                         RD_KAFKAP_BYTES_IS_NULL(&hdr.Value) ?
                                         NULL : hdr.Value.data);
+
+        rkm->rkm_broker_id = msetr->msetr_broker_id;
 
         /* Store pointer to unparsed message headers, they will
          * be parsed on the first access.

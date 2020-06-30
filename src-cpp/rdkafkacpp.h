@@ -2216,6 +2216,10 @@ class RD_EXPORT Message {
    *
    * @remark The lifetime of the Headers are the same as the Message. */
   virtual RdKafka::Headers   *headers (RdKafka::ErrorCode *err) = 0;
+
+  /** @returns the broker id of the broker the message was produced to or
+   *           fetched from, or -1 if not known/applicable. */
+  virtual int32_t broker_id () const = 0;
 };
 
 /**@}*/

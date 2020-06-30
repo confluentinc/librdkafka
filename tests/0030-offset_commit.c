@@ -502,9 +502,121 @@ static void do_nonexist_commit (void) {
 }
 
 
+
+static int64_t get_committed_offset (rd_kafka_t *rk,
+                                     const char *topic, int32_t partition) {
+        rd_kafka_topic_partition_list_t *parts =
+                rd_kafka_topic_partition_list_new(1);
+        int64_t offset;
+
+        rd_kafka_topic_partition_list_add(parts, topic, partition);
+
+        TEST_CALL_ERR__(rd_kafka_committed(rk, parts, tmout_multip(5000)));
+
+        offset = parts->elems[0].offset;
+
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        return offset;
+}
+
+
+/**
+ * @brief Verify that offset_store() is not allowed for unassigned offsets
+ *        and that it is reset on assign(). Issue #2948.
+ */
+static void do_offset_store (void) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *parts =
+                rd_kafka_topic_partition_list_new(1);
+        int64_t committed;
+        rd_kafka_message_t *rkm;
+        rd_kafka_resp_err_t err;
+
+        TEST_SAY(_C_MAG "[ do_offset_store ]\n");
+
+        rd_kafka_topic_partition_list_add(parts, topic, 0);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "enable.auto.offset.store", "false");
+        rk = test_create_consumer(topic, NULL, conf, NULL);
+
+        /* Store before assign() should fail because partition is not known */
+        parts->elems[0].offset = 10;
+        err = rd_kafka_offsets_store(rk, parts);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+                    "Expected ERR__UNKNOWN_PARTITION, not %s",
+                    rd_kafka_err2name(err));
+
+        /* Assign partition */
+        parts->elems[0].offset = RD_KAFKA_OFFSET_INVALID;
+        TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+
+        /* Store after assign() should succeed */
+        parts->elems[0].offset = 20;
+        TEST_CALL_ERR__(rd_kafka_offsets_store(rk, parts));
+
+        /* Commit stored offsets of current assignment */
+        TEST_CALL_ERR__(rd_kafka_commit(rk, NULL, 0/*sync*/));
+
+        /* Verify committed offset */
+        committed = get_committed_offset(rk, topic, 0);
+        TEST_SAY("Committed offset is %"PRId64"\n", committed);
+        TEST_ASSERT(committed == 20,
+                    "Expected committed offset 20, not %"PRId64, committed);
+
+        /* Store other offset than committed */
+        parts->elems[0].offset = 15;
+        TEST_CALL_ERR__(rd_kafka_offsets_store(rk, parts));
+
+        /* Unassign */
+        TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
+
+        /* Store without assignment should fail */
+        parts->elems[0].offset = 30;
+        err = rd_kafka_offsets_store(rk, parts);
+        TEST_ASSERT(err == 0, //RD_KAFKA_RESP_ERR__STATE,
+                    "Expected ERR__STATE, not %s", rd_kafka_err2name(err));
+
+        /* Assign partition */
+        parts->elems[0].offset = RD_KAFKA_OFFSET_INVALID;
+        TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+
+        /* Trigger a commit, which should be a no-op since the stored offset
+         * should have been reset on assign(). */
+        err = rd_kafka_commit(rk, NULL, 0/*sync*/);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NO_OFFSET,
+                    "Expected commit to fail with ERR__NO_OFFSET, not %s",
+                    rd_kafka_err2name(err));
+
+        /* Verify committed offset */
+        committed = get_committed_offset(rk, topic, 0);
+        TEST_SAY("Committed offset is %"PRId64"\n", committed);
+        TEST_ASSERT(committed == 20,
+                    "Expected committed offset 20, not %"PRId64, committed);
+
+        rkm = rd_kafka_consumer_poll(rk, tmout_multip(3000));
+        TEST_ASSERT(rkm != NULL, "Expected message, got timeout");
+        TEST_ASSERT(!rkm->err, "Expected message, got error: %s",
+                    rd_kafka_message_errstr(rkm));
+
+        /* Verify first message is indeed the committed offset. */
+        TEST_ASSERT(rkm->offset == 20,
+                    "Expected message offset 20, not %"PRId64, rkm->offset);
+        rd_kafka_message_destroy(rkm);
+
+        rd_kafka_topic_partition_list_destroy(parts);
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ do_offset_store PASS ]\n");
+}
+
+
 int main_0030_offset_commit (int argc, char **argv) {
 
-	topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_strdupa(&topic, test_mk_topic_name(__FUNCTION__, 1));
 	testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
 
 	do_offset_test("AUTO.COMMIT & AUTO.STORE",
@@ -540,6 +652,8 @@ int main_0030_offset_commit (int argc, char **argv) {
 	do_empty_commit();
 
 	do_nonexist_commit();
+
+        do_offset_store();
 
         return 0;
 }

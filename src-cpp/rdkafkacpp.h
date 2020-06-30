@@ -2367,7 +2367,7 @@ public:
   /**
    * @brief Update the subscription set to \p topics.
    *
-   * Any previous subscription will be unassigned and  unsubscribed first.
+   * Any previous subscription will be unassigned and unsubscribed first.
    *
    * The subscription set denotes the desired topics to consume and this
    * set is provided to the partition assignor (one of the elected group
@@ -2404,15 +2404,26 @@ public:
   virtual ErrorCode unsubscribe () = 0;
 
   /**
-   *  @brief Update the assignment set to \p partitions.
+   *  @brief Set the assignment to \p partitions.
    *
    * The assignment set is the set of partitions actually being consumed
    * by the KafkaConsumer.
+   *
+   * @remark Any stored offsets, either automatically if
+   *         `enable.auto.offset.store` remains enabled or manually with
+   *         RdKafka::KafkaConsumer::offsets_store(), will be cleared for the
+   *         currently assigned partitions (if any) as well as the new
+   *         assignment (if any).
    */
   virtual ErrorCode assign (const std::vector<TopicPartition*> &partitions) = 0;
 
   /**
    * @brief Stop consumption and remove the current assignment.
+   *
+   * @remark Any stored offsets, either automatically if
+   *         `enable.auto.offset.store` remains enabled or manually with
+   *         RdKafka::KafkaConsumer::offsets_store(), will be cleared for the
+   *         currently assigned partitions (if any).
    */
   virtual ErrorCode unassign () = 0;
 

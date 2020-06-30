@@ -68,11 +68,17 @@ librdkafka.
  * The roundrobin partition assignor could crash if subscriptions
    where asymmetrical (different sets from different members of the group).
    Thanks to @ankon and @wilmai for identifying the root cause (#2121).
+ * The currently stored offset (for commit) will now be cleared when the
+   current assignment is changed to guarantee a clean state.
+   This fixes the issue where a manual offset store after the current assignment
+   was removed would be auto-committed and overwrite the currently committed
+   offset at a later rebalance when the partition was re-assigned to
+   this consumer, leading to replay of messages (#2948).
  * The consumer would connect to all partition leaders of a topic even
    for partitions that were not being consumed (#2826).
  * Initial consumer group joins should now be a couple of seconds quicker
-   thanks expedited query intervals (@benesch).
- * Don't propagate temporary offset lookup errors to application
+   thanks to expedited query intervals (@benesch).
+ * Don't propagate temporary offset lookup errors to application.
 
 ### Producer fixes
 

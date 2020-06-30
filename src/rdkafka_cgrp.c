@@ -2630,6 +2630,15 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_toppar_t *rktp = rktpar->_private;
                         rd_kafka_toppar_lock(rktp);
                         rd_kafka_toppar_desired_add0(rktp);
+
+                        /* Reset the stored offset to invalid so that
+                         * a manual offset-less commit() or the auto-committer
+                         * will not commit a stored offset from a previous
+                         * assignment (issue #2782 and #2948), each assign()
+                         * should present a clean state unaffected by previous
+                         * offsets on the partition. */
+                        rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID,
+                                               RD_DONT_LOCK);
                         rd_kafka_toppar_unlock(rktp);
                 }
         }

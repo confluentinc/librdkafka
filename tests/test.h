@@ -651,6 +651,22 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                           _desc, rd_kafka_err2str(_err));               \
         } while (0)
 
+/**
+ * @brief Same as TEST_CALL__() but for functions not writing to an errstr.
+ */
+#define TEST_CALL_ERR__(FUNC_W_ARGS) do {                               \
+        test_timing_t _timing;                                          \
+        const char *_desc = RD_STRINGIFY(FUNC_W_ARGS);                  \
+        rd_kafka_resp_err_t _err;                                       \
+        TIMING_START(&_timing, "%s", _desc);                            \
+        TEST_SAYL(3, "Begin call %s\n", _desc);                         \
+        _err = FUNC_W_ARGS;                                             \
+        TIMING_STOP(&_timing);                                          \
+        if (_err)                                                       \
+                TEST_FAIL("%s failed: %s\n",                            \
+                          _desc, rd_kafka_err2str(_err));               \
+        } while (0)
+
 
 /**
  * @brief Same as TEST_CALL__() but expects an rd_kafka_error_t * return type.

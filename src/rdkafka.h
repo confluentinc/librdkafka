@@ -3655,6 +3655,11 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  * albeit empty, assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
  *
+ * @remark Any stored offsets, either automatically if
+ *         `enable.auto.offset.store` remains enabled or manually with
+ *         rd_kafka_offsets_store(), will be cleared for the currently
+ *         assigned partitions (if any) as well as the new assignment (if any).
+ *
  * @returns An error code indicating if the new assignment was applied or not.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.

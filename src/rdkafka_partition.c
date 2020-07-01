@@ -1157,17 +1157,18 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 void
 rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
-				      rd_kafka_resp_err_t err,
-				      rd_kafka_topic_partition_list_t *offsets){
-	if (err) {
-		rd_kafka_q_op_err(rktp->rktp_fetchq,
-				  RD_KAFKA_OP_CONSUMER_ERR,
-				  err, 0 /* FIXME:VERSION*/,
-				  rktp, 0,
-				  "Offset commit failed: %s",
-				  rd_kafka_err2str(err));
-		return;
-	}
+                                      rd_kafka_resp_err_t err,
+                                      rd_kafka_topic_partition_list_t *offsets){
+        if (err) {
+                rd_kafka_consumer_err(rktp->rktp_fetchq,
+                                      /* FIXME: propagate broker_id */
+                                      RD_KAFKA_NODEID_UA,
+                                      err, 0 /* FIXME:VERSION*/,
+                                      NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                                      "Offset commit failed: %s",
+                                      rd_kafka_err2str(err));
+                return;
+        }
 
 	rd_kafka_toppar_lock(rktp);
 	rktp->rktp_committed_offset = offsets->elems[0].offset;
@@ -1379,10 +1380,9 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                       err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE ||
                       err == RD_KAFKA_RESP_ERR__TRANSPORT ||
                       err == RD_KAFKA_RESP_ERR__TIMED_OUT)) {
-                        rd_kafka_q_op_err(
-                                rktp->rktp_fetchq,
-                                RD_KAFKA_OP_CONSUMER_ERR,
-                                err, 0, rktp,
+                        rd_kafka_consumer_err(
+                                rktp->rktp_fetchq, rkb->rkb_nodeid,
+                                err, 0, NULL, rktp,
                                 (rktp->rktp_query_offset <=
                                  RD_KAFKA_OFFSET_TAIL_BASE ?
                                  rktp->rktp_query_offset -
@@ -2179,15 +2179,18 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                         rd_kafka_toppar_unlock(rktp);
 
 
-			/* Propagate error to application */
-			if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD) {
-				rd_kafka_q_op_err(rktp->rktp_fetchq,
-						  RD_KAFKA_OP_ERR, rko->rko_err,
-						  0, rktp, 0,
-						  "Failed to fetch "
-						  "offsets from brokers: %s",
-						  rd_kafka_err2str(rko->rko_err));
-			}
+                        /* Propagate error to application */
+                        if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD) {
+                                rd_kafka_consumer_err(
+                                        rktp->rktp_fetchq,
+                                        RD_KAFKA_NODEID_UA,
+                                        rko->rko_err, 0,
+                                        NULL, rktp,
+                                        RD_KAFKA_OFFSET_INVALID,
+                                        "Failed to fetch "
+                                        "offsets from brokers: %s",
+                                        rd_kafka_err2str(rko->rko_err));
+                        }
 
 			rd_kafka_toppar_destroy(rktp);
 

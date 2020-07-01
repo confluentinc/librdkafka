@@ -490,13 +490,13 @@ err2:
 
         if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
                 rd_kafka_cgrp_coord_update(rkcg, -1);
-	else {
+        else {
                 if (rkcg->rkcg_last_err != ErrorCode) {
-                        rd_kafka_q_op_err(rkcg->rkcg_q,
-                                          RD_KAFKA_OP_CONSUMER_ERR,
-                                          ErrorCode, 0, NULL, 0,
-                                          "FindCoordinator response error: %s",
-                                          errstr);
+                        rd_kafka_consumer_err(
+                                rkcg->rkcg_q, rd_kafka_broker_id(rkb),
+                                ErrorCode, 0, NULL, NULL,
+                                RD_KAFKA_OFFSET_INVALID,
+                                "FindCoordinator response error: %s", errstr);
 
                         /* Suppress repeated errors */
                         rkcg->rkcg_last_err = ErrorCode;
@@ -1131,11 +1131,12 @@ err:
                         ErrorCode = RD_KAFKA_RESP_ERR__FATAL;
 
                 } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
-                        rd_kafka_q_op_err(rkcg->rkcg_q,
-                                          RD_KAFKA_OP_CONSUMER_ERR,
-                                          ErrorCode, 0, NULL, 0,
-                                          "JoinGroup failed: %s",
-                                          rd_kafka_err2str(ErrorCode));
+                        rd_kafka_consumer_err(rkcg->rkcg_q,
+                                              rd_kafka_broker_id(rkb),
+                                              ErrorCode, 0, NULL, NULL,
+                                              RD_KAFKA_OFFSET_INVALID,
+                                              "JoinGroup failed: %s",
+                                              rd_kafka_err2str(ErrorCode));
 
                 if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");
@@ -1797,11 +1798,12 @@ static void rd_kafka_cgrp_offsets_fetch_response (
 			     rd_kafka_err2str(err));
 
 		if (err != RD_KAFKA_RESP_ERR__WAIT_COORD)
-			rd_kafka_q_op_err(rkcg->rkcg_q,
-					  RD_KAFKA_OP_CONSUMER_ERR, err, 0,
-					  NULL, 0,
-					  "Failed to fetch offsets: %s",
-					  rd_kafka_err2str(err));
+                        rd_kafka_consumer_err(rkcg->rkcg_q,
+                                              rd_kafka_broker_id(rkb),
+                                              err, 0, NULL, NULL,
+                                              RD_KAFKA_OFFSET_INVALID,
+                                              "Failed to fetch offsets: %s",
+                                              rd_kafka_err2str(err));
 	} else {
 		if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
 			rd_kafka_cgrp_partitions_fetch_start(
@@ -2768,11 +2770,12 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
                      "leaving group",
                      rk->rk_conf.max_poll_interval_ms, exceeded);
 
-        rd_kafka_q_op_err(rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
-                          RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED, 0, NULL, 0,
-                          "Application maximum poll interval (%dms) "
-                          "exceeded by %dms",
-                          rk->rk_conf.max_poll_interval_ms, exceeded);
+        rd_kafka_consumer_err(rkcg->rkcg_q, RD_KAFKA_NODEID_UA,
+                              RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED,
+                              0, NULL, NULL, RD_KAFKA_OFFSET_INVALID,
+                              "Application maximum poll interval (%dms) "
+                              "exceeded by %dms",
+                              rk->rk_conf.max_poll_interval_ms, exceeded);
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED;
 
@@ -2919,13 +2922,14 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 		if (rko) {
 			rd_kafka_q_t *rkq = rko->rko_replyq.q;
 			rko->rko_replyq.q = NULL;
-			rd_kafka_q_op_err(rkq, RD_KAFKA_OP_CONSUMER_ERR,
-					  RD_KAFKA_RESP_ERR__IN_PROGRESS,
-					  rko->rko_replyq.version,
-					  NULL, 0,
-					  "Group is %s",
-					  rkcg->rkcg_reply_rko ?
-					  "terminating":"terminated");
+                        rd_kafka_consumer_err(rkq, RD_KAFKA_NODEID_UA,
+                                              RD_KAFKA_RESP_ERR__IN_PROGRESS,
+                                              rko->rko_replyq.version,
+                                              NULL, NULL,
+                                              RD_KAFKA_OFFSET_INVALID,
+                                              "Group is %s",
+                                              rkcg->rkcg_reply_rko ?
+                                              "terminating":"terminated");
 			rd_kafka_q_destroy(rkq);
 			rd_kafka_op_destroy(rko);
 		}
@@ -3550,13 +3554,13 @@ rd_kafka_propagate_consumer_topic_errors (
                              rd_kafka_err2str(topic->err));
 
                 /* Send consumer error to application */
-                rd_kafka_q_op_topic_err(
-                        rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
-                        topic->err, 0,
-                        topic->topic,
-                        "%s: %s: %s",
-                        error_prefix, topic->topic,
-                        rd_kafka_err2str(topic->err));
+                rd_kafka_consumer_err(rkcg->rkcg_q, RD_KAFKA_NODEID_UA,
+                                      topic->err, 0,
+                                      topic->topic, NULL,
+                                      RD_KAFKA_OFFSET_INVALID,
+                                      "%s: %s: %s",
+                                      error_prefix, topic->topic,
+                                      rd_kafka_err2str(topic->err));
         }
 
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);

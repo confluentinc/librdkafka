@@ -138,6 +138,10 @@ typedef struct rd_kafka_mock_broker_s {
 
         TAILQ_HEAD(, rd_kafka_mock_connection_s) connections;
 
+        /**< Per-protocol request error stack.
+         *   @locks mcluster->lock */
+        rd_kafka_mock_error_stack_head_t errstacks;
+
         struct rd_kafka_mock_cluster_s *cluster;
 } rd_kafka_mock_broker_t;
 
@@ -362,7 +366,7 @@ rd_kafka_mock_msgset_find (const rd_kafka_mock_partition_t *mpart,
                            int64_t offset, rd_bool_t on_follower);
 
 rd_kafka_resp_err_t
-rd_kafka_mock_next_request_error (rd_kafka_mock_cluster_t *mcluster,
+rd_kafka_mock_next_request_error (rd_kafka_mock_connection_t *mconn,
                                   int16_t ApiKey);
 
 rd_kafka_resp_err_t

@@ -142,6 +142,18 @@ RD_EXPORT
 void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
                                         int16_t ApiKey, size_t cnt, ...);
 
+
+/**
+ * @brief Same as rd_kafka_mock_push_request_errors() but for a specific broker.
+ *
+ * @remark The broker errors take precedence over the cluster errors.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
+                                          int32_t broker_id,
+                                          int16_t ApiKey, size_t cnt, ...);
+
+
 /**
  * @brief Set the topic error to return in protocol requests.
  *

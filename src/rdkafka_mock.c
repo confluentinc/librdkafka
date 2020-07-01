@@ -1244,13 +1244,29 @@ static void rd_kafka_mock_broker_close_all (rd_kafka_mock_broker_t *mrkb,
                 rd_kafka_mock_connection_close(mconn, reason);
 }
 
+/**
+ * @brief Destroy error stack, must be unlinked.
+ */
+static void
+rd_kafka_mock_error_stack_destroy (rd_kafka_mock_error_stack_t *errstack) {
+        if (errstack->errs)
+                rd_free(errstack->errs);
+        rd_free(errstack);
+}
+
 
 static void rd_kafka_mock_broker_destroy (rd_kafka_mock_broker_t *mrkb) {
+        rd_kafka_mock_error_stack_t *errstack;
 
         rd_kafka_mock_broker_close_all(mrkb, "Destroying broker");
 
         rd_kafka_mock_cluster_io_del(mrkb->cluster, mrkb->listen_s);
         rd_close(mrkb->listen_s);
+
+        while ((errstack = TAILQ_FIRST(&mrkb->errstacks))) {
+                TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
+                rd_kafka_mock_error_stack_destroy(errstack);
+        }
 
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;
@@ -1328,6 +1344,7 @@ rd_kafka_mock_broker_new (rd_kafka_mock_cluster_t *mcluster,
                     "%s", rd_sockaddr2str(&sin, 0));
 
         TAILQ_INIT(&mrkb->connections);
+        TAILQ_INIT(&mrkb->errstacks);
 
         TAILQ_INSERT_TAIL(&mcluster->brokers, mrkb, link);
         mcluster->broker_cnt++;
@@ -1502,17 +1519,23 @@ rd_kafka_mock_error_stack_get (rd_kafka_mock_error_stack_head_t *shead,
  * @brief Removes and returns the next request error for request type \p ApiKey.
  */
 rd_kafka_resp_err_t
-rd_kafka_mock_next_request_error (rd_kafka_mock_cluster_t *mcluster,
+rd_kafka_mock_next_request_error (rd_kafka_mock_connection_t *mconn,
                                   int16_t ApiKey) {
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_mock_error_stack_t *errstack;
         rd_kafka_resp_err_t err;
 
         mtx_lock(&mcluster->lock);
 
-        errstack = rd_kafka_mock_error_stack_find(&mcluster->errstacks, ApiKey);
+        errstack = rd_kafka_mock_error_stack_find(&mconn->broker->errstacks,
+                                                  ApiKey);
         if (likely(!errstack)) {
-                mtx_unlock(&mcluster->lock);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                errstack = rd_kafka_mock_error_stack_find(&mcluster->errstacks,
+                                                          ApiKey);
+                if (likely(!errstack)) {
+                        mtx_unlock(&mcluster->lock);
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
         }
 
         err = rd_kafka_mock_error_stack_next(errstack);
@@ -1522,16 +1545,6 @@ rd_kafka_mock_next_request_error (rd_kafka_mock_cluster_t *mcluster,
 }
 
 
-
-/**
- * @brief Destroy error stack, must be unlinked.
- */
-static void
-rd_kafka_mock_error_stack_destroy (rd_kafka_mock_error_stack_t *errstack) {
-        if (errstack->errs)
-                rd_free(errstack->errs);
-        rd_free(errstack);
-}
 
 
 void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
@@ -1560,6 +1573,45 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
         va_end(ap);
 
         mtx_unlock(&mcluster->lock);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
+                                          int32_t broker_id,
+                                          int16_t ApiKey, size_t cnt, ...) {
+        rd_kafka_mock_broker_t *mrkb;
+        va_list ap;
+        rd_kafka_mock_error_stack_t *errstack;
+        size_t totcnt;
+
+        mtx_lock(&mcluster->lock);
+
+        if (!(mrkb = rd_kafka_mock_broker_find(mcluster, broker_id))) {
+                mtx_unlock(&mcluster->lock);
+                return RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
+        }
+
+        errstack = rd_kafka_mock_error_stack_get(&mrkb->errstacks, ApiKey);
+
+        totcnt = errstack->cnt + cnt;
+
+        if (totcnt > errstack->size) {
+                errstack->size = totcnt + 4;
+                errstack->errs = rd_realloc(errstack->errs,
+                                            errstack->size *
+                                            sizeof(*errstack->errs));
+        }
+
+        va_start(ap, cnt);
+        while (cnt-- > 0)
+                errstack->errs[errstack->cnt++] =
+                        va_arg(ap, rd_kafka_resp_err_t);
+        va_end(ap);
+
+        mtx_unlock(&mcluster->lock);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

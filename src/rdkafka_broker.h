@@ -79,7 +79,8 @@ typedef struct rd_kafka_broker_monitor_s {
 struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
 
-	int32_t             rkb_nodeid;
+        int32_t             rkb_nodeid;  /**< Broker Node Id.
+                                          *   @locks rkb_lock */
 #define RD_KAFKA_NODEID_UA -1
 
 	rd_sockaddr_list_t *rkb_rsal;
@@ -517,6 +518,7 @@ void msghdr_print (rd_kafka_t *rk,
 		   const char *what, const struct msghdr *msg,
 		   int hexdump);
 
+int32_t rd_kafka_broker_id (rd_kafka_broker_t *rkb);
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
 void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb);
 int rd_kafka_all_brokers_wakeup (rd_kafka_t *rk,

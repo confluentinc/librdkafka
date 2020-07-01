@@ -5914,6 +5914,31 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
 
 
 /**
+ * @returns the broker id, or RD_KAFKA_NODEID_UA if \p rkb is NULL.
+ *
+ * @locality any
+ * @locks_required none
+ * @locks_acquired rkb_lock
+ */
+int32_t rd_kafka_broker_id (rd_kafka_broker_t *rkb) {
+        int32_t broker_id;
+
+        if (unlikely(!rkb))
+                return RD_KAFKA_NODEID_UA;
+
+        /* Avoid locking if already on the broker thread */
+        if (thrd_is_current(rkb->rkb_thread))
+                return rkb->rkb_nodeid;
+
+        rd_kafka_broker_lock(rkb);
+        broker_id = rkb->rkb_nodeid;
+        rd_kafka_broker_unlock(rkb);
+
+        return broker_id;
+}
+
+
+/**
  * Returns a thread-safe temporary copy of the broker name.
  * Must not be called more than 4 times from the same expression.
  *

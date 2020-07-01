@@ -98,6 +98,7 @@ v1.4.4 is a maintenance release with the following fixes and enhancements:
  * Fix crash on transactional coordinator FindCoordinator request failure.
  * Minimize broker re-connect delay when broker's connection is needed to
    send requests.
+ * Proper locking for transaction state in EndTxn handler.
  * `socket.timeout.ms` was ignored when `transactional.id` was set.
  * Added RTT/delay simulation to mock brokers.
 

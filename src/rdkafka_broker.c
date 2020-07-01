@@ -487,8 +487,7 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
                              "%s: %s", rkb->rkb_name, errstr);
 
                 /* Send ERR op to application for processing. */
-                rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, RD_KAFKA_OP_ERR,
-                                  err, 0, NULL, 0, "%s: %s",
+                rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, err, "%s: %s",
                                   rkb->rkb_name, errstr);
         }
 }
@@ -4447,14 +4446,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
 					rd_dassert(tver->version > 0);
-					rd_kafka_q_op_err(
-						rktp->rktp_fetchq,
-						RD_KAFKA_OP_CONSUMER_ERR,
-						hdr.ErrorCode, tver->version,
-						rktp,
-						rktp->rktp_offsets.fetch_offset,
-						"Fetch failed: %s",
-						rd_kafka_err2str(hdr.ErrorCode));
+                                        rd_kafka_consumer_err(
+                                                rktp->rktp_fetchq,
+                                                rd_kafka_broker_id(rkb),
+                                                hdr.ErrorCode, tver->version,
+                                                NULL, rktp,
+                                                rktp->rktp_offsets.fetch_offset,
+                                                "Fetch failed: %s",
+                                                rd_kafka_err2str(hdr.ErrorCode));
 					break;
 				}
 

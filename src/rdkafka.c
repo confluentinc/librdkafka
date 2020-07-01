@@ -832,11 +832,12 @@ int rd_kafka_set_fatal_error0 (rd_kafka_t *rk, rd_dolock_t do_lock,
          * while for all other client types (the producer) we propagate to
          * the standard error handler (typically error_cb). */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
-                rd_kafka_q_op_err(rk->rk_cgrp->rkcg_q,
-                                  RD_KAFKA_OP_CONSUMER_ERR,
-                                  RD_KAFKA_RESP_ERR__FATAL, 0, NULL, 0,
-                                  "Fatal error: %s: %s",
-                                  rd_kafka_err2str(err), rk->rk_fatal.errstr);
+                rd_kafka_consumer_err(rk->rk_cgrp->rkcg_q, RD_KAFKA_NODEID_UA,
+                                      RD_KAFKA_RESP_ERR__FATAL, 0, NULL, NULL,
+                                      RD_KAFKA_OFFSET_INVALID,
+                                      "Fatal error: %s: %s",
+                                      rd_kafka_err2str(err),
+                                      rk->rk_fatal.errstr);
         else
                 rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__FATAL,
                                 "Fatal error: %s: %s",

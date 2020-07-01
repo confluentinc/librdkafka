@@ -529,17 +529,15 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__); \
 			break;						\
 		}							\
-		rd_kafka_q_op_err((rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
-				  NULL, 0, __VA_ARGS__);		\
+		rd_kafka_q_op_err((rk)->rk_rep, err, __VA_ARGS__);      \
 	} while (0)
 
-void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
-                        rd_kafka_resp_err_t err, int32_t version,
-                        rd_kafka_toppar_t *rktp, int64_t offset,
-			const char *fmt, ...);
- void rd_kafka_q_op_topic_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
-                               rd_kafka_resp_err_t err, int32_t version,
-                               const char *topic, const char *fmt, ...);
+void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
+                        const char *fmt, ...);
+void rd_kafka_consumer_err (rd_kafka_q_t *rkq, int32_t broker_id,
+                            rd_kafka_resp_err_t err, int32_t version,
+                            const char *topic, rd_kafka_toppar_t *rktp,
+                            int64_t offset, const char *fmt, ...);
 rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_q_t *recvq,
                                  rd_kafka_op_t *rko,

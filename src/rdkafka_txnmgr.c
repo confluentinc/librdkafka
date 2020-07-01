@@ -1937,13 +1937,17 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                 is_commit = rd_false;
         else
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
+
+        if (!err) {
+                /* EndTxn successful: complete the transaction */
+                rd_kafka_txn_complete(rk);
+        }
+
         rd_kafka_wrunlock(rk);
 
         switch (err)
         {
         case RD_KAFKA_RESP_ERR_NO_ERROR:
-                /* EndTxn successful: complete the transaction */
-                rd_kafka_txn_complete(rk);
                 break;
 
         case RD_KAFKA_RESP_ERR__DESTROY:

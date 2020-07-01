@@ -54,10 +54,10 @@ static RD_INLINE RD_UNUSED rd_bool_t
 rd_kafka_txn_may_send_msg (rd_kafka_t *rk) {
         rd_bool_t ret;
 
-        rd_kafka_wrlock(rk);
+        rd_kafka_rdlock(rk);
         ret = (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_IN_TRANSACTION ||
                rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_BEGIN_COMMIT);
-        rd_kafka_wrunlock(rk);
+        rd_kafka_rdunlock(rk);
 
         return ret;
 }

@@ -4361,6 +4361,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
 				case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
 				case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+                                case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+                                case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+                                case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
                                         /* Request metadata information update*/
                                         rd_kafka_toppar_leader_unavailable(
                                                 rktp, "fetch", hdr.ErrorCode);
@@ -4452,7 +4455,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 hdr.ErrorCode, tver->version,
                                                 NULL, rktp,
                                                 rktp->rktp_offsets.fetch_offset,
-                                                "Fetch failed: %s",
+                                                "Fetch from broker %"PRId32
+                                                " failed: %s",
+                                                rd_kafka_broker_id(rkb),
                                                 rd_kafka_err2str(hdr.ErrorCode));
 					break;
 				}

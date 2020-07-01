@@ -451,6 +451,9 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                 RD_KAFKA_ERR_ACTION_REFRESH,
                 RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
 
+                RD_KAFKA_ERR_ACTION_REFRESH,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
+
                 RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
                 RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
 

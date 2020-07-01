@@ -520,6 +520,9 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk);
 void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
                                      const char *topic, int32_t partition,
                                      int64_t offset);
+void test_consumer_pause_resume_partition (rd_kafka_t *rk,
+                                           const char *topic, int32_t partition,
+                                           rd_bool_t pause);
 
 void test_consumer_close (rd_kafka_t *rk);
 

@@ -100,7 +100,7 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
                               rktp->rktp_partition)))
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
-        if (!err) {
+        if (!err && !rktpar->err) {
                 rd_kafka_toppar_lock(rktp);
                 rktp->rktp_lo_offset = rktpar->offset;
                 rd_kafka_toppar_unlock(rktp);
@@ -1333,11 +1333,15 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                                              rkbuf, request, offsets);
         }
 
-        if (!err &&
-            (!(rktpar = rd_kafka_topic_partition_list_find(
-                       offsets,
-                       rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition))))
-                err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+        if (!err) {
+                if (!(rktpar = rd_kafka_topic_partition_list_find(
+                              offsets,
+                              rktp->rktp_rkt->rkt_topic->str,
+                              rktp->rktp_partition)))
+                        err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                else if (rktpar->err)
+                        err = rktpar->err;
+        }
 
         if (err) {
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",

@@ -2613,6 +2613,29 @@ void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
 }
 
 
+void test_consumer_pause_resume_partition (rd_kafka_t *rk,
+                                           const char *topic, int32_t partition,
+                                           rd_bool_t pause) {
+        rd_kafka_topic_partition_list_t *part;
+        rd_kafka_resp_err_t err;
+
+        part = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(part, topic, partition);
+
+        if (pause)
+                err = rd_kafka_pause_partitions(rk, part);
+        else
+                err = rd_kafka_resume_partitions(rk, part);
+
+        TEST_ASSERT(!err, "Failed to %s %s [%"PRId32"]: %s",
+                    pause ? "pause":"resume",
+                    topic, partition,
+                    rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(part);
+}
+
+
 /**
  * Message verification services
  *

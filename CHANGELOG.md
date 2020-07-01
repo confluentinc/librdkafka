@@ -62,7 +62,7 @@ librdkafka.
    supported (by @sky92zwq).
  * `./configure` arguments now take precedence over cached `configure` variables
    from previous invocation.
- * Fix theoeretical crash on coord request failure.
+ * Fix theoretical crash on coord request failure.
 
 
 ### Consumer fixes
@@ -76,9 +76,11 @@ librdkafka.
    for partitions that were not being consumed (#2826).
  * Initial consumer group joins should now be a couple of seconds quicker
    thanks expedited query intervals (@benesch).
- * Don't propagate temporary offset lookup errors to application
  * Fix crash and/or inconsistent subscriptions when using multiple consumers
    (in the same process) with wildcard topics on Windows.
+ * Don't propagate temporary offset lookup errors to application.
+ * Immediately refresh topic metadata when partitions are reassigned to other
+   brokers, avoiding a fetch stall of up to `topic.metadata.refresh.interval.ms`. (#2955)
 
 
 ### Producer fixes

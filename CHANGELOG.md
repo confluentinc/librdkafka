@@ -68,6 +68,8 @@ librdkafka.
  * The roundrobin partition assignor could crash if subscriptions
    where asymmetrical (different sets from different members of the group).
    Thanks to @ankon and @wilmai for identifying the root cause (#2121).
+ * The consumer assignors could ignore some topics if there were more subscribed
+   topics than consumers in taking part in the assignment.
  * The consumer would connect to all partition leaders of a topic even
    for partitions that were not being consumed (#2826).
  * Initial consumer group joins should now be a couple of seconds quicker

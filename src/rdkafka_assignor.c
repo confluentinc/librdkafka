@@ -232,12 +232,11 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
         /* For each topic in the cluster, scan through the member list
          * to find matching subscriptions. */
         for (ti = 0 ; ti < metadata->topic_cnt ; ti++) {
-                int complete_cnt = 0;
                 int i;
 
                 /* Ignore topics in blacklist */
                 if (rkcg->rkcg_rk->rk_conf.topic_blacklist &&
-		    rd_kafka_pattern_match(rkcg->rkcg_rk->rk_conf.
+                    rd_kafka_pattern_match(rkcg->rkcg_rk->rk_conf.
                                            topic_blacklist,
                                            metadata->topics[ti].topic)) {
                         rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "BLACKLIST",
@@ -256,10 +255,9 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 for (i = 0 ; i < member_cnt ; i++) {
                         /* Match topic against existing metadata,
                            incl regex matching. */
-                        if (rd_kafka_member_subscription_match(
-                                    rkcg, &members[i], &metadata->topics[ti],
-                                    eligible_topic))
-                                complete_cnt++;
+                        rd_kafka_member_subscription_match(
+                                rkcg, &members[i], &metadata->topics[ti],
+                                eligible_topic);
                 }
 
                 if (rd_list_empty(&eligible_topic->members)) {
@@ -270,9 +268,6 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 eligible_topic->metadata = &metadata->topics[ti];
                 rd_list_add(eligible_topics, eligible_topic);
                 eligible_topic = NULL;
-
-                if (complete_cnt == (int)member_cnt)
-                        break;
         }
 
         if (eligible_topic)

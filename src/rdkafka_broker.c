@@ -4164,9 +4164,10 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                           * (8+8));
                                         }
                                 } else {
-                                        if (rd_kafka_buf_ApiVersion(request) > 8) {
+					/* Older brokers may return LSO -1,
+					 * in which case we use the HWM. */
+                                        if (hdr.LastStableOffset >= 0)
                                                 end_offset = hdr.LastStableOffset;
-                                        }
 
                                         if (AbortedTxnCnt > 0) {
                                                 int k;

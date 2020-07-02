@@ -991,6 +991,21 @@ rd_kafka_mock_connection_write_out (rd_kafka_mock_connection_t *mconn) {
 }
 
 
+/**
+ * @brief Call connection_write_out() for all the broker's connections.
+ *
+ * Use to check if any responses should be sent when RTT has changed.
+ */
+static void
+rd_kafka_mock_broker_connections_write_out (rd_kafka_mock_broker_t *mrkb) {
+        rd_kafka_mock_connection_t *mconn, *tmp;
+
+        /* Need a safe loop since connections may be removed on send error */
+        TAILQ_FOREACH_SAFE(mconn, &mrkb->connections, link, tmp) {
+                rd_kafka_mock_connection_write_out(mconn);
+        }
+}
+
 
 /**
  * @brief Per-Connection IO handler
@@ -1824,6 +1839,10 @@ rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
                         return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
 
                 mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
+
+                /* Check if there is anything to send now that the RTT
+                 * has changed or if a timer is to be started. */
+                rd_kafka_mock_broker_connections_write_out(mrkb);
                 break;
 
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:

@@ -63,6 +63,8 @@ librdkafka.
  * `./configure` arguments now take precedence over cached `configure` variables
    from previous invocation.
  * Fix theoretical crash on coord request failure.
+ * Unknown partition error could be triggered for existing partitions when
+   additional topics were added to a topic (@benesch, #2915)
 
 
 ### Consumer fixes
@@ -84,6 +86,8 @@ librdkafka.
 
 
 ### Producer fixes
+
+ * Proper locking for transaction state in EndTxn handler.
 
 
 

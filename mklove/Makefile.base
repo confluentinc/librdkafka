@@ -26,7 +26,8 @@ ifndef MKL_MAKEFILE_CONFIG
 endif
 
 # Use C compiler as default linker.
-# C++ libraries will need to override this CXX after including Makefile.base
+# C++ libraries will need to override this with CXX after
+# including Makefile.base
 CC_LD?=$(CC)
 
 _UNAME_S := $(shell uname -s)

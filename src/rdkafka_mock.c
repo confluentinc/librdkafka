@@ -40,6 +40,9 @@
 
 #include <stdarg.h>
 
+static void
+rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster);
+
 
 static rd_kafka_mock_broker_t *
 rd_kafka_mock_broker_find (const rd_kafka_mock_cluster_t *mcluster,
@@ -1196,6 +1199,8 @@ static int rd_kafka_mock_cluster_thread_main (void *arg) {
                                              RD_KAFKA_THREAD_BACKGROUND);
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
+        rd_kafka_mock_cluster_destroy0(mcluster);
+
         return 0;
 }
 
@@ -1972,7 +1977,9 @@ rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster) {
         mtx_destroy(&mcluster->lock);
 
         rd_free(mcluster->bootstraps);
-        rd_free(mcluster);
+
+        rd_close(mcluster->wakeup_fds[0]);
+        rd_close(mcluster->wakeup_fds[1]);
 }
 
 
@@ -1994,10 +2001,7 @@ void rd_kafka_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster) {
         if (thrd_join(mcluster->thread, &res) != thrd_success)
                 rd_assert(!*"failed to join mock thread");
 
-        rd_close(mcluster->wakeup_fds[0]);
-        rd_close(mcluster->wakeup_fds[1]);
-
-        rd_kafka_mock_cluster_destroy0(mcluster);
+        rd_free(mcluster);
 }
 
 

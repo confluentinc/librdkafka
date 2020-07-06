@@ -549,6 +549,7 @@ void rd_kafka_toppar_desired_link (rd_kafka_toppar_t *rktp) {
 
         rd_kafka_toppar_keep(rktp);
         rd_list_add(&rktp->rktp_rkt->rkt_desp, rktp);
+        rd_interval_reset(&rktp->rktp_rkt->rkt_desp_refresh_intvl);
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_DESP;
 }
 
@@ -563,6 +564,7 @@ void rd_kafka_toppar_desired_unlink (rd_kafka_toppar_t *rktp) {
 
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_DESP;
         rd_list_remove(&rktp->rktp_rkt->rkt_desp, rktp);
+        rd_interval_reset(&rktp->rktp_rkt->rkt_desp_refresh_intvl);
         rd_kafka_toppar_destroy(rktp);
 }
 

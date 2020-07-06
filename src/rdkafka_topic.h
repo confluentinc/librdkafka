@@ -107,6 +107,9 @@ struct rd_kafka_topic_s {
         rd_list_t          rkt_desp;              /* Desired partitions
                                                    * that are not yet seen
                                                    * in the cluster. */
+        rd_interval_t      rkt_desp_refresh_intvl; /**< Rate-limiter for
+                                                    *   desired partition
+                                                    *   metadata refresh. */
 
         rd_ts_t            rkt_ts_create;   /**< Topic object creation time. */
 	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata

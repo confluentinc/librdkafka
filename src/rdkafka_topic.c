@@ -429,6 +429,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
         rd_list_init(&rkt->rkt_desp, 16, NULL);
+        rd_interval_init(&rkt->rkt_desp_refresh_intvl);
         rd_refcnt_init(&rkt->rkt_refcnt, 0);
         rd_refcnt_init(&rkt->rkt_app_refcnt, 0);
 
@@ -1344,7 +1345,7 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                 rd_kafka_topic_rdlock(rkt);
 
                 if (rkt->rkt_partition_cnt == 0) {
-                        /* If this partition is unknown by brokers try
+                        /* If this topic is unknown by brokers try
                          * to create it by sending a topic-specific
                          * metadata request.
                          * This requires "auto.create.topics.enable=true"
@@ -1353,6 +1354,20 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                      "Topic %s partition count is zero: "
                                      "should refresh metadata",
                                      rkt->rkt_topic->str);
+
+                        query_this = 1;
+
+                } else if (!rd_list_empty(&rkt->rkt_desp) &&
+                           rd_interval_immediate(&rkt->rkt_desp_refresh_intvl,
+                                                 10*1000*1000, 0) > 0) {
+                        /* Query topic metadata if there are
+                         * desired (non-existent) partitions.
+                         * At most every 10 seconds. */
+                        rd_kafka_dbg(rk, TOPIC, "DESIRED",
+                                     "Topic %s has %d desired partition(s): "
+                                     "should refresh metadata",
+                                     rkt->rkt_topic->str,
+                                     rd_list_cnt(&rkt->rkt_desp));
 
                         query_this = 1;
                 }

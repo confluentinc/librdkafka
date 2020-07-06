@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2020, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,10 +42,7 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
         int64_t offset = RD_KAFKA_OFFSET_BEGINNING;
         uint64_t testid = test_id_generate();
         rd_kafka_t *c;
-        rd_kafka_topic_t *rkt;
         rd_kafka_topic_partition_list_t *tpl;
-        rd_kafka_resp_err_t err;
-        const struct rd_kafka_metadata *md;
 
         test_conf_init(NULL, NULL, 60);
 
@@ -64,9 +61,8 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
         rd_kafka_topic_partition_list_add(tpl, topic, 0)->offset = offset;
         test_consumer_assign("ASSIGN", c, tpl);
 
-        TEST_SAY("Waiting for message");
-        rkt = rd_kafka_topic_new(c, topic, NULL);
-        test_consume_msgs("CONSUME", rkt, testid, 0, TEST_NO_SEEK, 0, 1, 1);
+        TEST_SAY("Waiting for message\n");
+        test_consumer_poll("CONSUME 0", c, testid, -1, 0, 1, NULL);
 
         TEST_SAY("Changing partition count for topic %s\n", topic);
         test_create_partitions(NULL, topic, 2);
@@ -78,14 +74,8 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
         rd_kafka_topic_partition_list_add(tpl, topic, 1)->offset = offset;
         test_consumer_assign("ASSIGN", c, tpl);
 
-        TEST_SAY("Updating metadata\n");
-        err = rd_kafka_metadata(c, 0, rkt, &md, tmout_multip(2000));
-        TEST_ASSERT(!err, "metadata failed: %s", rd_kafka_err2str(err));
-        rd_kafka_metadata_destroy(md);
-
-        TEST_SAY("Waiting for messages");
-        test_consume_msgs("CONSUME", rkt, testid, 0, TEST_NO_SEEK, 0, 1, 0);
-        test_consume_msgs("CONSUME", rkt, testid, 1, TEST_NO_SEEK, 0, 1, 0);
+        TEST_SAY("Waiting for messages\n");
+        test_consumer_poll("CONSUME", c, testid, -1, 0, 2, NULL);
 
         rd_kafka_topic_partition_list_destroy(tpl);
         test_consumer_close(c);

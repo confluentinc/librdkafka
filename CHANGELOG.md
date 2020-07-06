@@ -71,6 +71,9 @@ librdkafka.
  * Fix theoretical crash on coord request failure.
  * Unknown partition error could be triggered for existing partitions when
    additional topics were added to a topic (@benesch, #2915)
+ * Quickly refresh topic metadata for desired but non-existent partitions.
+   This will speed up the initial discovery delay when new partitions are added
+   to an existing topic (#2917).
 
 
 ### Consumer fixes

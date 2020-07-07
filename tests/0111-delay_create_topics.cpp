@@ -33,7 +33,7 @@
 #include "testcpp.h"
 
 /**
- * Verify that the producer waits FIXME.topic.metadata.propagation.max.ms
+ * Verify that the producer waits topic.metadata.propagation.max.ms
  * before flagging a topic as non-existent, allowing asynchronous
  * CreateTopics() to be used in non-auto-create scenarios.
  *
@@ -84,7 +84,7 @@ static void do_test_producer (bool timeout_too_short) {
   }
 
   DrCb dr_cb(timeout_too_short ?
-             RdKafka::ERR__UNKNOWN_TOPIC : RdKafka::ERR_NO_ERROR);
+             RdKafka::ERR_UNKNOWN_TOPIC_OR_PART : RdKafka::ERR_NO_ERROR);
   conf->set("dr_cb", &dr_cb, errstr);
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);

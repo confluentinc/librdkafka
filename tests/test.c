@@ -1566,7 +1566,7 @@ int main(int argc, char **argv) {
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
                 else if (!strcmp(argv[i], "-s") && i+1 < argc)
-                        strncpy(test_scenario, argv[i],
+                        strncpy(test_scenario, argv[++i],
                                 sizeof(test_scenario)-1);
 		else if (!strcmp(argv[i], "-S"))
 			show_summary = 0;

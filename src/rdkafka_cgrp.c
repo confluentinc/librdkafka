@@ -2650,6 +2650,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_c.assignment_size = assignment ? assignment->cnt : 0;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
+
         /* Remove existing assignment (async operation) */
 	if (rkcg->rkcg_assignment)
 		rd_kafka_cgrp_unassign(rkcg);

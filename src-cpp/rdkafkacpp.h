@@ -2364,7 +2364,6 @@ public:
    *         RdKafka::KafkaConsumer::assign() */
   virtual ErrorCode assignment (std::vector<RdKafka::TopicPartition*> &partitions) = 0;
 
-
   /** @brief Returns the current subscription as set by
    *         RdKafka::KafkaConsumer::subscribe() */
   virtual ErrorCode subscription (std::vector<std::string> &topics) = 0;

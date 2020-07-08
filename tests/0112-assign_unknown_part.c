@@ -43,6 +43,7 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
         uint64_t testid = test_id_generate();
         rd_kafka_t *c;
         rd_kafka_topic_partition_list_t *tpl;
+        int r;
 
         test_conf_init(NULL, NULL, 60);
 
@@ -66,6 +67,16 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
 
         TEST_SAY("Changing partition count for topic %s\n", topic);
         test_create_partitions(NULL, topic, 2);
+
+        /* FIXME: The new partition might not have propagated through the
+         *        cluster by the time the producer tries to produce to it
+         *        which causes the produce to fail.
+         *        Loop until the partition count is correct. */
+        while ((r = test_get_partition_count(c, topic, 5000)) != 2) {
+                TEST_SAY("Waiting for %s partition count to reach 2, "
+                         "currently %d\n", topic, r);
+                rd_sleep(1);
+        }
 
         TEST_SAY("Producing message to partition 1\n");
         test_produce_msgs_easy(topic, testid, 1, 1);

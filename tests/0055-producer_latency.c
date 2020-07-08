@@ -211,7 +211,7 @@ static float find_max (const struct latconf *latconf) {
 
 int main_0055_producer_latency (int argc, char **argv) {
         struct latconf latconfs[] = {
-                { "standard settings", {NULL}, 0, 0 }, /* default is now 0ms */
+                { "standard settings", {NULL}, 5, 5 }, /* default is now 5ms */
                 { "low queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
                 { "microsecond queue.buffering.max.ms",

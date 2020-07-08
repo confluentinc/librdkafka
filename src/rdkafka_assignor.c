@@ -451,11 +451,10 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 
 
 /**
- * Add an assignor, overwriting any previous one with the same protocol_name.
+ * @brief Add an assignor.
  */
 rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
-		       rd_kafka_assignor_t **rkasp,
                        const char *protocol_type,
                        const char *protocol_name,
                        int supported_protocols,
@@ -482,22 +481,17 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                                const rd_kafkap_bytes_t *userdata,
                                const rd_kafka_consumer_group_metadata_t *rkcgm),
                        void (*destroy_state_cb) (void *assignor_state),
+                       int (*unittest_cb) (void),
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
-
-	if (rkasp)
-		*rkasp = NULL;
 
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
                                   protocol_type))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
 
         /* Dont overwrite application assignors */
-        if ((rkas = rd_kafka_assignor_find(rk, protocol_name))) {
-		if (rkasp)
-			*rkasp = rkas;
-		return RD_KAFKA_RESP_ERR__CONFLICT;
-	}
+        if ((rkas = rd_kafka_assignor_find(rk, protocol_name)))
+                return RD_KAFKA_RESP_ERR__CONFLICT;
 
         rkas = rd_calloc(1, sizeof(*rkas));
 
@@ -508,12 +502,10 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         rkas->rkas_get_metadata_cb  = get_metadata_cb;
         rkas->rkas_on_assignment_cb = on_assignment_cb;
         rkas->rkas_destroy_state_cb = destroy_state_cb;
+        rkas->rkas_unittest         = unittest_cb;
         rkas->rkas_opaque = opaque;
 
         rd_list_add(&rk->rk_conf.partition_assignors, rkas);
-
-	if (rkasp)
-		*rkasp = rkas;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -540,8 +532,13 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 	char *wanted;
 	char *s;
 
-        rd_list_init(&rk->rk_conf.partition_assignors, 2,
+        rd_list_init(&rk->rk_conf.partition_assignors, 3,
                      (void *)rd_kafka_assignor_destroy);
+
+        /* Initialize builtin assignors (ignore errors) */
+        rd_kafka_range_assignor_init(rk);
+        rd_kafka_roundrobin_assignor_init(rk);
+        rd_kafka_sticky_assignor_init(rk);
 
 	rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
 
@@ -564,42 +561,18 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Right trim */
 		rtrim(s);
 
-		/* Match builtin consumer assignors */
-		if (!strcmp(s, "range"))
-			rd_kafka_assignor_add(
-                                rk, &rkas, "consumer", "range",
-                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
-                                rd_kafka_range_assignor_assign_cb,
-                                rd_kafka_assignor_get_metadata_with_empty_userdata,
-                                NULL, NULL, NULL);
-		else if (!strcmp(s, "roundrobin"))
-			rd_kafka_assignor_add(
-                                rk, &rkas, "consumer", "roundrobin",
-                                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
-                                rd_kafka_roundrobin_assignor_assign_cb,
-                                rd_kafka_assignor_get_metadata_with_empty_userdata,
-                                NULL, NULL, NULL);
-                else if (!strcmp(s, "cooperative-sticky"))
-                        rd_kafka_assignor_add(
-                                rk, &rkas, "consumer", "cooperative-sticky",
-                                RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE,
-                                rd_kafka_sticky_assignor_assign_cb,
-                                rd_kafka_sticky_assignor_get_metadata,
-                                rd_kafka_sticky_assignor_on_assignment_cb,
-                                rd_kafka_sticky_assignor_state_destroy, NULL);
-		else {
-			rd_snprintf(errstr, errstr_size,
-				    "Unsupported partition.assignment.strategy:"
-				    " %s", s);
-			return -1;
-		}
+                rkas = rd_kafka_assignor_find(rk, s);
+                if (!rkas) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Unsupported partition.assignment.strategy:"
+                                    " %s", s);
+                        return -1;
+                }
 
-		if (rkas) {
-			if (!rkas->rkas_enabled) {
-				rkas->rkas_enabled = 1;
-				rk->rk_conf.enabled_assignor_cnt++;
-			}
-		}
+                if (!rkas->rkas_enabled) {
+                        rkas->rkas_enabled = 1;
+                        rk->rk_conf.enabled_assignor_cnt++;
+                }
 
 		s = t;
 	}
@@ -845,6 +818,7 @@ static int ut_assignors (void) {
         };
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
+        const rd_kafka_assignor_t *rkas;
         int fails = 0;
         int i;
 
@@ -911,7 +885,6 @@ static int ut_assignors (void) {
                 for (ie = 0 ; ie < tests[i].expect_cnt ; ie++) {
                         rd_kafka_resp_err_t err;
                         char errstr[256];
-                        rd_kafka_assignor_t *rkas;
 
                         RD_UT_SAY("Test case %s: %s assignor",
                                   tests[i].name,
@@ -1019,6 +992,13 @@ static int ut_assignors (void) {
                 }
         }
 
+
+        /* Run assignor-specific unittests */
+        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
+                if (rkas->rkas_unittest)
+                        fails += rkas->rkas_unittest();
+        }
+
         rd_kafka_destroy(rk);
 
         if (fails)
@@ -1032,11 +1012,5 @@ static int ut_assignors (void) {
  * @brief Unit tests for assignors
  */
 int unittest_assignors (void) {
-        int fails = 0;
-
-        fails += ut_assignors();
-
-        fails += rd_kafka_sticky_assignor_unittest();
-
-        return fails;
+        return ut_assignors();
 }

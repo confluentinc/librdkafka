@@ -119,3 +119,14 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 
 
 
+/**
+ * @brief Initialzie and add roundrobin assignor.
+ */
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init (rd_kafka_t *rk) {
+        return rd_kafka_assignor_add(
+                rk, "consumer", "roundrobin",
+                RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER,
+                rd_kafka_roundrobin_assignor_assign_cb,
+                rd_kafka_assignor_get_metadata_with_empty_userdata,
+                NULL, NULL, NULL, NULL);
+}

@@ -1919,6 +1919,7 @@ rd_kafka_sticky_assignor_assign_cb (rd_kafka_t *rk,
 
 
 /** @brief FIXME docstring */
+static
 void rd_kafka_sticky_assignor_on_assignment_cb (
                 const rd_kafka_assignor_t *rkas,
                 void **assignor_state,
@@ -1940,7 +1941,7 @@ void rd_kafka_sticky_assignor_on_assignment_cb (
 }
 
 /** @brief FIXME docstring */
-rd_kafkap_bytes_t *
+static rd_kafkap_bytes_t *
 rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
                                        void *assignor_state,
                                        const rd_list_t *topics,
@@ -1995,7 +1996,7 @@ rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
 /**
  * @brief Destroy assignor state
  */
-void rd_kafka_sticky_assignor_state_destroy (void *assignor_state) {
+static void rd_kafka_sticky_assignor_state_destroy (void *assignor_state) {
         rd_kafka_sticky_assignor_state_t *state =
                 (rd_kafka_sticky_assignor_state_t *)assignor_state;
 
@@ -3420,7 +3421,7 @@ ut_testConflictingPreviousAssignments (rd_kafka_t *rk,
  * from Java since random tests don't provide meaningful test coverage. */
 
 
-int rd_kafka_sticky_assignor_unittest (void) {
+static int rd_kafka_sticky_assignor_unittest (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         int fails = 0;
@@ -3489,4 +3490,20 @@ int rd_kafka_sticky_assignor_unittest (void) {
         rd_kafka_destroy(rk);
 
         return fails;
+}
+
+
+/**
+ * @brief Initialzie and add sticky assignor.
+ */
+rd_kafka_resp_err_t rd_kafka_sticky_assignor_init (rd_kafka_t *rk) {
+        return rd_kafka_assignor_add(
+                rk, "consumer", "cooperative-sticky",
+                RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE,
+                rd_kafka_sticky_assignor_assign_cb,
+                rd_kafka_sticky_assignor_get_metadata,
+                rd_kafka_sticky_assignor_on_assignment_cb,
+                rd_kafka_sticky_assignor_state_destroy,
+                rd_kafka_sticky_assignor_unittest,
+                NULL);
 }

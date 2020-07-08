@@ -55,6 +55,11 @@ librdkafka.
    Users on Brokers 0.9.x or older should already be configuring
    `api.version.request=false` and `broker.version.fallback=...` so there
    should be no functional change.
+ * The default producer batch accumulation time, `linger.ms`, has been changed
+   from 0.5ms to 5ms to improve batch sizes and throughput while reducing
+   the per-message protocol overhead.
+   Applications that require lower produce latency than 5ms will need to
+   manually set `linger.ms` to a lower value.
  * librdkafka's build tooling now requires Python 3.x (python3 interpreter).
 
 

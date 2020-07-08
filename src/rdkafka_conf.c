@@ -1205,7 +1205,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "A higher value allows larger and more effective "
           "(less overhead, improved compression) batches of messages to "
           "accumulate at the expense of increased message delivery latency.",
-	  .dmin = 0, .dmax = 900.0*1000.0, .ddef = 0.5 },
+	  .dmin = 0, .dmax = 900.0*1000.0, .ddef = 5.0 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "message.send.max.retries",
@@ -3645,15 +3645,20 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
         if (cltype == RD_KAFKA_PRODUCER) {
+                if (tconf->message_timeout_ms != 0 &&
+                    (double)tconf->message_timeout_ms <=
+                    conf->buffering_max_ms_dbl) {
+                        if (rd_kafka_topic_conf_is_modified(tconf, "linger.ms"))
+                                return "`message.timeout.ms` must be greater "
+                                        "than `linger.ms`";
+                        else
+                                conf->buffering_max_ms_dbl =
+                                        (double)tconf->message_timeout_ms - 0.1;
+                }
+
                 /* Convert double linger.ms to internal int microseconds */
                 conf->buffering_max_us = (rd_ts_t)(conf->buffering_max_ms_dbl *
                                                    1000);
-
-                if (tconf->message_timeout_ms != 0 &&
-                    (rd_ts_t)tconf->message_timeout_ms * 1000 <=
-                    conf->buffering_max_us)
-                        return "`message.timeout.ms` must be greater than "
-                                "`linger.ms`";
         }
 
 

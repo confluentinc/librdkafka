@@ -142,6 +142,14 @@ RdKafka::KafkaConsumerImpl::assignment (std::vector<RdKafka::TopicPartition*> &p
 }
 
 
+
+bool
+RdKafka::KafkaConsumerImpl::assignment_lost () {
+  return rd_kafka_assignment_lost(rk_) ? true : false;
+}
+
+
+
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::subscription (std::vector<std::string> &topics) {
   rd_kafka_topic_partition_list_t *c_topics;

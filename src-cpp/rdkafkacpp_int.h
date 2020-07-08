@@ -1114,6 +1114,7 @@ public:
   static KafkaConsumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode assignment (std::vector<TopicPartition*> &partitions);
+  bool assignment_lost ();
   ErrorCode subscription (std::vector<std::string> &topics);
   ErrorCode subscribe (const std::vector<std::string> &topics);
   ErrorCode unsubscribe ();

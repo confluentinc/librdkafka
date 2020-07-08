@@ -2652,6 +2652,22 @@ public:
   virtual ConsumerGroupMetadata *groupMetadata () = 0;
 
 
+  /** @brief Check whether the consumer considers the current assignment to
+   *         have been lost involuntarily. This method is only applicable for
+   *         use with a subscribing consumer. Assignments are revoked
+   *         immediately when determined to have been lost, so this method is
+   *         only useful within a rebalance callback. Partitions that have
+   *         been lost may already be owned by other members in the group and
+   *         therefore commiting offsets, for example, may fail.
+   *
+   * @remark Calling assign(), incremental_assign() or incremental_unassign()
+   *         resets this flag.
+   *
+   * @returns Returns true if the current partition assignment is considered
+   *          lost, false otherwise.
+   */
+  virtual bool assignment_lost () = 0;
+
 };
 
 

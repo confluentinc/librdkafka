@@ -68,6 +68,7 @@ typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
 #define RD_DEPRECATED __declspec(deprecated)
+#define RD_FORMAT(...)
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -89,6 +90,12 @@ typedef SSIZE_T ssize_t;
 #define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
+
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+#define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#else
+#define RD_FORMAT(...)
+#endif
 
 #ifndef LIBRDKAFKA_TYPECHECKS
 #define LIBRDKAFKA_TYPECHECKS 1
@@ -828,7 +835,8 @@ void rd_kafka_error_destroy (rd_kafka_error_t *error);
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
-                                      const char *fmt, ...);
+                                      const char *fmt, ...)
+        RD_FORMAT(printf, 2, 3);
 
 
 /**

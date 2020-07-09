@@ -2452,25 +2452,34 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
 
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
-                             "ASSIGN", "Group \"%s\": consumer is in "
-                             "a failed state, treating incremental "
+                             "ASSIGN", "Group \"%s\": consumer has raised "
+                             "a fatal error, treating incremental "
                              "assign of %d partitions as unassign of all"
-                             "%d partitions in the current assignment",
+                             "%d partition(s) in the current assignment",
                              rkcg->rkcg_group_id->str, partitions->cnt,
                              !rkcg->rkcg_assignment ? 0
                              : rkcg->rkcg_assignment->cnt);
                 err = rd_kafka_cgrp_assign(rkcg, NULL);
-                rd_assert(err);
-                return rd_kafka_error_new(err, rd_kafka_err2str(err));
+                return rd_kafka_error_new(err, "%s", rd_kafka_err2str(err));
         }
 
         if (rd_atomic32_get(&rkcg->rkcg_assignment_lost))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                     "Partitions can not be added to a current assignment "
-                     "that is lost");
+                     "Partitions can not be added to a lost assignment");
+
+        if (partitions->cnt == 0) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
+                        "ASSIGN", "Group \"%s\": not adding empty partition "
+                        "list to existing assignment of %d partitions in join "
+                        "state %s (nothing to do)", rkcg->rkcg_group_id->str,
+                        !rkcg->rkcg_assignment ? 0
+                        : rkcg->rkcg_assignment->cnt,
+                        rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+                return NULL;
+        }
 
         /* Verify partitions do not exist in the current assignment before
-         * making any changes to it to so the operation doesn't partially
+         * making any changes to it so the operation doesn't partially
          * succeed. */
         for (i = 0; rkcg->rkcg_assignment && i < partitions->cnt; i++) {
                 const rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
@@ -2478,37 +2487,26 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                                                        rktpar->topic,
                                                        rktpar->partition)) {
                         return rd_kafka_error_new(
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                RD_KAFKA_RESP_ERR__CONFLICT,
                                 "%s [%"PRId32"] is already part of the "
                                 "current assignment",
                                 rktpar->topic, rktpar->partition);
                 }
         }
 
-        if (partitions->cnt == 0) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
-                        "ASSIGN", "Group \"%s\": adding 0 partitions to "
-                        "existing assignment of %d partitions in join state "
-                        "%s (nothing to do)", rkcg->rkcg_group_id->str,
-                        !rkcg->rkcg_assignment ? 0
-                        : rkcg->rkcg_assignment->cnt,
-                        rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
-                return NULL;
-        }
-
         rd_kafka_cgrp_version_new_barrier(rkcg);
-
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGN",
-                "Group \"%s\": adding %d partitions to existing assignment "
-                "of %d partitions in join state %s (v%"PRId32")",
-                rkcg->rkcg_group_id->str, partitions->cnt,
-                !rkcg->rkcg_assignment ? 0 : rkcg->rkcg_assignment->cnt,
-                rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
-                rkcg->rkcg_version);
 
         if (!rkcg->rkcg_assignment)
                 rkcg->rkcg_assignment = rd_kafka_topic_partition_list_new(
                                                 partitions->cnt);
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGN",
+                "Group \"%s\": adding %d partition(s) to existing assignment "
+                "of %d partition(s) in join state %s (v%"PRId32")",
+                rkcg->rkcg_group_id->str, partitions->cnt,
+                rkcg->rkcg_assignment->cnt,
+                rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                rkcg->rkcg_version);
 
         /* Add and mark partition(s) as desired */
         for (i = 0; i < partitions->cnt; i++) {
@@ -2529,18 +2527,14 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_toppar_keep(rktp);
 
                 partitions->elems[i]._private = rktp;
-                if (!rd_kafka_topic_partition_list_add0(
-                          rkcg->rkcg_assignment,
-                          rktpar->topic,
-                          rktpar->partition,
-                          rktp)) {
-                        rd_assert(
-                                !*"rd_kafka_topic_partition_list_add0 failed");
-                }
+                rd_kafka_topic_partition_list_add0(rkcg->rkcg_assignment,
+                                                   rktpar->topic,
+                                                   rktpar->partition,
+                                                   rktp);
         }
 
         rd_kafka_wrlock(rkcg->rkcg_rk);
-        rkcg->rkcg_c.assignment_size += partitions->cnt;
+        rkcg->rkcg_c.assignment_size = rkcg->rkcg_assignment->cnt;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
         rd_kafka_cgrp_set_join_state(rkcg,
@@ -2569,30 +2563,27 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
         int cur_assignment_cnt =
                 (rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0);
 
-        rd_assert(partitions);
-
         /* If the consumer has raised a fatal error, remove the entire
          * assignment */
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
-                             "UNASSIGN", "Group \"%s\": consumer is "
-                             "in a failed state, treating incremental "
+                             "UNASSIGN", "Group \"%s\": consumer has "
+                             "raised a fatal error, treating incremental "
                              "unassign of %d partitions as unassign of all "
                              "%d partitions in the current assignment",
                              rkcg->rkcg_group_id->str,
-                             partitions->cnt, !rkcg->rkcg_assignment ?
-                             0 : rkcg->rkcg_assignment->cnt);
+                             partitions->cnt, cur_assignment_cnt);
                 err = rd_kafka_cgrp_assign(rkcg, NULL);
-                rd_assert(err);
-                return rd_kafka_error_new(err, rd_kafka_err2str(err));
+                return rd_kafka_error_new(err, "%s", rd_kafka_err2str(err));
         }
 
         if (rd_atomic32_get(&rkcg->rkcg_assignment_lost) &&
-            partitions->cnt < cur_assignment_cnt) {
+            partitions->cnt != cur_assignment_cnt) {
                 return rd_kafka_error_new(
                         RD_KAFKA_RESP_ERR__INVALID_ARG,
-                        "Current assignment is lost, but incremental "
-                        "unassign only includes %d of %d partitions",
+                        "Current assignment is lost, but size of "
+                        "incremental unassign (%d) does not equal "
+                        "the size of the current assignment (%d)",
                         partitions->cnt, cur_assignment_cnt);
         }
 
@@ -2617,9 +2608,10 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
         rd_atomic32_set(&rkcg->rkcg_assignment_lost, rd_false);
 
         if (partitions->cnt == 0) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "UNASSIGN",
-                     "Group \"%s\": removing 0 of %d assigned partition(s) "
-                     "in join state %s (nothing to do)",
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
+                     "UNASSIGN", "Group \"%s\": list of partitions to remove "
+                     "is empty, not adjusting existing assignment of %d "
+                     "partition(s) in join state %s.",
                      rkcg->rkcg_group_id->str, rkcg->rkcg_assignment->cnt,
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 return NULL;
@@ -2654,7 +2646,7 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
 
         /* Update statistics */
         rd_kafka_wrlock(rkcg->rkcg_rk);
-        rkcg->rkcg_c.assignment_size -= partitions->cnt;
+        rkcg->rkcg_c.assignment_size = rkcg->rkcg_assignment->cnt;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
         for (i = 0 ; i < partitions->cnt ; i++) {
@@ -3448,7 +3440,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         ? rd_kafka_consumer_group_metadata_new_with_genid(
                                 rkcg->rkcg_rk->rk_conf.group_id_str,
                                 rkcg->rkcg_generation_id,
-                                RD_KAFKAP_STR_DUP(rkcg->rkcg_member_id),
+                                rkcg->rkcg_member_id->str,
                                 rkcg->rkcg_rk->rk_conf.group_instance_id)
                         : NULL;
                 rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
@@ -3559,7 +3551,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         error = !err ? NULL
                                      : rd_kafka_error_new(
                                                 err,
-                                                rd_kafka_err2str(err));
+                                                "Consumer is terminating");
                 } else {
                         switch (rko->rko_u.assign.method)
                         {
@@ -3584,7 +3576,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                                                 rko->rko_u.assign.partitions);
                                 break;
                         default:
-                                rd_assert(0);
+                                RD_NOTREACHED();
                                 break;
                         }
                 }
@@ -4314,7 +4306,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
 }
 
 
-static int unittest_iteration(const char *group_id,
+static int unittest_consumer_group_metadata_iteration(const char *group_id,
                           int32_t generation_id,
                           const char *member_id,
                           const char *group_instance_id) {
@@ -4387,7 +4379,7 @@ static int unittest_consumer_group_metadata (void) {
                                         if (strcmp(group_instance_id,
                                                    "NULL") == 0)
                                                 group_instance_id = NULL;
-                                        ret = unittest_iteration(
+                                        ret = unittest_consumer_group_metadata_iteration(
                                                         group_id,
                                                         gen_id,
                                                         member_id,

@@ -101,7 +101,8 @@ rd_kafka_assign0 (rd_kafka_t *rk,
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
-                        rd_kafka_err2str(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP));
+                                          "Requires a consumer with group.id "
+                                          "configured");
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
 

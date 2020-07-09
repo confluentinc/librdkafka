@@ -81,7 +81,9 @@
 #define PRIusz  "zu"
 #define PRIdsz  "zd"
 
+#ifndef RD_FORMAT
 #define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#endif
 #define rd_snprintf(...)  snprintf(__VA_ARGS__)
 #define rd_vsnprintf(...) vsnprintf(__VA_ARGS__)
 

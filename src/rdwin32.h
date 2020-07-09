@@ -102,7 +102,9 @@ struct msghdr {
 #define PRIusz  "Iu"
 #define PRIdsz  "Id"
 
+#ifndef RD_FORMAT
 #define RD_FORMAT(...)
+#endif
 
 static RD_UNUSED RD_INLINE
 int rd_vsnprintf (char *str, size_t size, const char *format, va_list ap) {

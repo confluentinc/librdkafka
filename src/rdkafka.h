@@ -3715,10 +3715,12 @@ rd_kafka_incremental_unassign (rd_kafka_t *rk,
  * albeit empty assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
  *
- * When used from a rebalance callback, the application shall pass the
+ * When used from a rebalance callback, the application should pass the
  * partition list passed to the callback (or a copy of it) even if the list
  * is empty (i.e. should not pass NULL in this case) so as to maintain
- * internal join state.
+ * internal join state. This is not strictly required - the application
+ * may adjust the assignment provided by the group. However, this is rarely
+ * useful in practice.
  *
  * @returns An error code indicating if the new assignment was applied or not.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
@@ -3902,6 +3904,14 @@ rd_kafka_consumer_group_metadata_new (const char *group_id);
 /**
  * @brief Create a new consumer group metadata object.
  *        This is typically only used for writing tests.
+ *
+ * @param group_id The group id (must not be NULL).
+ *
+ * @param generation_id The group generation id.
+ *
+ * @param member_id The group member id (must not be NULL).
+ *
+ * @param group_instance_id The group instance id (may be NULL).
  *
  * @remark The returned pointer must be freed by the application using
  *         rd_kafka_consumer_group_metadata_destroy().

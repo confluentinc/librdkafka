@@ -517,7 +517,7 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko,
 /**
  * @brief Reply to 'rko' re-using the same rko with rko_error specified
  *        by \p error (may be NULL) and rko_err set to the corresponding
- *        error code.
+ *        error code. Assumes ownership of \p error.
  *
  * If there is no replyq the rko is destroyed.
  *
@@ -623,7 +623,7 @@ rd_kafka_error_t *rd_kafka_op_error_destroy (rd_kafka_op_t *rko) {
 
         return rd_kafka_error_new(
                 RD_KAFKA_RESP_ERR__TIMED_OUT,
-                rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT));
+                "Operation timed out");
 }
 
 

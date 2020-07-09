@@ -2025,6 +2025,7 @@ static int verifyValidityAndBalance0 (const char *func, int line,
                                       const rd_kafka_metadata_t *metadata) {
         int fails = 0;
         int i;
+        rd_bool_t verbose = rd_false; /* Enable for troubleshooting */
 
         RD_UT_SAY("%s:%d: verifying assignment for %d member(s):",
                   func, line, (int)member_cnt);
@@ -2035,19 +2036,23 @@ static int verifyValidityAndBalance0 (const char *func, int line,
                         members[i].rkgm_assignment;
                 int p, j;
 
-                RD_UT_SAY("%s:%d:   consumer \"%s\", %d subscribed topic(s), "
-                          "%d assigned partition(s):",
-                          func, line, consumer,
-                          members[i].rkgm_subscription->cnt,
-                          partitions->cnt);
+                if (verbose)
+                        RD_UT_SAY("%s:%d:   "
+                                  "consumer \"%s\", %d subscribed topic(s), "
+                                  "%d assigned partition(s):",
+                                  func, line, consumer,
+                                  members[i].rkgm_subscription->cnt,
+                                  partitions->cnt);
 
                 for (p = 0 ; p < partitions->cnt ; p++) {
                         const rd_kafka_topic_partition_t *partition =
                                 &partitions->elems[p];
 
-                        RD_UT_SAY("%s:%d:     %s [%"PRId32"]",
-                                  func, line,
-                                  partition->topic, partition->partition);
+                        if (verbose)
+                                RD_UT_SAY("%s:%d:     %s [%"PRId32"]",
+                                          func, line,
+                                          partition->topic,
+                                          partition->partition);
 
                         if (!rd_kafka_topic_partition_list_find(
                                     members[i].rkgm_subscription,

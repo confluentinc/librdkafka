@@ -160,7 +160,7 @@ static void direct_assign_test_4(RdKafka::KafkaConsumer *consumer,
   delete assignment[0];
   assignment.clear();
   RdKafka::Message *m = consumer->consume(5000);
-  test_assert(m->err() == RdKafka::ErrorCode::ERR_NO_ERROR, "Expecting a consumed message.");
+  test_assert(m->err() == RdKafka::ERR_NO_ERROR, "Expecting a consumed message.");
   test_assert(m->len() == 100, "Expecting msg len to be 100"); // implies read from topic 1.
   delete m;
 
@@ -169,7 +169,7 @@ static void direct_assign_test_4(RdKafka::KafkaConsumer *consumer,
   test_assert(assignment.size() == 0, "Expecting current assignment to have size 0");
 
   m = consumer->consume(100);
-  test_assert(m->err() == RdKafka::ErrorCode::ERR__TIMED_OUT, "Not expecting a consumed message.");
+  test_assert(m->err() == RdKafka::ERR__TIMED_OUT, "Not expecting a consumed message.");
   delete m;
 
   consumer->incremental_assign(toppars2);
@@ -178,7 +178,7 @@ static void direct_assign_test_4(RdKafka::KafkaConsumer *consumer,
   delete assignment[0];
   assignment.clear();
   m = consumer->consume(5000);
-  test_assert(m->err() == RdKafka::ErrorCode::ERR_NO_ERROR, "Expecting a consumed message.");
+  test_assert(m->err() == RdKafka::ERR_NO_ERROR, "Expecting a consumed message.");
   test_assert(m->len() == 200, "Expecting msg len to be 200"); // implies read from topic 2.
   delete m;
 
@@ -190,7 +190,7 @@ static void direct_assign_test_4(RdKafka::KafkaConsumer *consumer,
   assignment.clear();
 
   m = consumer->consume(5000);
-  test_assert(m->err() == RdKafka::ErrorCode::ERR_NO_ERROR, "Expecting a consumed message.");
+  test_assert(m->err() == RdKafka::ERR_NO_ERROR, "Expecting a consumed message.");
   delete m;
 
   consumer->incremental_unassign(toppars2);

@@ -2433,40 +2433,6 @@ public:
   virtual ErrorCode unassign () = 0;
 
   /**
-   * @brief Incrementally add \p partitions to the current assignment.
-   *
-   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
-   * this method should be used in a rebalance callback to adjust the current
-   * assignment appropriately in the case where the rebalance type is
-   * ERR__ASSIGN_PARTITIONS. The application must pass the partition list
-   * passed to the callback (or a copy of it), even if the list is empty.
-   * This method may also be used outside the context of a rebalance callback.
-   *
-   * @returns NULL on success, or an error object if the operation was
-   *          unsuccessful.
-   *
-   * @remark The returned object must be deleted by the application.
-   */
-  virtual Error *incremental_assign (const std::vector<TopicPartition*> &partitions) = 0;
-
-  /**
-   * @brief Incrementally remove \p partitions from the current assignment.
-   *
-   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
-   * this method should be used in a rebalance callback to adjust the current
-   * assignment appropriately in the case where the rebalance type is
-   * ERR__REVOKE_PARTITIONS. The application must pass the partition list
-   * passed to the callback (or a copy of it), even if the list is empty.
-   * This method may also be used outside the context of a rebalance callback.
-   *
-   * @returns NULL on success, or an error object if the operation was
-   *          unsuccessful.
-   *
-   * @remark The returned object must be deleted by the application.
-   */
-  virtual Error *incremental_unassign (const std::vector<TopicPartition*> &partitions) = 0;
-
-  /**
    * @brief Consume message or get error event, triggers callbacks.
    *
    * Will automatically call registered callbacks for any such queued events,
@@ -2701,6 +2667,42 @@ public:
    *          lost, false otherwise.
    */
   virtual bool assignment_lost () = 0;
+
+
+  /**
+   * @brief Incrementally add \p partitions to the current assignment.
+   *
+   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+   * this method should be used in a rebalance callback to adjust the current
+   * assignment appropriately in the case where the rebalance type is
+   * ERR__ASSIGN_PARTITIONS. The application must pass the partition list
+   * passed to the callback (or a copy of it), even if the list is empty.
+   * This method may also be used outside the context of a rebalance callback.
+   *
+   * @returns NULL on success, or an error object if the operation was
+   *          unsuccessful.
+   *
+   * @remark The returned object must be deleted by the application.
+   */
+  virtual Error *incremental_assign (const std::vector<TopicPartition*> &partitions) = 0;
+
+
+  /**
+   * @brief Incrementally remove \p partitions from the current assignment.
+   *
+   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+   * this method should be used in a rebalance callback to adjust the current
+   * assignment appropriately in the case where the rebalance type is
+   * ERR__REVOKE_PARTITIONS. The application must pass the partition list
+   * passed to the callback (or a copy of it), even if the list is empty.
+   * This method may also be used outside the context of a rebalance callback.
+   *
+   * @returns NULL on success, or an error object if the operation was
+   *          unsuccessful.
+   *
+   * @remark The returned object must be deleted by the application.
+   */
+  virtual Error *incremental_unassign (const std::vector<TopicPartition*> &partitions) = 0;
 
 };
 

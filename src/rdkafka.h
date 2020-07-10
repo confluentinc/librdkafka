@@ -3921,12 +3921,9 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
  * @brief Create a new consumer group metadata object.
  *        This is typically only used for writing tests.
  *
- * @param group_id The group id (must not be NULL).
- *
+ * @param group_id The group id.
  * @param generation_id The group generation id.
- *
- * @param member_id The group member id (must not be NULL).
- *
+ * @param member_id The group member id.
  * @param group_instance_id The group instance id (may be NULL).
  *
  * @remark The returned pointer must be freed by the application using

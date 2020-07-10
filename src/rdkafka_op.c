@@ -527,6 +527,7 @@ int rd_kafka_op_error_reply (rd_kafka_op_t *rko,
                              rd_kafka_error_t *error) {
 
         if (!rko->rko_replyq.q) {
+                RD_IF_FREE(error, rd_kafka_error_destroy);
                 rd_kafka_op_destroy(rko);
                 return 0;
         }

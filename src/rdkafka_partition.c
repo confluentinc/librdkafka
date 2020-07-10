@@ -1276,7 +1276,7 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
         rd_kafka_topic_partition_list_add0(part,
                                            rktp->rktp_rkt->rkt_topic->str,
                                            rktp->rktp_partition,
-					   rd_kafka_toppar_keep(rktp));
+					   rktp);
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
 	rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -2773,6 +2773,8 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
         rktpar->partition = partition;
 	rktpar->offset = RD_KAFKA_OFFSET_INVALID;
         rktpar->_private = _private;
+        if (_private)
+                rd_kafka_toppar_keep(_private);
 
         return rktpar;
 }
@@ -2846,9 +2848,7 @@ rd_kafka_topic_partition_add_copy (rd_kafka_topic_partition_list_t *rktparlist,
                 rktparlist,
                 rktpar->topic,
                 rktpar->partition,
-                rktpar->_private ?
-                rd_kafka_toppar_keep((rd_kafka_toppar_t *)rktpar->_private) :
-                NULL);
+                rktpar->_private);
 
         rd_kafka_topic_partition_update(dst, rktpar);
 }

@@ -2492,7 +2492,6 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                                   rd_kafka_topic_partition_list_t
                                   *partitions) {
         int i;
-        rd_kafka_resp_err_t err;
 
         rd_assert(partitions);
 
@@ -2505,8 +2504,9 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                              rkcg->rkcg_group_id->str, partitions->cnt,
                              !rkcg->rkcg_assignment ? 0
                              : rkcg->rkcg_assignment->cnt);
-                err = rd_kafka_cgrp_assign(rkcg, NULL);
-                return rd_kafka_error_new(err, "%s", rd_kafka_err2str(err));
+                rd_kafka_cgrp_assign(rkcg, NULL);
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__FATAL,
+                                          "Consumer has raised a fatal error");
         }
 
         if (rd_atomic32_get(&rkcg->rkcg_assignment_lost))
@@ -2570,8 +2570,6 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                         /* LOG_ERR already emitted by rd_kafka_toppar_get2 */
                         continue;
 
-                rd_kafka_toppar_keep(rktp);
-
                 partitions->elems[i]._private = rktp;
                 rd_kafka_topic_partition_list_add0(rkcg->rkcg_assignment,
                                                    rktpar->topic,
@@ -2605,7 +2603,6 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
                                     rd_kafka_topic_partition_list_t
                                     *partitions) {
         int i;
-        rd_kafka_resp_err_t err;
         int cur_assignment_cnt =
                 (rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0);
 
@@ -2619,8 +2616,9 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
                              "%d partitions in the current assignment",
                              rkcg->rkcg_group_id->str,
                              partitions->cnt, cur_assignment_cnt);
-                err = rd_kafka_cgrp_assign(rkcg, NULL);
-                return rd_kafka_error_new(err, "%s", rd_kafka_err2str(err));
+                rd_kafka_cgrp_assign(rkcg, NULL);
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__FATAL,
+                                          "Consumer has raised a fatal error");
         }
 
         if (rd_atomic32_get(&rkcg->rkcg_assignment_lost) &&
@@ -2980,9 +2978,9 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
                 if (assignment)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
-                                     "ASSIGN", "Group \"%s\": Consumer is in "
-                                     "a failed state, treating assign as "
-                                     "unassign", rkcg->rkcg_group_id->str);
+                                     "ASSIGN", "Group \"%s\": Consumer has "
+                                     "raised a fatal error, treating assign "
+                                     "as unassign", rkcg->rkcg_group_id->str);
                 err = RD_KAFKA_RESP_ERR__FATAL;
                 assignment = NULL;
         }
@@ -3609,6 +3607,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                                 error = !err ? NULL
                                              : rd_kafka_error_new(
                                                         err,
+                                                        "%s",
                                                         rd_kafka_err2str(err));
                                 break;
                         case RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN:
@@ -4162,9 +4161,6 @@ rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
                                                  *group_instance_id) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        rd_assert(group_id);
-        rd_assert(member_id);
-
         cgmetadata = rd_calloc(1, sizeof(*cgmetadata));
         cgmetadata->group_id = rd_strdup(group_id);
         cgmetadata->generation_id = generation_id;
@@ -4328,7 +4324,7 @@ rd_kafka_error_t *rd_kafka_consumer_group_metadata_read (
                                           "Input buffer member id is not "
                                           "safe");
 
-        group_instance_id_is_null = (int8_t)*next++;
+        group_instance_id_is_null = (int8_t)*(next++);
         if (!group_instance_id_is_null) {
                 group_instance_id = next;
                 next = str_is_printable(group_instance_id, end);

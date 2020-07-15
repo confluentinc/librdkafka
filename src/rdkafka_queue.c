@@ -602,8 +602,10 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
                         /* If this is a control messages, don't return
                          * message to application, only store the offset */
-                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
+                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                                rd_kafka_op_destroy(rko);
                                 continue;
+                        }
                 }
 
 		/* Get rkmessage from rko and append to array. */

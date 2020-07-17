@@ -5,7 +5,6 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>librdkafka</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
-    <PlatformToolset>Visual Studio 2013 (v120)</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>

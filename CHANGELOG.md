@@ -97,6 +97,8 @@ librdkafka.
  * Don't propagate temporary offset lookup errors to application.
  * Immediately refresh topic metadata when partitions are reassigned to other
    brokers, avoiding a fetch stall of up to `topic.metadata.refresh.interval.ms`. (#2955)
+ * Memory for batches containing control messages would not be freed when
+   using the batch consume APIs (@pf-qiu, #2990).
 
 
 ### Producer fixes

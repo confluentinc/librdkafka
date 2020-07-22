@@ -69,13 +69,13 @@ librdkafka.
 
  * The client could crash in rare circumstances on ApiVersion or
    SaslHandshake request timeouts (#2326)
- * `./configure --LDFLAGS='a=b, c=d` with arguments containing = are now
+ * `./configure --LDFLAGS='a=b, c=d'` with arguments containing = are now
    supported (by @sky92zwq).
  * `./configure` arguments now take precedence over cached `configure` variables
    from previous invocation.
  * Fix theoretical crash on coord request failure.
  * Unknown partition error could be triggered for existing partitions when
-   additional topics were added to a topic (@benesch, #2915)
+   additional partitions were added to a topic (@benesch, #2915)
  * Quickly refresh topic metadata for desired but non-existent partitions.
    This will speed up the initial discovery delay when new partitions are added
    to an existing topic (#2917).

@@ -515,8 +515,13 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 
 void test_consumer_wait_assignment (rd_kafka_t *rk);
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
-			   rd_kafka_topic_partition_list_t *parts);
+                           rd_kafka_topic_partition_list_t *parts);
+void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,
+                                       rd_kafka_topic_partition_list_t *parts);
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
+void test_consumer_incremental_unassign (const char *what, rd_kafka_t *rk,
+                                         rd_kafka_topic_partition_list_t
+                                         *parts);
 void test_consumer_assign_partition (const char *what, rd_kafka_t *rk,
                                      const char *topic, int32_t partition,
                                      int64_t offset);

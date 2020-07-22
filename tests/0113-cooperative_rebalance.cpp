@@ -33,6 +33,12 @@
 #include <assert.h>
 #include "testcpp.h"
 #include <fstream>
+extern "C" {
+#include "test.h"
+#include "rdkafka.h"
+#include "rdkafka_mock.h"
+}
+
 using namespace std;
 
 
@@ -493,7 +499,6 @@ static void subscribe_no_cb_test () {
   std::string errstr;
 
   /* Create consumer 1 */
-  TestRebalanceCb rebalance_cb1;
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, test_timeout_s);
   Test::conf_set(conf, "client.id", "C_1");
@@ -508,7 +513,6 @@ static void subscribe_no_cb_test () {
   delete conf;
 
   /* Create consumer 2 */
-  TestRebalanceCb rebalance_cb2;
   Test::conf_init(&conf, NULL, test_timeout_s);
   Test::conf_set(conf, "client.id", "C_2");
   Test::conf_set(conf, "group.id", topic_name.c_str()); /* same group as c1 */
@@ -584,7 +588,9 @@ static void lost_partitions_poll_timeout_test () {
 static void lost_partitions_session_timeout_test() {
 }
 
-static void lost_partitions_heartbeat_unknown_member_id_test () {
+
+extern "C" {
+
 }
 
 static void lost_partitions_heartbeat_illegal_generation_id_test () {
@@ -610,10 +616,56 @@ static void fetchers_test () {
 }
 
 extern "C" {
+
+  static void rebalance_cb (rd_kafka_t *rk,
+                            rd_kafka_resp_err_t err,
+                            rd_kafka_topic_partition_list_t *parts,
+                            void *opaque) {
+    if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+      test_consumer_incremental_assign("assign", rk, parts);
+    } else {
+      test_consumer_incremental_unassign("unassign", rk, parts);
+    }
+  }
+
+  static void lost_partitions_heartbeat_unknown_member_id_test () {
+    const char *bootstraps;
+    rd_kafka_mock_cluster_t *mcluster;
+    const char *groupid = "mygroup";
+    const char *topic = "test";
+    rd_kafka_t *c;
+    int test_timeout_s = 120;
+    rd_kafka_conf_t *conf;
+
+    mcluster = test_mock_cluster_new(3, &bootstraps);
+
+    rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
+
+    test_conf_init(&conf, NULL, 30);
+    test_conf_set(conf, "bootstrap.servers", bootstraps);
+    test_conf_set(conf, "security.protocol", "PLAINTEXT");
+    test_conf_set(conf, "group.id", groupid);
+    test_conf_set(conf, "session.timeout.ms", "5000");
+    test_conf_set(conf, "heartbeat.interval.ms", "1000");
+    test_conf_set(conf, "auto.offset.reset", "earliest");
+    test_conf_set(conf, "enable.auto.commit", "true");
+    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+
+    c = test_create_consumer(groupid, NULL, conf, NULL);
+
+    test_consumer_subscribe(c, topic);
+
+    test_consumer_close(c);
+
+    rd_kafka_destroy(c);
+
+    test_mock_cluster_destroy(mcluster);
+  }
+
   int main_0113_cooperative_rebalance (int argc, char **argv) {
-    assign_tests();
-    subscribe_with_cb_test();
-    subscribe_no_cb_test();
+    // assign_tests();
+    // subscribe_with_cb_test();
+    // subscribe_no_cb_test();
     cooperative_close_empty_assignment_test();
     unsubscribe_with_cb_test();
     unsubscribe_no_cb_test();

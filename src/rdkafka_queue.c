@@ -492,7 +492,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
                 rd_kafka_op_res_t res;
-
+fprintf(stderr, "handling rko_type %d\n", rko->rko_type);
                 rd_kafka_q_deq0(&localq, rko);
                 res = rd_kafka_op_handle(rk, &localq, rko, cb_type,
                                          opaque, callback);

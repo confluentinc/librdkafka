@@ -26,6 +26,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+extern "C" {
+#include "../src/rdkafka_proto.h"
+#include "test.h"
+#include "rdkafka.h"
+#include "rdkafka_mock.h"
+}
 #include <iostream>
 #include <map>
 #include <cstring>
@@ -33,14 +39,9 @@
 #include <assert.h>
 #include "testcpp.h"
 #include <fstream>
-extern "C" {
-#include "test.h"
-#include "rdkafka.h"
-#include "rdkafka_mock.h"
-}
+
 
 using namespace std;
-
 
 
 /** Incremental assign, then assign(NULL).
@@ -617,15 +618,55 @@ static void fetchers_test () {
 
 extern "C" {
 
+  static int rebalance_cnt;
+  static rd_kafka_resp_err_t rebalance_exp_event;
+
   static void rebalance_cb (rd_kafka_t *rk,
                             rd_kafka_resp_err_t err,
                             rd_kafka_topic_partition_list_t *parts,
                             void *opaque) {
+    rebalance_cnt++;
+    TEST_SAY("Rebalance #%d: %s: %d partition(s)\n",
+             rebalance_cnt, rd_kafka_err2name(err), parts->cnt);
+
+    TEST_ASSERT(err == rebalance_exp_event,
+                "Expected rebalance event %s, not %s",
+                rd_kafka_err2name(rebalance_exp_event),
+                rd_kafka_err2name(err));
+
     if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
       test_consumer_incremental_assign("assign", rk, parts);
     } else {
       test_consumer_incremental_unassign("unassign", rk, parts);
     }
+  }
+
+  /**
+   * @brief Wait for an expected rebalance event, or fail.
+   */
+  static void expect_rebalance (const char *what, rd_kafka_t *c,
+                                rd_kafka_resp_err_t exp_event,
+                                int timeout_s) {
+    int64_t tmout = test_clock() + (timeout_s * 1000000);
+    int start_cnt = rebalance_cnt;
+
+    TEST_SAY("Waiting for %s (%s) for %ds\n",
+      what, rd_kafka_err2name(exp_event), timeout_s);
+
+    rebalance_exp_event = exp_event;
+
+    while (tmout > test_clock() && rebalance_cnt == start_cnt) {
+      if (test_consumer_poll_once(c, NULL, 1000))
+        rd_sleep(1);
+    }
+
+    if (rebalance_cnt == start_cnt + 1) {
+      rebalance_exp_event = RD_KAFKA_RESP_ERR_NO_ERROR;
+      return;
+    }
+
+    TEST_FAIL("Timed out waiting for %s (%s)\n",
+      what, rd_kafka_err2name(exp_event));
   }
 
   static void lost_partitions_heartbeat_unknown_member_id_test () {
@@ -641,6 +682,12 @@ extern "C" {
 
     rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
 
+    /* Seed the topic with messages */
+    test_produce_msgs_easy_v(topic, 0, 0, 0, 100, 10,
+                             "bootstrap.servers", bootstraps,
+                             "batch.num.messages", "10",
+                             NULL);
+
     test_conf_init(&conf, NULL, 30);
     test_conf_set(conf, "bootstrap.servers", bootstraps);
     test_conf_set(conf, "security.protocol", "PLAINTEXT");
@@ -648,13 +695,30 @@ extern "C" {
     test_conf_set(conf, "session.timeout.ms", "5000");
     test_conf_set(conf, "heartbeat.interval.ms", "1000");
     test_conf_set(conf, "auto.offset.reset", "earliest");
-    test_conf_set(conf, "enable.auto.commit", "true");
+    test_conf_set(conf, "enable.auto.commit", "false");
     test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
 
-    c = test_create_consumer(groupid, NULL, conf, NULL);
+    c = test_create_consumer(groupid, rebalance_cb, conf, NULL);
 
     test_consumer_subscribe(c, topic);
 
+    expect_rebalance("initial assignment", c,
+                     RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS, 5+2);
+
+    // /* Let Heartbeats fail after a couple of successful ones */
+    rd_kafka_mock_push_request_errors(
+      mcluster, RD_KAFKAP_Heartbeat,
+      5,
+      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION);
+
+    expect_rebalance("lost partitions", c,
+                     RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS, 10+2);
+
+    rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
     test_consumer_close(c);
 
     rd_kafka_destroy(c);
@@ -678,6 +742,7 @@ extern "C" {
     stress_test();
     java_interop_test();
     fetchers_test();
+    // auto-commit true/false.
     return 0;
   }
 }

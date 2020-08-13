@@ -3547,6 +3547,9 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *
  * Regex and full topic names can be mixed in \p topics.
  *
+ * @remark The \p topics list is copied, not aliased. It is safe to free the
+ *         list with rd_kafka_topic_partition_list_destroy() after subscribing.
+ *
  * @remark Only the \c .topic field is used in the supplied \p topics list,
  *         all other fields are ignored.
  *

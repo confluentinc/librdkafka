@@ -54,7 +54,7 @@ endif()
 # }
 
 # ZSTD {
-find_package(Zstd QUIET)
+find_package(ZSTD QUIET)
 if(ZSTD_FOUND)
   set(with_zstd_default ON)
 else()

@@ -186,7 +186,7 @@ int _tthread_timespec_get(struct timespec *ts, int base);
  * tinycthreads but the runtime libc also provides C11 threads.
  * The *BSD values are notably different. */
 #define thrd_success  0 /**< The requested operation succeeded */
-#define thrd_busy     1 /**< The requested operation failed because a tesource requested by a test and return function is already in use */
+#define thrd_busy     1 /**< The requested operation failed because the resource has been requested by a test and return function is already in use */
 #define thrd_error    2 /**< The requested operation failed */
 #define thrd_nomem    3 /**< The requested operation failed because it was unable to allocate memory */
 #define thrd_timedout 4 /**< The time specified in the call was reached without acquiring the requested resource */

@@ -477,15 +477,6 @@ int main (int argc, char **argv) {
                         exit(1);
                 }
 
-                /* Consumer groups always use broker based offset storage */
-                if (rd_kafka_topic_conf_set(topic_conf, "offset.store.method",
-                                            "broker",
-                                            errstr, sizeof(errstr)) !=
-                    RD_KAFKA_CONF_OK) {
-                        fprintf(stderr, "%% %s\n", errstr);
-                        exit(1);
-                }
-
                 /* Set default topic config for pattern-matched topics. */
                 rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
 

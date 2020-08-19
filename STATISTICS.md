@@ -15,7 +15,7 @@ The stats are provided as a JSON object string.
 
 ## General structure
 
-All fields that contain sizes are are in bytes unless otherwise noted.
+All fields that contain sizes are in bytes unless otherwise noted.
 
 ```
 {
@@ -89,7 +89,7 @@ stateage | int gauge | | Time since last broker state change (microseconds)
 outbuf_cnt | int gauge | | Number of requests awaiting transmission to broker
 outbuf_msg_cnt | int gauge | | Number of messages awaiting transmission to broker
 waitresp_cnt | int gauge | | Number of requests in-flight to broker awaiting response
-waitresp_msg_cnt | int gauge | | Number of messages in-flight to broker awaitign response
+waitresp_msg_cnt | int gauge | | Number of messages in-flight to broker awaiting response
 tx | int | | Total number of requests sent
 txbytes | int | | Total number of bytes sent
 txerrs | int | | Total number of transmission errors
@@ -99,7 +99,7 @@ rx | int | | Total number of responses received
 rxbytes | int | | Total number of bytes received
 rxerrs | int | | Total number of receive errors
 rxcorriderrs | int | | Total number of unmatched correlation ids in response (typically for timed out requests)
-rxpartial | int | | Total number of partial MessageSets received. The broker may return partial responses if the full MessageSet could not fit in remaining Fetch response size.
+rxpartial | int | | Total number of partial MessageSets received. The broker may return partial responses if the full MessageSet could not fit in the remaining Fetch response size.
 req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)

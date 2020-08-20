@@ -962,9 +962,6 @@ int main (int argc, char **argv) {
 		case 'd':
 			debug = optarg;
 			break;
-        case 'h':
-            read_hdrs = 1;
-            break;
         case 'H':
             if (mode == 'P') {
                 char *name, *val;

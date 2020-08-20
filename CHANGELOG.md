@@ -1,3 +1,14 @@
+# librdkafka v1.6.0
+
+## Fixes
+
+### General fixes
+
+ * `rd_kafka_topic_opaque()` (used by the C++ API) would cause object
+    refcounting issues when used on light-weight (error-only) topic objects
+    such as consumer errors (#2693)
+
+
 # librdkafka v1.5.0
 
 The v1.5.0 release brings usability improvements, enhancements and fixes to

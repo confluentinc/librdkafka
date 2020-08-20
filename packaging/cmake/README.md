@@ -36,3 +36,22 @@ If you use librdkafka as submodule in cmake project and want static link of libr
       set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
       add_subdirectory(librdkafka)
       target_link_libraries(your_library_or_executable rdkafka)
+
+# Build DEB/RPM packages on Linux
+
+	$ cd _cmake_build
+	$ cpack -G DEB # or RPM
+
+# Build a Nuget package with Visual Studio
+
+Build both Debug and RelWithDebInfo
+
+	$ cmake -G "Visual Studio 16 2019" -A x64 -B _cmake_build
+	$ cmake --build _cmake_build --config Debug -j
+	$ cmake --build _cmake_build --config RelWithDebInfo -j
+	
+Then run cpack as follows
+	
+	$ cd _cmake_build
+	$ set PATH=%PATH%;c:\some\dir\that\contains\nuget.exe
+	$ cpack -G NuGet -C Debug;RelWithDebInfo

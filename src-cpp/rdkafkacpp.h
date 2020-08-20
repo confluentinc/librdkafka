@@ -56,27 +56,26 @@
 #include <sys/types.h>
 
 #ifdef _WIN32
-#ifndef ssize_t
-#ifndef _BASETSD_H_
-#include <basetsd.h>
-#endif
-#ifndef _SSIZE_T_DEFINED
-#define _SSIZE_T_DEFINED
+#  ifndef ssize_t
+#    ifndef _BASETSD_H_
+#      include <basetsd.h>
+#    endif
+#    ifndef _SSIZE_T_DEFINED
+#      define _SSIZE_T_DEFINED
 typedef SSIZE_T ssize_t;
+#    endif
+#  endif
+#  ifndef LIBRDKAFKACPP_STATICLIB
+#    ifdef LIBRDKAFKACPP_EXPORTS
+#      define RDCPP_EXPORT __declspec(dllexport)
+#    else
+#      define RDCPP_EXPORT __declspec(dllimport)
+#    endif
+#  endif
 #endif
-#endif
-#undef RD_EXPORT
-#ifdef LIBRDKAFKA_STATICLIB
-#define RD_EXPORT
-#else
-#ifdef LIBRDKAFKACPP_EXPORTS
-#define RD_EXPORT __declspec(dllexport)
-#else
-#define RD_EXPORT __declspec(dllimport)
-#endif
-#endif
-#else
-#define RD_EXPORT
+
+#ifndef RDCPP_EXPORT
+#  define RDCPP_EXPORT
 #endif
 
 /**@endcond*/
@@ -118,20 +117,20 @@ namespace RdKafka {
  *
  * @sa See RD_KAFKA_VERSION for how to parse the integer format.
  */
-RD_EXPORT
+RDCPP_EXPORT
 int          version ();
 
 /**
  * @brief Returns the librdkafka version as string.
  */
-RD_EXPORT
+RDCPP_EXPORT
 std::string  version_str();
 
 /**
  * @brief Returns a CSV list of the supported debug contexts
  *        for use with Conf::Set("debug", ..).
  */
-RD_EXPORT
+RDCPP_EXPORT
 std::string get_debug_contexts();
 
 /**
@@ -143,7 +142,7 @@ std::string get_debug_contexts();
  * \p wait_destroyed() function can be used for applications where
  * a clean shutdown is required.
  */
-RD_EXPORT
+RDCPP_EXPORT
 int          wait_destroyed(int timeout_ms);
 
 
@@ -481,7 +480,7 @@ enum ErrorCode {
 /**
  * @brief Returns a human readable representation of a kafka error.
  */
-RD_EXPORT
+RDCPP_EXPORT
 std::string  err2str(RdKafka::ErrorCode err);
 
 
@@ -542,7 +541,7 @@ class KafkaConsumer;
  *
  * Error objects must be deleted explicitly to free its resources.
  */
-class RD_EXPORT Error {
+class RDCPP_EXPORT Error {
  public:
 
  /**
@@ -627,7 +626,7 @@ class RD_EXPORT Error {
  * serve queued delivery report callbacks.
 
  */
-class RD_EXPORT DeliveryReportCb {
+class RDCPP_EXPORT DeliveryReportCb {
  public:
   /**
    * @brief Delivery report callback.
@@ -665,7 +664,7 @@ class RD_EXPORT DeliveryReportCb {
  * serve queued SASL/OAUTHBEARER token refresh callbacks (when
  * OAUTHBEARER is the SASL mechanism).
  */
-class RD_EXPORT OAuthBearerTokenRefreshCb {
+class RDCPP_EXPORT OAuthBearerTokenRefreshCb {
  public:
   /**
    * @brief SASL/OAUTHBEARER token refresh callback class.
@@ -683,7 +682,7 @@ class RD_EXPORT OAuthBearerTokenRefreshCb {
  *
  * @sa RdKafka::Conf::set() \c "partitioner_cb"
  */
-class RD_EXPORT PartitionerCb {
+class RDCPP_EXPORT PartitionerCb {
  public:
   /**
    * @brief Partitioner callback
@@ -742,7 +741,7 @@ class PartitionerKeyPointerCb {
  *
  * @sa RdKafka::Event
  */
-class RD_EXPORT EventCb {
+class RDCPP_EXPORT EventCb {
  public:
   /**
    * @brief Event callback
@@ -758,7 +757,7 @@ class RD_EXPORT EventCb {
 /**
  * @brief Event object class as passed to the EventCb callback.
  */
-class RD_EXPORT Event {
+class RDCPP_EXPORT Event {
  public:
   /** @brief Event type */
   enum Type {
@@ -852,7 +851,7 @@ class RD_EXPORT Event {
 /**
  * @brief Consume callback class
  */
-class RD_EXPORT ConsumeCb {
+class RDCPP_EXPORT ConsumeCb {
  public:
   /**
    * @brief The consume callback is used with
@@ -870,7 +869,7 @@ class RD_EXPORT ConsumeCb {
 /**
  * @brief \b KafkaConsumer: Rebalance callback class
  */
-class RD_EXPORT RebalanceCb {
+class RDCPP_EXPORT RebalanceCb {
 public:
   /**
    * @brief Group rebalance callback for use with RdKafka::KafkaConsumer
@@ -932,7 +931,7 @@ public:
 /**
  * @brief Offset Commit callback class
  */
-class RD_EXPORT OffsetCommitCb {
+class RDCPP_EXPORT OffsetCommitCb {
 public:
   /**
    * @brief Set offset commit callback for use with consumer groups
@@ -962,7 +961,7 @@ public:
  *
  * @remark Class instance must outlive the RdKafka client instance.
  */
-class RD_EXPORT SslCertificateVerifyCb {
+class RDCPP_EXPORT SslCertificateVerifyCb {
 public:
   /**
    * @brief SSL broker certificate verification callback.
@@ -1015,7 +1014,7 @@ public:
  * @brief \b Portability: SocketCb callback class
  *
  */
-class RD_EXPORT SocketCb {
+class RDCPP_EXPORT SocketCb {
  public:
   /**
    * @brief Socket callback
@@ -1040,7 +1039,7 @@ class RD_EXPORT SocketCb {
  * @brief \b Portability: OpenCb callback class
  *
  */
-class RD_EXPORT OpenCb {
+class RDCPP_EXPORT OpenCb {
  public:
   /**
    * @brief Open callback
@@ -1079,7 +1078,7 @@ class RD_EXPORT OpenCb {
  *
  * @sa CONFIGURATION.md for the full list of supported properties.
  */
-class RD_EXPORT Conf {
+class RDCPP_EXPORT Conf {
  public:
   /**
    * @brief Configuration object type
@@ -1340,7 +1339,7 @@ class RD_EXPORT Conf {
 /**
  * @brief Base handle, super class for specific clients.
  */
-class RD_EXPORT Handle {
+class RDCPP_EXPORT Handle {
  public:
   virtual ~Handle() { }
 
@@ -1693,7 +1692,7 @@ class RD_EXPORT Handle {
  * Is typically used with std::vector<RdKafka::TopicPartition*> to provide
  * a list of partitions for different operations.
  */
-class RD_EXPORT TopicPartition {
+class RDCPP_EXPORT TopicPartition {
 public:
   /**
    * @brief Create topic+partition object for \p topic and \p partition.
@@ -1741,7 +1740,7 @@ public:
  * @brief Topic handle
  *
  */
-class RD_EXPORT Topic {
+class RDCPP_EXPORT Topic {
  public:
   /**
    * @brief Unassigned partition.
@@ -1837,7 +1836,7 @@ class RD_EXPORT Topic {
  *
  */
 
-class RD_EXPORT MessageTimestamp {
+class RDCPP_EXPORT MessageTimestamp {
 public:
   /*! Message timestamp type */
   enum MessageTimestampType {
@@ -1860,7 +1859,7 @@ public:
  *
  * @remark Requires Apache Kafka >= 0.11.0 brokers
  */
-class RD_EXPORT Headers {
+class RDCPP_EXPORT Headers {
 public:
   virtual ~Headers() = 0;
 
@@ -2105,7 +2104,7 @@ public:
  * an error event.
  *
  */
-class RD_EXPORT Message {
+class RDCPP_EXPORT Message {
  public:
   /** @brief Message persistence status can be used by the application to
    *         find out if a produced message was persisted in the topic log. */
@@ -2245,7 +2244,7 @@ class RD_EXPORT Message {
  * RdKafka::Consumer::consume_callback() methods that take a queue as the first
  * parameter for more information.
  */
-class RD_EXPORT Queue {
+class RDCPP_EXPORT Queue {
  public:
   /**
    * @brief Create Queue object
@@ -2320,7 +2319,7 @@ class RD_EXPORT Queue {
  *
  * This class currently does not have any public methods.
  */
-class RD_EXPORT ConsumerGroupMetadata {
+class RDCPP_EXPORT ConsumerGroupMetadata {
 public:
   virtual ~ConsumerGroupMetadata () = 0;
 };
@@ -2342,7 +2341,7 @@ public:
  * Currently supports the \c range and \c roundrobin partition assignment
  * strategies (see \c partition.assignment.strategy)
  */
-class RD_EXPORT KafkaConsumer : public virtual Handle {
+class RDCPP_EXPORT KafkaConsumer : public virtual Handle {
 public:
   /**
    * @brief Creates a KafkaConsumer.
@@ -2657,7 +2656,7 @@ public:
  *
  * A simple non-balanced, non-group-aware, consumer.
  */
-class RD_EXPORT Consumer : public virtual Handle {
+class RDCPP_EXPORT Consumer : public virtual Handle {
  public:
   /**
    * @brief Creates a new Kafka consumer handle.
@@ -2834,7 +2833,7 @@ class RD_EXPORT Consumer : public virtual Handle {
 /**
  * @brief Producer
  */
-class RD_EXPORT Producer : public virtual Handle {
+class RDCPP_EXPORT Producer : public virtual Handle {
  public:
   /**
    * @brief Creates a new Kafka producer handle.

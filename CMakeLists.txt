@@ -5,6 +5,19 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
+set(CPACK_PACKAGE_VENDOR "Magnus Edenhill")
+set(CPACK_PACKAGE_CONTACT "info@edenhill.se")
+set(CPACK_PACKAGE_HOMEPAGE_URL https://github.com/edenhill/librdkafka)
+set(CPACK_PACKAGE_DESCRIPTION "\
+librdkafka is a C library implementation of the Apache Kafka protocol, \
+providing Producer, Consumer and Admin clients. It was designed with message \
+delivery reliability and high performance in mind, current figures exceed 1 \
+million msgs/second for the producer and 3 million msgs/second for the consumer. \
+\
+librdkafka is licensed under the 2-clause BSD license.")
+
+include(CPack)
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
@@ -159,7 +172,6 @@ if(ENABLE_LZ4_EXT)
 endif()
 # }
 
-option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)
@@ -256,7 +268,14 @@ install(
     DESTINATION "share/licenses/librdkafka"
 )
 
+INSTALL(FILES packaging/cmake/rdkafka.targets
+    DESTINATION "build/native"
+	RENAME ${CMAKE_PROJECT_NAME}.targets
+)
+
 # }
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

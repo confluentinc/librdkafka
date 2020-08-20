@@ -155,100 +155,88 @@ if(WITHOUT_WIN32_CONFIG)
   endif(WITH_PLUGINS)
 endif()
 
-if(RDKAFKA_BUILD_STATIC)
-  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-  set(RDKAFKA_BUILD_MODE STATIC)
-else()
-  set(RDKAFKA_BUILD_MODE SHARED)
-endif()
+set(CMAKE_DEBUG_POSTFIX d)
 
-add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
-if(NOT RDKAFKA_BUILD_STATIC)
-  set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
-endif()
+add_library(rdkafka SHARED ${sources})
+add_library(rdkafka_static STATIC ${sources})
+set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
+target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
+target_compile_definitions(rdkafka_static PUBLIC LIBRDKAFKA_STATICLIB)
 
 if(MINGW)
   # Target Windows 8.1 to match the VS projects (MinGW defaults to an older WinAPI version)
   list(APPEND rdkafka_compile_definitions WINVER=0x0603 _WIN32_WINNT=0x0603 UNICODE)
 endif(MINGW)
 
-# Support '#include <rdkafka.h>'
-target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
-target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
-if(RDKAFKA_BUILD_STATIC)
-  target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
-endif()
-
-if(MINGW)
-	message(STATUS "Detected MinGW build")
-  # MinGW ignores `#pragma comment(lib, ...)` so we need to specify link libs
-  target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
-endif(MINGW)
-
-if(WIN32)  
-  if(RDKAFKA_BUILD_STATIC)
-    target_link_libraries(rdkafka PUBLIC crypt32)
-  else()
-    target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
-  endif()
-endif()
-
 # We need 'dummy' directory to support `#include "../config.h"` path
 set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")
-target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 
-if(WITH_HDRHISTOGRAM)
-  target_link_libraries(rdkafka PUBLIC m)
-endif()
+foreach(target rdkafka rdkafka_static)
 
-if(WITH_ZLIB)
-  find_package(ZLIB REQUIRED)
-  target_include_directories(rdkafka PUBLIC ${ZLIB_INCLUDE_DIRS})
-  target_link_libraries(rdkafka PUBLIC ZLIB::ZLIB)
-endif()
+  # Support '#include <rdkafka.h>'
+  target_include_directories(${target}
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>"
+    PUBLIC "$<BUILD_INTERFACE:${dummy}>")
+  target_compile_definitions(${target} PUBLIC ${rdkafka_compile_definitions})
 
-if(WITH_ZSTD)
-  target_link_libraries(rdkafka PUBLIC ${ZSTD_LIBRARY})
-  target_include_directories(rdkafka PUBLIC ${ZSTD_INCLUDE_DIR})
-  message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")
-endif()
-
-if(WITH_SSL)
-  if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
-    if(NOT TARGET bundled-ssl)
-      message(FATAL_ERROR "bundled-ssl target not exist")
-    endif()
-    target_include_directories(rdkafka BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
-    target_link_libraries(rdkafka PUBLIC ${BUNDLED_SSL_LIBRARIES})
-    add_dependencies(rdkafka bundled-ssl)
-  else()
-    find_package(OpenSSL REQUIRED)
-    target_include_directories(rdkafka PUBLIC ${OPENSSL_INCLUDE_DIR})
-    target_link_libraries(rdkafka PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  if(WIN32)  
+    target_link_libraries(${target} PUBLIC crypt32 ws2_32 secur32)
   endif()
-endif()
 
-if(LINK_ATOMIC)
-  target_link_libraries(rdkafka PUBLIC "-latomic")
-endif()
+  if(WITH_HDRHISTOGRAM)
+    target_link_libraries(${target} PUBLIC m)
+  endif()
 
-find_package(Threads REQUIRED)
-target_link_libraries(rdkafka PUBLIC Threads::Threads)
+  if(WITH_ZLIB)
+    find_package(ZLIB REQUIRED)
+    target_include_directories(${target} PUBLIC ${ZLIB_INCLUDE_DIRS})
+    target_link_libraries(${target} PUBLIC ZLIB::ZLIB)
+  endif()
 
-if(WITH_SASL_CYRUS)
-  target_include_directories(rdkafka PUBLIC ${SASL_INCLUDE_DIRS})
-  target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
-endif()
+  if(WITH_ZSTD)
+    target_link_libraries(${target} PUBLIC ${ZSTD_LIBRARY})
+    target_include_directories(${target} PUBLIC ${ZSTD_INCLUDE_DIR})
+    message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")
+  endif()
 
-if(WITH_LIBDL)
-  target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
-endif()
+  if(WITH_SSL)
+    if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
+      if(NOT TARGET bundled-ssl)
+        message(FATAL_ERROR "bundled-ssl target not exist")
+      endif()
+      target_include_directories(${target} BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
+      target_link_libraries(${target} PUBLIC ${BUNDLED_SSL_LIBRARIES})
+      add_dependencies(${target} bundled-ssl)
+    else()
+      find_package(OpenSSL REQUIRED)
+      target_include_directories(${target} PUBLIC ${OPENSSL_INCLUDE_DIR})
+      target_link_libraries(${target} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    endif()
+  endif()
 
-if(WITH_LZ4_EXT)
-  target_include_directories(rdkafka PUBLIC ${LZ4_INCLUDE_DIRS})
-  target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
-endif()
+  if(LINK_ATOMIC)
+    target_link_libraries(${target} PUBLIC "-latomic")
+  endif()
+
+  find_package(Threads REQUIRED)
+  target_link_libraries(${target} PUBLIC Threads::Threads)
+
+  if(WITH_SASL_CYRUS)
+    target_include_directories(${target} PUBLIC ${SASL_INCLUDE_DIRS})
+    target_link_libraries(${target} PUBLIC ${SASL_LIBRARIES})
+  endif()
+
+  if(WITH_LIBDL)
+    target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
+  endif()
+
+  if(WITH_LZ4_EXT)
+    target_include_directories(${target} PUBLIC ${LZ4_INCLUDE_DIRS})
+    target_link_libraries(${target} PUBLIC LZ4::LZ4)
+  endif()
+
+endforeach()
 
 # Set up path to these sources for other sub-projects (tests, examples)
 # to be able to reach them.
@@ -285,7 +273,7 @@ set(PKG_CONFIG_CFLAGS
     "-I\${includedir}"
 )
 set(PKG_CONFIG_LIBS
-    "-L\${libdir} -lrdkafka"
+    "-L\${libdir}"
 )
 set(PKG_CONFIG_LIBS_PRIVATE
     "-lpthread"
@@ -308,34 +296,19 @@ configure_file(
 install(FILES ${GENERATED_DIR}/rdkafka.pc
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
 )
-if(RDKAFKA_BUILD_STATIC)
-  set(PKG_CONFIG_NAME
-    "librdkafka-static"
-  )
-  set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library (static)"
-  )
-  set(PKG_CONFIG_LIBS
-    "-L\${libdir} \${libdir}/librdkafka.a"
-  )
-  configure_file(
-    "../packaging/cmake/rdkafka.pc.in"
-    "${GENERATED_DIR}/rdkafka-static.pc"
-    @ONLY
-  )
-  install(FILES ${GENERATED_DIR}/rdkafka.pc
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
-  )
-endif()
 
 install(
-    TARGETS rdkafka
+    TARGETS rdkafka rdkafka_static
     EXPORT "${targets_export_name}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
+
+if (WIN32)
+  install(FILES $<TARGET_PDB_FILE:rdkafka> DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
 
 install(
     FILES "rdkafka.h" "rdkafka_mock.h"

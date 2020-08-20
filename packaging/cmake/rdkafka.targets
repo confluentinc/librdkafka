@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)\..\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)\..\..\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <Target Name="RdKafka_CopyReleaseDllsToOutDir" BeforeTargets="PrepareForRun">
+      <ItemGroup>
+        <ReleaseFilesToCopy Include="$(MSBuildThisFileDirectory)\..\..\bin\*.dll" Exclude="$(MSBuildThisFileDirectory)\..\..\bin\*d.dll"/>
+		<ReleaseFilesToCopy Include="$(MSBuildThisFileDirectory)\..\..\bin\*.pdb" Exclude="$(MSBuildThisFileDirectory)\..\..\bin\*d.pdb"/>
+		<DebugFilesToCopy   Include="$(MSBuildThisFileDirectory)\..\..\bin\*d.dll"/>
+		<DebugFilesToCopy   Include="$(MSBuildThisFileDirectory)\..\..\bin\*d.pdb"/>
+      </ItemGroup>
+      <Copy SourceFiles="@(DebugFilesToCopy)" SkipUnchangedFiles="true" DestinationFolder="$(OutDir)" Condition="'$(Configuration)'=='Debug'" />
+	  <Copy SourceFiles="@(ReleaseFilesToCopy)" SkipUnchangedFiles="true" DestinationFolder="$(OutDir)" Condition="'$(Configuration)'!='Debug'"/>
+  </Target>
+  
+</Project>

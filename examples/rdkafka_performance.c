@@ -863,7 +863,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNhH:")) != -1) {
+                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
 		switch (opt) {
 		case 'G':
 			if (rd_kafka_conf_set(conf, "group.id", optarg,
@@ -966,7 +966,7 @@ int main (int argc, char **argv) {
             read_hdrs = 1;
             break;
         case 'H':
-            {
+            if (mode == 'P') {
                 char *name, *val;
                 size_t name_sz = -1;
 
@@ -989,6 +989,12 @@ int main (int argc, char **argv) {
                 }
 
                 read_hdrs = 1;
+            } else if (!strcmp(optarg, "parse")) {
+                read_hdrs = 1;
+            } else {
+                fprintf(stderr, "%% expected "
+                        "-H parse, not -H %s for consumer\n", optarg);
+                exit(1);
             }
             break;
 		case 'X':
@@ -1130,7 +1136,7 @@ int main (int argc, char **argv) {
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
             "  -H <name[=value]> Add header to message (producer)\n"
-            "  -h           Read message headers (consumer)\n"
+            "  -H parse     Read message headers (consumer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
 			"  -x <cnt>     Hard exit after transmitting <cnt> messages (producer)\n"
 			"  -D           Copy/Duplicate data buffer (producer)\n"

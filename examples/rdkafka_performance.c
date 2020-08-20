@@ -963,7 +963,9 @@ int main (int argc, char **argv) {
 			debug = optarg;
 			break;
         case 'H':
-            if (mode == 'P') {
+            if (!strcmp(optarg, "parse"))
+                read_hdrs = 1;
+            else {
                 char *name, *val;
                 size_t name_sz = -1;
 
@@ -984,14 +986,6 @@ int main (int argc, char **argv) {
                                 name, rd_kafka_err2str(err));
                         exit(1);
                 }
-
-                read_hdrs = 1;
-            } else if (!strcmp(optarg, "parse")) {
-                read_hdrs = 1;
-            } else {
-                fprintf(stderr, "%% expected "
-                        "-H parse, not -H %s for consumer\n", optarg);
-                exit(1);
             }
             break;
 		case 'X':
@@ -1294,6 +1288,15 @@ int main (int argc, char **argv) {
         if (mode == 'C' || mode == 'G')
                 rd_kafka_conf_set(conf, "enable.partition.eof", "true",
                                   NULL, 0);
+    if (read_hdrs && mode == 'P') {
+        fprintf(stderr, "%% producer can not read headers\n");
+        exit(1);
+    }
+    
+    if (hdrs && mode != 'P') {
+        fprintf(stderr, "%% consumer can not add headers\n");
+        exit(1);
+    }
 
 	if (mode == 'P') {
 		/*

@@ -119,7 +119,9 @@ void rd_kafka_topic_destroy_final (rd_kafka_topic_t *rkt) {
 }
 
 /**
- * Application destroy
+ * @brief Application topic object destroy.
+ * @warning MUST ONLY BE CALLED BY THE APPLICATION.
+ *          Use rd_kafka_topic_destroy0() for all internal use.
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *app_rkt) {
         rd_kafka_lwtopic_t *lrkt;
@@ -1487,7 +1489,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 
                 opaque = rkt->rkt_conf.opaque;
 
-                rd_kafka_topic_destroy(rkt); /* loose refcnt from find() */
+                rd_kafka_topic_destroy0(rkt); /* loose refcnt from find() */
 
                 return opaque;
         }

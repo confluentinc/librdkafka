@@ -33,9 +33,8 @@ Install library:
 
 If you use librdkafka as submodule in cmake project and want static link of librdkafka:
 
-      set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
       add_subdirectory(librdkafka)
-      target_link_libraries(your_library_or_executable rdkafka)
+      target_link_libraries(your_library_or_executable rdkafka_static)
 
 # Build DEB/RPM packages on Linux
 

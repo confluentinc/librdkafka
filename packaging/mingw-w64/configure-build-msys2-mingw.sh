@@ -13,7 +13,6 @@ cmake \
     -D WITH_SASL=ON \
     -D WITH_SSL=ON \
     -D WITH_ZLIB=OFF \
-    -D RDKAFKA_BUILD_STATIC=OFF \
     -D CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE .
 
 $mingw64 mingw32-make

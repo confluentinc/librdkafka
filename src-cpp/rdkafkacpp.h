@@ -65,7 +65,7 @@
 typedef SSIZE_T ssize_t;
 #    endif
 #  endif
-#  ifndef LIBRDKAFKACPP_STATICLIB
+#  ifndef LIBRDKAFKA_STATICLIB
 #    ifdef LIBRDKAFKACPP_EXPORTS
 #      define RDCPP_EXPORT __declspec(dllexport)
 #    else

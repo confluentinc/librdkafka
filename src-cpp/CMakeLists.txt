@@ -25,13 +25,12 @@ set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
 target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 target_compile_definitions(rdkafka++_static PUBLIC LIBRDKAFKACPP_STATICLIB)
 
+target_link_libraries(rdkafka++ PUBLIC rdkafka)
+target_link_libraries(rdkafka++_static PUBLIC rdkafka_static)
+
 foreach(target rdkafka++ rdkafka++_static)
-
-    target_link_libraries(${target} PUBLIC rdkafka)
-
     # Support '#include <rdkafcpp.h>'
     target_include_directories(${target} PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
-
 endforeach()
 
 # Generate pkg-config file

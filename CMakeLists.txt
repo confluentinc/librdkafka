@@ -273,6 +273,19 @@ INSTALL(FILES packaging/cmake/rdkafka.targets
 	RENAME ${CMAKE_PROJECT_NAME}.targets
 )
 
+if (MSVC)
+    install(FILES
+        $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
+        $<TARGET_FILE_DIR:rdkafka++_static>/$<TARGET_FILE_BASE_NAME:rdkafka++_static>.pdb
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        CONFIGURATIONS Debug RelWithDebInfo)
+    install(FILES
+        $<TARGET_PDB_FILE:rdkafka>
+        $<TARGET_PDB_FILE:rdkafka++>
+        DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        CONFIGURATIONS Debug RelWithDebInfo)
+endif()
+
 # }
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

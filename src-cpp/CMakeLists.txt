@@ -72,7 +72,10 @@ install(
 )
 
 if (MSVC)
-    install(FILES $<TARGET_PDB_FILE:rdkafka++> DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    set_target_properties(rdkafka++_static
+        PROPERTIES
+        COMPILE_PDB_NAME_RELWITHDEBINFO rdkafka++_static
+        COMPILE_PDB_NAME_DEBUG          rdkafka++_static${CMAKE_DEBUG_POSTFIX})
 endif()
 
 install(

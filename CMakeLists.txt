@@ -7,7 +7,7 @@ project(RdKafka VERSION ${RDKAFKA_VERSION})
 
 set(CPACK_PACKAGE_VENDOR "Magnus Edenhill")
 set(CPACK_PACKAGE_CONTACT "info@edenhill.se")
-set(CPACK_PACKAGE_HOMEPAGE_URL https://github.com/edenhill/librdkafka)
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/edenhill/librdkafka")
 set(CPACK_PACKAGE_DESCRIPTION "\
 librdkafka is a C library implementation of the Apache Kafka protocol, \
 providing Producer, Consumer and Admin clients. It was designed with message \

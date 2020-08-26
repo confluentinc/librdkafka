@@ -56,47 +56,47 @@ extern "C" {
 #endif
 
 #ifdef _WIN32
-#  include <basetsd.h>
-#  ifndef WIN32_MEAN_AND_LEAN
-#    define WIN32_MEAN_AND_LEAN
-#  endif
-#  include <winsock2.h>  /* for sockaddr, .. */
-#  ifndef _SSIZE_T_DEFINED
-#    define _SSIZE_T_DEFINED
+#include <basetsd.h>
+#ifndef WIN32_MEAN_AND_LEAN
+#define WIN32_MEAN_AND_LEAN
+#endif
+#include <winsock2.h>  /* for sockaddr, .. */
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
 typedef SSIZE_T ssize_t;
-#  endif
-#  define RD_UNUSED
-#  define RD_INLINE __inline
-#  define RD_DEPRECATED __declspec(deprecated)
+#endif
+#define RD_UNUSED
+#define RD_INLINE __inline
+#define RD_DEPRECATED __declspec(deprecated)
 
-#  ifndef LIBRDKAFKA_STATICLIB
-#    ifdef LIBRDKAFKA_EXPORTS
-#      define RD_EXPORT __declspec(dllexport)
-#    else
-#      define RD_EXPORT __declspec(dllimport)
-#    endif
-#  endif
+#ifndef LIBRDKAFKA_STATICLIB
+#ifdef LIBRDKAFKA_EXPORTS
+#define RD_EXPORT __declspec(dllexport)
+#else
+#define RD_EXPORT __declspec(dllimport)
+#endif
+#endif
 
-#  ifndef LIBRDKAFKA_TYPECHECKS
-#    define LIBRDKAFKA_TYPECHECKS 0
-#  endif
+#ifndef LIBRDKAFKA_TYPECHECKS
+#define LIBRDKAFKA_TYPECHECKS 0
+#endif
 
 #else
 
-#  include <sys/socket.h> /* for sockaddr, .. */
+#include <sys/socket.h> /* for sockaddr, .. */
 
-#  define RD_UNUSED __attribute__((unused))
-#  define RD_INLINE inline
-#  define RD_EXPORT
-#  define RD_DEPRECATED __attribute__((deprecated))
+#define RD_UNUSED __attribute__((unused))
+#define RD_INLINE inline
+#define RD_EXPORT
+#define RD_DEPRECATED __attribute__((deprecated))
 
-#  ifndef LIBRDKAFKA_TYPECHECKS
-#    define LIBRDKAFKA_TYPECHECKS 1
-#  endif
+#ifndef LIBRDKAFKA_TYPECHECKS
+#define LIBRDKAFKA_TYPECHECKS 1
+#endif
 #endif
 
 #ifndef RD_EXPORT
-#  define RD_EXPORT
+#define RD_EXPORT
 #endif
 
 /**

@@ -83,7 +83,7 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
         gdb)
-            grun=$(mktemp gdbrunXXXXXX.gdb)
+            grun=$(mktemp gdbrunXXXXXX)
             cat >$grun <<EOF
 set \$_exitcode = -999
 run $ARGS

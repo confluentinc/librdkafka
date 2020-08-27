@@ -8,6 +8,12 @@
     refcounting issues when used on light-weight (error-only) topic objects
     such as consumer errors (#2693)
 
+### Consumer fixes
+
+ * The `roundrobin` `partition.assignment.strategy` could crash (assert)
+   for certain combinations of members and partitions.
+   This is a regression in v1.5.0. (#3024)
+
 
 # librdkafka v1.5.0
 

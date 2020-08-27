@@ -81,9 +81,15 @@ case "$1" in
 esac
 
 
-# enable variable shadow warnings and strict C99, C++98 checks.
-#export CFLAGS="$CFLAGS -std=c99 -Wshadow=compatible-local -Wshadow=local"
-#export CXXFLAGS="$CXXFLAGS -std=c++98 -Wshadow=compatible-local -Wshadow=local"
+if [[ $1 != clean ]]; then
+    # enable strict C99, C++98 checks.
+    export CFLAGS="$CFLAGS -std=c99"
+    export CXXFLAGS="$CXXFLAGS -std=c++98"
+fi
+
+# enable variable shadow warnings
+#export CFLAGS="$CFLAGS -Wshadow=compatible-local -Wshadow=local"
+#export CXXFLAGS="$CXXFLAGS -Wshadow=compatible-local -Wshadow=local"
 
 # enable pedantic
 #export CFLAGS='-pedantic'

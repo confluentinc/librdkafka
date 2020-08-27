@@ -19,12 +19,12 @@ addons:
 
 matrix:
  include:
- - name: "Linux GCC: +Debian packages +BuiltinRegex"
+ - name: "Linux GCC: +Debian packages +BuiltinRegex +Strict"
    os: linux
    compiler: gcc
    env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest"
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest"
  - name: "RPM packages"
    os: linux
    compiler: gcc

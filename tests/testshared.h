@@ -32,7 +32,9 @@
  * C variables and functions shared with C++ tests
  */
 
+#ifndef _RDKAFKA_H_
 typedef struct rd_kafka_s rd_kafka_t;
+#endif
 
 /* ANSI color codes */
 #define _C_CLR "\033[0m"

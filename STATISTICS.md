@@ -199,7 +199,7 @@ Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 state | string | "up"    | Local consumer group handler's state.
 stateage | int gauge | | Time elapsed since last state change (milliseconds).
-joinstate | string | "assigned" | Local consumer group handler's join state.
+join_state | string | "assigned" | Local consumer group handler's join state.
 rebalance_age | int gauge | | Time elapsed since last rebalance (assign or revoke) (milliseconds).
 rebalance_cnt | int | | Total number of rebalances (assign or revoke).
 rebalance_reason | string | | Last rebalance reason, or empty string.

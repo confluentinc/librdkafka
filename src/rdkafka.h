@@ -566,6 +566,22 @@ typedef enum {
         /** Static consumer fenced by other consumer with same
          *  group.instance.id. */
         RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID = 82,
+        /** Eligible topic partition leaders are not available */
+        RD_KAFKA_RESP_ERR_ELIGIBLE_LEADERS_NOT_AVAILABLE = 83,
+        /** Leader election not needed for topic partition */
+        RD_KAFKA_RESP_ERR_ELECTION_NOT_NEEDED = 84,
+        /** No partition reassignment is in progress */
+        RD_KAFKA_RESP_ERR_NO_REASSIGNMENT_IN_PROGRESS = 85,
+        /** Deleting offsets of a topic while the consumer group is subscribed to it */
+        RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC = 86,
+        /** Broker failed to validate record */
+        RD_KAFKA_RESP_ERR_INVALID_RECORD = 87,
+        /** There are unstable offsets that need to be cleared */
+        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT = 88,
+        /** The throttling quota has been exceeded */
+        RD_KAFKA_RESP_ERR_THROTTLING_QUOTA_EXCEEDED = 89,
+        /** Producer has been fenced by another with the same transaction.id */
+        RD_KAFKA_RESP_ERR_PRODUCER_FENCED = 90,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

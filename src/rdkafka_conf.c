@@ -598,6 +598,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "It might be useful to turn this off when interacting with "
           "0.9 brokers with an aggressive `connection.max.idle.ms` value.",
 	  0, 1, 1 },
+        { _RK_GLOBAL, "log.configuration.warnings", _RK_C_BOOL,
+          _RK(log_conf_warn),
+          "Log configuration warnings on client initialization. "
+          "Warning logs will be emitted for ignored, deprecated, experimental "
+          "and inconsistent configuration settings.",
+          0, 1, 1 },
         { _RK_GLOBAL, "background_event_cb", _RK_C_PTR,
           _RK(background_event_cb),
           "Background queue event callback "
@@ -3783,9 +3789,11 @@ static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
                                              rd_kafka_conf_scope_t scope,
                                              const void *conf) {
         const struct rd_kafka_property *prop;
-        const int warn_on = _RK_DEPRECATED|_RK_EXPERIMENTAL;
-        int cnt = 0;
+        int warn_type = rk->rk_type == RD_KAFKA_PRODUCER ?
+                _RK_CONSUMER : _RK_PRODUCER;
+        int warn_on = _RK_DEPRECATED|_RK_EXPERIMENTAL|warn_type;
 
+        int cnt = 0;
 
         for (prop = rd_kafka_properties; prop->name ; prop++) {
                 int match = prop->scope & warn_on;
@@ -3796,13 +3804,27 @@ static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
                 if (likely(!rd_kafka_anyconf_is_modified(conf, prop)))
                         continue;
 
-                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
-                             "Configuration property %s is %s%s%s: %s",
-                             prop->name,
-                             match & _RK_DEPRECATED ? "deprecated" : "",
-                             match == warn_on ? " and " : "",
-                             match & _RK_EXPERIMENTAL ? "experimental" : "",
-                             prop->desc);
+                if (match != warn_type)
+                        rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                                     "Configuration property %s is %s%s%s: %s",
+                                     prop->name,
+                                     match & _RK_DEPRECATED ? "deprecated" : "",
+                                     match == warn_on ? " and " : "",
+                                     match & _RK_EXPERIMENTAL ?
+                                     "experimental" : "",
+                                     prop->desc);
+
+                if (match & warn_type)
+                        rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                                     "Configuration property %s "
+                                     "is a %s property and will be ignored by "
+                                     "this %s instance",
+                                     prop->name,
+                                     warn_type == _RK_PRODUCER ?
+                                     "producer" : "consumer",
+                                     warn_type == _RK_PRODUCER ?
+                                     "consumer" : "producer");
+
                 cnt++;
         }
 
@@ -3930,8 +3952,9 @@ int unittest_conf (void) {
                         int odd = cnt & 1;
                         int do_set = iteration == 3 || (iteration == 1 && odd);
                         rd_bool_t is_modified;
-                        int exp_is_modified = iteration >= 3 ||
-                                (iteration > 0 && (do_set || odd));
+                        int exp_is_modified = !prop->unsupported &&
+                                (iteration >= 3 ||
+                                 (iteration > 0 && (do_set || odd)));
 
                         readlen = sizeof(readval);
 
@@ -4015,7 +4038,13 @@ int unittest_conf (void) {
 
 
 
-                        if (do_set) {
+                        if (do_set && prop->unsupported) {
+                                RD_UT_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                                             "conf_set %s should've failed "
+                                             "with CONF_INVALID, not %d: %s",
+                                             prop->name, res, errstr);
+
+                        } else if (do_set) {
                                 RD_UT_ASSERT(res == RD_KAFKA_CONF_OK,
                                              "conf_set %s failed: %d: %s",
                                              prop->name, res, errstr);

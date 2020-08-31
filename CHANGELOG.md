@@ -1,12 +1,19 @@
 # librdkafka v1.6.0
 
+## Enhancements
+
+ * The generated `CONFIGURATION.md` (through `rd_kafka_conf_properties_show())`)
+   now include all properties and values, regardless if they were included in
+   the build, and setting a disabled property or value through
+   `rd_kafka_conf_set()` now returns `RD_KAFKA_CONF_INVALID` and provides
+   a more useful error string saying why the property can't be set.
 ## Fixes
 
 ### General fixes
 
  * `rd_kafka_topic_opaque()` (used by the C++ API) would cause object
-    refcounting issues when used on light-weight (error-only) topic objects
-    such as consumer errors (#2693)
+   refcounting issues when used on light-weight (error-only) topic objects
+   such as consumer errors (#2693).
 
 
 # librdkafka v1.5.0

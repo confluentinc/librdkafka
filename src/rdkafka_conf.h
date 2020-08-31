@@ -219,14 +219,13 @@ struct rd_kafka_conf_s {
 	char   *broker_version_fallback;
 	rd_kafka_secproto_t security_protocol;
 
-#if WITH_SSL
         struct {
+#if WITH_SSL
                 SSL_CTX *ctx;
+#endif
                 char *cipher_suites;
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
                 char *curves_list;
                 char *sigalgs_list;
-#endif
                 char *key_location;
                 char *key_pem;
                 rd_kafka_cert_t *key;
@@ -250,7 +249,6 @@ struct rd_kafka_conf_s {
                                        char *errstr, size_t errstr_size,
                                        void *opaque);
         } ssl;
-#endif
 
         struct {
                 const struct rd_kafka_sasl_provider *provider;
@@ -272,20 +270,17 @@ struct rd_kafka_conf_s {
                 /* Hash size */
                 size_t         scram_H_size;
 #endif
-#if WITH_SASL_OAUTHBEARER
                 char *oauthbearer_config;
                 int   enable_oauthbearer_unsecure_jwt;
-
                 /* SASL/OAUTHBEARER token refresh event callback */
                 void (*oauthbearer_token_refresh_cb) (
                         rd_kafka_t *rk,
                         const char *oauthbearer_config,
                         void *opaque);
-#endif
         } sasl;
 
-#if WITH_PLUGINS
         char *plugin_paths;
+#if WITH_PLUGINS
         rd_list_t plugins;
 #endif
 

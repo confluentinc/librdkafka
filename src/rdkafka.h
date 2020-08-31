@@ -1533,7 +1533,9 @@ rd_kafka_message_status (const rd_kafka_message_t *rkmessage);
  */
 typedef enum {
 	RD_KAFKA_CONF_UNKNOWN = -2, /**< Unknown configuration name. */
-	RD_KAFKA_CONF_INVALID = -1, /**< Invalid configuration value. */
+	RD_KAFKA_CONF_INVALID = -1, /**< Invalid configuration value or
+                                     *   property or value not supported in
+                                     *   this build. */
 	RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
 } rd_kafka_conf_res_t;
 
@@ -1630,6 +1632,9 @@ const rd_kafka_conf_t *rd_kafka_conf (rd_kafka_t *rk);
  * @returns \c rd_kafka_conf_res_t to indicate success or failure.
  * In case of failure \p errstr is updated to contain a human readable
  * error string.
+ *
+ * @remark Setting properties or values that were disabled at build time due to
+ *         missing dependencies will return RD_KAFKA_CONF_INVALID.
  */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
@@ -2327,6 +2332,9 @@ void rd_kafka_conf_dump_free(const char **arr, size_t cnt);
 /**
  * @brief Prints a table to \p fp of all supported configuration properties,
  *        their default values as well as a description.
+ *
+ * @remark All properties and properties and values are shown, even those
+ *         that have been disabled at build time due to missing dependencies.
  */
 RD_EXPORT
 void rd_kafka_conf_properties_show(FILE *fp);

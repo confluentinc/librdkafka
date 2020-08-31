@@ -7,6 +7,12 @@
    the build, and setting a disabled property or value through
    `rd_kafka_conf_set()` now returns `RD_KAFKA_CONF_INVALID` and provides
    a more useful error string saying why the property can't be set.
+ * Consumer configs on producers and vice versa will now be logged with
+   warning messages on client instantiation.
+   All configuration warnings can be disabled by setting
+   `log.configuration.warnings=false`.
+
+
 ## Fixes
 
 ### General fixes

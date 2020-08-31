@@ -2382,7 +2382,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rk->rk_conf.debug);
 
         /* Log warnings for deprecated configuration */
-        rd_kafka_conf_warn(rk);
+        if (rk->rk_conf.log_conf_warn)
+                rd_kafka_conf_warn(rk);
 
         /* Free user supplied conf's base pointer on success,
          * but not the actual allocated fields since the struct

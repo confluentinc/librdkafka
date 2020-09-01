@@ -313,7 +313,7 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
 
         case 2:
                 /* MsgVer2 uses varints, we calculate for the worst-case. */
-                msg_overhead += RD_KAFKAP_MESSAGE_V2_OVERHEAD;
+                msg_overhead += RD_KAFKAP_MESSAGE_V2_MAX_OVERHEAD;
 
                 /* MessageSet header fields */
                 msgsetsize +=

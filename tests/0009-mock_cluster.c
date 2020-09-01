@@ -72,6 +72,10 @@ int main_0009_mock_cluster (int argc, char **argv) {
         test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt,
                           NULL, 0);
 
+        /* Produce tiny messages */
+        test_produce_msgs(p, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt,
+                          "hello", 5);
+
         rd_kafka_topic_destroy(rkt);
 
         /* Assign */

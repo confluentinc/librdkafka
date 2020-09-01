@@ -505,7 +505,7 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 /**
  * MsgVersion v2
  */
-#define RD_KAFKAP_MESSAGE_V2_OVERHEAD                                  \
+#define RD_KAFKAP_MESSAGE_V2_MAX_OVERHEAD                              \
         (                                                              \
         /* Length (varint) */                                          \
         RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
@@ -523,6 +523,23 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
         RD_UVARINT_ENC_SIZEOF(int32_t)                                 \
         )
 
+#define RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD                              \
+        (                                                              \
+        /* Length (varint) */                                          \
+        RD_UVARINT_ENC_SIZE_0() +                                      \
+        /* Attributes */                                               \
+        1 +                                                            \
+        /* TimestampDelta (varint) */                                  \
+        RD_UVARINT_ENC_SIZE_0() +                                      \
+        /* OffsetDelta (varint) */                                     \
+        RD_UVARINT_ENC_SIZE_0() +                                      \
+        /* KeyLen (varint) */                                          \
+        RD_UVARINT_ENC_SIZE_0() +                                      \
+        /* ValueLen (varint) */                                        \
+        RD_UVARINT_ENC_SIZE_0() +                                      \
+        /* HeaderCnt (varint): */                                      \
+        RD_UVARINT_ENC_SIZE_0()                                        \
+        )
 
 
 /**

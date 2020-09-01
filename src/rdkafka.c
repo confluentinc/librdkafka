@@ -987,6 +987,27 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
                      "(destroy flags %s (0x%x))",
                      flags ? flags_str : "none", flags);
 
+        /* If producer still has messages in queue the application
+         * is terminating the producer without first calling flush() or purge()
+         * which is a common new user mistake, so hint the user of proper
+         * shutdown semantics. */
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
+                unsigned int tot_cnt;
+                size_t tot_size;
+
+                rd_kafka_curr_msgs_get(rk, &tot_cnt, &tot_size);
+
+                if (tot_cnt > 0)
+                        rd_kafka_log(rk, LOG_WARNING, "TERMINATE",
+                                     "Producer terminating with %u message%s "
+                                     "(%"PRIusz" byte%s) still in "
+                                     "queue or transit: "
+                                     "use flush() to wait for "
+                                     "outstanding message delivery",
+                                     tot_cnt, tot_cnt > 1 ? "s" : "",
+                                     tot_size, tot_size > 1 ? "s" : "");
+        }
+
         /* Make sure destroy is not called from a librdkafka thread
          * since this will most likely cause a deadlock.
          * FIXME: include broker threads (for log_cb) */

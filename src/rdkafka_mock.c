@@ -207,7 +207,7 @@ rd_kafka_mock_partition_log_append (rd_kafka_mock_partition_t *mpart,
 
         if (RecordCount < 1 ||
             (size_t)RecordCount >
-            RD_KAFKAP_BYTES_LEN(bytes) / RD_KAFKAP_MESSAGE_V2_OVERHEAD) {
+            RD_KAFKAP_BYTES_LEN(bytes) / RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD) {
                 err = RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
                 goto err;
         }

@@ -48,7 +48,7 @@ set(PKG_CONFIG_CFLAGS
     "-I\${includedir}"
 )
 set(PKG_CONFIG_LIBS
-    "-L\${libdir}"
+    "-L\${libdir} -lrdkafka++"
 )
 set(PKG_CONFIG_LIBS_PRIVATE
     "-lrdkafka"

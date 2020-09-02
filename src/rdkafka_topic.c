@@ -378,6 +378,27 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 
         /* Sticky partition assignment interval */
         rd_interval_init(&rkt->rkt_sticky_intvl);
+        rkt->rkt_sticky_partition = RD_KAFKA_PARTITION_UA;
+
+        if (rkt->rkt_rk->rk_conf.sticky_partition_linger_ms > 0 &&
+            /* Only enable sticky partitioning for partitioners that do
+             * random assignments on null keys. */
+            rkt->rkt_conf.partitioner !=
+            rd_kafka_msg_partitioner_consistent &&
+            rkt->rkt_conf.partitioner !=
+            rd_kafka_msg_partitioner_murmur2 &&
+            rkt->rkt_conf.partitioner !=
+            rd_kafka_msg_partitioner_fnv1a) {
+
+                rkt->rkt_enable_sticky_partition = rd_true;
+
+                /* consistent_random is special in that empty (but non-null)
+                 * keys are treated as null keys. */
+                rkt->rkt_enable_sticky_partition_empty_keys =
+                        rkt->rkt_conf.partitioner ==
+                        rd_kafka_msg_partitioner_consistent_random;
+        }
+
 
         if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgid;
@@ -1460,6 +1481,9 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 	int avail;
         rd_kafka_toppar_t *rktp;
         rd_kafka_broker_t *rkb;
+
+        if (partition < 0)
+                return 0; /* Invalid partitions are never available */
 
         /* This API must only be called from a partitioner and the
          * partitioner is always passed a proper topic */

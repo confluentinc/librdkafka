@@ -104,10 +104,15 @@ struct rd_kafka_topic_s {
 	rd_kafka_toppar_t **rkt_p;          /**< Partition array */
 	int32_t            rkt_partition_cnt;
 
-        int32_t            rkt_sticky_partition;    /**< Current sticky partition.
-                                                     *     @locks rkt_lock */
-        rd_interval_t      rkt_sticky_intvl;        /**< Interval to assign new 
-                                                     *   sticky partition. */
+        rd_bool_t          rkt_enable_sticky_partition; /**< Sticky partition
+                                                         *   is enabled. */
+        rd_bool_t          rkt_enable_sticky_partition_empty_keys; /**< .. and
+                                                                    *  for empty
+                                                                    *  keys. */
+        int32_t            rkt_sticky_partition;  /**< Current sticky partition.
+                                                   *     @locks rkt_lock */
+        rd_interval_t      rkt_sticky_intvl;      /**< Interval to assign new
+                                                   *   sticky partition. */
 
         rd_list_t          rkt_desp;              /* Desired partitions
                                                    * that are not yet seen

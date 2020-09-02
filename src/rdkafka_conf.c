@@ -1208,6 +1208,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .dmin = 0, .dmax = 900.0*1000.0, .ddef = 5.0 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "sticky.partitioning.linger.ms",
+          _RK_C_INT,
+          _RK(sticky_partition_linger_ms),
+          "Sticky partitioning will assign messages without keys to a single "
+          "random partition for the duration of the linger time controlled by "
+          "this configuration property. "
+          "A higher value allows for more effective batching (less overhead) "
+          "of null keyed messages at the expense of fine grain load balancing. "
+          "This behavior affects messages with the key NULL in all cases, and "
+          "messages with key lengths of zero when the `consistent_random` "
+          "partitioner is in use. "
+          "By default, set to double the time of linger.ms. To disable sticky "
+          "behavior, set to 0, which will assign a random partition for each "
+          "message without a key.",
+	  0, INT32_MAX, 10 },
+
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "message.send.max.retries",
           _RK_C_INT,
 	  _RK(max_retries),
@@ -1282,19 +1298,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
-        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "sticky.partitioning.linger.ms", _RK_C_INT,
-          _RK(sticky_partition_linger_ms),
-          "Delay in milliseconds to wait to assign new sticky partitions for "
-          "each topic. "
-          "By default, set to double the time of linger.ms. To disable sticky "
-          "behavior, set to 0. "
-          "A higher value allows for more effective batching (less overhead) " 
-          "of null keyed messages at the expense of fine grain load balancing. "
-          "This behavior affects messages with the key NULL in all cases, and "
-          "messages with key lengths of zero when the consistent_random "
-          "partitioner is in use.",
-	  0, 900000, 10 },
-       
 
         /*
          * Topic properties

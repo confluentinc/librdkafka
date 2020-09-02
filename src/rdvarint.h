@@ -150,7 +150,7 @@ size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
 /**
  * @returns the encoding size of the value 0
  */
-#define RD_UVARINT_ENC_SIZE_0() 1
+#define RD_UVARINT_ENC_SIZE_0() ((size_t)1)
 
 
 int unittest_rdvarint (void);

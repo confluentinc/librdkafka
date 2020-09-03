@@ -2739,6 +2739,10 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
+                RD_KAFKA_ERR_ACTION_PERMANENT|
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
+                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+
                 RD_KAFKA_ERR_ACTION_RETRY|
                 RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS,
@@ -3001,11 +3005,19 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 perr->update_next_err = rd_true;
         }
 
-        /* Translate request-level timeout error code
-         * to message-level timeout error code. */
         if (perr->err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
-            perr->err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
+            perr->err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE) {
+                /* Translate request-level timeout error code
+                 * to message-level timeout error code. */
                 perr->err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+
+        } else if (perr->err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED) {
+                /* If we're no longer authorized to access the topic mark
+                 * it as errored to deny further produce requests. */
+                rd_kafka_topic_wrlock(rktp->rktp_rkt);
+                rd_kafka_topic_set_error(rktp->rktp_rkt, perr->err);
+                rd_kafka_topic_wrunlock(rktp->rktp_rkt);
+        }
 
         return 1;
 }

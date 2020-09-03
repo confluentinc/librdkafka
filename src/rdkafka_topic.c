@@ -47,7 +47,8 @@
 const char *rd_kafka_topic_state_names[] = {
         "unknown",
         "exists",
-        "notexists"
+        "notexists",
+        "error"
 };
 
 
@@ -506,6 +507,10 @@ static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
                      rkt->rkt_topic->str,
                      rd_kafka_topic_state_names[rkt->rkt_state],
                      rd_kafka_topic_state_names[state]);
+
+        if (rkt->rkt_state == RD_KAFKA_TOPIC_S_ERROR)
+                rkt->rkt_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
         rkt->rkt_state = state;
 }
 
@@ -773,10 +778,9 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
                              "desired partition does not exist in cluster",
                              rkt->rkt_topic->str, rktp->rktp_partition);
                 rd_kafka_toppar_enq_error(rktp,
+                                          rkt->rkt_err ? rkt->rkt_err :
                                           RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
-                                          "desired partition does not exist "
-                                          "in cluster");
-
+                                          "desired partition is not available");
         }
 
 	/* Remove excessive partitions */
@@ -805,8 +809,10 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
                         if (!rd_kafka_terminating(rkt->rkt_rk))
                                 rd_kafka_toppar_enq_error(
                                         rktp,
+                                        rkt->rkt_err ? rkt->rkt_err :
                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
-                                        "desired partition no longer exists");
+                                        "desired partition is no longer "
+                                        "available");
 
 			rd_kafka_toppar_broker_delegate(rktp, NULL);
 
@@ -866,6 +872,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt,
 	rd_kafka_msg_t *rkm, *tmp;
 	rd_kafka_msgq_t uas = RD_KAFKA_MSGQ_INITIALIZER(uas);
 	rd_kafka_msgq_t failed = RD_KAFKA_MSGQ_INITIALIZER(failed);
+        rd_kafka_resp_err_t err_all = RD_KAFKA_RESP_ERR_NO_ERROR;
 	int cnt;
 
 	if (rkt->rkt_rk->rk_type != RD_KAFKA_PRODUCER)
@@ -882,25 +889,45 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt,
 	/* Assign all unassigned messages to new topics. */
         rd_kafka_toppar_lock(rktp_ua);
 
-        rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-                     "Partitioning %i unassigned messages in topic %.*s to "
-                     "%"PRId32" partitions",
-                     rktp_ua->rktp_msgq.rkmq_msg_cnt,
-                     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-                     rkt->rkt_partition_cnt);
+        if (rkt->rkt_state == RD_KAFKA_TOPIC_S_ERROR) {
+                err_all = rkt->rkt_err;
+                rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                             "Failing all %i unassigned messages in "
+                             "topic %.*s due to permanent topic error: %s",
+                             rktp_ua->rktp_msgq.rkmq_msg_cnt,
+                             RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                             rd_kafka_err2str(err_all));
+        } else if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS) {
+                err_all = err;
+                rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                             "Failing all %i unassigned messages in "
+                             "topic %.*s since topic does not exist: %s",
+                             rktp_ua->rktp_msgq.rkmq_msg_cnt,
+                             RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                             rd_kafka_err2str(err_all));
+        } else {
+                rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                             "Partitioning %i unassigned messages in "
+                             "topic %.*s to %"PRId32" partitions",
+                             rktp_ua->rktp_msgq.rkmq_msg_cnt,
+                             RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                             rkt->rkt_partition_cnt);
+        }
 
 	rd_kafka_msgq_move(&uas, &rktp_ua->rktp_msgq);
 	cnt = uas.rkmq_msg_cnt;
 	rd_kafka_toppar_unlock(rktp_ua);
 
 	TAILQ_FOREACH_SAFE(rkm, &uas.rkmq_msgs, rkm_link, tmp) {
-		/* Fast-path for failing messages with forced partition */
-		if (rkm->rkm_partition != RD_KAFKA_PARTITION_UA &&
-		    rkm->rkm_partition >= rkt->rkt_partition_cnt &&
-		    rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN) {
-			rd_kafka_msgq_enq(&failed, rkm);
-			continue;
-		}
+                /* Fast-path for failing messages with forced partition or
+                 * when all messages are to fail. */
+                if (err_all ||
+                    (rkm->rkm_partition != RD_KAFKA_PARTITION_UA &&
+                     rkm->rkm_partition >= rkt->rkt_partition_cnt &&
+                     rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN)) {
+                        rd_kafka_msgq_enq(&failed, rkm);
+                        continue;
+                }
 
 		if (unlikely(rd_kafka_msg_partitioner(rkt, rkm, 0) != 0)) {
 			/* Desired partition not available */
@@ -918,10 +945,9 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt,
                              "%"PRId32"/%i messages failed partitioning "
                              "in topic %s",
                              failed.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
-		rd_kafka_dr_msgq(rkt, &failed,
-				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
-				 err :
-				 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                rd_kafka_dr_msgq(rkt, &failed,
+                                 err_all ? err_all :
+                                 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 	}
 
 	rd_kafka_toppar_destroy(rktp_ua); /* from get() */
@@ -986,6 +1012,49 @@ rd_bool_t rd_kafka_topic_set_notexists (rd_kafka_topic_t *rkt,
         return rd_true;
 }
 
+/**
+ * @brief Mark topic as errored, such as when topic authorization fails.
+ *
+ * @param err Propagate error using this error code.
+ *
+ * @returns true if the topic was marked as errored, else false.
+ *
+ * @locality any
+ * @locks topic_wrlock() MUST be held.
+ */
+rd_bool_t rd_kafka_topic_set_error (rd_kafka_topic_t *rkt,
+                                    rd_kafka_resp_err_t err) {
+
+        if (unlikely(rd_kafka_terminating(rkt->rkt_rk))) {
+                /* Dont update metadata while terminating. */
+                return rd_false;
+        }
+
+        rd_assert(err != RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        /* Same error, ignore. */
+        if (rkt->rkt_state == RD_KAFKA_TOPIC_S_ERROR &&
+            rkt->rkt_err == err)
+                return rd_true;
+
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPICERROR",
+                     "Topic %s has permanent error: %s",
+                     rkt->rkt_topic->str, rd_kafka_err2str(err));
+
+        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_ERROR);
+
+        rkt->rkt_err = err;
+
+        /* Update number of partitions */
+        rd_kafka_topic_partition_cnt_update(rkt, 0);
+
+        /* Purge messages with forced partition */
+        rd_kafka_topic_assign_uas(rkt, err);
+
+        return rd_true;
+}
+
+
 
 /**
  * @brief Update a topic from metadata.
@@ -1049,6 +1118,8 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
                 rd_kafka_topic_set_notexists(rkt, mdt->err);
         else if (mdt->partition_cnt > 0)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
+        else if (mdt->err)
+                rd_kafka_topic_set_error(rkt, mdt->err);
 
 	/* Update number of partitions, but not if there are
 	 * (possibly intermittent) errors (e.g., "Leader not available"). */
@@ -1117,7 +1188,7 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
                 }
         }
 
-        /* If there was an update to the partitionts try to assign
+        /* If there was an update to the partitions try to assign
          * unassigned messages to new partitions, or fail them */
         if (upd > 0)
                 rd_kafka_topic_assign_uas(rkt, mdt->err ?

@@ -27,6 +27,12 @@
    for certain combinations of members and partitions.
    This is a regression in v1.5.0. (#3024)
 
+### Producer fixes
+
+ * Topic authorization errors are now properly propagated for produced messages,
+   both through delivery reports and as `ERR_TOPIC_AUTHORIZATION_FAILED`
+   return value from `produce*()` (#2215)
+
 
 # librdkafka v1.5.0
 

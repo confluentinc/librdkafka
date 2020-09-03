@@ -231,6 +231,7 @@ static void do_test_txn_requires_abort_errors (void) {
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
+        int r;
 
         TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
 
@@ -288,6 +289,11 @@ static void do_test_txn_requires_abort_errors (void) {
          * 2. Restart transaction and fail on AddPartitionsToTxn
          */
         TEST_SAY("2. Fail on AddPartitionsToTxn\n");
+
+        /* First refresh proper Metadata to clear the topic's auth error,
+         * otherwise the produce() below will fail immediately. */
+        r = test_get_partition_count(rk, "mytopic", 5000);
+        TEST_ASSERT(r > 0, "Expected topic %s to exist", "mytopic");
 
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 

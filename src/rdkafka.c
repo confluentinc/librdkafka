@@ -688,10 +688,6 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Broker: Broker failed to validate record"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
                   "Broker: There are unstable offsets that need to be cleared"),
-        _ERR_DESC(RD_KAFKA_RESP_ERR_THROTTLING_QUOTA_EXCEEDED,
-                  "Broker: The throttling quota has been exceeded"),
-        _ERR_DESC(RD_KAFKA_RESP_ERR_PRODUCER_FENCED,
-                  "Broker: Producer has been fenced by another producer with the same transaction.id"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

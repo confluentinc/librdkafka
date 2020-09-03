@@ -486,11 +486,7 @@ enum ErrorCode {
         /** Broker failed to validate record */
         ERR_INVALID_RECORD = 87,
         /** There are unstable offsets that need to be cleared */
-        ERR_UNSTABLE_OFFSET_COMMIT = 88,
-        /** The throttling quota has been exceeded */
-        ERR_THROTTLING_QUOTA_EXCEEDED = 89,
-        /** Producer has been fenced by another producer with the same transaction.id */
-        ERR_PRODUCER_FENCED = 90
+        ERR_UNSTABLE_OFFSET_COMMIT = 88
 };
 
 

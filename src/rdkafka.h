@@ -578,10 +578,6 @@ typedef enum {
         RD_KAFKA_RESP_ERR_INVALID_RECORD = 87,
         /** There are unstable offsets that need to be cleared */
         RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT = 88,
-        /** The throttling quota has been exceeded */
-        RD_KAFKA_RESP_ERR_THROTTLING_QUOTA_EXCEEDED = 89,
-        /** Producer has been fenced by another producer with the same transaction.id */
-        RD_KAFKA_RESP_ERR_PRODUCER_FENCED = 90,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

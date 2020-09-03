@@ -503,6 +503,8 @@ static void rd_kafka_txn_partition_registered (rd_kafka_toppar_t *rktp) {
         TAILQ_REMOVE(&rk->rk_eos.txn_waitresp_rktps, rktp, rktp_txnlink);
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
+        /* Not destroy()/keep():ing rktp since it just changes tailq. */
+
         TAILQ_INSERT_TAIL(&rk->rk_eos.txn_rktps, rktp, rktp_txnlink);
 }
 
@@ -847,18 +849,22 @@ void rd_kafka_txn_schedule_register_partitions (rd_kafka_t *rk,
 
 
 /**
- * @brief Clears \p flag from all rktps in \p tqh
+ * @brief Clears \p flag from all rktps and destroys them, emptying
+ *        and reinitializing the \p tqh.
  */
 static void rd_kafka_txn_clear_partitions_flag (rd_kafka_toppar_tqhead_t *tqh,
                                                 int flag) {
-        rd_kafka_toppar_t *rktp;
+        rd_kafka_toppar_t *rktp, *tmp;
 
-        TAILQ_FOREACH(rktp, tqh, rktp_txnlink) {
+        TAILQ_FOREACH_SAFE(rktp, tqh, rktp_txnlink, tmp) {
                 rd_kafka_toppar_lock(rktp);
                 rd_dassert(rktp->rktp_flags & flag);
                 rktp->rktp_flags &= ~flag;
                 rd_kafka_toppar_unlock(rktp);
+                rd_kafka_toppar_destroy(rktp);
         }
+
+        TAILQ_INIT(tqh);
 }
 
 
@@ -872,8 +878,6 @@ static void rd_kafka_txn_clear_pending_partitions (rd_kafka_t *rk) {
                                            RD_KAFKA_TOPPAR_F_PEND_TXN);
         rd_kafka_txn_clear_partitions_flag(&rk->rk_eos.txn_waitresp_rktps,
                                            RD_KAFKA_TOPPAR_F_PEND_TXN);
-        TAILQ_INIT(&rk->rk_eos.txn_pending_rktps);
-        TAILQ_INIT(&rk->rk_eos.txn_waitresp_rktps);
 }
 
 /**
@@ -884,7 +888,6 @@ static void rd_kafka_txn_clear_pending_partitions (rd_kafka_t *rk) {
 static void rd_kafka_txn_clear_partitions (rd_kafka_t *rk) {
         rd_kafka_txn_clear_partitions_flag(&rk->rk_eos.txn_rktps,
                                            RD_KAFKA_TOPPAR_F_IN_TXN);
-        TAILQ_INIT(&rk->rk_eos.txn_rktps);
 }
 
 

@@ -123,6 +123,7 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
         TAILQ_INSERT_SORTED(&rk->rk_eos.txn_pending_rktps, rktp,
                             rd_kafka_toppar_t *, rktp_txnlink,
                             rd_kafka_toppar_topic_cmp);
+        rd_kafka_toppar_keep(rktp);
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
         /* Schedule registration of partitions by the rdkafka main thread */

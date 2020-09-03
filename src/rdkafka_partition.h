@@ -79,9 +79,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_activelink; /* rkb_active_toppars */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rktlink; /* rd_kafka_topic_t link*/
         TAILQ_ENTRY(rd_kafka_toppar_s) rktp_cgrplink;/* rd_kafka_cgrp_t link */
-        TAILQ_ENTRY(rd_kafka_toppar_s)  rktp_txnlink; /**< rd_kafka_t.rk_eos.
-                                                       *   txn_pend_rktps
-                                                       *   or txn_rktps */
+        TAILQ_ENTRY(rd_kafka_toppar_s) rktp_txnlink; /**< rd_kafka_t.rk_eos.
+                                                      *   txn_pend_rktps
+                                                      *   or txn_rktps */
         rd_kafka_topic_t *rktp_rkt;         /**< This toppar's topic object */
 	int32_t            rktp_partition;
         //LOCK: toppar_lock() + topic_wrlock()

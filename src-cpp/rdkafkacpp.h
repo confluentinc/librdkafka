@@ -475,6 +475,22 @@ enum ErrorCode {
         /** Static consumer fenced by other consumer with same
          * group.instance.id. */
         ERR_FENCED_INSTANCE_ID = 82,
+        /** Eligible partition leaders are not available */
+        ERR_ELIGIBLE_LEADERS_NOT_AVAILABLE = 83,
+        /** Leader election not needed for topic partition */
+        ERR_ELECTION_NOT_NEEDED = 84,
+        /** No partition reassignment is in progress */
+        ERR_NO_REASSIGNMENT_IN_PROGRESS = 85,
+        /** Deleting offsets of a topic while the consumer group is subscribed to it */
+        ERR_GROUP_SUBSCRIBED_TO_TOPIC = 86,
+        /** Broker failed to validate record */
+        ERR_INVALID_RECORD = 87,
+        /** There are unstable offsets that need to be cleared */
+        ERR_UNSTABLE_OFFSET_COMMIT = 88,
+        /** The throttling quota has been exceeded */
+        ERR_THROTTLING_QUOTA_EXCEEDED = 89,
+        /** Producer has been fenced by another producer with the same transaction.id */
+        ERR_PRODUCER_FENCED = 90
 };
 
 

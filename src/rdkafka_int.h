@@ -95,6 +95,7 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #include "rdkafka_mock.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_coord.h"
+#include "rdkafka_leader.h"
 #include "rdkafka_mock.h"
 
 /**
@@ -496,6 +497,11 @@ struct rd_kafka_s {
 
         TAILQ_HEAD(, rd_kafka_coord_req_s) rk_coord_reqs; /**< Coordinator
                                                            *   requests */
+
+
+        TAILQ_HEAD(, rd_kafka_leader_req_s) rk_leader_reqs; /**< Partition
+                                                             *   leader
+                                                             *   requests. */
 
 	const rd_kafkap_bytes_t *rk_null_bytes;
 

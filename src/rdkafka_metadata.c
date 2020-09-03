@@ -914,6 +914,38 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
 
 /**
+ * @brief Refresh metadata for \p topic.
+ *
+ * @param rk: used to look up usable broker if \p rkb is NULL.
+ * @param rkb: use this broker, unless NULL then any usable broker from \p rk
+ * @param force: force refresh even if topic is up-to-date in cache
+ * @param cgrp_update: Allow consumer group state update on response.
+ *
+ * @returns an error code
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_topic (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
+                                 const char *topic, rd_bool_t force,
+                                 rd_bool_t cgrp_update,
+                                 const char *reason) {
+        rd_kafka_resp_err_t err;
+        rd_list topics;
+
+        rd_list_init(&topics, 1, NULL);
+        rd_list_add(&topics, topic);
+
+        err = rd_kafka_metadata_refresh_topics(rk, rkb, &topics, force,
+                                               cgrp_update, reason);
+        rd_list_destroy(&topics);
+
+        return err;
+}
+
+
+/**
  * @brief Refresh metadata for known topics
  *
  * @param rk: used to look up usable broker if \p rkb is NULL.

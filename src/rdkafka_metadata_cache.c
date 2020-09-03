@@ -651,6 +651,55 @@ int rd_kafka_metadata_cache_topic_partition_get (
 
 
 /**
+ * @brief Looks up the leader for a partition in the shared metadata cache.
+ *
+ * @param leaderp pointer to where the leader id will be stored.
+ *                Will be set to -1 if an error is returned.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if \p leaderp is set and known,
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC if the topic is not in the cache,
+ *          RD_KAFKA_RESP_ERR__WAIT_CACHE if there's an outstanding Metadata
+ *          request for this topic,
+ *          or any other error code if there's a negative(error) cache entry
+ *          for this topic or partition.
+ *
+ * @locks rd_kafka_*lock()
+ */
+rd_kafka_resp_err_t rd_kafka_metadata_cache_topic_partition_leader_get (
+        rd_kafka_t *rk,
+        const char *topic, int32_t partition, int32_t *leaderp) {
+        const rd_kafka_metadata_topic_t *mtopic;
+        const rd_kafka_metadata_partition_t *mpart;
+        rd_kafka_metadata_partition_t skel = { .id = partition };
+
+        *leaderp = -1;
+
+        if (!(mtopic = rd_kafka_metadata_cache_topic_get(
+                      rk, topic, rd_false/*allow hints*/)))
+                return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+        if (mtopic->err) /* Will also cover ERR__WAIT_CACHE hints */
+                return mtopic->err;
+
+        /* Partitions array may be sparse so use bsearch lookup. */
+        mpart = bsearch(&skel, mtopic->partitions,
+                        mtopic->partition_cnt,
+                        sizeof(*mtopic->partitions),
+                        rd_kafka_metadata_partition_id_cmp);
+
+        if (!mpart)
+                return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+        if (mpart->leader < 0)
+                return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+
+        *leaderp = mpart->leader;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
  * @returns the number of topics in \p topics that are in the cache.
  *
  * @param topics rd_list(const char *): topic names

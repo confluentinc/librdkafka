@@ -45,6 +45,7 @@ set(
     rdkafka_txnmgr.c
     rdkafka_cert.c
     rdkafka_coord.c
+    rdkafka_leader.c
     rdkafka_mock.c
     rdkafka_mock_handlers.c
     rdkafka_mock_cgrp.c

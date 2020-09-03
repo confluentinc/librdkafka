@@ -59,6 +59,11 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                   rd_bool_t cgrp_update,
                                   const char *reason);
 rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_topic (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
+                                 const char *topic, rd_bool_t force,
+                                 rd_bool_t cgrp_update,
+                                 const char *reason);
+rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                         rd_bool_t force, const char *reason);
 rd_kafka_resp_err_t
@@ -153,6 +158,9 @@ int rd_kafka_metadata_cache_topic_partition_get (
         const rd_kafka_metadata_topic_t **mtopicp,
         const rd_kafka_metadata_partition_t **mpartp,
         const char *topic, int32_t partition, int valid);
+rd_kafka_resp_err_t rd_kafka_metadata_cache_topic_partition_leader_get (
+        rd_kafka_t *rk,
+        const char *topic, int32_t partition, int32_t *leaderp);
 
 int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
                                                  const rd_list_t *topics,

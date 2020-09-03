@@ -218,6 +218,7 @@ _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
 _TEST_DECL(0112_assign_unknown_part);
+_TEST_DECL(0115_producer_auth);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -405,6 +406,7 @@ struct test tests[] = {
         _TEST(0111_delay_create_topics, 0, TEST_BRKVER_TOPIC_ADMINAPI,
               .scenario = "noautocreate"),
         _TEST(0112_assign_unknown_part, 0),
+        _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

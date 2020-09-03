@@ -469,6 +469,11 @@ rd_kafka_toppar_get_avail (const rd_kafka_topic_t *rkt,
                 *errp = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
                 return NULL;
 
+        case RD_KAFKA_TOPIC_S_ERROR:
+                /* Permanent topic error. */
+                *errp = rkt->rkt_err;
+                return NULL;
+
         case RD_KAFKA_TOPIC_S_EXISTS:
                 /* Topic exists in cluster. */
 

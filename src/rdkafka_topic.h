@@ -122,11 +122,15 @@ struct rd_kafka_topic_s {
 		RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
 		RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
 		RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
+                RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
+                                             * state, such as auth failure. */
 	} rkt_state;
 
         int               rkt_flags;
 #define RD_KAFKA_TOPIC_F_LEADER_UNAVAIL   0x1 /* Leader lost/unavailable
                                                * for at least one partition. */
+
+        rd_kafka_resp_err_t rkt_err;        /**< Permanent error. */
 
 	rd_kafka_t       *rkt_rk;
 
@@ -196,6 +200,24 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt);
 
 rd_bool_t rd_kafka_topic_set_notexists (rd_kafka_topic_t *rkt,
                                         rd_kafka_resp_err_t err);
+rd_bool_t rd_kafka_topic_set_error (rd_kafka_topic_t *rkt,
+                                    rd_kafka_resp_err_t err);
+
+/**
+ * @returns the topic's permanent error, if any.
+ *
+ * @locality any
+ * @locks_acquired rd_kafka_topic_rdlock(rkt)
+ */
+static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
+rd_kafka_topic_get_error (rd_kafka_topic_t *rkt) {
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_topic_rdlock(rkt);
+        if (rkt->rkt_state == RD_KAFKA_TOPIC_S_ERROR)
+                err = rkt->rkt_err;
+        rd_kafka_topic_rdunlock(rkt);
+        return err;
+}
 
 int rd_kafka_topic_metadata_update2 (rd_kafka_broker_t *rkb,
                                      const struct rd_kafka_metadata_topic *mdt);

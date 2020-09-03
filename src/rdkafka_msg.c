@@ -1170,6 +1170,14 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 			rd_kafka_topic_rdunlock(rkt);
                 return err;
 
+        case RD_KAFKA_TOPIC_S_ERROR:
+                /* Topic has permanent error.
+                 * Fail message immediately. */
+                err = rkt->rkt_err;
+                if (do_lock)
+                        rd_kafka_topic_rdunlock(rkt);
+                return err;
+
         case RD_KAFKA_TOPIC_S_EXISTS:
                 /* Topic exists in cluster. */
 

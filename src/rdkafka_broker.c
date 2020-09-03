@@ -2902,6 +2902,7 @@ static void rd_kafka_broker_prepare_destroy (rd_kafka_broker_t *rkb) {
 static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				      rd_kafka_op_t *rko) {
         rd_kafka_toppar_t *rktp;
+        rd_kafka_resp_err_t topic_err;
         int ret = 1;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
@@ -3108,6 +3109,10 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		 */
                 rktp = rko->rko_rktp;
 
+                /* If there is a topic-wide error, use it as error code
+                 * when failing messages below. */
+                topic_err = rd_kafka_topic_get_error(rktp->rktp_rkt);
+
 		rd_kafka_toppar_lock(rktp);
 
 		/* Multiple PARTITION_LEAVEs are possible during partition
@@ -3189,10 +3194,11 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				   rktp->rktp_partition,
 				   rd_kafka_msgq_len(&rktp->rktp_msgq));
 			rd_kafka_assert(NULL, rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
-			rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
-					 rd_kafka_terminating(rkb->rkb_rk) ?
-					 RD_KAFKA_RESP_ERR__DESTROY :
-					 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                        rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
+                                         rd_kafka_terminating(rkb->rkb_rk) ?
+                                         RD_KAFKA_RESP_ERR__DESTROY :
+                                         (topic_err ? topic_err :
+                                          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION));
 
 		}
 

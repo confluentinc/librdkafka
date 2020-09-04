@@ -368,6 +368,9 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
                 RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
 
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
+
                 RD_KAFKA_ERR_ACTION_REFRESH,
                 RD_KAFKA_RESP_ERR__TRANSPORT,
 

@@ -160,6 +160,7 @@ rd_bool_t rd_kafka_idemp_check_error (rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT:
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
                 if (rd_kafka_is_transactional(rk))
                         rd_kafka_txn_set_fatal_error(rk, RD_DONT_LOCK,
                                                      err, "%s", errstr);

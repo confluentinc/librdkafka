@@ -611,6 +611,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                 break;
 
                         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+                        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
                         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING:
                         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
                         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
@@ -1454,6 +1455,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING:
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
@@ -1664,6 +1666,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT:
@@ -1971,6 +1974,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
                 actions |= RD_KAFKA_ERR_ACTION_FATAL;
                 break;
@@ -2486,6 +2490,7 @@ rd_kafka_txn_handle_FindCoordinator (rd_kafka_t *rk,
                 return;
 
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
                 rd_kafka_wrlock(rk);
                 rd_kafka_txn_set_fatal_error(
                         rkb->rkb_rk, RD_DONT_LOCK, err,

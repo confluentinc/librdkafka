@@ -243,16 +243,7 @@ RdKafka::KafkaConsumerImpl::seek (const RdKafka::TopicPartition &partition,
 
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::close () {
-  rd_kafka_resp_err_t err;
-  err = rd_kafka_consumer_close(rk_);
-  if (err)
-    return static_cast<RdKafka::ErrorCode>(err);
-
-  while (rd_kafka_outq_len(rk_) > 0)
-    rd_kafka_poll(rk_, 10);
-  rd_kafka_destroy(rk_);
-
-  return static_cast<RdKafka::ErrorCode>(err);
+  return static_cast<RdKafka::ErrorCode>(rd_kafka_consumer_close(rk_));
 }
 
 

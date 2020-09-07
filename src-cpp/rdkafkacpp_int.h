@@ -1103,7 +1103,8 @@ class ConsumerGroupMetadataImpl : public ConsumerGroupMetadata {
 class KafkaConsumerImpl : virtual public KafkaConsumer, virtual public HandleImpl {
 public:
   ~KafkaConsumerImpl () {
-
+    if (rk_)
+      rd_kafka_destroy_flags(rk_, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
   }
 
   static KafkaConsumer *create (Conf *conf, std::string &errstr);
@@ -1276,7 +1277,10 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
 class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
  public:
-  ~ProducerImpl () { if (rk_) rd_kafka_destroy(rk_); };
+  ~ProducerImpl () {
+    if (rk_)
+      rd_kafka_destroy(rk_);
+  };
 
   ErrorCode produce (Topic *topic, int32_t partition,
                      int msgflags,

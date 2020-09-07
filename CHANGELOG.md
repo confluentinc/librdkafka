@@ -26,6 +26,8 @@
  * The `roundrobin` `partition.assignment.strategy` could crash (assert)
    for certain combinations of members and partitions.
    This is a regression in v1.5.0. (#3024)
+ * The C++ `KafkaConsumer` destructor did not destroy the underlying
+   C `rd_kafka_t` instance, causing a leak if `close()` was not used.
 
 ### Producer fixes
 

@@ -32,8 +32,10 @@
  * Topic authorization errors are now properly propagated for produced messages,
    both through delivery reports and as `ERR_TOPIC_AUTHORIZATION_FAILED`
    return value from `produce*()` (#2215)
+ * Treat cluster authentication failures as fatal in the transactional
+   producer (#2994).
  * The transactional producer code did not properly reference-count partition
-   objects which could in very rare circumstances lead to a user-after-free bug
+   objects which could in very rare circumstances lead to a use-after-free bug
    if a topic was deleted from the cluster when a transaction was using it.
 
 

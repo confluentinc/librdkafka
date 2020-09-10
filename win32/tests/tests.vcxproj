@@ -196,6 +196,7 @@
     <ClCompile Include="..\..\tests\0112-assign_unknown_part.c" />
     <ClCompile Include="..\..\tests\0115-producer_auth.cpp" />
     <ClCompile Include="..\..\tests\0116-kafkaconsumer_close.cpp" />
+    <ClCompile Include="..\..\tests\0117-mock_errors.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

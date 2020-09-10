@@ -134,6 +134,12 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                         RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
                 break;
 
+        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+                actions |= RD_KAFKA_ERR_ACTION_REFRESH|
+                        RD_KAFKA_ERR_ACTION_RETRY|
+                        RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
+                break;
+
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
@@ -2743,6 +2749,11 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
 
+                RD_KAFKA_ERR_ACTION_REFRESH|
+                RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
+                RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR,
+
                 RD_KAFKA_ERR_ACTION_RETRY|
                 RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS,
@@ -2855,8 +2866,12 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                         /* We can't be certain the request wasn't
                          * sent in case of transport failure,
                          * so the ERR__TRANSPORT case will need
-                         * the retry count to be increased */
-                        if (perr->err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                         * the retry count to be increased,
+                         * In case of certain other errors we want to
+                         * avoid retrying for the duration of the
+                         * message.timeout.ms to speed up error propagation. */
+                        if (perr->err != RD_KAFKA_RESP_ERR__TRANSPORT &&
+                            perr->err != RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR)
                                 perr->incr_retry = 0;
                 }
 

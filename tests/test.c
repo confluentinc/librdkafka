@@ -220,6 +220,7 @@ _TEST_DECL(0111_delay_create_topics);
 _TEST_DECL(0112_assign_unknown_part);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
+_TEST_DECL(0117_mock_errors);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -409,6 +410,7 @@ struct test tests[] = {
         _TEST(0112_assign_unknown_part, 0),
         _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
+        _TEST(0117_mock_errors, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

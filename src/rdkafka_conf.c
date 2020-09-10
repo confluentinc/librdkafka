@@ -598,12 +598,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "It might be useful to turn this off when interacting with "
           "0.9 brokers with an aggressive `connection.max.idle.ms` value.",
 	  0, 1, 1 },
-        { _RK_GLOBAL, "log.configuration.warnings", _RK_C_BOOL,
-          _RK(log_conf_warn),
-          "Log configuration warnings on client initialization. "
-          "Warning logs will be emitted for ignored, deprecated, experimental "
-          "and inconsistent configuration settings.",
-          0, 1, 1 },
         { _RK_GLOBAL, "background_event_cb", _RK_C_PTR,
           _RK(background_event_cb),
           "Background queue event callback "

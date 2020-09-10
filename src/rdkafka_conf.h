@@ -424,7 +424,6 @@ struct rd_kafka_conf_s {
         int    log_queue;
         int    log_thread_name;
         int    log_connection_close;
-        int    log_conf_warn;
 
         /* PRNG seeding */
         int    enable_random_seed;

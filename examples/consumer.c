@@ -72,6 +72,7 @@ static int is_printable (const char *buf, size_t size) {
 int main (int argc, char **argv) {
         rd_kafka_t *rk;          /* Consumer instance handle */
         rd_kafka_conf_t *conf;   /* Temporary configuration object */
+        rd_kafka_topic_conf_t *topic_conf;
         rd_kafka_resp_err_t err; /* librdkafka API error code */
         char errstr[512];        /* librdkafka API error reporting buffer */
         const char *brokers;     /* Argument: broker list */
@@ -102,6 +103,7 @@ int main (int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
+        topic_conf = rd_kafka_topic_conf_new();
 
         /* Set bootstrap broker(s) as a comma-separated list of
          * host or host:port (default port 9092).
@@ -131,7 +133,7 @@ int main (int argc, char **argv) {
          * in the partition to start fetching messages.
          * By setting this to earliest the consumer will read all messages
          * in the partition if there was no previously committed offset. */
-        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest",
+        if (rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
                               errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);

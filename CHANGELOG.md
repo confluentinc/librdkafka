@@ -28,6 +28,7 @@
    This is a regression in v1.5.0. (#3024)
  * The C++ `KafkaConsumer` destructor did not destroy the underlying
    C `rd_kafka_t` instance, causing a leak if `close()` was not used.
+ * Expose rich error strings for C++ Consumer `Message->errstr()`.
 
 ### Producer fixes
 

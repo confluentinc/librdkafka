@@ -56,9 +56,10 @@ RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
   rkmessage = rd_kafka_consume_queue(queue_, timeout_ms);
 
   if (!rkmessage)
-    return new RdKafka::MessageImpl(NULL, RdKafka::ERR__TIMED_OUT);
+    return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, NULL,
+                                    RdKafka::ERR__TIMED_OUT);
 
-  return new RdKafka::MessageImpl(rkmessage);
+  return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, rkmessage);
 }
 
 int RdKafka::QueueImpl::poll (int timeout_ms) {

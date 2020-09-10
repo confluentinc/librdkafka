@@ -132,11 +132,11 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Topic *topic,
 
   rkmessage = rd_kafka_consume(topicimpl->rkt_, partition, timeout_ms);
   if (!rkmessage)
-    return new RdKafka::MessageImpl(topic,
+    return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, topic,
                                     static_cast<RdKafka::ErrorCode>
                                     (rd_kafka_last_error()));
 
-  return new RdKafka::MessageImpl(topic, rkmessage);
+  return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, topic, rkmessage);
 }
 
 namespace {
@@ -154,7 +154,8 @@ namespace {
      */
     static void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
       ConsumerImplCallback *instance = static_cast<ConsumerImplCallback*>(opaque);
-      RdKafka::MessageImpl message(instance->topic, msg, false /*don't free*/);
+      RdKafka::MessageImpl message(RD_KAFKA_CONSUMER, instance->topic,
+                                   msg, false /*don't free*/);
       instance->cb_cls->consume_cb(message, instance->cb_data);
     }
     RdKafka::Topic *topic;
@@ -182,7 +183,7 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
 
   rkmessage = rd_kafka_consume_queue(queueimpl->queue_, timeout_ms);
   if (!rkmessage)
-    return new RdKafka::MessageImpl(NULL,
+    return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, NULL,
                                     static_cast<RdKafka::ErrorCode>
                                     (rd_kafka_last_error()));
   /*
@@ -192,7 +193,7 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
   void *opaque = rd_kafka_topic_opaque(rkmessage->rkt);
   Topic *topic = static_cast<Topic *>(opaque);
 
-  return new RdKafka::MessageImpl(topic, rkmessage);
+  return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, topic, rkmessage);
 }
 
 namespace {
@@ -216,7 +217,8 @@ namespace {
        */
       void *topic_opaque = rd_kafka_topic_opaque(msg->rkt);
       RdKafka::Topic *topic = static_cast<RdKafka::Topic *>(topic_opaque);
-      RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+      RdKafka::MessageImpl message(RD_KAFKA_CONSUMER, topic, msg,
+                                   false /*don't free*/);
       instance->cb_cls->consume_cb(message, instance->cb_data);
     }
     RdKafka::ConsumeCb *cb_cls;

@@ -114,9 +114,10 @@ RdKafka::Message *RdKafka::KafkaConsumerImpl::consume (int timeout_ms) {
   rkmessage = rd_kafka_consumer_poll(this->rk_, timeout_ms);
 
   if (!rkmessage)
-    return new RdKafka::MessageImpl(NULL, RdKafka::ERR__TIMED_OUT);
+    return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, NULL,
+                                    RdKafka::ERR__TIMED_OUT);
 
-  return new RdKafka::MessageImpl(rkmessage);
+  return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, rkmessage);
 
 }
 

@@ -43,7 +43,8 @@ static void dr_msg_cb_trampoline (rd_kafka_t *rk,
                                   rkmessage,
                                   void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
-  RdKafka::MessageImpl message(NULL, (rd_kafka_message_t *)rkmessage, false);
+  RdKafka::MessageImpl message(RD_KAFKA_PRODUCER, NULL,
+                               (rd_kafka_message_t *)rkmessage, false);
   handle->dr_cb_->dr_cb(message);
 }
 

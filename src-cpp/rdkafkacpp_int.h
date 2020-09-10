@@ -328,18 +328,20 @@ class MessageImpl : public Message {
       delete headers_;
   };
 
-  MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL),
-  headers_(NULL) {}
+  MessageImpl (rd_kafka_type_t rk_type,
+               RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
+      topic_(topic), rkmessage_(rkmessage),
+      free_rkmessage_(true), key_(NULL), headers_(NULL), rk_type_(rk_type) {}
 
-  MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
+  MessageImpl (rd_kafka_type_t rk_type,
+               RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL),
-  headers_(NULL) {}
+      topic_(topic), rkmessage_(rkmessage),
+      free_rkmessage_(dofree), key_(NULL), headers_(NULL), rk_type_(rk_type) {}
 
-  MessageImpl (rd_kafka_message_t *rkmessage):
-  topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL),
-  headers_(NULL) {
+  MessageImpl (rd_kafka_type_t rk_type, rd_kafka_message_t *rkmessage):
+      topic_(NULL), rkmessage_(rkmessage),
+      free_rkmessage_(true), key_(NULL), headers_(NULL), rk_type_(rk_type)  {
     if (rkmessage->rkt) {
       /* Possibly NULL */
       topic_ = static_cast<Topic *>(rd_kafka_topic_opaque(rkmessage->rkt));
@@ -347,19 +349,20 @@ class MessageImpl : public Message {
   }
 
   /* Create errored message */
-  MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-  topic_(topic), free_rkmessage_(false), key_(NULL), headers_(NULL) {
+  MessageImpl (rd_kafka_type_t rk_type,
+               RdKafka::Topic *topic, RdKafka::ErrorCode err):
+      topic_(topic), free_rkmessage_(false),
+      key_(NULL), headers_(NULL), rk_type_(rk_type)  {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
   }
 
   std::string         errstr() const {
-    /* FIXME: If there is an error string in payload (for consume_cb)
-     *        it wont be shown since 'payload' is reused for errstr
-     *        and we cant distinguish between consumer and producer.
-     *        For the producer case the payload needs to be the original
-     *        payload pointer. */
+    /* message_errstr() is only available for the consumer. */
+    if (rk_type_ == RD_KAFKA_CONSUMER)
+      return std::string(rd_kafka_message_errstr(rkmessage_));
+
     const char *es = rd_kafka_err2str(rkmessage_->err);
     return std::string(es ? es : "");
   }
@@ -456,6 +459,7 @@ private:
   MessageImpl& operator=(MessageImpl const&) /*= delete*/;
 
   RdKafka::Headers *headers_;
+  const rd_kafka_type_t rk_type_; /**< Client type */
 };
 
 

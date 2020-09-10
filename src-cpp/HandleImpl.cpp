@@ -36,7 +36,8 @@ void RdKafka::consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
   RdKafka::Topic* topic = static_cast<Topic *>(rd_kafka_topic_opaque(msg->rkt));
 
-  RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+  RdKafka::MessageImpl message(RD_KAFKA_CONSUMER, topic, msg,
+                               false /*don't free*/);
 
   handle->consume_cb_->consume_cb(message, opaque);
 }

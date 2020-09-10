@@ -1724,6 +1724,11 @@ $cflags"
         local stlibs=$(mkl_lib_check_static $1 "$libs")
         if [[ -n $stlibs ]]; then
             libs=$stlibs
+        else
+            # if we don't find a static library to bundle into the
+            # -static.a, we need to export a pkgconfig dependency
+            # so it can be resolved when linking downstream packages
+            mkl_mkvar_append $1 "MKL_PKGCONFIG_REQUIRES" "$libname"
         fi
     fi
 
@@ -2338,8 +2343,3 @@ function mkl_toggle_option_lib {
     eval "function _tmp_func { mkl_lib_check \"$2\" \"$3\" \"$4\" CC \"$7\"; }"
     mkl_func_push MKL_CHECKS "$MKL_MODULE" _tmp_func
 }
-
-
-
-
-

@@ -2221,7 +2221,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
                              "for %d/%d partition(s): "
                              "%s%s%s",
                              rko_orig->rko_u.offset_commit.reason,
-                             errcnt ? offsets->cnt : errcnt, offsets->cnt,
+                             errcnt ? errcnt : offsets->cnt, offsets->cnt,
                              errcnt ? rd_kafka_err2str(err) : "",
                              errcnt ? ": " : "",
                              tmp);

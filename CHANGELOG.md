@@ -39,6 +39,8 @@
  * The transactional producer code did not properly reference-count partition
    objects which could in very rare circumstances lead to a use-after-free bug
    if a topic was deleted from the cluster when a transaction was using it.
+ * `ERR_KAFKA_STORAGE_ERROR` is now correctly treated as a retriable
+   produce error (#3026).
 
 
 # librdkafka v1.5.0

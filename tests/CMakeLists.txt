@@ -106,6 +106,7 @@ set(
     0112-assign_unknown_part.c
     0115-producer_auth.cpp
     0116-kafkaconsumer_close.cpp
+    0117-mock_errors.c
     8000-idle.cpp
     test.c
     testcpp.cpp

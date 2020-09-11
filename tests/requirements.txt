@@ -1,2 +1,2 @@
-trivup
+trivup>=0.9.0
 jsoncomment

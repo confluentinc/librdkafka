@@ -79,7 +79,7 @@ static const char *rd_kafka_cert_enc_names[] = {
 /**
  * @brief Destroy a certificate
  */
-static void rd_kafka_cert_destroy (rd_kafka_cert_t *cert) {
+void rd_kafka_cert_destroy (rd_kafka_cert_t *cert) {
         if (rd_refcnt_sub(&cert->refcnt) > 0)
                 return;
 
@@ -136,7 +136,7 @@ static RD_UNUSED void rd_kafka_print_ssl_errors (void) {
  *          or NULL on failure in which case errstr will have a human-readable
  *          error string written to it.
  */
-static rd_kafka_cert_t *rd_kafka_cert_new (const rd_kafka_conf_t *conf,
+rd_kafka_cert_t *rd_kafka_cert_new (const rd_kafka_conf_t *conf,
                                            rd_kafka_cert_type_t type,
                                            rd_kafka_cert_enc_t encoding,
                                            const void *buffer, size_t size,

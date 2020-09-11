@@ -140,7 +140,6 @@ def print_report_summary (fullreport):
           (pass_cnt, pass_clr, fail_cnt, fail_clr))
 
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Show test suite report')

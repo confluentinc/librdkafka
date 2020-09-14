@@ -21,6 +21,8 @@ librdkafka is licensed under the 2-clause BSD license.")
 set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/CPackProjectConfig.cmake")
 set(CPACK_NUGET_TARGETS_FILE "packaging/cmake/rdkafka.targets")
 set(CPACK_STAGING_DIR "${CMAKE_BINARY_DIR}")
+# This install statement is from the binary dir, but the above CPackProjectConfig.cmake will copy it
+# there only when building a NuGet package
 install(FILES "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.targets"
   DESTINATION "build/native" OPTIONAL)
 

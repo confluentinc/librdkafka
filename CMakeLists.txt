@@ -16,6 +16,14 @@ million msgs/second for the producer and 3 million msgs/second for the consumer.
 \
 librdkafka is licensed under the 2-clause BSD license.")
 
+# All this block is the machinery required to install the .targets file only for the NuGet generator
+# This is really something that the cpack generator ought to support directly
+set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/CPackProjectConfig.cmake")
+set(CPACK_NUGET_TARGETS_FILE "packaging/cmake/rdkafka.targets")
+set(CPACK_STAGING_DIR "${CMAKE_BINARY_DIR}")
+install(FILES "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.targets"
+  DESTINATION "build/native" OPTIONAL)
+
 include(CPack)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
@@ -268,11 +276,6 @@ install(
     DESTINATION "share/licenses/librdkafka"
 )
 
-INSTALL(FILES packaging/cmake/rdkafka.targets
-    DESTINATION "build/native"
-	RENAME ${CMAKE_PROJECT_NAME}.targets
-)
-
 if (MSVC)
     install(FILES
         $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
@@ -289,6 +292,7 @@ endif()
 # }
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_DEBUG_POSTFIX d)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

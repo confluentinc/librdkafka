@@ -25,6 +25,11 @@ set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
 target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 target_compile_definitions(rdkafka++_static PUBLIC LIBRDKAFKACPP_STATICLIB)
 
+set_target_properties(rdkafka++_static
+    PROPERTIES COMPILE_PDB_NAME rdkafka++_static)
+set_target_properties(rdkafka++_static
+    PROPERTIES COMPILE_PDB_NAME_DEBUG rdkafka++_static${CMAKE_DEBUG_POSTFIX})
+
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 target_link_libraries(rdkafka++_static PUBLIC rdkafka_static)
 
@@ -82,3 +87,12 @@ install(
     FILES "rdkafkacpp.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
 )
+
+if (MSVC)
+    install(FILES $<TARGET_PDB_FILE:rdkafka++>
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+    install(FILES $<TARGET_FILE_DIR:rdkafka++_static>/$<TARGET_FILE_BASE_NAME:rdkafka++_static>.pdb
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+endif()

@@ -163,6 +163,11 @@ set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
 target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
 target_compile_definitions(rdkafka_static PUBLIC LIBRDKAFKA_STATICLIB)
 
+set_target_properties(rdkafka_static
+    PROPERTIES COMPILE_PDB_NAME rdkafka_static)
+set_target_properties(rdkafka_static
+    PROPERTIES COMPILE_PDB_NAME_DEBUG rdkafka_static${CMAKE_DEBUG_POSTFIX})
+
 if(MINGW)
   # Target Windows 8.1 to match the VS projects (MinGW defaults to an older WinAPI version)
   list(APPEND rdkafka_compile_definitions WINVER=0x0603 _WIN32_WINNT=0x0603 UNICODE)
@@ -317,3 +322,12 @@ install(
     FILES "rdkafka.h" "rdkafka_mock.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
 )
+
+if (MSVC)
+    install(FILES $<TARGET_PDB_FILE:rdkafka>
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+    install(FILES $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+endif()

@@ -294,7 +294,6 @@ endif()
 # }
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_DEBUG_POSTFIX d)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

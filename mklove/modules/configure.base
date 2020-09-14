@@ -1578,6 +1578,7 @@ function mkl_lib_check0 {
         # E.g., check for crypto and then ssl should result in -lssl -lcrypto
         mkl_dbg "$1: from lib_check: LIBS: prepend $libs"
         mkl_mkvar_prepend "$1" LIBS "$libs"
+        mkl_mkvar_prepend "$1" MKL_PKGCONFIG_LIBS_PRIVATE "$libs"
     fi
 
     return 0
@@ -1715,12 +1716,19 @@ $cflags"
         fi
     fi
 
+    mkl_mkvar_append $1 "MKL_PKGCONFIG_REQUIRES_PRIVATE" "$libname"
+
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
     if [[ -z $nostaticopt ]]; then
         local stlibs=$(mkl_lib_check_static $1 "$libs")
         if [[ -n $stlibs ]]; then
             libs=$stlibs
+        else
+            # if we don't find a static library to bundle into the
+            # -static.a, we need to export a pkgconfig dependency
+            # so it can be resolved when linking downstream packages
+            mkl_mkvar_append $1 "MKL_PKGCONFIG_REQUIRES" "$libname"
         fi
     fi
 
@@ -2335,8 +2343,3 @@ function mkl_toggle_option_lib {
     eval "function _tmp_func { mkl_lib_check \"$2\" \"$3\" \"$4\" CC \"$7\"; }"
     mkl_func_push MKL_CHECKS "$MKL_MODULE" _tmp_func
 }
-
-
-
-
-

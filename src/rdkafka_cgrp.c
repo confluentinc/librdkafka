@@ -2206,7 +2206,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
              (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
               err != RD_KAFKA_RESP_ERR__NO_OFFSET))) {
                 /* If there is no callback or handler for this (auto)
-                 * commit then raise an error to the application (#1043) */
+                 * commit then log an error (#1043) */
                 char tmp[512];
 
                 rd_kafka_topic_partition_list_str(

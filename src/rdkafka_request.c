@@ -126,8 +126,8 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
         case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
+        case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR__WAIT_COORD:
                 /* Request metadata information update */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH|
@@ -135,6 +135,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+                /* Request metadata update and retry */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH|
                         RD_KAFKA_ERR_ACTION_RETRY|
                         RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
@@ -156,6 +157,13 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_RESP_ERR__PURGE_INFLIGHT:
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT|
+                        RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
+                break;
+
+        case RD_KAFKA_RESP_ERR__BAD_MSG:
+                /* Buffer parse failures are typically a client-side bug,
+                 * treat them as permanent failures. */
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT|
                         RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
                 break;
@@ -891,26 +899,90 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 }
 
 
+
+/**
+ * @brief Handle per-partition OffsetCommit errors and returns actions flags.
+ */
+static int rd_kafka_handle_OffsetCommit_error (
+        rd_kafka_broker_t *rkb, rd_kafka_buf_t *request,
+        const rd_kafka_topic_partition_t *rktpar) {
+
+        /* These actions are mimicking AK's ConsumerCoordinator.java */
+
+        return rd_kafka_err_action(
+                rkb, rktpar->err, request,
+
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
+
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+
+
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE,
+
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE,
+
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+
+
+                /* .._SPECIAL: mark coordinator dead */
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+
+
+                /* FIXME: There are some cases in the Java code where
+                 *        this is not treated as a fatal error. */
+                RD_KAFKA_ERR_ACTION_PERMANENT|RD_KAFKA_ERR_ACTION_FATAL,
+                RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+
+
+                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
+
+
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+
+                RD_KAFKA_ERR_ACTION_END);
+}
+
+
 /**
  * @remark \p offsets may be NULL if \p err is set
  */
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
-			      rd_kafka_broker_t *rkb,
-			      rd_kafka_resp_err_t err,
-			      rd_kafka_buf_t *rkbuf,
-			      rd_kafka_buf_t *request,
-			      rd_kafka_topic_partition_list_t *offsets) {
+                              rd_kafka_broker_t *rkb,
+                              rd_kafka_resp_err_t err,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_kafka_buf_t *request,
+                              rd_kafka_topic_partition_list_t *offsets) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
-        int16_t ErrorCode = 0, last_ErrorCode = 0;
-	int errcnt = 0;
+        int errcnt = 0;
         int partcnt = 0;
         int i;
-	int actions;
+        int actions = 0;
 
         if (err)
-		goto err;
+                goto err;
 
         if (request->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_throttle_time(rkbuf);
@@ -929,6 +1001,7 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 
                 for (j = 0 ; j < PartArrayCnt ; j++) {
                         int32_t partition;
+                        int16_t ErrorCode;
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &partition);
@@ -944,93 +1017,65 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         }
 
                         rktpar->err = ErrorCode;
-			if (ErrorCode) {
-				last_ErrorCode = ErrorCode;
-				errcnt++;
-			}
+                        if (ErrorCode) {
+                                err = ErrorCode;
+                                errcnt++;
+
+                                /* Accumulate actions for per-partition
+                                 * errors. */
+                                actions |= rd_kafka_handle_OffsetCommit_error(
+                                        rkb, request, rktpar);
+                        }
 
                         partcnt++;
                 }
         }
 
-	/* If all partitions failed use error code
-	 * from last partition as the global error. */
-	if (offsets && errcnt == partcnt) {
-		err = last_ErrorCode;
-                if (err)
-                        goto err;
-        }
+        /* If all partitions failed use error code
+         * from last partition as the global error. */
+        if (offsets && err && errcnt == partcnt)
+                goto err;
 
-	goto done;
+        goto done;
 
  err_parse:
         err = rkbuf->rkbuf_err;
 
  err:
-        actions = rd_kafka_err_action(
-		rkb, err, request,
+        if (!actions) /* Transport/Request-level error */
+                actions = rd_kafka_err_action(
+                        rkb, err, request,
 
-		RD_KAFKA_ERR_ACTION_PERMANENT,
-		RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE,
+                        RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                        RD_KAFKA_RESP_ERR__TRANSPORT,
 
-		RD_KAFKA_ERR_ACTION_RETRY,
-		RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS,
+                        RD_KAFKA_ERR_ACTION_END);
 
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
-		RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
-
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
-		RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP,
-
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
-                RD_KAFKA_RESP_ERR__TRANSPORT,
-
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
-		RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
-		RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
-
-		RD_KAFKA_ERR_ACTION_RETRY,
-		RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
-
-		RD_KAFKA_ERR_ACTION_PERMANENT,
-		RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE,
-
-		RD_KAFKA_ERR_ACTION_PERMANENT,
-		RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
-
-		RD_KAFKA_ERR_ACTION_PERMANENT,
-		RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
-
-                RD_KAFKA_ERR_ACTION_PERMANENT,
-                RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-
-		RD_KAFKA_ERR_ACTION_END);
-
-        if (err == RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID)
+        if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
                 rd_kafka_set_fatal_error(rk, err,
-                                         "Fatal consumer error: %s",
+                                         "OffsetCommit failed: %s",
                                          rd_kafka_err2str(err));
+                return err;
+        }
 
-	if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
-		/* Mark coordinator dead or re-query for coordinator.
-		 * ..dead() will trigger a re-query. */
-		if (actions & RD_KAFKA_ERR_ACTION_SPECIAL)
-			rd_kafka_cgrp_coord_dead(rk->rk_cgrp, err,
-						 "OffsetCommitRequest failed");
-		else
-			rd_kafka_cgrp_coord_query(rk->rk_cgrp,
-						  "OffsetCommitRequest failed");
-	}
-	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-		if (rd_kafka_buf_retry(rkb, request))
-			return RD_KAFKA_RESP_ERR__IN_PROGRESS;
-		/* FALLTHRU */
-	}
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
+                /* Mark coordinator dead or re-query for coordinator.
+                 * ..dead() will trigger a re-query. */
+                if (actions & RD_KAFKA_ERR_ACTION_SPECIAL)
+                        rd_kafka_cgrp_coord_dead(rk->rk_cgrp, err,
+                                                 "OffsetCommitRequest failed");
+                else
+                        rd_kafka_cgrp_coord_query(rk->rk_cgrp,
+                                                  "OffsetCommitRequest failed");
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
+            !(actions & RD_KAFKA_ERR_ACTION_PERMANENT) &&
+            rd_kafka_buf_retry(rkb, request))
+                return RD_KAFKA_RESP_ERR__IN_PROGRESS;
 
  done:
-	return err;
+        return err;
 }
 
 

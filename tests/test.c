@@ -223,6 +223,7 @@ _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
 _TEST_DECL(0118_commit_rebalance);
+_TEST_DECL(0119_consumer_auth);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -416,6 +417,7 @@ struct test tests[] = {
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
         _TEST(0117_mock_errors, TEST_F_LOCAL),
         _TEST(0118_commit_rebalance, 0),
+        _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

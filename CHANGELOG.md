@@ -27,6 +27,9 @@
  * The C++ `KafkaConsumer` destructor did not destroy the underlying
    C `rd_kafka_t` instance, causing a leak if `close()` was not used.
  * Expose rich error strings for C++ Consumer `Message->errstr()`.
+ * The consumer could get stuck if an outstanding commit failed during
+   rebalancing (#2933).
+ * Topic authorization errors during fetching are now reported only once (#3072).
 
 ### Producer fixes
 

@@ -19,7 +19,7 @@ MKL_COPYRIGHT_SKIP?=^(tests|packaging)
 
 .PHONY:
 
-all: mklove-check libs CONFIGURATION.md check
+all: mklove-check libs CONFIGURATION.md check TAGS
 
 include mklove/Makefile.base
 
@@ -88,7 +88,7 @@ TAGS: .PHONY
 		echo "Using etags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
 			etags -f $@ - ; \
-	 else \
+	 elif which ctags >/dev/null 2>&1 ; then \
 		echo "Using ctags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
 			ctags -e -f $@ -L- ; \

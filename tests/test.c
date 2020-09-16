@@ -221,6 +221,7 @@ _TEST_DECL(0112_assign_unknown_part);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
+_TEST_DECL(0118_commit_rebalance);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -411,6 +412,7 @@ struct test tests[] = {
         _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
         _TEST(0117_mock_errors, TEST_F_LOCAL),
+        _TEST(0118_commit_rebalance, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -2182,8 +2184,8 @@ rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  *
  * @param ... is a NULL-terminated list of key, value config property pairs.
  */
-void test_produce_msgs_easy_v (const char *topic,
-                               int32_t partition, uint64_t testid,
+void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
+                               int32_t partition,
                                int msg_base, int cnt, size_t size, ...) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *p;
@@ -2209,6 +2211,33 @@ void test_produce_msgs_easy_v (const char *topic,
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(p);
+}
+
+
+/**
+ * @brief A standard rebalance callback.
+ */
+void test_rebalance_cb (rd_kafka_t *rk,
+                        rd_kafka_resp_err_t err,
+                        rd_kafka_topic_partition_list_t *parts,
+                        void *opaque) {
+
+        TEST_SAY("%s: Rebalance: %s: %d partition(s)\n",
+                 rd_kafka_name(rk), rd_kafka_err2name(err), parts->cnt);
+
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                test_consumer_assign("assign", rk, parts);
+                break;
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                test_consumer_unassign("unassign", rk);
+                break;
+        default:
+                TEST_FAIL("Unknown rebalance event: %s",
+                          rd_kafka_err2name(err));
+                break;
+        }
 }
 
 
@@ -3806,7 +3835,7 @@ void test_consumer_close (rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         test_timing_t timing;
 
-        TEST_SAY("Closing consumer\n");
+        TEST_SAY("Closing consumer %s\n", rd_kafka_name(rk));
 
         TIMING_START(&timing, "CONSUMER.CLOSE");
         err = rd_kafka_consumer_close(rk);

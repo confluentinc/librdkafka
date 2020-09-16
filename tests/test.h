@@ -441,9 +441,14 @@ void test_produce_msgs_rate (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                        uint64_t testid, int32_t partition);
 
-void test_produce_msgs_easy_v (const char *topic, int32_t partition,
-                               uint64_t testid,
+void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
+                               int32_t partition,
                                int msg_base, int cnt, size_t size, ...);
+
+void test_rebalance_cb (rd_kafka_t *rk,
+                        rd_kafka_resp_err_t err,
+                        rd_kafka_topic_partition_list_t *parts,
+                        void *opaque);
 
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
@@ -675,6 +680,24 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                 break;                                                  \
         TEST_FAIL("%s failed: %s\n",                                    \
                   _desc, rd_kafka_error_string(_error));                \
+        } while (0)
+
+/**
+ * @brief Same as TEST_CALL__() but expects an rd_kafka_resp_err_t return type
+ *        without errstr.
+ */
+#define TEST_CALL_ERR__(FUNC_W_ARGS) do {                               \
+        test_timing_t _timing;                                          \
+        const char *_desc = RD_STRINGIFY(FUNC_W_ARGS);                  \
+        rd_kafka_resp_err_t _err;                                       \
+        TIMING_START(&_timing, "%s", _desc);                            \
+        TEST_SAYL(3, "Begin call %s\n", _desc);                         \
+        _err = FUNC_W_ARGS;                                             \
+        TIMING_STOP(&_timing);                                          \
+        if (!_err)                                                      \
+                break;                                                  \
+        TEST_FAIL("%s failed: %s\n",                                    \
+                  _desc, rd_kafka_err2str(_err));                       \
         } while (0)
 
 /**

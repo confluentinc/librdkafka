@@ -265,13 +265,8 @@ static void do_test_regex (void) {
 }
 
 
-/* @remark This test will fail if auto topic creation is enabled on the broker
- * since the client will issue a topic-creating metadata request to find
- * a new leader when the topic is removed.
- *
- * To run with trivup, do:
- * ./interactive_broker_version.py .. -conf '{"auto_create_topics":"false"}' ..
- * TESTS=0045 ./run-test.sh -k
+/**
+ * @remark Requires scenario=noautocreate.
  */
 static void do_test_topic_remove (void) {
 	char *topic_f = rd_strdup(test_mk_topic_name("topic_f", 1));
@@ -354,10 +349,8 @@ static void do_test_topic_remove (void) {
 
 int main_0045_subscribe_update (int argc, char **argv) {
 
-        if (!test_can_create_topics(1)) {
-                TEST_SKIP("Can't create topics\n");
+        if (!test_can_create_topics(1))
                 return 0;
-        }
 
         do_test_regex();
 
@@ -365,11 +358,6 @@ int main_0045_subscribe_update (int argc, char **argv) {
 }
 
 int main_0045_subscribe_update_non_exist_and_partchange (int argc, char **argv){
-        if (test_check_auto_create_topic()) {
-                TEST_SKIP("do_test_non_exist_and_partchange(): "
-                          "topic auto-creation is enabled\n");
-                return 0;
-        }
 
         do_test_non_exist_and_partchange();
 
@@ -378,10 +366,10 @@ int main_0045_subscribe_update_non_exist_and_partchange (int argc, char **argv){
 
 int main_0045_subscribe_update_topic_remove (int argc, char **argv) {
 
-	if (!test_can_create_topics(1))
-		return 0;
+        if (!test_can_create_topics(1))
+                return 0;
 
-	do_test_topic_remove();
+        do_test_topic_remove();
 
         return 0;
 }

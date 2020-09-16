@@ -76,6 +76,7 @@ int          test_rusage = 0; /**< Check resource usage */
  *   <1.0: CPU is faster than base line system. */
 double       test_rusage_cpu_calibration = 1.0;
 static  const char *tests_to_run = NULL; /* all */
+int          test_write_report = 0; /**< Write test report file */
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -1253,7 +1254,7 @@ static void run_tests (int argc, char **argv) {
  */
 static int test_summary (int do_lock) {
         struct test *test;
-        FILE *report_fp;
+        FILE *report_fp = NULL;
         char report_path[128];
         time_t t;
         struct tm *tm;
@@ -1272,25 +1273,30 @@ static int test_summary (int do_lock) {
 
         if ((tmp = test_getenv("TEST_REPORT", NULL)))
                 rd_snprintf(report_path, sizeof(report_path), "%s", tmp);
-        else
+        else if (test_write_report)
                 rd_snprintf(report_path, sizeof(report_path),
                             "test_report_%s.json", datestr);
-
-        report_fp = fopen(report_path, "w+");
-        if (!report_fp)
-                TEST_WARN("Failed to create report file %s: %s\n",
-                          report_path, strerror(errno));
         else
-                fprintf(report_fp,
-                        "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
-                        "\"scenario\": \"%s\", "
-			"\"date\": \"%s\", "
-			"\"git_version\": \"%s\", "
-			"\"broker_version\": \"%s\", "
-			"\"tests\": {",
-			datestr, test_mode, test_mode, test_scenario, datestr,
-			test_git_version,
-			test_broker_version_str);
+                report_path[0] = '\0';
+
+        if (*report_path) {
+                report_fp = fopen(report_path, "w+");
+                if (!report_fp)
+                        TEST_WARN("Failed to create report file %s: %s\n",
+                                  report_path, strerror(errno));
+                else
+                        fprintf(report_fp,
+                                "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
+                                "\"scenario\": \"%s\", "
+                                "\"date\": \"%s\", "
+                                "\"git_version\": \"%s\", "
+                                "\"broker_version\": \"%s\", "
+                                "\"tests\": {",
+                                datestr, test_mode, test_mode,
+                                test_scenario, datestr,
+                                test_git_version,
+                                test_broker_version_str);
+        }
 
         if (do_lock)
                 TEST_LOCK();
@@ -1586,6 +1592,8 @@ int main(int argc, char **argv) {
                         test_idempotent_producer = 1;
                 else if (!strcmp(argv[i], "-Q"))
                         test_quick = 1;
+                else if (!strcmp(argv[i], "-r"))
+                        test_write_report = 1;
                 else if (!strncmp(argv[i], "-R", 2)) {
                         test_rusage = 1;
                         test_concurrent_max = 1;
@@ -1611,6 +1619,7 @@ int main(int argc, char **argv) {
 			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -E     Don't run sockem tests\n"
                                "  -a     Assert on failures\n"
+                               "  -r     Write test_report_...json file.\n"
 			       "  -S     Dont show test summary\n"
                                "  -s <scenario> Test scenario.\n"
 			       "  -V <N.N.N.N> Broker version.\n"

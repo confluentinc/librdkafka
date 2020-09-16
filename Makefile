@@ -87,11 +87,13 @@ TAGS: .PHONY
 	@(if which etags >/dev/null 2>&1 ; then \
 		echo "Using etags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
-			etags -f $@ - ; \
+			etags -f $@.tmp - ; \
+		cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp ; \
 	 elif which ctags >/dev/null 2>&1 ; then \
 		echo "Using ctags to generate $@" ; \
 		git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$' | \
-			ctags -e -f $@ -L- ; \
+			ctags -e -f $@.tmp -L- ; \
+		cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp ; \
 	fi)
 
 coverity: Makefile.config

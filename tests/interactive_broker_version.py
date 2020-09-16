@@ -159,7 +159,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
-        cmd_env['BROKER_ADDRESS_%d' % b.appid] = b.conf['address']
+        cmd_env['BROKER_ADDRESS_%d' % b.appid] = \
+            ','.join([x for x in b.conf['listeners'].split(',') if x.startswith(security_protocol)])
         # Add each broker pid as an env so they can be killed indivdidually.
         cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
         # JMX port, if available

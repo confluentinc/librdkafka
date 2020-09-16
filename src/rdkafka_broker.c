@@ -3971,6 +3971,11 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
         if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
                 return;
 
+        /* Certain errors that may require manual intervention should have
+         * a longer backoff time. */
+        if (err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                backoff_ms = RD_MAX(1000, backoff_ms * 10);
+
         rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
 
         rd_rkb_dbg(rkb, FETCH, "BACKOFF",
@@ -4066,6 +4071,148 @@ rd_kafka_fetch_preferred_replica_handle (rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_fetch_backoff(
                 rkb, rktp, RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE);
 }
+
+
+/**
+ * @brief Handle partition-specific Fetch error.
+ */
+static void rd_kafka_fetch_reply_handle_partition_error (
+        rd_kafka_broker_t *rkb,
+        rd_kafka_toppar_t *rktp,
+        const struct rd_kafka_toppar_ver *tver,
+        rd_kafka_resp_err_t err,
+        int64_t HighwaterMarkOffset) {
+
+        /* Some errors should be passed to the
+         * application while some handled by rdkafka */
+        switch (err)
+        {
+                /* Errors handled by rdkafka */
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+        case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+                /* Request metadata information update*/
+                rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
+                /* Occurs when:
+                 *   - Msg exists on broker but
+                 *     offset > HWM, or:
+                 *   - HWM is >= offset, but msg not
+                 *     yet available at that offset
+                 *     (replica is out of sync).
+                 *
+                 * Handle by retrying FETCH (with backoff).
+                 */
+                rd_rkb_dbg(rkb, MSG, "FETCH",
+                           "Topic %s [%"PRId32"]: Offset %"PRId64" not "
+                           "available on broker %"PRId32" (leader %"PRId32"): "
+                           "retrying",
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           rktp->rktp_offsets.
+                           fetch_offset,
+                           rktp->rktp_broker_id,
+                           rktp->rktp_leader_id);
+                break;
+
+        case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
+        {
+                int64_t err_offset;
+
+                if (rktp->rktp_broker_id != rktp->rktp_leader_id &&
+                    rktp->rktp_offsets.fetch_offset > HighwaterMarkOffset) {
+                        rd_kafka_log(rkb->rkb_rk,
+                                     LOG_WARNING, "FETCH",
+                                     "Topic %s [%"PRId32"]: Offset %"PRId64
+                                     " out of range (HighwaterMark %"PRId64
+                                     " fetching from "
+                                     "broker %"PRId32" (leader %"PRId32"): "
+                                     "reverting to leader",
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rktp->rktp_offsets.fetch_offset,
+                                     HighwaterMarkOffset,
+                                     rktp->rktp_broker_id,
+                                     rktp->rktp_leader_id);
+
+                        /* Out of range error cannot be taken as definitive
+                         * when fetching from follower.
+                         * Revert back to the leader in lieu of KIP-320.
+                         */
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+                        break;
+                }
+
+                /* Application error */
+                err_offset = rktp->rktp_offsets.fetch_offset;
+                rktp->rktp_offsets.fetch_offset = RD_KAFKA_OFFSET_INVALID;
+                rd_kafka_offset_reset(rktp, err_offset, err,
+                                      rd_kafka_err2str(err));
+        }
+        break;
+
+        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                /* If we're not authorized to access the
+                 * topic mark it as errored to deny
+                 * further Fetch requests. */
+                if (rktp->rktp_last_error != err) {
+                        rd_kafka_consumer_err(
+                                rktp->rktp_fetchq,
+                                rd_kafka_broker_id(rkb),
+                                err,
+                                tver->version,
+                                NULL, rktp,
+                                rktp->rktp_offsets.fetch_offset,
+                                "Fetch from broker %"PRId32" failed: %s",
+                                rd_kafka_broker_id(rkb),
+                                rd_kafka_err2str(err));
+                        rktp->rktp_last_error = err;
+                }
+                break;
+
+
+                /* Application errors */
+        case RD_KAFKA_RESP_ERR__PARTITION_EOF:
+                if (rkb->rkb_rk->rk_conf.enable_partition_eof)
+                        rd_kafka_consumer_err(
+                                rktp->rktp_fetchq,
+                                rd_kafka_broker_id(rkb),
+                                err, tver->version,
+                                NULL, rktp,
+                                rktp->rktp_offsets.fetch_offset,
+                                "Fetch from broker %"PRId32" reached end of "
+                                "partition at offset %"PRId64
+                                " (HighwaterMark %"PRId64")",
+                                rd_kafka_broker_id(rkb),
+                                rktp->rktp_offsets.fetch_offset,
+                                HighwaterMarkOffset);
+                break;
+
+        case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
+        default: /* and all other errors */
+                rd_dassert(tver->version > 0);
+                rd_kafka_consumer_err(
+                        rktp->rktp_fetchq,
+                        rd_kafka_broker_id(rkb),
+                        err, tver->version,
+                        NULL, rktp,
+                        rktp->rktp_offsets.fetch_offset,
+                        "Fetch from broker %"PRId32" failed: %s",
+                        rd_kafka_broker_id(rkb),
+                        rd_kafka_err2str(err));
+                break;
+        }
+
+        /* Back off the next fetch for this partition */
+        rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
+}
+
+
 
 /**
  * Parses and handles a Fetch reply.
@@ -4358,131 +4505,25 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                         rktp->rktp_offsets.fetch_offset;
 			}
 
-			/* Handle partition-level errors. */
-			if (unlikely(hdr.ErrorCode !=
-				     RD_KAFKA_RESP_ERR_NO_ERROR)) {
-				/* Some errors should be passed to the
-				 * application while some handled by rdkafka */
-				switch (hdr.ErrorCode)
-				{
-					/* Errors handled by rdkafka */
-				case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-				case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-				case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-				case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-                                case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-                                case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
-                                case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
-                                        /* Request metadata information update*/
-                                        rd_kafka_toppar_leader_unavailable(
-                                                rktp, "fetch", hdr.ErrorCode);
-                                        break;
-                                case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
-                                        /* Occurs when:
-                                         *   - Msg exists on broker but
-                                         *     offset > HWM, or:
-                                         *   - HWM is >= offset, but msg not
-                                         *     yet available at that offset
-                                         *     (replica is out of sync).
-                                         *
-                                         * Handle by retrying FETCH (with
-                                         * backoff).
-                                         */
-                                        rd_rkb_dbg(rkb, MSG, "FETCH",
-                                                   "Topic %.*s [%"PRId32"]: "
-                                                   "Offset %"PRId64" not "
-                                                   "available on broker %"PRId32
-                                                   " (leader %"PRId32"): "
-                                                   "retrying",
-                                                   RD_KAFKAP_STR_PR(&topic),
-                                                   hdr.Partition,
-                                                   rktp->rktp_offsets.
-                                                   fetch_offset,
-                                                   rktp->rktp_broker_id,
-                                                   rktp->rktp_leader_id);
-                                        break;
-				case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
-                                {
-                                        int64_t err_offset;
+                        if (unlikely(hdr.ErrorCode !=
+                                     RD_KAFKA_RESP_ERR_NO_ERROR)) {
+                                /* Handle partition-level errors. */
+                                rd_kafka_fetch_reply_handle_partition_error(
+                                        rkb, rktp, tver, hdr.ErrorCode,
+                                        hdr.HighwaterMarkOffset);
 
-                                        if (rktp->rktp_broker_id !=
-                                            rktp->rktp_leader_id &&
-                                            rktp->rktp_offsets.fetch_offset >
-                                            hdr.HighwaterMarkOffset) {
-                                                rd_kafka_log(rkb->rkb_rk,
-                                                             LOG_WARNING, "FETCH",
-                                                             "Topic %.*s [%"PRId32
-                                                             "]: Offset %"PRId64
-                                                             " out of range "
-                                                             "fetching from "
-                                                             "broker %"PRId32" "
-                                                             "(leader %"PRId32
-                                                             "): reverting to "
-                                                             "leader",
-                                                             RD_KAFKAP_STR_PR(
-                                                             &topic),
-                                                             hdr.Partition,
-                                                             rktp->rktp_offsets.
-                                                             fetch_offset,
-                                                             rktp->rktp_broker_id,
-                                                             rktp->rktp_leader_id);
-
-                                                /* Out of range error cannot
-                                                 * be taken as definitive
-                                                 * when fetching from follower.
-                                                 * Revert back to the leader in
-                                                 * lieu of KIP-320.
-                                                 */
-                                                rd_kafka_toppar_delegate_to_leader(
-                                                        rktp);
-                                                break;
-                                        }
-
-                                        /* Application error */
-                                        err_offset =
-                                                rktp->rktp_offsets.fetch_offset;
-                                        rktp->rktp_offsets.fetch_offset =
-                                                RD_KAFKA_OFFSET_INVALID;
-					rd_kafka_offset_reset(
-						rktp, err_offset,
-						hdr.ErrorCode,
-						rd_kafka_err2str(hdr.
-								 ErrorCode));
-                                }
-                                break;
-                                	/* Application errors */
-				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
-					if (!rkb->rkb_rk->rk_conf.enable_partition_eof)
-						break;
-					/* FALLTHRU */
-				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
-				default: /* and all other errors */
-					rd_dassert(tver->version > 0);
-                                        rd_kafka_consumer_err(
-                                                rktp->rktp_fetchq,
-                                                rd_kafka_broker_id(rkb),
-                                                hdr.ErrorCode, tver->version,
-                                                NULL, rktp,
-                                                rktp->rktp_offsets.fetch_offset,
-                                                "Fetch from broker %"PRId32
-                                                " failed: %s",
-                                                rd_kafka_broker_id(rkb),
-                                                rd_kafka_err2str(hdr.ErrorCode));
-					break;
-				}
-
-                                rd_kafka_toppar_fetch_backoff(rkb, rktp,
-                                                              hdr.ErrorCode);
-
-				rd_kafka_toppar_destroy(rktp);/* from get()*/
+                                rd_kafka_toppar_destroy(rktp); /* from get()*/
 
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 
                                 if (aborted_txns)
                                         rd_kafka_aborted_txns_destroy(
                                                 aborted_txns);
-				continue;
-			}
+                                continue;
+                        }
+
+                        /* No error, clear any previous fetch error. */
+                        rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 			if (unlikely(hdr.MessageSetSize <= 0)) {
 				rd_kafka_toppar_destroy(rktp); /*from get()*/

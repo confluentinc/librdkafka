@@ -353,6 +353,9 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
 
         rktp->rktp_fetch_state = fetch_state;
 
+        /* Clear the last error */
+        rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+
         if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
                              CONSUMER|RD_KAFKA_DBG_TOPIC,
@@ -2121,19 +2124,23 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 	switch ((int)rko->rko_type)
 	{
 	case RD_KAFKA_OP_FETCH_START:
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_start(rktp,
 					    rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_FETCH_STOP:
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_stop(rktp, rko);
 		break;
 
 	case RD_KAFKA_OP_SEEK:
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_seek(rktp, rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_PAUSE:
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_pause_resume(rktp, rko);
 		break;
 

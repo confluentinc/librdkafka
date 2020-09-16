@@ -1470,6 +1470,18 @@ As the topic metadata is refreshed every `topic.metadata.refresh.interval.ms`
 the unavailable topics are re-checked for availability, but the same error
 will not be raised again for the same topic.
 
+If a consumer has Describe (ACL) permissions for a topic but not Read it will
+be able to join a consumer group and start consuming the topic, but the Fetch
+requests to retrieve messages from the broker will fail with
+`RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED`.
+This error will be raised to the application once per partition and
+assign()/seek() and the fetcher will back off the next fetch 10 times longer than
+the `fetch.error.backoff.ms` (but at least 1 second).
+It is recommended that the application takes appropriate action when this
+occurs, for instance adjusting its subscription or assignment to exclude the
+unauthorized topic.
+
+
 #### Topic metadata propagation for newly created topics
 
 Due to the asynchronous nature of topic creation in Apache Kafka it may

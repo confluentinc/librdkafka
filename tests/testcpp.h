@@ -147,6 +147,18 @@ namespace Test {
                 << "\n");
   }
 
+
+  /* Convenience subscribe() */
+  static RD_UNUSED void subscribe (RdKafka::KafkaConsumer *c,
+                                   const std::string &topic) {
+      std::vector<std::string> topics;
+      topics.push_back(topic);
+      RdKafka::ErrorCode err;
+      if ((err = c->subscribe(topics)))
+        Test::Fail("subscribe failed: " + RdKafka::err2str(err));
+  }
+
+
   /**
    * @brief Delivery report class
    */

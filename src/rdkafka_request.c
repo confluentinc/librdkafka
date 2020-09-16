@@ -965,7 +965,14 @@ static int rd_kafka_handle_OffsetCommit_error (
 
 
 /**
+ * @brief Handle OffsetCommit response.
+ *
  * @remark \p offsets may be NULL if \p err is set
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if all partitions were successfully
+ *          committed,
+ *          RD_KAFKA_RESP_ERR__IN_PROGRESS if a retry was scheduled,
+ *          or any other error code if the request was not retried.
  */
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,

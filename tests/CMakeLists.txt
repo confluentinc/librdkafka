@@ -107,6 +107,7 @@ set(
     0115-producer_auth.cpp
     0116-kafkaconsumer_close.cpp
     0117-mock_errors.c
+    0118-commit_rebalance.c
     8000-idle.cpp
     test.c
     testcpp.cpp

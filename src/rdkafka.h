@@ -3179,10 +3179,11 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu);
  * @remark IO and callback event triggering are mutually exclusive.
  * @remark When using forwarded queues the IO event must only be enabled
  *         on the final forwarded-to (destination) queue.
+ * @remark The file-descriptor/socket must be set to non-blocking.
  */
 RD_EXPORT
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
-				     const void *payload, size_t size);
+                                     const void *payload, size_t size);
 
 /**
  * @brief Enable callback event triggering for queue.

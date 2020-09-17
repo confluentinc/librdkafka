@@ -295,9 +295,10 @@ static void rd_kafka_admin_result_set_err0 (rd_kafka_op_t *rko,
 /**
  * @sa rd_kafka_admin_result_set_err0
  */
-static RD_UNUSED void rd_kafka_admin_result_set_err (rd_kafka_op_t *rko,
-                                                     rd_kafka_resp_err_t err,
-                                                     const char *fmt, ...) {
+static RD_UNUSED RD_FORMAT(printf, 3, 4)
+        void rd_kafka_admin_result_set_err (rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err,
+                                            const char *fmt, ...) {
         va_list ap;
 
         va_start(ap, fmt);
@@ -318,9 +319,10 @@ void rd_kafka_admin_result_enq (rd_kafka_op_t *rko_req,
 /**
  * @brief Set request-level error code and string in reply op.
  */
-static void rd_kafka_admin_result_fail (rd_kafka_op_t *rko_req,
-                                        rd_kafka_resp_err_t err,
-                                        const char *fmt, ...) {
+static RD_FORMAT(printf, 3, 4)
+        void rd_kafka_admin_result_fail (rd_kafka_op_t *rko_req,
+                                         rd_kafka_resp_err_t err,
+                                         const char *fmt, ...) {
         va_list ap;
         rd_kafka_op_t *rko_result;
 

@@ -533,11 +533,13 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 	} while (0)
 
 void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
-                        const char *fmt, ...);
+                        const char *fmt, ...)
+        RD_FORMAT(printf, 3, 4);
 void rd_kafka_consumer_err (rd_kafka_q_t *rkq, int32_t broker_id,
                             rd_kafka_resp_err_t err, int32_t version,
                             const char *topic, rd_kafka_toppar_t *rktp,
-                            int64_t offset, const char *fmt, ...);
+                            int64_t offset, const char *fmt, ...)
+        RD_FORMAT(printf, 8, 9);
 rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_q_t *recvq,
                                  rd_kafka_op_t *rko,

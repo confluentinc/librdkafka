@@ -1,4 +1,16 @@
-# librdkafka v1.6.0
+# librdkafka v1.5.2
+
+
+## Upgrade considerations
+
+ * The default value for the producer configuration property `retries` has
+   been increased from 2 to infinity, effectively limiting Produce retries to
+   only `message.timeout.ms`.
+   As the reasons for the automatic internal retries vary (various broker error
+   codes as well as transport layer issues), it doesn't make much sense to limit
+   the number of retries for retriable errors, but instead only limit the
+   retries based on the allowed time to produce a message.
+
 
 ## Enhancements
 

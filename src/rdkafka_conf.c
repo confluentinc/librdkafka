@@ -1284,7 +1284,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "How many times to retry sending a failing Message. "
           "**Note:** retrying may cause reordering unless "
           "`enable.idempotence` is set to true.",
-          0, 10000000, 2 },
+          0, INT32_MAX, INT32_MAX },
           { _RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
                 .sdef = "message.send.max.retries" },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "retry.backoff.ms", _RK_C_INT,

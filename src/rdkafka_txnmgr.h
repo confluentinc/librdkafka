@@ -140,16 +140,19 @@ void rd_kafka_txn_idemp_state_change (rd_kafka_t *rk,
 
 void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
                                        rd_kafka_resp_err_t err,
-                                       const char *fmt, ...);
+                                       const char *fmt, ...)
+        RD_FORMAT(printf, 3, 4);
 
 void rd_kafka_txn_set_fatal_error (rd_kafka_t *rk, rd_dolock_t do_lock,
                                    rd_kafka_resp_err_t err,
-                                   const char *fmt, ...);
+                                   const char *fmt, ...)
+        RD_FORMAT(printf, 4, 5);
 
 rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason);
 
 rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const char *fmt, ...);
+                                  const char *fmt, ...)
+        RD_FORMAT(printf, 3, 4);
 
 void rd_kafka_txns_term (rd_kafka_t *rk);
 void rd_kafka_txns_init (rd_kafka_t *rk);

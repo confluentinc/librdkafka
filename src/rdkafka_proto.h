@@ -42,6 +42,9 @@
 #define RD_KAFKA_PORT      9092
 #define RD_KAFKA_PORT_STR "9092"
 
+/** Default generic retry count for failed requests.
+ *  This may be overriden for specific request types. */
+#define RD_KAFKA_REQUEST_MAX_RETRIES 2
 
 /**
  * Request types

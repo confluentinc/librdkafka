@@ -134,7 +134,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey
         rd_kafka_broker_keep(rkb);
 
         rkbuf->rkbuf_rel_timeout = rkb->rkb_rk->rk_conf.socket_timeout_ms;
-        rkbuf->rkbuf_max_retries = rkb->rkb_rk->rk_conf.max_retries;
+        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_MAX_RETRIES;
 
         rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 

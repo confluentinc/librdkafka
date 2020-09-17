@@ -452,8 +452,8 @@ int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
-			   int level, rd_kafka_resp_err_t err,
-			   const char *fmt, ...);
+                           int level, rd_kafka_resp_err_t err,
+                           const char *fmt, ...) RD_FORMAT(printf, 4, 5);
 
 void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
                                   rd_kafka_resp_err_t err,

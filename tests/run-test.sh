@@ -61,6 +61,7 @@ for mode in $MODES; do
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
 		     --errors-for-leak-kinds=all \
 		     --track-origins=yes \
+                     --track-fds=yes \
 		     $SUPP $GEN_SUPP \
 		$TEST $ARGS
 	    RET=$?

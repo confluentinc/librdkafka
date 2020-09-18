@@ -753,13 +753,15 @@ rd_kafka_test_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 
 /**
- * @returns the error code for \p error.
+ * @returns the error code for \p error or RD_KAFKA_RESP_ERR_NO_ERROR if
+ *          \p error is NULL.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error);
 
 /**
- * @returns the error code name for \p error, e.g, "ERR_UNKNOWN_MEMBER_ID".
+ * @returns the error code name for \p error, e.g, "ERR_UNKNOWN_MEMBER_ID",
+ *          or an empty string if \p error is NULL.
  *
  * @remark The lifetime of the returned pointer is the same as the error object.
  *
@@ -769,7 +771,8 @@ RD_EXPORT
 const char *rd_kafka_error_name (const rd_kafka_error_t *error);
 
 /**
- * @returns a human readable error string for \p error.
+ * @returns a human readable error string for \p error,
+ *          or an empty string if \p error is NULL.
  *
  * @remark The lifetime of the returned pointer is the same as the error object.
  */
@@ -779,14 +782,15 @@ const char *rd_kafka_error_string (const rd_kafka_error_t *error);
 
 /**
  * @returns 1 if the error is a fatal error, indicating that the client
- *          instance is no longer usable, else 0.
+ *          instance is no longer usable, else 0 (also if \p error is NULL).
  */
 RD_EXPORT
 int rd_kafka_error_is_fatal (const rd_kafka_error_t *error);
 
 
 /**
- * @returns 1 if the operation may be retried, else 0.
+ * @returns 1 if the operation may be retried,
+ *          else 0 (also if \p error is NULL).
  */
 RD_EXPORT
 int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
@@ -797,7 +801,7 @@ int rd_kafka_error_is_retriable (const rd_kafka_error_t *error);
  *          the application must call rd_kafka_abort_transaction() and
  *          start a new transaction with rd_kafka_begin_transaction() if it
  *          wishes to proceed with transactions.
- *          Else returns 0.
+ *          Else returns 0 (also if \p error is NULL).
  *
  * @remark The return value of this method is only valid for errors returned
  *         by the transactional API.
@@ -807,6 +811,8 @@ int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error);
 
 /**
  * @brief Free and destroy an error object.
+ *
+ * @remark As a conveniance it is permitted to pass a NULL \p error.
  */
 RD_EXPORT
 void rd_kafka_error_destroy (rd_kafka_error_t *error);

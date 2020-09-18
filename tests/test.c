@@ -511,16 +511,18 @@ static int test_closesocket_cb (int s, void *opaque) {
         TEST_LOCK();
         skm = sockem_find(s);
         if (skm) {
+                /* Close sockem's sockets */
                 sockem_close(skm);
                 test_socket_del(test, skm, 0/*nolock*/);
-        } else {
-#ifdef _WIN32
-                closesocket(s);
-#else
-                close(s);
-#endif
         }
         TEST_UNLOCK();
+
+        /* Close librdkafka's socket */
+#ifdef _WIN32
+        closesocket(s);
+#else
+        close(s);
+#endif
 
         return 0;
 }

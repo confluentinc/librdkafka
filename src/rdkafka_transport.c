@@ -877,8 +877,10 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	}
 
         rktrans = rd_kafka_transport_new(rkb, s, errstr, errstr_size);
-        if (!rktrans)
-                goto err;
+        if (!rktrans) {
+                rd_kafka_transport_close0(rkb->rkb_rk, s);
+                return NULL;
+        }
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT", "Connecting to %s (%s) "
 		   "with socket %i",
@@ -917,7 +919,9 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 			    "Failed to connect to broker at %s: %s",
 			    rd_sockaddr2str(sinx, RD_SOCKADDR2STR_F_NICE),
 			    rd_socket_strerror(r));
-		goto err;
+
+                rd_kafka_transport_close(rktrans);
+                return NULL;
 	}
 
         /* Set up transport handle */
@@ -932,15 +936,6 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	rd_kafka_transport_poll_set(rktrans, POLLOUT);
 
 	return rktrans;
-
- err:
-	if (s != -1)
-                rd_kafka_transport_close0(rkb->rkb_rk, s);
-
-        if (rktrans)
-                rd_kafka_transport_close(rktrans);
-
-	return NULL;
 }
 
 

@@ -82,6 +82,7 @@ rm -rf %{buildroot}
 %doc %{_docdir}/librdkafka/CONFIGURATION.md
 %doc %{_docdir}/librdkafka/INTRODUCTION.md
 %doc %{_docdir}/librdkafka/STATISTICS.md
+%doc %{_docdir}/librdkafka/CHANGELOG.md
 %doc %{_docdir}/librdkafka/LICENSES.txt
 
 %defattr(-,root,root)

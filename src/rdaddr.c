@@ -38,11 +38,12 @@
 
 const char *rd_sockaddr2str (const void *addr, int flags) {
 	const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
-	static RD_TLS char ret[32][INET6_ADDRSTRLEN + 16];
+	static RD_TLS char ret[32][256];
 	static RD_TLS int  reti = 0;
 	char portstr[32];
 	int of = 0;
 	int niflags = NI_NUMERICSERV;
+        int r;
 
 	reti = (reti + 1) % 32;
 	
@@ -61,15 +62,29 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 		if (!(flags & RD_SOCKADDR2STR_F_RESOLVE))
 			niflags |= NI_NUMERICHOST;
 
-		if (getnameinfo((const struct sockaddr *)a,
-				RD_SOCKADDR_INX_LEN(a),
-				ret[reti]+of, sizeof(ret[reti])-of,
-				(flags & RD_SOCKADDR2STR_F_PORT) ?
-				portstr : NULL,
-				(flags & RD_SOCKADDR2STR_F_PORT) ?
-				sizeof(portstr) : 0,
-				niflags))
-			break;
+        retry:
+                if ((r = getnameinfo(
+                             (const struct sockaddr *)a,
+                             RD_SOCKADDR_INX_LEN(a),
+
+                             ret[reti]+of, sizeof(ret[reti])-of,
+
+                             (flags & RD_SOCKADDR2STR_F_PORT) ?
+                             portstr : NULL,
+
+                             (flags & RD_SOCKADDR2STR_F_PORT) ?
+                             sizeof(portstr) : 0,
+
+                             niflags))) {
+
+                        if (r == EAI_AGAIN && !(niflags & NI_NUMERICHOST)) {
+                                /* If unable to resolve name, retry without
+                                 * name resolution. */
+                                niflags |= NI_NUMERICHOST;
+                                goto retry;
+                        }
+                        break;
+                }
 
 		
 		if (flags & RD_SOCKADDR2STR_F_PORT) {

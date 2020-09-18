@@ -30,6 +30,11 @@
  * `rd_kafka_topic_opaque()` (used by the C++ API) would cause object
    refcounting issues when used on light-weight (error-only) topic objects
    such as consumer errors (#2693).
+ * Handle name resolution failures when formatting IP addresses in error logs,
+   and increase printed hostname limit to ~256 bytes (was ~60).
+ * Broker sockets would be closed twice (thus leading to potential race
+   condition with fd-reuse in other threads) if a custom `socket_cb` would
+   return error.
 
 ### Consumer fixes
 

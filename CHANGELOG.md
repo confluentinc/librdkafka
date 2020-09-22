@@ -1,5 +1,7 @@
 # librdkafka v1.5.2
 
+librdkafka v1.5.2 is a maintenance release.
+
 
 ## Upgrade considerations
 
@@ -24,6 +26,16 @@
 
 
 ## Fixes
+
+### Security fixes
+
+ * There was an incorrect call to zlib's `inflateGetHeader()` with
+   unitialized memory pointers that could lead to the GZIP header of a fetched
+   message batch to be copied to arbitrary memory.
+   This function call has now been completely removed since the result was
+   not used.
+   Reported by Ilja van Sprundel.
+
 
 ### General fixes
 

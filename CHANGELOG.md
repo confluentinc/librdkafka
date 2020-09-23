@@ -64,6 +64,10 @@
    If the application did not take action on failed messages in its delivery
    report callback and went on to commit the transaction, the transaction would
    be successfully committed, simply omitting the failed messages.
+ * EndTxnRequests (sent on commit/abort) are only retried in allowed
+   states (#3041).
+   Previously the transaction could hang on commit_transaction() if an abortable
+   error was hit and the EndTxnRequest was to be retried.
 
 
 

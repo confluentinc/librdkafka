@@ -185,7 +185,8 @@ rd_kafka_mock_topic_create (rd_kafka_mock_cluster_t *mcluster,
  *
  * The topic will be created if it does not exist.
  *
- * \p broker_id needs to be an existing broker.
+ * \p broker_id needs to be an existing broker, or -1 to make the
+ * partition leader-less.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_partition_set_leader (rd_kafka_mock_cluster_t *mcluster,

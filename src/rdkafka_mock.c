@@ -229,7 +229,7 @@ rd_kafka_mock_partition_log_append (rd_kafka_mock_partition_t *mpart,
 
 
 /**
- * @brief Set the partition leader
+ * @brief Set the partition leader, or NULL for leader-less.
  */
 static void
 rd_kafka_mock_partition_set_leader0 (rd_kafka_mock_partition_t *mpart,
@@ -1818,10 +1818,14 @@ rd_kafka_mock_cluster_cmd (rd_kafka_mock_cluster_t *mcluster,
                 if (!mpart)
                         return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+                if (rko->rko_u.mock.broker_id != -1) {
+                        mrkb = rd_kafka_mock_broker_find(
+                                mcluster, rko->rko_u.mock.broker_id);
+                        if (!mrkb)
+                                return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+                } else {
+                        mrkb = NULL;
+                }
 
                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
                              "Set %s [%"PRId32"] leader to %"PRId32,

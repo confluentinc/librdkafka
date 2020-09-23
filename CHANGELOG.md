@@ -72,6 +72,11 @@ librdkafka v1.5.2 is a maintenance release.
    if a topic was deleted from the cluster when a transaction was using it.
  * `ERR_KAFKA_STORAGE_ERROR` is now correctly treated as a retriable
    produce error (#3026).
+ * Messages that timed out locally would not fail the ongoing transaction.
+   If the application did not take action on failed messages in its delivery
+   report callback and went on to commit the transaction, the transaction would
+   be successfully committed, simply omitting the failed messages.
+
 
 
 # librdkafka v1.5.0

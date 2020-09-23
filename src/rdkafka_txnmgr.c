@@ -1305,6 +1305,7 @@ rd_kafka_txn_op_begin_transaction (rd_kafka_t *rk,
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_IN_TRANSACTION);
 
                 rk->rk_eos.txn_req_cnt = 0;
+                rd_atomic64_set(&rk->rk_eos.txn_dr_fails, 0);
                 rk->rk_eos.txn_err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 RD_IF_FREE(rk->rk_eos.txn_errstr, rd_free);
                 rk->rk_eos.txn_errstr = NULL;
@@ -2031,6 +2032,7 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_pid_t pid;
+        int64_t dr_fails;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -2050,6 +2052,18 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
                         rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
                 goto err;
         }
+
+        /* If any messages failed delivery the transaction must be aborted. */
+        dr_fails = rd_atomic64_get(&rk->rk_eos.txn_dr_fails);
+        if (unlikely(dr_fails > 0)) {
+                error = rd_kafka_error_new_txn_requires_abort(
+                        RD_KAFKA_RESP_ERR__INCONSISTENT,
+                        "%"PRId64" message(s) failed delivery "
+                        "(see individual delivery reports)",
+                        dr_fails);
+                goto err;
+        }
+
 
         err = rd_kafka_EndTxnRequest(rk->rk_eos.txn_coord,
                                      rk->rk_conf.eos.transactional_id,
@@ -2072,6 +2086,14 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
 
  err:
         rd_kafka_wrunlock(rk);
+
+        /* If the returned error is an abortable error
+         * also set the current transaction state accordingly. */
+        if (rd_kafka_error_txn_requires_abort(error))
+                rd_kafka_txn_set_abortable_error(
+                        rk,
+                        rd_kafka_error_code(error),
+                        "%s", rd_kafka_error_string(error));
 
         rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
                                           error);
@@ -2759,5 +2781,6 @@ void rd_kafka_txns_init (rd_kafka_t *rk) {
         rd_kafka_broker_persistent_connection_add(
                 rk->rk_eos.txn_coord,
                 &rk->rk_eos.txn_coord->rkb_persistconn.coord);
-}
 
+        rd_atomic64_init(&rk->rk_eos.txn_dr_fails, 0);
+}

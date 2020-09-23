@@ -369,14 +369,28 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
                                        const char *fmt, va_list ap) {
         char errstr[512];
         char extra[128];
-        size_t of, ofe;
+        size_t of = 0, ofe;
         rd_bool_t identical, suppress;
         int state_duration_ms = (int)((rd_clock() - rkb->rkb_ts_state)/1000);
 
 
-        of = (size_t)rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
-        if (of > sizeof(errstr))
-                of = sizeof(errstr);
+        /* If this is a logical broker we include its current nodename/address
+         * in the log message. */
+        rd_kafka_broker_lock(rkb);
+        if (rkb->rkb_source == RD_KAFKA_LOGICAL && *rkb->rkb_nodename) {
+                of = (size_t)rd_snprintf(errstr, sizeof(errstr), "%s: ",
+                                         rkb->rkb_nodename);
+                if (of > sizeof(errstr))
+                        of = 0; /* If nodename overflows the entire buffer we
+                                 * skip it completely since the error message
+                                 * itself is more important. */
+        }
+        rd_kafka_broker_unlock(rkb);
+
+        ofe = (size_t)rd_vsnprintf(errstr+of, sizeof(errstr)-of, fmt, ap);
+        if (ofe > sizeof(errstr)-of)
+                ofe = sizeof(errstr)-of;
+        of += ofe;
 
         /* Provide more meaningful error messages in certain cases */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&

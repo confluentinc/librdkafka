@@ -906,13 +906,15 @@ rd_kafka_txn_curr_api_abort_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_txn_set_abortable_error(
                 rkts->rkts_rk,
                 RD_KAFKA_RESP_ERR__TIMED_OUT,
-                "Transactional operation timed out");
+                "Transactional API operation (%s) timed out",
+                rkq->rkq_rk->rk_eos.txn_curr_api.name);
 
         rd_kafka_txn_curr_api_reply_error(
                 rkq,
                 rd_kafka_error_new_txn_requires_abort(
                         RD_KAFKA_RESP_ERR__TIMED_OUT,
-                        "Transactional operation timed out"));
+                        "Transactional API operation (%s) timed out",
+                        rkq->rkq_rk->rk_eos.txn_curr_api.name));
 }
 
 /**
@@ -1917,7 +1919,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
         rd_kafka_q_t *rkq = opaque;
         int16_t ErrorCode;
         int actions = 0;
-        rd_bool_t is_commit = rd_false;
+        rd_bool_t is_commit = rd_false, may_retry = rd_false;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_kafka_q_destroy(rkq);
@@ -1937,18 +1939,26 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
         err = rkbuf->rkbuf_err;
  err:
         rd_kafka_wrlock(rk);
-        if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION)
+        if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION) {
                 is_commit = rd_true;
-        else if (rk->rk_eos.txn_state ==
-                 RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION)
+                may_retry = rd_true;
+        } else if (rk->rk_eos.txn_state ==
+                   RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION) {
                 is_commit = rd_false;
-        else
+                may_retry = rd_true;
+        } else if (!err)
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
 
         if (!err) {
                 /* EndTxn successful: complete the transaction */
                 rd_kafka_txn_complete(rk);
         }
+
+        rd_kafka_dbg(rk, EOS, "ENDTXN",
+                     "EndTxn failed due to %s in state %s (may_retry=%s)",
+                     rd_kafka_err2name(err),
+                     rd_kafka_txn_state2str(rk->rk_eos.txn_state),
+                     RD_STR_ToF(may_retry));
 
         rd_kafka_wrunlock(rk);
 
@@ -1959,10 +1969,12 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR__DESTROY:
                 /* Producer is being terminated, ignore the response. */
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                /* Transaction API timeout has been hit
+                 * (this is our internal timer) */
         case RD_KAFKA_RESP_ERR__OUTDATED:
-                /* Set a non-actionable actions flag so that curr_api_reply()
-                 * is called below, without other side-effects. */
-                actions = RD_KAFKA_ERR_ACTION_SPECIAL;
+                /* Transactional state no longer relevant for this
+                 * outdated response. */
                 break;
 
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
@@ -1994,7 +2006,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                                              "Failed to end transaction: %s",
                                              rd_kafka_err2str(err));
 
-        } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+        } else if (may_retry && actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 if (rd_kafka_buf_retry(rkb, request))
                         return;
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;

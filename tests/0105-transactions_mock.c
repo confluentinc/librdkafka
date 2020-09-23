@@ -811,6 +811,159 @@ static void do_test_txn_auth_failure (int16_t ApiKey,
 }
 
 
+/**
+ * @brief Issue #3041: Commit fails due to message flush() taking too long,
+ *        eventually resulting in an unabortable error and failure to
+ *        re-init the transactional producer.
+ */
+static void do_test_txn_flush_timeout (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        rd_kafka_error_t *error;
+        const char *txnid = "myTxnId";
+        const char *topic = "myTopic";
+        const int32_t coord_id = 2;
+        int msgcounter = 0;
+        rd_bool_t is_retry = rd_false;
+
+        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 "message.timeout.ms", "10000",
+                                 "transaction.timeout.ms", "10000",
+                                 /* Speed up coordinator reconnect */
+                                 "reconnect.backoff.max.ms", "1000",
+                                 NULL);
+
+
+        /* Broker down is not a test-failing error */
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        allowed_error = RD_KAFKA_RESP_ERR__TRANSPORT;
+
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+
+        /* Set coordinator so we can disconnect it later */
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, coord_id);
+
+        /*
+         * Init transactions
+         */
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+ retry:
+        if (!is_retry) {
+                /* First attempt should fail. */
+
+                test_curr->ignore_dr_err = rd_true;
+                test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+
+                /* Assign invalid partition leaders for some partitions so
+                 * that messages will not be delivered. */
+                rd_kafka_mock_partition_set_leader(mcluster, topic, 0, -1);
+                rd_kafka_mock_partition_set_leader(mcluster, topic, 1, -1);
+
+        } else {
+                /* The retry should succeed */
+                test_curr->ignore_dr_err = rd_false;
+                test_curr->exp_dr_err = is_retry ? RD_KAFKA_RESP_ERR_NO_ERROR :
+                        RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+
+                rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+                rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 1);
+
+        }
+
+
+        /*
+         * Start a transaction
+         */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        /*
+         * Produce some messages to specific partitions and random.
+         */
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, 100, NULL, 10,
+                                  &msgcounter);
+        test_produce_msgs2_nowait(rk, topic, 1, 0, 0, 100, NULL, 10,
+                                  &msgcounter);
+        test_produce_msgs2_nowait(rk, topic, RD_KAFKA_PARTITION_UA,
+                                  0, 0, 100, NULL, 10, &msgcounter);
+
+
+        /*
+         * Send some arbitrary offsets.
+         */
+        offsets = rd_kafka_topic_partition_list_new(4);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctop2", 99)->offset =
+                999999111;
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 0)->offset = 999;
+        rd_kafka_topic_partition_list_add(offsets, "srctop2", 3499)->offset =
+                123456789;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(
+                                  rk, offsets,
+                                  cgmetadata, -1));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        rd_sleep(2);
+
+        if (!is_retry) {
+                /* Now disconnect the coordinator. */
+                TEST_SAY("Disconnecting transaction coordinator %"PRId32"\n",
+                         coord_id);
+                rd_kafka_mock_broker_set_down(mcluster, coord_id);
+        }
+
+        /*
+         * Start committing.
+         */
+        error = rd_kafka_commit_transaction(rk, -1);
+
+        if (!is_retry) {
+                TEST_ASSERT(error != NULL,
+                            "Expected commit to fail");
+                TEST_SAY("commit_transaction() failed (expectedly): %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+
+        } else {
+                TEST_ASSERT(!error,
+                            "Expected commit to succeed, not: %s",
+                            rd_kafka_error_string(error));
+        }
+
+        if (!is_retry) {
+                /*
+                 * Bring the coordinator back up.
+                 */
+                rd_kafka_mock_broker_set_up(mcluster, coord_id);
+                rd_sleep(2);
+
+                /*
+                 * Abort, and try again, this time without error.
+                 */
+                TEST_SAY("Aborting and retrying\n");
+                is_retry = rd_true;
+
+                TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 60000));
+                goto retry;
+        }
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -840,6 +993,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
         do_test_txn_auth_failure(
                 RD_KAFKAP_FindCoordinator,
                 RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED);
+
+        do_test_txn_flush_timeout();
 
         if (!test_quick)
                 do_test_txn_switch_coordinator();

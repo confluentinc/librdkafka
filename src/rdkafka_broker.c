@@ -2740,6 +2740,10 @@ void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 	if (unlikely(rd_kafka_msgq_len(rkmq) == 0))
 	    return;
 
+        if (err && rd_kafka_is_transactional(rk))
+                rd_atomic64_add(&rk->rk_eos.txn_dr_fails,
+                                rd_kafka_msgq_len(rkmq));
+
         /* Call on_acknowledgement() interceptors */
         rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
 

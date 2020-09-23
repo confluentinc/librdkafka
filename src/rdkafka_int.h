@@ -470,6 +470,12 @@ struct rd_kafka_s {
                 /**< Partitions added and registered to transaction. */
                 rd_kafka_toppar_tqhead_t txn_rktps;
 
+                /**< Number of messages that failed delivery.
+                 *   If this number is >0 on transaction_commit then an
+                 *   abortable transaction error will be raised.
+                 *   Is reset to zero on each begin_transaction(). */
+                rd_atomic64_t txn_dr_fails;
+
                 /**< Current transaction error. */
                 rd_kafka_resp_err_t txn_err;
 

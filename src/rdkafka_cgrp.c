@@ -2052,8 +2052,8 @@ rd_kafka_cgrp_update_committed_offsets (rd_kafka_cgrp_t *rkcg,
                         continue;
                 }
 
-                rktp = rd_kafka_topic_partition_list_get_toppar(rkcg->rkcg_rk,
-                                                                rktpar);
+                rktp = rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
+                                                           rktpar);
                 if (!rktp)
                         continue;
 

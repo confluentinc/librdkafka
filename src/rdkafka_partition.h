@@ -577,14 +577,11 @@ rd_kafka_toppar_t *
 rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
                                      rd_kafka_topic_partition_t *rktpar);
 
-rd_kafka_toppar_t *
-rd_kafka_topic_partition_list_get_toppar (
-        rd_kafka_t *rk, rd_kafka_topic_partition_t *rktpar);
-
 void
 rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
                                               rd_kafka_topic_partition_list_t
-                                              *rktparlist);
+                                              *rktparlist,
+                                              rd_bool_t create_on_miss);
 
 int
 rd_kafka_topic_partition_list_get_leaders (

@@ -2477,7 +2477,7 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
 		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
 		rd_kafka_toppar_t *rktp;
 
-                rktp = rd_kafka_topic_partition_list_get_toppar(rk, rktpar);
+                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
 		if (!rktp) {
 			rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
 				     "%s %s [%"PRId32"]: skipped: "
@@ -3105,39 +3105,30 @@ int rd_kafka_topic_partition_list_count_abs_offsets (
 	return valid_cnt;
 }
 
-/**
- * @returns a toppar object (with refcnt increased) for partition
- *          at index \p idx, or NULL if not set, not found, or out of range.
- *
- * @remark A new reference is returned.
- * @remark The _private field is set to the toppar it not previously set.
- */
-rd_kafka_toppar_t *
-rd_kafka_topic_partition_list_get_toppar (
-        rd_kafka_t *rk, rd_kafka_topic_partition_t *rktpar) {
-        rd_kafka_toppar_t *rktp;
-
-        rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
-        if (!rktp)
-                return NULL;
-
-        return rktp;
-}
-
 
 /**
  * @brief Update _private (toppar) field to point to valid rktp
  *        for each parition.
+ *
+ * @param create_on_miss Create partition (and topic_t object) if necessary.
  */
 void
 rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
                                               rd_kafka_topic_partition_list_t
-                                              *rktparlist) {
+                                              *rktparlist,
+                                              rd_bool_t create_on_miss) {
         int i;
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
 
-                rd_kafka_topic_partition_list_get_toppar(rk, rktpar);
+                if (!rktpar->_private)
+                        rktpar->_private =
+                                rd_kafka_toppar_get2(rk,
+                                                     rktpar->topic,
+                                                     rktpar->partition,
+                                                     0/*not ua-on-miss*/,
+                                                     create_on_miss);
+
         }
 }
 

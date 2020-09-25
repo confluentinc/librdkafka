@@ -511,7 +511,7 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
 
         rktpar = &offsets->elems[0];
 
-        if (!(rktp = rd_kafka_topic_partition_list_get_toppar(rk, rktpar))) {
+        if (!(rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar))) {
 		rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
 			     "No local partition found for %s [%"PRId32"] "
 			     "while parsing OffsetCommit response "

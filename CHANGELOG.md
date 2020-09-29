@@ -12,6 +12,10 @@ librdkafka v1.5.2 is a maintenance release.
    codes as well as transport layer issues), it doesn't make much sense to limit
    the number of retries for retriable errors, but instead only limit the
    retries based on the allowed time to produce a message.
+ * The default value for the producer configuration property
+   `request.timeout.ms` has been increased from 5 to 30 seconds to match
+   the Apache Kafka Java producer default.
+   This change yields increased robustness for broker-side congestion.
 
 
 ## Enhancements

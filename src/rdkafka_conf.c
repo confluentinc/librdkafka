@@ -1380,7 +1380,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The ack timeout of the producer request in milliseconds. "
 	  "This value is only enforced by the broker and relies "
 	  "on `request.required.acks` being != 0.",
-	  1, 900*1000, 5*1000 },
+	  1, 900*1000, 30*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "message.timeout.ms", _RK_C_INT,
 	  _RKT(message_timeout_ms),
 	  "Local message timeout. "

@@ -863,7 +863,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNHH:")) != -1) {
+                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
 		switch (opt) {
 		case 'G':
 			if (rd_kafka_conf_set(conf, "group.id", optarg,
@@ -962,37 +962,32 @@ int main (int argc, char **argv) {
 		case 'd':
 			debug = optarg;
 			break;
-                case 'H':
-                {
-                        char *name, *val;
-                        size_t name_sz = -1;
+        case 'H':
+            if (!strcmp(optarg, "parse"))
+                read_hdrs = 1;
+            else {
+                char *name, *val;
+                size_t name_sz = -1;
 
-                        if (!optarg) {
-                                read_hdrs = 1;
-                                break;
-                        }
-
-                        name = optarg;
-                        val = strchr(name, '=');
-                        if (val) {
-                                name_sz = (size_t)(val-name);
-                                val++; /* past the '=' */
-                        }
-
-                        if (!hdrs)
-                                hdrs = rd_kafka_headers_new(8);
-
-                        err = rd_kafka_header_add(hdrs, name, name_sz, val, -1);
-                        if (err) {
-                                fprintf(stderr,
-                                        "%% Failed to add header %s: %s\n",
-                                        name, rd_kafka_err2str(err));
-                                exit(1);
-                        }
-
-                        read_hdrs = 1;
+                name = optarg;
+                val = strchr(name, '=');
+                if (val) {
+                        name_sz = (size_t)(val-name);
+                        val++; /* past the '=' */
                 }
-                break;
+
+                if (!hdrs)
+                        hdrs = rd_kafka_headers_new(8);
+
+                err = rd_kafka_header_add(hdrs, name, name_sz, val, -1);
+                if (err) {
+                        fprintf(stderr,
+                                "%% Failed to add header %s: %s\n",
+                                name, rd_kafka_err2str(err));
+                        exit(1);
+                }
+            }
+            break;
 		case 'X':
 		{
 			char *name, *val;
@@ -1131,8 +1126,8 @@ int main (int argc, char **argv) {
 			"  -b <brokers> Broker address list (host[:port],..)\n"
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
-                        "  -H <name[=value]> Add header to message (producer)\n"
-                        "  -H           Read message headers (consumer)\n"
+            "  -H <name[=value]> Add header to message (producer)\n"
+            "  -H parse     Read message headers (consumer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
 			"  -x <cnt>     Hard exit after transmitting <cnt> messages (producer)\n"
 			"  -D           Copy/Duplicate data buffer (producer)\n"
@@ -1293,6 +1288,15 @@ int main (int argc, char **argv) {
         if (mode == 'C' || mode == 'G')
                 rd_kafka_conf_set(conf, "enable.partition.eof", "true",
                                   NULL, 0);
+    if (read_hdrs && mode == 'P') {
+        fprintf(stderr, "%% producer can not read headers\n");
+        exit(1);
+    }
+    
+    if (hdrs && mode != 'P') {
+        fprintf(stderr, "%% consumer can not add headers\n");
+        exit(1);
+    }
 
 	if (mode == 'P') {
 		/*

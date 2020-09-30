@@ -86,6 +86,9 @@ librdkafka v1.5.2 is a maintenance release.
    error was hit and the EndTxnRequest was to be retried.
 
 
+*Note: there was no v1.5.1 librdkafka release*
+
+
 
 # librdkafka v1.5.0
 

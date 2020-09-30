@@ -53,6 +53,10 @@ rename_vals = {'plat': {'windows': 'win'},
 #   librdkafka/p-librdkafka__bld-travis__plat-linux__arch-x64__tag-v0.0.62__sha-d051b2c19eb0c118991cd8bc5cf86d8e5e446cde__bid-1562.1/librdkafka.tar.gz
 
 
+class MissingArtifactError(Exception):
+    pass
+
+
 s3_bucket = 'librdkafka-ci-packages'
 dry_run = False
 
@@ -400,7 +404,7 @@ class NugetPackage (Package):
                     break
 
             if artifact is None:
-                raise Exception('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
+                raise MissingArtifactError('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
 
             outf = os.path.join(self.stpath, m[2])
             member = m[1]
@@ -538,7 +542,7 @@ class StaticPackage (Package):
                     break
 
             if artifact is None:
-                raise Exception('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
+                raise MissingArtifactError('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
 
             outf = os.path.join(self.stpath, m[2])
             member = m[1]

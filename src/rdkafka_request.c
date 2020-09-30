@@ -1067,6 +1067,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
 
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
                         RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {

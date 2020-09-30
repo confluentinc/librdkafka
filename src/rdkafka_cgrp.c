@@ -143,10 +143,7 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
  * @returns true if a rebalance is in progress.
  */
 #define RD_KAFKA_CGRP_WAIT_REBALANCE(rkcg)                      \
-	((rkcg)->rkcg_join_state ==				\
-	 RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB ||	\
-	 (rkcg)->rkcg_join_state ==				\
-	 RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB ||   \
+        (RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg)             ||   \
          (rkcg)->rkcg_flags &                                   \
          RD_KAFKA_CGRP_F_WAIT_UNASSIGN_CALL                ||   \
          (rkcg)->rkcg_rebalance_incr_assignment != NULL    ||   \
@@ -968,6 +965,14 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 
 /**
+ * @brief Rejoin the group.
+ */
+static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
+}
+
+
+/**
  * @brief Collect all assigned or owned partitions from group members.
  *        The member field of each result element is set to the associated
  *        group member. The members_match field is set to rd_false.
@@ -1317,8 +1322,7 @@ err:
                      rkas->rkas_protocol_name->str,
                      member_cnt, errstr);
 
-        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
-
+        rd_kafka_cgrp_rejoin(rkcg);
 }
 
 
@@ -1712,9 +1716,8 @@ err:
                                 rd_true/*this consumer is initiating*/,
                                 "JoinGroup error");
                 else
-                        rd_kafka_cgrp_set_join_state(
-                                rkcg,
-                                RD_KAFKA_CGRP_JOIN_STATE_INIT);
+                        rd_kafka_cgrp_rejoin(rkcg);
+
         }
 
         return;
@@ -2238,7 +2241,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 		}
 	}
 
-	if (!RD_KAFKA_CGRP_WAIT_REBALANCE(rkcg) &&
+	if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
 	    rd_list_empty(&rkcg->rkcg_toppars) &&
 	    rkcg->rkcg_wait_unassign_cnt == 0 &&
 	    rkcg->rkcg_wait_commit_cnt == 0 &&
@@ -2786,6 +2789,28 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
                              rko_orig->rko_u.offset_commit.reason,
                              rd_kafka_err2str(err));
 
+
+        /* Revoke assignment and rebalance on unknown member, or illegal
+         * generation error. */
+
+        rebalance_revoke = rd_false;
+        if (err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID) {
+                rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
+                rebalance_revoke = rd_true;
+        } else if (err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION) {
+                rk->rk_cgrp->rkcg_generation_id = -1;
+                rebalance_revoke = rd_true;
+        }
+
+        if (rebalance_revoke) {
+                rd_kafka_cgrp_rebalance_revoke_all(
+                        rkcg,
+                        rd_true/*assignment is lost*/,
+                        rd_true/*this consumer is initiating*/,
+                        "OffsetCommit error");
+        }
+
+
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
         else if (err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR ||
@@ -2834,29 +2859,6 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
                  * unassign is complete. Try now. */
                 rd_kafka_cgrp_check_unassign_done(rkcg, "OffsetCommit done");
 
-        }
-
-
-        /* Revoke assignment and rebalance on unknown member, or illegal
-         * generation error. */
-
-        rebalance_revoke = rd_false;
-        if (err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID) {
-                rd_kafka_cgrp_set_member_id(rk->rk_cgrp, "");
-                rebalance_revoke = rd_true;
-        } else if (err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION) {
-                rk->rk_cgrp->rkcg_generation_id = -1;
-                rebalance_revoke = rd_true;
-        }
-
-        if (rebalance_revoke) {
-                rd_kafka_cgrp_rebalance_revoke_all(
-                        rkcg,
-                        rd_true/*assignment is lost*/,
-                        rd_true/*this consumer is initiating*/,
-                        "OffsetCommit error");
-                rd_kafka_op_destroy(rko_orig);
-                return;
         }
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -3037,14 +3039,6 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
 
 	rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL,
                                               "cgrp auto commit timer");
-}
-
-
-/**
- * @brief Rejoin the group.
- */
-static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
-        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }
 
 
@@ -3403,9 +3397,7 @@ static void rd_kafka_cgrp_incr_unassign_done (rd_kafka_cgrp_t *rkcg,
                  * is not the case under normal conditions), in which case
                  * the rejoin flag will be set. */
 
-                rd_kafka_cgrp_set_join_state(
-                        rkcg,
-                        RD_KAFKA_CGRP_JOIN_STATE_INIT);
+                rd_kafka_cgrp_rejoin(rkcg);
 
                 rkcg->rkcg_rebalance_rejoin = rd_false;
 
@@ -3468,8 +3460,7 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
                 /* Skip the join backoff */
                 rd_interval_reset(&rkcg->rkcg_join_intvl);
 
-		rd_kafka_cgrp_set_join_state(rkcg,
-					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
+		rd_kafka_cgrp_rejoin(rkcg);
 	}
 
         /* Whether or not it was before, current assignment is now not lost. */
@@ -3719,8 +3710,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 /* Skip the join backoff */
                 rd_interval_reset(&rkcg->rkcg_join_intvl);
 
-		rd_kafka_cgrp_set_join_state(rkcg,
-					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
+		rd_kafka_cgrp_rejoin(rkcg);
 	}
 
         return err;
@@ -4131,9 +4121,7 @@ static void rd_kafka_cgrp_rebalance_revoke_all (rd_kafka_cgrp_t *rkcg,
                      "rejoining group",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
 
-        rd_kafka_cgrp_set_join_state(
-                rkcg,
-                RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        rd_kafka_cgrp_rejoin(rkcg);
 }
 
 
@@ -4447,9 +4435,7 @@ rd_kafka_cgrp_modify_subscription (rd_kafka_cgrp_t *rkcg,
                                 rkcg->rkcg_rebalance_rejoin
                                 ? " (rebalance rejoin)": "");
                         } else
-                                rd_kafka_cgrp_set_join_state(
-                                        rkcg,
-                                        RD_KAFKA_CGRP_JOIN_STATE_INIT);
+                                rd_kafka_cgrp_rejoin(rkcg);
 
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
@@ -4643,7 +4629,7 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
          * If the instate is being terminated with NO_CONSUMER_CLOSE we
          * trigger unassign directly to avoid stalling on rebalance callback
          * queues that are no longer served by the application. */
-        if (!RD_KAFKA_CGRP_WAIT_REBALANCE(rkcg) ||
+        if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) ||
             rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
                 rd_kafka_cgrp_unassign(rkcg);
 
@@ -5525,8 +5511,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                 return;
         }
 
-        rd_kafka_cgrp_set_join_state(rkcg,
-                                     RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        rd_kafka_cgrp_rejoin(rkcg);
 }
 
 

@@ -43,6 +43,9 @@ extern "C" {
 using namespace std;
 
 
+#define TOPIC_CREATE_WAIT_S 4
+
+
 static std::string get_bootstrap_servers() {
   RdKafka::Conf *conf;
   std::string bootstrap_servers;
@@ -376,10 +379,11 @@ static void a_assign_tests () {
 
     std::string topic1_str = Test::mk_topic_name("0113-cooperative_rebalance", 1);
     test_create_topic(NULL, topic1_str.c_str(), 1, 1);
-    test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
-
     std::string topic2_str = Test::mk_topic_name("0113-cooperative_rebalance", 1);
     test_create_topic(NULL, topic2_str.c_str(), 1, 1);
+    sleep(TOPIC_CREATE_WAIT_S);
+
+    test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
     test_produce_msgs_easy_size(topic2_str.c_str(), 0, 0, msgcnt, msgsize2);
 
     run_test(topic1_str, topic2_str, assign_test_1);
@@ -407,6 +411,8 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
+
   std::vector<std::string> topics;
   topics.push_back(topic_name);
 
@@ -553,6 +559,8 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
+
   std::vector<std::string> topics;
   topics.push_back(topic_name);
 
@@ -630,6 +638,7 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
   test_create_topic(NULL, topic_name1.c_str(), 2, 1);
   std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name2.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -699,6 +708,7 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
   test_create_topic(NULL, topic_name1.c_str(), 2, 1);
   std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name2.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -802,6 +812,7 @@ static void f_assign_call_cooperative () {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -880,6 +891,7 @@ static void g_incremental_assign_call_eager() {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -919,6 +931,7 @@ static void h_delete_topic () {
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
   std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name2.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -983,6 +996,7 @@ static void i_delete_topic_2 () {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -1044,6 +1058,7 @@ static void j_delete_topic_no_rb_callback () {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -1103,6 +1118,7 @@ static void k_add_partition () {
   /* construct test topics (one partition) */
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
@@ -1177,12 +1193,11 @@ static void l_unsubscribe () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
   test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
+
   std::vector<std::string> topics;
   topics.push_back(topic_name_1);
   topics.push_back(topic_name_2);
-
-  /* hack: wait for a bit to have better certainty the topics created above exist. */
-  sleep(3);
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
@@ -1285,6 +1300,8 @@ static void m_unsubscribe_2 () {
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
+
   std::vector<std::string> topics;
   topics.push_back(topic_name_1);
 
@@ -1393,6 +1410,7 @@ static void n_wildcard () {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
+      sleep(TOPIC_CREATE_WAIT_S);
       created_topics = true;
     }
 
@@ -1493,12 +1511,14 @@ static void o_java_interop() {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
   test_create_topic(NULL, topic_name_2.c_str(), 6, 1);
+  sleep(TOPIC_CREATE_WAIT_S);
+
   std::vector<std::string> topics;
   topics.push_back(topic_name_1);
   topics.push_back(topic_name_2);
 
   /* hack: wait for a bit to have better certainty the topics created above exist. */
-  sleep(3);
+
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
@@ -1576,6 +1596,128 @@ static void o_java_interop() {
   delete c1;
 }
 
+
+/* ------- s_subscribe_when_rebalancing
+ *
+ * check behavior when:
+ *  - single consumer subscribes to topic.
+ *  - soon after (timing such that rebalance is probably in progress) it subscribes to a different topic.
+ */
+
+static void s_subscribe_when_rebalancing(int variation) {
+  Test::Say(tostr() << "Executing s_subscribe_when_rebalancing, variation: " << variation << "\n");
+
+  /* construct test topic (2 partitions) */
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string topic_name_3 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
+  std::vector<std::string> topic_1;
+  topic_1.push_back(topic_name_1);
+  test_create_topic(NULL, topic_name_2.c_str(), 1, 1);
+  std::vector<std::string> topic_2;
+  topic_2.push_back(topic_name_2);
+  test_create_topic(NULL, topic_name_3.c_str(), 1, 1);
+  std::vector<std::string> topic_3;
+  topic_3.push_back(topic_name_3);
+  sleep(TOPIC_CREATE_WAIT_S);
+
+  DefaultRebalanceCb rebalance_cb1;
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
+
+  if (variation == 2 || variation == 4 || variation == 5) {
+    /* make sure metadata is pre-cached for all topics. */
+    class RdKafka::Metadata *metadata;
+    c1->metadata(true, NULL, &metadata, 5000);
+    delete metadata;
+  }
+
+  Test::Say(tostr() << "Subscribing consumer 1 to topic 1: " << topic_name_1 << "\n");
+  RdKafka::ErrorCode err;
+  if ((err = c1->subscribe(topic_1)))
+    Test::Fail("Consumer 1 subscribe to topic 1 failed: " + RdKafka::err2str(err));
+
+  std::vector<RdKafka::TopicPartition*> partitions1;
+  RdKafka::Message *msg1;
+
+  // wait until subscribed to topic 1.
+  bool done = false;
+  while (!done) {
+    msg1 = c1->consume(100);
+    delete msg1;
+
+    c1->assignment(partitions1);
+
+    if (partitions1.size() == 1) {
+      done = true;
+    }
+
+    for (size_t i = 0; i<partitions1.size(); i++)
+      delete partitions1[i];
+    partitions1.clear();
+  }
+
+  // now subscribe to topic 2.
+  Test::Say(tostr() << "Subscribing consumer 1 to topic 2: " << topic_name_2 << "\n");
+  if ((err = c1->subscribe(topic_2)))
+    Test::Fail("Consumer 1 subscribe to topic 2 failed: " + RdKafka::err2str(err));
+
+  if (variation == 3 || variation == 4) {
+    msg1 = c1->consume(2);
+    delete msg1;
+  }
+
+  if (variation < 5) {
+    // and very quickly after, subscribe to topic 3.
+    Test::Say(tostr() << "Subscribing consumer 1 to topic 3: " << topic_name_3 << "\n");
+    if ((err = c1->subscribe(topic_3)))
+      Test::Fail("Consumer 1 subscribe to topic 3 failed: " + RdKafka::err2str(err));
+
+    // wait until subscribed to topic 3.
+    done = false;
+    while (!done) {
+      msg1 = c1->consume(100);
+      delete msg1;
+
+      c1->assignment(partitions1);
+
+      if (partitions1.size() == 1) {
+        if (partitions1[0]->topic() == topic_name_3)
+          done = true;
+      }
+
+      for (size_t i = 0; i<partitions1.size(); i++)
+        delete partitions1[i];
+      partitions1.clear();
+    }
+  } else {
+    // and very quickly, unsubscribe
+    Test::Say(tostr() << "Unsubscribing consumer 1\n");
+    if ((err = c1->unsubscribe()))
+      Test::Fail("Consumer 1 unsubscribe failed: " + RdKafka::err2str(err));
+
+    // wait until subscribed to topic 3.
+    done = false;
+    while (!done) {
+      msg1 = c1->consume(100);
+      delete msg1;
+
+      c1->assignment(partitions1);
+
+      if (partitions1.size() == 0) {
+        done = true;
+      }
+
+      for (size_t i = 0; i<partitions1.size(); i++)
+        delete partitions1[i];
+      partitions1.clear();
+    }
+  }
+
+
+  delete c1;
+}
 
 
 extern "C" {
@@ -1893,50 +2035,36 @@ extern "C" {
 
 
   int main_0113_cooperative_rebalance (int argc, char **argv) {
-    // TODO: re-enable. working tests.
-    if (true) {
-      a_assign_tests();
-      b_subscribe_with_cb_test(true/*close consumer*/);
-      b_subscribe_with_cb_test(false/*don't close consumer*/);
-      c_subscribe_no_cb_test(true/*close consumer*/);
-      c_subscribe_no_cb_test(false/*don't close consumer*/);
-      d_change_subscription_add_topic(true/*close consumer*/);
-      d_change_subscription_add_topic(false/*don't close consumer*/);
-      e_change_subscription_remove_topic(true/*close consumer*/);
-      e_change_subscription_remove_topic(false/*don't close consumer*/);
-      f_assign_call_cooperative();
-      g_incremental_assign_call_eager();
-      h_delete_topic();
-      i_delete_topic_2();
-      j_delete_topic_no_rb_callback();
-      k_add_partition();
-      l_unsubscribe();
-      m_unsubscribe_2();
-      n_wildcard();
-      o_java_interop();
-      p_lost_partitions_heartbeat_illegal_generation_test();
-      q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
-      q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
-      r_lost_partitions_commit_illegal_generation_test();
-    }
+    a_assign_tests();
+    b_subscribe_with_cb_test(true/*close consumer*/);
+    b_subscribe_with_cb_test(false/*don't close consumer*/);
+    c_subscribe_no_cb_test(true/*close consumer*/);
+    c_subscribe_no_cb_test(false/*don't close consumer*/);
+    d_change_subscription_add_topic(true/*close consumer*/);
+    d_change_subscription_add_topic(false/*don't close consumer*/);
+    e_change_subscription_remove_topic(true/*close consumer*/);
+    e_change_subscription_remove_topic(false/*don't close consumer*/);
+    f_assign_call_cooperative();
+    g_incremental_assign_call_eager();
+    h_delete_topic();
+    i_delete_topic_2();
+    j_delete_topic_no_rb_callback();
+    k_add_partition();
+    l_unsubscribe();
+    m_unsubscribe_2();
+    n_wildcard();
+    o_java_interop();
+    p_lost_partitions_heartbeat_illegal_generation_test();
+    q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
+    q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
+    r_lost_partitions_commit_illegal_generation_test();
+    s_subscribe_when_rebalancing(1/*test variant*/);
+    s_subscribe_when_rebalancing(2);
+    s_subscribe_when_rebalancing(3);
+    s_subscribe_when_rebalancing(4);
+    s_subscribe_when_rebalancing(5);
+    s_subscribe_when_rebalancing(6);
 
     return 0;
   }
 }
-
-
-
-
-// -- TODO ideas --
-
-// unit test assinors of different types.
-// auto commit tests.
-
-// kip says: ConsumerCoordinator will check if the newly assigned / revoked / lost partitions set is
-// empty or not; and if not, we will not trigger the corresponding listener.
-// however it also says: For those newly-added-partitions, call the rebalance listener's
-// onPartitionsAssigned (even if empty). the latter is what matches java (double check)
-
-// lost_partitions_poll_timeout_test();
-// lost_partitions_session_timeout_test();
-// lost_partitions_heartbeat_fenced_instance_id_test();

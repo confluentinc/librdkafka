@@ -214,6 +214,15 @@ typedef struct rd_kafka_cgrp_s {
 	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
         /** Subscribed topics that are errored/not available. */
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
+        /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
+         *  actioning this will be postponed until after the rebalance
+         *  completes. The waiting subscription is stored here. */
+        rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+        /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
+         *  actioning this will be posponed until after the rebalance
+         *  completes. This flag is used to signal a waiting unsubscribe
+         *  operation. */
+        rd_bool_t rkcg_next_unsubscribe;
 
         /* Current assignment */
         rd_kafka_topic_partition_list_t *rkcg_assignment;
@@ -320,7 +329,8 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
 void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 			       const char *reason);
-void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
+                                          rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
 rd_kafka_rebalance_protocol_t

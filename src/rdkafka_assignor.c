@@ -453,36 +453,24 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 
 
 /**
- * @brief Check that the rebalance protocol of all assignors matches
- *        \p rebalance_protocol, or if \p rebalance_protocol is NONE,
- *        that they are all consistent.
- *
- * @param rebalance_protocol The rebalance_protocol to check.
+ * @brief Check that the rebalance protocol of all enabled assignors is
+ *        the same.
  */
 rd_kafka_resp_err_t
-rd_kafka_assignor_rebalance_protocol_check(rd_kafka_conf_t *conf,
-                                           rd_kafka_rebalance_protocol_t
-                                           rebalance_protocol) {
-        rd_kafka_assignor_t *rkas;
+rd_kafka_assignor_rebalance_protocol_check(const rd_kafka_conf_t *conf) {
         int i;
+        rd_kafka_assignor_t *rkas;
+        rd_kafka_rebalance_protocol_t rebalance_protocol
+                = RD_KAFKA_REBALANCE_PROTOCOL_NONE;
 
         RD_LIST_FOREACH(rkas, &conf->partition_assignors, i) {
+                if (!rkas->rkas_enabled)
+                        continue;
 
-                if (i == 0 && rebalance_protocol ==
-                    RD_KAFKA_REBALANCE_PROTOCOL_NONE) {
-                        rebalance_protocol =
-                                rkas->rkas_protocol;
-                        if (rebalance_protocol !=
-                            RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
-                            rebalance_protocol !=
-                            RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE)
-                                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-                } else if (rkas->rkas_enabled) {
-                        if (rebalance_protocol !=
-                                rkas->rkas_protocol)
-                                return RD_KAFKA_RESP_ERR__CONFLICT;
-                }
+                if (rebalance_protocol == RD_KAFKA_REBALANCE_PROTOCOL_NONE)
+                        rebalance_protocol = rkas->rkas_protocol;
+                if (rebalance_protocol != rkas->rkas_protocol)
+                        return RD_KAFKA_RESP_ERR__CONFLICT;
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -523,20 +511,18 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        int (*unittest_cb) (void),
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
-        rd_kafka_resp_err_t err;
 
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
                                   protocol_type))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
 
+        if (rebalance_protocol != RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
+            rebalance_protocol != RD_KAFKA_REBALANCE_PROTOCOL_EAGER)
+                return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
+
         /* Dont overwrite application assignors */
         if ((rkas = rd_kafka_assignor_find(rk, protocol_name)))
                 return RD_KAFKA_RESP_ERR__CONFLICT;
-
-        err = rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf,
-                                                         rebalance_protocol);
-        if (err)
-                return err;
 
         rkas = rd_calloc(1, sizeof(*rkas));
 
@@ -621,6 +607,14 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 		s = t;
 	}
+
+        if (rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf)) {
+                rd_snprintf(errstr, errstr_size,
+                            "All assignors must have the same protocol type. "
+                            "Online migration between assignors with "
+                            "different protocol types is not supported");
+                return -1;
+        }
 
 	return 0;
 }

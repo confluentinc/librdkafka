@@ -3612,16 +3612,6 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
 
-                if (rd_kafka_assignor_rebalance_protocol_check(
-                                        conf,
-                                        RD_KAFKA_REBALANCE_PROTOCOL_NONE))
-                        return "All assignors must have "
-                               "the same protocol type. "
-                               "Online migration between "
-                               "assignors with different "
-                               "protocol types is not "
-                               "supported";
-
         } else if (cltype == RD_KAFKA_PRODUCER) {
                 if (conf->eos.transactional_id) {
                         if (!conf->eos.idempotence) {

@@ -432,17 +432,17 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
     delete msg1;
     delete msg2;
 
-    /* failure case: test will time out. */
-    if (rebalance_cb1.assign_call_cnt == 3 &&
-        rebalance_cb2.assign_call_cnt == 2) {
-      break;
-    }
-
     /* start c2 after c1 has received initial assignment */
     if (!c2_subscribed && rebalance_cb1.assign_call_cnt > 0) {
       if ((err = c2->subscribe(topics)))
         Test::Fail("consumer 2 subscribe failed: " + RdKafka::err2str(err));
       c2_subscribed = true;
+    }
+
+    /* failure case: test will time out. */
+    if (rebalance_cb1.assign_call_cnt == 3 &&
+        rebalance_cb2.assign_call_cnt == 2) {
+      break;
     }
   }
 
@@ -1644,14 +1644,13 @@ static void s_subscribe_when_rebalancing(int variation) {
   // wait until subscribed to topic 1.
   bool done = false;
   while (!done) {
-    msg1 = c1->consume(100);
+    msg1 = c1->consume(500);
     delete msg1;
 
     c1->assignment(partitions1);
 
-    if (partitions1.size() == 1) {
+    if (partitions1.size() == 1)
       done = true;
-    }
 
     for (size_t i = 0; i<partitions1.size(); i++)
       delete partitions1[i];
@@ -1677,7 +1676,7 @@ static void s_subscribe_when_rebalancing(int variation) {
     // wait until subscribed to topic 3.
     done = false;
     while (!done) {
-      msg1 = c1->consume(100);
+      msg1 = c1->consume(500);
       delete msg1;
 
       c1->assignment(partitions1);
@@ -1700,7 +1699,7 @@ static void s_subscribe_when_rebalancing(int variation) {
     // wait until subscribed to topic 3.
     done = false;
     while (!done) {
-      msg1 = c1->consume(100);
+      msg1 = c1->consume(500);
       delete msg1;
 
       c1->assignment(partitions1);
@@ -2035,6 +2034,8 @@ extern "C" {
 
 
   int main_0113_cooperative_rebalance (int argc, char **argv) {
+    int i;
+
     a_assign_tests();
     b_subscribe_with_cb_test(true/*close consumer*/);
     b_subscribe_with_cb_test(false/*don't close consumer*/);
@@ -2058,12 +2059,8 @@ extern "C" {
     q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
     q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
     r_lost_partitions_commit_illegal_generation_test();
-    s_subscribe_when_rebalancing(1/*test variant*/);
-    s_subscribe_when_rebalancing(2);
-    s_subscribe_when_rebalancing(3);
-    s_subscribe_when_rebalancing(4);
-    s_subscribe_when_rebalancing(5);
-    s_subscribe_when_rebalancing(6);
+    for (i = 1 ; i <= 6 ; i++)
+      s_subscribe_when_rebalancing(i);
 
     return 0;
   }

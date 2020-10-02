@@ -136,11 +136,6 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        int (*unittest_cb) (void),
                        void *opaque);
 
-rd_kafka_resp_err_t
-rd_kafka_assignor_rebalance_protocol_check(rd_kafka_conf_t *conf,
-                                           rd_kafka_rebalance_protocol_t
-                                           rebalance_protocol);
-
 rd_kafkap_bytes_t *
 rd_kafka_consumer_protocol_member_metadata_new (const rd_list_t *topics,
                                                 const void *userdata,

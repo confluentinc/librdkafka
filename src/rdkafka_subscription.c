@@ -112,27 +112,6 @@ rd_kafka_assign0 (rd_kafka_t *rk,
                                           "Requires a consumer with group.id "
                                           "configured");
 
-        if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
-            RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
-            assign_method == RD_KAFKA_ASSIGN_METHOD_ASSIGN)
-                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                          "Changes to the current assignment "
-                                          "must be made using "
-                                          "incremental_assign() or "
-                                          "incremental_unassign() "
-                                          "when rebalance protocol type is "
-                                          "COOPERATIVE");
-
-        if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
-             RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
-            (assign_method == RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN ||
-             assign_method == RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN))
-                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                          "Changes to the current assignment "
-                                          "must be made using "
-                                          "assign() when rebalance "
-                                          "protocol type is EAGER");
-
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
 
         rko->rko_u.assign.method = assign_method;
@@ -218,12 +197,15 @@ rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
         rko = rd_kafka_op_req2(rkcg->rkcg_ops,
                                RD_KAFKA_OP_GET_REBALANCE_PROTOCOL);
 
-        if (!rko || rko->rko_err)
-                result = RD_KAFKA_REBALANCE_PROTOCOL_NONE;
-        else {
-                result = rko->rko_u.rebalance_protocol.protocol;
+        if (!rko)
+                return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
+        else if (rko->rko_err) {
                 rd_kafka_op_destroy(rko);
+                return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
         }
+
+        result = rko->rko_u.rebalance_protocol.protocol;
+        rd_kafka_op_destroy(rko);
 
         return result;
 }

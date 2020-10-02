@@ -209,19 +209,20 @@ typedef struct rd_kafka_cgrp_s {
 
         /** Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
-	/** The actual topics subscribed (after metadata+wildcard matching).
+        /** The actual topics subscribed (after metadata+wildcard matching).
          *  Sorted. */
-	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
+        rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
         /** Subscribed topics that are errored/not available. */
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
-         *  completes. The waiting subscription is stored here. */
+         *  completes. The waiting subscription is stored here.
+         *  Mutually exclusive with rkcg_next_subscription. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe
-         *  operation. */
+         *  operation. Mutually exclusive with rkcg_next_subscription. */
         rd_bool_t rkcg_next_unsubscribe;
 
         /* Current assignment */
@@ -333,8 +334,6 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
                                           rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
-rd_kafka_rebalance_protocol_t
-rd_kafka_cgrp_rebalance_protocol (rd_kafka_cgrp_t *rkcg);
 
 
 struct rd_kafka_consumer_group_metadata_s {

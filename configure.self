@@ -202,6 +202,14 @@ void foo (void) {
 	mkl_mkvar_append CFLAGS CFLAGS "-std=c99"
     fi
 
+    # Check if rand_r() is available
+    mkl_compile_check "rand_r" "HAVE_RAND_R" disable CC "" \
+"#include <stdlib.h>
+void foo (void) {
+   unsigned int seed = 0xbeaf;
+   (void)rand_r(&seed);
+}"
+
     # Check if strndup() is available (isn't on Solaris 10)
     mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
 "#include <string.h>

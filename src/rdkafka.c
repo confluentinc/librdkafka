@@ -2070,7 +2070,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                 * freed from rd_kafka_destroy_internal()
                                 * as the rk itself is destroyed. */
 
-        /* Seed PRNG */
+        /* Seed PRNG, don't bother about HAVE_RAND_R, since it is pretty cheap. */
         if (rk->rk_conf.enable_random_seed)
                 call_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
 

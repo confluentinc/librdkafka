@@ -191,9 +191,6 @@ rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
 
-        if (!rkcg->rkcg_assignor)
-                return RD_KAFKA_REBALANCE_PROTOCOL_NONE;
-
         rko = rd_kafka_op_req2(rkcg->rkcg_ops,
                                RD_KAFKA_OP_GET_REBALANCE_PROTOCOL);
 

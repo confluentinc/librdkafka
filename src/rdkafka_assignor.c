@@ -469,7 +469,7 @@ rd_kafka_assignor_rebalance_protocol_check(const rd_kafka_conf_t *conf) {
 
                 if (rebalance_protocol == RD_KAFKA_REBALANCE_PROTOCOL_NONE)
                         rebalance_protocol = rkas->rkas_protocol;
-                if (rebalance_protocol != rkas->rkas_protocol)
+                else if (rebalance_protocol != rkas->rkas_protocol)
                         return RD_KAFKA_RESP_ERR__CONFLICT;
         }
 

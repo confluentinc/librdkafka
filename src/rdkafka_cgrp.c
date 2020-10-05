@@ -47,7 +47,7 @@ static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
                                                const char *reason);
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);
-static rd_kafka_resp_err_t
+static rd_kafka_error_t *
 rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                       rd_kafka_topic_partition_list_t *assignment);
 static rd_kafka_resp_err_t rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg);
@@ -889,10 +889,14 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
 	    || !assignment) {
+                rd_kafka_error_t *error;
 	no_delegation:
-		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-			rd_kafka_cgrp_assign(rkcg, assignment);
-		else
+		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+			error = rd_kafka_cgrp_assign(rkcg, assignment);
+                        if (error)
+                                /* if set, is always fatal */
+                                rd_kafka_error_destroy(error);
+                } else
 			rd_kafka_cgrp_unassign(rkcg);
 		return rd_false;
 	}
@@ -3047,11 +3051,11 @@ static rd_bool_t rd_kafka_trigger_waiting_subscribe_maybe (
                         rd_kafka_cgrp_t *rkcg) {
 
         if (rkcg->rkcg_next_subscription) {
+                rd_kafka_topic_partition_list_t *next_subscription =
+                        rkcg->rkcg_next_subscription;
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIBE",
                              "Group \"%s\": invoking waiting postponed "
                              "subscribe op", rkcg->rkcg_group_id->str);
-                rd_kafka_topic_partition_list_t *next_subscription =
-                        rkcg->rkcg_next_subscription;
                 rkcg->rkcg_next_subscription = NULL;
                 rd_kafka_cgrp_subscribe(rkcg, next_subscription);
                 return rd_true;
@@ -3084,6 +3088,7 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
         rd_assert(partitions);
 
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
+                rd_kafka_error_t *error;
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
                              "ASSIGN", "Group \"%s\": consumer has raised "
                              "a fatal error, treating incremental "
@@ -3092,15 +3097,16 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                              rkcg->rkcg_group_id->str, partitions->cnt,
                              !rkcg->rkcg_assignment ? 0
                              : rkcg->rkcg_assignment->cnt);
-                rd_kafka_cgrp_assign(rkcg, NULL);
+                error = rd_kafka_cgrp_assign(rkcg, NULL);
+                if (error)
+                        rd_kafka_error_destroy(error);
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__FATAL,
                                           "Consumer has raised a fatal error");
         }
 
-        if (rd_atomic32_get(&rkcg->rkcg_assignment_lost)) {
+        if (rd_atomic32_get(&rkcg->rkcg_assignment_lost))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                      "Partitions can not be added to a lost assignment");
-        }
 
         /* If this action was underway when a terminate was initiated, then
          * swap it out with an unassign of all partitions instead. */
@@ -3124,8 +3130,9 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
                         !rkcg->rkcg_assignment ? 0
                         : rkcg->rkcg_assignment->cnt,
                         rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
-                rd_kafka_cgrp_set_join_state(rkcg,
-                        RD_KAFKA_CGRP_JOIN_STATE_STARTED);
+                if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STARTED)
+                        rd_kafka_cgrp_set_join_state(rkcg,
+                                RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
                 goto check_rejoin;
         }
 
@@ -3237,6 +3244,7 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
         /* If the consumer has raised a fatal error, remove the entire
          * assignment */
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
+                rd_kafka_error_t *error;
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER,
                              "UNASSIGN", "Group \"%s\": consumer has "
                              "raised a fatal error, treating incremental "
@@ -3244,7 +3252,9 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
                              "%d partitions in the current assignment",
                              rkcg->rkcg_group_id->str,
                              partitions->cnt, cur_assignment_cnt);
-                rd_kafka_cgrp_assign(rkcg, NULL);
+                error = rd_kafka_cgrp_assign(rkcg, NULL);
+                if (error)
+                        rd_kafka_error_destroy(error);
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__FATAL,
                                           "Consumer has raised a fatal error");
         }
@@ -3624,13 +3634,13 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
  * @brief Set new atomic partition assignment
  *        May update \p assignment but will not hold on to it.
  *
- * @returns 0 on success or an error if a fatal error has been raised.
+ * @returns NULL on success or an error if a fatal error has been raised.
  */
-static rd_kafka_resp_err_t
+static rd_kafka_error_t *
 rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                       rd_kafka_topic_partition_list_t *assignment) {
         int i;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_error_t *error = NULL;
 
         /* If this call was set in motion before a terminate was initiated, then
          * swap it out with an unassign instead. */
@@ -3693,7 +3703,10 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                                      "ASSIGN", "Group \"%s\": Consumer has "
                                      "raised a fatal error, treating assign "
                                      "as unassign", rkcg->rkcg_group_id->str);
-                err = RD_KAFKA_RESP_ERR__FATAL;
+                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__FATAL,
+                                           "Consumer has raised a fatal "
+                                           "error, treating assign as "
+                                           "unassign");
                 assignment = NULL;
         }
 
@@ -3720,7 +3733,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 
         if (rkcg->rkcg_join_state ==
             RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE)
-                return err;
+                return error;
 
         rd_dassert(rkcg->rkcg_wait_unassign_cnt == 0);
 
@@ -3741,7 +3754,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 		rd_kafka_cgrp_rejoin(rkcg);
 	}
 
-        return err;
+        return error;
 }
 
 
@@ -4812,12 +4825,9 @@ static void rd_kafka_cgrp_handle_assign_op (rd_kafka_cgrp_t *rkcg,
                 case RD_KAFKA_ASSIGN_METHOD_ASSIGN:
                         /* New atomic assignment (partitions != NULL),
                          * or unassignment (partitions == NULL) */
-                        err = rd_kafka_cgrp_assign(rkcg,
-                                rko->rko_u.assign.partitions);
-                        if (err)
-                                error = rd_kafka_error_new(err, "%s",
-                                                           rd_kafka_err2str(
-                                                                   err));
+                        error = rd_kafka_cgrp_assign(
+                                        rkcg,
+                                        rko->rko_u.assign.partitions);
                         break;
                 case RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN:
                         error = rd_kafka_cgrp_incremental_assign(

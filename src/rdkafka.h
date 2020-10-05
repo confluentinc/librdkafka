@@ -68,21 +68,21 @@ typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
 #define RD_DEPRECATED __declspec(deprecated)
-#undef RD_EXPORT
-#ifdef LIBRDKAFKA_STATICLIB
-#define RD_EXPORT
-#else
+
+#ifndef LIBRDKAFKA_STATICLIB
 #ifdef LIBRDKAFKA_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else
 #define RD_EXPORT __declspec(dllimport)
 #endif
+#endif
+
 #ifndef LIBRDKAFKA_TYPECHECKS
 #define LIBRDKAFKA_TYPECHECKS 0
 #endif
-#endif
 
 #else
+
 #include <sys/socket.h> /* for sockaddr, .. */
 
 #define RD_UNUSED __attribute__((unused))
@@ -95,6 +95,9 @@ typedef SSIZE_T ssize_t;
 #endif
 #endif
 
+#ifndef RD_EXPORT
+#define RD_EXPORT
+#endif
 
 /**
  * @brief Type-checking macros

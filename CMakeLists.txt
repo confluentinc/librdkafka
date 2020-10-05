@@ -5,6 +5,29 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
+set(CPACK_PACKAGE_VENDOR "Magnus Edenhill")
+set(CPACK_PACKAGE_CONTACT "info@edenhill.se")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/edenhill/librdkafka")
+set(CPACK_PACKAGE_DESCRIPTION "\
+librdkafka is a C library implementation of the Apache Kafka protocol, \
+providing Producer, Consumer and Admin clients. It was designed with message \
+delivery reliability and high performance in mind, current figures exceed 1 \
+million msgs/second for the producer and 3 million msgs/second for the consumer. \
+\
+librdkafka is licensed under the 2-clause BSD license.")
+
+# All this block is the machinery required to install the .targets file only for the NuGet generator
+# This is really something that the cpack generator ought to support directly
+set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/CPackProjectConfig.cmake")
+set(CPACK_NUGET_TARGETS_FILE "packaging/cmake/rdkafka.targets")
+set(CPACK_STAGING_DIR "${CMAKE_BINARY_DIR}")
+# This install statement is from the binary dir, but the above CPackProjectConfig.cmake will copy it
+# there only when building a NuGet package
+install(FILES "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.targets"
+  DESTINATION "build/native" OPTIONAL)
+
+include(CPack)
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
@@ -159,7 +182,6 @@ if(ENABLE_LZ4_EXT)
 endif()
 # }
 
-option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)
@@ -256,7 +278,22 @@ install(
     DESTINATION "share/licenses/librdkafka"
 )
 
+if (MSVC)
+    install(FILES
+        $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
+        $<TARGET_FILE_DIR:rdkafka++_static>/$<TARGET_FILE_BASE_NAME:rdkafka++_static>.pdb
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        CONFIGURATIONS Debug RelWithDebInfo)
+    install(FILES
+        $<TARGET_PDB_FILE:rdkafka>
+        $<TARGET_PDB_FILE:rdkafka++>
+        DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        CONFIGURATIONS Debug RelWithDebInfo)
+endif()
+
 # }
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

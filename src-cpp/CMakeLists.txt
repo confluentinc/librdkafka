@@ -16,25 +16,27 @@ set(
     TopicPartitionImpl.cpp
 )
 
-if(RDKAFKA_BUILD_STATIC)
-  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-  set(RDKAFKA_BUILD_MODE STATIC)
-else()
-  set(RDKAFKA_BUILD_MODE SHARED)
-endif()
+set(CMAKE_DEBUG_POSTFIX d)
 
-add_library(rdkafka++ ${RDKAFKA_BUILD_MODE} ${sources})
-if(NOT RDKAFKA_BUILD_STATIC)
-  set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
-endif()
+add_library(rdkafka++ SHARED ${sources})
+add_library(rdkafka++_static STATIC ${sources})
+
+set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
+target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
+target_compile_definitions(rdkafka++_static PUBLIC LIBRDKAFKACPP_STATICLIB)
+
+set_target_properties(rdkafka++_static
+    PROPERTIES COMPILE_PDB_NAME rdkafka++_static)
+set_target_properties(rdkafka++_static
+    PROPERTIES COMPILE_PDB_NAME_DEBUG rdkafka++_static${CMAKE_DEBUG_POSTFIX})
 
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
+target_link_libraries(rdkafka++_static PUBLIC rdkafka_static)
 
-# Support '#include <rdkafcpp.h>'
-target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
-if(NOT RDKAFKA_BUILD_STATIC)
-    target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
-endif()
+foreach(target rdkafka++ rdkafka++_static)
+    # Support '#include <rdkafcpp.h>'
+    target_include_directories(${target} PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+endforeach()
 
 # Generate pkg-config file
 set(PKG_CONFIG_NAME
@@ -64,28 +66,9 @@ configure_file(
 install(FILES ${GENERATED_DIR}/rdkafka++.pc
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
 )
-if(RDKAFKA_BUILD_STATIC)
-  set(PKG_CONFIG_NAME
-    "librdkafka++-static"
-  )
-  set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library (static)"
-  )
-  set(PKG_CONFIG_LIBS
-    "-L\${libdir} \${libdir}/librdkafka++.a"
-  )
-  configure_file(
-    "../packaging/cmake/rdkafka.pc.in"
-    "${GENERATED_DIR}/rdkafka++-static.pc"
-    @ONLY
-  )
-  install(FILES ${GENERATED_DIR}/rdkafka.pc
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
-  )
-endif()
 
 install(
-    TARGETS rdkafka++
+    TARGETS rdkafka++ rdkafka++_static
     EXPORT "${targets_export_name}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -93,7 +76,23 @@ install(
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
+if (MSVC)
+    set_target_properties(rdkafka++_static
+        PROPERTIES
+        COMPILE_PDB_NAME_RELWITHDEBINFO rdkafka++_static
+        COMPILE_PDB_NAME_DEBUG          rdkafka++_static${CMAKE_DEBUG_POSTFIX})
+endif()
+
 install(
     FILES "rdkafkacpp.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
 )
+
+if (MSVC)
+    install(FILES $<TARGET_PDB_FILE:rdkafka++>
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+    install(FILES $<TARGET_FILE_DIR:rdkafka++_static>/$<TARGET_FILE_BASE_NAME:rdkafka++_static>.pdb
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        CONFIGURATIONS Debug RelWithDebInfo)
+endif()

@@ -30,3 +30,6 @@ test_report*.json
 cov-int
 gdbrun*.gdb
 TAGS
+build
+.vs
+out

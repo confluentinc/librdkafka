@@ -33,12 +33,7 @@
 /**
  * Returns a random (using rand(3)) number between 'low'..'high' (inclusive).
  */
-static RD_INLINE int rd_jitter (int low, int high) RD_UNUSED;
-static RD_INLINE int rd_jitter (int low, int high) {
-	return (low + (rand() % ((high-low)+1)));
-	
-}
-
+int rd_jitter (int low, int high);
 
 /**
  * Shuffles (randomizes) an array using the modern Fisher-Yates algorithm.

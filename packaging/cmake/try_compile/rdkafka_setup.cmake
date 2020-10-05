@@ -11,6 +11,12 @@ try_compile(
 )
 
 try_compile(
+    HAVE_RAND_R
+    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+    "${TRYCOMPILE_SRC_DIR}/rand_r_test.c"
+)
+
+try_compile(
     HAVE_PTHREAD_SETNAME_GNU
     "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
     "${TRYCOMPILE_SRC_DIR}/pthread_setname_gnu_test.c"

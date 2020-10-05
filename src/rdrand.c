@@ -28,8 +28,28 @@
 
 #include "rd.h"
 #include "rdrand.h"
+#include "rdtime.h"
+#include "tinycthread.h"
 
+int rd_jitter (int low, int high) {
+	int rand_num;
+#if HAVE_RAND_R
+	static RD_TLS unsigned int seed = 0;
 
+	/* Initial seed with time+thread id */
+	if (unlikely(seed == 0)) {
+		struct timeval tv;
+		rd_gettimeofday(&tv, NULL);
+		seed = (unsigned int)(tv.tv_usec / 1000);
+		seed ^= (unsigned int)thrd_current();
+	}
+
+	rand_num = rand_r(&seed);
+#else
+	rand_num = rand();
+#endif
+	return (low + (rand_num % ((high-low)+1)));
+}
 
 void rd_array_shuffle (void *base, size_t nmemb, size_t entry_size) {
 	int i;

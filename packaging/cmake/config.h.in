@@ -40,6 +40,7 @@
 #cmakedefine01 WITH_LZ4_EXT
 #cmakedefine01 HAVE_REGEX
 #cmakedefine01 HAVE_STRNDUP
+#cmakedefine01 HAVE_RAND_R
 #cmakedefine01 HAVE_PTHREAD_SETNAME_GNU
 #cmakedefine01 HAVE_PTHREAD_SETNAME_DARWIN
 #cmakedefine01 WITH_C11THREADS

@@ -589,10 +589,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 1, 1 },
         { _RK_GLOBAL, "enable.random.seed", _RK_C_BOOL,
           _RK(enable_random_seed),
-          "If enabled librdkafka will initialize the POSIX PRNG "
+          "If enabled librdkafka will initialize the PRNG "
           "with srand(current_time.milliseconds) on the first invocation of "
-          "rd_kafka_new(). If disabled the application must call srand() "
-          "prior to calling rd_kafka_new().",
+          "rd_kafka_new() (required only if rand_r() is not available on your platform). "
+          "If disabled the application must call srand() prior to calling rd_kafka_new().",
           0, 1, 1 },
 	{ _RK_GLOBAL, "log.connection.close", _RK_C_BOOL,
 	  _RK(log_connection_close),

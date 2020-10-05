@@ -43,9 +43,6 @@ extern "C" {
 using namespace std;
 
 
-#define TOPIC_CREATE_WAIT_S 4
-
-
 static std::string get_bootstrap_servers() {
   RdKafka::Conf *conf;
   std::string bootstrap_servers;
@@ -381,7 +378,6 @@ static void a_assign_tests () {
     test_create_topic(NULL, topic1_str.c_str(), 1, 1);
     std::string topic2_str = Test::mk_topic_name("0113-cooperative_rebalance", 1);
     test_create_topic(NULL, topic2_str.c_str(), 1, 1);
-    sleep(TOPIC_CREATE_WAIT_S);
 
     test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
     test_produce_msgs_easy_size(topic2_str.c_str(), 0, 0, msgcnt, msgsize2);
@@ -397,7 +393,7 @@ static void a_assign_tests () {
 
 /* -------- b_subscribe_with_cb_test
  *
- * check behavior when:
+ * Check behavior when:
  *   1. single topic with 2 partitions.
  *   2. consumer 1 (with rebalance_cb) subscribes to it.
  *   3. consumer 2 (with rebalance_cb) subscribes to it.
@@ -407,39 +403,29 @@ static void a_assign_tests () {
 static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   Test::Say("Executing b_subscribe_with_cb_test\n");
 
-  /* construct test topic (2 partitions) */
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
-
-  std::vector<std::string> topics;
-  topics.push_back(topic_name);
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
   DefaultRebalanceCb rebalance_cb2;
   RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2);
 
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("consumer 1 subscribe failed: " + RdKafka::err2str(err));
+  Test::subscribe(c1, topic_name);
 
   bool c2_subscribed = false;
   while (true) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    RdKafka::Message *msg2 = c2->consume(100);
-    delete msg1;
-    delete msg2;
+    Test::poll_once(c1);
+    Test::poll_once(c2);
 
-    /* start c2 after c1 has received initial assignment */
+    /* Start c2 after c1 has received initial assignment */
     if (!c2_subscribed && rebalance_cb1.assign_call_cnt > 0) {
-      if ((err = c2->subscribe(topics)))
-        Test::Fail("consumer 2 subscribe failed: " + RdKafka::err2str(err));
+      Test::subscribe(c2, topic_name);
       c2_subscribed = true;
     }
 
-    /* failure case: test will time out. */
+    /* Failure case: test will time out. */
     if (rebalance_cb1.assign_call_cnt == 3 &&
         rebalance_cb2.assign_call_cnt == 2) {
       break;
@@ -505,7 +491,7 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
     delete msg1;
     delete msg2;
 
-    /* failure case: test will timeout. */
+    /* Failure case: test will timeout. */
     if (consumed_from_c1 && consumed_from_c2)
       break;
   }
@@ -525,13 +511,13 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   if (rebalance_cb2.revoke_call_cnt != 1)
     Test::Fail(tostr() << "Expecting 1 revoke calls on consumer 2, not: " << rebalance_cb2.revoke_call_cnt);
 
-  /* and net assigned partitions should drop to 0 in both cases: */
+  /* ..and net assigned partitions should drop to 0 in both cases: */
   if (rebalance_cb1.partitions_assigned_net != 0)
     Test::Fail(tostr() << "Expecting consumer 1 to have net 0 assigned partitions, not: " << rebalance_cb1.partitions_assigned_net);
   if (rebalance_cb2.partitions_assigned_net != 0)
     Test::Fail(tostr() << "Expecting consumer 2 to have net 0 assigned partitions, not: " << rebalance_cb2.partitions_assigned_net);
 
-  /* nothing in this test should result in lost partitions */
+  /* Nothing in this test should result in lost partitions */
   if (rebalance_cb1.lost_call_cnt > 0)
     Test::Fail(tostr() << "Expecting consumer 1 to have 0 lost partition events, not: " << rebalance_cb1.lost_call_cnt);
   if (rebalance_cb2.lost_call_cnt > 0)
@@ -545,72 +531,47 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
 
 /* -------- c_subscribe_no_cb_test
  *
- * check behavior when:
- *   1. single topic with 2 partitions.
- *   2. consumer 1 (no rebalance_cb) subscribes to it.
- *   3. consumer 2 (no rebalance_cb) subscribes to it.
- *   4. close.
+ * Check behavior when:
+ *   1. Single topic with 2 partitions.
+ *   2. Consumer 1 (no rebalance_cb) subscribes to it.
+ *   3. Consumer 2 (no rebalance_cb) subscribes to it.
+ *   4. Close.
  */
 
 static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
   Test::Say("Executing c_subscribe_no_cb_test\n");
 
-  /* construct test topic (2 partitions) */
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
-
-  std::vector<std::string> topics;
-  topics.push_back(topic_name);
 
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
   RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", NULL);
 
-  Test::Say("Subscribing consumer 1 to topic: " + topic_name + "\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("Consumer 1 subscribe failed: " + RdKafka::err2str(err));
-
-  std::vector<RdKafka::TopicPartition*> partitions1;
-  std::vector<RdKafka::TopicPartition*> partitions2;
+  Test::subscribe(c1, topic_name);
 
   bool c2_subscribed = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    RdKafka::Message *msg2 = c2->consume(100);
-    delete msg1;
-    delete msg2;
+    Test::poll_once(c1);
+    Test::poll_once(c2);
 
-    c1->assignment(partitions1);
-    if (partitions1.size() == 2 && !c2_subscribed) {
-      Test::Say("Subscribing consumer 2 to topic: " + topic_name + "\n");
-      if ((err = c2->subscribe(topics)))
-        Test::Fail("Consumer 2 subscribe failed: " + RdKafka::err2str(err));
+    if (Test::partition_count(c1) == 2 && !c2_subscribed) {
+      Test::subscribe(c2, topic_name);
       c2_subscribed = true;
     }
 
-    if (partitions1.size() == 1) {
-      c2->assignment(partitions2);
-      if (partitions2.size() == 1) {
-        Test::Say("Consumer 1 and 2 are both assigned to single partition.\n");
-        done = true;
-      }
-      for (size_t i = 0; i<partitions2.size(); i++)
-        delete partitions2[i];
-      partitions2.clear();
+    if (Test::partition_count(c1) == 1 &&
+        Test::partition_count(c2) == 1) {
+      Test::Say("Consumer 1 and 2 are both assigned to single partition.\n");
+      done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
   if (close_consumer) {
-    Test::Say("Closing consumer 1.\n");
+    Test::Say("Closing consumer 1\n");
     c1->close();
-    Test::Say("Closing consumer 2.\n");
+    Test::Say("Closing consumer 2\n");
     c2->close();
   } else {
     Test::Say("Skipping close() of consumer 1 and 2.\n");
@@ -624,157 +585,112 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
 
 /* ------- d_change_subscription_add_topic
  *
- * check behavior when:
- *   1. single consumer (no rebalance_cb) subscribes to topic.
- *   2. subscription is changed (topic added).
- *   3. consumer is closed.
+ * Check behavior when:
+ *   1. Single consumer (no rebalance_cb) subscribes to topic.
+ *   2. Subscription is changed (topic added).
+ *   3. Consumer is closed.
  */
 
 static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
   Test::Say("Executing d_change_subscription_add_topic\n");
 
-  /* construct test topics (two partitions) */
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 2, 1);
-  std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name2.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
+  std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
-
-  Test::Say("Subscribing to one topic\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics_1;
-  topics_1.push_back(topic_name1);
-  if ((err = c1->subscribe(topics_1)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  Test::subscribe(c, topic_name_1);
 
   bool subscribed_to_one_topic = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    delete msg1;
+    Test::poll_once(c);
 
-    std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-
-    if (partitions1.size() == 2 && !subscribed_to_one_topic) {
+    if (Test::partition_count(c) == 2 && !subscribed_to_one_topic) {
       subscribed_to_one_topic = true;
-      Test::Say("Subscribing to two topics\n");
-      std::vector<std::string> topics_2;
-      topics_2.push_back(topic_name1);
-      topics_2.push_back(topic_name2);
-      if ((err = c1->subscribe(topics_2)))
-        Test::Fail("Subscribe to two topics failed: " + RdKafka::err2str(err) + "\n");
+      Test::subscribe(c, topic_name_1, topic_name_2);
     }
 
-    if (partitions1.size() == 4) {
+    if (Test::partition_count(c) == 4) {
       Test::Say("Consumer is assigned to two topics.\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
   if (close_consumer) {
-    Test::Say("Closing consumer.\n");
-    c1->close();
-  } else {
-    Test::Say("Skipping close() of consumer 1.\n");
-  }
+    Test::Say("Closing consumer\n");
+    c->close();
+  } else
+    Test::Say("Skipping close() of consumer\n");
 
-  delete c1;
+  delete c;
 }
 
 
 
 /* ------- e_change_subscription_remove_topic
  *
- * check behavior when:
- *   1. single consumer (no rebalance_cb) subscribes to topic.
- *   2. subscription is changed (topic added).
- *   3. consumer is closed.
+ * Check behavior when:
+ *   1. Single consumer (no rebalance_cb) subscribes to topic.
+ *   2. Subscription is changed (topic added).
+ *   3. Consumer is closed.
  */
 
 static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
   Test::Say("Executing e_change_subscription_remove_topic\n");
 
-  /* construct test topics (two partitions) */
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 2, 1);
-  std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name2.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
+  std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
-
-  Test::Say("Subscribing to two topics\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics_2;
-  topics_2.push_back(topic_name1);
-  topics_2.push_back(topic_name2);
-  if ((err = c1->subscribe(topics_2)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  Test::subscribe(c, topic_name_1, topic_name_2);
 
   bool subscribed_to_two_topics = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
+    Test::poll_once(c);
 
-    std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-    Test::Say(tostr() << "Current assignment size: " << partitions1.size() << "\n");
-
-    if (partitions1.size() == 4 && !subscribed_to_two_topics) {
+    if (Test::partition_count(c) == 4 && !subscribed_to_two_topics) {
       subscribed_to_two_topics = true;
-      Test::Say("Subscribing to one topic\n");
-      std::vector<std::string> topics_1;
-      topics_1.push_back(topic_name1);
-      if ((err = c1->subscribe(topics_1)))
-        Test::Fail("Subscribe to one topics failed: " + RdKafka::err2str(err) + "\n");
+      Test::subscribe(c, topic_name_1);
     }
 
-    if (partitions1.size() == 2) {
+    if (Test::partition_count(c) == 2) {
       Test::Say("Consumer is assigned to one topic\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
   if (!close_consumer) {
-    Test::Say("Closing consumer.\n");
-    c1->close();
-  } else {
-    Test::Say("Skipping close() of consumer 1.\n");
-  }
+    Test::Say("Closing consumer\n");
+    c->close();
+  } else
+    Test::Say("Skipping close() of consumer\n");
 
-  delete c1;
+  delete c;
 }
 
 
 
 /* ------- f_assign_call_cooperative
  *
- * check that use of consumer->assign() and consumer->unassign() is disallowed when a
+ * Check that use of consumer->assign() and consumer->unassign() is disallowed when a
  * COOPERATIVE assignor is in use.
  */
 
 class FTestRebalanceCb : public RdKafka::RebalanceCb {
 public:
-  int assigned;
+  rd_bool_t assigned;
 
   FTestRebalanceCb () {
-    assigned = 0;
+    assigned = rd_false;
   }
 
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
@@ -792,7 +708,7 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: " << error->str());
 
-      assigned = 1;
+      assigned = rd_true;
 
     } else {
       RdKafka::ErrorCode err_resp = consumer->unassign();
@@ -812,42 +728,33 @@ static void f_assign_call_cooperative () {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   FTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  Test::subscribe(c, topic_name1);
 
-  Test::Say(tostr() << "Subscribing to " << topic_name1 << "\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics;
-  topics.push_back(topic_name1);
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  while (!rebalance_cb.assigned)
+    Test::poll_once(c);
 
-  while (!rebalance_cb.assigned) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
-  }
-
-  c1->close();
-  delete c1;
+  c->close();
+  delete c;
 }
 
 
 
 /* ------- g_incremental_assign_call_eager
  *
- * check that use of consumer->incremental_assign() and consumer->incremental_unassign() is
+ * Check that use of consumer->incremental_assign() and consumer->incremental_unassign() is
  * disallowed when an EAGER assignor is in use.
  */
 class GTestRebalanceCb : public RdKafka::RebalanceCb {
 public:
-  int assigned;
+  rd_bool_t assigned;
 
   GTestRebalanceCb () {
-    assigned = 0;
+    assigned = rd_false;
   }
 
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
@@ -868,7 +775,7 @@ public:
       if (err_resp)
         Test::Fail(tostr() << "consumer->assign() failed: " << err_resp);
 
-      assigned = 1;
+      assigned = rd_true;
 
     } else {
       RdKafka::Error *error = consumer->incremental_unassign(partitions);
@@ -891,82 +798,63 @@ static void g_incremental_assign_call_eager() {
 
   std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   GTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "roundrobin", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "roundrobin", &rebalance_cb);
+  Test::subscribe(c, topic_name1);
 
-  Test::Say(tostr() << "Subscribing to " << topic_name1 << "\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics;
-  topics.push_back(topic_name1);
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  while (!rebalance_cb.assigned)
+    Test::poll_once(c);
 
-  while (!rebalance_cb.assigned) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
-  }
-
-  c1->close();
-  delete c1;
+  c->close();
+  delete c;
 }
+
 
 
 /* ------- h_delete_topic
  *
- * check behavior when:
- *   1. single consumer (rebalance_cb) subscribes to two topics.
- *   2. one of the topics is deleted.
- *   3. consumer is closed.
+ * Check behavior when:
+ *   1. Single consumer (rebalance_cb) subscribes to two topics.
+ *   2. One of the topics is deleted.
+ *   3. Consumer is closed.
  */
 
 static void h_delete_topic () {
   Test::Say("Executing h_delete_topic\n");
 
-  /* construct test two topics (one partitions) */
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  std::string topic_name2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name2.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
+  std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_2.c_str(), 1, 1);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1);
-
-  Test::Say("Subscribing\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics;
-  topics.push_back(topic_name1);
-  topics.push_back(topic_name2);
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  DefaultRebalanceCb rebalance_cb;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  Test::subscribe(c, topic_name_1, topic_name_2);
 
   bool deleted = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
+    Test::poll_once(c);
 
     std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-    Test::Say(tostr() << "Current assignment size: " << partitions1.size() << "\n");
+    c->assignment(partitions1);
 
     if (partitions1.size() == 2 && !deleted) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb1.assign_call_cnt << "\n");
-      Test::delete_topic(c1, topic_name2.c_str());
+      if (rebalance_cb.assign_call_cnt != 1)
+        Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb.assign_call_cnt << "\n");
+      Test::delete_topic(c, topic_name_2.c_str());
       deleted = true;
     }
 
     if (partitions1.size() == 1 && deleted) {
-      if (partitions1[0]->topic() != topic_name1)
-        Test::Fail(tostr() << "Expecting subscribed topic to be '" << topic_name1 << "' not '" << partitions1[0]->topic() << "'");
-      Test::Say(tostr() << "Assignment no longer includes deleted topic '" << topic_name2 << "'\n");
+      if (partitions1[0]->topic() != topic_name_1)
+        Test::Fail(tostr() << "Expecting subscribed topic to be '" << topic_name_1 << "' not '" << partitions1[0]->topic() << "'");
+      Test::Say(tostr() << "Assignment no longer includes deleted topic '" << topic_name_2 << "'\n");
       done = true;
     }
 
@@ -976,78 +864,61 @@ static void h_delete_topic () {
   }
 
   Test::Say("Closing consumer\n");
-  c1->close();
+  c->close();
 
-  delete c1;
+  delete c;
 }
 
 
 
 /* ------- i_delete_topic_2
  *
- * check behavior when:
- *   1. single consumer (rebalance_cb) subscribes to a single topic.
- *   2. that topic is deleted leaving no topics.
- *   3. consumer is closed.
+ * Check behavior when:
+ *   1. Single consumer (rebalance_cb) subscribes to a single topic.
+ *   2. That topic is deleted leaving no topics.
+ *   3. Consumer is closed.
  */
 
 static void i_delete_topic_2 () {
   Test::Say("Executing i_delete_topic_2\n");
 
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
-
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1);
-
-  Test::Say("Subscribing\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics;
-  topics.push_back(topic_name1);
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  DefaultRebalanceCb rebalance_cb;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  Test::subscribe(c, topic_name_1);
 
   bool deleted = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
+    Test::poll_once(c);
 
-    std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-    Test::Say(tostr() << "Current assignment size: " << partitions1.size() << "\n");
-
-    if (partitions1.size() == 1 && !deleted) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expected one assign call, saw " << rebalance_cb1.assign_call_cnt << "\n");
-      Test::delete_topic(c1, topic_name1.c_str());
+    if (Test::partition_count(c) == 1 && !deleted) {
+      if (rebalance_cb.assign_call_cnt != 1)
+        Test::Fail(tostr() << "Expected one assign call, saw " << rebalance_cb.assign_call_cnt << "\n");
+      Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (partitions1.size() == 0 && deleted) {
+    if (Test::partition_count(c) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
-  Test::Say("Closing consumer.\n");
-  c1->close();
+  Test::Say("Closing consumer\n");
+  c->close();
 
-  delete c1;
+  delete c;
 }
 
 
 
 /* ------- j_delete_topic_no_rb_callback
  *
- * check behavior when:
+ * Check behavior when:
  *   1. single consumer (without rebalance_cb) subscribes to a single topic.
  *   2. that topic is deleted leaving no topics.
  *   3. consumer is closed.
@@ -1056,129 +927,97 @@ static void i_delete_topic_2 () {
 static void j_delete_topic_no_rb_callback () {
   Test::Say("Executing j_delete_topic_no_rb_callback\n");
 
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", NULL);
-
-  Test::Say("Subscribing\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics;
-  topics.push_back(topic_name1);
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", NULL);
+  Test::subscribe(c, topic_name_1);
 
   bool deleted = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
+    Test::poll_once(c);
 
-    std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-    Test::Say(tostr() << "Current assignment size: " << partitions1.size() << "\n");
-
-    if (partitions1.size() == 1 && !deleted) {
-      Test::delete_topic(c1, topic_name1.c_str());
+    if (Test::partition_count(c) == 1 && !deleted) {
+      Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (partitions1.size() == 0 && deleted) {
+    if (Test::partition_count(c) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
-  Test::Say("Closing consumer.\n");
-  c1->close();
+  Test::Say("Closing consumer\n");
+  c->close();
 
-  delete c1;
+  delete c;
 }
 
 
 
 /* ------- k_add_partition
  *
- * check behavior when:
- *   1. single consumer (rebalance_cb) subscribes to a 1 partition topic.
- *   2. number of partitions is increased to 2.
- *   3. consumer is closed.
+ * Check behavior when:
+ *   1. Single consumer (rebalance_cb) subscribes to a 1 partition topic.
+ *   2. Number of partitions is increased to 2.
+ *   3. Consumer is closed.
  */
 
 static void k_add_partition () {
   Test::Say("Executing k_add_partition\n");
 
-  /* construct test topics (one partition) */
-  std::string topic_name1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
-  test_create_topic(NULL, topic_name1.c_str(), 1, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  test_create_topic(NULL, topic_name.c_str(), 1, 1);
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1);
-
-  Test::Say("Subscribing\n");
-  RdKafka::ErrorCode err;
-  std::vector<std::string> topics_1;
-  topics_1.push_back(topic_name1);
-  if ((err = c1->subscribe(topics_1)))
-    Test::Fail("subscribe failed: " + RdKafka::err2str(err) + "\n");
+  DefaultRebalanceCb rebalance_cb;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  Test::subscribe(c, topic_name);
 
   bool subscribed = false;
   bool done = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(1000);
-    delete msg1;
+    Test::poll_once(c);
 
-    std::vector<RdKafka::TopicPartition*> partitions1;
-    c1->assignment(partitions1);
-    Test::Say(tostr() << "Current assignment size: " << partitions1.size() << "\n");
-
-    if (partitions1.size() == 1 && !subscribed) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb1.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expected 0 revoke calls, saw " << rebalance_cb1.revoke_call_cnt);
-      Test::create_partitions(c1, topic_name1.c_str(), 2);
+    if (Test::partition_count(c) == 1 && !subscribed) {
+      if (rebalance_cb.assign_call_cnt != 1)
+        Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb.assign_call_cnt);
+      if (rebalance_cb.revoke_call_cnt != 0)
+        Test::Fail(tostr() << "Expected 0 revoke calls, saw " << rebalance_cb.revoke_call_cnt);
+      Test::create_partitions(c, topic_name.c_str(), 2);
       subscribed = true;
     }
 
-    if (partitions1.size() == 2 && subscribed) {
-      if (rebalance_cb1.assign_call_cnt != 2)
-        Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb1.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expected 0 revoke calls, saw " << rebalance_cb1.revoke_call_cnt);
+    if (Test::partition_count(c) == 2 && subscribed) {
+      if (rebalance_cb.assign_call_cnt != 2)
+        Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);
+      if (rebalance_cb.revoke_call_cnt != 0)
+        Test::Fail(tostr() << "Expected 0 revoke calls, saw " << rebalance_cb.revoke_call_cnt);
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
-  Test::Say("Closing consumer.\n");
-  c1->close();
+  Test::Say("Closing consumer\n");
+  c->close();
 
-  if (rebalance_cb1.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb1.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected 1 revoke call, saw " << rebalance_cb1.revoke_call_cnt);
+  if (rebalance_cb.assign_call_cnt != 2)
+    Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);
+  if (rebalance_cb.revoke_call_cnt != 1)
+    Test::Fail(tostr() << "Expected 1 revoke call, saw " << rebalance_cb.revoke_call_cnt);
 
-  delete c1;
+  delete c;
 }
+
 
 
 /* ------- l_unsubscribe
  *
- * check behavior when:
+ * Check behavior when:
  *   1. two consumers (with rebalance_cb's) subscribe to two topics.
  *   2. one of the consumers calls unsubscribe.
  *   3. consumers closed.
@@ -1187,47 +1026,27 @@ static void k_add_partition () {
 static void l_unsubscribe () {
   Test::Say("Executing l_unsubscribe\n");
 
-  /* construct test topic (2 partitions) */
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
   test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
-
-  std::vector<std::string> topics;
-  topics.push_back(topic_name_1);
-  topics.push_back(topic_name_2);
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
+  Test::subscribe(c1, topic_name_1, topic_name_2);
+
   DefaultRebalanceCb rebalance_cb2;
   RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2);
-
-  Test::Say("Subscribing consumer 1 to both topics\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("Consumer 1 subscribe failed: " + RdKafka::err2str(err));
-
-  Test::Say("Subscribing consumer 2 to both topics\n");
-  if ((err = c2->subscribe(topics)))
-    Test::Fail("Consumer 2 subscribe failed: " + RdKafka::err2str(err));
-
-  std::vector<RdKafka::TopicPartition*> partitions1;
-  std::vector<RdKafka::TopicPartition*> partitions2;
+  Test::subscribe(c2, topic_name_1, topic_name_2);
 
   bool done = false;
   bool unsubscribed = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    RdKafka::Message *msg2 = c2->consume(100);
-    delete msg1;
-    delete msg2;
+    Test::poll_once(c1);
+    Test::poll_once(c2);
 
-    c1->assignment(partitions1);
-    c2->assignment(partitions2);
-
-    if (partitions1.size() == 2 && partitions2.size() == 2) {
+    if (Test::partition_count(c1) == 2 && Test::partition_count(c2) == 2) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1237,7 +1056,7 @@ static void l_unsubscribe () {
       unsubscribed = true;
     }
 
-    if (unsubscribed && partitions1.size() == 0 && partitions2.size() == 4) {
+    if (unsubscribed && Test::partition_count(c1) == 0 && Test::partition_count(c2) == 4) {
       if (rebalance_cb1.assign_call_cnt != 1) /* is now unsubscribed, so rebalance_cb will no longer be called. */
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 2)
@@ -1249,19 +1068,11 @@ static void l_unsubscribe () {
       Test::Say("Unsubscribe completed");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
-
-    for (size_t i = 0; i<partitions2.size(); i++)
-      delete partitions2[i];
-    partitions2.clear();
   }
 
-  Test::Say("Closing consumer 1.\n");
+  Test::Say("Closing consumer 1\n");
   c1->close();
-  Test::Say("Closing consumer 2.\n");
+  Test::Say("Closing consumer 2\n");
   c2->close();
 
   /* there should be no assign rebalance_cb calls on close */
@@ -1285,73 +1096,56 @@ static void l_unsubscribe () {
 }
 
 
+
 /* ------- m_unsubscribe_2
  *
- * check behavior when:
- *   1. a consumers (with no rebalance_cb) subscribes to a topic.
- *   2. the consumer calls unsubscribe.
- *   3. consumers closed.
+ * Check behavior when:
+ *   1. A consumers (with no rebalance_cb) subscribes to a topic.
+ *   2. The consumer calls unsubscribe.
+ *   3. Consumers closed.
  */
 
 static void m_unsubscribe_2 () {
   Test::Say("Executing m_unsubscribe_2\n");
 
-  /* construct test topic (2 partitions) */
-  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
-  test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
+  test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
-  std::vector<std::string> topics;
-  topics.push_back(topic_name_1);
-
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
-
-  Test::Say("Subscribing consumer 1\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("Consumer 1 subscribe failed: " + RdKafka::err2str(err));
-
-  std::vector<RdKafka::TopicPartition*> partitions1;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  Test::subscribe(c, topic_name);
 
   bool done = false;
   bool unsubscribed = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    delete msg1;
+    Test::poll_once(c);
 
-    c1->assignment(partitions1);
-
-    if (partitions1.size() == 2) {
-      Test::Say("Unsubscribing consumer 1\n");
-      c1->unsubscribe();
+    if (Test::partition_count(c) == 2) {
+      Test::unsubscribe(c);
       unsubscribed = true;
     }
 
-    if (unsubscribed && partitions1.size() == 0) {
+    if (unsubscribed && Test::partition_count(c) == 0) {
       Test::Say("Unsubscribe completed");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
-  Test::Say("Closing consumer 1.\n");
-  c1->close();
+  Test::Say("Closing consumer\n");
+  c->close();
 
-  delete c1;
+  delete c;
 }
+
 
 
 /* ------- n_wildcard
  *
- * check behavior when:
- *   1. two consumers (with rebalance_cb) subscribe to a regex (no matching topics exist)
- *   2. create two topics.
- *   3. remove one of the topics.
- *   3. consumers closed.
+ * Check behavior when:
+ *   1. Two consumers (with rebalance_cb) subscribe to a regex (no matching topics exist)
+ *   2. Create two topics.
+ *   3. Remove one of the topics.
+ *   3. Consumers closed.
  */
 
 static void n_wildcard () {
@@ -1360,35 +1154,23 @@ static void n_wildcard () {
   uint64_t random = test_id_generate();
   string topic_sub_name = tostr() << "0113-coop_regex_" << random;
 
-  /* construct test topic (2 partitions) */
   std::string topic_name_1 = Test::mk_topic_name(topic_sub_name, 1);
   std::string topic_name_2 = Test::mk_topic_name(topic_sub_name, 1);
   std::string group_name = Test::mk_unique_group_name("0113-coop_regex");
-  std::vector<std::string> topics;
-  topics.push_back(tostr() << "^rdkafkatest.*" << topic_sub_name);
+  std::string topic_regex = tostr() << "^rdkafkatest.*" << topic_sub_name;
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1);
+  Test::subscribe(c1, topic_regex);
+
   DefaultRebalanceCb rebalance_cb2;
   RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, true, "cooperative-sticky", &rebalance_cb2);
+  Test::subscribe(c2, topic_regex);
 
-  Test::Say("Subscribing consumer 1 to regex\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("Consumer 1 subscribe failed: " + RdKafka::err2str(err));
+  /* There are no matching topics, so the consumers should not join the group initially */
+  Test::poll_once(c1);
+  Test::poll_once(c2);
 
-  Test::Say("Subscribing consumer 2 to regex\n");
-  if ((err = c2->subscribe(topics)))
-    Test::Fail("Consumer 2 subscribe failed: " + RdKafka::err2str(err));
-
-  std::vector<RdKafka::TopicPartition*> partitions1;
-  std::vector<RdKafka::TopicPartition*> partitions2;
-
-  /* there are no matching topics, so the consumers should not join the group initially */
-  RdKafka::Message *msg1 = c1->consume(1000);
-  RdKafka::Message *msg2 = c2->consume(1000);
-  delete msg1;
-  delete msg2;
   if (rebalance_cb1.assign_call_cnt != 0)
     Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 0 not: " << rebalance_cb1.assign_call_cnt);
   if (rebalance_cb2.assign_call_cnt != 0)
@@ -1398,23 +1180,17 @@ static void n_wildcard () {
   bool created_topics = false;
   bool deleted_topic = false;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    RdKafka::Message *msg2 = c2->consume(100);
-    delete msg1;
-    delete msg2;
+    Test::poll_once(c1);
+    Test::poll_once(c2);
 
-    c1->assignment(partitions1);
-    c2->assignment(partitions2);
-
-    if (partitions1.size() == 0 && partitions2.size() == 0 && !created_topics) {
+    if (Test::partition_count(c1) == 0 && Test::partition_count(c2) == 0 && !created_topics) {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
-      sleep(TOPIC_CREATE_WAIT_S);
       created_topics = true;
     }
 
-    if (partitions1.size() == 2 && partitions2.size() == 2 && !deleted_topic) {
+    if (Test::partition_count(c1) == 2 && Test::partition_count(c2) == 2 && !deleted_topic) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1430,7 +1206,7 @@ static void n_wildcard () {
       deleted_topic = true;
     }
 
-    if (partitions1.size() == 1 && partitions2.size() == 1 && deleted_topic) {
+    if (Test::partition_count(c1) == 1 && Test::partition_count(c2) == 1 && deleted_topic) {
       if (rebalance_cb1.revoke_call_cnt != 1) /* accumulated in lost case as well */
         Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
       if (rebalance_cb2.revoke_call_cnt != 1)
@@ -1441,36 +1217,26 @@ static void n_wildcard () {
       if (rebalance_cb2.lost_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 2's lost_call_cnt to be 1 not: " << rebalance_cb2.lost_call_cnt);
 
-      /* consumers will rejoin group after revoking the lost partitions.
+      /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
        * it follows the revoke, which has alrady been confirmed to have happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
       while (rebalance_cb1.assign_call_cnt != 2 || rebalance_cb2.assign_call_cnt != 2) {
-        msg1 = c1->consume(100);
-        msg2 = c2->consume(100);
-        delete msg1;
-        delete msg2;
+        Test::poll_once(c1);
+        Test::poll_once(c2);
       }
 
       Test::Say("Consumers are subscribed to one partition each\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
-
-    for (size_t i = 0; i<partitions2.size(); i++)
-      delete partitions2[i];
-    partitions2.clear();
   }
 
-  Test::Say("Closing consumer 1.\n");
+  Test::Say("Closing consumer 1\n");
   c1->close();
-  Test::Say("Closing consumer 2.\n");
+  Test::Say("Closing consumer 2\n");
   c2->close();
 
-  /* there should be no assign rebalance_cb calls on close */
+  /* There should be no assign rebalance_cb calls on close */
   if (rebalance_cb1.assign_call_cnt != 2)
     Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
   if (rebalance_cb2.assign_call_cnt != 2)
@@ -1491,44 +1257,30 @@ static void n_wildcard () {
 }
 
 
+
 /* ------- o_java_interop
  *
- * check behavior when:
- *   1. consumer (librdkafka) subscribes to two topics (2 and 6 partitions).
- *   2. consumer (java) subscribes to the same two topics.
- *   3. consumer (librdkafka) unsubscribes from the two partition topic.
- *   4. consumer (java) process closes upon detecting the above unsubscribe.
- *   5. consumer (librdkafka) will now be subscribed to 6 partitions.
- *   6. close librdkafka consumer.
+ * Check behavior when:
+ *   1. Consumer (librdkafka) subscribes to two topics (2 and 6 partitions).
+ *   2. Consumer (java) subscribes to the same two topics.
+ *   3. Consumer (librdkafka) unsubscribes from the two partition topic.
+ *   4. Consumer (java) process closes upon detecting the above unsubscribe.
+ *   5. Consumer (librdkafka) will now be subscribed to 6 partitions.
+ *   6. Close librdkafka consumer.
  */
 
 static void o_java_interop() {
   Test::Say("Executing o_java_interop\n");
 
-  /* construct test topic (2 partitions) */
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
   test_create_topic(NULL, topic_name_2.c_str(), 6, 1);
-  sleep(TOPIC_CREATE_WAIT_S);
 
-  std::vector<std::string> topics;
-  topics.push_back(topic_name_1);
-  topics.push_back(topic_name_2);
-
-  /* hack: wait for a bit to have better certainty the topics created above exist. */
-
-
-  DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
-
-  Test::Say("Subscribing consumer 1 to topic\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topics)))
-    Test::Fail("Consumer 1 subscribe failed: " + RdKafka::err2str(err));
-
-  std::vector<RdKafka::TopicPartition*> partitions1;
+  DefaultRebalanceCb rebalance_cb;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb);
+  Test::subscribe(c, topic_name_1, topic_name_2);
 
   bool done = false;
   bool java_started = false;
@@ -1536,13 +1288,10 @@ static void o_java_interop() {
   bool changed_subscription_done = false;
   int java_pid;
   while (!done) {
-    RdKafka::Message *msg1 = c1->consume(100);
-    delete msg1;
+    Test::poll_once(c);
 
-    c1->assignment(partitions1);
-
-    if (partitions1.size() == 8 && !java_started) {
-      Test::Say("Consumer 1 assigned to 8 partitions\n");
+    if (Test::partition_count(c) == 8 && !java_started) {
+      Test::Say("librdkafka consumer assigned to 8 partitions\n");
       string bootstrapServers = get_bootstrap_servers();
       const char **argv = (const char **)rd_alloca(sizeof(*argv) * (1 + 1 + 1 + 1 + 1 + 1));
       size_t i = 0;
@@ -1556,18 +1305,15 @@ static void o_java_interop() {
       java_started = true;
     }
 
-    if (partitions1.size() == 4 && java_started && !changed_subscription) {
-      if (rebalance_cb1.assign_call_cnt != 2)
-        Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
+    if (Test::partition_count(c) == 4 && java_started && !changed_subscription) {
+      if (rebalance_cb.assign_call_cnt != 2)
+        Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb.assign_call_cnt);
       Test::Say("Java consumer is now part of the group\n");
-      std::vector<std::string> topic_1_only;
-      topic_1_only.push_back(topic_name_1);
-      if ((err = c1->subscribe(topic_1_only)))
-        Test::Fail("Consumer 1 subscribe to one topic failed: " + RdKafka::err2str(err));
+      Test::subscribe(c, topic_name_1);
       changed_subscription = true;
     }
 
-    if (partitions1.size() == 2 && changed_subscription && rebalance_cb1.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
+    if (Test::partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
       /* All topic 1 partitions will be allocated to this consumer whether or not the Java
        * consumer has unsubscribed yet because the sticky algorithm attempts to ensure
        * partition counts are even. */
@@ -1575,148 +1321,74 @@ static void o_java_interop() {
       changed_subscription_done = true;
     }
 
-    if (partitions1.size() == 2 && changed_subscription && rebalance_cb1.assign_call_cnt == 4 && changed_subscription_done) {
+    if (Test::partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 4 && changed_subscription_done) {
       /* When the java consumer closes, this will cause an empty assign rebalance_cb event,
        * allowing detection of when this has happened. */
       Test::Say("Java consumer has left the group\n");
       done = true;
     }
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
   }
 
-  Test::Say("Closing consumer 1.\n");
-  c1->close();
+  Test::Say("Closing consumer\n");
+  c->close();
 
   /* Expected behavior is IncrementalRebalanceCli will exit cleanly, timeout otherwise. */
   test_waitpid(java_pid);
 
-  delete c1;
+  delete c;
 }
+
 
 
 /* ------- s_subscribe_when_rebalancing
  *
- * check behavior when:
- *  - single consumer subscribes to topic.
- *  - soon after (timing such that rebalance is probably in progress) it subscribes to a different topic.
+ * Check behavior when:
+ *  - Single consumer subscribes to topic.
+ *  - Soon after (timing such that rebalance is probably in progress) it subscribes to a different topic.
  */
 
 static void s_subscribe_when_rebalancing(int variation) {
   Test::Say(tostr() << "Executing s_subscribe_when_rebalancing, variation: " << variation << "\n");
 
-  /* construct test topic (2 partitions) */
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_3 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
-  std::vector<std::string> topic_1;
-  topic_1.push_back(topic_name_1);
   test_create_topic(NULL, topic_name_2.c_str(), 1, 1);
-  std::vector<std::string> topic_2;
-  topic_2.push_back(topic_name_2);
   test_create_topic(NULL, topic_name_3.c_str(), 1, 1);
-  std::vector<std::string> topic_3;
-  topic_3.push_back(topic_name_3);
-  sleep(TOPIC_CREATE_WAIT_S);
 
-  DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
+  DefaultRebalanceCb rebalance_cb;
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb);
 
-  if (variation == 2 || variation == 4 || variation == 5) {
-    /* make sure metadata is pre-cached for all topics. */
+  if (variation == 2 || variation == 4 || variation == 6) {
+    /* Pre-cache metadata for all topics. */
     class RdKafka::Metadata *metadata;
-    c1->metadata(true, NULL, &metadata, 5000);
+    c->metadata(true, NULL, &metadata, 5000);
     delete metadata;
   }
 
-  Test::Say(tostr() << "Subscribing consumer 1 to topic 1: " << topic_name_1 << "\n");
-  RdKafka::ErrorCode err;
-  if ((err = c1->subscribe(topic_1)))
-    Test::Fail("Consumer 1 subscribe to topic 1 failed: " + RdKafka::err2str(err));
+  Test::subscribe(c, topic_name_1);
+  Test::wait_for_assignment(c, 1, &topic_name_1);
 
-  std::vector<RdKafka::TopicPartition*> partitions1;
-  RdKafka::Message *msg1;
+  Test::subscribe(c, topic_name_2);
 
-  // wait until subscribed to topic 1.
-  bool done = false;
-  while (!done) {
-    msg1 = c1->consume(500);
-    delete msg1;
-
-    c1->assignment(partitions1);
-
-    if (partitions1.size() == 1)
-      done = true;
-
-    for (size_t i = 0; i<partitions1.size(); i++)
-      delete partitions1[i];
-    partitions1.clear();
-  }
-
-  // now subscribe to topic 2.
-  Test::Say(tostr() << "Subscribing consumer 1 to topic 2: " << topic_name_2 << "\n");
-  if ((err = c1->subscribe(topic_2)))
-    Test::Fail("Consumer 1 subscribe to topic 2 failed: " + RdKafka::err2str(err));
-
-  if (variation == 3 || variation == 4) {
-    msg1 = c1->consume(2);
-    delete msg1;
-  }
+  if (variation == 3 || variation == 5)
+    Test::poll_once(c);
 
   if (variation < 5) {
-    // and very quickly after, subscribe to topic 3.
-    Test::Say(tostr() << "Subscribing consumer 1 to topic 3: " << topic_name_3 << "\n");
-    if ((err = c1->subscribe(topic_3)))
-      Test::Fail("Consumer 1 subscribe to topic 3 failed: " + RdKafka::err2str(err));
-
-    // wait until subscribed to topic 3.
-    done = false;
-    while (!done) {
-      msg1 = c1->consume(500);
-      delete msg1;
-
-      c1->assignment(partitions1);
-
-      if (partitions1.size() == 1) {
-        if (partitions1[0]->topic() == topic_name_3)
-          done = true;
-      }
-
-      for (size_t i = 0; i<partitions1.size(); i++)
-        delete partitions1[i];
-      partitions1.clear();
-    }
+    // Very quickly after subscribing to topic 2, subscribe to topic 3.
+    Test::subscribe(c, topic_name_3);
+    Test::wait_for_assignment(c, 1, &topic_name_3);
   } else {
-    // and very quickly, unsubscribe
-    Test::Say(tostr() << "Unsubscribing consumer 1\n");
-    if ((err = c1->unsubscribe()))
-      Test::Fail("Consumer 1 unsubscribe failed: " + RdKafka::err2str(err));
-
-    // wait until subscribed to topic 3.
-    done = false;
-    while (!done) {
-      msg1 = c1->consume(500);
-      delete msg1;
-
-      c1->assignment(partitions1);
-
-      if (partitions1.size() == 0) {
-        done = true;
-      }
-
-      for (size_t i = 0; i<partitions1.size(); i++)
-        delete partitions1[i];
-      partitions1.clear();
-    }
+    // ..or unsubscribe.
+    Test::unsubscribe(c);
+    Test::wait_for_assignment(c, 0, NULL);
   }
 
-
-  delete c1;
+  delete c;
 }
+
 
 
 extern "C" {
@@ -1785,9 +1457,10 @@ extern "C" {
   }
 
 
+
   /* ------- p_lost_partitions_heartbeat_illegal_generation_test
    *
-   * check lost partitions revoke occurs on ILLEGAL_GENERATION heartbeat error.
+   * Check lost partitions revoke occurs on ILLEGAL_GENERATION heartbeat error.
    */
 
   static void p_lost_partitions_heartbeat_illegal_generation_test () {
@@ -1828,7 +1501,7 @@ extern "C" {
                      RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                      rd_false/*don't expect lost*/, 5+2);
 
-    /* fail heartbeats */
+    /* Fail heartbeats */
     rd_kafka_mock_push_request_errors(
       mcluster, RD_KAFKAP_Heartbeat,
       5,
@@ -1860,9 +1533,10 @@ extern "C" {
   }
 
 
+
   /* ------- q_lost_partitions_illegal_generation_test
    *
-   * check lost partitions revoke occurs on ILLEGAL_GENERATION JoinGroup
+   * Check lost partitions revoke occurs on ILLEGAL_GENERATION JoinGroup
    * or SyncGroup error.
    */
 
@@ -1915,7 +1589,7 @@ extern "C" {
                      RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                      rd_false/*don't expect lost*/, 5+2);
 
-    /* fail JoinGroups or SyncGroups */
+    /* Fail JoinGroups or SyncGroups */
     rd_kafka_mock_push_request_errors(
       mcluster,
       test_joingroup_fail ? RD_KAFKAP_JoinGroup : RD_KAFKAP_SyncGroup,
@@ -1960,9 +1634,10 @@ extern "C" {
   }
 
 
+
   /* ------- r_lost_partitions_commit_illegal_generation_test
    *
-   * check lost partitions revoke occurs on ILLEGAL_GENERATION Commit
+   * Check lost partitions revoke occurs on ILLEGAL_GENERATION Commit
    * error.
    */
 
@@ -2002,7 +1677,7 @@ extern "C" {
                      RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                      rd_false/*don't expect lost*/, 5+2);
 
-    /* fail heartbeats */
+    /* Fail heartbeats */
     rd_kafka_mock_push_request_errors(
       mcluster, RD_KAFKAP_OffsetCommit,
       5,
@@ -2031,6 +1706,7 @@ extern "C" {
     TEST_SAY("Destroying mock cluster\n");
     test_mock_cluster_destroy(mcluster);
   }
+
 
 
   int main_0113_cooperative_rebalance (int argc, char **argv) {

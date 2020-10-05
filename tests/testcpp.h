@@ -169,11 +169,92 @@ namespace Test {
   /* Convenience subscribe() */
   static RD_UNUSED void subscribe (RdKafka::KafkaConsumer *c,
                                    const std::string &topic) {
+      Test::Say(tostr() << "Subscribing to " << topic << "\n");
       std::vector<std::string> topics;
       topics.push_back(topic);
       RdKafka::ErrorCode err;
       if ((err = c->subscribe(topics)))
-        Test::Fail("subscribe failed: " + RdKafka::err2str(err));
+        Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
+  }
+
+
+  /* Convenience subscribe() to two topics */
+  static RD_UNUSED void subscribe (RdKafka::KafkaConsumer *c,
+                                   const std::string &topic1,
+                                   const std::string &topic2) {
+      Test::Say(tostr() << "Subscribing to " << topic1 << " and " << topic2 << "\n");
+      std::vector<std::string> topics;
+      topics.push_back(topic1);
+      topics.push_back(topic2);
+      RdKafka::ErrorCode err;
+      if ((err = c->subscribe(topics)))
+        Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
+  }
+
+
+  /* Convenience unsubscribe() */
+  static RD_UNUSED void unsubscribe (RdKafka::KafkaConsumer *c) {
+      Test::Say("Unsubscribing\n");
+      RdKafka::ErrorCode err;
+      if ((err = c->unsubscribe()))
+        Test::Fail("Unsubscribe failed: " + RdKafka::err2str(err));
+  }
+
+
+  /**
+   * @brief Wait until the current assignment size is \p partition_count.
+   *        If \p topic is not NULL, then additionally, each partition in
+   *        the assignment must have topic \p topic.
+   */
+  static RD_UNUSED void wait_for_assignment (RdKafka::KafkaConsumer *c,
+                                             size_t partition_count,
+                                             const std::string *topic) {
+    bool done = false;
+    while (!done) {
+      RdKafka::Message *msg1 = c->consume(500);
+      delete msg1;
+
+      std::vector<RdKafka::TopicPartition*> partitions;
+      c->assignment(partitions);
+
+      if (partitions.size() == partition_count) {
+        done = true;
+        if (topic) {
+          for (size_t i = 0 ; i < partitions.size() ; i++) {
+            if (partitions[i]->topic() != *topic) {
+              done = false;
+              break;
+            }
+          }
+        }
+      }
+
+      for (size_t i = 0 ; i < partitions.size() ; i++)
+        delete partitions[i];
+      partitions.clear();
+    }
+  }
+
+
+  /**
+   * @brief Current assignment partition count
+   */
+  static RD_UNUSED size_t partition_count (RdKafka::KafkaConsumer *c) {
+    std::vector<RdKafka::TopicPartition*> partitions;
+    c->assignment(partitions);
+    for (size_t i = 0 ; i < partitions.size() ; i++)
+      delete partitions[i];
+    return partitions.size();
+  }
+
+
+  /**
+   * @brief Poll the consumer once, discarding the returned message
+   *        or error event.
+   */
+  static RD_UNUSED void poll_once (RdKafka::KafkaConsumer *c) {
+    RdKafka::Message *msg = c->consume(500);
+    delete msg;
   }
 
 

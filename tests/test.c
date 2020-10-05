@@ -4215,12 +4215,39 @@ static void test_create_topic_sh (const char *topicname, int partition_cnt,
 void test_create_topic (rd_kafka_t *use_rk,
                         const char *topicname, int partition_cnt,
                         int replication_factor) {
+        const struct rd_kafka_metadata *metadata;
+        rd_bool_t found_topic = rd_false;
+
         if (test_broker_version < TEST_BRKVER(0,10,2,0))
                 test_create_topic_sh(topicname, partition_cnt,
                                      replication_factor);
         else
                 test_admin_create_topic(use_rk, topicname, partition_cnt,
                                         replication_factor);
+
+        if (!use_rk) {
+                /* obviously not foolproof, but makes topic much more likely
+                 * to exist when the method returns */
+                sleep(1);
+                return;
+        }
+
+        /* This delay is not fool-proof because updated metadata may have
+         * propagated to the broker responding to the metadata request,
+         * but not the broker a subsequent request are sent to. */
+        while (!found_topic) {
+                int i;
+                rd_kafka_metadata(use_rk, rd_true, NULL, &metadata, 10000);
+
+                for (i = 0 ; i < metadata->topic_cnt ; i++) {
+                        if (!strcmp(metadata->topics[i].topic, topicname)) {
+                                found_topic = rd_true;
+                                break;
+                        }
+                }
+
+                rd_kafka_metadata_destroy(metadata);
+        }
 }
 
 

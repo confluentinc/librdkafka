@@ -229,9 +229,29 @@ namespace Test {
         }
       }
 
-      for (size_t i = 0 ; i < partitions.size() ; i++)
-        delete partitions[i];
-      partitions.clear();
+      RdKafka::TopicPartition::destroy(partitions);
+    }
+  }
+
+
+  /**
+   * @brief Check current assignment has size \p partition_count
+   *        If \p topic is not NULL, then additionally check that
+   *        each partition in the assignment has topic \p topic.
+   */
+  static RD_UNUSED void check_assignment (RdKafka::KafkaConsumer *c,
+                                          size_t partition_count,
+                                          const std::string *topic) {
+    std::vector<RdKafka::TopicPartition*> partitions;
+    c->assignment(partitions);
+    if (partition_count != partitions.size())
+      Test::Fail(tostr() << "Expecting current assignment to have size " << partition_count << ", not: " << partitions.size());
+    for (size_t i = 0 ; i < partitions.size() ; i++) {
+      if (topic != NULL) {
+        if (partitions[i]->topic() != *topic)
+          Test::Fail(tostr() << "Expecting assignment to be " << *topic << ", not " << partitions[i]->topic());
+      }
+      delete partitions[i];
     }
   }
 
@@ -239,7 +259,7 @@ namespace Test {
   /**
    * @brief Current assignment partition count
    */
-  static RD_UNUSED size_t partition_count (RdKafka::KafkaConsumer *c) {
+  static RD_UNUSED size_t assignment_partition_count (RdKafka::KafkaConsumer *c) {
     std::vector<RdKafka::TopicPartition*> partitions;
     c->assignment(partitions);
     for (size_t i = 0 ; i < partitions.size() ; i++)
@@ -252,8 +272,9 @@ namespace Test {
    * @brief Poll the consumer once, discarding the returned message
    *        or error event.
    */
-  static RD_UNUSED void poll_once (RdKafka::KafkaConsumer *c) {
-    RdKafka::Message *msg = c->consume(500);
+  static RD_UNUSED void poll_once (RdKafka::KafkaConsumer *c,
+                                   int timeout_ms) {
+    RdKafka::Message *msg = c->consume(timeout_ms);
     delete msg;
   }
 

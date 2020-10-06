@@ -56,16 +56,16 @@ static RdKafka::KafkaConsumer *make_consumer (string client_id,
                                               string group_id,
                                               bool quick_metadata_refresh,
                                               string assignment_strategy,
-                                              RdKafka::RebalanceCb *rebalance_cb) {
+                                              RdKafka::RebalanceCb *rebalance_cb,
+                                              int timeout_s) {
 
-  int test_timeout_s = 120;
   std::string bootstraps;
   std::string errstr;
 
   RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, test_timeout_s);
+  Test::conf_init(&conf, NULL, timeout_s);
   Test::conf_set(conf, "client.id", client_id);
-  Test::conf_set(conf, "group.id", group_id.c_str());
+  Test::conf_set(conf, "group.id", group_id);
   if (quick_metadata_refresh)
     Test::conf_set(conf, "topic.metadata.refresh.interval.ms", "3000");
   Test::conf_set(conf, "auto.offset.reset", "earliest");
@@ -124,6 +124,8 @@ public:
                      std::vector<RdKafka::TopicPartition*> &partitions) {
     Test::Say(tostr() << "RebalanceCb: " << consumer->name() << " " << RdKafka::err2str(err) << ": " << part_list_print(partitions) << "\n");
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
+      if (consumer->assignment_lost())
+        Test::Fail("unexpected lost assignment during ASSIGN rebalance");
       RdKafka::Error *error = consumer->incremental_assign(partitions);
       if (error)
         Test::Fail(tostr() << "consumer->incremental_assign() failed: " << error->str());
@@ -159,27 +161,16 @@ static void assign_test_1 (RdKafka::KafkaConsumer *consumer,
                            std::vector<RdKafka::TopicPartition *> toppars2) {
   RdKafka::ErrorCode err;
   RdKafka::Error *error;
-  std::vector<RdKafka::TopicPartition *> assignment;
 
   Test::Say("Incremental assign, then assign(NULL)\n");
 
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
-
   if ((error = consumer->incremental_assign(toppars1)))
     Test::Fail(tostr() << "Incremental assign failed: " << error->str());
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail(tostr() << "Failed to get current assignment: " << RdKafka::err2str(err));
-  if (assignment.size() != 1)
-    Test::Fail(tostr() << "Expecting current assignment to have size 1, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  Test::check_assignment(consumer, 1, &toppars1[0]->topic());
 
   if ((err = consumer->unassign()))
     Test::Fail("Unassign failed: " + RdKafka::err2str(err));
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  Test::check_assignment(consumer, 0, NULL);
 }
 
 
@@ -190,27 +181,16 @@ static void assign_test_2 (RdKafka::KafkaConsumer *consumer,
                            std::vector<RdKafka::TopicPartition *> toppars2) {
   RdKafka::ErrorCode err;
   RdKafka::Error *error;
-  std::vector<RdKafka::TopicPartition *> assignment;
 
   Test::Say("Assign, then incremental unassign\n");
 
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
-
   if ((err = consumer->assign(toppars1)))
     Test::Fail("Assign failed: " + RdKafka::err2str(err));
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 1)
-    Test::Fail(tostr() << "Expecting current assignment to have size 1, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  Test::check_assignment(consumer, 1, &toppars1[0]->topic());
 
   if ((error = consumer->incremental_unassign(toppars1)))
     Test::Fail("Incremental unassign failed: " + error->str());
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  Test::check_assignment(consumer, 0, NULL);
 }
 
 
@@ -219,27 +199,17 @@ static void assign_test_2 (RdKafka::KafkaConsumer *consumer,
 static void assign_test_3 (RdKafka::KafkaConsumer *consumer,
                            std::vector<RdKafka::TopicPartition *> toppars1,
                            std::vector<RdKafka::TopicPartition *> toppars2) {
-  RdKafka::ErrorCode err;
   RdKafka::Error *error;
-  std::vector<RdKafka::TopicPartition *> assignment;
 
   Test::Say("Incremental assign, then incremental unassign\n");
 
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
-
   if ((error = consumer->incremental_assign(toppars1)))
     Test::Fail("Incremental assign failed: " + error->str());
-  if ((err = consumer->assignment(assignment))) Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 1)
-    Test::Fail(tostr() << "Expecting current assignment to have size 1, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  Test::check_assignment(consumer, 1, &toppars1[0]->topic());
 
   if ((error = consumer->incremental_unassign(toppars1)))
     Test::Fail("Incremental unassign failed: " + error->str());
-  if ((err = consumer->assignment(assignment))) Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  Test::check_assignment(consumer, 0, NULL);
 }
 
 
@@ -248,15 +218,13 @@ static void assign_test_3 (RdKafka::KafkaConsumer *consumer,
 static void assign_test_4 (RdKafka::KafkaConsumer *consumer,
                            std::vector<RdKafka::TopicPartition *> toppars1,
                            std::vector<RdKafka::TopicPartition *> toppars2) {
-  std::vector<RdKafka::TopicPartition *> assignment;
+  RdKafka::Error *error;
 
   Test::Say("Multi-topic incremental assign and unassign + message consumption\n");
 
-  consumer->incremental_assign(toppars1);
-  consumer->assignment(assignment);
-  if (assignment.size() != 1)
-    Test::Fail(tostr() << "Expecting current assignment to have size 1, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  if ((error = consumer->incremental_assign(toppars1)))
+    Test::Fail("Incremental assign failed: " + error->str());
+  Test::check_assignment(consumer, 1, &toppars1[0]->topic());
 
   RdKafka::Message *m = consumer->consume(5000);
   if (m->err() != RdKafka::ERR_NO_ERROR)
@@ -265,21 +233,18 @@ static void assign_test_4 (RdKafka::KafkaConsumer *consumer,
     Test::Fail(tostr() << "Expecting msg len to be 100, not: " << m->len()); /* implies read from topic 1. */
   delete m;
 
-  consumer->incremental_unassign(toppars1);
-  consumer->assignment(assignment);
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  if ((error = consumer->incremental_unassign(toppars1)))
+    Test::Fail("Incremental unassign failed: " + error->str());
+  Test::check_assignment(consumer, 0, NULL);
 
   m = consumer->consume(100);
   if (m->err() != RdKafka::ERR__TIMED_OUT)
     Test::Fail("Not expecting a consumed message.");
   delete m;
 
-  consumer->incremental_assign(toppars2);
-  consumer->assignment(assignment);
-  if (assignment.size() != 1)
-    Test::Fail(tostr() << "Expecting current assignment to have size 1, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  if ((error = consumer->incremental_assign(toppars2)))
+    Test::Fail("Incremental assign failed: " + error->str());
+  Test::check_assignment(consumer, 1, &toppars2[0]->topic());
 
   m = consumer->consume(5000);
   if (m->err() != RdKafka::ERR_NO_ERROR)
@@ -288,22 +253,21 @@ static void assign_test_4 (RdKafka::KafkaConsumer *consumer,
     Test::Fail(tostr() << "Expecting msg len to be 200, not: " << m->len()); /* implies read from topic 2. */
   delete m;
 
-  consumer->incremental_assign(toppars1);
-  consumer->assignment(assignment);
-  if (assignment.size() != 2)
-    Test::Fail(tostr() << "Expecting current assignment to have size 2, not: " << assignment.size());
-  RdKafka::TopicPartition::destroy(assignment);
+  if ((error = consumer->incremental_assign(toppars1)))
+    Test::Fail("Incremental assign failed: " + error->str());
+  if (Test::assignment_partition_count(consumer) != 2)
+    Test::Fail(tostr() << "Expecting current assignment to have size 2, not: " << Test::assignment_partition_count(consumer));
 
   m = consumer->consume(5000);
   if (m->err() != RdKafka::ERR_NO_ERROR)
     Test::Fail("Expecting a consumed message.");
   delete m;
 
-  consumer->incremental_unassign(toppars2);
-  consumer->incremental_unassign(toppars1);
-  consumer->assignment(assignment);
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0. not: " << assignment.size());
+  if ((error = consumer->incremental_unassign(toppars2)))
+    Test::Fail("Incremental unassign failed: " + error->str());
+  if ((error = consumer->incremental_unassign(toppars1)))
+    Test::Fail("Incremental unassign failed: " + error->str());
+  Test::check_assignment(consumer, 0, NULL);
 }
 
 
@@ -312,29 +276,18 @@ static void assign_test_4 (RdKafka::KafkaConsumer *consumer,
 static void assign_test_5 (RdKafka::KafkaConsumer *consumer,
                            std::vector<RdKafka::TopicPartition *> toppars1,
                            std::vector<RdKafka::TopicPartition *> toppars2) {
-  RdKafka::ErrorCode err;
   RdKafka::Error *error;
-  std::vector<RdKafka::TopicPartition *> assignment;
   std::vector<RdKafka::TopicPartition *> toppars3;
 
   Test::Say("Incremental assign and unassign of empty collection\n");
 
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
-
   if ((error = consumer->incremental_assign(toppars3)))
     Test::Fail("Incremental assign failed: " + error->str());
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  Test::check_assignment(consumer, 0, NULL);
 
   if ((error = consumer->incremental_unassign(toppars3)))
     Test::Fail("Incremental unassign failed: " + error->str());
-  if ((err = consumer->assignment(assignment)))
-    Test::Fail("Failed to get current assignment: " + RdKafka::err2str(err));
-  if (assignment.size() != 0)
-    Test::Fail(tostr() << "Expecting current assignment to have size 0, not: " << assignment.size());
+  Test::check_assignment(consumer, 0, NULL);
 }
 
 
@@ -349,7 +302,7 @@ static void run_test (std::string &t1, std::string &t2,
     toppars2.push_back(RdKafka::TopicPartition::create(t2, 0,
                                                        RdKafka::Topic::OFFSET_BEGINNING));
 
-    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1, false, "cooperative-sticky", NULL);
+    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1, false, "cooperative-sticky", NULL, 10);
 
     test(consumer, toppars1, toppars2);
 
@@ -400,17 +353,17 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1, 25);
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2, 25);
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name);
 
   bool c2_subscribed = false;
   while (true) {
-    Test::poll_once(c1);
-    Test::poll_once(c2);
+    Test::poll_once(c1, 500);
+    Test::poll_once(c2, 500);
 
     /* Start c2 after c1 has received initial assignment */
     if (!c2_subscribed && rebalance_cb1.assign_call_cnt > 0) {
@@ -535,8 +488,8 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", NULL);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 20);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", NULL, 20);
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name);
@@ -544,16 +497,16 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
   bool c2_subscribed = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c1);
-    Test::poll_once(c2);
+    Test::poll_once(c1, 500);
+    Test::poll_once(c2, 500);
 
-    if (Test::partition_count(c1) == 2 && !c2_subscribed) {
+    if (Test::assignment_partition_count(c1) == 2 && !c2_subscribed) {
       Test::subscribe(c2, topic_name);
       c2_subscribed = true;
     }
 
-    if (Test::partition_count(c1) == 1 &&
-        Test::partition_count(c2) == 1) {
+    if (Test::assignment_partition_count(c1) == 1 &&
+        Test::assignment_partition_count(c2) == 1) {
       Test::Say("Consumer 1 and 2 are both assigned to single partition.\n");
       done = true;
     }
@@ -590,7 +543,7 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -599,14 +552,14 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
   bool subscribed_to_one_topic = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 2 && !subscribed_to_one_topic) {
+    if (Test::assignment_partition_count(c) == 2 && !subscribed_to_one_topic) {
       subscribed_to_one_topic = true;
       Test::subscribe(c, topic_name_1, topic_name_2);
     }
 
-    if (Test::partition_count(c) == 4) {
+    if (Test::assignment_partition_count(c) == 4) {
       Test::Say("Consumer is assigned to two topics.\n");
       done = true;
     }
@@ -639,7 +592,7 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -648,14 +601,14 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
   bool subscribed_to_two_topics = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 4 && !subscribed_to_two_topics) {
+    if (Test::assignment_partition_count(c) == 4 && !subscribed_to_two_topics) {
       subscribed_to_two_topics = true;
       Test::subscribe(c, topic_name_1);
     }
 
-    if (Test::partition_count(c) == 2) {
+    if (Test::assignment_partition_count(c) == 2) {
       Test::Say("Consumer is assigned to one topic\n");
       done = true;
     }
@@ -723,13 +676,13 @@ static void f_assign_call_cooperative () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   FTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
 
   while (!rebalance_cb.assigned)
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
   c->close();
   delete c;
@@ -793,13 +746,13 @@ static void g_incremental_assign_call_eager() {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   GTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "roundrobin", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "roundrobin", &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
 
   while (!rebalance_cb.assigned)
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
   c->close();
   delete c;
@@ -824,7 +777,7 @@ static void h_delete_topic () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -833,7 +786,7 @@ static void h_delete_topic () {
   bool deleted = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
     std::vector<RdKafka::TopicPartition*> partitions;
     c->assignment(partitions);
@@ -877,7 +830,7 @@ static void i_delete_topic_2 () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name_1);
@@ -885,16 +838,16 @@ static void i_delete_topic_2 () {
   bool deleted = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 1 && !deleted) {
+    if (Test::assignment_partition_count(c) == 1 && !deleted) {
       if (rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected one assign call, saw " << rebalance_cb.assign_call_cnt << "\n");
       Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (Test::partition_count(c) == 0 && deleted) {
+    if (Test::assignment_partition_count(c) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
@@ -922,7 +875,7 @@ static void j_delete_topic_no_rb_callback () {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", NULL);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name_1);
@@ -930,14 +883,14 @@ static void j_delete_topic_no_rb_callback () {
   bool deleted = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 1 && !deleted) {
+    if (Test::assignment_partition_count(c) == 1 && !deleted) {
       Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (Test::partition_count(c) == 0 && deleted) {
+    if (Test::assignment_partition_count(c) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
@@ -966,7 +919,7 @@ static void k_add_partition () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -974,9 +927,9 @@ static void k_add_partition () {
   bool subscribed = false;
   bool done = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 1 && !subscribed) {
+    if (Test::assignment_partition_count(c) == 1 && !subscribed) {
       if (rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb.assign_call_cnt);
       if (rebalance_cb.revoke_call_cnt != 0)
@@ -985,7 +938,7 @@ static void k_add_partition () {
       subscribed = true;
     }
 
-    if (Test::partition_count(c) == 2 && subscribed) {
+    if (Test::assignment_partition_count(c) == 2 && subscribed) {
       if (rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);
       if (rebalance_cb.revoke_call_cnt != 0)
@@ -1023,23 +976,23 @@ static void l_unsubscribe () {
   test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
 
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1, 30);
   test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name_1, topic_name_2);
 
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2, 30);
   Test::subscribe(c2, topic_name_1, topic_name_2);
 
   bool done = false;
   bool unsubscribed = false;
   while (!done) {
-    Test::poll_once(c1);
-    Test::poll_once(c2);
+    Test::poll_once(c1, 500);
+    Test::poll_once(c2, 500);
 
-    if (Test::partition_count(c1) == 2 && Test::partition_count(c2) == 2) {
+    if (Test::assignment_partition_count(c1) == 2 && Test::assignment_partition_count(c2) == 2) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1049,7 +1002,7 @@ static void l_unsubscribe () {
       unsubscribed = true;
     }
 
-    if (unsubscribed && Test::partition_count(c1) == 0 && Test::partition_count(c2) == 4) {
+    if (unsubscribed && Test::assignment_partition_count(c1) == 0 && Test::assignment_partition_count(c2) == 4) {
       if (rebalance_cb1.assign_call_cnt != 1) /* is now unsubscribed, so rebalance_cb will no longer be called. */
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 2)
@@ -1103,7 +1056,7 @@ static void m_unsubscribe_2 () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -1111,14 +1064,14 @@ static void m_unsubscribe_2 () {
   bool done = false;
   bool unsubscribed = false;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 2) {
+    if (Test::assignment_partition_count(c) == 2) {
       Test::unsubscribe(c);
       unsubscribed = true;
     }
 
-    if (unsubscribed && Test::partition_count(c) == 0) {
+    if (unsubscribed && Test::assignment_partition_count(c) == 0) {
       Test::Say("Unsubscribe completed");
       done = true;
     }
@@ -1151,16 +1104,16 @@ static void n_wildcard () {
   std::string topic_regex = tostr() << "^rdkafkatest.*" << topic_sub_name;
 
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1, 30);
   Test::subscribe(c1, topic_regex);
 
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, true, "cooperative-sticky", &rebalance_cb2);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, true, "cooperative-sticky", &rebalance_cb2, 30);
   Test::subscribe(c2, topic_regex);
 
   /* There are no matching topics, so the consumers should not join the group initially */
-  Test::poll_once(c1);
-  Test::poll_once(c2);
+  Test::poll_once(c1, 500);
+  Test::poll_once(c2, 500);
 
   if (rebalance_cb1.assign_call_cnt != 0)
     Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 0 not: " << rebalance_cb1.assign_call_cnt);
@@ -1171,10 +1124,10 @@ static void n_wildcard () {
   bool created_topics = false;
   bool deleted_topic = false;
   while (!done) {
-    Test::poll_once(c1);
-    Test::poll_once(c2);
+    Test::poll_once(c1, 500);
+    Test::poll_once(c2, 500);
 
-    if (Test::partition_count(c1) == 0 && Test::partition_count(c2) == 0 && !created_topics) {
+    if (Test::assignment_partition_count(c1) == 0 && Test::assignment_partition_count(c2) == 0 && !created_topics) {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
@@ -1183,7 +1136,7 @@ static void n_wildcard () {
       created_topics = true;
     }
 
-    if (Test::partition_count(c1) == 2 && Test::partition_count(c2) == 2 && !deleted_topic) {
+    if (Test::assignment_partition_count(c1) == 2 && Test::assignment_partition_count(c2) == 2 && !deleted_topic) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1199,7 +1152,7 @@ static void n_wildcard () {
       deleted_topic = true;
     }
 
-    if (Test::partition_count(c1) == 1 && Test::partition_count(c2) == 1 && deleted_topic) {
+    if (Test::assignment_partition_count(c1) == 1 && Test::assignment_partition_count(c2) == 1 && deleted_topic) {
       if (rebalance_cb1.revoke_call_cnt != 1) /* accumulated in lost case as well */
         Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
       if (rebalance_cb2.revoke_call_cnt != 1)
@@ -1215,8 +1168,8 @@ static void n_wildcard () {
        * it follows the revoke, which has alrady been confirmed to have happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
       while (rebalance_cb1.assign_call_cnt != 2 || rebalance_cb2.assign_call_cnt != 2) {
-        Test::poll_once(c1);
-        Test::poll_once(c2);
+        Test::poll_once(c1, 500);
+        Test::poll_once(c2, 500);
       }
 
       Test::Say("Consumers are subscribed to one partition each\n");
@@ -1270,24 +1223,23 @@ static void o_java_interop() {
   test_create_topic(NULL, topic_name_2.c_str(), 6, 1);
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb, 25);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name_1, topic_name_2);
 
   bool done = false;
-  bool java_started = false;
   bool changed_subscription = false;
   bool changed_subscription_done = false;
-  int java_pid;
+  int java_pid = 0;
   while (!done) {
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
-    if (Test::partition_count(c) == 8 && !java_started) {
+    if (Test::assignment_partition_count(c) == 8 && !java_pid != 0) {
       Test::Say("librdkafka consumer assigned to 8 partitions\n");
       string bootstrapServers = get_bootstrap_servers();
-      const char **argv = (const char **)rd_alloca(sizeof(*argv) * (1 + 1 + 1 + 1 + 1 + 1));
+      const char *argv[1 + 1 + 1 + 1 + 1 + 1];
       size_t i = 0;
       argv[i++] = "test1";
       argv[i++] = bootstrapServers.c_str();
@@ -1295,11 +1247,12 @@ static void o_java_interop() {
       argv[i++] = topic_name_2.c_str();
       argv[i++] = group_name.c_str();
       argv[i] = NULL;
-      java_pid = test_run_java("IncrementalRebalanceCli", (const char **)argv);
-      java_started = true;
+      java_pid = test_run_java("IncrementalRebalanceCli", argv);
+      if (java_pid <= 0)
+        Test::Fail(tostr() << "Unexpected pid: " << java_pid);
     }
 
-    if (Test::partition_count(c) == 4 && java_started && !changed_subscription) {
+    if (Test::assignment_partition_count(c) == 4 && java_pid != 0 && !changed_subscription) {
       if (rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb.assign_call_cnt);
       Test::Say("Java consumer is now part of the group\n");
@@ -1307,7 +1260,7 @@ static void o_java_interop() {
       changed_subscription = true;
     }
 
-    if (Test::partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
+    if (Test::assignment_partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
       /* All topic 1 partitions will be allocated to this consumer whether or not the Java
        * consumer has unsubscribed yet because the sticky algorithm attempts to ensure
        * partition counts are even. */
@@ -1315,7 +1268,7 @@ static void o_java_interop() {
       changed_subscription_done = true;
     }
 
-    if (Test::partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 4 && changed_subscription_done) {
+    if (Test::assignment_partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 4 && changed_subscription_done) {
       /* When the java consumer closes, this will cause an empty assign rebalance_cb event,
        * allowing detection of when this has happened. */
       Test::Say("Java consumer has left the group\n");
@@ -1351,7 +1304,7 @@ static void s_subscribe_when_rebalancing(int variation) {
   test_create_topic(NULL, topic_name_3.c_str(), 1, 1);
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb, 25);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), 10*1000);
@@ -1369,7 +1322,7 @@ static void s_subscribe_when_rebalancing(int variation) {
   Test::subscribe(c, topic_name_2);
 
   if (variation == 3 || variation == 5)
-    Test::poll_once(c);
+    Test::poll_once(c, 500);
 
   if (variation < 5) {
     // Very quickly after subscribing to topic 2, subscribe to topic 3.
@@ -1706,7 +1659,7 @@ extern "C" {
 
     if (test_quick) {
       Test::Say("Skipping tests c -> s due to quick mode\n");
-      goto end;
+      return 0;
     }
 
     b_subscribe_with_cb_test(false/*don't close consumer*/);
@@ -1733,7 +1686,6 @@ extern "C" {
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
       s_subscribe_when_rebalancing(i);
 
-end:
     return 0;
   }
 }

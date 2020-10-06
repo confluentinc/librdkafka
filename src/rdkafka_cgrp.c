@@ -3327,15 +3327,9 @@ rd_kafka_cgrp_incremental_unassign (rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_c.assignment_size = rkcg->rkcg_assignment->cnt;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
-        for (i = 0 ; i < partitions->cnt ; i++) {
-                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-                if (!rktpar->_private)
-                        rktpar->_private = rd_kafka_toppar_get2(
-                                        rkcg->rkcg_rk,
-                                        rktpar->topic,
-                                        rktpar->partition,
-                                        0/*no-ua*/, 0/*no-create-on-miss*/);
-        }
+        rd_kafka_topic_partition_list_update_toppars(rkcg->rkcg_rk,
+                                                     partitions,
+                                                     rd_false);
 
         if (rkcg->rkcg_rk->rk_conf.offset_store_method ==
             RD_KAFKA_OFFSET_METHOD_BROKER &&

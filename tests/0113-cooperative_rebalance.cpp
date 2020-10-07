@@ -1366,8 +1366,8 @@ static void s_subscribe_when_rebalancing(int variation) {
  *  - Max poll interval is exceeded on the first consumer.
  */
 
-static void t_max_poll_interval_exceeded() {
-  Test::Say("Executing t_max_poll_interval_exceeded\n");
+static void t_max_poll_interval_exceeded(int variation) {
+  Test::Say(tostr() << "Executing t_max_poll_interval_exceeded, variation: " << variation << "\n");
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1401,20 +1401,25 @@ static void t_max_poll_interval_exceeded() {
     }
 
     if (Test::assignment_partition_count(c2) == 2 && both_have_been_assigned) {
-      Test::Say("Consumer 1 has unsubscribed, done\n");
+      Test::Say("Consumer 1 is no longer assigned any partitions, done\n");
       done = true;
     }
   }
 
-  if (rebalance_cb1.lost_call_cnt != 0)
-    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 0, not: " << rebalance_cb1.lost_call_cnt);
-  Test::poll_once(c1, 500); /* Eat the max poll interval exceeded error message */
-  Test::poll_once(c1, 500); /* Trigger the rebalance_cb with lost partitions */
-  if (rebalance_cb1.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: " << rebalance_cb1.lost_call_cnt);
+  if (variation == 1) {
+    if (rebalance_cb1.lost_call_cnt != 0)
+      Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 0, not: " << rebalance_cb1.lost_call_cnt);
+    Test::poll_once(c1, 500); /* Eat the max poll interval exceeded error message */
+    Test::poll_once(c1, 500); /* Trigger the rebalance_cb with lost partitions */
+    if (rebalance_cb1.lost_call_cnt != 1)
+      Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: " << rebalance_cb1.lost_call_cnt);
+  }
 
   c1->close();
   c2->close();
+
+  if (rebalance_cb1.lost_call_cnt != 1)
+    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: " << rebalance_cb1.lost_call_cnt);
 
   if (rebalance_cb1.assign_call_cnt != 1)
     Test::Fail(tostr() << "Expected consumer 1 assign count to be 1, not: " << rebalance_cb1.assign_call_cnt);
@@ -1778,7 +1783,8 @@ extern "C" {
     r_lost_partitions_commit_illegal_generation_test();
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
       s_subscribe_when_rebalancing(i);
-    t_max_poll_interval_exceeded();
+    t_max_poll_interval_exceeded(1);
+    t_max_poll_interval_exceeded(2);
 
     return 0;
   }

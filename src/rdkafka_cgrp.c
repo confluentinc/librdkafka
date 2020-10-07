@@ -4478,7 +4478,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
 
-        rd_kafka_cgrp_revoke_all_rejoin(rkcg,
+        if (!rd_atomic32_get(&rkcg->rkcg_assignment_lost))
+                rd_kafka_cgrp_revoke_all_rejoin(rkcg,
                                         rd_false/*not lost*/,
                                         rd_true/*initiating*/,
                                         "unsubscribe");
@@ -4774,8 +4775,9 @@ static void rd_kafka_cgrp_handle_assign_op (rd_kafka_cgrp_t *rkcg,
                  * terminating, so their counts must match. */
                 else if (rko->rko_u.assign.method ==
                          RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN &&
-                         rko->rko_u.assign.partitions->cnt !=
-                         rkcg->rkcg_assignment->cnt)
+                         (!rkcg->rkcg_assignment ||
+                          (rko->rko_u.assign.partitions->cnt !=
+                           rkcg->rkcg_assignment->cnt)))
                         err = RD_KAFKA_RESP_ERR__DESTROY;
 
                 /* Further check that assign partitions completely
@@ -4804,7 +4806,6 @@ static void rd_kafka_cgrp_handle_assign_op (rd_kafka_cgrp_t *rkcg,
                                 }
                         }
                 }
-
 
                 /* Treat all assignments as unassign
                  * when terminating. */

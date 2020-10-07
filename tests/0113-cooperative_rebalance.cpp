@@ -54,23 +54,27 @@ static std::string get_bootstrap_servers() {
 
 static RdKafka::KafkaConsumer *make_consumer (string client_id,
                                               string group_id,
-                                              bool quick_metadata_refresh,
                                               string assignment_strategy,
+                                              std::vector<std::pair<std::string, std::string> > *additional_conf,
                                               RdKafka::RebalanceCb *rebalance_cb,
                                               int timeout_s) {
 
   std::string bootstraps;
   std::string errstr;
+  std::vector<std::pair<std::string, std::string> >::iterator itr;
 
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, timeout_s);
   Test::conf_set(conf, "client.id", client_id);
   Test::conf_set(conf, "group.id", group_id);
-  if (quick_metadata_refresh)
-    Test::conf_set(conf, "topic.metadata.refresh.interval.ms", "3000");
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "enable.auto.commit", "false");
   Test::conf_set(conf, "partition.assignment.strategy", assignment_strategy);
+  if (additional_conf != NULL) {
+    for (itr = (*additional_conf).begin(); itr != (*additional_conf).end(); itr++)
+      Test::conf_set(conf, itr->first, itr->second);
+  }
+
   if (rebalance_cb) {
     if (conf->set("rebalance_cb", rebalance_cb, errstr))
       Test::Fail("Failed to set rebalance_cb: " + errstr);
@@ -122,7 +126,9 @@ public:
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
 		                 RdKafka::ErrorCode err,
                      std::vector<RdKafka::TopicPartition*> &partitions) {
-    Test::Say(tostr() << "RebalanceCb: " << consumer->name() << " " << RdKafka::err2str(err) << ": " << part_list_print(partitions) << "\n");
+
+    const char *lost_str = consumer->assignment_lost() ? " (LOST)" : "";
+    Test::Say(tostr() << "RebalanceCb: " << consumer->name() << " " << RdKafka::err2str(err) << lost_str << ": " << part_list_print(partitions) << "\n");
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
       if (consumer->assignment_lost())
         Test::Fail("unexpected lost assignment during ASSIGN rebalance");
@@ -302,7 +308,7 @@ static void run_test (std::string &t1, std::string &t2,
     toppars2.push_back(RdKafka::TopicPartition::create(t2, 0,
                                                        RdKafka::Topic::OFFSET_BEGINNING));
 
-    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1, false, "cooperative-sticky", NULL, 10);
+    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1, "cooperative-sticky", NULL, NULL, 10);
 
     test(consumer, toppars1, toppars2);
 
@@ -353,9 +359,9 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1, 25);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb1, 25);
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2, 25);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 25);
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name);
@@ -488,8 +494,8 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 20);
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", NULL, 20);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 20);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, "cooperative-sticky", NULL, NULL, 20);
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name);
@@ -543,7 +549,7 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -592,7 +598,7 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -667,6 +673,7 @@ public:
   }
 };
 
+
 static void f_assign_call_cooperative () {
   Test::Say("Executing f_assign_call_cooperative\n");
 
@@ -675,8 +682,10 @@ static void f_assign_call_cooperative () {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
   FTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -745,8 +754,10 @@ static void g_incremental_assign_call_eager() {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
   GTestRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "roundrobin", &rebalance_cb, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "roundrobin", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -776,8 +787,10 @@ static void h_delete_topic () {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -829,8 +842,10 @@ static void i_delete_topic_2 () {
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name_1);
@@ -875,7 +890,9 @@ static void j_delete_topic_no_rb_callback () {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", NULL, 15);
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name_1);
@@ -918,8 +935,10 @@ static void k_add_partition () {
 
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -976,14 +995,14 @@ static void l_unsubscribe () {
   test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
 
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb1, 30);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb1, 30);
   test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 10*1000);
 
   Test::subscribe(c1, topic_name_1, topic_name_2);
 
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, false, "cooperative-sticky", &rebalance_cb2, 30);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 30);
   Test::subscribe(c2, topic_name_1, topic_name_2);
 
   bool done = false;
@@ -1056,7 +1075,7 @@ static void m_unsubscribe_2 () {
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
   test_create_topic(NULL, topic_name.c_str(), 2, 1);
 
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", NULL, 15);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), 10*1000);
 
   Test::subscribe(c, topic_name);
@@ -1103,12 +1122,15 @@ static void n_wildcard () {
   std::string group_name = Test::mk_unique_group_name("0113-coop_regex");
   std::string topic_regex = tostr() << "^rdkafkatest.*" << topic_sub_name;
 
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
+
   DefaultRebalanceCb rebalance_cb1;
-  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, true, "cooperative-sticky", &rebalance_cb1, 30);
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb1, 30);
   Test::subscribe(c1, topic_regex);
 
   DefaultRebalanceCb rebalance_cb2;
-  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, true, "cooperative-sticky", &rebalance_cb2, 30);
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb2, 30);
   Test::subscribe(c2, topic_regex);
 
   /* There are no matching topics, so the consumers should not join the group initially */
@@ -1223,7 +1245,7 @@ static void o_java_interop() {
   test_create_topic(NULL, topic_name_2.c_str(), 6, 1);
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb, 25);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb, 25);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
 
@@ -1304,7 +1326,7 @@ static void s_subscribe_when_rebalancing(int variation) {
   test_create_topic(NULL, topic_name_3.c_str(), 1, 1);
 
   DefaultRebalanceCb rebalance_cb;
-  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, false, "cooperative-sticky", &rebalance_cb, 25);
+  RdKafka::KafkaConsumer *c = make_consumer("C_1", group_name, "cooperative-sticky", NULL, &rebalance_cb, 25);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), 10*1000);
   test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), 10*1000);
@@ -1335,6 +1357,77 @@ static void s_subscribe_when_rebalancing(int variation) {
   }
 
   delete c;
+}
+
+
+
+/* Check behavior when:
+ *  - Two consumer subscribe to a topic.
+ *  - Max poll interval is exceeded on the first consumer.
+ */
+
+static void t_max_poll_interval_exceeded() {
+  Test::Say("Executing t_max_poll_interval_exceeded\n");
+
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
+  test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
+
+  std::vector<std::pair<std::string, std::string> > additional_conf;
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("session.timeout.ms"), std::string("6000")));
+  additional_conf.push_back(std::pair<std::string, std::string>(std::string("max.poll.interval.ms"), std::string("7000")));
+
+  DefaultRebalanceCb rebalance_cb1;
+  RdKafka::KafkaConsumer *c1 = make_consumer("C_1", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb1, 30);
+  DefaultRebalanceCb rebalance_cb2;
+  RdKafka::KafkaConsumer *c2 = make_consumer("C_2", group_name, "cooperative-sticky", &additional_conf, &rebalance_cb2, 30);
+
+  test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 10*1000);
+  test_wait_topic_exists(c2->c_ptr(), topic_name_1.c_str(), 10*1000);
+
+  Test::subscribe(c1, topic_name_1);
+  Test::subscribe(c2, topic_name_1);
+
+  bool done = false;
+  bool both_have_been_assigned = false;
+  while (!done) {
+    if (!both_have_been_assigned)
+      Test::poll_once(c1, 500);
+    Test::poll_once(c2, 500);
+
+    if (Test::assignment_partition_count(c1) == 1 && Test::assignment_partition_count(c2) == 1 && !both_have_been_assigned) {
+      Test::Say(tostr() << "Both consumers are assigned to topic " << topic_name_1 << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
+      both_have_been_assigned = true;
+    }
+
+    if (Test::assignment_partition_count(c2) == 2 && both_have_been_assigned) {
+      Test::Say("Consumer 1 has unsubscribed, done\n");
+      done = true;
+    }
+  }
+
+  if (rebalance_cb1.lost_call_cnt != 0)
+    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 0, not: " << rebalance_cb1.lost_call_cnt);
+  Test::poll_once(c1, 500); /* Eat the max poll interval exceeded error message */
+  Test::poll_once(c1, 500); /* Trigger the rebalance_cb with lost partitions */
+  if (rebalance_cb1.lost_call_cnt != 1)
+    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: " << rebalance_cb1.lost_call_cnt);
+
+  c1->close();
+  c2->close();
+
+  if (rebalance_cb1.assign_call_cnt != 1)
+    Test::Fail(tostr() << "Expected consumer 1 assign count to be 1, not: " << rebalance_cb1.assign_call_cnt);
+  if (rebalance_cb2.assign_call_cnt != 2)
+    Test::Fail(tostr() << "Expected consumer 1 assign count to be 2, not: " << rebalance_cb1.assign_call_cnt);
+
+  if (rebalance_cb1.revoke_call_cnt != 1)
+    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
+  if (rebalance_cb2.revoke_call_cnt != 1)
+    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
+
+  delete c1;
+  delete c2;
 }
 
 
@@ -1685,6 +1778,7 @@ extern "C" {
     r_lost_partitions_commit_illegal_generation_test();
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
       s_subscribe_when_rebalancing(i);
+    t_max_poll_interval_exceeded();
 
     return 0;
   }

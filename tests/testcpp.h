@@ -257,14 +257,20 @@ namespace Test {
 
 
   /**
-   * @brief Current assignment partition count
+   * @brief Current assignment partition count. If \p topic is
+   *        NULL, then the total partition count, else the number
+   *        of assigned partitions from \p topic.
    */
-  static RD_UNUSED size_t assignment_partition_count (RdKafka::KafkaConsumer *c) {
+  static RD_UNUSED size_t assignment_partition_count (RdKafka::KafkaConsumer *c, std::string *topic) {
     std::vector<RdKafka::TopicPartition*> partitions;
     c->assignment(partitions);
-    for (size_t i = 0 ; i < partitions.size() ; i++)
+    int cnt = 0;
+    for (size_t i = 0 ; i < partitions.size() ; i++) {
+      if (topic == NULL || *topic == partitions[i]->topic())
+        cnt++;
       delete partitions[i];
-    return partitions.size();
+    }
+    return cnt;
   }
 
 

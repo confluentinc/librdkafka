@@ -3432,6 +3432,7 @@ static void rd_kafka_cgrp_incr_unassign_done (rd_kafka_cgrp_t *rkcg,
                  * should occur immediately following the unassign (this
                  * is not the case under normal conditions), in which case
                  * the rejoin flag will be set. */
+
                 rd_kafka_cgrp_rejoin(rkcg);
 
         } else {
@@ -4546,14 +4547,17 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
 
         if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
             RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
-            rktparlist && rkcg->rkcg_subscription)
+            rktparlist && rkcg->rkcg_subscription &&
+            rkcg->rkcg_assignment)
                 return rd_kafka_cgrp_modify_subscription(rkcg, rktparlist);
 
         /* Remove existing subscription first */
-        rd_kafka_cgrp_unsubscribe(rkcg,
-                                  rktparlist ?
-                                  0/* don't leave group if new subscription */ :
-                                  1/* leave group if no new subscription */);
+        if (rkcg->rkcg_assignment)
+                rd_kafka_cgrp_unsubscribe(
+                        rkcg,
+                        rktparlist ?
+                        0/* don't leave group if new subscription */ :
+                        1/* leave group if no new subscription */);
 
         if (!rktparlist)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;

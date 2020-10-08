@@ -261,8 +261,8 @@ static void assign_test_4 (RdKafka::KafkaConsumer *consumer,
 
   if ((error = consumer->incremental_assign(toppars1)))
     Test::Fail("Incremental assign failed: " + error->str());
-  if (Test::assignment_partition_count(consumer) != 2)
-    Test::Fail(tostr() << "Expecting current assignment to have size 2, not: " << Test::assignment_partition_count(consumer));
+  if (Test::assignment_partition_count(consumer, NULL) != 2)
+    Test::Fail(tostr() << "Expecting current assignment to have size 2, not: " << Test::assignment_partition_count(consumer, NULL));
 
   m = consumer->consume(5000);
   if (m->err() != RdKafka::ERR_NO_ERROR)
@@ -506,13 +506,13 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1) == 2 && !c2_subscribed) {
+    if (Test::assignment_partition_count(c1, NULL) == 2 && !c2_subscribed) {
       Test::subscribe(c2, topic_name);
       c2_subscribed = true;
     }
 
-    if (Test::assignment_partition_count(c1) == 1 &&
-        Test::assignment_partition_count(c2) == 1) {
+    if (Test::assignment_partition_count(c1, NULL) == 1 &&
+        Test::assignment_partition_count(c2, NULL) == 1) {
       Test::Say("Consumer 1 and 2 are both assigned to single partition.\n");
       done = true;
     }
@@ -560,12 +560,12 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 2 && !subscribed_to_one_topic) {
+    if (Test::assignment_partition_count(c, NULL) == 2 && !subscribed_to_one_topic) {
       subscribed_to_one_topic = true;
       Test::subscribe(c, topic_name_1, topic_name_2);
     }
 
-    if (Test::assignment_partition_count(c) == 4) {
+    if (Test::assignment_partition_count(c, NULL) == 4) {
       Test::Say("Consumer is assigned to two topics.\n");
       done = true;
     }
@@ -609,12 +609,12 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 4 && !subscribed_to_two_topics) {
+    if (Test::assignment_partition_count(c, NULL) == 4 && !subscribed_to_two_topics) {
       subscribed_to_two_topics = true;
       Test::subscribe(c, topic_name_1);
     }
 
-    if (Test::assignment_partition_count(c) == 2) {
+    if (Test::assignment_partition_count(c, NULL) == 2) {
       Test::Say("Consumer is assigned to one topic\n");
       done = true;
     }
@@ -855,14 +855,14 @@ static void i_delete_topic_2 () {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 1 && !deleted) {
+    if (Test::assignment_partition_count(c, NULL) == 1 && !deleted) {
       if (rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected one assign call, saw " << rebalance_cb.assign_call_cnt << "\n");
       Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (Test::assignment_partition_count(c) == 0 && deleted) {
+    if (Test::assignment_partition_count(c, NULL) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
@@ -902,12 +902,12 @@ static void j_delete_topic_no_rb_callback () {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 1 && !deleted) {
+    if (Test::assignment_partition_count(c, NULL) == 1 && !deleted) {
       Test::delete_topic(c, topic_name_1.c_str());
       deleted = true;
     }
 
-    if (Test::assignment_partition_count(c) == 0 && deleted) {
+    if (Test::assignment_partition_count(c, NULL) == 0 && deleted) {
       Test::Say(tostr() << "Assignment is empty following deletion of topic\n");
       done = true;
     }
@@ -948,7 +948,7 @@ static void k_add_partition () {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 1 && !subscribed) {
+    if (Test::assignment_partition_count(c, NULL) == 1 && !subscribed) {
       if (rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected 1 assign call, saw " << rebalance_cb.assign_call_cnt);
       if (rebalance_cb.revoke_call_cnt != 0)
@@ -957,7 +957,7 @@ static void k_add_partition () {
       subscribed = true;
     }
 
-    if (Test::assignment_partition_count(c) == 2 && subscribed) {
+    if (Test::assignment_partition_count(c, NULL) == 2 && subscribed) {
       if (rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);
       if (rebalance_cb.revoke_call_cnt != 0)
@@ -1011,7 +1011,7 @@ static void l_unsubscribe () {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1) == 2 && Test::assignment_partition_count(c2) == 2) {
+    if (Test::assignment_partition_count(c1, NULL) == 2 && Test::assignment_partition_count(c2, NULL) == 2) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1021,7 +1021,7 @@ static void l_unsubscribe () {
       unsubscribed = true;
     }
 
-    if (unsubscribed && Test::assignment_partition_count(c1) == 0 && Test::assignment_partition_count(c2) == 4) {
+    if (unsubscribed && Test::assignment_partition_count(c1, NULL) == 0 && Test::assignment_partition_count(c2, NULL) == 4) {
       if (rebalance_cb1.assign_call_cnt != 1) /* is now unsubscribed, so rebalance_cb will no longer be called. */
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 2)
@@ -1085,12 +1085,12 @@ static void m_unsubscribe_2 () {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 2) {
+    if (Test::assignment_partition_count(c, NULL) == 2) {
       Test::unsubscribe(c);
       unsubscribed = true;
     }
 
-    if (unsubscribed && Test::assignment_partition_count(c) == 0) {
+    if (unsubscribed && Test::assignment_partition_count(c, NULL) == 0) {
       Test::Say("Unsubscribe completed");
       done = true;
     }
@@ -1149,7 +1149,7 @@ static void n_wildcard () {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1) == 0 && Test::assignment_partition_count(c2) == 0 && !created_topics) {
+    if (Test::assignment_partition_count(c1, NULL) == 0 && Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
@@ -1158,7 +1158,7 @@ static void n_wildcard () {
       created_topics = true;
     }
 
-    if (Test::assignment_partition_count(c1) == 2 && Test::assignment_partition_count(c2) == 2 && !deleted_topic) {
+    if (Test::assignment_partition_count(c1, NULL) == 2 && Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
       if (rebalance_cb1.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
       if (rebalance_cb2.assign_call_cnt != 1)
@@ -1174,7 +1174,7 @@ static void n_wildcard () {
       deleted_topic = true;
     }
 
-    if (Test::assignment_partition_count(c1) == 1 && Test::assignment_partition_count(c2) == 1 && deleted_topic) {
+    if (Test::assignment_partition_count(c1, NULL) == 1 && Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
       if (rebalance_cb1.revoke_call_cnt != 1) /* accumulated in lost case as well */
         Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
       if (rebalance_cb2.revoke_call_cnt != 1)
@@ -1258,7 +1258,7 @@ static void o_java_interop() {
   while (!done) {
     Test::poll_once(c, 500);
 
-    if (Test::assignment_partition_count(c) == 8 && !java_pid != 0) {
+    if (Test::assignment_partition_count(c, NULL) == 8 && !java_pid != 0) {
       Test::Say("librdkafka consumer assigned to 8 partitions\n");
       string bootstrapServers = get_bootstrap_servers();
       const char *argv[1 + 1 + 1 + 1 + 1 + 1];
@@ -1274,7 +1274,7 @@ static void o_java_interop() {
         Test::Fail(tostr() << "Unexpected pid: " << java_pid);
     }
 
-    if (Test::assignment_partition_count(c) == 4 && java_pid != 0 && !changed_subscription) {
+    if (Test::assignment_partition_count(c, NULL) == 4 && java_pid != 0 && !changed_subscription) {
       if (rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb.assign_call_cnt);
       Test::Say("Java consumer is now part of the group\n");
@@ -1282,7 +1282,7 @@ static void o_java_interop() {
       changed_subscription = true;
     }
 
-    if (Test::assignment_partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
+    if (Test::assignment_partition_count(c, NULL) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 3 && changed_subscription && !changed_subscription_done) {
       /* All topic 1 partitions will be allocated to this consumer whether or not the Java
        * consumer has unsubscribed yet because the sticky algorithm attempts to ensure
        * partition counts are even. */
@@ -1290,7 +1290,7 @@ static void o_java_interop() {
       changed_subscription_done = true;
     }
 
-    if (Test::assignment_partition_count(c) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 4 && changed_subscription_done) {
+    if (Test::assignment_partition_count(c, NULL) == 2 && changed_subscription && rebalance_cb.assign_call_cnt == 4 && changed_subscription_done) {
       /* When the java consumer closes, this will cause an empty assign rebalance_cb event,
        * allowing detection of when this has happened. */
       Test::Say("Java consumer has left the group\n");
@@ -1395,12 +1395,12 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1) == 1 && Test::assignment_partition_count(c2) == 1 && !both_have_been_assigned) {
+    if (Test::assignment_partition_count(c1, NULL) == 1 && Test::assignment_partition_count(c2, NULL) == 1 && !both_have_been_assigned) {
       Test::Say(tostr() << "Both consumers are assigned to topic " << topic_name_1 << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
       both_have_been_assigned = true;
     }
 
-    if (Test::assignment_partition_count(c2) == 2 && both_have_been_assigned) {
+    if (Test::assignment_partition_count(c2, NULL) == 2 && both_have_been_assigned) {
       Test::Say("Consumer 1 is no longer assigned any partitions, done\n");
       done = true;
     }
@@ -1433,6 +1433,144 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   delete c1;
   delete c2;
+}
+
+
+
+/* Stress test with 8 consumers subscribing, fetching and committing.
+ *
+ * TODO: incorporate committing offsets.
+ */
+
+static void u_stress(int variation) {
+  int i;
+
+  bool use_rebalance_cb = variation % 2 == 0;
+  int subscription_variation = variation % 3;
+
+  Test::Say(tostr() << "Executing u_stress, use_rebalance_cb: " << use_rebalance_cb << ", subscription_variation: " << subscription_variation << "\n");
+
+  std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+  std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
+  test_create_topic(NULL, topic_name_1.c_str(), 16, 1);
+  test_create_topic(NULL, topic_name_2.c_str(), 16, 1);
+
+  Test::Say("Creating consumers\n");
+  const int N_CONSUMERS = 8;
+  DefaultRebalanceCb rebalance_cbs[N_CONSUMERS];
+  RdKafka::KafkaConsumer *consumers[N_CONSUMERS];
+  for (i = 0 ; i < N_CONSUMERS ; i++) {
+    std::string name = tostr() << "C_" << i;
+    consumers[i] = make_consumer(name.c_str(), group_name, "cooperative-sticky", NULL, use_rebalance_cb ? &rebalance_cbs[i] : NULL, 80);
+  }
+
+  test_wait_topic_exists(consumers[0]->c_ptr(), topic_name_1.c_str(), 10*1000);
+  test_wait_topic_exists(consumers[0]->c_ptr(), topic_name_2.c_str(), 10*1000);
+
+  /* Seed the topics with messages */
+  const int msgcnt = 50000;
+  const int msgsize = 10;
+  test_produce_msgs_easy_size(topic_name_1.c_str(), 0, -1, msgcnt, msgsize);
+  test_produce_msgs_easy_size(topic_name_2.c_str(), 0, -1, msgcnt, msgsize);
+
+  const int SUBSCRIPTION_1 = 0;
+  const int SUBSCRIPTION_2 = 1;
+
+  /* timestamp_ms, consumer_number, SUBSCRIPTION_1/SUBSCRIPTION_2  */
+  int playbook[][3] = {
+    { 0,     0, SUBSCRIPTION_1 },
+    { 4000,  1, SUBSCRIPTION_1 },
+    { 4000,  1, SUBSCRIPTION_1 },
+    { 4000,  1, SUBSCRIPTION_1 },
+    { 4000,  2, SUBSCRIPTION_1 },
+    { 6000,  3, SUBSCRIPTION_1 },
+    { 6000,  4, SUBSCRIPTION_1 },
+    { 6000,  5, SUBSCRIPTION_1 },
+    { 6000,  6, SUBSCRIPTION_1 },
+    { 6000,  7, SUBSCRIPTION_2 },
+    { 6000,  1, SUBSCRIPTION_1 },
+    { 6000,  1, SUBSCRIPTION_2 },
+    { 6000,  1, SUBSCRIPTION_1 },
+    { 6000,  2, SUBSCRIPTION_2 },
+    { 7000,  2, SUBSCRIPTION_1 },
+    { 7000,  1, SUBSCRIPTION_2 },
+    { 8000,  0, SUBSCRIPTION_2 },
+    { 8000,  1, SUBSCRIPTION_1 },
+    { 8000,  0, SUBSCRIPTION_1 },
+    { 13000, 2, SUBSCRIPTION_1 },
+    { 13000, 1, SUBSCRIPTION_2 },
+    { 13000, 5, SUBSCRIPTION_2 },
+    { 14000, 6, SUBSCRIPTION_2 },
+    { 15000, 7, SUBSCRIPTION_1 },
+    { 15000, 1, SUBSCRIPTION_1 },
+    { 15000, 5, SUBSCRIPTION_1 },
+    { 15000, 6, SUBSCRIPTION_1 },
+    { INT_MAX, 0, 0 }
+  };
+
+  int elapsed_ms = 0;
+  int cmd_number = 0;
+  while (playbook[cmd_number][0] != INT_MAX) {
+
+    for (i = 0 ; i < N_CONSUMERS ; i++)
+      Test::poll_once(consumers[i], 0);
+
+    if (elapsed_ms < playbook[cmd_number][0]) {
+      rd_sleep(1);
+      elapsed_ms += 1000;
+      Test::Say(tostr() << "Test elapsed time: " << elapsed_ms << "ms\n");
+      continue;
+    }
+
+    if (playbook[cmd_number][2] == SUBSCRIPTION_1) {
+      Test::Say(tostr() << "Consumer: " << playbook[cmd_number][1] << " is subscribing to one topic (elapsed time: " << elapsed_ms << ")\n");
+      Test::subscribe(consumers[playbook[cmd_number][1]], topic_name_1);
+    } else {
+      if (subscription_variation == 0) {
+        Test::Say(tostr() << "Consumer: " << playbook[cmd_number][1] << " is subscribing to two topics (elapsed time: " << elapsed_ms << ")\n");
+        Test::subscribe(consumers[playbook[cmd_number][1]], topic_name_1, topic_name_2);
+      } else if (subscription_variation == 1) {
+        Test::Say(tostr() << "Consumer: " << playbook[cmd_number][1] << " is subscribing to second topic (elapsed time: " << elapsed_ms << ")\n");
+        Test::subscribe(consumers[playbook[cmd_number][1]], topic_name_2);
+      } else if (subscription_variation == 2) {
+        Test::Say(tostr() << "Consumer: " << playbook[cmd_number][1] << " is unsubscribing (elapsed time: " << elapsed_ms << ")\n");
+        Test::unsubscribe(consumers[playbook[cmd_number][1]]);
+      }
+    }
+
+    cmd_number++;
+  }
+
+  Test::Say("Waiting for final assignment state\n");
+  int check_count = 0;
+  bool done = false;
+  while (check_count < 20 && !done) {
+    for (i = 0 ; i < N_CONSUMERS ; i++)
+      Test::poll_once(consumers[i], 0);
+
+    int counts[N_CONSUMERS];
+    for (i = 0 ; i < N_CONSUMERS ; i++)
+      counts[i] = Test::assignment_partition_count(consumers[i], &topic_name_1);
+
+    Test::Say(tostr() << "Partition Counts " << counts[0] << " "  << counts[1] << " " << counts[2] << " " << counts[3] << " " << counts[4] << " " << counts[5] << " " << counts[6] << " " << counts[7] << "\n");
+    done = true;
+    for (i = 0 ; i < N_CONSUMERS ; i++) {
+      if (counts[i] != 2)
+        done = false;
+    }
+    check_count++;
+    rd_sleep(1);
+  }
+
+  if (!done)
+    Test::Fail("Not all assignment partitions counts equal 2");
+
+  Test::Say("Disposing consumers\n");
+  for (i = 0 ; i < N_CONSUMERS ; i++) {
+    consumers[i]->close();
+    delete consumers[i];
+  }
 }
 
 
@@ -1752,39 +1890,45 @@ extern "C" {
   int main_0113_cooperative_rebalance (int argc, char **argv) {
     int i;
 
-    a_assign_tests();
-    b_subscribe_with_cb_test(true/*close consumer*/);
+    // a_assign_tests();
+    // b_subscribe_with_cb_test(true/*close consumer*/);
 
-    if (test_quick) {
-      Test::Say("Skipping tests c -> s due to quick mode\n");
-      return 0;
-    }
+    // if (test_quick) {
+    //   Test::Say("Skipping tests c -> s due to quick mode\n");
+    //   return 0;
+    // }
 
-    b_subscribe_with_cb_test(false/*don't close consumer*/);
-    c_subscribe_no_cb_test(true/*close consumer*/);
-    c_subscribe_no_cb_test(false/*don't close consumer*/);
-    d_change_subscription_add_topic(true/*close consumer*/);
-    d_change_subscription_add_topic(false/*don't close consumer*/);
-    e_change_subscription_remove_topic(true/*close consumer*/);
-    e_change_subscription_remove_topic(false/*don't close consumer*/);
-    f_assign_call_cooperative();
-    g_incremental_assign_call_eager();
-    h_delete_topic();
-    i_delete_topic_2();
-    j_delete_topic_no_rb_callback();
-    k_add_partition();
-    l_unsubscribe();
-    m_unsubscribe_2();
-    n_wildcard();
-    o_java_interop();
-    p_lost_partitions_heartbeat_illegal_generation_test();
-    q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
-    q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
-    r_lost_partitions_commit_illegal_generation_test();
-    for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
-      s_subscribe_when_rebalancing(i);
-    t_max_poll_interval_exceeded(1);
-    t_max_poll_interval_exceeded(2);
+    // b_subscribe_with_cb_test(false/*don't close consumer*/);
+    // c_subscribe_no_cb_test(true/*close consumer*/);
+    // c_subscribe_no_cb_test(false/*don't close consumer*/);
+    // d_change_subscription_add_topic(true/*close consumer*/);
+    // d_change_subscription_add_topic(false/*don't close consumer*/);
+    // e_change_subscription_remove_topic(true/*close consumer*/);
+    // e_change_subscription_remove_topic(false/*don't close consumer*/);
+    // f_assign_call_cooperative();
+    // g_incremental_assign_call_eager();
+    // h_delete_topic();
+    // i_delete_topic_2();
+    // j_delete_topic_no_rb_callback();
+    // k_add_partition();
+    // l_unsubscribe();
+    // m_unsubscribe_2();
+    // n_wildcard();
+    // o_java_interop();
+    // p_lost_partitions_heartbeat_illegal_generation_test();
+    // q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
+    // q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
+    // r_lost_partitions_commit_illegal_generation_test();
+    // for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
+    //   s_subscribe_when_rebalancing(i);
+    // for (i = 1 ; i <= 2 ; i++)
+    //   t_max_poll_interval_exceeded(i);
+    // u_stress(1);
+    // u_stress(2); // doesn't work
+    u_stress(3); // doesn't work
+    // u_stress(4); // doesn't work
+    // u_stress(5);
+    // u_stress(6); // doesn't work
 
     return 0;
   }

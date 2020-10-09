@@ -27,7 +27,7 @@
  */
 
 extern "C" {
-#include "../src/rdkafka_proto.h"
+#include "../src/rdkafka_protocol.h"
 #include "test.h"
 #include "rdkafka.h"
 #include "rdkafka_mock.h"

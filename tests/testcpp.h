@@ -277,11 +277,14 @@ namespace Test {
   /**
    * @brief Poll the consumer once, discarding the returned message
    *        or error event.
+   * @returns true if a proper event/message was seen, or false on timeout.
    */
-  static RD_UNUSED void poll_once (RdKafka::KafkaConsumer *c,
+  static RD_UNUSED bool poll_once (RdKafka::KafkaConsumer *c,
                                    int timeout_ms) {
     RdKafka::Message *msg = c->consume(timeout_ms);
+    bool ret = msg->err() != RdKafka::ERR__TIMED_OUT;
     delete msg;
+    return ret;
   }
 
 

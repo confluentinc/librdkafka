@@ -937,7 +937,31 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 /**
  * @brief Rejoin the group.
  */
-static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...)
+        RD_FORMAT(printf, 2, 3);
+
+static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
+        char reason[512];
+        va_list ap;
+        char astr[128];
+
+        va_start(ap, fmt);
+        rd_vsnprintf(reason, sizeof(reason), fmt, ap);
+        va_end(ap);
+
+        if (rkcg->rkcg_assignment)
+                rd_snprintf(astr, sizeof(astr), " with %d owned partition(s)",
+                            rkcg->rkcg_assignment->cnt);
+        else
+                *astr = '\0';
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REJOIN",
+                     "Group \"%s\": %s group%s: %s",
+                     rkcg->rkcg_group_id->str,
+                     rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ?
+                     "Joining" : "Rejoining",
+                     astr, reason);
+
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }
 
@@ -1123,10 +1147,10 @@ static void rd_kafka_cooperative_protocol_adjust_assignment (
                                             rd_true/*owned*/);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRP",
-                "Group \"%s\": Partitions owned by members: %d. "
-                "Partitions assigned by assignor: %d",
-                rkcg->rkcg_group_id->str,
-                (int)RD_MAP_CNT(owned), (int)RD_MAP_CNT(assigned));
+                     "Group \"%s\": Partitions owned by members: %d, "
+                     "partitions assigned by assignor: %d",
+                     rkcg->rkcg_group_id->str,
+                     (int)RD_MAP_CNT(owned), (int)RD_MAP_CNT(assigned));
 
         /* Still owned by some members */
         maybe_revoking =
@@ -1216,7 +1240,7 @@ static void rd_kafka_cooperative_protocol_adjust_assignment (
                 (int)RD_MAP_CNT(unknown_but_owned));
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRP",
-                "Group \"%s\": %d partitions assigned to consumers: ",
+                "Group \"%s\": %d partitions assigned to consumers",
                 rkcg->rkcg_group_id->str, total_assigned);
 
         RD_MAP_DESTROY_AND_FREE(maybe_revoking);
@@ -1293,7 +1317,8 @@ err:
                      rkas->rkas_protocol_name->str,
                      member_cnt, errstr);
 
-        rd_kafka_cgrp_rejoin(rkcg);
+        rd_kafka_cgrp_rejoin(rkcg, "%s assignor failed: %s",
+                             rkas->rkas_protocol_name->str, errstr);
 }
 
 
@@ -1701,7 +1726,9 @@ err:
                                 rd_true/*this consumer is initiating*/,
                                 "JoinGroup error");
                 else
-                        rd_kafka_cgrp_rejoin(rkcg);
+                        rd_kafka_cgrp_rejoin(rkcg,
+                                             "JoinGroup error: %s",
+                                             rd_kafka_err2str(ErrorCode));
 
         }
 
@@ -3203,12 +3230,10 @@ rd_kafka_cgrp_incremental_assign (rd_kafka_cgrp_t *rkcg,
 check_rejoin:
         if (rkcg->rkcg_rebalance_rejoin) {
                 rkcg->rkcg_rebalance_rejoin = rd_false;
-                rd_kafka_dbg(rkcg->rkcg_rk,
-                             CGRP|RD_KAFKA_DBG_CONSUMER, "CGRP",
-                             "Group \"%s\": rejoining group to redistribute "
-                             "previously owned partitions",
-                             rkcg->rkcg_group_id->str);
-                rd_kafka_cgrp_rejoin(rkcg);
+                rd_kafka_cgrp_rejoin(rkcg,
+                                     "Rejoining group to redistribute "
+                                     "previously owned partitions to other "
+                                     "group members");
                 return NULL;
         }
 
@@ -3434,7 +3459,7 @@ static void rd_kafka_cgrp_incr_unassign_done (rd_kafka_cgrp_t *rkcg,
                  * is not the case under normal conditions), in which case
                  * the rejoin flag will be set. */
 
-                rd_kafka_cgrp_rejoin(rkcg);
+                rd_kafka_cgrp_rejoin(rkcg, "Incremental unassignment done");
 
         } else {
                 if (!rd_kafka_trigger_waiting_subscribe_maybe(rkcg))
@@ -3490,12 +3515,12 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
                 if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
-	} else {
+        } else {
                 /* Skip the join backoff */
                 rd_interval_reset(&rkcg->rkcg_join_intvl);
 
-		rd_kafka_cgrp_rejoin(rkcg);
-	}
+                rd_kafka_cgrp_rejoin(rkcg, "Unassignment done");
+        }
 
         /* Whether or not it was before, current assignment is now not lost. */
         rd_atomic32_set(&rkcg->rkcg_assignment_lost, rd_false);
@@ -3743,12 +3768,12 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
                         rd_kafka_cgrp_partitions_fetch_start(
                                 rkcg, rkcg->rkcg_assignment, 0);
-	} else {
+        } else {
                 /* Skip the join backoff */
                 rd_interval_reset(&rkcg->rkcg_join_intvl);
 
-		rd_kafka_cgrp_rejoin(rkcg);
-	}
+                rd_kafka_cgrp_rejoin(rkcg, "No assignment");
+        }
 
         return error;
 }
@@ -3971,13 +3996,7 @@ static void rd_kafka_cgrp_group_is_rebalancing (rd_kafka_cgrp_t *rkcg) {
                 return;
         }
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
-                     "REBALANCE", "Group \"%.*s\": rejoining group "
-                     "with %d owned partitions",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                     rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0);
-
-        rd_kafka_cgrp_rejoin(rkcg);
+        rd_kafka_cgrp_rejoin(rkcg, "Group is rebalancing");
 }
 
 
@@ -3994,13 +4013,12 @@ static void rd_kafka_cgrp_revoke_all_rejoin_maybe (rd_kafka_cgrp_t *rkcg,
                                                    const char *reason) {
         if (RD_KAFKA_CGRP_REBALANCING(rkcg)) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
-                        "REBALANCE", "Group \"%.*s\": rebalance (%s) "
-                        "already in progress, skipping in state %s "
-                        "(join-state %s) %s assignment%s: %s",
-                        RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                        rd_kafka_cgrp_rebalance_protocol(rkcg) ==
-                        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE
-                        ? "COOPERATIVE" : "EAGER",
+                             "REBALANCE", "Group \"%.*s\": rebalance (%s) "
+                             "already in progress, skipping in state %s "
+                             "(join-state %s) %s assignment%s: %s",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                             rd_kafka_rebalance_protocol2str(
+                                     rd_kafka_cgrp_rebalance_protocol(rkcg)),
                         rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                         rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                         rkcg->rkcg_assignment ? "with" : "without",
@@ -4115,19 +4133,7 @@ static void rd_kafka_cgrp_revoke_all_rejoin (rd_kafka_cgrp_t *rkcg,
                 return;
         }
 
-        rd_kafka_dbg(rkcg->rkcg_rk,
-                     CONSUMER|RD_KAFKA_DBG_CGRP,
-                     "REBALANCE", "Group \"%.*s\" current "
-                     "assignment is empty, skipping unassign",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
-
-        rd_kafka_dbg(rkcg->rkcg_rk,
-                     CONSUMER|RD_KAFKA_DBG_CGRP,
-                     "REBALANCE", "Group \"%.*s\": "
-                     "rejoining group",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
-
-        rd_kafka_cgrp_rejoin(rkcg);
+        rd_kafka_cgrp_rejoin(rkcg, "Current assignment is empty");
 }
 
 
@@ -4422,7 +4428,7 @@ rd_kafka_cgrp_modify_subscription (rd_kafka_cgrp_t *rkcg,
 
         if (rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos) &&
             !revoking) {
-                rd_kafka_cgrp_rejoin(rkcg);
+                rd_kafka_cgrp_rejoin(rkcg, "Subscription modified");
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
@@ -5565,7 +5571,8 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                 return;
         }
 
-        rd_kafka_cgrp_rejoin(rkcg);
+        rd_kafka_cgrp_rejoin(rkcg, "SyncGroup error: %s",
+                             rd_kafka_err2str(err));
 }
 
 

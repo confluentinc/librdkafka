@@ -1574,7 +1574,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                 sub_cnt++;
                                 rkgm->rkgm_assignment =
                                         rd_kafka_topic_partition_list_new(
-                                                rkgm->rkgm_subscription->size);
+                                                rkgm->rkgm_subscription->cnt);
                                 rd_kafka_topic_partition_list_get_topic_names(
                                         rkgm->rkgm_subscription, &topics,
                                         0/*dont include regex*/);
@@ -5335,7 +5335,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_topic_partition_list_t *result = NULL;
         int i;
 
-        for (i=0; i<rkcg->rkcg_assignment->size; i++) {
+        for (i=0; i<rkcg->rkcg_assignment->cnt; i++) {
                 const rd_kafka_topic_partition_t *cur =
                         &rkcg->rkcg_assignment->elems[i];
 

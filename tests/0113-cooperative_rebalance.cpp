@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+extern "C" {
+#include "../src/rdkafka_protocol.h"
+#include "test.h"
+}
 #include <iostream>
 #include <map>
 #include <cstring>

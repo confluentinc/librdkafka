@@ -5015,7 +5015,11 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 break;
 
         case RD_KAFKA_OP_GET_SUBSCRIPTION:
-                if (rkcg->rkcg_subscription)
+                if (rkcg->rkcg_next_subscription)
+                        rko->rko_u.subscribe.topics =
+                                rd_kafka_topic_partition_list_copy(
+                                        rkcg->rkcg_next_subscription);
+                else if (rkcg->rkcg_subscription)
                         rko->rko_u.subscribe.topics =
                                 rd_kafka_topic_partition_list_copy(
                                         rkcg->rkcg_subscription);

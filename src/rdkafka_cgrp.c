@@ -1146,7 +1146,8 @@ static void rd_kafka_cooperative_protocol_adjust_assignment (
         /* Rough guess at a size that is a bit higher than
          * the maximum number of partitions likely to be
          * assigned to any partition. */
-        expected_max_assignment_size = RD_MAP_CNT(assigned) / member_cnt + 4;
+        expected_max_assignment_size =
+                (int)(RD_MAP_CNT(assigned) / member_cnt) + 4;
 
         for (i = 0 ; i < member_cnt ; i++) {
                 rd_kafka_group_member_t *rkgm = &members[i];
@@ -3646,7 +3647,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                              " unassign instead",
                              rkcg->rkcg_group_id->str, assignment->cnt);
                 rd_kafka_cgrp_unassign(rkcg);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                return NULL;
         }
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGN",
@@ -3789,7 +3790,7 @@ static rd_kafka_topic_partition_list_t *
 rd_kafka_toppar_member_info_map_to_list (map_toppar_member_info_t *map) {
         const rd_kafka_topic_partition_t *k;
         rd_kafka_topic_partition_list_t *list =
-                rd_kafka_topic_partition_list_new(RD_MAP_CNT(map));
+                rd_kafka_topic_partition_list_new((int)RD_MAP_CNT(map));
 
         RD_MAP_FOREACH_KEY(k, map) {
                 rd_kafka_topic_partition_list_add(list,

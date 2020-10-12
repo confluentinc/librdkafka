@@ -347,4 +347,18 @@ rd_kafka_consumer_group_metadata_t *
 rd_kafka_consumer_group_metadata_dup (
         const rd_kafka_consumer_group_metadata_t *cgmetadata);
 
+
+static RD_UNUSED const char *
+rd_kafka_rebalance_protocol2str (rd_kafka_rebalance_protocol_t protocol) {
+        switch (protocol)
+        {
+        case RD_KAFKA_REBALANCE_PROTOCOL_EAGER:
+                return "EAGER";
+        case RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE:
+                return "COOPERATIVE";
+        default:
+                return "NONE";
+        }
+}
+
 #endif /* _RDKAFKA_CGRP_H_ */

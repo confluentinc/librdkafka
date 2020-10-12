@@ -29,6 +29,25 @@
 #define _RDKAFKA_ASSIGNOR_H_
 
 
+
+/*!
+ * Enumerates the different rebalance protocol types.
+ *
+ * @sa rd_kafka_rebalance_protocol()
+ */
+typedef enum rd_kafka_rebalance_protocol_t {
+        RD_KAFKA_REBALANCE_PROTOCOL_NONE,       /**< Rebalance protocol is
+                                                     unknown */
+        RD_KAFKA_REBALANCE_PROTOCOL_EAGER,      /**< Eager rebalance
+                                                     protocol */
+        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE /**< Cooperative
+                                                     rebalance protocol*/
+} rd_kafka_rebalance_protocol_t;
+
+
+
+
+
 typedef struct rd_kafka_group_member_s {
         rd_kafka_topic_partition_list_t *rkgm_subscription;
         rd_kafka_topic_partition_list_t *rkgm_assignment;

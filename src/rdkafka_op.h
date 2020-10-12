@@ -295,7 +295,7 @@ struct rd_kafka_op_s {
                 } rebalance;
 
                 struct {
-                        rd_kafka_rebalance_protocol_t protocol;
+                        const char *str;
                 } rebalance_protocol;
 
 		struct {

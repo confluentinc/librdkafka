@@ -216,22 +216,6 @@ typedef enum rd_kafka_timestamp_type_t {
 
 
 
-/*!
- * Enumerates the different rebalance protocol types.
- *
- * @sa rd_kafka_rebalance_protocol()
- */
-typedef enum rd_kafka_rebalance_protocol_t {
-        RD_KAFKA_REBALANCE_PROTOCOL_NONE,       /**< Rebalance protocol is
-                                                     unknown */
-        RD_KAFKA_REBALANCE_PROTOCOL_EAGER,      /**< Eager rebalance
-                                                     protocol */
-        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE /**< Cooperative
-                                                     rebalance protocol*/
-} rd_kafka_rebalance_protocol_t;
-
-
-
 /**
  * @brief Retrieve supported debug contexts for use with the \c \"debug\"
  *        configuration property. (runtime)
@@ -3751,17 +3735,19 @@ rd_kafka_incremental_unassign (rd_kafka_t *rk,
 
 /**
  * @brief The rebalance protocol currently in use. This will be
- *        RD_KAFKA_REBALANCE_PROTOCOL_NONE if the consumer has not
- *        (yet) joined a group, else it will match the rebalance
- *        protocol of the configured assignor(s). All configured
+ *        "NONE" if the consumer has not (yet) joined a group, else it will
+ *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+ *        configured and selected assignor(s). All configured
  *        assignors must have the same protocol type, meaning
  *        online migration of a consumer group from using one
  *        protocol to another (in particular upgading from EAGER
  *        to COOPERATIVE) without a restart is not currently
  *        supported.
+ *
+ * @returns NULL on error, or one of "NONE", "EAGER", "COOPERATIVE" on success.
  */
-rd_kafka_rebalance_protocol_t
-rd_kafka_rebalance_protocol (rd_kafka_t *rk);
+RD_EXPORT
+const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
 
 
 /**

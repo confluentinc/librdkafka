@@ -88,7 +88,9 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: JoinGroupRequest sent, awaiting response. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN,
 
-                /* Leader: MetadataRequest sent, awaiting response. */
+                /* all: MetadataRequest sent, awaiting response.
+                 *      While metadata requests may be issued at any time,
+                 *      this state is only set upon a proper (re)join. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA,
 
                 /* Follower: SyncGroupRequest sent, awaiting response. */
@@ -103,15 +105,15 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for application's rebalance_cb to assign() */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB,
 
-		/* all: waiting for application's rebalance_cb to revoke */
+                /* all: waiting for application's rebalance_cb to revoke */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB,
 
                 /* all: synchronized and assigned
                  *      may be an empty assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,
 
-		/* all: fetchers are started and operational */
-		RD_KAFKA_CGRP_JOIN_STATE_STARTED
+                /* all: fetchers are started and operational */
+                RD_KAFKA_CGRP_JOIN_STATE_STARTED
         } rkcg_join_state;
 
         /* State when group leader */

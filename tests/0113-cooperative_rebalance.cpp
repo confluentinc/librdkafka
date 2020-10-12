@@ -42,6 +42,34 @@ extern "C" {
 
 using namespace std;
 
+/** Topic+Partition helper class */
+class Toppar {
+public:
+  Toppar(const string &topic, int32_t partition):
+    topic(topic), partition(partition) { }
+
+  Toppar(const RdKafka::TopicPartition *tp):
+    topic(tp->topic()), partition(tp->partition()) {}
+
+  friend bool operator== (const Toppar &a, const Toppar &b) {
+    return a.partition == b.partition && a.topic == b.topic;
+  }
+
+  friend bool operator< (const Toppar &a, const Toppar &b) {
+    if (a.partition < b.partition)
+      return true;
+    return a.topic < b.topic;
+  }
+
+  string str () const {
+    return tostr() << topic << "[" << partition << "]";
+  }
+
+  std::string topic;
+  int32_t partition;
+};
+
+
 
 static std::string get_bootstrap_servers() {
   RdKafka::Conf *conf;
@@ -51,6 +79,59 @@ static std::string get_bootstrap_servers() {
   delete conf;
   return bootstrap_servers;
 }
+
+
+class DrCb : public RdKafka::DeliveryReportCb {
+ public:
+  void dr_cb (RdKafka::Message &msg) {
+    if (msg.err())
+      Test::Fail("Delivery failed: " + RdKafka::err2str(msg.err()));
+  }
+};
+
+
+/**
+ * @brief Produce messages to partitions.
+ *
+ * The pair is Toppar,msg_cnt_per_partition.
+ * The Toppar is topic,partition_cnt.
+ */
+static void produce_msgs (vector<pair<Toppar,int> > partitions) {
+
+  RdKafka::Conf *conf;
+  Test::conf_init(&conf, NULL, 0);
+
+  string errstr;
+  DrCb dr;
+  conf->set("dr_cb", &dr, errstr);
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail("Failed to create producer: " + errstr);
+
+  for (vector<pair<Toppar,int> >::iterator it = partitions.begin() ;
+       it != partitions.end() ; it++) {
+    for (int part = 0 ; part < it->first.partition ; part++) {
+      for (int i = 0 ; i < it->second ; i++) {
+        RdKafka::ErrorCode err = p->produce(it->first.topic, part,
+                                            RdKafka::Producer::RK_MSG_COPY,
+                                            (void *)"Hello there", 11,
+                                            NULL, 0,
+                                            0, NULL);
+        TEST_ASSERT(!err, "produce(%s, %d) failed: %s",
+                    it->first.topic.c_str(), part,
+                    RdKafka::err2str(err).c_str());
+
+        p->poll(0);
+      }
+    }
+  }
+
+  p->flush(10000);
+
+  delete p;
+}
+
+
 
 static RdKafka::KafkaConsumer *
 make_consumer (string client_id,
@@ -109,50 +190,136 @@ void expect_assignment(RdKafka::KafkaConsumer *consumer, size_t count) {
 }
 
 
-/** Topic+Partition helper class */
-class Toppar {
+class DefaultRebalanceCb : public RdKafka::RebalanceCb {
+
+private:
+
+  static string part_list_print (const vector<RdKafka::TopicPartition*>
+                                 &partitions) {
+    ostringstream ss;
+    for (unsigned int i = 0 ; i < partitions.size() ; i++)
+      ss << (i == 0 ? "" : ", ") <<
+        partitions[i]->topic() << " [" << partitions[i]->partition() << "]";
+    return ss.str();
+  }
+
 public:
-  Toppar(string &topic, int32_t partition):
-    topic(topic), partition(partition) { }
-  Toppar(const RdKafka::TopicPartition *tp):
-    topic(tp->topic()), partition(tp->partition()) {}
 
-  friend bool operator== (const Toppar &a, const Toppar &b) {
-    return a.partition == b.partition && a.topic == b.topic;
+  int assign_call_cnt;
+  int revoke_call_cnt;
+  int lost_call_cnt;
+  int partitions_assigned_net;
+  bool wait_rebalance;
+  map<Toppar,int> msg_cnt; /**< Number of consumed messages per partition. */
+
+  DefaultRebalanceCb ():
+    assign_call_cnt(0),
+    revoke_call_cnt(0),
+    lost_call_cnt(0),
+    partitions_assigned_net(0),
+    wait_rebalance(false) { }
+
+
+  void rebalance_cb (RdKafka::KafkaConsumer *consumer,
+                     RdKafka::ErrorCode err,
+                     std::vector<RdKafka::TopicPartition*> &partitions) {
+    wait_rebalance = false;
+
+    std::string protocol = consumer->rebalance_protocol();
+
+    TEST_ASSERT(protocol == "COOPERATIVE",
+                "%s: Expected rebalance_protocol \"COOPERATIVE\", not %s",
+                consumer->name().c_str(), protocol.c_str());
+
+    const char *lost_str = consumer->assignment_lost() ? " (LOST)" : "";
+    Test::Say(tostr() << _C_YEL "RebalanceCb " << protocol <<
+              ": " << consumer->name() <<
+              " " << RdKafka::err2str(err) << lost_str << ": " <<
+              part_list_print(partitions) << "\n");
+
+    if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
+      if (consumer->assignment_lost())
+        Test::Fail("unexpected lost assignment during ASSIGN rebalance");
+      RdKafka::Error *error = consumer->incremental_assign(partitions);
+      if (error)
+        Test::Fail(tostr() << "consumer->incremental_assign() failed: " <<
+                   error->str());
+      assign_call_cnt += 1;
+      partitions_assigned_net += partitions.size();
+    } else {
+      if (consumer->assignment_lost())
+        lost_call_cnt += 1;
+      RdKafka::Error *error = consumer->incremental_unassign(partitions);
+      if (error)
+        Test::Fail(tostr() << "consumer->incremental_unassign() failed: " <<
+                   error->str());
+      revoke_call_cnt += 1;
+      partitions_assigned_net -= partitions.size();
+    }
   }
 
-  friend bool operator< (const Toppar &a, const Toppar &b) {
-    if (a.partition < b.partition)
-      return true;
-    return a.topic < b.topic;
+  bool poll_once (RdKafka::KafkaConsumer *c, int timeout_ms) {
+    RdKafka::Message *msg = c->consume(timeout_ms);
+    bool ret = msg->err() != RdKafka::ERR__TIMED_OUT;
+    if (!msg->err())
+      msg_cnt[Toppar(msg->topic_name(), msg->partition())]++;
+    delete msg;
+    return ret;
   }
 
-  string str () const {
-    return tostr() << topic << "[" << partition << "]";
+  void reset_msg_cnt () {
+    msg_cnt.clear();
   }
 
-  std::string topic;
-  int32_t partition;
+  void reset_msg_cnt (Toppar &tp) {
+    msg_cnt.erase(tp);
+  }
+
+  void reset_msg_cnt (const vector<RdKafka::TopicPartition*> &partitions) {
+    for (unsigned int i = 0 ; i < partitions.size() ; i++) {
+      Toppar tp(partitions[i]->topic(), partitions[i]->partition());
+      reset_msg_cnt(tp);
+    }
+  }
+
+  int get_msg_cnt (const Toppar &tp) {
+    map<Toppar,int>::iterator it = msg_cnt.find(tp);
+    if (it == msg_cnt.end())
+      return 0;
+    return it->second;
+  }
+
 };
+
+
 
 
 /**
  * @brief Verify that the consumer's assignment is a subset of the
  *        subscribed topics.
  *
- * @param all_assignments Is a set where assignments are accumulated.
- *                        If an assigned partition already exists in the
- *                        set the test will fail.
+ * @param allow_mismatch Allow assignment of not subscribed topics.
+ *                       This can happen when the subscription is updated
+ *                       but a rebalance callback hasn't been seen yet.
+ * @param all_assignments Accumualted assignments for all consumers.
+ *                        If an assigned partition is already exists it means
+ *                        the partition is assigned to multiple consumers and
+ *                        the test will fail.
+ * @param exp_msg_cnt Expected message count per assigned partition, or -1
+ *                    if not to check.
  *
  * @returns the number of assigned partitions, or fails if the
  *          assignment is empty or there is an assignment for
  *          topic that is not subscribed.
  */
 static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
+                                       DefaultRebalanceCb &rebalance_cb,
                                        const vector<string> &topics,
                                        bool allow_empty,
+                                       bool allow_mismatch,
                                        map<Toppar,RdKafka::KafkaConsumer*>
-                                       *all_assignments) {
+                                       *all_assignments,
+                                       int exp_msg_cnt) {
   vector<RdKafka::TopicPartition*> partitions;
   RdKafka::ErrorCode err;
   int fails = 0;
@@ -172,12 +339,14 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
     RdKafka::TopicPartition *p = *it;
 
     if (find(topics.begin(), topics.end(), p->topic()) == topics.end()) {
-      Test::Say(tostr() << _C_RED << "Error: "
-                << consumer->name() << " is assigned "
+      Test::Say(tostr() <<
+                (allow_mismatch ? _C_YEL "Warning (allowed)" : _C_RED "Error")
+                << ": " << consumer->name() << " is assigned "
                 << p->topic() << " [" << p->partition() << "] which is "
                 << "not in the list of subscribed topics: " <<
                 string_vec_to_str(topics) << "\n");
-      fails++;
+      if (!allow_mismatch)
+        fails++;
     }
 
     Toppar tp(p);
@@ -194,8 +363,19 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
     }
 
 
+    int msg_cnt = rebalance_cb.get_msg_cnt(tp);
+
+    if (exp_msg_cnt != -1 && msg_cnt != exp_msg_cnt) {
+      Test::Say(tostr() << _C_RED << "Error: "
+                << consumer->name() << " expected " << exp_msg_cnt <<
+                " messages on " <<
+                p->topic() << " [" << p->partition() << "], not " <<
+                msg_cnt << "\n");
+      fails++;
+    }
+
     ss << (it == partitions.begin() ? "" : ", ") << p->topic() <<
-      "[" << p->partition() << "]";
+      "[" << p->partition() << "] (" << msg_cnt << "msgs)";
   }
 
   RdKafka::TopicPartition::destroy(partitions);
@@ -215,60 +395,6 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
 }
 
 
-
-
-class DefaultRebalanceCb : public RdKafka::RebalanceCb {
-
-private:
-
-  static std::string part_list_print (const std::vector<RdKafka::TopicPartition*>&partitions) {
-    ostringstream ss;
-    for (unsigned int i = 0 ; i < partitions.size() ; i++)
-      ss << partitions[i]->topic() << "[" << partitions[i]->partition() << "], ";
-    ss << "\n";
-    return ss.str();
-  }
-
-public:
-
-  int assign_call_cnt;
-  int revoke_call_cnt;
-  int lost_call_cnt;
-  int partitions_assigned_net;
-
-  DefaultRebalanceCb () {
-    assign_call_cnt = 0;
-    revoke_call_cnt = 0;
-    lost_call_cnt = 0;
-    partitions_assigned_net = 0;
-  }
-
-  void rebalance_cb (RdKafka::KafkaConsumer *consumer,
-                     RdKafka::ErrorCode err,
-                     std::vector<RdKafka::TopicPartition*> &partitions) {
-
-    const char *lost_str = consumer->assignment_lost() ? " (LOST)" : "";
-    Test::Say(tostr() << _C_YEL "RebalanceCb: " << consumer->name() << " " << RdKafka::err2str(err) << lost_str << ": " << part_list_print(partitions) << "\n");
-    if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
-      if (consumer->assignment_lost())
-        Test::Fail("unexpected lost assignment during ASSIGN rebalance");
-      RdKafka::Error *error = consumer->incremental_assign(partitions);
-      if (error)
-        Test::Fail(tostr() << "consumer->incremental_assign() failed: " << error->str());
-      assign_call_cnt += 1;
-      partitions_assigned_net += partitions.size();
-    } else {
-      if (consumer->assignment_lost())
-        lost_call_cnt += 1;
-      RdKafka::Error *error = consumer->incremental_unassign(partitions);
-      if (error)
-        Test::Fail(tostr() << "consumer->incremental_unassign() failed: " << error->str());
-      revoke_call_cnt += 1;
-      partitions_assigned_net -= partitions.size();
-    }
-  }
-
-};
 
 
 
@@ -1557,11 +1683,12 @@ static void t_max_poll_interval_exceeded(int variation) {
 
 
 /**
- * @brief Poll all consumers until there are no more events
+ * @brief Poll all consumers until there are no more events or messages
  *        and the timeout has expired.
  */
-static void poll_all_consumers (RdKafka::KafkaConsumer **consumers, size_t num,
-                                int timeout_ms) {
+static void poll_all_consumers (RdKafka::KafkaConsumer **consumers,
+                                DefaultRebalanceCb *rebalance_cbs,
+                                size_t num, int timeout_ms) {
   int64_t ts_end = test_clock() + (timeout_ms * 1000);
 
   /* Poll all consumers until no more events are seen,
@@ -1572,34 +1699,33 @@ static void poll_all_consumers (RdKafka::KafkaConsumer **consumers, size_t num,
     for (size_t i = 0 ; i < num ; i++) {
       int block_ms =
         min(10, (int)((ts_end - test_clock()) / 1000));
-      while (Test::poll_once(consumers[i], max(block_ms, 0)))
+      while (rebalance_cbs[i].poll_once(consumers[i], max(block_ms, 0)))
         evented = true;
     }
   } while (evented || test_clock() < ts_end);
 }
 
 
-/* Stress test with 8 consumers subscribing, fetching and committing.
+/**
+ * @brief Stress test with 8 consumers subscribing, fetching and committing.
+ *
+ * @param subscription_variation 0..2
  *
  * FIXME: What's the stressy part?
  * TODO: incorporate committing offsets.
  */
 
-static void u_stress(int variation) {
-  int i;
-
-  bool use_rebalance_cb = variation % 2 == 0;
-  int subscription_variation = variation % 3;
-  bool close_consumer = variation != 1;
+static void u_stress (bool use_rebalance_cb, int subscription_variation) {
 
   const int N_CONSUMERS = 8;
   const int N_TOPICS = 2;
   const int N_PARTS_PER_TOPIC = N_CONSUMERS * N_TOPICS;
   const int N_PARTITIONS = N_PARTS_PER_TOPIC * N_TOPICS;
+  const int N_MSGS_PER_PARTITION = 1000;
 
-  Test::Say(tostr() << _C_MAG "Executing u_stress, use_rebalance_cb: " <<
+  Test::Say(tostr() << _C_MAG "[ Executing u_stress, use_rebalance_cb: " <<
             use_rebalance_cb << ", subscription_variation: " <<
-            subscription_variation << "\n");
+            subscription_variation << " ]\n");
 
   string topic_name_1 = Test::mk_topic_name("0113u_1", 1);
   string topic_name_2 = Test::mk_topic_name("0113u_2", 1);
@@ -1611,7 +1737,8 @@ static void u_stress(int variation) {
   Test::Say("Creating consumers\n");
   DefaultRebalanceCb rebalance_cbs[N_CONSUMERS];
   RdKafka::KafkaConsumer *consumers[N_CONSUMERS];
-  for (i = 0 ; i < N_CONSUMERS ; i++) {
+
+  for (int i = 0 ; i < N_CONSUMERS ; i++) {
     std::string name = tostr() << "C_" << i;
     consumers[i] = make_consumer(name.c_str(), group_name, "cooperative-sticky",
                                  NULL,
@@ -1622,13 +1749,23 @@ static void u_stress(int variation) {
   test_wait_topic_exists(consumers[0]->c_ptr(), topic_name_1.c_str(), 10*1000);
   test_wait_topic_exists(consumers[0]->c_ptr(), topic_name_2.c_str(), 10*1000);
 
-  /* Seed the topics with messages */
-  const int msgcnt = 50000;
-  const int msgsize = 10;
-  test_produce_msgs_easy_size(topic_name_1.c_str(), 0, -1, msgcnt, msgsize);
-  test_produce_msgs_easy_size(topic_name_2.c_str(), 0, -1, msgcnt, msgsize);
 
-  RdKafka::ErrorCode err;
+  /*
+   * Seed all partitions with the same number of messages so we later can
+   * verify that consumtion is working.
+   */
+  vector<pair<Toppar,int> >ptopics;
+  ptopics.push_back(pair<Toppar,int>(Toppar(topic_name_1, N_PARTS_PER_TOPIC),
+                                     N_MSGS_PER_PARTITION));
+  ptopics.push_back(pair<Toppar,int>(Toppar(topic_name_2, N_PARTS_PER_TOPIC),
+                                     N_MSGS_PER_PARTITION));
+  produce_msgs(ptopics);
+
+
+  /*
+   * Track what topics a consumer should be subscribed to and use this to
+   * verify both its subscription and assignment throughout the test.
+   */
 
   /* consumer -> currently subscribed topics */
   map<int, vector<string> > consumer_topics;
@@ -1661,6 +1798,10 @@ static void u_stress(int variation) {
   sort(SUBSCRIPTION_1.begin(), SUBSCRIPTION_1.end());
   sort(SUBSCRIPTION_2.begin(), SUBSCRIPTION_2.end());
 
+
+  /*
+   * Define playbook
+   */
   const struct {
     int timestamp_ms;
     int consumer;
@@ -1697,25 +1838,39 @@ static void u_stress(int variation) {
                   { INT_MAX, 0, 0 }
   };
 
+  /*
+   * Run the playbook
+   */
   int cmd_number = 0;
   uint64_t ts_start = test_clock();
 
-  /* Run the playbook */
   while (playbook[cmd_number].timestamp_ms != INT_MAX) {
+
+    TEST_ASSERT(playbook[cmd_number].consumer < N_CONSUMERS);
 
     Test::Say(tostr() << "Cmd #" << cmd_number << ": wait " <<
               playbook[cmd_number].timestamp_ms << "ms\n");
 
-    poll_all_consumers(consumers, N_CONSUMERS,
+    poll_all_consumers(consumers, rebalance_cbs, N_CONSUMERS,
                        playbook[cmd_number].timestamp_ms -
                        ((test_clock() - ts_start) / 1000));
 
     /* Verify consumer assignments match subscribed topics */
     map<Toppar, RdKafka::KafkaConsumer*> all_assignments;
-    for (i = 0 ; i < N_CONSUMERS ; i++)
+    for (int i = 0 ; i < N_CONSUMERS ; i++)
       verify_consumer_assignment(consumers[i],
-                                 consumer_topics[i], true,
-                                 &all_assignments);
+                                 rebalance_cbs[i],
+                                 consumer_topics[i],
+                                 /* allow empty assignment */
+                                 true,
+                                 /* if we're waiting for a rebalance it is
+                                  * okay for the current assignment to contain
+                                  * topics that this consumer (no longer)
+                                  * subscribes to. */
+                                 !use_rebalance_cb ||
+                                 rebalance_cbs[i].wait_rebalance,
+                                 &all_assignments,
+                                 -1/* no msgcnt check*/);
 
     int cid = playbook[cmd_number].consumer;
     RdKafka::KafkaConsumer *consumer = consumers[playbook[cmd_number].consumer];
@@ -1737,6 +1892,8 @@ static void u_stress(int variation) {
       topic_consumers[*it].insert(cid);
     }
 
+    RdKafka::ErrorCode err;
+
     /*
      * Change subscription
      */
@@ -1749,10 +1906,16 @@ static void u_stress(int variation) {
                   RdKafka::err2str(err).c_str());
     } else {
       Test::Say(tostr() << "Consumer: " << consumer->name() <<
-                " is unsubscribing " << " after " <<
+                " is unsubscribing after " <<
                 ((test_clock() - ts_start) / 1000) << "ms\n");
       Test::unsubscribe(consumer);
     }
+
+    /* Mark this consumer as waiting for rebalance so that
+     * verify_consumer_assignment() allows assigned partitions that
+     * (no longer) match the subscription. */
+    rebalance_cbs[cid].wait_rebalance = true;
+
 
     /*
      * Verify subscription matches what we think it should be.
@@ -1777,26 +1940,44 @@ static void u_stress(int variation) {
   }
 
 
+  /*
+   * Wait for final rebalances and all consumers to settle,
+   * then verify assignments and received message counts.
+   */
   Test::Say(_C_YEL "Waiting for final assignment state\n");
   int check_count = 0;
   bool done = false;
   while (check_count < 20 && !done) {
 
-    poll_all_consumers(consumers, N_CONSUMERS, 1000);
+    poll_all_consumers(consumers, rebalance_cbs, N_CONSUMERS, 5000);
 
+    /* Verify consumer assignments */
     int counts[N_CONSUMERS];
     map<Toppar, RdKafka::KafkaConsumer*> all_assignments;
     Test::Say(tostr() << "Consumer assignments:\n");
-    for (i = 0 ; i < N_CONSUMERS ; i++)
+    for (int i = 0 ; i < N_CONSUMERS ; i++)
       counts[i] = verify_consumer_assignment(consumers[i],
-                                             consumer_topics[i], true,
-                                             &all_assignments);
+                                             rebalance_cbs[i],
+                                             consumer_topics[i],
+                                             /* allow empty */
+                                             true,
+                                             /* if we're waiting for a
+                                              * rebalance it is okay for the
+                                              * current assignment to contain
+                                              * topics that this consumer
+                                              * (no longer) subscribes to. */
+                                             !use_rebalance_cb ||
+                                             rebalance_cbs[i].wait_rebalance,
+                                             /* do not allow assignments for
+                                              * topics that are not subscribed*/
+                                             &all_assignments,
+                                             N_MSGS_PER_PARTITION);
 
     Test::Say(tostr() << all_assignments.size() << "/" << N_PARTITIONS <<
               " partitions assigned\n");
 
     done = true;
-    for (i = 0 ; i < N_CONSUMERS ; i++) {
+    for (int i = 0 ; i < N_CONSUMERS ; i++) {
       /* For each topic the consumer subscribes to it should
        * be assigned its share of partitions. */
       int exp_parts = 0;
@@ -1821,11 +2002,18 @@ static void u_stress(int variation) {
     Test::Fail("Assignments count don't match, see above");
 
   Test::Say("Disposing consumers\n");
-  for (i = 0 ; i < N_CONSUMERS ; i++) {
-    if (close_consumer)
+  for (int i = 0 ; i < N_CONSUMERS ; i++) {
+    TEST_ASSERT(!use_rebalance_cb ||
+                !rebalance_cbs[i].wait_rebalance,
+                "Consumer %d still waiting for rebalance", i);
+    if (i & 1)
       consumers[i]->close();
     delete consumers[i];
   }
+
+  Test::Say(tostr() << _C_GRN "[ PASS u_stress, use_rebalance_cb: " <<
+            use_rebalance_cb << ", subscription_variation: " <<
+            subscription_variation << " ]\n");
 }
 
 
@@ -2145,47 +2333,45 @@ extern "C" {
   int main_0113_cooperative_rebalance (int argc, char **argv) {
     int i;
 
-    if (0) {
-      a_assign_tests();
-      b_subscribe_with_cb_test(true/*close consumer*/);
+    a_assign_tests();
+    b_subscribe_with_cb_test(true/*close consumer*/);
 
-      if (test_quick) {
-        Test::Say("Skipping tests c -> s due to quick mode\n");
-        return 0;
-      }
-
-      b_subscribe_with_cb_test(false/*don't close consumer*/);
-      c_subscribe_no_cb_test(true/*close consumer*/);
-      c_subscribe_no_cb_test(false/*don't close consumer*/);
-      d_change_subscription_add_topic(true/*close consumer*/);
-      d_change_subscription_add_topic(false/*don't close consumer*/);
-      e_change_subscription_remove_topic(true/*close consumer*/);
-      e_change_subscription_remove_topic(false/*don't close consumer*/);
-      f_assign_call_cooperative();
-      g_incremental_assign_call_eager();
-      h_delete_topic();
-      i_delete_topic_2();
-      j_delete_topic_no_rb_callback();
-      k_add_partition();
-      l_unsubscribe();
-      m_unsubscribe_2();
-      n_wildcard();
-      o_java_interop();
-      p_lost_partitions_heartbeat_illegal_generation_test();
-      q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
-      q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
-      r_lost_partitions_commit_illegal_generation_test();
-      for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
-        s_subscribe_when_rebalancing(i);
-      for (i = 1 ; i <= 2 ; i++)
-        t_max_poll_interval_exceeded(i);
-      u_stress(1);
-      u_stress(2); // doesn't work
+    if (test_quick) {
+      Test::Say("Skipping tests c -> s due to quick mode\n");
+      return 0;
     }
-    u_stress(3); // doesn't work
-    // u_stress(4); // doesn't work
-    // u_stress(5);
-    // u_stress(6); // doesn't work
+
+    b_subscribe_with_cb_test(false/*don't close consumer*/);
+    c_subscribe_no_cb_test(true/*close consumer*/);
+    c_subscribe_no_cb_test(false/*don't close consumer*/);
+    d_change_subscription_add_topic(true/*close consumer*/);
+    d_change_subscription_add_topic(false/*don't close consumer*/);
+    e_change_subscription_remove_topic(true/*close consumer*/);
+    e_change_subscription_remove_topic(false/*don't close consumer*/);
+    f_assign_call_cooperative();
+    g_incremental_assign_call_eager();
+    h_delete_topic();
+    i_delete_topic_2();
+    j_delete_topic_no_rb_callback();
+    k_add_partition();
+    l_unsubscribe();
+    m_unsubscribe_2();
+    n_wildcard();
+    o_java_interop();
+    p_lost_partitions_heartbeat_illegal_generation_test();
+    q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
+    q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
+    r_lost_partitions_commit_illegal_generation_test();
+    for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
+      s_subscribe_when_rebalancing(i);
+    for (i = 1 ; i <= 2 ; i++)
+      t_max_poll_interval_exceeded(i);
+
+    /* Run all 2*3 variations of the u_.. test */
+    for (i = 0 ; i < 3 ; i++) {
+      u_stress(true/*with rebalance_cb*/, i);
+      u_stress(false/*without rebalance_cb*/, i);
+    }
 
     return 0;
   }

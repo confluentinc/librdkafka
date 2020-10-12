@@ -711,6 +711,13 @@ err:
 
 
 static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg) {
+        char *member_id;
+
+        RD_KAFKAP_STR_DUPA(&member_id, rkcg->rkcg_member_id);
+
+        /* Leaving the group invalidates the member id, reset it
+         * now to avoid an ERR_UNKNOWN_MEMBER_ID on the next join. */
+        rd_kafka_cgrp_set_member_id(rkcg, "");
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "LEAVE",
@@ -732,9 +739,8 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg) {
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_coord,
-                                           rkcg->rkcg_group_id,
-                                           rkcg->rkcg_member_id,
-                                           rkcg->rkcg_group_instance_id,
+                                           rkcg->rkcg_group_id->str,
+                                           member_id,
                                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                            rd_kafka_cgrp_handle_LeaveGroup,
                                            rkcg);
@@ -955,12 +961,25 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         else
                 *astr = '\0';
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REJOIN",
-                     "Group \"%s\": %s group%s: %s",
-                     rkcg->rkcg_group_id->str,
-                     rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_INIT ?
-                     "Joining" : "Rejoining",
-                     astr, reason);
+        if (rkcg->rkcg_subscription || rkcg->rkcg_next_subscription)
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "REJOIN",
+                             "Group \"%s\": %s group%s: %s",
+                             rkcg->rkcg_group_id->str,
+                             rkcg->rkcg_join_state ==
+                             RD_KAFKA_CGRP_JOIN_STATE_INIT ?
+                             "Joining" : "Rejoining",
+                             astr, reason);
+        else
+                rd_kafka_dbg(rkcg->rkcg_rk,CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "NOREJOIN",
+                             "Group \"%s\": Not %s group%s: %s: "
+                             "no subscribed topics",
+                             rkcg->rkcg_group_id->str,
+                             rkcg->rkcg_join_state ==
+                             RD_KAFKA_CGRP_JOIN_STATE_INIT ?
+                             "joining" : "rejoining",
+                             astr, reason);
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }

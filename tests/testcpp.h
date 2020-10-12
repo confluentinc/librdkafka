@@ -169,12 +169,12 @@ namespace Test {
   /* Convenience subscribe() */
   static RD_UNUSED void subscribe (RdKafka::KafkaConsumer *c,
                                    const std::string &topic) {
-      Test::Say(tostr() << "Subscribing to " << topic << "\n");
-      std::vector<std::string> topics;
-      topics.push_back(topic);
-      RdKafka::ErrorCode err;
-      if ((err = c->subscribe(topics)))
-        Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
+    Test::Say(c->name() + ": Subscribing to " + topic + "\n");
+    std::vector<std::string> topics;
+    topics.push_back(topic);
+    RdKafka::ErrorCode err;
+    if ((err = c->subscribe(topics)))
+      Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
   }
 
 
@@ -182,22 +182,22 @@ namespace Test {
   static RD_UNUSED void subscribe (RdKafka::KafkaConsumer *c,
                                    const std::string &topic1,
                                    const std::string &topic2) {
-      Test::Say(tostr() << "Subscribing to " << topic1 << " and " << topic2 << "\n");
-      std::vector<std::string> topics;
-      topics.push_back(topic1);
-      topics.push_back(topic2);
-      RdKafka::ErrorCode err;
-      if ((err = c->subscribe(topics)))
-        Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
+    Test::Say(c->name() + ": Subscribing to " + topic1 + " and "
+              + topic2 + "\n");
+    std::vector<std::string> topics;
+    topics.push_back(topic1);
+    topics.push_back(topic2);
+    RdKafka::ErrorCode err;
+    if ((err = c->subscribe(topics)))
+      Test::Fail("Subscribe failed: " + RdKafka::err2str(err));
   }
-
 
   /* Convenience unsubscribe() */
   static RD_UNUSED void unsubscribe (RdKafka::KafkaConsumer *c) {
-      Test::Say("Unsubscribing\n");
-      RdKafka::ErrorCode err;
-      if ((err = c->unsubscribe()))
-        Test::Fail("Unsubscribe failed: " + RdKafka::err2str(err));
+    Test::Say(c->name() + ": Unsubscribing\n");
+    RdKafka::ErrorCode err;
+    if ((err = c->unsubscribe()))
+      Test::Fail("Unsubscribe failed: " + RdKafka::err2str(err));
   }
 
 

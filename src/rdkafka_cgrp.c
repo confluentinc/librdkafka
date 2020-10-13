@@ -5039,8 +5039,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 rd_kafka_OffsetFetchRequest(
                         rkcg->rkcg_coord, 1,
                         rko->rko_u.offset_fetch.partitions,
-                        RD_KAFKA_REPLYQ(rkcg->rkcg_ops,
-                                        rkcg->rkcg_version),
+                        RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                         rd_kafka_op_handle_OffsetFetch, rko);
                 rko = NULL; /* rko now owned by request */
                 break;

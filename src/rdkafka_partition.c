@@ -268,9 +268,11 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_topic_t *rkt,
         rktp->rktp_rkt = rd_kafka_topic_keep(rkt);
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, rkt->rkt_rk->rk_ops);
-	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARNEW", "NEW %s [%"PRId32"] %p (at %s:%d)",
-		     rkt->rkt_topic->str, rktp->rktp_partition, rktp,
-		     func, line);
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARNEW",
+                     "NEW %s [%"PRId32"] %p refcnt %p (at %s:%d)",
+                     rkt->rkt_topic->str, rktp->rktp_partition, rktp,
+                     &rktp->rktp_refcnt,
+                     func, line);
 
 	return rd_kafka_toppar_keep(rktp);
 }
@@ -395,7 +397,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
 		return NULL;
 
 	if (rktp)
-                return rd_kafka_toppar_keep(rktp);
+                return rd_kafka_toppar_keep_fl(func, line, rktp);
 
 	return NULL;
 }
@@ -1258,7 +1260,7 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
 
 
 /**
- * Fetch stored offset for a single partition. (simple consumer)
+ * Fetch committed offset for a single partition. (simple consumer)
  *
  * Locality: toppar thread
  */
@@ -1270,12 +1272,12 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
 
         rd_kafka_dbg(rk, TOPIC, "OFFSETREQ",
                      "Partition %.*s [%"PRId32"]: querying cgrp for "
-                     "stored offset (opv %d)",
+                     "committed offset (opv %d)",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, replyq.version);
 
         part = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add0(part,
+        rd_kafka_topic_partition_list_add0(__FUNCTION__,__LINE__,part,
                                            rktp->rktp_rkt->rkt_topic->str,
                                            rktp->rktp_partition,
 					   rktp);
@@ -2393,7 +2395,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
  *
  * @locality any
  */
-static rd_kafka_resp_err_t
+rd_kafka_resp_err_t
 rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp, int pause, int flag,
                                  rd_kafka_replyq_t replyq) {
 	int32_t version;
@@ -2483,7 +2485,8 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
 		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
 		rd_kafka_toppar_t *rktp;
 
-                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
+                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar,
+                                                           rd_false);
 		if (!rktp) {
 			rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
 				     "%s %s [%"PRId32"]: skipped: "
@@ -2719,6 +2722,23 @@ rd_kafka_topic_partition_destroy0 (rd_kafka_topic_partition_t *rktpar, int do_fr
 		rd_free(rktpar);
 }
 
+
+/**
+ * @brief Destroy all partitions in list.
+ *
+ * @remark The allocated size of the list will not shrink.
+ */
+void rd_kafka_topic_partition_list_clear (
+        rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++)
+                rd_kafka_topic_partition_destroy0(&rktparlist->elems[i], 0);
+
+        rktparlist->cnt = 0;
+}
+
+
 void rd_kafka_topic_partition_destroy_free (void *ptr) {
         rd_kafka_topic_partition_destroy0(ptr, rd_true/*do_free*/);
 }
@@ -2765,7 +2785,8 @@ void rd_kafka_topic_partition_list_destroy_free (void *ptr) {
  * Returns a pointer to the added element.
  */
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
+rd_kafka_topic_partition_list_add0 (const char *func, int line,
+                                    rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
 				    rd_kafka_toppar_t *_private) {
         rd_kafka_topic_partition_t *rktpar;
@@ -2780,7 +2801,7 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
 	rktpar->offset = RD_KAFKA_OFFSET_INVALID;
         rktpar->_private = _private;
         if (_private)
-                rd_kafka_toppar_keep(_private);
+                rd_kafka_toppar_keep_fl(func, line, _private);
 
         return rktpar;
 }
@@ -2789,7 +2810,8 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
                                    const char *topic, int32_t partition) {
-        return rd_kafka_topic_partition_list_add0(rktparlist,
+        return rd_kafka_topic_partition_list_add0(__FUNCTION__,__LINE__,
+                                                  rktparlist,
                                                   topic, partition, NULL);
 }
 
@@ -2845,12 +2867,13 @@ void rd_kafka_topic_partition_update (rd_kafka_topic_partition_t *dst,
 /**
  * @brief Creates a copy of \p rktpar and adds it to \p rktparlist
  */
-void
-rd_kafka_topic_partition_add_copy (rd_kafka_topic_partition_list_t *rktparlist,
-                                   const rd_kafka_topic_partition_t *rktpar) {
+void rd_kafka_topic_partition_list_add_copy (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_topic_partition_t *dst;
 
         dst = rd_kafka_topic_partition_list_add0(
+                __FUNCTION__,__LINE__,
                 rktparlist,
                 rktpar->topic,
                 rktpar->partition,
@@ -2872,8 +2895,27 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
         dst = rd_kafka_topic_partition_list_new(src->size);
 
         for (i = 0 ; i < src->cnt ; i++)
-                rd_kafka_topic_partition_add_copy(dst, &src->elems[i]);
+                rd_kafka_topic_partition_list_add_copy(dst, &src->elems[i]);
         return dst;
+}
+
+/**
+ * @brief Append copies of all elements in \p src to \p dst.
+ *        No duplicate-checks are performed.
+ */
+void rd_kafka_topic_partition_list_add_list (
+        rd_kafka_topic_partition_list_t *dst,
+        const rd_kafka_topic_partition_list_t *src) {
+        int i;
+
+        if (src->cnt == 0)
+                return;
+
+        if (dst->size < dst->cnt + src->cnt)
+                rd_kafka_topic_partition_list_grow(dst, src->cnt);
+
+        for (i = 0 ; i < src->cnt ; i++)
+                rd_kafka_topic_partition_list_add_copy(dst, &src->elems[i]);
 }
 
 
@@ -2915,23 +2957,42 @@ rd_kafka_topic_partition_list_cmp (const void *_a, const void *_b,
 
 
 /**
+ * @brief Ensures the \p rktpar has a toppar set in _private.
+ *
+ * @returns the toppar object (or possibly NULL if \p create_on_miss is true)
+ *          WITHOUT refcnt increased.
+ */
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_ensure_toppar (rd_kafka_t *rk,
+                                        rd_kafka_topic_partition_t *rktpar,
+                                        rd_bool_t create_on_miss) {
+        if (!rktpar->_private)
+                rktpar->_private =
+                        rd_kafka_toppar_get2(rk,
+                                             rktpar->topic,
+                                             rktpar->partition, 0,
+                                             create_on_miss);
+        return rktpar->_private;
+}
+
+
+/**
  * @returns (and sets if necessary) the \p rktpar's _private / toppar.
  * @remark a new reference is returned.
  */
 rd_kafka_toppar_t *
 rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
-                                     rd_kafka_topic_partition_t *rktpar) {
+                                     rd_kafka_topic_partition_t *rktpar,
+                                     rd_bool_t create_on_miss) {
         rd_kafka_toppar_t *rktp;
 
-        if (!(rktp = rktpar->_private))
-                rktp = rktpar->_private =
-                        rd_kafka_toppar_get2(rk,
-                                             rktpar->topic,
-                                             rktpar->partition, 0, 0);
-        if (!rktp)
-                return NULL;
+        rktp = rd_kafka_topic_partition_ensure_toppar(rk, rktpar,
+                                                      create_on_miss);
 
-        return rd_kafka_toppar_keep(rktp);
+        if (rktp)
+                rd_kafka_toppar_keep(rktp);
+
+        return rktp;
 }
 
 
@@ -3364,8 +3425,8 @@ rd_kafka_topic_partition_list_get_leaders (
                         rd_kafka_topic_partition_update(rktpar2, rktpar);
                 } else {
                         /* Make a copy of rktpar and add to partitions list */
-                        rd_kafka_topic_partition_add_copy(leader->partitions,
-                                                          rktpar);
+                        rd_kafka_topic_partition_list_add_copy(
+                                leader->partitions, rktpar);
                 }
 
                 rd_kafka_broker_destroy(rkb);    /* loose refcount */
@@ -3483,7 +3544,8 @@ rd_kafka_topic_partition_list_get_topics (
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
                 rd_kafka_toppar_t *rktp;
 
-                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
+                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar,
+                                                           rd_false);
                 if (!rktp) {
                         rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
                         continue;
@@ -3557,7 +3619,7 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
                 if (!match(rktpar, opaque))
                         continue;
 
-                rd_kafka_topic_partition_add_copy(newlist, rktpar);
+                rd_kafka_topic_partition_list_add_copy(newlist, rktpar);
         }
 
         return newlist;

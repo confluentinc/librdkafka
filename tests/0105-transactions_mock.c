@@ -76,7 +76,7 @@ static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp,
 
         rd_snprintf(numstr, sizeof(numstr), "%d", broker_cnt);
 
-        test_conf_init(&conf, NULL, 0);
+        test_conf_init(&conf, NULL, 60);
 
         test_conf_set(conf, "transactional.id", transactional_id);
         test_conf_set(conf, "test.mock.num.brokers", numstr);

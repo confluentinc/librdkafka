@@ -48,6 +48,9 @@ VALGRIND_ARGS="--error-exitcode=3"
 # Enable vgdb on valgrind errors.
 #VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
+# Exit valgrind on first error
+VALGRIND_ARGS="$VALGRIND_ARGS --exit-on-first-error=yes"
+
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../src:../src-cpp
 export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:../src:../src-cpp
 

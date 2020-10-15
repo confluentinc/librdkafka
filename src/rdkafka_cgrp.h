@@ -31,6 +31,8 @@
 #include "rdinterval.h"
 
 #include "rdkafka_assignor.h"
+#include "rdkafka_assignment.h"
+
 
 /**
  * Client groups implementation
@@ -83,6 +85,7 @@ typedef struct rd_kafka_cgrp_s {
 
 
         enum {
+                /* all: join or rejoin, possibly with an existing assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_INIT,
 
                 /* all: JoinGroupRequest sent, awaiting response. */
@@ -96,10 +99,10 @@ typedef struct rd_kafka_cgrp_s {
                 /* Follower: SyncGroupRequest sent, awaiting response. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC,
 
-                /* all: waiting for previous assignment to decommission */
+                /* all: waiting for full assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE,
 
-                /* all: waiting for assignment to partially decommission */
+                /* all: waiting for partial assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE,
 
                 /* all: waiting for application's rebalance_cb to assign() */
@@ -110,10 +113,7 @@ typedef struct rd_kafka_cgrp_s {
 
                 /* all: synchronized and assigned
                  *      may be an empty assignment. */
-                RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,
-
-                /* all: fetchers are started and operational */
-                RD_KAFKA_CGRP_JOIN_STATE_STARTED
+                RD_KAFKA_CGRP_JOIN_STATE_STEADY,
         } rkcg_join_state;
 
         /* State when group leader */
@@ -132,6 +132,7 @@ typedef struct rd_kafka_cgrp_s {
 						     */
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
+#define RD_KAFKA_CGRP_F_TERMINATED   0x2            /* Cgrp terminated */
 #define RD_KAFKA_CGRP_F_WAIT_UNASSIGN_CALL 0x4      /* Waiting for unassign
 						     * or incremental_unassign
                                                      * to be called. */
@@ -182,11 +183,6 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t          rkcg_toppars;            /* Toppars subscribed to*/
 
-	int                rkcg_assigned_cnt;       /* Assigned partitions */
-
-        rd_atomic32_t      rkcg_assignment_lost;    /* Assignment considered
-                                                     * lost */
-
         int32_t            rkcg_generation_id;      /* Current generation id */
 
         rd_kafka_assignor_t *rkcg_assignor;         /**< The current partition
@@ -227,8 +223,8 @@ typedef struct rd_kafka_cgrp_s {
          *  operation. Mutually exclusive with rkcg_next_subscription. */
         rd_bool_t rkcg_next_unsubscribe;
 
-        /* Current assignment */
-        rd_kafka_topic_partition_list_t *rkcg_assignment;
+        /**< Current assignment */
+        rd_kafka_assignment_t rkcg_assignment;
 
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
@@ -237,13 +233,6 @@ typedef struct rd_kafka_cgrp_s {
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */
         rd_bool_t rkcg_rebalance_rejoin;
-
-        int rkcg_wait_unassign_cnt;                 /* Waiting for this number
-                                                     * of partitions to be
-                                                     * unassigned and
-                                                     * decommissioned before
-                                                     * transitioning to the
-                                                     * next state. */
 
 	int rkcg_wait_commit_cnt;                   /* Waiting for this number
 						     * of commits to finish. */
@@ -336,6 +325,18 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
                                           rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
+void rd_kafka_cgrp_version_new_barrier0 (rd_kafka_cgrp_t *rkcg,
+                                         const char *func, int line);
+#define rd_kafka_cgrp_version_new_barrier(rkcg) \
+        rd_kafka_cgrp_version_new_barrier0(rkcg, __FUNCTION__, __LINE__)
+
+void
+rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,
+                                       const rd_kafka_topic_partition_list_t
+                                       *offsets, rd_bool_t set_offsets,
+                                       const char *reason);
+
+void rd_kafka_cgrp_assignment_done (rd_kafka_cgrp_t *rkcg);
 
 
 struct rd_kafka_consumer_group_metadata_s {

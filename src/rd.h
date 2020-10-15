@@ -100,6 +100,15 @@
 /** Assert if reached */
 #define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")
 
+/** Assert if reached */
+#define RD_BUG(...) do {                                                \
+                fprintf(stderr,  "!!! BUG in librdkafka at %s:%d: ",    \
+                        __FUNCTION__, __LINE__);                        \
+                fprintf(stderr, __VA_ARGS__);                           \
+                fprintf(stderr, "\n");                                  \
+                rd_assert(!*"BUG");                                     \
+        } while (0)
+
 
 
 /**

@@ -197,9 +197,9 @@ typedef rd_kafka_op_res_t
  * @brief Enumerates the assign op sub-types.
  */
 typedef enum {
-        RD_KAFKA_ASSIGN_METHOD_ASSIGN,
-        RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,
-        RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN
+        RD_KAFKA_ASSIGN_METHOD_ASSIGN,        /**< Absolute assign/unassign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,   /**< Incremental assign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN  /**< Incremental unassign */
 } rd_kafka_assign_method_t;
 
 /**

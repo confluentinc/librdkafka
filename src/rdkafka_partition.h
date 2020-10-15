@@ -302,7 +302,11 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         rd_kafka_cgrp_t   *rktp_cgrp;            /* Belongs to this cgrp */
 
-        rd_bool_t          rktp_assigned;   /* Partition in cgrp assignment */
+        rd_bool_t          rktp_started;  /**< Fetcher is instructured to
+                                           *   start.
+                                           *   This is used by cgrp to keep
+                                           *   track of whether the toppar has
+                                           *   been started or not. */
 
         rd_kafka_replyq_t  rktp_replyq; /* Current replyq+version
 					 * for propagating

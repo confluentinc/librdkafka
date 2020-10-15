@@ -37,6 +37,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_transport.c rdkafka_buf.c rdkafka_queue.c rdkafka_op.c \
 		rdkafka_request.c rdkafka_cgrp.c rdkafka_pattern.c \
 		rdkafka_partition.c rdkafka_subscription.c \
+		rdkafka_assignment.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_sticky_assignor.c \
 		rdkafka_feature.c \

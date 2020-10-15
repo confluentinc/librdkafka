@@ -511,7 +511,8 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
 
         rktpar = &offsets->elems[0];
 
-        if (!(rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar))) {
+        if (!(rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar,
+                                                         rd_false))) {
 		rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
 			     "No local partition found for %s [%"PRId32"] "
 			     "while parsing OffsetCommit response "
@@ -529,9 +530,10 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
 	rd_kafka_toppar_offset_commit_result(rktp, err, offsets);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-                     "%s [%"PRId32"]: offset %"PRId64" committed: %s",
+                     "%s [%"PRId32"]: offset %"PRId64" %scommitted: %s",
                      rktp->rktp_rkt->rkt_topic->str,
                      rktp->rktp_partition, rktpar->offset,
+                     err ? "not " : "",
                      rd_kafka_err2str(err));
 
         rktp->rktp_committing_offset = 0;
@@ -677,7 +679,8 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
                 rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
                 rd_kafka_toppar_t *rktp;
 
-                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
+                rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar,
+                                                           rd_false);
                 if (!rktp) {
                         rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
                         continue;

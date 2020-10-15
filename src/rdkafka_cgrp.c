@@ -5008,7 +5008,8 @@ rd_kafka_cgrp_owned_but_not_exist_partitions (rd_kafka_cgrp_t *rkcg) {
                         result = rd_kafka_topic_partition_list_new(
                                         rkcg->rkcg_assignment.all->cnt);
 
-                rd_kafka_topic_partition_list_add0(result,
+                rd_kafka_topic_partition_list_add0(__FUNCTION__,__LINE__,
+                                                   result,
                                                    cur->topic,
                                                    cur->partition,
                                                    cur->_private);

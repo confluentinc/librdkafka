@@ -245,7 +245,7 @@ public:
         Test::Fail(tostr() << "consumer->incremental_assign() failed: " <<
                    error->str());
       assign_call_cnt += 1;
-      partitions_assigned_net += partitions.size();
+      partitions_assigned_net += (int)partitions.size();
 
     } else {
       if (consumer->assignment_lost())
@@ -255,7 +255,7 @@ public:
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: " <<
                    error->str());
       revoke_call_cnt += 1;
-      partitions_assigned_net -= partitions.size();
+      partitions_assigned_net -= (int)partitions.size();
     }
 
     /* Reset message counters for the given partitions. */
@@ -336,7 +336,7 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
               consumer->name().c_str(),
               RdKafka::err2str(err).c_str());
 
-  count = partitions.size();
+  count = (int)partitions.size();
 
   for (vector<RdKafka::TopicPartition*>::iterator it = partitions.begin() ;
        it != partitions.end() ; it++) {
@@ -1869,7 +1869,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
 
     poll_all_consumers(consumers, rebalance_cbs, N_CONSUMERS,
                        playbook[cmd_number].timestamp_ms -
-                       ((test_clock() - ts_start) / 1000));
+                       (int)((test_clock() - ts_start) / 1000));
 
     /* Verify consumer assignments match subscribed topics */
     map<Toppar, RdKafka::KafkaConsumer*> all_assignments;
@@ -2002,7 +2002,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
       int exp_parts = 0;
       for (vector<string>::const_iterator it = consumer_topics[i].begin();
            it != consumer_topics[i].end(); it++)
-        exp_parts += N_PARTS_PER_TOPIC / topic_consumers[*it].size();
+        exp_parts += N_PARTS_PER_TOPIC / (int)topic_consumers[*it].size();
 
       Test::Say(tostr() <<
                 (counts[i] == exp_parts ? "" : _C_YEL) <<

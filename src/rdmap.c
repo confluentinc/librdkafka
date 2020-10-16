@@ -409,7 +409,7 @@ static int unittest_untyped_map (void) {
         int exp_cnt = 0, get_cnt = 0, iter_cnt = 0;
         const rd_map_elem_t *elem;
         rd_ts_t ts = rd_clock();
-        rd_ts_t ts_get;
+        rd_ts_t ts_get = 0;
 
         rd_map_init(&rmap, cnt,
                     rd_map_str_cmp,

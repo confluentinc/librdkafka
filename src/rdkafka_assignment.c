@@ -32,6 +32,11 @@
  *
  * Responsible for managing the state of assigned partitions.
  *
+ *
+ ******************************************************************************
+ * rd_kafka_assignment_serve()
+ * ---------------------------
+ *
  * It is important to call rd_kafka_assignment_serve() after each change
  * to the assignment through assignment_add, assignment_subtract or
  * assignment_clear as those functions only modify the assignment but does
@@ -42,6 +47,45 @@
  * functions is for the caller to be able to set the current state before
  * the side-effects of serve() kick in, such as the call to
  * rd_kafka_cgrp_assignment_done() that in turn will set the cgrp state.
+ *
+ *
+ *
+ ******************************************************************************
+ * Querying for committed offsets (.queried list)
+ * ----------------------------------------------
+ *
+ * We only allow one outstanding query (fetch committed offset), this avoids
+ * complex handling of partitions that are assigned, unassigned and reassigned
+ * all within the window of a OffsetFetch request.
+ * Consider the following case:
+ *
+ *  1. tp1 and tp2 are incrementally assigned.
+ *  2. An OffsetFetchRequest is sent for tp1 and tp2
+ *  3. tp2 is incremental unassigned.
+ *  4. Broker sends OffsetFetchResponse with offsets tp1=10, tp2=20.
+ *  4. Some other consumer commits offsets 30 for tp2.
+ *  5. tp2 is incrementally assigned again.
+ *  6. The OffsetFetchResponse is received.
+ *
+ * Without extra handling the consumer would start fetching tp1 at offset 10
+ * (which is correct) and tp2 at offset 20 (which is incorrect, the last
+ *  committed offset is now 30).
+ *
+ * To alleviate this situation we remove unassigned partitions from the
+ * .queried list, and in the OffsetFetch response handler we only use offsets
+ * for partitions that are on the .queried list.
+ *
+ * To make sure the tp1 offset is used and not re-queried we only allow
+ * one outstanding OffsetFetch request at the time, meaning that at step 5
+ * a new OffsetFetch request will not be sent and tp2 will remain in the
+ * .pending list until the outstanding OffsetFetch response is received in
+ * step 6. At this point tp2 will transition to .queried and a new
+ * OffsetFetch request will be sent.
+ *
+ * This explanation is more verbose than the code involved.
+ *
+ ******************************************************************************
+ *
  *
  * @remark Try to keep any cgrp state out of this file.
  *
@@ -115,8 +159,13 @@ rd_kafka_assignment_apply_offsets (rd_kafka_cgrp_t *rkcg,
                 if (!rd_kafka_topic_partition_list_del(
                             rkcg->rkcg_assignment.queried,
                             rktpar->topic, rktpar->partition)) {
-                        rd_dassert(!*"OffsetFetch response contains partition "
-                                   "that is not on the queried list");
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSETFETCH",
+                                     "Group \"%s\": Ignoring OffsetFetch "
+                                     "response for %s [%"PRId32"] which is no "
+                                     "longer in the queried list "
+                                     "(possibly unassigned?)",
+                                     rkcg->rkcg_group_id->str,
+                                     rktpar->topic, rktpar->partition);
                         continue;
                 }
 
@@ -188,14 +237,6 @@ rd_kafka_cgrp_assignment_handle_OffsetFetch (rd_kafka_t *rk,
         }
 
         rkcg = rd_kafka_cgrp_get(rk);
-
-        if (rd_kafka_buf_version_outdated(request, rkcg->rkcg_version)) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSETFETCH",
-                             "Group \"%s\": "
-                             "ignoring outdated OffsetFetch response",
-                             rkcg->rkcg_group_id->str);
-                return;
-        }
 
         /* If all partitions already had usable offsets then there
          * was no request sent and thus no reply, the offsets list is
@@ -353,12 +394,18 @@ static int rd_kafka_assignment_serve_removals (rd_kafka_cgrp_t *rkcg) {
  */
 static int rd_kafka_assignment_serve_pending (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_topic_partition_list_t *partitions_to_query = NULL;
-        /* We can query committed offsets only if we have a coordinator
-         * and there are no outstanding commits (since we might need to
-         * read back those commits as our starting position). */
+        /* We can query committed offsets only if all of the following are true:
+         *  - We have a coordinator
+         *  - There are no outstanding commits (since we might need to
+         *    read back those commits as our starting position).
+         *  - There are no outstanding queries already (since we want to
+         *    avoid using a earlier queries response for a partition that
+         *    is unassigned and then assigned again).
+         */
         rd_bool_t can_query_offsets =
                 rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP &&
-                rkcg->rkcg_wait_commit_cnt == 0;
+                rkcg->rkcg_wait_commit_cnt == 0 &&
+                rkcg->rkcg_assignment.queried->cnt == 0;
         int i;
 
         if (can_query_offsets)
@@ -440,11 +487,13 @@ static int rd_kafka_assignment_serve_pending (rd_kafka_cgrp_t *rkcg) {
                                      "Pending assignment partition "
                                      "%s [%"PRId32"] can't fetch committed "
                                      "offset yet "
-                                     "(cgrp state %s, awaiting %d commits)",
+                                     "(cgrp state %s, awaiting %d commits, "
+                                     "%d partition(s) already being queried)",
                                      rktpar->topic, rktpar->partition,
                                      rd_kafka_cgrp_state_names[rkcg->
                                                                rkcg_state],
-                                     rkcg->rkcg_wait_commit_cnt);
+                                     rkcg->rkcg_wait_commit_cnt,
+                                     rkcg->rkcg_assignment.queried->cnt);
 
                         continue; /* Keep rktpar on pending list */
                 }

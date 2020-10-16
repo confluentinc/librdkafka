@@ -183,9 +183,61 @@ static string string_vec_to_str (const vector<string> &v) {
 
 void expect_assignment(RdKafka::KafkaConsumer *consumer, size_t count) {
   std::vector<RdKafka::TopicPartition*> partitions;
-  consumer->assignment(partitions);
+  RdKafka::ErrorCode err;
+  err = consumer->assignment(partitions);
+  if (err)
+    Test::Fail(consumer->name() + " assignment() failed: " +
+               RdKafka::err2str(err));
   if (partitions.size() != count)
     Test::Fail(tostr() << "Expecting consumer " << consumer->name() << " to have " << count << " assigned partition(s), not: " << partitions.size());
+  RdKafka::TopicPartition::destroy(partitions);
+}
+
+
+static bool TopicPartition_cmp (const RdKafka::TopicPartition *a,
+                                const RdKafka::TopicPartition *b) {
+  if (a->topic() < b->topic())
+    return true;
+  else if (a->topic() > b->topic())
+    return false;
+  return a->partition() < b->partition();
+}
+
+
+void expect_assignment (RdKafka::KafkaConsumer *consumer,
+                        vector<RdKafka::TopicPartition*> &expected) {
+  vector<RdKafka::TopicPartition*> partitions;
+  RdKafka::ErrorCode err;
+  err = consumer->assignment(partitions);
+  if (err)
+    Test::Fail(consumer->name() + " assignment() failed: " +
+               RdKafka::err2str(err));
+
+  if (partitions.size() != expected.size())
+    Test::Fail(tostr() << "Expecting consumer " << consumer->name() <<
+               " to have " << expected.size() <<
+               " assigned partition(s), not " << partitions.size());
+
+  sort(partitions.begin(), partitions.end(), TopicPartition_cmp);
+  sort(expected.begin(), expected.end(), TopicPartition_cmp);
+
+  int fails = 0;
+  for (int i = 0 ; i < (int)partitions.size() ; i++) {
+    if (!TopicPartition_cmp(partitions[i], expected[i]))
+      continue;
+
+    Test::Say(tostr() << _C_RED << consumer->name() <<
+              ": expected assignment #" << i << " " <<
+              expected[i]->topic() <<
+              " [" << expected[i]->partition() << "], not " <<
+              partitions[i]->topic() <<
+              " [" << partitions[i]->partition() << "]\n");
+    fails++;
+  }
+
+  if (fails)
+    Test::Fail(consumer->name() + ": Expected assignment mismatch, see above");
+
   RdKafka::TopicPartition::destroy(partitions);
 }
 
@@ -547,18 +599,21 @@ static void assign_test_5 (RdKafka::KafkaConsumer *consumer,
 }
 
 
-static void run_test (std::string &t1, std::string &t2,
-                      void (*test)(RdKafka::KafkaConsumer *consumer,
-                                   std::vector<RdKafka::TopicPartition *> toppars1,
-                                   std::vector<RdKafka::TopicPartition *> toppars2)) {
-    std::vector<RdKafka::TopicPartition *> toppars1;
-    toppars1.push_back(RdKafka::TopicPartition::create(t1, 0,
-                                                       RdKafka::Topic::OFFSET_BEGINNING));
-    std::vector<RdKafka::TopicPartition *> toppars2;
-    toppars2.push_back(RdKafka::TopicPartition::create(t2, 0,
-                                                       RdKafka::Topic::OFFSET_BEGINNING));
 
-    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1, "cooperative-sticky", NULL, NULL, 10);
+
+static void
+run_test (const std::string &t1, const std::string &t2,
+          void (*test)(RdKafka::KafkaConsumer *consumer,
+                       std::vector<RdKafka::TopicPartition *> toppars1,
+                       std::vector<RdKafka::TopicPartition *> toppars2)) {
+    std::vector<RdKafka::TopicPartition *> toppars1;
+    toppars1.push_back(RdKafka::TopicPartition::create(t1, 0));
+    std::vector<RdKafka::TopicPartition *> toppars2;
+    toppars2.push_back(RdKafka::TopicPartition::create(t2, 0));
+
+    RdKafka::KafkaConsumer *consumer = make_consumer("C_1", t1,
+                                                     "cooperative-sticky",
+                                                     NULL, NULL, 10);
 
     test(consumer, toppars1, toppars2);
 
@@ -577,9 +632,9 @@ static void a_assign_tests () {
     const int msgsize1 = 100;
     const int msgsize2 = 200;
 
-    std::string topic1_str = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+    std::string topic1_str = Test::mk_topic_name("0113-a1", 1);
     test_create_topic(NULL, topic1_str.c_str(), 1, 1);
-    std::string topic2_str = Test::mk_topic_name("0113-cooperative_rebalance", 1);
+    std::string topic2_str = Test::mk_topic_name("0113-a2", 1);
     test_create_topic(NULL, topic2_str.c_str(), 1, 1);
 
     test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
@@ -592,6 +647,208 @@ static void a_assign_tests () {
     run_test(topic1_str, topic2_str, assign_test_5);
 }
 
+
+
+/**
+ * @brief Quick Assign 1,2, Assign 2,3, Assign 1,2,3 test to verify
+ *        that the correct OffsetFetch response is used.
+ *        See note in rdkafka_assignment.c for details.
+ *
+ * Makes use of the mock cluster to induce latency.
+ */
+static void a_assign_rapid () {
+
+  std::string group_id = __FUNCTION__;
+
+  rd_kafka_mock_cluster_t *mcluster;
+  const char *bootstraps;
+
+  mcluster = test_mock_cluster_new(3, &bootstraps);
+  int32_t coord_id = 1;
+  rd_kafka_mock_coordinator_set(mcluster, "group", group_id.c_str(), coord_id);
+
+  rd_kafka_mock_topic_create(mcluster, "topic1", 1, 1);
+  rd_kafka_mock_topic_create(mcluster, "topic2", 1, 1);
+  rd_kafka_mock_topic_create(mcluster, "topic3", 1, 1);
+
+  /*
+   * Produce messages to topics
+   */
+  const int msgs_per_partition = 1000;
+
+  RdKafka::Conf *pconf;
+  Test::conf_init(&pconf, NULL, 10);
+  Test::conf_set(pconf, "bootstrap.servers", bootstraps);
+  std::string errstr;
+  RdKafka::Producer *p = RdKafka::Producer::create(pconf, errstr);
+  if (!p)
+    Test::Fail(tostr() << __FUNCTION__ << ": Failed to create producer: " <<
+               errstr);
+  delete pconf;
+
+  Test::produce_msgs(p, "topic1", 0, msgs_per_partition, 10, false/*no flush*/);
+  Test::produce_msgs(p, "topic2", 0, msgs_per_partition, 10, false/*no flush*/);
+  Test::produce_msgs(p, "topic3", 0, msgs_per_partition, 10, false/*no flush*/);
+  p->flush(10*1000);
+
+  delete p;
+
+  vector<RdKafka::TopicPartition *> toppars1;
+  toppars1.push_back(RdKafka::TopicPartition::create("topic1", 0));
+  vector<RdKafka::TopicPartition *> toppars2;
+  toppars2.push_back(RdKafka::TopicPartition::create("topic2", 0));
+  vector<RdKafka::TopicPartition *> toppars3;
+  toppars3.push_back(RdKafka::TopicPartition::create("topic3", 0));
+
+
+  RdKafka::Conf *conf;
+  Test::conf_init(&conf, NULL, 20);
+  Test::conf_set(conf, "bootstrap.servers", bootstraps);
+  Test::conf_set(conf, "client.id", __FUNCTION__);
+  Test::conf_set(conf, "group.id", group_id);
+  Test::conf_set(conf, "auto.offset.reset", "earliest");
+  Test::conf_set(conf, "enable.auto.commit", "false");
+
+  RdKafka::KafkaConsumer *consumer;
+  consumer = RdKafka::KafkaConsumer::create(conf, errstr);
+  if (!consumer)
+    Test::Fail(tostr() << __FUNCTION__ << ": Failed to create consumer: " <<
+               errstr);
+  delete conf;
+
+  vector<RdKafka::TopicPartition *> toppars;
+  vector<RdKafka::TopicPartition *> expected;
+
+  map<Toppar, int64_t> pos;  /* Expected consume position per partition */
+  pos[Toppar(toppars1[0]->topic(), toppars1[0]->partition())] = 0;
+  pos[Toppar(toppars2[0]->topic(), toppars2[0]->partition())] = 0;
+  pos[Toppar(toppars3[0]->topic(), toppars3[0]->partition())] = 0;
+
+  /* To make sure offset commits are fetched in proper assign sequence
+   * we commit an offset that should not be used in the final consume loop.
+   * This commit will be overwritten below with another commit. */
+  vector<RdKafka::TopicPartition *> offsets;
+  offsets.push_back(RdKafka::TopicPartition::create(toppars1[0]->topic(),
+                                                    toppars1[0]->partition(),
+                                                    11));
+  /* This partition should start at this position even though
+   * there will be a sub-sequent commit to overwrite it, that should not
+   * be used since this partition is never unassigned. */
+  offsets.push_back(RdKafka::TopicPartition::create(toppars2[0]->topic(),
+                                                    toppars2[0]->partition(),
+                                                    22));
+  pos[Toppar(toppars2[0]->topic(), toppars2[0]->partition())] = 22;
+
+  Test::print_TopicPartitions("pre-commit", offsets);
+
+  RdKafka::ErrorCode err;
+  err = consumer->commitSync(offsets);
+  if (err)
+    Test::Fail(tostr() << __FUNCTION__ << ": pre-commit failed: " <<
+               RdKafka::err2str(err) << "\n");
+
+  /* Add coordinator delay so that the OffsetFetchRequest originating
+   * from the coming incremental_assign() will not finish before
+   * we call incremental_unassign() and incremental_assign() again, resulting
+   * in a situation where the initial OffsetFetchResponse will contain
+   * an older offset for a previous assignment of one partition. */
+  rd_kafka_mock_broker_set_rtt(mcluster, coord_id, 5000);
+
+
+  /* Assign 1,2 == 1,2 */
+  toppars.push_back(toppars1[0]);
+  toppars.push_back(toppars2[0]);
+  expected.push_back(toppars1[0]);
+  expected.push_back(toppars2[0]);
+  Test::incremental_assign(consumer, toppars);
+  expect_assignment(consumer, expected);
+
+  /* Unassign -1 == 2 */
+  toppars.clear();
+  toppars.push_back(toppars1[0]);
+  vector<RdKafka::TopicPartition *>::iterator it = find(expected.begin(),
+                                                        expected.end(),
+                                                        toppars1[0]);
+  expected.erase(it);
+
+  Test::incremental_unassign(consumer, toppars);
+  expect_assignment(consumer, expected);
+
+
+  /* Commit offset for the removed partition and the partition that is
+   * unchanged in the assignment. */
+  RdKafka::TopicPartition::destroy(offsets);
+  offsets.push_back(RdKafka::TopicPartition::create(toppars1[0]->topic(),
+                                                    toppars1[0]->partition(),
+                                                    55));
+  offsets.push_back(RdKafka::TopicPartition::create(toppars2[0]->topic(),
+                                                    toppars2[0]->partition(),
+                                                    33)); /* should not be
+                                                           * used. */
+  pos[Toppar(toppars1[0]->topic(), toppars1[0]->partition())] = 55;
+  Test::print_TopicPartitions("commit", offsets);
+
+  err = consumer->commitAsync(offsets);
+  if (err)
+    Test::Fail(tostr() << __FUNCTION__ << ": commit failed: " <<
+               RdKafka::err2str(err) << "\n");
+
+  /* Assign +3 == 2,3 */
+  toppars.clear();
+  toppars.push_back(toppars3[0]);
+  expected.push_back(toppars3[0]);
+  Test::incremental_assign(consumer, toppars);
+  expect_assignment(consumer, expected);
+
+  /* Now remove the latency */
+  Test::Say(_C_MAG "Clearing rtt\n");
+  rd_kafka_mock_broker_set_rtt(mcluster, coord_id, 0);
+
+  /* Assign +1 == 1,2,3 */
+  toppars.clear();
+  toppars.push_back(toppars1[0]);
+  expected.push_back(toppars1[0]);
+  Test::incremental_assign(consumer, toppars);
+  expect_assignment(consumer, expected);
+
+  /* Verify consumed messages */
+  int wait_end = (int)expected.size();
+  while (wait_end > 0) {
+    RdKafka::Message *msg = consumer->consume(10*1000);
+    if (msg->err() == RdKafka::ERR__TIMED_OUT)
+      Test::Fail(tostr() << __FUNCTION__ << ": Consume timed out waiting "
+                 "for " << wait_end << " more partitions");
+
+    Toppar tp = Toppar(msg->topic_name(), msg->partition());
+    int64_t *exp_pos = &pos[tp];
+
+    Test::Say(3, tostr() << __FUNCTION__ << ": Received " <<
+              tp.topic << " [" << tp.partition << "] at offset " <<
+              msg->offset() << " (expected offset " << *exp_pos << ")\n");
+
+    if (*exp_pos != msg->offset())
+      Test::Fail(tostr() << __FUNCTION__ << ": expected message offset " <<
+                 *exp_pos << " for " << msg->topic_name() <<
+                 " [" << msg->partition() << "], not " << msg->offset() <<
+                 "\n");
+    (*exp_pos)++;
+    if (*exp_pos == msgs_per_partition) {
+      TEST_ASSERT(wait_end > 0, "");
+      wait_end--;
+    }
+
+    delete msg;
+  }
+
+  RdKafka::TopicPartition::destroy(offsets);
+  RdKafka::TopicPartition::destroy(toppars1);
+  RdKafka::TopicPartition::destroy(toppars2);
+  RdKafka::TopicPartition::destroy(toppars3);
+
+  delete consumer;
+
+  rd_kafka_mock_cluster_destroy(mcluster);
+}
 
 
 /* Check behavior when:
@@ -2359,6 +2616,7 @@ extern "C" {
     } while (0)
 
     _RUN(a_assign_tests());
+    _RUN(a_assign_rapid());
     _RUN(b_subscribe_with_cb_test(true/*close consumer*/));
 
     if (test_quick) {

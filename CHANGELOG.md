@@ -1,3 +1,18 @@
+# librdkafka v1.6.0
+
+librdkafka v1.6.0 is a feature release adding support for
+[KIP-429 Incremental rebalancing](...) and the sticky consumer group
+partition assignor.
+
+ * Incremental rebalancing and assignments - FIXME: write something nifty
+ * Sticky consumer group partition assignor - FIXME: write something spiffy
+ * Sticky producer partitioner - achieves higher throughput and lower latency
+   through sticky selection of random partition.
+
+
+
+
+
 # librdkafka v1.5.2
 
 librdkafka v1.5.2 is a maintenance release.

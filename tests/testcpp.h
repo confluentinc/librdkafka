@@ -201,6 +201,32 @@ namespace Test {
   }
 
 
+  static RD_UNUSED void
+  incremental_assign (RdKafka::KafkaConsumer *c,
+                      const std::vector<RdKafka::TopicPartition *> &parts) {
+    Test::Say(tostr() << c->name() <<
+              ": incremental assign of " << parts.size() <<
+              " partition(s)\n");
+    if (test_level >= 2)
+      print_TopicPartitions("incremental_assign()", parts);
+    RdKafka::Error *error;
+    if ((error = c->incremental_assign(parts)))
+      Test::Fail(c->name() + ": Incremental assign failed: " + error->str());
+  }
+
+  static RD_UNUSED void
+  incremental_unassign (RdKafka::KafkaConsumer *c,
+                        const std::vector<RdKafka::TopicPartition *> &parts) {
+    Test::Say(tostr() << c->name() <<
+              ": incremental unassign of " << parts.size() <<
+              " partition(s)\n");
+    if (test_level >= 2)
+      print_TopicPartitions("incremental_unassign()", parts);
+    RdKafka::Error *error;
+    if ((error = c->incremental_unassign(parts)))
+      Test::Fail(c->name() + ": Incremental unassign failed: " + error->str());
+  }
+
   /**
    * @brief Wait until the current assignment size is \p partition_count.
    *        If \p topic is not NULL, then additionally, each partition in
@@ -286,6 +312,35 @@ namespace Test {
     delete msg;
     return ret;
   }
+
+
+  /**
+   * @brief Produce \p msgcnt messages to \p topic \p partition.
+   */
+  static RD_UNUSED void produce_msgs (RdKafka::Producer *p,
+                                      const std::string &topic,
+                                      int32_t partition,
+                                      int msgcnt, int msgsize,
+                                      bool flush) {
+    char *buf = (char *)malloc(msgsize);
+
+    for (int i = 0 ; i < msgsize ; i++)
+      buf[i] = (char)((int)'a' + (i % 25));
+
+    for (int i = 0 ; i < msgcnt ; i++) {
+      RdKafka::ErrorCode err;
+      err = p->produce(topic, partition,
+                       RdKafka::Producer::RK_MSG_COPY,
+                       (void *)buf, (size_t)msgsize,
+                       NULL, 0, 0, NULL);
+      TEST_ASSERT(!err, "produce() failed: %s", RdKafka::err2str(err).c_str());
+      p->poll(0);
+    }
+
+    if (flush)
+      p->flush(10*1000);
+  }
+
 
 
   /**

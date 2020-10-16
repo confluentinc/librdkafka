@@ -64,7 +64,6 @@
  * Test output is controlled through "TEST_LEVEL=N" environemnt variable.
  * N < 2: TEST_SAY() is quiet.
  */
-extern int test_level;
 
 extern int test_seed;
 extern char test_mode[64];

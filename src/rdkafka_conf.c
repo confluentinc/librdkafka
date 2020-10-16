@@ -553,6 +553,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
 	  "The granularity is 1000ms. A value of 0 disables statistics.",
 	  0, 86400*1000, 0 },
+        { _RK_GLOBAL, "dogstatsd.endpoint", _RK_C_STR,
+          _RK(dogstatsd_endpoint),
+          "DogStatsD endpoint to send metrics to. The metrics interval emssion "
+          "depends on `statistics.interval.ms`."},
 	{ _RK_GLOBAL, "enabled_events", _RK_C_INT,
 	  _RK(enabled_events),
 	  "See `rd_kafka_conf_set_events()`",

@@ -206,6 +206,7 @@ struct rd_kafka_conf_s {
         int     socket_max_fails;
 	char   *client_id_str;
 	char   *brokerlist;
+        char   *dogstatsd_endpoint;
 	int     stats_interval_ms;
 	int     term_sig;
         int     reconnect_backoff_ms;

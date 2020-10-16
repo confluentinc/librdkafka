@@ -789,6 +789,7 @@ static void do_sleep (int sleep_us) {
 
 int main (int argc, char **argv) {
 	char *brokers = NULL;
+	char *dogstatsd_endpoint = NULL;
 	char mode = 'C';
 	char *topic = NULL;
 	const char *key = NULL;
@@ -863,7 +864,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
+                       "R:a:z:o:g:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
 		switch (opt) {
 		case 'G':
 			if (rd_kafka_conf_set(conf, "group.id", optarg,
@@ -955,6 +956,9 @@ int main (int argc, char **argv) {
 					start_offset = RD_KAFKA_OFFSET_TAIL(-start_offset);
 			}
 
+			break;
+		case 'g':
+			dogstatsd_endpoint = optarg;
 			break;
 		case 'e':
 			exit_eof = 1;
@@ -1143,6 +1147,7 @@ int main (int argc, char **argv) {
 			"               none|gzip|snappy\n"
 			"  -o <offset>  Start offset (consumer)\n"
 			"               beginning, end, NNNNN or -NNNNN\n"
+			"  -g <dogstatsd> Dogstatsd endpoint to send metrics to\n"
 			"  -d [facs..]  Enable debugging contexts:\n"
 			"               %s\n"
 			"  -X <prop=name> Set arbitrary librdkafka "
@@ -1221,6 +1226,15 @@ int main (int argc, char **argv) {
             RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);
                 exit(1);
+        }
+
+        if (dogstatsd_endpoint) {
+            if (rd_kafka_conf_set(conf, "dogstatsd.endpoint",
+                                  dogstatsd_endpoint, errstr,
+                                  sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                    fprintf(stderr, "%% %s\n", errstr);
+                    exit(1);
+            }
         }
 
         if (do_conf_dump) {

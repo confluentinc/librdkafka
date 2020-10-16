@@ -125,11 +125,6 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t      *rkcg_q;                  /* Application poll queue */
         rd_kafka_q_t      *rkcg_ops;                /* Manager ops queue */
 	rd_kafka_q_t      *rkcg_wait_coord_q;       /* Ops awaiting coord */
-	int32_t            rkcg_version;            /* Ops queue version barrier
-						     * Increased by:
-						     *  Rebalance delegation
-						     *  Assign/Unassign
-						     */
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_TERMINATED   0x2            /* Cgrp terminated */
@@ -325,10 +320,6 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
                                           rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
-void rd_kafka_cgrp_version_new_barrier0 (rd_kafka_cgrp_t *rkcg,
-                                         const char *func, int line);
-#define rd_kafka_cgrp_version_new_barrier(rkcg) \
-        rd_kafka_cgrp_version_new_barrier0(rkcg, __FUNCTION__, __LINE__)
 
 void
 rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,

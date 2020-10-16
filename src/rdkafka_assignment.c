@@ -471,7 +471,7 @@ static int rd_kafka_assignment_serve_pending (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_OffsetFetchRequest(
                         rkcg->rkcg_coord, 1,
                         partitions_to_query,
-                        RD_KAFKA_REPLYQ(rkcg->rkcg_ops, rkcg->rkcg_version),
+                        RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                         rd_kafka_cgrp_assignment_handle_OffsetFetch,
                         NULL);
         }
@@ -585,10 +585,6 @@ void rd_kafka_assignment_clear (rd_kafka_cgrp_t *rkcg) {
                                                rkcg->rkcg_assignment.all);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment.all);
         rkcg->rkcg_assignment.all = NULL;
-
-        /* Invalidate any outstanding offset fetch requests as a new
-         * assignment with the same partitions may otherwise use the response */
-        rd_kafka_cgrp_version_new_barrier(rkcg);
 
         rd_kafka_wrlock(rkcg->rkcg_rk);
         rkcg->rkcg_c.assignment_size = 0;
@@ -795,14 +791,6 @@ rd_kafka_assignment_subtract (rd_kafka_cgrp_t *rkcg,
                      "of %d partition(s)",
                      rkcg->rkcg_group_id->str, partitions->cnt,
                      matched_queried_partitions, assignment_pre_cnt);
-
-        /* If any of the removed partitions are being queried we need to
-         * bump the version barrer to invalidate the response when it gets back
-         * to avoid the case where the same partition is assigned again before
-         * the response comes back and the response will then be used, which
-         * might not be correct given that a rebalance might have happened. */
-        if (matched_queried_partitions)
-                rd_kafka_cgrp_version_new_barrier(rkcg);
 
         /* If the assignment is now empty we remove it.
          * Empty assignments may only be the result of an assign()

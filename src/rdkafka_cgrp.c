@@ -208,11 +208,10 @@ static int rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPSTATE",
                      "Group \"%.*s\" changed state %s -> %s "
-                     "(v%d, join-state %s)",
+                     "(join-state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_state_names[state],
-		     rkcg->rkcg_version,
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
         rkcg->rkcg_state = state;
         rkcg->rkcg_ts_statechange = rd_clock();
@@ -229,23 +228,12 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPJOINSTATE",
                      "Group \"%.*s\" changed join state %s -> %s "
-                     "(v%d, state %s)",
+                     "(join-state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rd_kafka_cgrp_join_state_names[join_state],
-		     rkcg->rkcg_version,
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
         rkcg->rkcg_join_state = join_state;
-}
-
-
-void rd_kafka_cgrp_version_new_barrier0 (rd_kafka_cgrp_t *rkcg,
-                                         const char *func, int line) {
-        rkcg->rkcg_version++;
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BARRIER",
-                     "Group \"%.*s\": %s:%d: new version barrier v%d",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), func, line,
-                     rkcg->rkcg_version);
 }
 
 
@@ -301,7 +289,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rkcg->rkcg_client_id = client_id;
         rkcg->rkcg_coord_id = -1;
         rkcg->rkcg_generation_id = -1;
-	rkcg->rkcg_version = 1;
 
         rkcg->rkcg_ops = rd_kafka_q_new(rk);
         rkcg->rkcg_ops->rkq_serve = rd_kafka_cgrp_op_serve;
@@ -2664,10 +2651,6 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 
         RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
-        /* If commit was for an older version barrier, ignore the response. */
-        if (rd_kafka_buf_version_outdated(request, rkcg->rkcg_version))
-                err = RD_KAFKA_RESP_ERR__DESTROY;
-
         err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf,
                                            request, offsets);
 
@@ -2789,15 +2772,12 @@ static size_t rd_kafka_topic_partition_has_absolute_offset (
  * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions from
  *                 the rktp's stored offset.
  *
- * \p op_version: cgrp's op version to use (or 0)
- *
  * Locality: cgrp thread
  */
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                           rd_kafka_op_t *rko,
                                           rd_bool_t set_offsets,
-                                          const char *reason,
-                                          int op_version) {
+                                          const char *reason) {
 	rd_kafka_topic_partition_list_t *offsets;
 	rd_kafka_resp_err_t err;
         int valid_offsets = 0;
@@ -2868,7 +2848,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         /* Send OffsetCommit */
         r = rd_kafka_OffsetCommitRequest(
                 rkcg->rkcg_coord, rkcg, offsets,
-                RD_KAFKA_REPLYQ(rkcg->rkcg_ops, op_version),
+                RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                 rd_kafka_cgrp_op_handle_OffsetCommit, rko,
                 reason);
 
@@ -2892,7 +2872,6 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         reply->rko_rk = rkcg->rkcg_rk; /* Set rk since the rkbuf will not
                                         * have a rkb to reach it. */
         reply->rko_err = err;
-        reply->rko_version = op_version;
 
         rkbuf = rd_kafka_buf_new(0, 0);
         rkbuf->rkbuf_cb = rd_kafka_cgrp_op_handle_OffsetCommit;
@@ -2944,8 +2923,7 @@ rd_kafka_cgrp_assigned_offsets_commit (
                 rko->rko_u.offset_commit.partitions =
                         rd_kafka_topic_partition_list_copy(offsets);
 	rko->rko_u.offset_commit.silent_empty = 1;
-        rd_kafka_cgrp_offsets_commit(rkcg, rko, set_offsets, reason,
-                                     rkcg->rkcg_version);
+        rd_kafka_cgrp_offsets_commit(rkcg, rko, set_offsets, reason);
 }
 
 
@@ -4052,7 +4030,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, rd_bool_t leave_group) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNSUBSCRIBE",
                      "Group \"%.*s\": unsubscribe from current %ssubscription "
                      "of size %d (leave group=%s, has joined=%s, %s, "
-                     "join-state %s, v%"PRId32")",
+                     "join-state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rkcg->rkcg_subscription ? "" : "unset ",
                      rkcg->rkcg_subscription ? rkcg->rkcg_subscription->cnt : 0,
@@ -4060,8 +4038,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, rd_bool_t leave_group) {
                      RD_STR_ToF(RD_KAFKA_CGRP_HAS_JOINED(rkcg)),
                      rkcg->rkcg_member_id ?
                      rkcg->rkcg_member_id->str : "n/a",
-                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
-                     rkcg->rkcg_version);
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_max_poll_interval_tmr, 1/*lock*/);
@@ -4512,37 +4489,28 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
         rd_kafka_resp_err_t err;
         const int silent_op = rko->rko_type == RD_KAFKA_OP_RECV_BUF;
 
-        if (rko->rko_version && rkcg->rkcg_version > rko->rko_version) {
-                rd_kafka_op_destroy(rko); /* outdated */
-                return RD_KAFKA_OP_RES_HANDLED;
-        }
-
         rktp = rko->rko_rktp;
 
         if (rktp && !silent_op)
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
                              "Group \"%.*s\" received op %s in state %s "
-                             "(join-state %s, v%"PRId32") "
-                             "for %.*s [%"PRId32"]",
+                             "(join-state %s) for %.*s [%"PRId32"]",
                              RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                              rd_kafka_op2str(rko->rko_type),
                              rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                              rd_kafka_cgrp_join_state_names[rkcg->
                                                             rkcg_join_state],
-                             rkcg->rkcg_version,
                              RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                              rktp->rktp_partition);
         else if (!silent_op)
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
-                             "Group \"%.*s\" received op %s (v%d) in state %s "
-                             "(joinstate %s, v%"PRId32" vs %"PRId32")",
+                             "Group \"%.*s\" received op %s in state %s "
+                             "(join-state %s)",
                              RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                              rd_kafka_op2str(rko->rko_type),
-                             rko->rko_version,
                              rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                              rd_kafka_cgrp_join_state_names[rkcg->
-                                                            rkcg_join_state],
-                             rkcg->rkcg_version, rko->rko_version);
+                                                            rkcg_join_state]);
 
         switch ((int)rko->rko_type)
         {
@@ -4614,8 +4582,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                                              rko->rko_u.offset_commit.
                                              partitions ?
                                              0 : 1 /* set_offsets*/,
-                                             rko->rko_u.offset_commit.reason,
-                                             0);
+                                             rko->rko_u.offset_commit.reason);
                 rko = NULL; /* rko now owned by request */
                 break;
 

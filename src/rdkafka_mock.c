@@ -290,7 +290,7 @@ rd_kafka_mock_committed_offset_find (const rd_kafka_mock_partition_t *mpart,
         const rd_kafka_mock_committed_offset_t *coff;
 
         TAILQ_FOREACH(coff, &mpart->committed_offsets, link) {
-                if (rd_kafkap_str_cmp_str(group, coff->group))
+                if (!rd_kafkap_str_cmp_str(group, coff->group))
                         return (rd_kafka_mock_committed_offset_t *)coff;
         }
 

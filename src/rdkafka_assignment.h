@@ -50,10 +50,6 @@ typedef struct rd_kafka_assignment_s {
 } rd_kafka_assignment_t;
 
 
-void
-rd_kafka_assignment_apply_offsets (struct rd_kafka_cgrp_s *rkcg,
-                                   rd_kafka_topic_partition_list_t *offsets,
-                                   rd_kafka_resp_err_t err);
 void rd_kafka_assignment_clear (struct rd_kafka_cgrp_s *rkcg);
 rd_kafka_error_t *
 rd_kafka_assignment_add (struct rd_kafka_cgrp_s *rkcg,
@@ -66,9 +62,6 @@ void rd_kafka_assignment_partition_stopped (struct rd_kafka_cgrp_s *rkcg,
 rd_bool_t rd_kafka_assignment_is_lost (struct rd_kafka_cgrp_s *rkcg);
 void rd_kafka_assignment_set_lost (struct rd_kafka_cgrp_s *rkcg,
                                    char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
-void rd_kafka_assignment_clear_lost (struct rd_kafka_cgrp_s *rkcg,
-                                     char *fmt, ...)
         RD_FORMAT(printf, 2, 3);
 void rd_kafka_assignment_serve (struct rd_kafka_cgrp_s *rkcg);
 rd_bool_t rd_kafka_assignment_in_progress (struct rd_kafka_cgrp_s *rkcg);

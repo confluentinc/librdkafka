@@ -101,6 +101,9 @@
 #include "rdkafka_request.h"
 
 
+static void rd_kafka_assignment_clear_lost (struct rd_kafka_cgrp_s *rkcg,
+                                            char *fmt, ...)
+        RD_FORMAT(printf, 2, 3);
 
 static void rd_kafka_assignment_dump (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "DUMP",
@@ -110,10 +113,9 @@ static void rd_kafka_assignment_dump (rd_kafka_cgrp_t *rkcg) {
                      rkcg->rkcg_assignment.wait_stop_cnt,
                      RD_STR_ToF(rd_kafka_assignment_is_lost(rkcg)));
 
-        if (rkcg->rkcg_assignment.all)
-                rd_kafka_topic_partition_list_log(
-                        rkcg->rkcg_rk, "DUMP_ALL", RD_KAFKA_DBG_CGRP,
-                        rkcg->rkcg_assignment.all);
+        rd_kafka_topic_partition_list_log(
+                rkcg->rkcg_rk, "DUMP_ALL", RD_KAFKA_DBG_CGRP,
+                rkcg->rkcg_assignment.all);
 
         rd_kafka_topic_partition_list_log(
                 rkcg->rkcg_rk, "DUMP_PND", RD_KAFKA_DBG_CGRP,
@@ -132,26 +134,17 @@ static void rd_kafka_assignment_dump (rd_kafka_cgrp_t *rkcg) {
  * @brief Apply the fetched committed offsets to the current assignment's
  *        queried partitions.
  *
+ * @param err is the request-level error, if any. The caller is responsible
+ *            for raising this error to the application. It is only used here
+ *            to avoid taking actions.
+ *
  * Called from the FetchOffsets response handler below.
  */
-void
+static void
 rd_kafka_assignment_apply_offsets (rd_kafka_cgrp_t *rkcg,
                                    rd_kafka_topic_partition_list_t *offsets,
                                    rd_kafka_resp_err_t err) {
         rd_kafka_topic_partition_t *rktpar;
-
-        /* Request-level error */
-        if (err)
-                rd_kafka_consumer_err(
-                        rkcg->rkcg_q, RD_KAFKA_NODEID_UA,
-                        err, 0,
-                        NULL, NULL,
-                        RD_KAFKA_OFFSET_INVALID,
-                        "Failed to fetch committed offset for %d assigned "
-                        "partition(s) in group \"%s\": %s",
-                        offsets->cnt,
-                        rkcg->rkcg_group_id->str,
-                        rd_kafka_err2str(err));
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, offsets) {
                 rd_kafka_toppar_t *rktp = rktpar->_private; /* May be NULL */
@@ -186,11 +179,7 @@ rd_kafka_assignment_apply_offsets (rd_kafka_cgrp_t *rkcg,
                          * and thus only reside on .all until the application
                          * unassigns it and possible re-assigns it. */
 
-                } else if (err) {
-                        /* Do nothing for request-level errors. */
-
-                } else {
-
+                } else if (!err) {
                         /* If rktpar->offset is RD_KAFKA_OFFSET_INVALID it means
                          * there was no committed offset for this partition.
                          * serve_pending() will now start this partition
@@ -202,14 +191,16 @@ rd_kafka_assignment_apply_offsets (rd_kafka_cgrp_t *rkcg,
                          * will start the fetcher. */
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSETFETCH",
                                      "Adding %s [%"PRId32"] back to pending "
-                                     "list with offset %"PRId64,
+                                     "list with offset %s",
                                      rktpar->topic,
                                      rktpar->partition,
-                                     rktpar->offset);
+                                     rd_kafka_offset2str(rktpar->offset));
 
                         rd_kafka_topic_partition_list_add_copy(
                                 rkcg->rkcg_assignment.pending, rktpar);
                 }
+                /* Do nothing for request-level errors (err is set). */
+
         }
 
         if (offsets->cnt > 0)
@@ -239,7 +230,7 @@ rd_kafka_cgrp_assignment_handle_OffsetFetch (rd_kafka_t *rk,
         rkcg = rd_kafka_cgrp_get(rk);
 
         /* If all partitions already had usable offsets then there
-         * was no request sent and thus no reply, the offsets list is
+         * was no request sent and thus no reply (NULL), the offsets list is
          * good to go. */
         if (reply) {
                 err = rd_kafka_handle_OffsetFetch(rk, rkb, err,
@@ -252,14 +243,19 @@ rd_kafka_cgrp_assignment_handle_OffsetFetch (rd_kafka_t *rk,
 
         if (err) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
-                             "Offset fetch error: %s",
+                             "Offset fetch error for %d partition(s): %s",
+                             offsets->cnt,
                              rd_kafka_err2str(err));
                 rd_kafka_consumer_err(rkcg->rkcg_q,
                                       rd_kafka_broker_id(rkb),
                                       err, 0, NULL, NULL,
                                       RD_KAFKA_OFFSET_INVALID,
-                                      "Failed to fetch offsets: %s",
+                                      "Failed to fetch committed offsets for "
+                                      "%d partition(s) in group \"%s\": %s",
+                                      offsets->cnt,
+                                      rkcg->rkcg_group_id->str,
                                       rd_kafka_err2str(err));
+
         }
 
         /* Apply the fetched offsets to the assignment */
@@ -267,24 +263,6 @@ rd_kafka_cgrp_assignment_handle_OffsetFetch (rd_kafka_t *rk,
 
         rd_kafka_topic_partition_list_destroy(offsets);
 }
-
-
-/**
- *
- * - Hold off starting partitions if there are outstanding commits.
- * - If a partition has an absolute or a logical offset, start it.
- *   A future optimization is to collect all BEGINNING/END partitions and
- *   query them per leader.
- * - If a partition needs to read the committed offset, add it to a query list
- *   and send the query list of FetchOffsetsRequest with a versioned op.
- *   Add these partitions to assignment.pending.
- * - If a new cgrp version barrier is pushed, clear out the pending list.
- *   The eventual FetchOffsetsResponse will be outdated and ignored.
- * - When FetchOffsetsResponse (not outdated) is received, find the partition
- *   in the pending list and apply the offset, remove it from the pending
- *   list and run the FSM again.
- * - Run this function following any [incremental_]assign.
- */
 
 
 /**
@@ -578,8 +556,7 @@ void rd_kafka_assignment_serve (rd_kafka_cgrp_t *rkcg) {
                              "with %d pending adds, %d offset queries, "
                              "%d partitions awaiting stop and "
                              "%d offset commits in progress",
-                             rkcg->rkcg_assignment.all ?
-                             rkcg->rkcg_assignment.all->cnt : 0,
+                             rkcg->rkcg_assignment.all->cnt,
                              inp_pending,
                              rkcg->rkcg_assignment.queried->cnt,
                              rkcg->rkcg_assignment.wait_stop_cnt,
@@ -610,11 +587,10 @@ rd_bool_t rd_kafka_assignment_in_progress (rd_kafka_cgrp_t *rkcg) {
 void rd_kafka_assignment_clear (rd_kafka_cgrp_t *rkcg) {
 
         /* Any change to the assignment marks the current assignment
-         * as not lost.
-         * FIXME: Why is this? */
+         * as not lost. */
         rd_kafka_assignment_clear_lost(rkcg, "assignment removed");
 
-        if (!rkcg->rkcg_assignment.all) {
+        if (rkcg->rkcg_assignment.all->cnt == 0) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
                              "CLEARASSIGN",
                              "Group \"%s\": no current assignment to clear",
@@ -632,8 +608,7 @@ void rd_kafka_assignment_clear (rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_topic_partition_list_add_list(rkcg->rkcg_assignment.removed,
                                                rkcg->rkcg_assignment.all);
-        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment.all);
-        rkcg->rkcg_assignment.all = NULL;
+        rd_kafka_topic_partition_list_clear(rkcg->rkcg_assignment.all);
 
         rd_kafka_wrlock(rkcg->rkcg_rk);
         rkcg->rkcg_c.assignment_size = 0;
@@ -653,8 +628,7 @@ void rd_kafka_assignment_clear (rd_kafka_cgrp_t *rkcg) {
 rd_kafka_error_t *
 rd_kafka_assignment_add (rd_kafka_cgrp_t *rkcg,
                          rd_kafka_topic_partition_list_t *partitions) {
-        rd_bool_t was_empty = !rkcg->rkcg_assignment.all ||
-                rkcg->rkcg_assignment.all->cnt == 0;
+        rd_bool_t was_empty = rkcg->rkcg_assignment.all->cnt == 0;
         int i;
 
         /* Make sure there are no duplicates, invalid partitions, or
@@ -685,8 +659,7 @@ rd_kafka_assignment_add (rd_kafka_cgrp_t *rkcg,
                                 "Duplicate %s [%"PRId32"] in input list",
                                 rktpar->topic, rktpar->partition);
 
-                if (rkcg->rkcg_assignment.all &&
-                    rd_kafka_topic_partition_list_find(
+                if (rd_kafka_topic_partition_list_find(
                             rkcg->rkcg_assignment.all,
                             rktpar->topic, rktpar->partition))
                         return rd_kafka_error_new(
@@ -712,10 +685,6 @@ rd_kafka_assignment_add (rd_kafka_cgrp_t *rkcg,
 
                 /* FIXME: old cgrp_assign() marks rktp as desired, should we? */
         }
-
-        if (!rkcg->rkcg_assignment.all)
-                rkcg->rkcg_assignment.all =
-                        rd_kafka_topic_partition_list_new(partitions->cnt);
 
         /* Add the new list of partitions to the current assignment.
          * Only need to sort the final assignment if it was non-empty
@@ -746,8 +715,7 @@ rd_kafka_assignment_add (rd_kafka_cgrp_t *rkcg,
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
         /* Any change to the assignment marks the current assignment
-         * as not lost.
-         * FIXME: Why is this? */
+         * as not lost. */
         rd_kafka_assignment_clear_lost(rkcg, "assignment updated");
 
         return NULL;
@@ -773,11 +741,7 @@ rd_kafka_assignment_subtract (rd_kafka_cgrp_t *rkcg,
         int matched_queried_partitions = 0;
         int assignment_pre_cnt;
 
-        if (!rkcg->rkcg_assignment.all)
-                return rd_kafka_error_new(
-                        RD_KAFKA_RESP_ERR__STATE,
-                        "No current assignment");
-        else if (rkcg->rkcg_assignment.all->cnt == 0 && partitions->cnt > 0)
+        if (rkcg->rkcg_assignment.all->cnt == 0 && partitions->cnt > 0)
                 return rd_kafka_error_new(
                         RD_KAFKA_RESP_ERR__INVALID_ARG,
                         "Can't subtract from empty assignment");
@@ -841,25 +805,18 @@ rd_kafka_assignment_subtract (rd_kafka_cgrp_t *rkcg,
                      rkcg->rkcg_group_id->str, partitions->cnt,
                      matched_queried_partitions, assignment_pre_cnt);
 
-        /* If the assignment is now empty we remove it.
-         * Empty assignments may only be the result of an assign()
-         * or incremental_assign(), not unassign() or incremental_unassign(). */
         if (rkcg->rkcg_assignment.all->cnt == 0) {
-                rd_kafka_topic_partition_list_destroy(
-                        rkcg->rkcg_assignment.all);
-                rkcg->rkcg_assignment.all = NULL;
+                /* Some safe checking */
                 rd_assert(rkcg->rkcg_assignment.pending->cnt == 0);
                 rd_assert(rkcg->rkcg_assignment.queried->cnt == 0);
         }
 
         rd_kafka_wrlock(rkcg->rkcg_rk);
-        rkcg->rkcg_c.assignment_size = rkcg->rkcg_assignment.all ?
-                rkcg->rkcg_assignment.all->cnt : 0;
+        rkcg->rkcg_c.assignment_size = rkcg->rkcg_assignment.all->cnt;
         rd_kafka_wrunlock(rkcg->rkcg_rk);
 
         /* Any change to the assignment marks the current assignment
-         * as not lost.
-         * FIXME: Why is this? */
+         * as not lost. */
         rd_kafka_assignment_clear_lost(rkcg, "assignment subtracted");
 
         return NULL;
@@ -909,7 +866,7 @@ void rd_kafka_assignment_set_lost (rd_kafka_cgrp_t *rkcg,
         va_list ap;
         char reason[256];
 
-        if (!rkcg->rkcg_assignment.all)
+        if (rkcg->rkcg_assignment.all->cnt == 0)
                 return;
 
         va_start(ap, fmt);
@@ -931,8 +888,8 @@ void rd_kafka_assignment_set_lost (rd_kafka_cgrp_t *rkcg,
  * @brief Call when the current assignment is no longer considered lost, with a
  *        human-readable reason.
  */
-void rd_kafka_assignment_clear_lost (rd_kafka_cgrp_t *rkcg,
-                                     char *fmt, ...) {
+static void rd_kafka_assignment_clear_lost (rd_kafka_cgrp_t *rkcg,
+                                            char *fmt, ...) {
         va_list ap;
         char reason[256];
 
@@ -956,8 +913,7 @@ void rd_kafka_assignment_clear_lost (rd_kafka_cgrp_t *rkcg,
  * @brief Destroy assignment state (but not \p assignment itself)
  */
 void rd_kafka_assignment_destroy (rd_kafka_assignment_t *assignment) {
-        if (assignment->all)
-                rd_kafka_topic_partition_list_destroy(assignment->all);
+        rd_kafka_topic_partition_list_destroy(assignment->all);
         rd_kafka_topic_partition_list_destroy(assignment->pending);
         rd_kafka_topic_partition_list_destroy(assignment->queried);
         rd_kafka_topic_partition_list_destroy(assignment->removed);
@@ -969,6 +925,7 @@ void rd_kafka_assignment_destroy (rd_kafka_assignment_t *assignment) {
  */
 void rd_kafka_assignment_init (rd_kafka_assignment_t *assignment) {
         memset(assignment, 0, sizeof(*assignment));
+        assignment->all     = rd_kafka_topic_partition_list_new(100);
         assignment->pending = rd_kafka_topic_partition_list_new(100);
         assignment->queried = rd_kafka_topic_partition_list_new(100);
         assignment->removed = rd_kafka_topic_partition_list_new(100);

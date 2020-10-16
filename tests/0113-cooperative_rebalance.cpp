@@ -262,6 +262,7 @@ public:
   int lost_call_cnt;
   int partitions_assigned_net;
   bool wait_rebalance;
+  int64_t ts_last_assign; /**< Timestamp of last rebalance assignment */
   map<Toppar,int> msg_cnt; /**< Number of consumed messages per partition. */
 
   DefaultRebalanceCb ():
@@ -269,7 +270,8 @@ public:
     revoke_call_cnt(0),
     lost_call_cnt(0),
     partitions_assigned_net(0),
-    wait_rebalance(false) { }
+    wait_rebalance(false),
+    ts_last_assign(0) { }
 
 
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
@@ -298,6 +300,7 @@ public:
                    error->str());
       assign_call_cnt += 1;
       partitions_assigned_net += (int)partitions.size();
+      ts_last_assign = test_clock();
 
     } else {
       if (consumer->assignment_lost())
@@ -311,6 +314,7 @@ public:
     }
 
     /* Reset message counters for the given partitions. */
+    Test::Say(consumer->name() + ": resetting message counters:\n");
     reset_msg_cnt(partitions);
   }
 
@@ -328,7 +332,12 @@ public:
   }
 
   void reset_msg_cnt (Toppar &tp) {
-    msg_cnt.erase(tp);
+    int msgcnt = get_msg_cnt(tp);
+    Test::Say(tostr() << " RESET " << tp.topic  << " [" << tp.partition << "]"
+              << " with " << msgcnt << " messages\n");
+    if (!msg_cnt.erase(tp) && msgcnt)
+      Test::Fail("erase failed!");
+
   }
 
   void reset_msg_cnt (const vector<RdKafka::TopicPartition*> &partitions) {
@@ -398,7 +407,7 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
       Test::Say(tostr() <<
                 (allow_mismatch ? _C_YEL "Warning (allowed)" : _C_RED "Error")
                 << ": " << consumer->name() << " is assigned "
-                << p->topic() << " [" << p->partition() << "] which is4 "
+                << p->topic() << " [" << p->partition() << "] which is "
                 << "not in the list of subscribed topics: " <<
                 string_vec_to_str(topics) << "\n");
       if (!allow_mismatch)
@@ -431,7 +440,7 @@ static int verify_consumer_assignment (RdKafka::KafkaConsumer *consumer,
     }
 
     ss << (it == partitions.begin() ? "" : ", ") << p->topic() <<
-      "[" << p->partition() << "] (" << msg_cnt << "msgs)";
+      " [" << p->partition() << "] (" << msg_cnt << "msgs)";
   }
 
   RdKafka::TopicPartition::destroy(partitions);
@@ -811,7 +820,9 @@ static void a_assign_rapid () {
   Test::incremental_assign(consumer, toppars);
   expect_assignment(consumer, expected);
 
-  /* Verify consumed messages */
+  /*
+   * Verify consumed messages
+   */
   int wait_end = (int)expected.size();
   while (wait_end > 0) {
     RdKafka::Message *msg = consumer->consume(10*1000);
@@ -835,7 +846,10 @@ static void a_assign_rapid () {
     if (*exp_pos == msgs_per_partition) {
       TEST_ASSERT(wait_end > 0, "");
       wait_end--;
-    }
+    } else if (msg->offset() > msgs_per_partition)
+      Test::Fail(tostr() << __FUNCTION__ << ": unexpected message with " <<
+                 "offset " << msg->offset() << " on " << tp.topic <<
+                 " [" << tp.partition << "]\n");
 
     delete msg;
   }
@@ -847,7 +861,7 @@ static void a_assign_rapid () {
 
   delete consumer;
 
-  rd_kafka_mock_cluster_destroy(mcluster);
+  test_mock_cluster_destroy(mcluster);
 }
 
 
@@ -2016,7 +2030,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
     consumers[i] = make_consumer(name.c_str(), group_name, "cooperative-sticky",
                                  NULL,
                                  use_rebalance_cb ? &rebalance_cbs[i] : NULL,
-                                 80);
+                                 120);
   }
 
   test_wait_topic_exists(consumers[0]->c_ptr(), topic_name_1.c_str(), 10*1000);
@@ -2134,14 +2148,17 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
       verify_consumer_assignment(consumers[i],
                                  rebalance_cbs[i],
                                  consumer_topics[i],
-                                 /* allow empty assignment */
+                                 /* Allow empty assignment */
                                  true,
-                                 /* if we're waiting for a rebalance it is
-                                  * okay for the current assignment to contain
-                                  * topics that this consumer (no longer)
-                                  * subscribes to. */
-                                 !use_rebalance_cb ||
-                                 rebalance_cbs[i].wait_rebalance,
+                                 /* Allow mismatch between subscribed topics
+                                  * and actual assignment since we can't
+                                  * synchronize the last subscription
+                                  * to the current assignment due to
+                                  * an unknown number of rebalances required
+                                  * for the final assignment to settle.
+                                  * This is instead checked at the end of
+                                  * this test case. */
+                                 true,
                                  &all_assignments,
                                  -1/* no msgcnt check*/);
 
@@ -2219,15 +2236,30 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
    */
   Test::Say(_C_YEL "Waiting for final assignment state\n");
   int done_count = 0;
+  /* Allow at least 20 seconds for group to stabilize. */
+  int64_t stabilize_until = test_clock() + (20 * 1000*1000); /* 20s */
+
   while (done_count < 2) {
+    bool stabilized = test_clock() > stabilize_until;
 
     poll_all_consumers(consumers, rebalance_cbs, N_CONSUMERS, 5000);
 
     /* Verify consumer assignments */
     int counts[N_CONSUMERS];
     map<Toppar, RdKafka::KafkaConsumer*> all_assignments;
-    Test::Say(tostr() << "Consumer assignments:\n");
-    for (int i = 0 ; i < N_CONSUMERS ; i++)
+    Test::Say(tostr() << "Consumer assignments " <<
+              "(subscription_variation " << subscription_variation << ")" <<
+              (stabilized ? " (stabilized)" : "") <<
+              (use_rebalance_cb ?
+               " (use_rebalance_cb)" : " (no rebalance cb)") <<
+              ":\n");
+    for (int i = 0 ; i < N_CONSUMERS ; i++) {
+      bool last_rebalance_stabilized =
+        stabilized &&
+        (!use_rebalance_cb ||
+         /* session.timeout.ms * 2 + 1 */
+         test_clock() > rebalance_cbs[i].ts_last_assign + (13 * 1000*1000));
+
       counts[i] = verify_consumer_assignment(consumers[i],
                                              rebalance_cbs[i],
                                              consumer_topics[i],
@@ -2238,6 +2270,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
                                               * current assignment to contain
                                               * topics that this consumer
                                               * (no longer) subscribes to. */
+                                             !last_rebalance_stabilized ||
                                              !use_rebalance_cb ||
                                              rebalance_cbs[i].wait_rebalance,
                                              /* do not allow assignments for
@@ -2245,9 +2278,12 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
                                              &all_assignments,
                                              /* Verify received message counts
                                               * once the assignments have
-                                              * stabilized. */
-                                             done_count > 0 ?
+                                              * stabilized.
+                                              * Requires the rebalance cb.*/
+                                             done_count > 0 &&
+                                             use_rebalance_cb ?
                                              N_MSGS_PER_PARTITION : -1);
+    }
 
     Test::Say(tostr() << all_assignments.size() << "/" << N_PARTITIONS <<
               " partitions assigned\n");
@@ -2272,7 +2308,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
         done = false;
     }
 
-    if (done) {
+    if (done && stabilized) {
       done_count++;
       Test::Say(tostr() << "All assignments verified, done count is " <<
                 done_count << "\n");

@@ -337,6 +337,8 @@ namespace Test {
       p->poll(0);
     }
 
+    free(buf);
+
     if (flush)
       p->flush(10*1000);
   }

@@ -82,6 +82,8 @@ matrix:
    compiler: gcc
    env: NO_ARTIFACTS=y
    before_script:
+    - sudo apt update
+    - sudo apt install -y gdb
     - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
     - ./packaging/tools/rdutcoverage.sh
 

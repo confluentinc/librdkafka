@@ -38,6 +38,7 @@
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_assignor.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
@@ -456,6 +457,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_DBG_ADMIN,    "admin" },
                         { RD_KAFKA_DBG_EOS,      "eos" },
                         { RD_KAFKA_DBG_MOCK,     "mock" },
+                        { RD_KAFKA_DBG_ASSIGNOR, "assignor" },
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -1000,8 +1002,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_CGRP|_RK_MED, "partition.assignment.strategy",
           _RK_C_STR,
           _RK(partition_assignment_strategy),
-          "Name of partition assignment strategy to use when elected "
-          "group leader assigns partitions to group members.",
+          "The name of one or more partition assignment strategies. The "
+          "elected group leader will use a strategy supported by all "
+          "members of the group to assign partitions to group members. If "
+          "there is more than one eligible strategy, preference is "
+          "determined by the order of this list (strategies earlier in the "
+          "list have higher priority).",
 	  .sdef = "range,roundrobin" },
         { _RK_GLOBAL|_RK_CGRP|_RK_HIGH, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
@@ -1022,7 +1028,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           1, 3600*1000, 3*1000 },
         { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
           _RK(group_protocol_type),
-          "Group protocol type",
+          "Group protocol type. NOTE: Currently, the only supported group "
+          "protocol type is `consumer`.",
           .sdef = "consumer" },
         { _RK_GLOBAL|_RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
           _RK(coord_query_intvl_ms),
@@ -3566,6 +3573,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */

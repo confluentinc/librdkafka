@@ -34,6 +34,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_error.h"
 
 /* Current number of rd_kafka_op_t */
 rd_atomic32_t rd_kafka_op_cnt;
@@ -69,6 +70,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_ASSIGNMENT] = "REPLY:GET_ASSIGNMENT",
                 [RD_KAFKA_OP_THROTTLE] = "REPLY:THROTTLE",
                 [RD_KAFKA_OP_NAME] = "REPLY:NAME",
+                [RD_KAFKA_OP_CG_METADATA] = "REPLY:CG_METADATA",
                 [RD_KAFKA_OP_OFFSET_RESET] = "REPLY:OFFSET_RESET",
                 [RD_KAFKA_OP_METADATA] = "REPLY:METADATA",
                 [RD_KAFKA_OP_LOG] = "REPLY:LOG",
@@ -85,6 +87,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_MOCK] = "REPLY:MOCK",
                 [RD_KAFKA_OP_BROKER_MONITOR] = "REPLY:BROKER_MONITOR",
                 [RD_KAFKA_OP_TXN] = "REPLY:TXN",
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = "REPLY:GET_REBALANCE_PROTOCOL",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -193,6 +196,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
                 [RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
                 [RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
+                [RD_KAFKA_OP_CG_METADATA] = sizeof(rko->rko_u.cg_metadata),
                 [RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
                 [RD_KAFKA_OP_METADATA] = sizeof(rko->rko_u.metadata),
                 [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log),
@@ -209,6 +213,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_MOCK] = sizeof(rko->rko_u.mock),
                 [RD_KAFKA_OP_BROKER_MONITOR] = sizeof(rko->rko_u.broker_monitor),
                 [RD_KAFKA_OP_TXN] = sizeof(rko->rko_u.txn),
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = sizeof(rko->rko_u.rebalance_protocol),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -267,6 +272,11 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
 	case RD_KAFKA_OP_NAME:
 		RD_IF_FREE(rko->rko_u.name.str, rd_free);
+		break;
+
+	case RD_KAFKA_OP_CG_METADATA:
+                RD_IF_FREE(rko->rko_u.cg_metadata,
+                           rd_kafka_consumer_group_metadata_destroy);
 		break;
 
 	case RD_KAFKA_OP_ERR:
@@ -342,7 +352,6 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.txn.group_id, rd_free);
                 RD_IF_FREE(rko->rko_u.txn.offsets,
                            rd_kafka_topic_partition_list_destroy);
-                RD_IF_FREE(rko->rko_u.txn.error, rd_kafka_error_destroy);
                 break;
 
 	default:
@@ -359,6 +368,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
         }
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
+
+        RD_IF_FREE(rko->rko_error, rd_kafka_error_destroy);
 
 	rd_kafka_replyq_destroy(&rko->rko_replyq);
 
@@ -482,22 +493,53 @@ rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
 
 
 /**
- * @brief Reply to 'rko' re-using the same rko.
+ * @brief Reply to 'rko' re-using the same rko with rko_err
+ *        specified by \p err. rko_error is set to NULL.
+ *
  * If there is no replyq the rko is destroyed.
  *
  * @returns 1 if op was enqueued, else 0 and rko is destroyed.
  */
-int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
+int rd_kafka_op_reply (rd_kafka_op_t *rko,
+                       rd_kafka_resp_err_t err) {
 
         if (!rko->rko_replyq.q) {
-		rd_kafka_op_destroy(rko);
+                rd_kafka_op_destroy(rko);
                 return 0;
-	}
+        }
 
-	rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
+        rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
         rko->rko_err   = err;
+        rko->rko_error = NULL;
 
 	return rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+}
+
+
+/**
+ * @brief Reply to 'rko' re-using the same rko with rko_error specified
+ *        by \p error (may be NULL) and rko_err set to the corresponding
+ *        error code. Assumes ownership of \p error.
+ *
+ * If there is no replyq the rko is destroyed.
+ *
+ * @returns 1 if op was enqueued, else 0 and rko is destroyed.
+ */
+int rd_kafka_op_error_reply (rd_kafka_op_t *rko,
+                             rd_kafka_error_t *error) {
+
+        if (!rko->rko_replyq.q) {
+                RD_IF_FREE(error, rd_kafka_error_destroy);
+                rd_kafka_op_destroy(rko);
+                return 0;
+        }
+
+        rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
+        rko->rko_err   = error ? rd_kafka_error_code(error)
+                               : RD_KAFKA_RESP_ERR_NO_ERROR;
+        rko->rko_error = error;
+
+        return rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
 }
 
 
@@ -556,8 +598,9 @@ rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type) {
         return rd_kafka_op_req(destq, rko, RD_POLL_INFINITE);
 }
 
+
 /**
- * Destroys the rko and returns its error.
+ * Destroys the rko and returns its err.
  */
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
@@ -567,6 +610,23 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
 		rd_kafka_op_destroy(rko);
 	}
         return err;
+}
+
+
+/**
+ * Destroys the rko and returns its error object or NULL if no error.
+ */
+rd_kafka_error_t *rd_kafka_op_error_destroy (rd_kafka_op_t *rko) {
+        if (rko) {
+                rd_kafka_error_t *error = rko->rko_error;
+                rko->rko_error = NULL;
+                rd_kafka_op_destroy(rko);
+                return error;
+        }
+
+        return rd_kafka_error_new(
+                RD_KAFKA_RESP_ERR__TIMED_OUT,
+                "Operation timed out");
 }
 
 

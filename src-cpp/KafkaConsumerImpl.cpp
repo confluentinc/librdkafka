@@ -142,6 +142,14 @@ RdKafka::KafkaConsumerImpl::assignment (std::vector<RdKafka::TopicPartition*> &p
 }
 
 
+
+bool
+RdKafka::KafkaConsumerImpl::assignment_lost () {
+  return rd_kafka_assignment_lost(rk_) ? true : false;
+}
+
+
+
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::subscription (std::vector<std::string> &topics) {
   rd_kafka_topic_partition_list_t *c_topics;
@@ -177,6 +185,38 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::unassign () {
   return static_cast<RdKafka::ErrorCode>(rd_kafka_assign(rk_, NULL));
+}
+
+
+RdKafka::Error *
+RdKafka::KafkaConsumerImpl::incremental_assign (const std::vector<TopicPartition*> &partitions) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_error_t *c_error;
+
+  c_parts = partitions_to_c_parts(partitions);
+  c_error = rd_kafka_incremental_assign(rk_, c_parts);
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  if (c_error)
+    return new ErrorImpl(c_error);
+
+  return NULL;
+}
+
+
+RdKafka::Error *
+RdKafka::KafkaConsumerImpl::incremental_unassign (const std::vector<TopicPartition*> &partitions) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_error_t *c_error;
+
+  c_parts = partitions_to_c_parts(partitions);
+  c_error = rd_kafka_incremental_unassign(rk_, c_parts);
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  if (c_error)
+    return new ErrorImpl(c_error);
+
+  return NULL;
 }
 
 

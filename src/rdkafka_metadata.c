@@ -36,7 +36,7 @@
 #include "rdkafka_metadata.h"
 
 #include <string.h>
-
+#include <stdarg.h>
 
 
 rd_kafka_resp_err_t
@@ -606,7 +606,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
          * propagate non-included topics as non-existent. */
         if (cgrp_update && (requested_topics || all_topics))
                 rd_kafka_cgrp_metadata_update_check(
-                        rkb->rkb_rk->rk_cgrp, 1/*do join*/);
+                        rkb->rkb_rk->rk_cgrp, rd_true/*do join*/);
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */
@@ -1204,4 +1204,111 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk) {
                                      rd_kafka_metadata_leader_query_tmr_cb,
                                      NULL);
         }
+}
+
+
+
+
+/**
+ * @brief Create mock Metadata (for testing) based on the provided topics.
+ *
+ * @param topics elements are checked for .topic and .partition_cnt
+ * @param topic_cnt is the number of topic elements in \p topics.
+ *
+ * @returns a newly allocated metadata object that must be freed with
+ *          rd_kafka_metadata_destroy().
+ *
+ * @sa rd_kafka_metadata_copy()
+ */
+rd_kafka_metadata_t *
+rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
+                                  size_t topic_cnt) {
+        rd_kafka_metadata_t *md;
+        rd_tmpabuf_t tbuf;
+        size_t topic_names_size = 0;
+        int total_partition_cnt = 0;
+        size_t i;
+
+        /* Calculate total partition count and topic names size before
+         * allocating memory. */
+        for (i = 0 ; i < topic_cnt ; i++) {
+                topic_names_size += 1 + strlen(topics[i].topic);
+                total_partition_cnt += topics[i].partition_cnt;
+        }
+
+
+        /* Allocate contiguous buffer which will back all the memory
+         * needed by the final metadata_t object */
+        rd_tmpabuf_new(&tbuf,
+                       sizeof(*md) +
+                       (sizeof(*md->topics) * topic_cnt) +
+                       topic_names_size +
+                       (64/*topic name size..*/ * topic_cnt) +
+                       (sizeof(*md->topics[0].partitions) *
+                        total_partition_cnt),
+                       1/*assert on fail*/);
+
+        md = rd_tmpabuf_alloc(&tbuf, sizeof(*md));
+        memset(md, 0, sizeof(*md));
+
+        md->topic_cnt = (int)topic_cnt;
+        md->topics = rd_tmpabuf_alloc(&tbuf,
+                                      md->topic_cnt * sizeof(*md->topics));
+
+        for (i = 0 ; i < (size_t)md->topic_cnt ; i++) {
+                int j;
+
+                md->topics[i].topic = rd_tmpabuf_write_str(
+                        &tbuf, topics[i].topic);
+                md->topics[i].partition_cnt = topics[i].partition_cnt;
+                md->topics[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                md->topics[i].partitions =
+                        rd_tmpabuf_alloc(&tbuf,
+                                         md->topics[i].partition_cnt *
+                                         sizeof(*md->topics[i].partitions));
+
+                for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
+                        memset(&md->topics[i].partitions[j], 0,
+                               sizeof(md->topics[i].partitions[j]));
+                        md->topics[i].partitions[j].id = j;
+                }
+        }
+
+        /* Check for tmpabuf errors */
+        if (rd_tmpabuf_failed(&tbuf))
+                rd_assert(!*"metadata mock failed");
+
+        /* Not destroying the tmpabuf since we return
+         * its allocated memory. */
+        return md;
+}
+
+
+/**
+ * @brief Create mock Metadata (for testing) based on the
+ *        var-arg tuples of (const char *topic, int partition_cnt).
+ *
+ * @param topic_cnt is the number of topic,partition_cnt tuples.
+ *
+ * @returns a newly allocated metadata object that must be freed with
+ *          rd_kafka_metadata_destroy().
+ *
+ * @sa rd_kafka_metadata_new_topic_mock()
+ */
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...) {
+        rd_kafka_metadata_topic_t *topics;
+        va_list ap;
+        size_t i;
+
+        topics = rd_alloca(sizeof(*topics) * topic_cnt);
+
+        va_start(ap, topic_cnt);
+        for (i = 0 ; i < topic_cnt ; i++) {
+                topics[i].topic = va_arg(ap, char *);
+                topics[i].partition_cnt = va_arg(ap, int);
+        }
+        va_end(ap);
+
+        return rd_kafka_metadata_new_topic_mock(topics, topic_cnt);
 }

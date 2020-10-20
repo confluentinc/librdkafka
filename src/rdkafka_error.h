@@ -61,9 +61,9 @@ rd_kafka_error_t *rd_kafka_error_new_fatal (rd_kafka_resp_err_t code,
 rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
                                                 const char *fmt, ...)
         RD_FORMAT(printf, 2, 3);
-rd_kafka_error_t *rd_kafka_error_new_txn_requires_abort (
-        rd_kafka_resp_err_t code,
-        const char *fmt, ...)
+rd_kafka_error_t *
+rd_kafka_error_new_txn_requires_abort (rd_kafka_resp_err_t code,
+                                       const char *fmt, ...)
         RD_FORMAT(printf, 2, 3);
 
 

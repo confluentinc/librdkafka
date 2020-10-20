@@ -74,6 +74,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
+        rd_kafka_topic_partition_list_t *topics_cpy;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
@@ -84,10 +85,42 @@ rd_kafka_subscribe (rd_kafka_t *rk,
                                               _invalid_topic_cb, NULL) > 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+        topics_cpy = rd_kafka_topic_partition_list_copy(topics);
+        if (rd_kafka_topic_partition_list_has_duplicates(topics_cpy,
+            rd_true/*ignore partition field*/)) {
+                rd_kafka_topic_partition_list_destroy(topics_cpy);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
         rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-	rko->rko_u.subscribe.topics = rd_kafka_topic_partition_list_copy(topics);
+	rko->rko_u.subscribe.topics = topics_cpy;
 
         return rd_kafka_op_err_destroy(
+                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+}
+
+
+rd_kafka_error_t *
+rd_kafka_assign0 (rd_kafka_t *rk,
+                  rd_kafka_assign_method_t assign_method,
+                  const rd_kafka_topic_partition_list_t *partitions) {
+        rd_kafka_op_t *rko;
+        rd_kafka_cgrp_t *rkcg;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+                                          "Requires a consumer with group.id "
+                                          "configured");
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
+
+        rko->rko_u.assign.method = assign_method;
+
+        if (partitions)
+                rko->rko_u.assign.partitions =
+                        rd_kafka_topic_partition_list_copy(partitions);
+
+        return rd_kafka_op_error_destroy(
                 rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
 }
 
@@ -95,21 +128,85 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *partitions) {
-        rd_kafka_op_t *rko;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+
+        error = rd_kafka_assign0(rk, RD_KAFKA_ASSIGN_METHOD_ASSIGN,
+                                 partitions);
+
+        if (!error)
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        else {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+        }
+
+        return err;
+}
+
+
+rd_kafka_error_t *
+rd_kafka_incremental_assign (rd_kafka_t *rk,
+                             const rd_kafka_topic_partition_list_t
+                             *partitions) {
+        if (!partitions)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "partitions must not be NULL");
+
+        return rd_kafka_assign0(rk, RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,
+                                partitions);
+}
+
+
+rd_kafka_error_t *
+rd_kafka_incremental_unassign (rd_kafka_t *rk,
+                               const rd_kafka_topic_partition_list_t
+                               *partitions) {
+        if (!partitions)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "partitions must not be NULL");
+
+        return rd_kafka_assign0(rk, RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN,
+                                partitions);
+}
+
+
+int
+rd_kafka_assignment_lost (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+                return 0;
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
-	if (partitions)
-		rko->rko_u.assign.partitions =
-                        rd_kafka_topic_partition_list_copy(partitions);
-
-        return rd_kafka_op_err_destroy(
-                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+        return rd_kafka_cgrp_assignment_is_lost(rkcg) == rd_true;
 }
 
+
+const char *
+rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
+        rd_kafka_op_t *rko;
+        rd_kafka_cgrp_t *rkcg;
+        const char *result;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return NULL;
+
+        rko = rd_kafka_op_req2(rkcg->rkcg_ops,
+                               RD_KAFKA_OP_GET_REBALANCE_PROTOCOL);
+
+        if (!rko)
+                return NULL;
+        else if (rko->rko_err) {
+                rd_kafka_op_destroy(rko);
+                return NULL;
+        }
+
+        result = rko->rko_u.rebalance_protocol.str;
+
+        rd_kafka_op_destroy(rko);
+
+        return result;
+}
 
 
 rd_kafka_resp_err_t

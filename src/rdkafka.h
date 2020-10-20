@@ -68,6 +68,7 @@ typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
 #define RD_DEPRECATED __declspec(deprecated)
+#define RD_FORMAT(...)
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -89,6 +90,12 @@ typedef SSIZE_T ssize_t;
 #define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
+
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+#define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#else
+#define RD_FORMAT(...)
+#endif
 
 #ifndef LIBRDKAFKA_TYPECHECKS
 #define LIBRDKAFKA_TYPECHECKS 1
@@ -151,7 +158,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010502ff
+#define RD_KAFKA_VERSION  0x01060000
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -226,7 +233,7 @@ const char *rd_kafka_get_debug_contexts(void);
  *             Use rd_kafka_get_debug_contexts() instead.
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,mock"
+        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin,eos,mock,assignor"
 
 
 /* @cond NO_DOC */
@@ -378,6 +385,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__FENCED = -144,
         /** Application generated error */
         RD_KAFKA_RESP_ERR__APPLICATION = -143,
+        /** Assignment lost */
+        RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -828,7 +837,8 @@ void rd_kafka_error_destroy (rd_kafka_error_t *error);
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
-                                      const char *fmt, ...);
+                                      const char *fmt, ...)
+        RD_FORMAT(printf, 2, 3);
 
 
 /**
@@ -1001,8 +1011,9 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
  */
 RD_EXPORT
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
-				    const char *topic, int32_t partition);
+rd_kafka_topic_partition_list_find (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition);
 
 
 /**
@@ -3595,7 +3606,7 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes,
+ *          topics or regexes or duplicate entries,
  *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -3678,19 +3689,84 @@ RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
 
+/**
+ * @brief Incrementally add \p partitions to the current assignment.
+ *
+ * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+ * this method should be used in a rebalance callback to adjust the current
+ * assignment appropriately in the case where the rebalance type is
+ * RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS. The application must pass the
+ * partition list passed to the callback (or a copy of it), even if the
+ * list is empty. \p partitions must not be NULL. This method may also be
+ * used outside the context of a rebalance callback.
+ *
+ * @returns NULL on success, or an error object if the operation was
+ *          unsuccessful.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_incremental_assign (rd_kafka_t *rk,
+                             const rd_kafka_topic_partition_list_t
+                             *partitions);
+
+
+/**
+ * @brief Incrementally remove \p partitions from the current assignment.
+ *
+ * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+ * this method should be used in a rebalance callback to adjust the current
+ * assignment appropriately in the case where the rebalance type is
+ * RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS. The application must pass the
+ * partition list passed to the callback (or a copy of it), even if the
+ * list is empty. \p partitions must not be NULL. This method may also be
+ * used outside the context of a rebalance callback.
+ *
+ * @returns NULL on success, or an error object if the operation was
+ *          unsuccessful.
+ *
+ * @remark The returned error object (if not NULL) must be destroyed with
+ *         rd_kafka_error_destroy().
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_incremental_unassign (rd_kafka_t *rk,
+                               const rd_kafka_topic_partition_list_t
+                               *partitions);
+
+
+/**
+ * @brief The rebalance protocol currently in use. This will be
+ *        "NONE" if the consumer has not (yet) joined a group, else it will
+ *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+ *        configured and selected assignor(s). All configured
+ *        assignors must have the same protocol type, meaning
+ *        online migration of a consumer group from using one
+ *        protocol to another (in particular upgading from EAGER
+ *        to COOPERATIVE) without a restart is not currently
+ *        supported.
+ *
+ * @returns NULL on error, or one of "NONE", "EAGER", "COOPERATIVE" on success.
+ */
+RD_EXPORT
+const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
+
 
 /**
  * @brief Atomic assignment of partitions to consume.
  *
  * The new \p partitions will replace the existing assignment.
  *
- * When used from a rebalance callback the application shall pass the
- * partition list passed to the callback (or a copy of it) (even if the list
- * is empty) rather than NULL to maintain internal join state.
-
  * A zero-length \p partitions will treat the partitions as a valid,
- * albeit empty, assignment, and maintain internal state, while a \c NULL
+ * albeit empty assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
+ *
+ * When used from a rebalance callback, the application should pass the
+ * partition list passed to the callback (or a copy of it) even if the list
+ * is empty (i.e. should not pass NULL in this case) so as to maintain
+ * internal join state. This is not strictly required - the application
+ * may adjust the assignment provided by the group. However, this is rarely
+ * useful in practice.
  *
  * @returns An error code indicating if the new assignment was applied or not.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
@@ -3714,6 +3790,24 @@ rd_kafka_assignment (rd_kafka_t *rk,
                      rd_kafka_topic_partition_list_t **partitions);
 
 
+/**
+ * @brief Check whether the consumer considers the current assignment to
+ *        have been lost involuntarily. This method is only applicable for
+ *        use with a high level subscribing consumer. Assignments are revoked
+ *        immediately when determined to have been lost, so this method
+ *        is only useful when reacting to a RD_KAFKA_EVENT_REBALANCE event
+ *        or from within a rebalance_cb. Partitions that have been lost may
+ *        already be owned by other members in the group and therefore
+ *        commiting offsets, for example, may fail.
+ *
+ * @remark Calling rd_kafka_assign(), rd_kafka_incremental_assign() or
+ *         rd_kafka_incremental_unassign() resets this flag.
+ *
+ * @returns Returns 1 if the current partition assignment is considered
+ *          lost, 0 otherwise.
+ */
+RD_EXPORT int
+rd_kafka_assignment_lost (rd_kafka_t *rk);
 
 
 /**
@@ -3846,11 +3940,33 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
  * @brief Create a new consumer group metadata object.
  *        This is typically only used for writing tests.
  *
+ * @param group_id The group id.
+ *
  * @remark The returned pointer must be freed by the application using
  *         rd_kafka_consumer_group_metadata_destroy().
  */
 RD_EXPORT rd_kafka_consumer_group_metadata_t *
 rd_kafka_consumer_group_metadata_new (const char *group_id);
+
+
+/**
+ * @brief Create a new consumer group metadata object.
+ *        This is typically only used for writing tests.
+ *
+ * @param group_id The group id.
+ * @param generation_id The group generation id.
+ * @param member_id The group member id.
+ * @param group_instance_id The group instance id (may be NULL).
+ *
+ * @remark The returned pointer must be freed by the application using
+ *         rd_kafka_consumer_group_metadata_destroy().
+ */
+RD_EXPORT rd_kafka_consumer_group_metadata_t *
+rd_kafka_consumer_group_metadata_new_with_genid (const char *group_id,
+                                                 int32_t generation_id,
+                                                 const char *member_id,
+                                                 const char
+                                                 *group_instance_id);
 
 
 /**
@@ -6077,7 +6193,7 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
  * @brief Create a new NewPartitions. This object is later passed to
- *        rd_kafka_CreatePartitions() to increas the number of partitions
+ *        rd_kafka_CreatePartitions() to increase the number of partitions
  *        to \p new_total_cnt for an existing topic.
  *
  * @param topic Topic name to create more partitions for.

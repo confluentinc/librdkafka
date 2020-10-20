@@ -37,9 +37,12 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_transport.c rdkafka_buf.c rdkafka_queue.c rdkafka_op.c \
 		rdkafka_request.c rdkafka_cgrp.c rdkafka_pattern.c \
 		rdkafka_partition.c rdkafka_subscription.c \
+		rdkafka_assignment.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
-		rdkafka_roundrobin_assignor.c rdkafka_feature.c \
-		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c rdaddr.c rdrand.c rdlist.c \
+		rdkafka_roundrobin_assignor.c rdkafka_sticky_assignor.c \
+		rdkafka_feature.c \
+		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c \
+		rdaddr.c rdrand.c rdlist.c \
 		tinycthread.c tinycthread_extra.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
 		rdregex.c rdports.c rdkafka_metadata_cache.c rdavl.c \
@@ -48,7 +51,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_header.c rdkafka_admin.c rdkafka_aux.c \
 		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
 		rdkafka_txnmgr.c rdkafka_coord.c \
-		rdvarint.c rdbuf.c rdunittest.c \
+		rdvarint.c rdbuf.c rdmap.c rdunittest.c \
 		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
 		rdkafka_error.c \
 		$(SRCS_y)

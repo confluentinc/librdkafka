@@ -30,14 +30,34 @@
 
 
 
+/*!
+ * Enumerates the different rebalance protocol types.
+ *
+ * @sa rd_kafka_rebalance_protocol()
+ */
+typedef enum rd_kafka_rebalance_protocol_t {
+        RD_KAFKA_REBALANCE_PROTOCOL_NONE,       /**< Rebalance protocol is
+                                                     unknown */
+        RD_KAFKA_REBALANCE_PROTOCOL_EAGER,      /**< Eager rebalance
+                                                     protocol */
+        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE /**< Cooperative
+                                                     rebalance protocol*/
+} rd_kafka_rebalance_protocol_t;
+
+
+
+
+
 typedef struct rd_kafka_group_member_s {
         rd_kafka_topic_partition_list_t *rkgm_subscription;
         rd_kafka_topic_partition_list_t *rkgm_assignment;
+        rd_kafka_topic_partition_list_t *rkgm_owned;
         rd_list_t                        rkgm_eligible;
         rd_kafkap_str_t                 *rkgm_member_id;
         rd_kafkap_str_t                 *rkgm_group_instance_id;
         rd_kafkap_bytes_t               *rkgm_userdata;
         rd_kafkap_bytes_t               *rkgm_member_metadata;
+        int                              rkgm_generation;
 } rd_kafka_group_member_t;
 
 
@@ -63,18 +83,17 @@ int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b);
 
 
 typedef struct rd_kafka_assignor_s {
-        rd_kafkap_str_t   *rkas_protocol_type;
-        rd_kafkap_str_t   *rkas_protocol_name;
+        rd_kafkap_str_t *rkas_protocol_type;
+        rd_kafkap_str_t *rkas_protocol_name;
 
-        const void        *rkas_userdata;
-        size_t             rkas_userdata_size;
+	int rkas_enabled;
 
-	int                rkas_enabled;
+        rd_kafka_rebalance_protocol_t rkas_protocol;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,
+                const struct rd_kafka_assignor_s *rkas,
                 const char *member_id,
-                const char *protocol_name,
                 const rd_kafka_metadata_t *metadata,
                 rd_kafka_group_member_t *members,
                 size_t member_cnt,
@@ -85,31 +104,80 @@ typedef struct rd_kafka_assignor_s {
                 void *opaque);
 
         rd_kafkap_bytes_t *(*rkas_get_metadata_cb) (
-                struct rd_kafka_assignor_s *rkpas,
-		const rd_list_t *topics);
+                const struct rd_kafka_assignor_s *rkas,
+                void *assignor_state,
+                const rd_list_t *topics,
+                const rd_kafka_topic_partition_list_t *owned_partitions);
 
+        void (*rkas_on_assignment_cb) (
+                const struct rd_kafka_assignor_s *rkas,
+                void **assignor_state,
+                const rd_kafka_topic_partition_list_t *assignment,
+                const rd_kafkap_bytes_t *assignment_userdata,
+                const rd_kafka_consumer_group_metadata_t *rkcgm);
 
-        void (*rkas_on_assignment_cb) (const char *member_id,
-                                        rd_kafka_group_member_t
-                                        *assignment, void *opaque);
+        void (*rkas_destroy_state_cb) (void *assignor_state);
+
+        int (*rkas_unittest) (void);
 
         void *rkas_opaque;
 } rd_kafka_assignor_t;
 
 
+rd_kafka_resp_err_t
+rd_kafka_assignor_add (rd_kafka_t *rk,
+                       const char *protocol_type,
+                       const char *protocol_name,
+                       rd_kafka_rebalance_protocol_t rebalance_protocol,
+                       rd_kafka_resp_err_t (*assign_cb) (
+                               rd_kafka_t *rk,
+                               const struct rd_kafka_assignor_s *rkas,
+                               const char *member_id,
+                               const rd_kafka_metadata_t *metadata,
+                               rd_kafka_group_member_t *members,
+                               size_t member_cnt,
+                               rd_kafka_assignor_topic_t **eligible_topics,
+                               size_t eligible_topic_cnt,
+                               char *errstr, size_t errstr_size, void *opaque),
+                       rd_kafkap_bytes_t *(*get_metadata_cb) (
+                               const struct rd_kafka_assignor_s *rkas,
+                               void *assignor_state,
+                               const rd_list_t *topics,
+                               const rd_kafka_topic_partition_list_t
+                               *owned_partitions),
+                       void (*on_assignment_cb) (
+                               const struct rd_kafka_assignor_s *rkas,
+                               void **assignor_state,
+                               const rd_kafka_topic_partition_list_t *assignment,
+                               const rd_kafkap_bytes_t *userdata,
+                               const rd_kafka_consumer_group_metadata_t *rkcgm),
+                       void (*destroy_state_cb) (void *assignor_state),
+                       int (*unittest_cb) (void),
+                       void *opaque);
+
 rd_kafkap_bytes_t *
-rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkpas,
-				const rd_list_t *topics);
+rd_kafka_consumer_protocol_member_metadata_new (const rd_list_t *topics,
+                                                const void *userdata,
+                                                size_t userdata_size,
+                                                const rd_kafka_topic_partition_list_t
+                                                *owned_partitions);
+
+rd_kafkap_bytes_t *
+rd_kafka_assignor_get_metadata_with_empty_userdata (const rd_kafka_assignor_t *rkas,
+                                                    void *assignor_state,
+                                                    const rd_list_t *topics,
+                                                    const rd_kafka_topic_partition_list_t
+                                                    *owned_partitions);
 
 
-void rd_kafka_assignor_update_subscription (rd_kafka_assignor_t *rkpas,
+void rd_kafka_assignor_update_subscription (const rd_kafka_assignor_t *rkas,
                                             const rd_kafka_topic_partition_list_t
                                             *subscription);
 
 
 rd_kafka_resp_err_t
 rd_kafka_assignor_run (struct rd_kafka_cgrp_s *rkcg,
-                       const char *protocol_name,
+                       const rd_kafka_assignor_t *rkas,
                        rd_kafka_metadata_t *metadata,
                        rd_kafka_group_member_t *members, int member_cnt,
                        char *errstr, size_t errstr_size);
@@ -125,36 +193,8 @@ void rd_kafka_assignors_term (rd_kafka_t *rk);
 void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm);
 
 
-/**
- * rd_kafka_range_assignor.c
- */
-rd_kafka_resp_err_t
-rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
-                                   const char *member_id,
-                                   const char *protocol_name,
-                                   const rd_kafka_metadata_t *metadata,
-                                   rd_kafka_group_member_t *members,
-                                   size_t member_cnt,
-                                   rd_kafka_assignor_topic_t **eligible_topics,
-                                   size_t eligible_topic_cnt,
-                                   char *errstr, size_t errstr_size,
-                                   void *opaque);
-
-
-/**
- * rd_kafka_roundrobin_assignor.c
- */
-rd_kafka_resp_err_t
-rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
-					const char *member_id,
-					const char *protocol_name,
-					const rd_kafka_metadata_t *metadata,
-					rd_kafka_group_member_t *members,
-					size_t member_cnt,
-					rd_kafka_assignor_topic_t
-					**eligible_topics,
-					size_t eligible_topic_cnt,
-					char *errstr, size_t errstr_size,
-					void *opaque);
+rd_kafka_resp_err_t rd_kafka_range_assignor_init (rd_kafka_t *rk);
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init (rd_kafka_t *rk);
+rd_kafka_resp_err_t rd_kafka_sticky_assignor_init (rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_ASSIGNOR_H_ */

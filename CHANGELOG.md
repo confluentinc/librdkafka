@@ -1,3 +1,18 @@
+# librdkafka v1.6.0
+
+librdkafka v1.6.0 is a feature release adding support for
+[KIP-429 Incremental rebalancing](...) and the sticky consumer group
+partition assignor.
+
+ * Incremental rebalancing and assignments - FIXME: write something nifty
+ * Sticky consumer group partition assignor - FIXME: write something spiffy
+ * Sticky producer partitioner - achieves higher throughput and lower latency
+   through sticky selection of random partition.
+
+
+
+
+
 # librdkafka v1.5.2
 
 librdkafka v1.5.2 is a maintenance release.
@@ -18,6 +33,9 @@ librdkafka v1.5.2 is a maintenance release.
    This change yields increased robustness for broker-side congestion.
 
 
+The v1.6.0 release is a feature release adding support for incremental
+rebalancing of consumer groups.
+
 ## Enhancements
 
  * The generated `CONFIGURATION.md` (through `rd_kafka_conf_properties_show())`)
@@ -27,6 +45,8 @@ librdkafka v1.5.2 is a maintenance release.
    a more useful error string saying why the property can't be set.
  * Consumer configs on producers and vice versa will now be logged with
    warning messages on client instantiation.
+ * Added `assignor` debug context for troubleshooting consumer partition
+   assignments.
 
 
 ## Fixes
@@ -87,6 +107,7 @@ librdkafka v1.5.2 is a maintenance release.
 
 
 *Note: there was no v1.5.1 librdkafka release*
+
 
 
 

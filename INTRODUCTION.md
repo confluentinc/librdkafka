@@ -1201,6 +1201,8 @@ plugin        | *        | Plugin loading debugging.
 consumer      | consumer | High-level consumer debugging.
 admin         | admin    | Admin API debugging.
 eos           | producer | Idempotent Producer debugging.
+mock          | *        | Mock cluster functionality debugging.
+assignor      | consumer | Detailed consumer group partition assignor debugging.
 all           | *        | All of the above.
 
 
@@ -1761,7 +1763,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-42 - Producer and Consumer interceptors                              | 0.10.0.0                                  | Supported (not supported by Go, .NET and Python)                                              |
 | KIP-43 - SASL PLAIN and handshake                                        | 0.10.0.0                                  | Supported                                                                                     |
 | KIP-48 - Delegation tokens                                               | 1.1.0                                     | Not supported                                                                                 |
-| KIP-54 - Sticky partition assignment strategy                            | 0.11.0.0                                  | Not supported                                                                                 |
+| KIP-54 - Sticky partition assignment strategy                            | 0.11.0.0                                  | Not supported (superceeded by KIP-429)                                                        |
 | KIP-57 - Interoperable LZ4 framing                                       | 0.10.0.0                                  | Supported                                                                                     |
 | KIP-62 - max.poll.interval and background heartbeats                     | 0.10.1.0                                  | Supported                                                                                     |
 | KIP-70 - Proper client rebalance event on unsubscribe/subscribe          | 0.10.1.0                                  | Supported                                                                                     |
@@ -1807,7 +1809,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-320 - Consumer: handle log truncation                                | 2.1.0 (partially implemented) / 2.2.0     | Not supported                                                                                 |
 | KIP-322 - DeleteTopics disabled error code                               | 2.1.0                                     | Supported                                                                                     |
 | KIP-339 - AdminAPI: incrementalAlterConfigs                              | 2.3.0                                     | Not supported                                                                                 |
-| KIP-341 - Update Sticky partition assignment data                        | 2.3.0                                     | Not supported                                                                                 |
+| KIP-341 - Update Sticky partition assignment data                        | 2.3.0                                     | Not supported (superceeded by KIP-429)                                                        |
 | KIP-342 - Custom SASL OAUTHBEARER extensions                             | 2.1.0                                     | Supported                                                                                     |
 | KIP-345 - Consumer: Static membership                                    | 2.4.0                                     | Supported                                                                                     |
 | KIP-357 - AdminAPI: list ACLs per principal                              | 2.1.0                                     | Not supported                                                                                 |

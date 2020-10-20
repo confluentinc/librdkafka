@@ -219,6 +219,7 @@ _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
 _TEST_DECL(0112_assign_unknown_part);
+_TEST_DECL(0113_cooperative_rebalance);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
@@ -413,6 +414,7 @@ struct test tests[] = {
         _TEST(0111_delay_create_topics, 0, TEST_BRKVER_TOPIC_ADMINAPI,
               .scenario = "noautocreate"),
         _TEST(0112_assign_unknown_part, 0),
+        _TEST(0113_cooperative_rebalance, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
         _TEST(0117_mock_errors, TEST_F_LOCAL),
@@ -2632,6 +2634,26 @@ void test_consumer_assign (const char *what, rd_kafka_t *rk,
 }
 
 
+void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,
+                                       rd_kafka_topic_partition_list_t
+                                       *partitions) {
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "INCREMENTAL.ASSIGN.PARTITIONS");
+        error = rd_kafka_incremental_assign(rk, partitions);
+        TIMING_STOP(&timing);
+        if (error) {
+                TEST_FAIL("%s: incremental assign of %d partition(s) failed: "
+                          "%s", what, partitions->cnt,
+                          rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else
+                TEST_SAY("%s: incremental assign of %d partition(s) done\n",
+                         what, partitions->cnt);
+}
+
+
 void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         test_timing_t timing;
@@ -2644,6 +2666,26 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
                           what, rd_kafka_err2str(err));
         else
                 TEST_SAY("%s: unassigned current partitions\n", what);
+}
+
+
+void test_consumer_incremental_unassign (const char *what, rd_kafka_t *rk,
+                                         rd_kafka_topic_partition_list_t
+                                         *partitions) {
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "INCREMENTAL.UNASSIGN.PARTITIONS");
+        error = rd_kafka_incremental_unassign(rk, partitions);
+        TIMING_STOP(&timing);
+        if (error) {
+                TEST_FAIL("%s: incremental unassign of %d partition(s) "
+                          "failed: %s", what, partitions->cnt,
+                          rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else
+                TEST_SAY("%s: incremental unassign of %d partition(s) done\n",
+                         what, partitions->cnt);
 }
 
 

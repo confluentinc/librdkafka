@@ -111,7 +111,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x010502ff
+#define RD_KAFKA_VERSION  0x01060000
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -290,6 +290,8 @@ enum ErrorCode {
         ERR__FENCED = -144,
         /** Application generated error */
         ERR__APPLICATION = -143,
+        /** Assignment lost */
+        ERR__ASSIGNMENT_LOST = -142,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -2651,6 +2653,75 @@ public:
    */
   virtual ConsumerGroupMetadata *groupMetadata () = 0;
 
+
+  /** @brief Check whether the consumer considers the current assignment to
+   *         have been lost involuntarily. This method is only applicable for
+   *         use with a subscribing consumer. Assignments are revoked
+   *         immediately when determined to have been lost, so this method is
+   *         only useful within a rebalance callback. Partitions that have
+   *         been lost may already be owned by other members in the group and
+   *         therefore commiting offsets, for example, may fail.
+   *
+   * @remark Calling assign(), incremental_assign() or incremental_unassign()
+   *         resets this flag.
+   *
+   * @returns Returns true if the current partition assignment is considered
+   *          lost, false otherwise.
+   */
+  virtual bool assignment_lost () = 0;
+
+  /**
+   * @brief The rebalance protocol currently in use. This will be
+   *        "NONE" if the consumer has not (yet) joined a group, else it will
+   *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+   *        configured and selected assignor(s). All configured
+   *        assignors must have the same protocol type, meaning
+   *        online migration of a consumer group from using one
+   *        protocol to another (in particular upgading from EAGER
+   *        to COOPERATIVE) without a restart is not currently
+   *        supported.
+   *
+   * @returns an empty string on error, or one of
+   *          "NONE", "EAGER", "COOPERATIVE" on success.
+   */
+
+  virtual std::string rebalance_protocol () = 0;
+
+
+  /**
+   * @brief Incrementally add \p partitions to the current assignment.
+   *
+   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+   * this method should be used in a rebalance callback to adjust the current
+   * assignment appropriately in the case where the rebalance type is
+   * ERR__ASSIGN_PARTITIONS. The application must pass the partition list
+   * passed to the callback (or a copy of it), even if the list is empty.
+   * This method may also be used outside the context of a rebalance callback.
+   *
+   * @returns NULL on success, or an error object if the operation was
+   *          unsuccessful.
+   *
+   * @remark The returned object must be deleted by the application.
+   */
+  virtual Error *incremental_assign (const std::vector<TopicPartition*> &partitions) = 0;
+
+
+  /**
+   * @brief Incrementally remove \p partitions from the current assignment.
+   *
+   * If a COOPERATIVE assignor (i.e. incremental rebalancing) is being used,
+   * this method should be used in a rebalance callback to adjust the current
+   * assignment appropriately in the case where the rebalance type is
+   * ERR__REVOKE_PARTITIONS. The application must pass the partition list
+   * passed to the callback (or a copy of it), even if the list is empty.
+   * This method may also be used outside the context of a rebalance callback.
+   *
+   * @returns NULL on success, or an error object if the operation was
+   *          unsuccessful.
+   *
+   * @remark The returned object must be deleted by the application.
+   */
+  virtual Error *incremental_unassign (const std::vector<TopicPartition*> &partitions) = 0;
 
 };
 

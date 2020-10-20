@@ -108,6 +108,7 @@ typedef enum {
 				      * Reuses u.assign */
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
 	RD_KAFKA_OP_NAME,            /* Request name */
+        RD_KAFKA_OP_CG_METADATA,     /**< Request consumer metadata */
 	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
         RD_KAFKA_OP_METADATA,        /* Metadata response */
         RD_KAFKA_OP_LOG,             /* Log */
@@ -124,6 +125,7 @@ typedef enum {
         RD_KAFKA_OP_MOCK,            /**< Mock cluster command */
         RD_KAFKA_OP_BROKER_MONITOR,    /**< Broker state change */
         RD_KAFKA_OP_TXN,             /**< Transaction command */
+        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -192,6 +194,15 @@ typedef rd_kafka_op_res_t
         RD_WARN_UNUSED_RESULT;
 
 /**
+ * @brief Enumerates the assign op sub-types.
+ */
+typedef enum {
+        RD_KAFKA_ASSIGN_METHOD_ASSIGN,        /**< Absolute assign/unassign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,   /**< Incremental assign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN  /**< Incremental unassign */
+} rd_kafka_assign_method_t;
+
+/**
  * @brief Op callback type
  */
 typedef rd_kafka_op_res_t (rd_kafka_op_cb_t) (rd_kafka_t *rk,
@@ -214,6 +225,7 @@ struct rd_kafka_op_s {
 	int                   rko_flags;  /* See RD_KAFKA_OP_F_... above */
 	int32_t               rko_version;
 	rd_kafka_resp_err_t   rko_err;
+        rd_kafka_error_t     *rko_error;
 	int32_t               rko_len;    /* Depends on type, typically the
 					   * message length. */
         rd_kafka_prio_t       rko_prio;   /**< In-queue priority.
@@ -275,15 +287,22 @@ struct rd_kafka_op_s {
 
 		struct {
 			rd_kafka_topic_partition_list_t *partitions;
+                        rd_kafka_assign_method_t method;
 		} assign; /* also used for GET_ASSIGNMENT */
 
-		struct {
-			rd_kafka_topic_partition_list_t *partitions;
-		} rebalance;
+                struct {
+                        rd_kafka_topic_partition_list_t *partitions;
+                } rebalance;
+
+                struct {
+                        const char *str;
+                } rebalance_protocol;
 
 		struct {
 			char *str;
 		} name;
+
+                rd_kafka_consumer_group_metadata_t *cg_metadata;
 
 		struct {
 			int64_t offset;
@@ -488,7 +507,6 @@ struct rd_kafka_op_s {
                 } broker_monitor;
 
                 struct {
-                        rd_kafka_error_t *error; /**< Error object */
                         char *group_id; /**< Consumer group id for commits */
                         int   timeout_ms; /**< Operation timeout */
                         rd_ts_t abs_timeout; /**< Absolute time */
@@ -520,7 +538,10 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
                                    rd_kafka_op_type_t type,
                                    rd_kafka_op_cb_t *cb);
-int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
+int rd_kafka_op_reply (rd_kafka_op_t *rko,
+                       rd_kafka_resp_err_t err);
+int rd_kafka_op_error_reply (rd_kafka_op_t *rko,
+                             rd_kafka_error_t *error);
 
 #define rd_kafka_op_set_prio(rko,prio) ((rko)->rko_prio = prio)
 
@@ -549,6 +570,7 @@ rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
                                 int timeout_ms);
 rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type);
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko);
+rd_kafka_error_t *rd_kafka_op_error_destroy (rd_kafka_op_t *rko);
 
 rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk,
                                     rd_kafka_q_t *rkq, rd_kafka_op_t *rko)

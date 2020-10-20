@@ -50,8 +50,8 @@
 
 rd_kafka_resp_err_t
 rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
+				        const rd_kafka_assignor_t *rkas,
 					const char *member_id,
-					const char *protocol_name,
 					const rd_kafka_metadata_t *metadata,
 					rd_kafka_group_member_t *members,
 					size_t member_cnt,
@@ -113,3 +113,14 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 
 
 
+/**
+ * @brief Initialzie and add roundrobin assignor.
+ */
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init (rd_kafka_t *rk) {
+        return rd_kafka_assignor_add(
+                rk, "consumer", "roundrobin",
+                RD_KAFKA_REBALANCE_PROTOCOL_EAGER,
+                rd_kafka_roundrobin_assignor_assign_cb,
+                rd_kafka_assignor_get_metadata_with_empty_userdata,
+                NULL, NULL, NULL, NULL);
+}

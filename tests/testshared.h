@@ -46,6 +46,9 @@ typedef struct rd_kafka_s rd_kafka_t;
 #define _C_CYA "\033[36m"
 
 
+/** Test logging level (TEST_LEVEL=.. env) */
+extern int test_level;
+
 /** Test scenario */
 extern char test_scenario[64];
 
@@ -74,6 +77,9 @@ void test_delete_topic (rd_kafka_t *use_rk, const char *topicname);
 
 void test_create_topic (rd_kafka_t *use_rk, const char *topicname,
                         int partition_cnt, int replication_factor);
+
+void test_create_partitions (rd_kafka_t *use_rk, const char *topicname,
+                             int new_partition_cnt);
 
 void test_wait_topic_exists (rd_kafka_t *rk, const char *topic, int tmout);
 

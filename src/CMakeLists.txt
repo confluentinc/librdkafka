@@ -32,7 +32,9 @@ set(
     rdkafka_roundrobin_assignor.c
     rdkafka_sasl.c
     rdkafka_sasl_plain.c
+    rdkafka_sticky_assignor.c
     rdkafka_subscription.c
+    rdkafka_assignment.c
     rdkafka_timer.c
     rdkafka_topic.c
     rdkafka_transport.c
@@ -58,6 +60,7 @@ set(
     rdstring.c
     rdunittest.c
     rdvarint.c
+    rdmap.c
     snappy.c
     tinycthread.c
     tinycthread_extra.c

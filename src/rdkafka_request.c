@@ -200,11 +200,16 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 /**
  * @brief Read a list of topic+partitions+extra from \p rkbuf.
  *
+ * @param rkbuf buffer to read from
+ * @param estimated_part_cnt estimated number of partitions to read.
+ * @param read_part_errs whether or not to read an error per partition.
+ *
  * @returns a newly allocated list on success, or NULL on parse error.
  */
 rd_kafka_topic_partition_list_t *
 rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
-                                    size_t estimated_part_cnt) {
+                                    size_t estimated_part_cnt,
+                                    rd_bool_t read_part_errs) {
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
@@ -215,7 +220,6 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
                 rd_kafka_buf_parse_fail(rkbuf,
                                         "TopicArrayCnt %"PRId32" out of range",
                                         TopicArrayCnt);
-
 
         parts = rd_kafka_topic_partition_list_new(
                 RD_MAX(TopicArrayCnt, (int)estimated_part_cnt));
@@ -235,11 +239,14 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
                         rktpar = rd_kafka_topic_partition_list_add(
                                 parts, topic, Partition);
-                        rktpar->err = ErrorCode;
+
+                        if (read_part_errs) {
+                                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                                rktpar->err = ErrorCode;
+                        }
                 }
         }
 
@@ -252,6 +259,7 @@ rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,
         return NULL;
 }
 
+
 /**
  * @brief Write a list of topic+partitions+offsets+extra to \p rkbuf
  *
@@ -263,6 +271,7 @@ int rd_kafka_buf_write_topic_partitions (
         rd_kafka_buf_t *rkbuf,
         const rd_kafka_topic_partition_list_t *parts,
         rd_bool_t skip_invalid_offsets,
+        rd_bool_t write_Offset,
         rd_bool_t write_Epoch,
         rd_bool_t write_Metadata) {
         size_t of_TopicArrayCnt;
@@ -304,10 +313,12 @@ int rd_kafka_buf_write_topic_partitions (
                 PartArrayCnt++;
 
                 /* Time/Offset */
-                if (rktpar->offset >= 0)
-                        rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
-                else
-                        rd_kafka_buf_write_i64(rkbuf, -1);
+                if (write_Offset) {
+                        if (rktpar->offset >= 0)
+                                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+                        else
+                                rd_kafka_buf_write_i64(rkbuf, -1);
+                }
 
                 if (write_Epoch) {
                         /* CommittedLeaderEpoch */
@@ -587,16 +598,21 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
  * Offsets for included partitions will be propagated through the passed
  * 'offsets' list.
  *
- * \p update_toppar: update toppar's committed_offset
+ * @param rkbuf response buffer, may be NULL if \p err is set.
+ * @param update_toppar update toppar's committed_offset
+ * @param add_part if true add partitions from the response to \p *offsets,
+ *                 else just update the partitions that are already
+ *                 in \p *offsets.
  */
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
-			     rd_kafka_broker_t *rkb,
-			     rd_kafka_resp_err_t err,
-			     rd_kafka_buf_t *rkbuf,
-			     rd_kafka_buf_t *request,
-			     rd_kafka_topic_partition_list_t *offsets,
-			     int update_toppar) {
+                             rd_kafka_broker_t *rkb,
+                             rd_kafka_resp_err_t err,
+                             rd_kafka_buf_t *rkbuf,
+                             rd_kafka_buf_t *request,
+                             rd_kafka_topic_partition_list_t **offsets,
+                             rd_bool_t update_toppar,
+                             rd_bool_t add_part) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
@@ -608,10 +624,13 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        if (!*offsets)
+                *offsets = rd_kafka_topic_partition_list_new(16);
+
         /* Set default offset for all partitions. */
-        rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, offsets, 0,
+        rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, *offsets, 0,
                                                   RD_KAFKA_OFFSET_INVALID,
-						  0 /* !is commit */);
+                                                  0 /* !is commit */);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         for (i = 0 ; i < TopicArrayCnt ; i++) {
@@ -636,10 +655,13 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
                         rd_kafka_buf_read_str(rkbuf, &metadata);
                         rd_kafka_buf_read_i16(rkbuf, &err2);
 
-                        rktpar = rd_kafka_topic_partition_list_find(offsets,
+                        rktpar = rd_kafka_topic_partition_list_find(*offsets,
                                                                     topic_name,
                                                                     partition);
-                        if (!rktpar) {
+                        if (!rktpar && add_part)
+                                rktpar = rd_kafka_topic_partition_list_add(
+                                        *offsets, topic_name, partition);
+                        else if (!rktpar) {
 				rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
 					   "OffsetFetchResponse: %s [%"PRId32"] "
 					   "not found in local list: ignoring",
@@ -693,11 +715,15 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
         }
 
 
-err:
-        rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
-                   "OffsetFetch for %d/%d partition(s) returned %s",
-                   seen_cnt,
-                   offsets ? offsets->cnt : -1, rd_kafka_err2str(err));
+ err:
+        if (!*offsets)
+                rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
+                           "OffsetFetch returned %s", rd_kafka_err2str(err));
+        else
+                rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
+                           "OffsetFetch for %d/%d partition(s) returned %s",
+                           seen_cnt,
+                           (*offsets)->cnt, rd_kafka_err2str(err));
 
         actions = rd_kafka_err_action(rkb, err, request,
 				      RD_KAFKA_ERR_ACTION_END);
@@ -768,7 +794,9 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
         if (rkbuf) {
                 /* ..else parse the response (or perror) */
                 err = rd_kafka_handle_OffsetFetch(rkb->rkb_rk, rkb, err, rkbuf,
-                                                  request, offsets, 0);
+                                                  request, &offsets,
+                                                  rd_false/*dont update rktp*/,
+                                                  rd_false/*dont add part*/);
                 if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                         rd_kafka_topic_partition_list_destroy(offsets);
                         return; /* Retrying */
@@ -1056,6 +1084,12 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
 
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+
+                        RD_KAFKA_ERR_ACTION_IGNORE,
+                        RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
                         RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
@@ -1234,44 +1268,18 @@ static void rd_kafka_group_MemberState_consumer_write (
         rd_kafka_buf_t *env_rkbuf,
         const rd_kafka_group_member_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
-        int i;
-        const char *last_topic = NULL;
-        size_t of_TopicCnt;
-        ssize_t of_PartCnt = -1;
-        int TopicCnt = 0;
-        int PartCnt = 0;
         rd_slice_t slice;
 
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
-        for (i = 0 ; i < rkgm->rkgm_assignment->cnt ; i++) {
-                const rd_kafka_topic_partition_t *rktpar;
-
-                rktpar = &rkgm->rkgm_assignment->elems[i];
-
-                if (!last_topic || strcmp(last_topic,
-                                          rktpar->topic)) {
-                        if (last_topic)
-                                /* Finalize previous PartitionCnt */
-                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
-                                                        PartCnt);
-                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
-                        /* Updated later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-                        PartCnt = 0;
-                        last_topic = rktpar->topic;
-                        TopicCnt++;
-                }
-
-                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
-                PartCnt++;
-        }
-
-        if (of_PartCnt != -1)
-                rd_kafka_buf_update_i32(rkbuf, of_PartCnt, PartCnt);
-        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
-
+        rd_assert(rkgm->rkgm_assignment);
+        rd_kafka_buf_write_topic_partitions(
+                rkbuf,
+                rkgm->rkgm_assignment,
+                rd_false /*don't skip invalid offsets*/,
+                rd_false /*don't write offsets*/,
+                rd_false /*don't write epoch*/,
+                rd_false /*don't write metadata*/);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */
@@ -1468,7 +1476,9 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 		if (!rkas->rkas_enabled)
 			continue;
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
-                member_metadata = rkas->rkas_get_metadata_cb(rkas, topics);
+                member_metadata = rkas->rkas_get_metadata_cb(
+                        rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
+                        rk->rk_cgrp->rkcg_group_assignment);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
@@ -1533,9 +1543,8 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
  * Send LeaveGroupRequest
  */
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
-                                 const rd_kafkap_str_t *group_id,
-                                 const rd_kafkap_str_t *member_id,
-                                 const rd_kafkap_str_t *group_instance_id,
+                                 const char *group_id,
+                                 const char *member_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
@@ -1549,11 +1558,10 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                                           &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup,
-                                         1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                         RD_KAFKAP_STR_SIZE(member_id));
-        rd_kafka_buf_write_kstr(rkbuf, group_id);
-        rd_kafka_buf_write_kstr(rkbuf, member_id);
+                                         1, 300);
+
+        rd_kafka_buf_write_str(rkbuf, group_id, -1);
+        rd_kafka_buf_write_str(rkbuf, member_id, -1);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

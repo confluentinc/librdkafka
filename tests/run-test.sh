@@ -9,7 +9,7 @@ CCLR='\033[0m'
 if [[ $1 == -h ]]; then
     echo "Usage: $0 [-..] [modes..]"
     echo ""
-    echo "  Modes: bare valgrind helgrind drd gdb lldb bash"
+    echo "  Modes: bare valgrind helgrind cachegrind drd gdb lldb bash"
     echo "  Options:"
     echo "   -..    - test-runner command arguments (pass thru)"
     exit 0
@@ -48,6 +48,9 @@ VALGRIND_ARGS="--error-exitcode=3"
 # Enable vgdb on valgrind errors.
 #VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
+# Exit valgrind on first error
+VALGRIND_ARGS="$VALGRIND_ARGS --exit-on-first-error=yes"
+
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../src:../src-cpp
 export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:../src:../src-cpp
 
@@ -71,6 +74,12 @@ for mode in $MODES; do
                      --sim-hints=no-nptl-pthread-stackcache \
                      $SUPP $GEN_SUPP \
 		$TEST	$ARGS
+	    RET=$?
+	    ;;
+	cachegrind|callgrind)
+	    valgrind $VALGRIND_ARGS --tool=$mode \
+		     $SUPP $GEN_SUPP \
+		$TEST $ARGS
 	    RET=$?
 	    ;;
 	drd)

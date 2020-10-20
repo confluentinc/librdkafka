@@ -363,7 +363,7 @@ rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error) {
         rko = rd_kafka_op_new(RD_KAFKA_OP_TXN|RD_KAFKA_OP_REPLY);
 
         if (error) {
-                rko->rko_u.txn.error = error;
+                rko->rko_error = error;
                 rko->rko_err = rd_kafka_error_code(error);
         }
 
@@ -1121,8 +1121,8 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
 
         rd_kafka_q_destroy_owner(tmpq);
 
-        if ((error = reply->rko_u.txn.error)) {
-                reply->rko_u.txn.error = NULL;
+        if ((error = reply->rko_error)) {
+                reply->rko_error = NULL;
                 for_reuse = rd_false;
         }
 
@@ -1343,8 +1343,8 @@ rd_kafka_error_t *rd_kafka_begin_transaction (rd_kafka_t *rk) {
                                    rd_kafka_txn_op_begin_transaction),
                 RD_POLL_INFINITE);
 
-        if ((error = reply->rko_u.txn.error))
-                reply->rko_u.txn.error = NULL;
+        if ((error = reply->rko_error))
+                reply->rko_error = NULL;
 
         rd_kafka_op_destroy(reply);
 
@@ -1388,7 +1388,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0);
+        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_true);
         if (!partitions)
                 goto err_parse;
 
@@ -1580,6 +1580,7 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
                 rkbuf,
                 rko->rko_u.txn.offsets,
                 rd_true /*skip invalid offsets*/,
+                rd_true /*write offsets*/,
                 rd_false/*dont write Epoch*/,
                 rd_true /*write Metadata*/);
 
@@ -2634,7 +2635,7 @@ rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason) {
  *
  * @returns true if the coordinator was changed, else false.
  *
- * @locality rd_kafka_main_thread
+ * @locality rdkafka main thread
  * @locks rd_kafka_wrlock(rk) MUST be held
  */
 rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,

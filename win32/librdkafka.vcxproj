@@ -188,6 +188,7 @@
     <ClCompile Include="..\src\rdkafka_queue.c" />
     <ClCompile Include="..\src\rdkafka_range_assignor.c" />
     <ClCompile Include="..\src\rdkafka_roundrobin_assignor.c" />
+    <ClCompile Include="..\src\rdkafka_sticky_assignor.c" />
     <ClCompile Include="..\src\rdkafka_request.c" />
     <ClCompile Include="..\src\rdkafka_sasl.c" />
     <ClCompile Include="..\src\rdkafka_sasl_win32.c" />
@@ -195,6 +196,7 @@
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
+    <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
@@ -226,6 +228,7 @@
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />
     <ClCompile Include="..\src\rdvarint.c" />
+    <ClCompile Include="..\src\rdmap.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\tinycthread_extra.c" />

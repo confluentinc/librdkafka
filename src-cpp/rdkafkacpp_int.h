@@ -1114,11 +1114,18 @@ public:
   static KafkaConsumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode assignment (std::vector<TopicPartition*> &partitions);
+  bool assignment_lost ();
+  std::string rebalance_protocol () {
+    const char *str = rd_kafka_rebalance_protocol(rk_);
+    return std::string(str ? str : "");
+  }
   ErrorCode subscription (std::vector<std::string> &topics);
   ErrorCode subscribe (const std::vector<std::string> &topics);
   ErrorCode unsubscribe ();
   ErrorCode assign (const std::vector<TopicPartition*> &partitions);
   ErrorCode unassign ();
+  Error *incremental_assign (const std::vector<TopicPartition*> &partitions);
+  Error *incremental_unassign (const std::vector<TopicPartition*> &partitions);
 
   Message *consume (int timeout_ms);
   ErrorCode commitSync () {

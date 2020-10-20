@@ -32,6 +32,7 @@
 
 #include "rdkafka_assignor.h"
 
+
 /**
  * Client groups implementation
  *
@@ -83,37 +84,39 @@ typedef struct rd_kafka_cgrp_s {
 
 
         enum {
+                /* all: join or rejoin, possibly with an existing assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_INIT,
 
                 /* all: JoinGroupRequest sent, awaiting response. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN,
 
-                /* Leader: MetadataRequest sent, awaiting response. */
+                /* all: MetadataRequest sent, awaiting response.
+                 *      While metadata requests may be issued at any time,
+                 *      this state is only set upon a proper (re)join. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA,
 
                 /* Follower: SyncGroupRequest sent, awaiting response. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC,
 
-                /* all: waiting for previous assignment to decommission */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN,
+                /* all: waiting for application to call *_assign() */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL,
 
-                /* all: waiting for application's rebalance_cb to assign() */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB,
+                /* all: waiting for application to call *_unassign() */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL,
 
-		/* all: waiting for application's rebalance_cb to revoke */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB,
+                /* all: waiting for full assignment to decommission */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE,
+
+                /* all: waiting for partial assignment to decommission */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE,
 
                 /* all: synchronized and assigned
                  *      may be an empty assignment. */
-                RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,
-
-		/* all: fetchers are started and operational */
-		RD_KAFKA_CGRP_JOIN_STATE_STARTED
+                RD_KAFKA_CGRP_JOIN_STATE_STEADY,
         } rkcg_join_state;
 
         /* State when group leader */
         struct {
-                char *protocol;
                 rd_kafka_group_member_t *members;
                 int member_cnt;
         } rkcg_group_leader;
@@ -121,18 +124,10 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t      *rkcg_q;                  /* Application poll queue */
         rd_kafka_q_t      *rkcg_ops;                /* Manager ops queue */
 	rd_kafka_q_t      *rkcg_wait_coord_q;       /* Ops awaiting coord */
-	int32_t            rkcg_version;            /* Ops queue version barrier
-						     * Increased by:
-						     *  Rebalance delegation
-						     *  Assign/Unassign
-						     */
-        mtx_t              rkcg_lock;
-
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
-#define RD_KAFKA_CGRP_F_WAIT_UNASSIGN 0x4           /* Waiting for unassign
-						     * to complete */
-#define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN 0x8       /* Send LeaveGroup when
+#define RD_KAFKA_CGRP_F_TERMINATED   0x2            /* Cgrp terminated */
+#define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE 0x8  /* Send LeaveGroup when
 						     * unassign is done */
 #define RD_KAFKA_CGRP_F_SUBSCRIPTION 0x10           /* If set:
                                                      *   subscription
@@ -179,12 +174,13 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t          rkcg_toppars;            /* Toppars subscribed to*/
 
-	int                rkcg_assigned_cnt;       /* Assigned partitions */
-
         int32_t            rkcg_generation_id;      /* Current generation id */
 
-        rd_kafka_assignor_t *rkcg_assignor;         /* Selected partition
-                                                     * assignor strategy. */
+        rd_kafka_assignor_t *rkcg_assignor;         /**< The current partition
+                                                     *   assignor. used by both
+                                                     *   leader and members. */
+        void              *rkcg_assignor_state;     /**< current partition
+                                                     *   assignor state */
 
         int32_t            rkcg_coord_id;      /**< Current coordinator id,
                                                 *   or -1 if not known. */
@@ -202,23 +198,54 @@ typedef struct rd_kafka_cgrp_s {
 
         /** Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
-	/** The actual topics subscribed (after metadata+wildcard matching) */
-	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
+        /** The actual topics subscribed (after metadata+wildcard matching).
+         *  Sorted. */
+        rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
         /** Subscribed topics that are errored/not available. */
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
+        /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
+         *  actioning this will be postponed until after the rebalance
+         *  completes. The waiting subscription is stored here.
+         *  Mutually exclusive with rkcg_next_subscription. */
+        rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+        /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
+         *  actioning this will be posponed until after the rebalance
+         *  completes. This flag is used to signal a waiting unsubscribe
+         *  operation. Mutually exclusive with rkcg_next_subscription. */
+        rd_bool_t rkcg_next_unsubscribe;
 
-        /* Current assignment */
-        rd_kafka_topic_partition_list_t *rkcg_assignment;
+        /** Assignment considered lost */
+        rd_atomic32_t rkcg_assignment_lost;
 
-        int rkcg_wait_unassign_cnt;                 /* Waiting for this number
-                                                     * of partitions to be
-                                                     * unassigned and
-                                                     * decommissioned before
-                                                     * transitioning to the
-                                                     * next state. */
+        /** Current assignment of partitions from last SyncGroup response.
+         *  NULL means no assignment, else empty or non-empty assignment.
+         *
+         * This group assignment is the actual set of partitions that were
+         * assigned to our consumer by the consumer group leader and should
+         * not be confused with the rk_consumer.assignment which is the
+         * partitions assigned by the application using assign(), et.al.
+         *
+         * The group assignment and the consumer assignment are typically
+         * identical, but not necessarily since an application is free to
+         * assign() any partition, not just the partitions it is handed
+         * through the rebalance callback.
+         *
+         * Yes, this nomenclature is ambigious but has historical reasons,
+         * so for now just try to remember that:
+         *  - group assignment == consumer group assignment.
+         *  - assignment == actual used assignment, i.e., fetched partitions.
+         *
+         * @remark This list is always sorted.
+         */
+        rd_kafka_topic_partition_list_t *rkcg_group_assignment;
 
-	int rkcg_wait_commit_cnt;                   /* Waiting for this number
-						     * of commits to finish. */
+        /** The partitions to incrementally assign following a
+         *  currently in-progress incremental unassign. */
+        rd_kafka_topic_partition_list_t *rkcg_rebalance_incr_assignment;
+
+        /** Rejoin the group following a currently in-progress
+         *  incremental unassign. */
+        rd_bool_t rkcg_rebalance_rejoin;
 
         rd_kafka_resp_err_t rkcg_last_err;          /* Last error propagated to
                                                      * application.
@@ -257,8 +284,6 @@ typedef struct rd_kafka_cgrp_s {
 
 
 
-#define rd_kafka_cgrp_lock(rkcg)    mtx_lock(&(rkcg)->rkcg_lock)
-#define rd_kafka_cgrp_unlock(rkcg)  mtx_unlock(&(rkcg)->rkcg_lock)
 
 /* Check if broker is the coordinator */
 #define RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,rkb)          \
@@ -302,20 +327,50 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
 
+rd_kafka_broker_t *rd_kafka_cgrp_get_coord (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
 void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 			       const char *reason);
-void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
+                                          rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
+
+
+void
+rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,
+                                       const rd_kafka_topic_partition_list_t
+                                       *offsets, rd_bool_t set_offsets,
+                                       const char *reason);
+
+void rd_kafka_cgrp_assignment_done (rd_kafka_cgrp_t *rkcg);
+
+rd_bool_t rd_kafka_cgrp_assignment_is_lost (rd_kafka_cgrp_t *rkcg);
 
 
 struct rd_kafka_consumer_group_metadata_s {
         char *group_id;
+        int32_t generation_id;
+        char *member_id;
+        char *group_instance_id;  /**< Optional (NULL) */
 };
 
 rd_kafka_consumer_group_metadata_t *
 rd_kafka_consumer_group_metadata_dup (
         const rd_kafka_consumer_group_metadata_t *cgmetadata);
+
+
+static RD_UNUSED const char *
+rd_kafka_rebalance_protocol2str (rd_kafka_rebalance_protocol_t protocol) {
+        switch (protocol)
+        {
+        case RD_KAFKA_REBALANCE_PROTOCOL_EAGER:
+                return "EAGER";
+        case RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE:
+                return "COOPERATIVE";
+        default:
+                return "NONE";
+        }
+}
 
 #endif /* _RDKAFKA_CGRP_H_ */

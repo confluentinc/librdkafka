@@ -1265,7 +1265,7 @@ rd_kafka_mock_handle_Heartbeat (rd_kafka_mock_connection_t *mconn,
                                                      GenerationId);
 
         if (!err)
-                rd_kafka_mock_cgrp_member_active(member);
+                rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
 
@@ -1368,7 +1368,6 @@ rd_kafka_mock_handle_SyncGroup (rd_kafka_mock_connection_t *mconn,
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_t *mcgrp = NULL;
         rd_kafka_mock_cgrp_member_t *member = NULL;
-        rd_bool_t is_leader;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_i32(rkbuf, &GenerationId);
@@ -1416,12 +1415,11 @@ rd_kafka_mock_handle_SyncGroup (rd_kafka_mock_connection_t *mconn,
                                                      GenerationId);
 
         if (!err)
-                rd_kafka_mock_cgrp_member_active(member);
-
-
-        is_leader = mcgrp->leader && mcgrp->leader == member;
+                rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         if (!err) {
+                rd_bool_t is_leader = mcgrp->leader && mcgrp->leader == member;
+
                 if (AssignmentCnt > 0 && !is_leader)
                         err = RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION; /* FIXME */
                 else if (AssignmentCnt == 0 && is_leader)

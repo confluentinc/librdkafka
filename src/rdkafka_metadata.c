@@ -606,7 +606,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
          * propagate non-included topics as non-existent. */
         if (cgrp_update && (requested_topics || all_topics))
                 rd_kafka_cgrp_metadata_update_check(
-                        rkb->rkb_rk->rk_cgrp, 1/*do join*/);
+                        rkb->rkb_rk->rk_cgrp, rd_true/*do join*/);
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */

@@ -425,6 +425,17 @@ unsigned int rd_map_str_hash (const void *a);
 
 
 /**
+ * @brief Typed hash map: Destroy and free the hash map.
+ *
+ * @sa rd_map_destroy()
+ */
+#define RD_MAP_DESTROY_AND_FREE(RMAP) do {   \
+        rd_map_destroy(&(RMAP)->rmap);       \
+        rd_free(RMAP);                       \
+} while (0)
+
+
+/**
  * @brief Typed hash map: Iterate over all elements in the map.
  *
  * @warning The current or previous elements may be removed, but the next
@@ -432,7 +443,7 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @warning RD_MAP_FOREACH() only supports one simultaneous invocation,
  *          that is, special care must be taken not to call FOREACH() from
- *          within a FOREACH() loop on the same map.
+ *          within a FOREACH() or FOREACH_KEY() loop on the same map.
  *          This is due to how RMAP->elem is used as the iterator.
  *          This restriction is unfortunately not enforced at build or run time.
  *
@@ -447,6 +458,30 @@ unsigned int rd_map_str_hash (const void *a);
                       (V) = (RMAP)->value,                              \
                       rd_map_iter_next(&(RMAP)->elem),                  \
                       rd_true) ; )                                      \
+
+
+/**
+ * @brief Typed hash map: Iterate over all keys in the map.
+ *
+ * @warning The current or previous elements may be removed, but the next
+ *          element after the current one MUST NOT be modified during the loop.
+ *
+ * @warning RD_MAP_FOREACH_KEY() only supports one simultaneous invocation,
+ *          that is, special care must be taken not to call FOREACH_KEY() from
+ *          within a FOREACH() or FOREACH_KEY() loop on the same map.
+ *          This is due to how RMAP->elem is used as the iterator.
+ *          This restriction is unfortunately not enforced at build or run time.
+ *
+ * @remark The \p RMAP may not be const.
+ */
+#define RD_MAP_FOREACH_KEY(K,RMAP)                                      \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
+             rd_map_iter(&(RMAP)->elem) &&                              \
+                     ((RMAP)->key = (void *)(RMAP)->elem->key,          \
+                      (K) = (RMAP)->key,                                \
+                      rd_map_iter_next(&(RMAP)->elem),                  \
+                      rd_true) ; )                                      \
+
 
 /**
  * @returns the number of elements in the map.

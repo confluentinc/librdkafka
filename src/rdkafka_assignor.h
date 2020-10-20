@@ -28,8 +28,24 @@
 #ifndef _RDKAFKA_ASSIGNOR_H_
 #define _RDKAFKA_ASSIGNOR_H_
 
-#define RD_KAFKA_ASSIGNOR_PROTOCOL_EAGER 0x1
-#define RD_KAFKA_ASSIGNOR_PROTOCOL_COOPERATIVE 0x2
+
+
+/*!
+ * Enumerates the different rebalance protocol types.
+ *
+ * @sa rd_kafka_rebalance_protocol()
+ */
+typedef enum rd_kafka_rebalance_protocol_t {
+        RD_KAFKA_REBALANCE_PROTOCOL_NONE,       /**< Rebalance protocol is
+                                                     unknown */
+        RD_KAFKA_REBALANCE_PROTOCOL_EAGER,      /**< Eager rebalance
+                                                     protocol */
+        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE /**< Cooperative
+                                                     rebalance protocol*/
+} rd_kafka_rebalance_protocol_t;
+
+
+
 
 
 typedef struct rd_kafka_group_member_s {
@@ -72,7 +88,7 @@ typedef struct rd_kafka_assignor_s {
 
 	int rkas_enabled;
 
-        int rkas_supported_protocols; /**< RD_KAFKA_ASSIGNOR_PROTOCOL_... */
+        rd_kafka_rebalance_protocol_t rkas_protocol;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,
@@ -112,7 +128,7 @@ rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
                        const char *protocol_type,
                        const char *protocol_name,
-                       int supported_protocols,
+                       rd_kafka_rebalance_protocol_t rebalance_protocol,
                        rd_kafka_resp_err_t (*assign_cb) (
                                rd_kafka_t *rk,
                                const struct rd_kafka_assignor_s *rkas,

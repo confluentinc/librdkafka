@@ -290,6 +290,8 @@ enum ErrorCode {
         ERR__FENCED = -144,
         /** Application generated error */
         ERR__APPLICATION = -143,
+        /** Assignment lost */
+        ERR__ASSIGNMENT_LOST = -142,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -2667,6 +2669,23 @@ public:
    *          lost, false otherwise.
    */
   virtual bool assignment_lost () = 0;
+
+  /**
+   * @brief The rebalance protocol currently in use. This will be
+   *        "NONE" if the consumer has not (yet) joined a group, else it will
+   *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+   *        configured and selected assignor(s). All configured
+   *        assignors must have the same protocol type, meaning
+   *        online migration of a consumer group from using one
+   *        protocol to another (in particular upgading from EAGER
+   *        to COOPERATIVE) without a restart is not currently
+   *        supported.
+   *
+   * @returns an empty string on error, or one of
+   *          "NONE", "EAGER", "COOPERATIVE" on success.
+   */
+
+  virtual std::string rebalance_protocol () = 0;
 
 
   /**

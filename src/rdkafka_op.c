@@ -87,6 +87,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_MOCK] = "REPLY:MOCK",
                 [RD_KAFKA_OP_BROKER_MONITOR] = "REPLY:BROKER_MONITOR",
                 [RD_KAFKA_OP_TXN] = "REPLY:TXN",
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = "REPLY:GET_REBALANCE_PROTOCOL",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -212,6 +213,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_MOCK] = sizeof(rko->rko_u.mock),
                 [RD_KAFKA_OP_BROKER_MONITOR] = sizeof(rko->rko_u.broker_monitor),
                 [RD_KAFKA_OP_TXN] = sizeof(rko->rko_u.txn),
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = sizeof(rko->rko_u.rebalance_protocol),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

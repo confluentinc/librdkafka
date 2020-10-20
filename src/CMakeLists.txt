@@ -34,6 +34,7 @@ set(
     rdkafka_sasl_plain.c
     rdkafka_sticky_assignor.c
     rdkafka_subscription.c
+    rdkafka_assignment.c
     rdkafka_timer.c
     rdkafka_topic.c
     rdkafka_transport.c

@@ -92,12 +92,13 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
-			     rd_kafka_broker_t *rkb,
-			     rd_kafka_resp_err_t err,
-			     rd_kafka_buf_t *rkbuf,
-			     rd_kafka_buf_t *request,
-			     rd_kafka_topic_partition_list_t *offsets,
-			     int update_toppar);
+                             rd_kafka_broker_t *rkb,
+                             rd_kafka_resp_err_t err,
+                             rd_kafka_buf_t *rkbuf,
+                             rd_kafka_buf_t *request,
+                             rd_kafka_topic_partition_list_t **offsets,
+                             rd_bool_t update_toppar,
+                             rd_bool_t add_part);
 
 void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 				     rd_kafka_broker_t *rkb,
@@ -143,14 +144,13 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
-                                 const rd_kafkap_str_t *group_id,
-                                 const rd_kafkap_str_t *member_id,
-                                 const rd_kafkap_str_t *group_instance_id,
+                                 const char *group_id,
+                                 const char *member_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque);
 void rd_kafka_handle_LeaveGroup (rd_kafka_t *rk,
-				 rd_kafka_broker_t *rkb,
+                                 rd_kafka_broker_t *rkb,
                                  rd_kafka_resp_err_t err,
                                  rd_kafka_buf_t *rkbuf,
                                  rd_kafka_buf_t *request,

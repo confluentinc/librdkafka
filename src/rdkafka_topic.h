@@ -230,7 +230,7 @@ typedef struct rd_kafka_topic_info_s {
 	int   partition_cnt;
 } rd_kafka_topic_info_t;
 
-
+int rd_kafka_topic_info_topic_cmp (const void *_a, const void *_b);
 int rd_kafka_topic_info_cmp (const void *_a, const void *_b);
 rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
 						int partition_cnt);

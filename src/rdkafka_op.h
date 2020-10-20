@@ -125,6 +125,7 @@ typedef enum {
         RD_KAFKA_OP_MOCK,            /**< Mock cluster command */
         RD_KAFKA_OP_BROKER_MONITOR,    /**< Broker state change */
         RD_KAFKA_OP_TXN,             /**< Transaction command */
+        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -196,9 +197,9 @@ typedef rd_kafka_op_res_t
  * @brief Enumerates the assign op sub-types.
  */
 typedef enum {
-        RD_KAFKA_ASSIGN_METHOD_ASSIGN,
-        RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,
-        RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN
+        RD_KAFKA_ASSIGN_METHOD_ASSIGN,        /**< Absolute assign/unassign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN,   /**< Incremental assign */
+        RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN  /**< Incremental unassign */
 } rd_kafka_assign_method_t;
 
 /**
@@ -289,9 +290,13 @@ struct rd_kafka_op_s {
                         rd_kafka_assign_method_t method;
 		} assign; /* also used for GET_ASSIGNMENT */
 
-		struct {
-			rd_kafka_topic_partition_list_t *partitions;
-		} rebalance;
+                struct {
+                        rd_kafka_topic_partition_list_t *partitions;
+                } rebalance;
+
+                struct {
+                        const char *str;
+                } rebalance_protocol;
 
 		struct {
 			char *str;

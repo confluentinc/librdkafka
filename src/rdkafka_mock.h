@@ -129,6 +129,14 @@ rd_kafka_mock_cluster_bootstraps (const rd_kafka_mock_cluster_t *mcluster);
 
 
 /**
+ * @brief Clear the cluster's error state for the given \p ApiKey.
+ */
+RD_EXPORT
+void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
+                                         int16_t ApiKey);
+
+
+/**
  * @brief Push \p cnt errors in the \p ... va-arg list onto the cluster's
  *        error stack for the given \p ApiKey.
  *

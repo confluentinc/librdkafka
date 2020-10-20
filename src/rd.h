@@ -100,6 +100,15 @@
 /** Assert if reached */
 #define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")
 
+/** Assert if reached */
+#define RD_BUG(...) do {                                                \
+                fprintf(stderr,  "INTERNAL ERROR: librdkafka %s:%d: ",  \
+                        __FUNCTION__, __LINE__);                        \
+                fprintf(stderr, __VA_ARGS__);                           \
+                fprintf(stderr, "\n");                                  \
+                rd_assert(!*"INTERNAL ERROR IN LIBRDKAFKA");            \
+        } while (0)
+
 
 
 /**
@@ -359,27 +368,31 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
 #if ENABLE_REFCNT_DEBUG
 #define rd_refcnt_add_fl(FUNC,LINE,R)                                   \
         (                                                               \
-                printf("REFCNT DEBUG: %-35s %d +1: %16p: %s:%d\n",      \
+                fprintf(stderr, "REFCNT DEBUG: %-35s %d +1: %16p: %s:%d\n", \
                        #R, rd_refcnt_get(R), (R), (FUNC), (LINE)),      \
                 rd_refcnt_add0(R)                                       \
                 )
 
 #define rd_refcnt_add(R) rd_refcnt_add_fl(__FUNCTION__, __LINE__, (R))
 
-#define rd_refcnt_add2(R,WHAT)  do {                                        \
-                printf("REFCNT DEBUG: %-35s %d +1: %16p: %16s: %s:%d\n",      \
-                       #R, rd_refcnt_get(R), (R), WHAT, __FUNCTION__,__LINE__), \
+#define rd_refcnt_add2(R,WHAT)  do {                                    \
+                fprintf(stderr,                                         \
+                        "REFCNT DEBUG: %-35s %d +1: %16p: %16s: %s:%d\n", \
+                        #R, rd_refcnt_get(R), (R), WHAT,                \
+                        __FUNCTION__,__LINE__),                         \
                 rd_refcnt_add0(R);                                      \
         } while (0)
 
-#define rd_refcnt_sub2(R,WHAT) (                                            \
-                printf("REFCNT DEBUG: %-35s %d -1: %16p: %16s: %s:%d\n",      \
-                       #R, rd_refcnt_get(R), (R), WHAT, __FUNCTION__,__LINE__), \
+#define rd_refcnt_sub2(R,WHAT) (                                        \
+                fprintf(stderr,                                         \
+                        "REFCNT DEBUG: %-35s %d -1: %16p: %16s: %s:%d\n", \
+                        #R, rd_refcnt_get(R), (R), WHAT, \
+                        __FUNCTION__,__LINE__),          \
                 rd_refcnt_sub0(R) )
 
 #define rd_refcnt_sub(R) (                                              \
-                printf("REFCNT DEBUG: %-35s %d -1: %16p: %s:%d\n",      \
-                       #R, rd_refcnt_get(R), (R), __FUNCTION__,__LINE__), \
+                fprintf(stderr, "REFCNT DEBUG: %-35s %d -1: %16p: %s:%d\n", \
+                        #R, rd_refcnt_get(R), (R), __FUNCTION__,__LINE__), \
                 rd_refcnt_sub0(R) )
 
 #else

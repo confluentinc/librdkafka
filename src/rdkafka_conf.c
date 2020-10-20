@@ -38,6 +38,7 @@
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
+#include "rdkafka_assignor.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
@@ -3572,6 +3573,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */

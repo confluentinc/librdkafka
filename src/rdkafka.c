@@ -495,6 +495,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: This instance has been fenced by a newer instance"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__APPLICATION,
                   "Local: Application generated error"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST,
+                  "Local: Group partition assignment lost"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -919,6 +921,11 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         rd_kafka_assignors_term(rk);
 
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                rd_kafka_assignment_destroy(rk);
+                rd_kafka_q_destroy(rk->rk_consumer.q);
+        }
+
 	/* Purge op-queues */
 	rd_kafka_q_destroy_owner(rk->rk_rep);
 	rd_kafka_q_destroy_owner(rk->rk_ops);
@@ -1191,6 +1198,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Purge broker state change waiters */
         rd_list_destroy(&rk->rk_broker_state_change_waiters);
         mtx_unlock(&rk->rk_broker_state_change_lock);
+
+        if (rk->rk_type == RD_KAFKA_CONSUMER)
+                rd_kafka_q_disable(rk->rk_consumer.q);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Purging reply queue");
@@ -2253,17 +2263,25 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 #endif
 
-	/* Client group, eligible both in consumer and producer mode. */
-        if (type == RD_KAFKA_CONSUMER &&
-	    RD_KAFKAP_STR_LEN(rk->rk_group_id) > 0)
-                rk->rk_cgrp = rd_kafka_cgrp_new(rk,
-                                                rk->rk_group_id,
-                                                rk->rk_client_id);
+        if (type == RD_KAFKA_CONSUMER) {
+                rd_kafka_assignment_init(rk);
 
-        if (type == RD_KAFKA_PRODUCER)
+                if (RD_KAFKAP_STR_LEN(rk->rk_group_id) > 0) {
+                        /* Create consumer group handle */
+                        rk->rk_cgrp = rd_kafka_cgrp_new(rk,
+                                                        rk->rk_group_id,
+                                                        rk->rk_client_id);
+                        rk->rk_consumer.q =
+                                rd_kafka_q_keep(rk->rk_cgrp->rkcg_q);
+                } else {
+                        /* Legacy consumer */
+                        rk->rk_consumer.q = rd_kafka_q_keep(rk->rk_rep);
+                }
+
+        } else if (type == RD_KAFKA_PRODUCER) {
                 rk->rk_eos.transactional_id =
-                        rd_kafkap_str_new(rk->rk_conf.eos.transactional_id,
-                                          -1);
+                        rd_kafkap_str_new(rk->rk_conf.eos.transactional_id, -1);
+        }
 
 #ifndef _WIN32
         /* Block all signals in newly created threads.
@@ -3491,15 +3509,16 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 break;
 
         case RD_KAFKA_OP_REBALANCE:
-                /* If EVENT_REBALANCE is enabled but rebalance_cb isn't
-                 * we need to perform a dummy assign for the application.
-                 * This might happen during termination with consumer_close() */
                 if (rk->rk_conf.rebalance_cb)
                         rk->rk_conf.rebalance_cb(
                                 rk, rko->rko_err,
                                 rko->rko_u.rebalance.partitions,
                                 rk->rk_conf.opaque);
                 else {
+                        /** If EVENT_REBALANCE is enabled but rebalance_cb
+                         *  isn't, we need to perform a dummy assign for the
+                         *  application. This might happen during termination
+                         *  with consumer_close() */
                         rd_kafka_dbg(rk, CGRP, "UNASSIGN",
                                      "Forcing unassign of %d partition(s)",
                                      rko->rko_u.rebalance.partitions ?
@@ -3515,6 +3534,11 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                         rk, rko->rko_err,
 			rko->rko_u.offset_commit.partitions,
 			rko->rko_u.offset_commit.opaque);
+                break;
+
+        case RD_KAFKA_OP_FETCH_STOP|RD_KAFKA_OP_REPLY:
+                /* Reply from toppar FETCH_STOP */
+                rd_kafka_assignment_partition_stopped(rk, rko->rko_rktp);
                 break;
 
         case RD_KAFKA_OP_CONSUMER_ERR:

@@ -94,6 +94,7 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #include "rdkafka_metadata.h"
 #include "rdkafka_mock.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_assignment.h"
 #include "rdkafka_coord.h"
 #include "rdkafka_mock.h"
 
@@ -491,6 +492,23 @@ struct rd_kafka_s {
                 /**< Transaction coordinator query timer */
                 rd_kafka_timer_t    txn_coord_tmr;
         } rk_eos;
+
+
+        /**
+         * Consumer state
+         *
+         * @locality rdkafka main thread
+         * @locks_required none
+         */
+        struct {
+                /** Application consumer queue for messages, events and errors.
+                 *  (typically points to rkcg_q) */
+                rd_kafka_q_t *q;
+                /** Current assigned partitions through assign() et.al. */
+                rd_kafka_assignment_t assignment;
+                /** Waiting for this number of commits to finish. */
+                int wait_commit_cnt;
+        } rk_consumer;
 
         /**<
          * Coordinator cache.

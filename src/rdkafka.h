@@ -385,6 +385,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__FENCED = -144,
         /** Application generated error */
         RD_KAFKA_RESP_ERR__APPLICATION = -143,
+        /** Assignment lost */
+        RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -3604,7 +3606,7 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes,
+ *          topics or regexes or duplicate entries,
  *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -3731,6 +3733,23 @@ RD_EXPORT rd_kafka_error_t *
 rd_kafka_incremental_unassign (rd_kafka_t *rk,
                                const rd_kafka_topic_partition_list_t
                                *partitions);
+
+
+/**
+ * @brief The rebalance protocol currently in use. This will be
+ *        "NONE" if the consumer has not (yet) joined a group, else it will
+ *        match the rebalance protocol ("EAGER", "COOPERATIVE") of the
+ *        configured and selected assignor(s). All configured
+ *        assignors must have the same protocol type, meaning
+ *        online migration of a consumer group from using one
+ *        protocol to another (in particular upgading from EAGER
+ *        to COOPERATIVE) without a restart is not currently
+ *        supported.
+ *
+ * @returns NULL on error, or one of "NONE", "EAGER", "COOPERATIVE" on success.
+ */
+RD_EXPORT
+const char *rd_kafka_rebalance_protocol (rd_kafka_t *rk);
 
 
 /**
@@ -3922,9 +3941,6 @@ rd_kafka_consumer_group_metadata (rd_kafka_t *rk);
  *        This is typically only used for writing tests.
  *
  * @param group_id The group id.
- * @param generation_id The group generation id.
- * @param member_id The group member id.
- * @param group_instance_id The group instance id (may be NULL).
  *
  * @remark The returned pointer must be freed by the application using
  *         rd_kafka_consumer_group_metadata_destroy().
@@ -3936,6 +3952,11 @@ rd_kafka_consumer_group_metadata_new (const char *group_id);
 /**
  * @brief Create a new consumer group metadata object.
  *        This is typically only used for writing tests.
+ *
+ * @param group_id The group id.
+ * @param generation_id The group generation id.
+ * @param member_id The group member id.
+ * @param group_instance_id The group instance id (may be NULL).
  *
  * @remark The returned pointer must be freed by the application using
  *         rd_kafka_consumer_group_metadata_destroy().
@@ -6172,7 +6193,7 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
  * @brief Create a new NewPartitions. This object is later passed to
- *        rd_kafka_CreatePartitions() to increas the number of partitions
+ *        rd_kafka_CreatePartitions() to increase the number of partitions
  *        to \p new_total_cnt for an existing topic.
  *
  * @param topic Topic name to create more partitions for.

@@ -1813,6 +1813,18 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
 
 	rktp->rktp_op_version = version;
 
+        if (!pause && (rktp->rktp_flags & flag) != flag) {
+                rd_kafka_dbg(rk, TOPIC, "RESUME",
+                             "Not resuming %s [%"PRId32"]: "
+                             "partition is not paused by %s",
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition,
+                             (flag & RD_KAFKA_TOPPAR_F_APP_PAUSE ?
+                              "application" : "library"));
+                rd_kafka_toppar_unlock(rktp);
+                return;
+        }
+
 	if (pause) {
                 /* Pause partition by setting either
                  * RD_KAFKA_TOPPAR_F_APP_PAUSE or

@@ -391,7 +391,8 @@ rd_kafka_mock_cluster_ApiVersion_check (const rd_kafka_mock_cluster_t *mcluster,
  * @name Mock consumer group (rdkafka_mock_cgrp.c)
  * @{
  */
-void rd_kafka_mock_cgrp_member_active (rd_kafka_mock_cgrp_member_t *member);
+void rd_kafka_mock_cgrp_member_active (rd_kafka_mock_cgrp_t *mcgrp,
+                                       rd_kafka_mock_cgrp_member_t *member);
 void
 rd_kafka_mock_cgrp_member_assignment_set (rd_kafka_mock_cgrp_t *mcgrp,
                                           rd_kafka_mock_cgrp_member_t *member,

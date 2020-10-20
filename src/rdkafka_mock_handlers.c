@@ -1265,7 +1265,7 @@ rd_kafka_mock_handle_Heartbeat (rd_kafka_mock_connection_t *mconn,
                                                      GenerationId);
 
         if (!err)
-                rd_kafka_mock_cgrp_member_active(member);
+                rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
 
@@ -1415,7 +1415,7 @@ rd_kafka_mock_handle_SyncGroup (rd_kafka_mock_connection_t *mconn,
                                                      GenerationId);
 
         if (!err)
-                rd_kafka_mock_cgrp_member_active(member);
+                rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         if (!err) {
                 rd_bool_t is_leader = mcgrp->leader && mcgrp->leader == member;

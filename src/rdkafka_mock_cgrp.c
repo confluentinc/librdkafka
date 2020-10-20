@@ -71,7 +71,11 @@ static void rd_kafka_mock_cgrp_set_state (rd_kafka_mock_cgrp_t *mcgrp,
 /**
  * @brief Mark member as active (restart session timer)
  */
-void rd_kafka_mock_cgrp_member_active (rd_kafka_mock_cgrp_member_t *member) {
+void rd_kafka_mock_cgrp_member_active (rd_kafka_mock_cgrp_t *mcgrp,
+                                       rd_kafka_mock_cgrp_member_t *member) {
+        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
+                     "Marking mock consumer group member %s as active",
+                     member->id);
         member->ts_last_activity = rd_clock();
 }
 
@@ -217,7 +221,7 @@ rd_kafka_mock_cgrp_member_sync_set (rd_kafka_mock_cgrp_t *mcgrp,
         if (mcgrp->state != RD_KAFKA_MOCK_CGRP_STATE_SYNCING)
                 return RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS; /* FIXME */
 
-        rd_kafka_mock_cgrp_member_active(member);
+        rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         rd_assert(!member->resp);
 
@@ -334,6 +338,11 @@ static void rd_kafka_mock_cgrp_elect_leader (rd_kafka_mock_cgrp_t *mcgrp) {
                                         resp, member2->protos[0].metadata);
                         }
                 }
+
+                /* Mark each member as active to avoid them timing out
+                 * at the same time as a JoinGroup handler that blocks
+                 * session.timeout.ms to elect a leader. */
+                rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
                 rd_kafka_mock_connection_set_blocking(mconn, rd_false);
                 rd_kafka_mock_connection_send_response(mconn, resp);
@@ -533,7 +542,7 @@ rd_kafka_mock_cgrp_member_add (rd_kafka_mock_cgrp_t *mcgrp,
         rd_assert(!member->resp);
         member->resp = resp;
         member->conn = mconn;
-        rd_kafka_mock_cgrp_member_active(member);
+        rd_kafka_mock_cgrp_member_active(mcgrp, member);
 
         if (mcgrp->state != RD_KAFKA_MOCK_CGRP_STATE_JOINING)
                 rd_kafka_mock_cgrp_rebalance(mcgrp, "member join");

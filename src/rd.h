@@ -102,11 +102,11 @@
 
 /** Assert if reached */
 #define RD_BUG(...) do {                                                \
-                fprintf(stderr,  "!!! BUG in librdkafka at %s:%d: ",    \
+                fprintf(stderr,  "INTERNAL ERROR: librdkafka %s:%d: ",  \
                         __FUNCTION__, __LINE__);                        \
                 fprintf(stderr, __VA_ARGS__);                           \
                 fprintf(stderr, "\n");                                  \
-                rd_assert(!*"BUG");                                     \
+                rd_assert(!*"INTERNAL ERROR IN LIBRDKAFKA");            \
         } while (0)
 
 

@@ -31,7 +31,6 @@
 #include "rdinterval.h"
 
 #include "rdkafka_assignor.h"
-#include "rdkafka_assignment.h"
 
 
 /**
@@ -99,17 +98,17 @@ typedef struct rd_kafka_cgrp_s {
                 /* Follower: SyncGroupRequest sent, awaiting response. */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC,
 
+                /* all: waiting for application to call *_assign() */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL,
+
+                /* all: waiting for application to call *_unassign() */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL,
+
                 /* all: waiting for full assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE,
 
                 /* all: waiting for partial assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE,
-
-                /* all: waiting for application's rebalance_cb to assign() */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB,
-
-                /* all: waiting for application's rebalance_cb to revoke */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB,
 
                 /* all: synchronized and assigned
                  *      may be an empty assignment. */
@@ -128,9 +127,6 @@ typedef struct rd_kafka_cgrp_s {
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_TERMINATED   0x2            /* Cgrp terminated */
-#define RD_KAFKA_CGRP_F_WAIT_UNASSIGN_CALL 0x4      /* Waiting for unassign
-						     * or incremental_unassign
-                                                     * to be called. */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE 0x8  /* Send LeaveGroup when
 						     * unassign is done */
 #define RD_KAFKA_CGRP_F_SUBSCRIPTION 0x10           /* If set:
@@ -218,8 +214,30 @@ typedef struct rd_kafka_cgrp_s {
          *  operation. Mutually exclusive with rkcg_next_subscription. */
         rd_bool_t rkcg_next_unsubscribe;
 
-        /**< Current assignment */
-        rd_kafka_assignment_t rkcg_assignment;
+        /** Assignment considered lost */
+        rd_atomic32_t rkcg_assignment_lost;
+
+        /** Current assignment of partitions from last SyncGroup response.
+         *  NULL means no assignment, else empty or non-empty assignment.
+         *
+         * This group assignment is the actual set of partitions that were
+         * assigned to our consumer by the consumer group leader and should
+         * not be confused with the rk_consumer.assignment which is the
+         * partitions assigned by the application using assign(), et.al.
+         *
+         * The group assignment and the consumer assignment are typically
+         * identical, but not necessarily since an application is free to
+         * assign() any partition, not just the partitions it is handed
+         * through the rebalance callback.
+         *
+         * Yes, this nomenclature is ambigious but has historical reasons,
+         * so for now just try to remember that:
+         *  - group assignment == consumer group assignment.
+         *  - assignment == actual used assignment, i.e., fetched partitions.
+         *
+         * @remark This list is always sorted.
+         */
+        rd_kafka_topic_partition_list_t *rkcg_group_assignment;
 
         /** The partitions to incrementally assign following a
          *  currently in-progress incremental unassign. */
@@ -228,9 +246,6 @@ typedef struct rd_kafka_cgrp_s {
         /** Rejoin the group following a currently in-progress
          *  incremental unassign. */
         rd_bool_t rkcg_rebalance_rejoin;
-
-	int rkcg_wait_commit_cnt;                   /* Waiting for this number
-						     * of commits to finish. */
 
         rd_kafka_resp_err_t rkcg_last_err;          /* Last error propagated to
                                                      * application.
@@ -312,6 +327,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
 
+rd_kafka_broker_t *rd_kafka_cgrp_get_coord (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
 void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
@@ -328,6 +344,8 @@ rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                        const char *reason);
 
 void rd_kafka_cgrp_assignment_done (rd_kafka_cgrp_t *rkcg);
+
+rd_bool_t rd_kafka_cgrp_assignment_is_lost (rd_kafka_cgrp_t *rkcg);
 
 
 struct rd_kafka_consumer_group_metadata_s {

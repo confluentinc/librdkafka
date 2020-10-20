@@ -178,7 +178,7 @@ rd_kafka_assignment_lost (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return 0;
 
-        return rd_kafka_assignment_is_lost(rkcg) == rd_true;
+        return rd_kafka_cgrp_assignment_is_lost(rkcg) == rd_true;
 }
 
 

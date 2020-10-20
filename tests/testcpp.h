@@ -325,7 +325,7 @@ namespace Test {
     char *buf = (char *)malloc(msgsize);
 
     for (int i = 0 ; i < msgsize ; i++)
-      buf[i] = (char)((int)'a' + (i % 25));
+      buf[i] = (char)((int)'a' + (i % 26));
 
     for (int i = 0 ; i < msgcnt ; i++) {
       RdKafka::ErrorCode err;

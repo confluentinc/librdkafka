@@ -3063,6 +3063,15 @@ rd_kafka_topic_partition_list_find (
 }
 
 
+int
+rd_kafka_topic_partition_list_find_idx (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition) {
+        return rd_kafka_topic_partition_list_find0(
+                rktparlist, topic, partition, rd_kafka_topic_partition_cmp);
+}
+
+
 /**
  * @returns the first element that matches \p topic, regardless of partition.
  */
@@ -3085,10 +3094,10 @@ rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktpa
 	if (unlikely(idx < 0 || idx >= rktparlist->cnt))
 		return 0;
 
-	rktparlist->cnt--;
 	rd_kafka_topic_partition_destroy0(&rktparlist->elems[idx], 0);
 	memmove(&rktparlist->elems[idx], &rktparlist->elems[idx+1],
-		(rktparlist->cnt - idx) * sizeof(rktparlist->elems[idx]));
+		(rktparlist->cnt - idx - 1) * sizeof(rktparlist->elems[idx]));
+	rktparlist->cnt--;
 
 	return 1;
 }

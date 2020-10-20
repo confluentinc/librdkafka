@@ -366,8 +366,8 @@ public:
  * @param allow_mismatch Allow assignment of not subscribed topics.
  *                       This can happen when the subscription is updated
  *                       but a rebalance callback hasn't been seen yet.
- * @param all_assignments Accumualted assignments for all consumers.
- *                        If an assigned partition is already exists it means
+ * @param all_assignments Accumulated assignments for all consumers.
+ *                        If an assigned partition already exists it means
  *                        the partition is assigned to multiple consumers and
  *                        the test will fail.
  * @param exp_msg_cnt Expected message count per assigned partition, or -1
@@ -2338,6 +2338,10 @@ extern "C" {
   static rd_kafka_resp_err_t rebalance_exp_event;
   static rd_bool_t rebalance_exp_lost;
 
+  extern void test_print_partition_list (const rd_kafka_topic_partition_list_t
+                                         *partitions);
+
+
   static void rebalance_cb (rd_kafka_t *rk,
                             rd_kafka_resp_err_t err,
                             rd_kafka_topic_partition_list_t *parts,
@@ -2345,6 +2349,8 @@ extern "C" {
     rebalance_cnt++;
     TEST_SAY("Rebalance #%d: %s: %d partition(s)\n",
              rebalance_cnt, rd_kafka_err2name(err), parts->cnt);
+
+    test_print_partition_list(parts);
 
     TEST_ASSERT(err == rebalance_exp_event ||
                 rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,

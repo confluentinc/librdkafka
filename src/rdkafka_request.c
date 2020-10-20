@@ -598,6 +598,7 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
  * Offsets for included partitions will be propagated through the passed
  * 'offsets' list.
  *
+ * @param rkbuf response buffer, may be NULL if \p err is set.
  * @param update_toppar update toppar's committed_offset
  * @param add_part if true add partitions from the response to \p *offsets,
  *                 else just update the partitions that are already
@@ -714,11 +715,15 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
         }
 
 
-err:
-        rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
-                   "OffsetFetch for %d/%d partition(s) returned %s",
-                   seen_cnt,
-                   (*offsets)->cnt, rd_kafka_err2str(err));
+ err:
+        if (!*offsets)
+                rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
+                           "OffsetFetch returned %s", rd_kafka_err2str(err));
+        else
+                rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
+                           "OffsetFetch for %d/%d partition(s) returned %s",
+                           seen_cnt,
+                           (*offsets)->cnt, rd_kafka_err2str(err));
 
         actions = rd_kafka_err_action(rkb, err, request,
 				      RD_KAFKA_ERR_ACTION_END);
@@ -1473,7 +1478,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(
                         rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                        rk->rk_cgrp->rkcg_assignment.all);
+                        rk->rk_cgrp->rkcg_group_assignment);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }

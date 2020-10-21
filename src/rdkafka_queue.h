@@ -65,6 +65,7 @@ struct rd_kafka_q_s {
                                       * by triggering the cond-var
                                       * but without having to enqueue
                                       * an op. */
+#define RD_KAFKA_Q_F_EXPLICIT_WAKE  0x10    /* Wake the queue immediately */
 
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
@@ -438,6 +439,17 @@ int rd_kafka_q_enq1 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
         }
 
         return 1;
+}
+
+ /**
+ * Wake anything sleeping on the queue.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_q_wake (rd_kafka_q_t *rkq) {
+        mtx_lock(&rkq->rkq_lock);
+        rkq->rkq_flags |= RD_KAFKA_Q_F_EXPLICIT_WAKE;
+        cnd_broadcast(&rkq->rkq_cond);
+        mtx_unlock(&rkq->rkq_lock);
 }
 
 /**

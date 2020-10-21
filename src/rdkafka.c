@@ -3711,6 +3711,9 @@ int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
         return r;
 }
 
+void rd_kafka_poll_wake (rd_kafka_t *rk) {
+        rd_kafka_q_wake(rk->rk_rep);
+}
 
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;

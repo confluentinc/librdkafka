@@ -2912,6 +2912,11 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
 RD_EXPORT
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms);
 
+ /**
+ * @brief Wake any threads blocked in rd_kafka_poll().
+ */
+RD_EXPORT
+void rd_kafka_poll_wake(rd_kafka_t *rk);
 
 /**
  * @brief Cancels the current callback dispatcher (rd_kafka_poll(),

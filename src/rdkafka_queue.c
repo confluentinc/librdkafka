@@ -467,12 +467,14 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	}
 
         rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+        rkq->rkq_flags &= ~RD_KAFKA_Q_F_EXPLICIT_WAKE;
 
         /* Wait for op */
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                !rd_kafka_q_check_yield(rkq) &&
                cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                 &timeout_tspec) == thrd_success)
+                                 &timeout_tspec) == thrd_success &&
+               !(rkq->rkq_flags & ~RD_KAFKA_Q_F_EXPLICIT_WAKE))
                 ;
 
 	if (!rko) {

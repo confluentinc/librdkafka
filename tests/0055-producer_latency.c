@@ -235,8 +235,8 @@ int main_0055_producer_latency (int argc, char **argv) {
                 return 0;
         }
 
-        /* Create topic */
-        test_produce_msgs_easy(topic, 0, 0, 1);
+        /* Create topic without replicas to keep broker-side latency down */
+        test_create_topic(NULL, topic, 4, 1);
 
         for (latconf = latconfs ; latconf->name ; latconf++)
                 fails += test_producer_latency(topic, latconf);

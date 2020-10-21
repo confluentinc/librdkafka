@@ -1803,6 +1803,14 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * @remark In this latter case (arbitrary error), the application must
  *         call rd_kafka_assign(rk, NULL) to synchronize state.
  *
+ * For eager/non-cooperative `partition.assignment.strategy` assignors,
+ * such as `range` and `roundrobin`, the application must use
+ * rd_kafka_assign() to set or clear the entire assignment.
+ * For the cooperative assignors, such as `cooperative-sticky`, the application
+ * must use rd_kafka_incremental_assign() for
+ * RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS and rd_kafka_incremental_unassign()
+ * for RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS.
+ *
  * Without a rebalance callback this is done automatically by librdkafka
  * but registering a rebalance callback gives the application flexibility
  * in performing other operations along with the assigning/revocation,
@@ -1828,6 +1836,12 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *         The result of `rd_kafka_position()` is typically outdated in
  *         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS.
  *
+ * @sa rd_kafka_assign()
+ * @sa rd_kafka_incremental_assign()
+ * @sa rd_kafka_incremental_unassign()
+ * @sa rd_kafka_assignment_lost()
+ * @sa rd_kafka_rebalance_protocol()
+ *
  * The following example shows the application's responsibilities:
  * @code
  *    static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -1839,15 +1853,20 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *          case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
  *             // application may load offets from arbitrary external
  *             // storage here and update \p partitions
- *
- *             rd_kafka_assign(rk, partitions);
+ *             if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
+ *                     rd_kafka_incremental_assign(rk, partitions);
+ *             else // EAGER
+ *                     rd_kafka_assign(rk, partitions);
  *             break;
  *
  *          case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
  *             if (manual_commits) // Optional explicit manual commit
  *                 rd_kafka_commit(rk, partitions, 0); // sync commit
  *
- *             rd_kafka_assign(rk, NULL);
+ *             if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
+ *                     rd_kafka_incremental_unassign(rk, partitions);
+ *             else // EAGER
+ *                     rd_kafka_assign(rk, NULL);
  *             break;
  *
  *          default:
@@ -1857,6 +1876,9 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *         }
  *    }
  * @endcode
+ *
+ * @remark The above example lacks error handling for assign calls, see
+ *         the examples/ directory.
  */
 RD_EXPORT
 void rd_kafka_conf_set_rebalance_cb (
@@ -3777,13 +3799,20 @@ rd_kafka_assign (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *partitions);
 
 /**
- * @brief Returns the current partition assignment
+ * @brief Returns the current partition assignment as set by rd_kafka_assign()
+ *        or rd_kafka_incremental_assign().
  *
  * @returns An error code on failure, otherwise \p partitions is updated
  *          to point to a newly allocated partition list (possibly empty).
  *
  * @remark The application is responsible for calling
  *         rd_kafka_topic_partition_list_destroy on the returned list.
+ *
+ * @remark This assignment represents the partitions assigned through the
+ *         assign functions and not the partitions assigned to this consumer
+ *         instance by the consumer group leader.
+ *         They are usually the same following a rebalance but not necessarily
+ *         since an application is free to assign any partitions.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,

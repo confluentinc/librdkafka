@@ -899,7 +899,13 @@ public:
    * arbitrary rebalancing failures where \p err is neither of those.
    * @remark In this latter case (arbitrary error), the application must
    *         call unassign() to synchronize state.
-
+   *
+   * For eager/non-cooperative `partition.assignment.strategy` assignors,
+   * such as `range` and `roundrobin`, the application must use
+   * assign assign() to set and unassign() to clear the entire assignment.
+   * For the cooperative assignors, such as `cooperative-sticky`, the
+   * application must use incremental_assign() for ERR__ASSIGN_PARTITIONS and
+   * incremental_unassign() for ERR__REVOKE_PARTITIONS.
    *
    * Without a rebalance callback this is done automatically by librdkafka
    * but registering a rebalance callback gives the application flexibility
@@ -907,24 +913,34 @@ public:
    * such as fetching offsets from an alternate location (on assign)
    * or manually committing offsets (on revoke).
    *
+   * @sa RdKafka::KafkaConsumer::assign()
+   * @sa RdKafka::KafkaConsumer::incremental_assign()
+   * @sa RdKafka::KafkaConsumer::incremental_unassign()
+   * @sa RdKafka::KafkaConsumer::assignment_lost()
+   * @sa RdKafka::KafkaConsumer::rebalance_protocol()
+   *
    * The following example show's the application's responsibilities:
    * @code
    *    class MyRebalanceCb : public RdKafka::RebalanceCb {
    *     public:
    *      void rebalance_cb (RdKafka::KafkaConsumer *consumer,
-   *     	      RdKafka::ErrorCode err,
-   *                  std::vector<RdKafka::TopicPartition*> &partitions) {
+   *                    RdKafka::ErrorCode err,
+   *                    std::vector<RdKafka::TopicPartition*> &partitions) {
    *         if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
    *           // application may load offets from arbitrary external
    *           // storage here and update \p partitions
-   *
-   *           consumer->assign(partitions);
+   *           if (consumer->rebalance_protocol() == "COOPERATIVE")
+   *             consumer->incremental_assign(partitions);
+   *           else
+   *             consumer->assign(partitions);
    *
    *         } else if (err == RdKafka::ERR__REVOKE_PARTITIONS) {
    *           // Application may commit offsets manually here
    *           // if auto.commit.enable=false
-   *
-   *           consumer->unassign();
+   *           if (consumer->rebalance_protocol() == "COOPERATIVE")
+   *             consumer->incremental_unassign(partitions);
+   *           else
+   *             consumer->unassign();
    *
    *         } else {
    *           std::cerr << "Rebalancing error: " <<
@@ -934,9 +950,12 @@ public:
    *     }
    *  }
    * @endcode
+   *
+   * @remark The above example lacks error handling for assign calls, see
+   *         the examples/ directory.
    */
  virtual void rebalance_cb (RdKafka::KafkaConsumer *consumer,
-			    RdKafka::ErrorCode err,
+                            RdKafka::ErrorCode err,
                             std::vector<TopicPartition*>&partitions) = 0;
 
  virtual ~RebalanceCb() { }
@@ -2478,7 +2497,7 @@ public:
   /**
    * @brief Asynchronous version of RdKafka::KafkaConsumer::CommitSync()
    *
-   * @sa RdKafka::KafkaConsummer::commitSync()
+   * @sa RdKafka::KafkaConsumer::commitSync()
    */
   virtual ErrorCode commitAsync () = 0;
 
@@ -2489,7 +2508,7 @@ public:
    *
    * @remark This is the synchronous variant.
    *
-   * @sa RdKafka::KafkaConsummer::commitSync()
+   * @sa RdKafka::KafkaConsumer::commitSync()
    */
   virtual ErrorCode commitSync (Message *message) = 0;
 
@@ -2500,7 +2519,7 @@ public:
    *
    * @remark This is the asynchronous variant.
    *
-   * @sa RdKafka::KafkaConsummer::commitSync()
+   * @sa RdKafka::KafkaConsumer::commitSync()
    */
   virtual ErrorCode commitAsync (Message *message) = 0;
 

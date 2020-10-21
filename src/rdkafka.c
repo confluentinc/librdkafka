@@ -923,7 +923,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_kafka_assignment_destroy(rk);
-                rd_kafka_q_destroy(rk->rk_consumer.q);
+                if (rk->rk_consumer.q)
+                        rd_kafka_q_destroy(rk->rk_consumer.q);
         }
 
 	/* Purge op-queues */
@@ -1199,8 +1200,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_broker_state_change_waiters);
         mtx_unlock(&rk->rk_broker_state_change_lock);
 
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
-                rd_kafka_q_disable(rk->rk_consumer.q);
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                if (rk->rk_consumer.q)
+                        rd_kafka_q_disable(rk->rk_consumer.q);
+        }
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Purging reply queue");

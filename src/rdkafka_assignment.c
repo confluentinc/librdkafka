@@ -888,6 +888,8 @@ void rd_kafka_assignment_resume (rd_kafka_t *rk, const char *reason) {
  * @brief Destroy assignment state (but not \p assignment itself)
  */
 void rd_kafka_assignment_destroy (rd_kafka_t *rk) {
+        if (!rk->rk_consumer.assignment.all)
+                return; /* rd_kafka_assignment_init() not called */
         rd_kafka_topic_partition_list_destroy(
                 rk->rk_consumer.assignment.all);
         rd_kafka_topic_partition_list_destroy(

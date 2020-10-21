@@ -610,9 +610,11 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         if (rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf)) {
                 rd_snprintf(errstr, errstr_size,
-                            "All assignors must have the same protocol type. "
-                            "Online migration between assignors with "
-                            "different protocol types is not supported");
+                            "All partition.assignment.strategy (%s) assignors "
+                            "must have the same protocol type, "
+                            "online migration between assignors with "
+                            "different protocol types is not supported",
+                            rk->rk_conf.partition_assignment_strategy);
                 return -1;
         }
 

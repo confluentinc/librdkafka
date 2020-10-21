@@ -339,33 +339,66 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 
 static void rebalance_cb (rd_kafka_t *rk,
-			  rd_kafka_resp_err_t err,
-			  rd_kafka_topic_partition_list_t *partitions,
-			  void *opaque) {
+                          rd_kafka_resp_err_t err,
+                          rd_kafka_topic_partition_list_t *partitions,
+                          void *opaque) {
+        rd_kafka_error_t *error = NULL;
+        rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-	switch (err)
-	{
-	case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-		fprintf(stderr,
-			"%% Group rebalanced: %d partition(s) assigned\n",
-			partitions->cnt);
-		eof_cnt = 0;
-		partition_cnt = partitions->cnt;
-		rd_kafka_assign(rk, partitions);
-		break;
+        if (exit_eof &&
+            !strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
+                fprintf(stderr, "%% This example has not been modified to "
+                        "support -e (exit on EOF) when "
+                        "partition.assignment.strategy "
+                        "is set to an incremental/cooperative strategy: "
+                        "-e will not behave as expected\n");
 
-	case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-		fprintf(stderr,
-			"%% Group rebalanced: %d partition(s) revoked\n",
-			partitions->cnt);
-		eof_cnt = 0;
-		partition_cnt = 0;
-		rd_kafka_assign(rk, NULL);
-		break;
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                fprintf(stderr,
+                        "%% Group rebalanced (%s): "
+                        "%d new partition(s) assigned\n",
+                        rd_kafka_rebalance_protocol(rk), partitions->cnt);
 
-	default:
-		break;
-	}
+                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE")) {
+                        error = rd_kafka_incremental_assign(rk, partitions);
+                } else {
+                        ret_err = rd_kafka_assign(rk, partitions);
+                        eof_cnt = 0;
+                }
+
+                partition_cnt += partitions->cnt;
+                break;
+
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                fprintf(stderr,
+                        "%% Group rebalanced (%s): %d partition(s) revoked\n",
+                        rd_kafka_rebalance_protocol(rk), partitions->cnt);
+
+                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE")) {
+                        error = rd_kafka_incremental_unassign(rk, partitions);
+                        partition_cnt -= partitions->cnt;
+                } else {
+                        ret_err = rd_kafka_assign(rk, NULL);
+                        partition_cnt = 0;
+                }
+
+                eof_cnt = 0; /* FIXME: Not correct for incremental case */
+                break;
+
+        default:
+                break;
+        }
+
+        if (error) {
+                fprintf(stderr, "%% incremental assign failure: %s\n",
+                        rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else if (ret_err) {
+                fprintf(stderr, "%% assign failure: %s\n",
+                        rd_kafka_err2str(ret_err));
+        }
 }
 
 

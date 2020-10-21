@@ -151,14 +151,32 @@ public:
 
     part_list_print(partitions);
 
+    RdKafka::Error *error = NULL;
+    RdKafka::ErrorCode ret_err = RdKafka::ERR_NO_ERROR;
+
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
-      consumer->assign(partitions);
-      partition_cnt = (int)partitions.size();
+      if (consumer->rebalance_protocol() == "COOPERATIVE")
+        error = consumer->incremental_assign(partitions);
+      else
+        ret_err = consumer->assign(partitions);
+      partition_cnt += (int)partitions.size();
     } else {
-      consumer->unassign();
-      partition_cnt = 0;
+      if (consumer->rebalance_protocol() == "COOPERATIVE") {
+        error = consumer->incremental_unassign(partitions);
+        partition_cnt -= (int)partitions.size();
+      } else {
+        ret_err = consumer->unassign();
+        partition_cnt = 0;
+      }
     }
-    eof_cnt = 0;
+    eof_cnt = 0; /* FIXME: Won't work with COOPERATIVE */
+
+    if (error) {
+      std::cerr << "incremental assign failed: " << error->str() << "\n";
+      delete error;
+    } else if (ret_err)
+      std::cerr << "assign failed: " << RdKafka::err2str(ret_err) << "\n";
+
   }
 };
 
@@ -353,6 +371,16 @@ int main (int argc, char **argv) {
 	exit(1);
   }
 
+  if (exit_eof) {
+    std::string strategy;
+    if (conf->get("partition.assignment.strategy", strategy) ==
+        RdKafka::Conf::CONF_OK && strategy == "cooperative-sticky") {
+      std::cerr << "Error: this example has not been modified to " <<
+        "support -e (exit on EOF) when the partition.assignment.strategy " <<
+        "is set to " << strategy << ": remove -e from the command line\n";
+      exit(1);
+    }
+  }
 
   /*
    * Set configuration properties

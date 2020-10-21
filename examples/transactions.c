@@ -35,6 +35,9 @@
  * the sum to the output topic as part of a transaction.
  * The transaction is committed every 5 seconds or 100 messages, whichever
  * comes first. As the transaction is committed a new transaction is started.
+ *
+ * @remark This example does not yet support incremental rebalancing and thus
+ *         not the cooperative-sticky partition.assignment.strategy.
  */
 
 #include <stdio.h>
@@ -363,6 +366,11 @@ consumer_group_rebalance_cb (rd_kafka_t *rk,
                              rd_kafka_topic_partition_list_t *partitions,
                              void *opaque) {
         int i;
+
+        if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
+                fatal("This example has not yet been modified to work with "
+                      "cooperative incremental rebalancing "
+                      "(partition.assignment.strategy=cooperative-sticky)");
 
         switch (err)
         {

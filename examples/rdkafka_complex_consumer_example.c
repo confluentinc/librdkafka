@@ -190,33 +190,56 @@ static void print_partition_list (FILE *fp,
 }
 static void rebalance_cb (rd_kafka_t *rk,
                           rd_kafka_resp_err_t err,
-			  rd_kafka_topic_partition_list_t *partitions,
+                          rd_kafka_topic_partition_list_t *partitions,
                           void *opaque) {
+        rd_kafka_error_t *error = NULL;
+        rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-	fprintf(stderr, "%% Consumer group rebalanced: ");
+        fprintf(stderr, "%% Consumer group rebalanced: ");
 
-	switch (err)
-	{
-	case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-		fprintf(stderr, "assigned:\n");
-		print_partition_list(stderr, partitions);
-		rd_kafka_assign(rk, partitions);
-		wait_eof += partitions->cnt;
-		break;
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                fprintf(stderr, "assigned (%s):\n",
+                        rd_kafka_rebalance_protocol(rk));
+                print_partition_list(stderr, partitions);
 
-	case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-		fprintf(stderr, "revoked:\n");
-		print_partition_list(stderr, partitions);
-		rd_kafka_assign(rk, NULL);
-		wait_eof = 0;
-		break;
+                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
+                        error = rd_kafka_incremental_assign(rk, partitions);
+                else
+                        ret_err = rd_kafka_assign(rk, partitions);
+                wait_eof += partitions->cnt;
+                break;
 
-	default:
-		fprintf(stderr, "failed: %s\n",
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                fprintf(stderr, "revoked (%s):\n",
+                        rd_kafka_rebalance_protocol(rk));
+                print_partition_list(stderr, partitions);
+
+                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE")) {
+                        error = rd_kafka_incremental_unassign(rk, partitions);
+                        wait_eof -= partitions->cnt;
+                } else {
+                        ret_err = rd_kafka_assign(rk, NULL);
+                        wait_eof = 0;
+                }
+                break;
+
+        default:
+                fprintf(stderr, "failed: %s\n",
                         rd_kafka_err2str(err));
                 rd_kafka_assign(rk, NULL);
-		break;
-	}
+                break;
+        }
+
+        if (error) {
+                fprintf(stderr, "incremental assign failure: %s\n",
+                        rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else if (ret_err) {
+                fprintf(stderr, "assign failure: %s\n",
+                        rd_kafka_err2str(ret_err));
+        }
 }
 
 

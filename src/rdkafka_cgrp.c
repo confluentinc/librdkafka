@@ -4634,12 +4634,15 @@ static void rd_kafka_cgrp_handle_assign_op (rd_kafka_cgrp_t *rkcg,
 
         }
 
-        if (error)
-                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
-                             "ASSIGN",
-                             "Group \"%s\": *assign() call failed: %s",
+        if (error) {
+                /* Log error since caller might not check
+                 * *assign() return value. */
+                rd_kafka_log(rkcg->rkcg_rk, LOG_WARNING, "ASSIGN",
+                             "Group \"%s\": application *assign() call "
+                             "failed: %s",
                              rkcg->rkcg_group_id->str,
                              rd_kafka_error_string(error));
+        }
 
         rd_kafka_op_error_reply(rko, error);
 }

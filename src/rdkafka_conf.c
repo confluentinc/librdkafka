@@ -1007,8 +1007,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "members of the group to assign partitions to group members. If "
           "there is more than one eligible strategy, preference is "
           "determined by the order of this list (strategies earlier in the "
-          "list have higher priority).",
-	  .sdef = "range,roundrobin" },
+          "list have higher priority). "
+          "Cooperative and non-cooperative (eager) strategies must not be "
+          "mixed. "
+          "Available strategies: range, roundrobin, cooperative-sticky.",
+          .sdef = "range,roundrobin" },
         { _RK_GLOBAL|_RK_CGRP|_RK_HIGH, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
           "Client group session and failure detection timeout. "

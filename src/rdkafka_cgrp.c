@@ -41,7 +41,7 @@
 #include "rdunittest.h"
 
 #include <ctype.h>
-
+#include <stdarg.h>
 
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);

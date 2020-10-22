@@ -1565,7 +1565,7 @@ static void rd_kafka_dogstatsd_add_metric(const char *prefix, char **metrics_str
          * See https://docs.datadoghq.com/developers/dogstatsd/datagram_shell for the specification.
          */
         ssize_t _r = rd_snprintf(*metrics_str + *offset, _rem,
-                                 "%s%s:%lld|%c|#%s\n", prefix, rkdm.name,
+                                 "%s%s:%"PRId64"|%c|#%s\n", prefix, rkdm.name,
                                  rkdm.value, rkdm.type, tags);
 
         while (_r >= _rem) {
@@ -1573,7 +1573,7 @@ static void rd_kafka_dogstatsd_add_metric(const char *prefix, char **metrics_str
                 _rem = *metrics_str_size - *offset;
                 *metrics_str = rd_realloc(*metrics_str, *metrics_str_size);
                 _r = rd_snprintf(*metrics_str + *offset, _rem,
-                                 "%s%s:%lld|%c|#%s\n", prefix, rkdm.name,
+                                 "%s%s:%"PRId64"|%c|#%s\n", prefix, rkdm.name,
                                  rkdm.value, rkdm.type, tags);
         }
         *offset += _r;

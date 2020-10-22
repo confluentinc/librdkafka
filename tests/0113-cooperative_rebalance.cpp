@@ -2646,28 +2646,37 @@ extern "C" {
     test_mock_cluster_destroy(mcluster);
   }
 
-
-
-  int main_0113_cooperative_rebalance (int argc, char **argv) {
-    int i;
-
     /* Separate test output */
 #define _RUN(CALL) do {                         \
       Test::Say(_C_MAG "[ " #CALL " ]\n"); \
       CALL;                                     \
     } while (0)
 
-    _RUN(a_assign_tests());
+  /* Local tests not needing a cluster */
+  int main_0113_cooperative_rebalance_local (int argc, char **argv) {
     _RUN(a_assign_rapid());
+    _RUN(p_lost_partitions_heartbeat_illegal_generation_test());
+    _RUN(q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/));
+    if (test_quick)
+      return 0;
+    _RUN(q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/));
+    _RUN(r_lost_partitions_commit_illegal_generation_test());
+    return 0;
+  }
+
+  int main_0113_cooperative_rebalance (int argc, char **argv) {
+    int i;
+
+    _RUN(a_assign_tests());
     _RUN(b_subscribe_with_cb_test(true/*close consumer*/));
+    _RUN(b_subscribe_with_cb_test(false/*don't close consumer*/));
+    _RUN(c_subscribe_no_cb_test(true/*close consumer*/));
 
     if (test_quick) {
       Test::Say("Skipping tests c -> s due to quick mode\n");
       return 0;
     }
 
-    _RUN(b_subscribe_with_cb_test(false/*don't close consumer*/));
-    _RUN(c_subscribe_no_cb_test(true/*close consumer*/));
     _RUN(c_subscribe_no_cb_test(false/*don't close consumer*/));
     _RUN(d_change_subscription_add_topic(true/*close consumer*/));
     _RUN(d_change_subscription_add_topic(false/*don't close consumer*/));
@@ -2683,10 +2692,6 @@ extern "C" {
     _RUN(m_unsubscribe_2());
     _RUN(n_wildcard());
     _RUN(o_java_interop());
-    _RUN(p_lost_partitions_heartbeat_illegal_generation_test());
-    _RUN(q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/));
-    _RUN(q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/));
-    _RUN(r_lost_partitions_commit_illegal_generation_test());
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
       _RUN(s_subscribe_when_rebalancing(i));
     for (i = 1 ; i <= 2 ; i++)

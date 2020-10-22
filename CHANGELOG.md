@@ -23,6 +23,8 @@ and the sticky consumer group partition assignor.
 
 ## Enhancements
 
+ * Use reentrant `rand_r()` on supporting platforms which decreases lock
+   contention (@azat).
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
 

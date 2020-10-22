@@ -308,7 +308,10 @@ static void rd_kafka_mock_cgrp_elect_leader (rd_kafka_mock_cgrp_t *mcgrp) {
                 rd_kafka_mock_cgrp_member_t *member2;
                 rd_kafka_mock_connection_t *mconn;
 
-                rd_assert(member->conn && member->resp);
+                /* Member connection has been closed, it will eventually
+                 * reconnect or time out from the group. */
+                if (!member->conn || !member->resp)
+                        continue;
                 mconn = member->conn;
                 member->conn = NULL;
                 resp = member->resp;

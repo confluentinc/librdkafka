@@ -1781,6 +1781,9 @@ static void rd_kafka_dogstatsd_emit(rd_kafka_t *rk) {
                                               rkdm_list[i], common_tags);
         }
 
+        rd_kafka_interceptors_on_sendto(rk, rk->rk_dogstatsd_sockfd,
+                                        (struct sockaddr *)&rk->rk_dogstatsd_addr,
+                                        (const char *)metrics_str);
         if (sendto(rk->rk_dogstatsd_sockfd, (const char *)metrics_str,
                    strlen(metrics_str), 0,
                    (const struct sockaddr *)&rk->rk_dogstatsd_addr,
@@ -2538,7 +2541,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
                 host = rk->rk_conf.dogstatsd_endpoint;
 
-                printf("## DD ## host=%s, port=%i\n", host, port);
                 rk->rk_dogstatsd_addr.in.sin_port = htons(port);
                 rk->rk_dogstatsd_addr.in.sin_addr.s_addr = inet_addr(host);
                 /* TODO: ipv4 only for now */

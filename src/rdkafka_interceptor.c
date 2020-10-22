@@ -41,6 +41,7 @@ typedef struct rd_kafka_interceptor_method_s {
                 rd_kafka_interceptor_f_on_new_t     *on_new;
                 rd_kafka_interceptor_f_on_destroy_t *on_destroy;
                 rd_kafka_interceptor_f_on_send_t    *on_send;
+                rd_kafka_interceptor_f_on_sendto_t  *on_sendto;
                 rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement;
                 rd_kafka_interceptor_f_on_consume_t *on_consume;
                 rd_kafka_interceptor_f_on_commit_t  *on_commit;
@@ -437,6 +438,24 @@ rd_kafka_interceptors_on_send (rd_kafka_t *rk, rd_kafka_message_t *rkmessage) {
 
 
 /**
+ * @brief Call interceptor on_sendto methods.
+ * @locality application thread calling produce()
+ */
+void
+rd_kafka_interceptors_on_sendto (rd_kafka_t *rk, int socket,
+                                 struct sockaddr *addr, const char *message) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_sendto, i) {
+                method->u.on_sendto(rk, socket, addr, message,
+                                          method->ic_opaque);
+        }
+}
+
+
+
+/**
  * @brief Call interceptor on_acknowledgement methods.
  * @locality application thread calling poll(), or the broker thread if
  *           if dr callback has been set.
@@ -679,6 +698,19 @@ rd_kafka_interceptor_add_on_send (
                                                ic_name, (void *)on_send,
                                                ic_opaque);
 }
+
+
+rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_sendto (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_sendto_t *on_sendto,
+        void *ic_opaque) {
+        assert(!rk->rk_initialized);
+        return rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.on_sendto,
+                                               ic_name, (void *)on_sendto,
+                                               ic_opaque);
+}
+
 
 rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_acknowledgement (

@@ -86,7 +86,16 @@ matrix:
     - sudo apt install -y gdb
     - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
     - ./packaging/tools/rdutcoverage.sh
-
+ - name: "Linux GCC s390x: +devel"
+   os: linux
+   arch: s390x   
+   dist: bionic
+   compiler: gcc
+   env: NO_ARTIFACTS=y
+   before_script:
+    - sudo apt update
+    - sudo apt install -y gdb
+    - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
 install:
  - ccache -s || echo "CCache is not available."
  - rm -rf artifacts dest

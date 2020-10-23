@@ -921,6 +921,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         rd_kafka_assignors_term(rk);
 
+        close(rk->rk_dogstatsd_sockfd);
+
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 rd_kafka_assignment_destroy(rk);
                 rd_kafka_q_destroy(rk->rk_consumer.q);

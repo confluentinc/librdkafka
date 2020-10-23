@@ -51,87 +51,56 @@ static rd_kafka_resp_err_t on_sendto (rd_kafka_t *rk,
                                      void *ic_opaque) {
         char *token;
         char *saveptr;
+        char common_tags[128] = "";
+        char topic_tags[128] = "";
         int i = 0;
 
+        /* The name is 0120_dogstatsd#consumer-??.
+           The id is not consistent between 2 tests run. */
+        rd_snprintf(common_tags, 128, "consumer_group:42,name:%s",
+                    rd_kafka_name(rk));
+        rd_snprintf(topic_tags, 128, "%s,topic:0120", common_tags);
+
         struct sent_metrics expected[] = {
-                {"kafka.consumer.topic.batchsize.avg",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.min",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.max",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.sum",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.count",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.hdrsize",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p50",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p75",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p90",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p95",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p99",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchsize.p99_99",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.avg",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.min",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.max",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.sum",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.count",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.hdrsize",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p50",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p75",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p90",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p95",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p99",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.batchcount.p99_99",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.age",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.topic.metadata_age",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1,topic:0120"},
-                {"kafka.consumer.messages",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.messages.size",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.messages.max",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.messages.size_max",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.metadata_cache",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.tx",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.tx_bytes",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.rx",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.rx_bytes",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.txmsgs",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.txmsg_bytes",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.rxmsgs",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
-                {"kafka.consumer.rxmsg_bytes",
-                 "consumer_group:42,name:0120_dogstatsd#consumer-1"},
+                {"kafka.consumer.topic.batchsize.avg", topic_tags},
+                {"kafka.consumer.topic.batchsize.min", topic_tags},
+                {"kafka.consumer.topic.batchsize.max", topic_tags},
+                {"kafka.consumer.topic.batchsize.sum", topic_tags},
+                {"kafka.consumer.topic.batchsize.count", topic_tags},
+                {"kafka.consumer.topic.batchsize.hdrsize", topic_tags},
+                {"kafka.consumer.topic.batchsize.p50", topic_tags},
+                {"kafka.consumer.topic.batchsize.p75", topic_tags},
+                {"kafka.consumer.topic.batchsize.p90", topic_tags},
+                {"kafka.consumer.topic.batchsize.p95", topic_tags},
+                {"kafka.consumer.topic.batchsize.p99", topic_tags},
+                {"kafka.consumer.topic.batchsize.p99_99", topic_tags},
+                {"kafka.consumer.topic.batchcount.avg", topic_tags},
+                {"kafka.consumer.topic.batchcount.min", topic_tags},
+                {"kafka.consumer.topic.batchcount.max", topic_tags},
+                {"kafka.consumer.topic.batchcount.sum", topic_tags},
+                {"kafka.consumer.topic.batchcount.count", topic_tags},
+                {"kafka.consumer.topic.batchcount.hdrsize", topic_tags},
+                {"kafka.consumer.topic.batchcount.p50", topic_tags},
+                {"kafka.consumer.topic.batchcount.p75", topic_tags},
+                {"kafka.consumer.topic.batchcount.p90", topic_tags},
+                {"kafka.consumer.topic.batchcount.p95", topic_tags},
+                {"kafka.consumer.topic.batchcount.p99", topic_tags},
+                {"kafka.consumer.topic.batchcount.p99_99", topic_tags},
+                {"kafka.consumer.topic.age", topic_tags},
+                {"kafka.consumer.topic.metadata_age", topic_tags},
+                {"kafka.consumer.messages", common_tags},
+                {"kafka.consumer.messages.size", common_tags},
+                {"kafka.consumer.messages.max", common_tags},
+                {"kafka.consumer.messages.size_max", common_tags},
+                {"kafka.consumer.metadata_cache", common_tags},
+                {"kafka.consumer.tx", common_tags},
+                {"kafka.consumer.tx_bytes", common_tags},
+                {"kafka.consumer.rx", common_tags},
+                {"kafka.consumer.rx_bytes", common_tags},
+                {"kafka.consumer.txmsgs", common_tags},
+                {"kafka.consumer.txmsg_bytes", common_tags},
+                {"kafka.consumer.rxmsgs", common_tags},
+                {"kafka.consumer.rxmsg_bytes", common_tags},
         };
         int expected_metrics_size = 39;
 
@@ -139,7 +108,7 @@ static rd_kafka_resp_err_t on_sendto (rd_kafka_t *rk,
         if (strncmp(message, expected[0].name, strlen(expected[0].name)) != 0)
             return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        char *cpy_msg = rd_malloc(strlen(message));
+        char *cpy_msg = rd_malloc(strlen(message) + 1);
         strcpy(cpy_msg, message);
 
         for (token = strtok_r(cpy_msg, ":", &saveptr);
@@ -157,9 +126,9 @@ static rd_kafka_resp_err_t on_sendto (rd_kafka_t *rk,
         }
 
         rd_free(cpy_msg);
-        
-    iterations++;
-    return RD_KAFKA_RESP_ERR_NO_ERROR;
+ 
+        iterations++;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
@@ -169,32 +138,31 @@ static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
 int main_0120_dogstatsd (int argc, char **argv) {
-    rd_kafka_t *rk;
-    rd_kafka_conf_t *conf;
-    rd_kafka_topic_t *rkt;
-    rd_kafka_topic_conf_t *topic_conf;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_topic_conf_t *topic_conf;
 
-    test_timeout_set(5);
-    test_conf_init(&conf, &topic_conf, 10);
+        test_conf_init(&conf, &topic_conf, 10);
 
-    /* Set up a global config object */
-    conf = rd_kafka_conf_new();
-    rd_kafka_conf_set(conf, "statistics.interval.ms", "100", NULL, 0);
-    rd_kafka_conf_set(conf, "dogstatsd.endpoint", "localhost:8125", NULL, 0);
+        rd_kafka_conf_set(conf, "statistics.interval.ms", "100", NULL, 0);
+        rd_kafka_conf_set(conf, "dogstatsd.endpoint", "localhost:8125",
+                          NULL, 0);
 
-    rd_kafka_conf_interceptor_add_on_new(conf, __FILE__, on_new, NULL);
+        rd_kafka_conf_interceptor_add_on_new(conf, __FILE__, on_new, NULL);
 
-    /* Create kafka instance */
-    rk = test_create_consumer("42", NULL, conf, NULL);
-    rkt = rd_kafka_topic_new(rk, "0120", topic_conf);
+        /* Create kafka instance */
+        rk = test_create_consumer("42", NULL, conf, NULL);
+        rkt = rd_kafka_topic_new(rk, "0120", topic_conf);
 
-    iterations = 0;
-    while (iterations < 10)
-        usleep(200 * 1000);
+        iterations = 0;
+        while (iterations < 10)
+                usleep(200 * 1000);
 
-    test_consumer_close(rk);
-    rd_kafka_destroy(rk);
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
 
-    return 0;
+        return 0;
 }

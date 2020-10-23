@@ -169,7 +169,7 @@ int main_0120_dogstatsd (int argc, char **argv) {
 
         iterations = 0;
         while (iterations < 10)
-                usleep(200 * 1000);
+                rd_usleep(200 * 1000, NULL);
 
         test_consumer_close(rk);
         rd_kafka_destroy(rk);

@@ -49,7 +49,8 @@ static rd_kafka_resp_err_t on_sendto (rd_kafka_t *rk,
                                      struct sockaddr *addr,
                                      const char *message,
                                      void *ic_opaque) {
-        char *token;
+        ssize_t token;
+        ssize_t offset;
         char *saveptr;
         char common_tags[128] = "";
         char topic_tags[128] = "";
@@ -108,24 +109,33 @@ static rd_kafka_resp_err_t on_sendto (rd_kafka_t *rk,
         if (strncmp(message, expected[0].name, strlen(expected[0].name)) != 0)
             return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        char *cpy_msg = rd_malloc(strlen(message) + 1);
-        strcpy(cpy_msg, message);
-
-        for (token = strtok_r(cpy_msg, ":", &saveptr);
-                token != NULL; 
-                token = strtok_r(NULL, ":", &saveptr)) {
-
+        token = 0;
+        while (message[token] != '\0') {
+                /* Read each line and check the name and the tags are correct */
                 TEST_ASSERT(i < expected_metrics_size);
+                offset = token;
 
-                TEST_ASSERT(strcmp(token, expected[i].name) == 0);
-                token = strtok_r(NULL, "#", &saveptr);
-                token = strtok_r(NULL, "\n", &saveptr);
-                TEST_ASSERT(strcmp(token, expected[i].tags) == 0);
+                while (message[token] != ':') {
+                        TEST_ASSERT(message[token] != '\0');
+                        token++;
+                }
+                TEST_ASSERT(strncmp(message + offset, expected[i].name,
+                            token - offset - 1) == 0);
+                while (message[token] != '#') {
+                        TEST_ASSERT(message[token] != '\0');
+                        token++;
+                }
+                offset = token + 1;
+                while (message[token] != '\n') {
+                        TEST_ASSERT(message[token] != '\0');
+                        token++;
+                }
+                TEST_ASSERT(strncmp(message + offset, expected[i].tags,
+                            token - offset - 1) == 0);
 
                 i++;
+                token++; /* Next line */
         }
-
-        rd_free(cpy_msg);
  
         iterations++;
         return RD_KAFKA_RESP_ERR_NO_ERROR;

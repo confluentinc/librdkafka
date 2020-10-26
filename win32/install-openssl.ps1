@@ -1,4 +1,4 @@
-$OpenSSLVersion = "1_0_2r"
+$OpenSSLVersion = "1_1_1h"
 $OpenSSLExe = "OpenSSL-$OpenSSLVersion.exe"
 
 if (!(Test-Path("C:\OpenSSL-Win32"))) {
@@ -6,7 +6,7 @@ if (!(Test-Path("C:\OpenSSL-Win32"))) {
    $exeFull = "Win32$OpenSSLExe"
    $exePath = "$($env:USERPROFILE)\$exeFull"
 
-   Write-Host "Downloading and installing OpenSSL v1.0 32-bit ..." -ForegroundColor Cyan
+   Write-Host "Downloading and installing OpenSSL v1.1 32-bit ..." -ForegroundColor Cyan
    (New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/$exeFull', $exePath)
 
    Write-Host "Installing to $instDir..."
@@ -22,7 +22,7 @@ if (!(Test-Path("C:\OpenSSL-Win64"))) {
    $exeFull = "Win64$OpenSSLExe"
    $exePath = "$($env:USERPROFILE)\$exeFull"
 
-   Write-Host "Downloading and installing OpenSSL v1.0 64-bit ..." -ForegroundColor Cyan
+   Write-Host "Downloading and installing OpenSSL v1.1 64-bit ..." -ForegroundColor Cyan
    (New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/$exeFull', $exePath)
 
    Write-Host "Installing to $instDir..."

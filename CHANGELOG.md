@@ -27,6 +27,7 @@ and the sticky consumer group partition assignor.
    contention (@azat).
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
+ * Updated to OpenSSL v1.1.1h when building dependencies.
 
 
 

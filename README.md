@@ -163,6 +163,7 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
 
   * C#/.NET: [confluent-kafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet) (based on [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet))
   * C++: [cppkafka](https://github.com/mfontanini/cppkafka)
+  * C++: [modern-cpp-kafka](https://github.com/Morgan-Stanley/modern-cpp-kafka)
   * Common Lisp: [cl-rdkafka](https://github.com/SahilKang/cl-rdkafka)
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
   * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)

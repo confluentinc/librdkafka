@@ -46,15 +46,36 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                 TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
 
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
+                rd_kafka_resp_err_t commit_err;
+
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
 
                 TEST_CALL_ERR__(rd_kafka_assign(rk, NULL));
 
+                if (rk == c1)
+                        return;
+
+                /* Give the closing consumer some time to handle the
+                 * unassignment and leave so that the coming commit fails. */
+                rd_sleep(5);
+
                 /* Committing after unassign will trigger an
                  * Illegal generation error from the broker, which would
                  * previously cause the cgrp to not properly transition
-                 * the next assigned state to fetching. */
-                TEST_CALL_ERR__(rd_kafka_commit(rk, parts, 1/*async*/));
+                 * the next assigned state to fetching.
+                 * The closing consumer's commit is denied by the consumer
+                 * since it will have started to shut down after the assign
+                 * call. */
+                TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
+                commit_err = rd_kafka_commit(rk, parts, 0/*sync*/);
+                TEST_SAY("%s: Commit result: %s\n",
+                         rd_kafka_name(rk), rd_kafka_err2name(commit_err));
+
+                TEST_ASSERT(commit_err,
+                            "Expected closing consumer %s's commit to "
+                            "fail, but got %s",
+                            rd_kafka_name(rk),
+                            rd_kafka_err2name(commit_err));
 
         } else {
                 TEST_FAIL("Unhandled event: %s", rd_kafka_err2name(err));

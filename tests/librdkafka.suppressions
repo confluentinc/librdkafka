@@ -419,3 +419,27 @@
    fun:_dl_open
 }
 
+{
+   atomics32_set
+   Helgrind:Race
+   fun:rd_atomic32_set
+}
+
+{
+   atomics32_get
+   Helgrind:Race
+   fun:rd_atomic32_get
+}
+
+{
+   atomics64_set
+   Helgrind:Race
+   fun:rd_atomic64_set
+}
+
+{
+   atomics64_get
+   Helgrind:Race
+   fun:rd_atomic64_get
+}
+

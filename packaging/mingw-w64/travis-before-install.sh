@@ -30,7 +30,7 @@ case $TRAVIS_OS_NAME in
             rm libzstd.dll.a && \
             rm libcrypto.dll.a && \
             rm liblz4.dll.a && \
-			rm libssl.dll.a
+            rm libssl.dll.a
 
         taskkill //IM gpg-agent.exe //F  || true  # https://travis-ci.community/t/4967
         export PATH=/C/tools/msys64/mingw64/bin:$PATH

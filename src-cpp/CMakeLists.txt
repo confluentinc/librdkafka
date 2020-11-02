@@ -71,15 +71,9 @@ if(RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_DESCRIPTION
     "The Apache Kafka C/C++ library (static)"
   )
-  if(WIN32)
-    set(PKG_CONFIG_LIBS
-      "-lws2_32 -lsecur32 -lcrypt32 -L\${libdir} \${libdir}/librdkafka++.a"
-    )
-  else()
-    set(PKG_CONFIG_LIBS
-      "-L\${libdir} \${libdir}/librdkafka++.a"
-    )
-  endif()
+  set(PKG_CONFIG_LIBS
+    "-L\${libdir} \${libdir}/librdkafka++.a"
+  )
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka++-static.pc"

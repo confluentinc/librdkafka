@@ -182,12 +182,6 @@ if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
 
-if(MINGW)
-	message(STATUS "Detected MinGW build")
-  # MinGW ignores `#pragma comment(lib, ...)` so we need to specify link libs
-  target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
-endif(MINGW)
-
 if(WIN32)  
   if(RDKAFKA_BUILD_STATIC)
     target_link_libraries(rdkafka PUBLIC crypt32)
@@ -252,6 +246,12 @@ if(WITH_LZ4_EXT)
   target_include_directories(rdkafka PUBLIC ${LZ4_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
 endif()
+
+if(MINGW)
+  message(STATUS "Detected MinGW build")
+  # MinGW ignores `#pragma comment(lib, ...)` so we need to specify link libs
+  target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
+endif(MINGW)
 
 # Set up path to these sources for other sub-projects (tests, examples)
 # to be able to reach them.

@@ -789,6 +789,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .copy = rd_kafka_conf_cert_copy,
           _UNSUPPORTED_SSL
         },
+        { _RK_GLOBAL, "ssl.ca.certificate.stores", _RK_C_STR,
+          _RK(ssl.ca_cert_stores),
+          "Comma-separated list of Windows Certificate stores to load "
+          "CA certificates from. Certificates will be loaded in the same "
+          "order as stores are specified. If no certificates can be loaded "
+          "from any of the specified stores an error is logged and the "
+          "OpenSSL library's default CA location is used instead. "
+          "Store names are typically one or more of: MY, Root, Trust, CA.",
+          .sdef = "Root",
+#if !defined(_WIN32)
+          .unsupported = "configuration only valid on Windows"
+#endif
+        },
+
         { _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
           _RK(ssl.crl_location),
           "Path to CRL for verifying broker's certificate validity.",

@@ -381,6 +381,9 @@ int main_0004_conf (int argc, char **argv) {
 #if WITH_ZLIB
 		"compression.codec", "gzip", /* S2I property */
 #endif
+#if defined(_WIN32)
+                "ssl.ca.certificate.stores", "Intermediate ,, Root ,",
+#endif
 		NULL
 	};
 	static const char *tconfs[] = {

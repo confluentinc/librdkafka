@@ -26,11 +26,11 @@ case $TRAVIS_OS_NAME in
 
         # Removing the DLLs so cmake links against the static libs
         $msys2 \
-            cd /mingw64/lib && \
+            cd /C/tools/msys64/mingw64/lib && \
             rm libzstd.dll.a && \
             rm libcrypto.dll.a && \
             rm liblz4.dll.a && \
-            rm libssl.dll.a
+			rm libssl.dll.a
 
         taskkill //IM gpg-agent.exe //F  || true  # https://travis-ci.community/t/4967
         export PATH=/C/tools/msys64/mingw64/bin:$PATH

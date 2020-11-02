@@ -22,10 +22,10 @@ $mingw64 mingw32-make install
 # Bundle all the static dependencies with the static lib we just built
 mkdir mergescratch
 pushd mergescratch
-cp /mingw64/lib/libzstd.a ./
-cp /mingw64/lib/libcrypto.a ./
-cp /mingw64/lib/liblz4.a ./
-cp /mingw64/lib/libssl.a ./
+cp /C/tools/msys64/mingw64/lib/libzstd.a ./
+cp /C/tools/msys64/mingw64/lib/libcrypto.a ./
+cp /C/tools/msys64/mingw64/lib/liblz4.a ./
+cp /C/tools/msys64/mingw64/lib/libssl.a ./
 cp ../src/librdkafka.a ./
 ar -M << EOF
 create librdkafka_windows.a

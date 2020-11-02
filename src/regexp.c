@@ -848,7 +848,6 @@ Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp)
         g->prog = prog;
 	g->pstart = g->pend = rd_malloc(sizeof (Renode) * strlen(pattern) * 2);
 
-        memcpy(((char *)prog)+1, prog, 4);
 	if (setjmp(g->kaboom)) {
 		if (errorp) *errorp = g->error;
 		rd_free(g->pstart);

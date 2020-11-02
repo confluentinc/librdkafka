@@ -298,7 +298,8 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         rd_kafka_resp_err_t rktp_last_error;     /**< Last Fetch error.
                                                   *   Used for suppressing
-                                                  *   reoccuring errors. */
+                                                  *   reoccuring errors.
+                                                  * @locality broker thread */
 
         rd_kafka_cgrp_t   *rktp_cgrp;            /* Belongs to this cgrp */
 

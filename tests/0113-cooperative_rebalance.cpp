@@ -2580,13 +2580,12 @@ extern "C" {
    * error.
    */
 
-  static void r_lost_partitions_commit_illegal_generation_test () {
-    TEST_SAY("Executing r_lost_partitions_commit_illegal_generation_test\n");
-
+  static void r_lost_partitions_commit_illegal_generation_test_local () {
     const char *bootstraps;
     rd_kafka_mock_cluster_t *mcluster;
     const char *groupid = "mygroup";
     const char *topic = "test";
+    const int msgcnt = 100;
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
 
@@ -2595,7 +2594,7 @@ extern "C" {
     rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
 
     /* Seed the topic with messages */
-    test_produce_msgs_easy_v(topic, 0, 0, 0, 100, 10,
+    test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 10,
                              "bootstrap.servers", bootstraps,
                              "batch.num.messages", "10",
                              NULL);
@@ -2616,7 +2615,11 @@ extern "C" {
                      RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                      rd_false/*don't expect lost*/, 5+2);
 
-    /* Fail heartbeats */
+
+    /* Consume some messages so that the commit has something to commit. */
+    test_consumer_poll("consume", c, -1, -1, -1, msgcnt/2, NULL);
+
+    /* Fail Commit */
     rd_kafka_mock_push_request_errors(
       mcluster, RD_KAFKAP_OffsetCommit,
       5,
@@ -2660,7 +2663,7 @@ extern "C" {
     if (test_quick)
       return 0;
     _RUN(q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/));
-    _RUN(r_lost_partitions_commit_illegal_generation_test());
+    _RUN(r_lost_partitions_commit_illegal_generation_test_local());
     return 0;
   }
 

@@ -25,12 +25,10 @@ case $TRAVIS_OS_NAME in
         $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd
 
         # Removing the DLLs so cmake links against the static libs
-        $msys2 \
-            cd /C/tools/msys64/mingw64/lib && \
-            rm libzstd.dll.a && \
-            rm libcrypto.dll.a && \
-            rm liblz4.dll.a && \
-            rm libssl.dll.a
+        rm /C/tools/msys64/mingw64/lib/libzstd.dll.a
+        rm /C/tools/msys64/mingw64/lib/libcrypto.dll.a
+        rm /C/tools/msys64/mingw64/lib/liblz4.dll.a
+        rm /C/tools/msys64/mingw64/lib/libssl.dll.a
 
         taskkill //IM gpg-agent.exe //F  || true  # https://travis-ci.community/t/4967
         export PATH=/C/tools/msys64/mingw64/bin:$PATH

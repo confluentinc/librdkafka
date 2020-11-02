@@ -2007,6 +2007,10 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
                 rktp->rktp_fetch_version = version;
 
+                /* Clear last error to propagate new fetch
+                 * errors if encountered. */
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+
                 rd_kafka_q_purge_toppar_version(rktp->rktp_fetchq, rktp,
                                                 version);
         }
@@ -2144,23 +2148,19 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 	switch ((int)rko->rko_type)
 	{
 	case RD_KAFKA_OP_FETCH_START:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_start(rktp,
 					    rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_FETCH_STOP:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_stop(rktp, rko);
 		break;
 
 	case RD_KAFKA_OP_SEEK:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_seek(rktp, rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_PAUSE:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_pause_resume(rktp, rko);
 		break;
 

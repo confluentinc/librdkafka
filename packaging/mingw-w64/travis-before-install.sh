@@ -20,9 +20,18 @@ case $TRAVIS_OS_NAME in
         # to zstd instead of xz compression
         $msys2 pacman -Sy --noconfirm pacman
         choco upgrade --no-progress -y msys2
-        $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-cyrus-sasl
 
         ## Install more MSYS2 packages from https://packages.msys2.org/base here
+        $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd
+
+        # Removing the DLLs so cmake links against the static libs
+        $msys2 \
+            cd /mingw64/lib && \
+            rm libzstd.dll.a && \
+            rm libcrypto.dll.a && \
+            rm liblz4.dll.a && \
+            rm libssl.dll.a
+
         taskkill //IM gpg-agent.exe //F  || true  # https://travis-ci.community/t/4967
         export PATH=/C/tools/msys64/mingw64/bin:$PATH
         export MAKE=mingw32-make  # so that Autotools can find it

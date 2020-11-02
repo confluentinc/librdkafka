@@ -508,6 +508,10 @@ class StaticPackage (Package):
             # osx static lib and pkg-config file
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/librdkafka-static.a', 'librdkafka_darwin.a'],
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_darwin.pc'],
+
+            # win static lib and pkg-config file
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './lib/librdkafka-static.a', 'librdkafka_windows.a'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_windows.pc'],
         ]
 
         for m in mappings:
@@ -573,7 +577,9 @@ class StaticPackage (Package):
             "./librdkafka_musl_linux.a",
             "./librdkafka_musl_linux.pc",
             "./librdkafka_darwin.a",
-            "./librdkafka_darwin.pc"]
+            "./librdkafka_darwin.pc",
+            "./librdkafka_windows.a",
+            "./librdkafka_windows.pc"]
 
         missing = list()
         with zfile.ZFile(path, 'r') as zf:

@@ -23,6 +23,9 @@ and the sticky consumer group partition assignor.
 
 ## Enhancements
 
+ * Windows: Added `ssl.ca.certificate.stores` to specify a list of
+   Windows Certificate Stores to read CA certificates from, e.g.,
+   `Intermediate,Root`. `Root` remains the default store.
  * Use reentrant `rand_r()` on supporting platforms which decreases lock
    contention (@azat).
  * Added `assignor` debug context for troubleshooting consumer partition

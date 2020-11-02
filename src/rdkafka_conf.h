@@ -235,6 +235,8 @@ struct rd_kafka_conf_s {
                 rd_kafka_cert_t *cert;
                 char *ca_location;
                 rd_kafka_cert_t *ca;
+                /** CSV list of Windows certificate stores */
+                char *ca_cert_stores;
                 char *crl_location;
                 char *keystore_location;
                 char *keystore_password;

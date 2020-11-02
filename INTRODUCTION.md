@@ -1047,7 +1047,9 @@ The CA root certificate defaults are system specific:
    CA path will be used, also called the OPENSSLDIR,  which is typically
    `/etc/ssl/certs` (on Linux, typcially in the `ca-certificates` package) and
    `/usr/local/etc/openssl` on Mac OSX (Homebrew).
- * On Windows the Root certificate store is used.
+ * On Windows the Root certificate store is used, unless
+   `ssl.ca.certificate.stores` is configured in which case certificates are
+   read from the specified stores.
  * If OpenSSL is linked statically, librdkafka will set the default CA
    location to the first of a series of probed paths (see below).
 
@@ -1083,6 +1085,21 @@ used when OpenSSL is statically linked:
     "/usr/local/etc/ssl/certs/cert.pem",
     "/usr/local/etc/ssl/certs/cacert.pem",
     etc..
+
+
+On **Windows** the Root certificate store is read by default, but any number
+of certificate stores can be read by setting the `ssl.ca.certificate.stores`
+configuration property to a comma-separated list of certificate store names.
+The predefined system store names are:
+
+ * `MY` - User certificates
+ * `Root` - System CA certificates (default)
+ * `CA` - Intermediate CA certificates
+ * `Trust` - Trusted publishers
+
+For example, to read both intermediate and root CAs, set
+`ssl.ca.certificate.stores=CA,Root`.
+
 
 
 #### Sparse connections

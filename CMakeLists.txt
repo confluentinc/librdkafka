@@ -5,13 +5,14 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+                      "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
 
-# This option doesn't affect build in fact, only C code
-# (see 'rd_kafka_version_str'). In CMake the build type feature usually used
-# (like Debug, Release, etc.).
+# This option doesn't affect build in fact, only C code (see
+# 'rd_kafka_version_str').
+# In CMake the build type feature usually used (like Debug, Release, etc.).
 option(WITHOUT_OPTIMIZATION "Disable optimization" OFF)
 
 option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
@@ -36,7 +37,7 @@ endif()
 include(CheckLibraryExists)
 check_library_exists(m pow "" WITH_HDRHISTOGRAM)
 if(WITH_HDRHISTOGRAM)
-    list(APPEND BUILT_WITH "HDRHISTOGRAM")
+  list(APPEND BUILT_WITH "HDRHISTOGRAM")
 endif()
 # }
 
@@ -68,11 +69,10 @@ endif()
 
 # LibDL {
 try_compile(
-    WITH_LIBDL
-    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-    "${TRYCOMPILE_SRC_DIR}/dlopen_test.c"
-    LINK_LIBRARIES "${CMAKE_DL_LIBS}"
-)
+  WITH_LIBDL
+  "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+  "${TRYCOMPILE_SRC_DIR}/dlopen_test.c"
+  LINK_LIBRARIES "${CMAKE_DL_LIBS}")
 if(WITH_LIBDL)
   list(APPEND BUILT_WITH "LIBDL")
 endif()
@@ -117,11 +117,10 @@ else()
       set(with_sasl_default ON)
     else()
       try_compile(
-          WITH_SASL_CYRUS_BOOL
-          "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-          "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
-          LINK_LIBRARIES "-lsasl2"
-      )
+        WITH_SASL_CYRUS_BOOL
+        "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+        "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
+        LINK_LIBRARIES "-lsasl2")
       if(WITH_SASL_CYRUS_BOOL)
         set(with_sasl_default ON)
         set(SASL_LIBRARIES "-lsasl2")
@@ -163,7 +162,8 @@ option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)
-    option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds" ON)
+  option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds"
+         ON)
 endif(WIN32)
 
 # In:
@@ -226,35 +226,27 @@ set(namespace "${PROJECT_NAME}::")
 include(CMakePackageConfigHelpers)
 
 # In:
-#   * targets_export_name
-#   * PROJECT_NAME
+# * targets_export_name
+# * PROJECT_NAME
 configure_package_config_file(
-    "packaging/cmake/Config.cmake.in"
-    "${project_config}"
-    INSTALL_DESTINATION "${config_install_dir}"
-)
+  "packaging/cmake/Config.cmake.in" "${project_config}"
+  INSTALL_DESTINATION "${config_install_dir}")
 
 write_basic_package_version_file(
-    "${project_version}"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY AnyNewerVersion
-)
+  "${project_version}"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion)
+
+install(FILES "${project_config}" "${project_version}"
+              "packaging/cmake/Modules/FindLZ4.cmake"
+        DESTINATION "${config_install_dir}")
 
 install(
-    FILES "${project_config}" "${project_version}" "packaging/cmake/Modules/FindLZ4.cmake"
-    DESTINATION "${config_install_dir}"
-)
+  EXPORT "${targets_export_name}"
+  NAMESPACE "${namespace}"
+  DESTINATION "${config_install_dir}")
 
-install(
-    EXPORT "${targets_export_name}"
-    NAMESPACE "${namespace}"
-    DESTINATION "${config_install_dir}"
-)
-
-install(
-    FILES LICENSES.txt
-    DESTINATION "share/licenses/librdkafka"
-)
+install(FILES LICENSES.txt DESTINATION "share/licenses/librdkafka")
 
 # }
 

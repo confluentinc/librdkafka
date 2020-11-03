@@ -1,5 +1,4 @@
-set(
-    sources
+set(sources
     0000-unittests.c
     0001-multiobj.c
     0002-unkpart.c
@@ -114,13 +113,12 @@ set(
     8000-idle.cpp
     test.c
     testcpp.cpp
-    rusage.c
-)
+    rusage.c)
 
 if(NOT WIN32)
-    list(APPEND sources sockem.c sockem_ctrl.c)
+  list(APPEND sources sockem.c sockem_ctrl.c)
 else()
-    list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
+  list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
 endif()
 
 add_executable(test-runner ${sources})

@@ -1,7 +1,6 @@
 set(LIBVER 1)
 
-set(
-    sources
+set(sources
     crc32c.c
     rdaddr.c
     rdavl.c
@@ -64,8 +63,7 @@ set(
     snappy.c
     tinycthread.c
     tinycthread_extra.c
-    rdxxhash.c
-)
+    rdxxhash.c)
 
 if(WITH_SSL)
   list(APPEND sources rdkafka_ssl.c)
@@ -176,13 +174,14 @@ if(MINGW)
 endif(MINGW)
 
 # Support '#include <rdkafka.h>'
-target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+target_include_directories(
+  rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
 target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
 
-if(WIN32)  
+if(WIN32)
   if(RDKAFKA_BUILD_STATIC)
     target_link_libraries(rdkafka PUBLIC crypt32)
   else()
@@ -253,100 +252,69 @@ if(MINGW)
   target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
 endif(MINGW)
 
-# Set up path to these sources for other sub-projects (tests, examples)
-# to be able to reach them.
-#set(rdkafka_SRC_DIR ${PROJECT_SOURCE_DIR}
-#    CACHE INTERNAL "${PROJECT_NAME} source dir" FORCE)
-
 # Generate pkg-config file
-set(PKG_CONFIG_NAME
-    "librdkafka"
-)
-set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library"
-)
-set(PKG_CONFIG_VERSION
-    "${PROJECT_VERSION}"
-)
-set(PKG_CONFIG_REQUIRES "")
-if(WITH_ZLIB)
-  string(APPEND PKG_CONFIG_REQUIRES "zlib ")
-endif()
-if(WITH_SSL)
+set(PKG_CONFIG_VERSION "${PROJECT_VERSION}")
+if(NOT RDKAFKA_BUILD_STATIC)
+  set(PKG_CONFIG_NAME "librdkafka")
+  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
+  set(PKG_CONFIG_REQUIRES "")
+  if(WITH_ZLIB)
+    string(APPEND PKG_CONFIG_REQUIRES "zlib ")
+  endif()
+  if(WITH_SSL)
     string(APPEND PKG_CONFIG_REQUIRES "libssl ")
-endif()
-if(WITH_SASL_CYRUS)
-  string(APPEND PKG_CONFIG_REQUIRES "libsasl2 ")
-endif()
-if(WITH_ZSTD)
+  endif()
+  if(WITH_SASL_CYRUS)
+    string(APPEND PKG_CONFIG_REQUIRES "libsasl2 ")
+  endif()
+  if(WITH_ZSTD)
     string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
-endif()
-if(WITH_LZ4_EXT)
+  endif()
+  if(WITH_LZ4_EXT)
     string(APPEND PKG_CONFIG_REQUIRES "liblz4 ")
-endif()
-set(PKG_CONFIG_CFLAGS
-    "-I\${includedir}"
-)
-set(PKG_CONFIG_LIBS
-    "-L\${libdir} -lrdkafka"
-)
-set(PKG_CONFIG_LIBS_PRIVATE
-    "-lpthread"
-)
-find_library(RT_LIBRARY rt)
-if(RT_LIBRARY)
-  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
-endif()
-if(WITH_PLUGINS)
-  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
-endif()
-if(WITH_HDRHISTOGRAM)
-  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
-endif()
-configure_file(
-  "../packaging/cmake/rdkafka.pc.in"
-  "${GENERATED_DIR}/rdkafka.pc"
-  @ONLY
-)
-install(FILES ${GENERATED_DIR}/rdkafka.pc
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
-)
-if(RDKAFKA_BUILD_STATIC)
-  set(PKG_CONFIG_NAME
-    "librdkafka-static"
-  )
-  set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library (static)"
-  )
+  endif()
+  set(PKG_CONFIG_CFLAGS "-I\${includedir}")
+  set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka")
+  set(PKG_CONFIG_LIBS_PRIVATE "-lpthread")
+  find_library(RT_LIBRARY rt)
+  if(RT_LIBRARY)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
+  endif()
+  if(WITH_PLUGINS)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
+  endif()
+  if(WITH_HDRHISTOGRAM)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
+  endif()
+  configure_file("../packaging/cmake/rdkafka.pc.in"
+                 "${GENERATED_DIR}/rdkafka.pc" @ONLY)
+  install(FILES ${GENERATED_DIR}/rdkafka.pc
+          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+else()
+  set(PKG_CONFIG_REQUIRES "")
+  set(PKG_CONFIG_NAME "librdkafka-static")
+  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
+  set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
   if(WIN32)
     set(PKG_CONFIG_LIBS
-      "-L\${libdir} \${libdir}/librdkafka.a -lws2_32 -lsecur32 -lcrypt32"
-    )
+        "-L\${libdir} \${libdir}/librdkafka.a -lws2_32 -lsecur32 -lcrypt32")
   else()
-    set(PKG_CONFIG_LIBS
-      "-L\${libdir} \${libdir}/librdkafka.a"
-    )
+    set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
   endif()
-  configure_file(
-    "../packaging/cmake/rdkafka.pc.in"
-    "${GENERATED_DIR}/rdkafka-static.pc"
-    @ONLY
-  )
-  install(FILES ${GENERATED_DIR}/rdkafka.pc
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
-  )
+  configure_file("../packaging/cmake/rdkafka.pc.in"
+                 "${GENERATED_DIR}/rdkafka-static.pc" @ONLY)
+  install(FILES ${GENERATED_DIR}/rdkafka-static.pc
+          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 endif()
 
 install(
-    TARGETS rdkafka
-    EXPORT "${targets_export_name}"
-    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-)
+  TARGETS rdkafka
+  EXPORT "${targets_export_name}"
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  INCLUDES
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
-install(
-    FILES "rdkafka.h" "rdkafka_mock.h"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
-)
+install(FILES "rdkafka.h" "rdkafka_mock.h"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka")

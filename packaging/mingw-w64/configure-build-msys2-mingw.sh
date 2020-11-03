@@ -27,8 +27,9 @@ cp /C/tools/msys64/mingw64/lib/libcrypto.a ./
 cp /C/tools/msys64/mingw64/lib/liblz4.a ./
 cp /C/tools/msys64/mingw64/lib/libssl.a ./
 cp ../src/librdkafka.a ./
+cp ../src-cpp/librdkafka++.a ./librdkafkapp.a
 ar -M << EOF
-create librdkafka_windows.a
+create librdkafka_merge.a
 addlib librdkafka.a
 addlib libzstd.a
 addlib libcrypto.a
@@ -38,7 +39,16 @@ save
 end
 EOF
 
-cp ./librdkafka_windows.a ../dest/
+ar -M << EOF
+create librdkafkapp_merge.a
+addlib librdkafka_merge.a
+addlib librdkafkapp.a
+save
+end
+EOF
+
+cp ./librdkafka_merge.a ../dest/lib/librdkafka.a
+cp ./librdkafkapp_merge.a ../dest/lib/librdkafka++.a
 popd
 rm -rf ./mergescratch
 

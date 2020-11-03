@@ -510,8 +510,8 @@ class StaticPackage (Package):
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_darwin.pc'],
 
             # win static lib and pkg-config file
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './librdkafka_windows.a', 'librdkafka_windows.a'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './generated/rdkafka-static.pc', 'librdkafka_windows.pc'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './lib/librdkafka.a', 'librdkafka_windows.a'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-mingw.tar.gz'}, './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_windows.pc'],
         ]
 
         for m in mappings:

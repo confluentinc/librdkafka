@@ -349,7 +349,7 @@ rd_kafka_q_yield (rd_kafka_q_t *rkq, rd_bool_t rate_limit) {
 
         if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
                 rkq->rkq_flags |= RD_KAFKA_Q_F_YIELD;
-                cnd_signal(&rkq->rkq_cond);
+                cnd_broadcast(&rkq->rkq_cond);
                 if (rkq->rkq_qlen == 0)
                         rd_kafka_q_io_event(rkq, rate_limit);
 

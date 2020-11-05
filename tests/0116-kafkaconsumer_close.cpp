@@ -31,6 +31,9 @@
 #include <cstring>
 #include <cstdlib>
 #include "testcpp.h"
+extern "C" {
+#include "test.h"
+}
 
 /**
  * Test KafkaConsumer close and destructor behaviour.
@@ -38,16 +41,40 @@
 
 
 static void do_test_consumer_close (bool do_subscribe,
+                                    bool do_unsubscribe,
                                     bool do_close) {
   Test::Say(tostr() << _C_MAG << "[ Test C++ KafkaConsumer close " <<
-            "subscribe=" << do_subscribe << ", close=" << do_close << " ]\n");
+            "subscribe=" << do_subscribe <<
+            ", unsubscribe=" << do_unsubscribe <<
+            ", close=" << do_close << " ]\n");
+
+  rd_kafka_mock_cluster_t *mcluster;
+  const char *bootstraps;
+  mcluster = test_mock_cluster_new(3, &bootstraps);
+
+  std::string errstr;
+
+  /*
+   * Produce messages to topics
+   */
+  const int msgs_per_partition = 10;
+  RdKafka::Conf *pconf;
+  Test::conf_init(&pconf, NULL, 10);
+  Test::conf_set(pconf, "bootstrap.servers", bootstraps);
+  RdKafka::Producer *p = RdKafka::Producer::create(pconf, errstr);
+  if (!p)
+    Test::Fail(tostr() << __FUNCTION__ << ": Failed to create producer: " <<
+               errstr);
+  delete pconf;
+  Test::produce_msgs(p, "some_topic", 0, msgs_per_partition, 10, true/*flush*/);
+  delete p;
 
   /* Create consumer */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-  Test::conf_set(conf, "test.mock.num.brokers", "1");
+  Test::conf_set(conf, "bootstrap.servers", bootstraps);
   Test::conf_set(conf, "group.id", "mygroup");
+  Test::conf_set(conf, "auto.offset.reset", "beginning");
 
-  std::string errstr;
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
@@ -61,11 +88,20 @@ static void do_test_consumer_close (bool do_subscribe,
       Test::Fail("subscribe failed: " + RdKafka::err2str(err));
   }
 
-  RdKafka::Message *msg = c->consume(500);
-  if (msg)
-    delete msg;
+  int received = 0;
+  while (received < msgs_per_partition) {
+    RdKafka::Message *msg = c->consume(500);
+    if (msg) {
+      ++received;
+      delete msg;
+    }
+  }
 
   RdKafka::ErrorCode err;
+  if (do_unsubscribe)
+    if ((err = c->unsubscribe()))
+      Test::Fail("unsubscribe failed: " + RdKafka::err2str(err));
+
   if (do_close) {
     if ((err = c->close()))
       Test::Fail("close failed: " + RdKafka::err2str(err));
@@ -83,16 +119,22 @@ static void do_test_consumer_close (bool do_subscribe,
                RdKafka::err2str(err));
 
   delete c;
+
+  test_mock_cluster_destroy(mcluster);
 }
 
 extern "C" {
   int main_0116_kafkaconsumer_close (int argc, char **argv) {
     /* Parameters:
-     *  subscribe, close */
-    do_test_consumer_close(true, true);
-    do_test_consumer_close(true, false);
-    do_test_consumer_close(false, true);
-    do_test_consumer_close(false, false);
+     *  subscribe, unsubscribe, close */
+    do_test_consumer_close(true, true, true);
+    do_test_consumer_close(true, true, false);
+    do_test_consumer_close(true, false, true);
+    do_test_consumer_close(true, false, false);
+    do_test_consumer_close(false, true, true);
+    do_test_consumer_close(false, true, false);
+    do_test_consumer_close(false, false, true);
+    do_test_consumer_close(false, false, false);
 
     return 0;
   }

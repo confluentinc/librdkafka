@@ -581,12 +581,33 @@ typedef enum {
         RD_KAFKA_RESP_ERR_ELECTION_NOT_NEEDED = 84,
         /** No partition reassignment is in progress */
         RD_KAFKA_RESP_ERR_NO_REASSIGNMENT_IN_PROGRESS = 85,
-        /** Deleting offsets of a topic while the consumer group is subscribed to it */
+        /** Deleting offsets of a topic while the consumer group is
+         *  subscribed to it */
         RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC = 86,
         /** Broker failed to validate record */
         RD_KAFKA_RESP_ERR_INVALID_RECORD = 87,
         /** There are unstable offsets that need to be cleared */
         RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT = 88,
+        /** Throttling quota has been exceeded */
+        RD_KAFKA_RESP_ERR_THROTTLING_QUOTA_EXCEEDED = 89,
+        /** There is a newer producer with the same transactionalId
+         *  which fences the current one */
+        RD_KAFKA_RESP_ERR_PRODUCER_FENCED = 90,
+        /** Request illegally referred to resource that does not exist */
+        RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND = 91,
+        /** Request illegally referred to the same resource twice */
+        RD_KAFKA_RESP_ERR_DUPLICATE_RESOURCE = 92,
+        /** Requested credential would not meet criteria for acceptability */
+        RD_KAFKA_RESP_ERR_UNACCEPTABLE_CREDENTIAL = 93,
+        /** Indicates that the either the sender or recipient of a
+         *  voter-only request is not one of the expected voters */
+        RD_KAFKA_RESP_ERR_INCONSISTENT_VOTER_SET = 94,
+        /** Invalid update version */
+        RD_KAFKA_RESP_ERR_INVALID_UPDATE_VERSION = 95,
+        /** Unable to update finalized features due to server error */
+        RD_KAFKA_RESP_ERR_FEATURE_UPDATE_FAILED = 96,
+        /** Request principal deserialization failed during forwarding */
+        RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

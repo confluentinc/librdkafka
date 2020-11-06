@@ -25,12 +25,26 @@ and the sticky consumer group partition assignor.
 
  * Windows: Added `ssl.ca.certificate.stores` to specify a list of
    Windows Certificate Stores to read CA certificates from, e.g.,
-   `Intermediate,Root`. `Root` remains the default store.
+   `CA,Root`. `Root` remains the default store.
  * Use reentrant `rand_r()` on supporting platforms which decreases lock
    contention (@azat).
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
  * Updated to OpenSSL v1.1.1h when building dependencies.
+
+
+## Fixes
+
+### General fixes
+
+### Consumer fixes
+
+ * The consumer assignment and consumer group implementations have been
+   decoupled, simplified and made more strict and robust. This will sort out
+   a number of edge cases for the consumer where the behaviour was previously
+   undefined.
+ * Consumer destroy without prior `close()` could hang in certain
+   cgrp states (@gridaphobe, #3127).
 
 
 

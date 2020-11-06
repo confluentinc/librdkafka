@@ -735,6 +735,8 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
+        test_wait_topic_exists(rk, topics[0], 10000);
+
         /*
          * ConfigResource #0: valid topic config
          */

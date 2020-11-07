@@ -306,9 +306,10 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         rd_kafka_metadata_broker_t mdb = RD_ZERO_INIT;
 
         /* Drop refcount from FindCoord.. in req_fsm().
-         * If this was the last refcount then we bail out. */
-        if (rd_kafka_coord_req_destroy(rk, creq))
-                return;
+         * If this is the last refcount it means whatever code triggered the
+         * creq is no longer interested, so we ignore the response. */
+        if (creq->creq_refcnt == 1)
+                err = RD_KAFKA_RESP_ERR__DESTROY;
 
         if (err)
                 goto err;
@@ -357,6 +358,9 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
 
         rd_kafka_coord_req_fsm(rk, creq);
 
+        /* Drop refcount from req_fsm() */
+        rd_kafka_coord_req_destroy(rk, creq);
+
         return;
 
  err_parse:
@@ -364,6 +368,9 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
  err:
         actions = rd_kafka_err_action(
                 rkb, err, request,
+
+                RD_KAFKA_ERR_ACTION_SPECIAL,
+                RD_KAFKA_RESP_ERR__DESTROY,
 
                 RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
@@ -387,10 +394,14 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 rd_kafka_buf_retry(rkb, request);
+                return; /* Keep refcnt from req_fsm() and retry */
 
         } else {
                 /* Rely on state broadcast to trigger retry */
         }
+
+        /* Drop refcount from req_fsm() */
+        rd_kafka_coord_req_destroy(rk, creq);
 }
 
 

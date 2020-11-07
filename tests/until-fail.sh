@@ -27,7 +27,7 @@ else
 fi
 
 if [[ $modes != gdb ]]; then
-    ARGS="$ARGS -p1"
+    ARGS="-p1 $ARGS"
 fi
 
 iter=0

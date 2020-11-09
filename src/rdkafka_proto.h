@@ -66,6 +66,11 @@ struct rd_kafkap_reshdr {
 
 
 
+/**
+ * @brief Protocol request type (ApiKey) to name/string.
+ *
+ * Generate updates to this list with generate_proto.sh.
+ */
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
         static const char *names[] = {
@@ -111,8 +116,30 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_RenewDelegationToken] = "RenewDelegationToken",
                 [RD_KAFKAP_ExpireDelegationToken] = "ExpireDelegationToken",
                 [RD_KAFKAP_DescribeDelegationToken] = "DescribeDelegationToken",
-                [RD_KAFKAP_DeleteGroups] = "DeleteGroups"
-
+                [RD_KAFKAP_DeleteGroups] = "DeleteGroups",
+                [RD_KAFKAP_ElectLeadersRequest] = "ElectLeadersRequest",
+                [RD_KAFKAP_IncrementalAlterConfigsRequest] =
+                "IncrementalAlterConfigsRequest",
+                [RD_KAFKAP_AlterPartitionReassignmentsRequest] =
+                "AlterPartitionReassignmentsRequest",
+                [RD_KAFKAP_ListPartitionReassignmentsRequest] =
+                "ListPartitionReassignmentsRequest",
+                [RD_KAFKAP_OffsetDeleteRequest] = "OffsetDeleteRequest",
+                [RD_KAFKAP_DescribeClientQuotasRequest] =
+                "DescribeClientQuotasRequest",
+                [RD_KAFKAP_AlterClientQuotasRequest] =
+                "AlterClientQuotasRequest",
+                [RD_KAFKAP_DescribeUserScramCredentialsRequest] =
+                "DescribeUserScramCredentialsRequest",
+                [RD_KAFKAP_AlterUserScramCredentialsRequest] =
+                "AlterUserScramCredentialsRequest",
+                [RD_KAFKAP_VoteRequest] = "VoteRequest",
+                [RD_KAFKAP_BeginQuorumEpochRequest] = "BeginQuorumEpochRequest",
+                [RD_KAFKAP_EndQuorumEpochRequest] = "EndQuorumEpochRequest",
+                [RD_KAFKAP_DescribeQuorumRequest] = "DescribeQuorumRequest",
+                [RD_KAFKAP_AlterIsrRequest] = "AlterIsrRequest",
+                [RD_KAFKAP_UpdateFeaturesRequest] = "UpdateFeaturesRequest",
+                [RD_KAFKAP_EnvelopeRequest] = "EnvelopeRequest",
         };
         static RD_TLS char ret[32];
 

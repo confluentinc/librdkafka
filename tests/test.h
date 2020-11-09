@@ -144,6 +144,7 @@ struct test {
         test_state_t state;
         int     failcnt;     /**< Number of failures, useful with FAIL_LATER */
         char    failstr[512];/**< First test failure reason */
+        char    subtest[400];/**< Current subtest, if any */
 
 #if WITH_SOCKEM
         rd_list_t sockets;

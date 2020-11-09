@@ -5774,7 +5774,8 @@ void test_fail0 (const char *file, int line, const char *function,
         if (t)
                 *t = '\0';
 
-        of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
+        of = rd_snprintf(buf, sizeof(buf), "%s():%i: %s%s", function, line,
+                         test_curr->subtest, *test_curr->subtest ? " " : "");
         rd_assert(of < sizeof(buf));
 
         va_start(ap, fmt);
@@ -5850,4 +5851,54 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                 *bootstraps = rd_kafka_mock_cluster_bootstraps(mcluster);
 
         return mcluster;
+}
+
+
+
+/**
+ * @name Sub-tests
+ */
+
+
+/**
+ * @brief Start a sub-test. \p fmt is optional and allows additional
+ *        sub-test info to be displayed, e.g., test parameters.
+ *
+ * @returns 0 if sub-test should not be run, else 1.
+ */
+int test_sub_start (const char *func, int line, int is_quick,
+                    const char *fmt, ...) {
+
+        if (!is_quick && test_quick)
+                return 0;
+
+        if (fmt && *fmt) {
+                va_list ap;
+                char buf[256];
+
+                va_start(ap, fmt);
+                rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+                va_end(ap);
+
+                rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
+                            "%s:%d: %s", func, line, buf);
+        } else {
+                rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
+                            "%s:%d", func, line);
+        }
+
+        TEST_SAY(_C_MAG "[ %s ]\n", test_curr->subtest);
+
+        return 1;
+}
+
+
+/**
+ * @brief Sub-test has passed.
+ */
+void test_sub_pass (void) {
+        TEST_ASSERT(*test_curr->subtest);
+
+        TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
+        *test_curr->subtest = '\0';
 }

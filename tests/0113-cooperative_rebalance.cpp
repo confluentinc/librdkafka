@@ -635,7 +635,7 @@ run_test (const std::string &t1, const std::string &t2,
 
 
 static void a_assign_tests () {
-    Test::Say("Executing a_assign_tests\n");
+    SUB_TEST_QUICK("");
 
     int msgcnt = 1000;
     const int msgsize1 = 100;
@@ -654,6 +654,8 @@ static void a_assign_tests () {
     run_test(topic1_str, topic2_str, assign_test_3);
     run_test(topic1_str, topic2_str, assign_test_4);
     run_test(topic1_str, topic2_str, assign_test_5);
+
+    SUB_TEST_PASS();
 }
 
 
@@ -666,6 +668,7 @@ static void a_assign_tests () {
  * Makes use of the mock cluster to induce latency.
  */
 static void a_assign_rapid () {
+  SUB_TEST_QUICK("");
 
   std::string group_id = __FUNCTION__;
 
@@ -862,6 +865,8 @@ static void a_assign_rapid () {
   delete consumer;
 
   test_mock_cluster_destroy(mcluster);
+
+  SUB_TEST_PASS();
 }
 
 
@@ -2374,15 +2379,16 @@ extern "C" {
   /**
    * @brief Wait for an expected rebalance event, or fail.
    */
-  static void expect_rebalance (const char *what, rd_kafka_t *c,
-                                rd_kafka_resp_err_t exp_event,
-                                rd_bool_t exp_lost,
-                                int timeout_s) {
+  static void expect_rebalance0 (const char *func, int line,
+                                 const char *what, rd_kafka_t *c,
+                                 rd_kafka_resp_err_t exp_event,
+                                 rd_bool_t exp_lost,
+                                 int timeout_s) {
     int64_t tmout = test_clock() + (timeout_s * 1000000);
     int start_cnt = rebalance_cnt;
 
-    TEST_SAY("Waiting for %s (%s) for %ds\n",
-      what, rd_kafka_err2name(exp_event), timeout_s);
+    TEST_SAY("%s:%d: Waiting for %s (%s) for %ds\n",
+             func, line, what, rd_kafka_err2name(exp_event), timeout_s);
 
     rebalance_exp_lost = exp_lost;
     rebalance_exp_event = exp_event;
@@ -2397,24 +2403,27 @@ extern "C" {
       return;
     }
 
-    TEST_FAIL("Timed out waiting for %s (%s)",
-      what, rd_kafka_err2name(exp_event));
+    TEST_FAIL("%s:%d: Timed out waiting for %s (%s)",
+              func, line, what, rd_kafka_err2name(exp_event));
   }
 
+#define expect_rebalance(WHAT,C,EXP_EVENT,EXP_LOST,TIMEOUT_S)    \
+  expect_rebalance0(__FUNCTION__, __LINE__,                      \
+                    WHAT, C, EXP_EVENT, EXP_LOST, TIMEOUT_S)
 
 
   /* Check lost partitions revoke occurs on ILLEGAL_GENERATION heartbeat error.
    */
 
   static void p_lost_partitions_heartbeat_illegal_generation_test () {
-    TEST_SAY("Executing p_lost_partitions_heartbeat_illegal_generation_test\n");
-
     const char *bootstraps;
     rd_kafka_mock_cluster_t *mcluster;
     const char *groupid = "mygroup";
     const char *topic = "test";
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
+
+    SUB_TEST_QUICK("");
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2473,6 +2482,8 @@ extern "C" {
 
     TEST_SAY("Destroying mock cluster\n");
     test_mock_cluster_destroy(mcluster);
+
+    SUB_TEST_PASS();
   }
 
 
@@ -2484,8 +2495,6 @@ extern "C" {
   static void q_lost_partitions_illegal_generation_test (
       rd_bool_t test_joingroup_fail) {
 
-    TEST_SAY("Executing q_lost_partitions_illegal_generation_test\n");
-
     const char *bootstraps;
     rd_kafka_mock_cluster_t *mcluster;
     const char *groupid = "mygroup";
@@ -2495,6 +2504,9 @@ extern "C" {
     rd_kafka_conf_t *conf;
     rd_kafka_resp_err_t err;
     rd_kafka_topic_partition_list_t *topics;
+
+    SUB_TEST0(!test_joingroup_fail/*quick*/,
+              "test_joingroup_fail=%d", test_joingroup_fail);
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2572,6 +2584,8 @@ extern "C" {
 
     TEST_SAY("Destroying mock cluster\n");
     test_mock_cluster_destroy(mcluster);
+
+    SUB_TEST_PASS();
   }
 
 
@@ -2588,6 +2602,8 @@ extern "C" {
     const int msgcnt = 100;
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
+
+    SUB_TEST("");
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2657,13 +2673,11 @@ extern "C" {
 
   /* Local tests not needing a cluster */
   int main_0113_cooperative_rebalance_local (int argc, char **argv) {
-    _RUN(a_assign_rapid());
-    _RUN(p_lost_partitions_heartbeat_illegal_generation_test());
-    _RUN(q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/));
-    if (test_quick)
-      return 0;
-    _RUN(q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/));
-    _RUN(r_lost_partitions_commit_illegal_generation_test_local());
+    a_assign_rapid();
+    p_lost_partitions_heartbeat_illegal_generation_test();
+    q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
+    q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
+    r_lost_partitions_commit_illegal_generation_test_local();
     return 0;
   }
 

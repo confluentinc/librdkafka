@@ -383,7 +383,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
             rkt->rkt_conf.partitioner !=
             rd_kafka_msg_partitioner_murmur2 &&
             rkt->rkt_conf.partitioner !=
-            rd_kafka_msg_partitioner_fnv1a){
+            rd_kafka_msg_partitioner_fnv1a) {
                 rkt->rkt_conf.random_partitioner = rd_false;
         } else {
                 rkt->rkt_conf.random_partitioner = rd_true;

@@ -42,6 +42,8 @@
 
 /**
  * Request types
+ *
+ * Generate updates to this list with generate_proto.sh.
  */
 #define RD_KAFKAP_None         -1
 #define RD_KAFKAP_Produce       0
@@ -87,7 +89,23 @@
 #define RD_KAFKAP_ExpireDelegationToken 40
 #define RD_KAFKAP_DescribeDelegationToken 41
 #define RD_KAFKAP_DeleteGroups 42
-#define RD_KAFKAP__NUM         43
+#define RD_KAFKAP_ElectLeadersRequest 43
+#define RD_KAFKAP_IncrementalAlterConfigsRequest 44
+#define RD_KAFKAP_AlterPartitionReassignmentsRequest 45
+#define RD_KAFKAP_ListPartitionReassignmentsRequest 46
+#define RD_KAFKAP_OffsetDeleteRequest 47
+#define RD_KAFKAP_DescribeClientQuotasRequest 48
+#define RD_KAFKAP_AlterClientQuotasRequest 49
+#define RD_KAFKAP_DescribeUserScramCredentialsRequest 50
+#define RD_KAFKAP_AlterUserScramCredentialsRequest 51
+#define RD_KAFKAP_VoteRequest 52
+#define RD_KAFKAP_BeginQuorumEpochRequest 53
+#define RD_KAFKAP_EndQuorumEpochRequest 54
+#define RD_KAFKAP_DescribeQuorumRequest 55
+#define RD_KAFKAP_AlterIsrRequest 56
+#define RD_KAFKAP_UpdateFeaturesRequest 57
+#define RD_KAFKAP_EnvelopeRequest 58
+#define RD_KAFKAP__NUM         59
 
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

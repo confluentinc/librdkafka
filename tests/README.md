@@ -125,6 +125,9 @@ Some additional guidelines:
    To make sure your test remains sturdy in these type of environments, make
    sure to use the `tmout_multip(milliseconds)` macro when passing timeout
    values to non-test functions, e.g, `rd_kafka_poll(rk, tmout_multip(3000))`.
+ * If your test file contains multiple separate sub-tests, use the
+   `SUB_TEST()`, `SUB_TEST_QUICK()` and `SUB_TEST_PASS()` from inside
+   the test functions to help differentiate test failures.
 
 
 ## Test scenarios

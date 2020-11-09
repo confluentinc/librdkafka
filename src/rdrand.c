@@ -41,7 +41,7 @@ int rd_jitter (int low, int high) {
 		struct timeval tv;
 		rd_gettimeofday(&tv, NULL);
 		seed = (unsigned int)(tv.tv_usec / 1000);
-		seed ^= (unsigned int)thrd_current();
+		seed ^= (unsigned int)(intptr_t)thrd_current();
 	}
 
 	rand_num = rand_r(&seed);

@@ -9,7 +9,7 @@ if [ "$1" = "--in-docker" ]; then
     # Runs in docker, performs the actual build.
     shift
 
-    apk add bash curl gcc g++ make musl-dev bsd-compat-headers git python3 perl
+    apk add bash curl gcc g++ make musl-dev linux-headers bsd-compat-headers git python3 perl
 
     git clone /v /librdkafka
 

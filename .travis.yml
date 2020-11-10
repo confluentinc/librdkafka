@@ -56,7 +56,7 @@ matrix:
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog
- - name: "Windows MinGW-w64"
+ - name: "Windows MinGW-w64 Dynamic"
    os: windows
    env:
     - SKIP_MAKE=y
@@ -64,6 +64,14 @@ matrix:
     - source ./packaging/mingw-w64/travis-before-install.sh
    before_script:
     - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
+ - name: "Windows MinGW-w64 Static"
+   os: windows
+   env:
+    - SKIP_MAKE=y
+   before_install:
+    - source ./packaging/mingw-w64/travis-before-install.sh
+   before_script:
+    - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check"
    os: linux
    dist: xenial

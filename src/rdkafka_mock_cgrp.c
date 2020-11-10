@@ -369,14 +369,20 @@ static void rd_kafka_mock_cgrp_rebalance (rd_kafka_mock_cgrp_t *mcgrp,
                                           const char *reason) {
         int timeout_ms;
 
-        if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
+        if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_JOINING)
+                return; /* Do nothing, group is already rebalancing. */
+        else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
                 timeout_ms = 1000; /* First join, low timeout */
         else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_REBALANCING &&
                  mcgrp->member_cnt == mcgrp->last_member_cnt)
                 timeout_ms = 100; /* All members rejoined, quickly transition
                                    * to election. */
-        else
-                timeout_ms = mcgrp->session_timeout_ms;
+        else /* Let the rebalance delay be a bit shorter than the
+              * session timeout so that we don't time out waiting members
+              * who are also subject to the session timeout. */
+                timeout_ms = mcgrp->session_timeout_ms > 1000 ?
+                        mcgrp->session_timeout_ms - 1000 :
+                        mcgrp->session_timeout_ms;
 
         rd_kafka_mock_cgrp_set_state(mcgrp, RD_KAFKA_MOCK_CGRP_STATE_JOINING,
                                      reason);

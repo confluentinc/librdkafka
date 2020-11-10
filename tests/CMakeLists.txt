@@ -1,4 +1,5 @@
-set(sources
+set(
+    sources
     0000-unittests.c
     0001-multiobj.c
     0002-unkpart.c
@@ -113,7 +114,8 @@ set(sources
     8000-idle.cpp
     test.c
     testcpp.cpp
-    rusage.c)
+    rusage.c
+)
 
 if(NOT WIN32)
   list(APPEND sources sockem.c sockem_ctrl.c)

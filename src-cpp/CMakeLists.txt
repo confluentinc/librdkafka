@@ -12,7 +12,8 @@ set(sources
     QueueImpl.cpp
     RdKafka.cpp
     TopicImpl.cpp
-    TopicPartitionImpl.cpp)
+    TopicPartitionImpl.cpp
+)
 
 if(RDKAFKA_BUILD_STATIC)
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -29,8 +30,7 @@ endif()
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 
 # Support '#include <rdkafcpp.h>'
-target_include_directories(
-  rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
 if(NOT RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 endif()
@@ -44,25 +44,34 @@ if(NOT RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_CFLAGS "-I\${includedir}")
   set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka++")
   set(PKG_CONFIG_LIBS_PRIVATE "-lrdkafka")
-  configure_file("../packaging/cmake/rdkafka.pc.in"
-                 "${GENERATED_DIR}/rdkafka++.pc" @ONLY)
-  install(FILES ${GENERATED_DIR}/rdkafka++.pc
-          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+  configure_file(
+    "../packaging/cmake/rdkafka.pc.in"
+    "${GENERATED_DIR}/rdkafka++.pc"
+    @ONLY
+  )
+  install(
+    FILES ${GENERATED_DIR}/rdkafka++.pc
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+  )
 else()
   set(PKG_CONFIG_NAME "librdkafka++-static")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
   set(PKG_CONFIG_REQUIRES "")
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
   if(WIN32)
-    set(PKG_CONFIG_LIBS
-        "-L\${libdir} \${libdir}/librdkafka++.a -lws2_32 -lsecur32 -lcrypt32")
+    set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a -lws2_32 -lsecur32 -lcrypt32")
   else()
     set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a")
   endif()
-  configure_file("../packaging/cmake/rdkafka.pc.in"
-                 "${GENERATED_DIR}/rdkafka++-static.pc" @ONLY)
-  install(FILES ${GENERATED_DIR}/rdkafka++-static.pc
-          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+  configure_file(
+    "../packaging/cmake/rdkafka.pc.in"
+    "${GENERATED_DIR}/rdkafka++-static.pc"
+    @ONLY
+  )
+  install(
+    FILES ${GENERATED_DIR}/rdkafka++-static.pc
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+  )
 endif()
 
 install(
@@ -72,7 +81,10 @@ install(
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
 
-install(FILES "rdkafkacpp.h"
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka")
+install(
+  FILES "rdkafkacpp.h"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
+)

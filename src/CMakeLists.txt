@@ -63,7 +63,8 @@ set(sources
     snappy.c
     tinycthread.c
     tinycthread_extra.c
-    rdxxhash.c)
+    rdxxhash.c
+)
 
 if(WITH_SSL)
   list(APPEND sources rdkafka_ssl.c)
@@ -174,8 +175,7 @@ if(MINGW)
 endif(MINGW)
 
 # Support '#include <rdkafka.h>'
-target_include_directories(
-  rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
 target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
@@ -314,7 +314,10 @@ install(
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
 
-install(FILES "rdkafka.h" "rdkafka_mock.h"
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka")
+install(
+  FILES "rdkafka.h" "rdkafka_mock.h"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
+)

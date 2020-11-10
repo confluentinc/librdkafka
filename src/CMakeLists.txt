@@ -1,69 +1,70 @@
 set(LIBVER 1)
 
-set(sources
-    crc32c.c
-    rdaddr.c
-    rdavl.c
-    rdbuf.c
-    rdcrc32.c
-    rdfnv1a.c
-    rdkafka.c
-    rdkafka_assignor.c
-    rdkafka_broker.c
-    rdkafka_buf.c
-    rdkafka_cgrp.c
-    rdkafka_conf.c
-    rdkafka_event.c
-    rdkafka_feature.c
-    rdkafka_lz4.c
-    rdkafka_metadata.c
-    rdkafka_metadata_cache.c
-    rdkafka_msg.c
-    rdkafka_msgset_reader.c
-    rdkafka_msgset_writer.c
-    rdkafka_offset.c
-    rdkafka_op.c
-    rdkafka_partition.c
-    rdkafka_pattern.c
-    rdkafka_queue.c
-    rdkafka_range_assignor.c
-    rdkafka_request.c
-    rdkafka_roundrobin_assignor.c
-    rdkafka_sasl.c
-    rdkafka_sasl_plain.c
-    rdkafka_sticky_assignor.c
-    rdkafka_subscription.c
-    rdkafka_assignment.c
-    rdkafka_timer.c
-    rdkafka_topic.c
-    rdkafka_transport.c
-    rdkafka_interceptor.c
-    rdkafka_header.c
-    rdkafka_admin.c
-    rdkafka_aux.c
-    rdkafka_background.c
-    rdkafka_idempotence.c
-    rdkafka_txnmgr.c
-    rdkafka_cert.c
-    rdkafka_coord.c
-    rdkafka_mock.c
-    rdkafka_mock_handlers.c
-    rdkafka_mock_cgrp.c
-    rdkafka_error.c
-    rdlist.c
-    rdlog.c
-    rdmurmur2.c
-    rdports.c
-    rdrand.c
-    rdregex.c
-    rdstring.c
-    rdunittest.c
-    rdvarint.c
-    rdmap.c
-    snappy.c
-    tinycthread.c
-    tinycthread_extra.c
-    rdxxhash.c
+set(
+  sources
+  crc32c.c
+  rdaddr.c
+  rdavl.c
+  rdbuf.c
+  rdcrc32.c
+  rdfnv1a.c
+  rdkafka.c
+  rdkafka_assignor.c
+  rdkafka_broker.c
+  rdkafka_buf.c
+  rdkafka_cgrp.c
+  rdkafka_conf.c
+  rdkafka_event.c
+  rdkafka_feature.c
+  rdkafka_lz4.c
+  rdkafka_metadata.c
+  rdkafka_metadata_cache.c
+  rdkafka_msg.c
+  rdkafka_msgset_reader.c
+  rdkafka_msgset_writer.c
+  rdkafka_offset.c
+  rdkafka_op.c
+  rdkafka_partition.c
+  rdkafka_pattern.c
+  rdkafka_queue.c
+  rdkafka_range_assignor.c
+  rdkafka_request.c
+  rdkafka_roundrobin_assignor.c
+  rdkafka_sasl.c
+  rdkafka_sasl_plain.c
+  rdkafka_sticky_assignor.c
+  rdkafka_subscription.c
+  rdkafka_assignment.c
+  rdkafka_timer.c
+  rdkafka_topic.c
+  rdkafka_transport.c
+  rdkafka_interceptor.c
+  rdkafka_header.c
+  rdkafka_admin.c
+  rdkafka_aux.c
+  rdkafka_background.c
+  rdkafka_idempotence.c
+  rdkafka_txnmgr.c
+  rdkafka_cert.c
+  rdkafka_coord.c
+  rdkafka_mock.c
+  rdkafka_mock_handlers.c
+  rdkafka_mock_cgrp.c
+  rdkafka_error.c
+  rdlist.c
+  rdlog.c
+  rdmurmur2.c
+  rdports.c
+  rdrand.c
+  rdregex.c
+  rdstring.c
+  rdunittest.c
+  rdvarint.c
+  rdmap.c
+  snappy.c
+  tinycthread.c
+  tinycthread_extra.c
+  rdxxhash.c
 )
 
 if(WITH_SSL)
@@ -120,36 +121,43 @@ if(WITHOUT_WIN32_CONFIG)
   else()
     list(APPEND rdkafka_compile_definitions WITH_SSL=0)
   endif(WITH_SSL)
+
   if(WITH_ZLIB)
     list(APPEND rdkafka_compile_definitions WITH_ZLIB=1)
   else()
     list(APPEND rdkafka_compile_definitions WITH_ZLIB=0)
   endif(WITH_ZLIB)
+
   if(WITH_SNAPPY)
     list(APPEND rdkafka_compile_definitions WITH_SNAPPY=1)
   else()
     list(APPEND rdkafka_compile_definitions WITH_SNAPPY=0)
   endif(WITH_SNAPPY)
+
   if(WITH_ZSTD)
     list(APPEND rdkafka_compile_definitions WITH_ZSTD=1)
   else()
     list(APPEND rdkafka_compile_definitions WITH_ZSTD=0)
   endif(WITH_ZSTD)
+
   if(WITH_SASL_SCRAM)
     list(APPEND rdkafka_compile_definitions WITH_SASL_SCRAM=1)
   else()
     list(APPEND rdkafka_compile_definitions WITH_SASL_SCRAM=0)
   endif(WITH_SASL_SCRAM)
+
   if(WITH_SASL_OAUTHBEARER)
     list(APPEND rdkafka_compile_definitions WITH_SASL_OAUTHBEARER=1)
   else()
     list(APPEND rdkafka_compile_definitions WITH_SASL_OAUTHBEARER=0)
   endif(WITH_SASL_OAUTHBEARER)
+
   if(ENABLE_DEVEL)
     list(APPEND rdkafka_compile_definitions ENABLE_DEVEL=1)
   else()
     list(APPEND rdkafka_compile_definitions ENABLE_DEVEL=0)
   endif(ENABLE_DEVEL)
+
   if(WITH_PLUGINS)
     list(APPEND rdkafka_compile_definitions WITH_PLUGIN=1)
   else()
@@ -215,6 +223,7 @@ if(WITH_SSL)
     if(NOT TARGET bundled-ssl)
       message(FATAL_ERROR "bundled-ssl target not exist")
     endif()
+
     target_include_directories(rdkafka BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
     target_link_libraries(rdkafka PUBLIC ${BUNDLED_SSL_LIBRARIES})
     add_dependencies(rdkafka bundled-ssl)
@@ -261,18 +270,23 @@ if(NOT RDKAFKA_BUILD_STATIC)
   if(WITH_ZLIB)
     string(APPEND PKG_CONFIG_REQUIRES "zlib ")
   endif()
+
   if(WITH_SSL)
     string(APPEND PKG_CONFIG_REQUIRES "libssl ")
   endif()
+
   if(WITH_SASL_CYRUS)
     string(APPEND PKG_CONFIG_REQUIRES "libsasl2 ")
   endif()
+
   if(WITH_ZSTD)
     string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
   endif()
+
   if(WITH_LZ4_EXT)
     string(APPEND PKG_CONFIG_REQUIRES "liblz4 ")
   endif()
+
   set(PKG_CONFIG_CFLAGS "-I\${includedir}")
   set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka")
   set(PKG_CONFIG_LIBS_PRIVATE "-lpthread")
@@ -280,31 +294,47 @@ if(NOT RDKAFKA_BUILD_STATIC)
   if(RT_LIBRARY)
     string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
   endif()
+
   if(WITH_PLUGINS)
     string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
   endif()
+
   if(WITH_HDRHISTOGRAM)
     string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
   endif()
-  configure_file("../packaging/cmake/rdkafka.pc.in"
-                 "${GENERATED_DIR}/rdkafka.pc" @ONLY)
-  install(FILES ${GENERATED_DIR}/rdkafka.pc
-          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+
+  configure_file(
+    "../packaging/cmake/rdkafka.pc.in"
+    "${GENERATED_DIR}/rdkafka.pc"
+    @ONLY
+  )
+  install(
+    FILES ${GENERATED_DIR}/rdkafka.pc
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+  )
 else()
   set(PKG_CONFIG_REQUIRES "")
   set(PKG_CONFIG_NAME "librdkafka-static")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
   if(WIN32)
-    set(PKG_CONFIG_LIBS
-        "-L\${libdir} \${libdir}/librdkafka.a -lws2_32 -lsecur32 -lcrypt32")
+    set(
+      PKG_CONFIG_LIBS
+      "-L\${libdir} \${libdir}/librdkafka.a -lws2_32 -lsecur32 -lcrypt32"
+    )
   else()
     set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
   endif()
-  configure_file("../packaging/cmake/rdkafka.pc.in"
-                 "${GENERATED_DIR}/rdkafka-static.pc" @ONLY)
-  install(FILES ${GENERATED_DIR}/rdkafka-static.pc
-          DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+
+  configure_file(
+    "../packaging/cmake/rdkafka.pc.in"
+    "${GENERATED_DIR}/rdkafka-static.pc"
+    @ONLY
+  )
+  install(
+    FILES ${GENERATED_DIR}/rdkafka-static.pc
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+  )
 endif()
 
 install(

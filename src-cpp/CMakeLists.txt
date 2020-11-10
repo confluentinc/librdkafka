@@ -1,18 +1,19 @@
 set(LIBVER 1)
 
-set(sources
-    ConfImpl.cpp
-    ConsumerImpl.cpp
-    HandleImpl.cpp
-    HeadersImpl.cpp
-    KafkaConsumerImpl.cpp
-    MessageImpl.cpp
-    MetadataImpl.cpp
-    ProducerImpl.cpp
-    QueueImpl.cpp
-    RdKafka.cpp
-    TopicImpl.cpp
-    TopicPartitionImpl.cpp
+set(
+  sources
+  ConfImpl.cpp
+  ConsumerImpl.cpp
+  HandleImpl.cpp
+  HeadersImpl.cpp
+  KafkaConsumerImpl.cpp
+  MessageImpl.cpp
+  MetadataImpl.cpp
+  ProducerImpl.cpp
+  QueueImpl.cpp
+  RdKafka.cpp
+  TopicImpl.cpp
+  TopicPartitionImpl.cpp
 )
 
 if(RDKAFKA_BUILD_STATIC)

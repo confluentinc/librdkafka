@@ -71,7 +71,8 @@ try_compile(
   WITH_LIBDL
   "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
   "${TRYCOMPILE_SRC_DIR}/dlopen_test.c"
-  LINK_LIBRARIES "${CMAKE_DL_LIBS}")
+  LINK_LIBRARIES "${CMAKE_DL_LIBS}"
+)
 if(WITH_LIBDL)
   list(APPEND BUILT_WITH "LIBDL")
 endif()
@@ -119,7 +120,8 @@ else()
         WITH_SASL_CYRUS_BOOL
         "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
         "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
-        LINK_LIBRARIES "-lsasl2")
+        LINK_LIBRARIES "-lsasl2"
+      )
       if(WITH_SASL_CYRUS_BOOL)
         set(with_sasl_default ON)
         set(SASL_LIBRARIES "-lsasl2")
@@ -229,27 +231,30 @@ include(CMakePackageConfigHelpers)
 configure_package_config_file(
   "packaging/cmake/Config.cmake.in"
   "${project_config}"
-  INSTALL_DESTINATION "${config_install_dir}")
+  INSTALL_DESTINATION "${config_install_dir}"
+)
 
 write_basic_package_version_file(
   "${project_version}"
   VERSION ${PROJECT_VERSION}
-  COMPATIBILITY AnyNewerVersion)
+  COMPATIBILITY AnyNewerVersion
+)
 
 install(
   FILES "${project_config}" "${project_version}" "packaging/cmake/Modules/FindLZ4.cmake"
-  DESTINATION "${config_install_dir}")
+  DESTINATION "${config_install_dir}"
+)
 
 install(
   EXPORT "${targets_export_name}"
   NAMESPACE "${namespace}"
-  DESTINATION "${config_install_dir}")
+  DESTINATION "${config_install_dir}"
+)
 
 install(
   FILES LICENSES.txt
-  DESTINATION "share/licenses/librdkafka")
-
-# }
+  DESTINATION "share/licenses/librdkafka"
+)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

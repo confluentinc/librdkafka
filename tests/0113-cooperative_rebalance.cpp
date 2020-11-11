@@ -259,6 +259,8 @@ public:
 
   int assign_call_cnt;
   int revoke_call_cnt;
+  int nonempty_assign_call_cnt; /**< ASSIGN_PARTITIONS with partitions */
+  int nonempty_revoke_call_cnt; /**< REVOKE_PARTITIONS with partitions */
   int lost_call_cnt;
   int partitions_assigned_net;
   bool wait_rebalance;
@@ -268,6 +270,8 @@ public:
   DefaultRebalanceCb ():
     assign_call_cnt(0),
     revoke_call_cnt(0),
+    nonempty_assign_call_cnt(0),
+    nonempty_revoke_call_cnt(0),
     lost_call_cnt(0),
     partitions_assigned_net(0),
     wait_rebalance(false),
@@ -298,6 +302,8 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_assign() failed: " <<
                    error->str());
+      if (partitions.size() > 0)
+        nonempty_assign_call_cnt++;
       assign_call_cnt += 1;
       partitions_assigned_net += (int)partitions.size();
       ts_last_assign = test_clock();
@@ -309,6 +315,8 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: " <<
                    error->str());
+      if (partitions.size() > 0)
+        nonempty_revoke_call_cnt++;
       revoke_call_cnt += 1;
       partitions_assigned_net -= (int)partitions.size();
     }
@@ -1640,13 +1648,11 @@ static void m_unsubscribe_2 () {
 static void n_wildcard () {
   Test::Say("Executing n_wildcard\n");
 
-  uint64_t random = test_id_generate();
-  string topic_sub_name = tostr() << "0113-coop_regex_" << random;
-
-  std::string topic_name_1 = Test::mk_topic_name(topic_sub_name, 1);
-  std::string topic_name_2 = Test::mk_topic_name(topic_sub_name, 1);
-  std::string group_name = Test::mk_unique_group_name("0113-coop_regex");
-  std::string topic_regex = tostr() << "^rdkafkatest.*" << topic_sub_name;
+  const string topic_base_name = Test::mk_topic_name("0113-n_wildcard", 1);
+  const string topic_name_1 = topic_base_name + "_1";
+  const string topic_name_2 = topic_base_name + "_2";
+  const string topic_regex = "^" + topic_base_name + "_.";
+  const string group_name = Test::mk_unique_group_name("0113-n_wildcard");
 
   std::vector<std::pair<std::string, std::string> > additional_conf;
   additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
@@ -1671,11 +1677,14 @@ static void n_wildcard () {
   bool done = false;
   bool created_topics = false;
   bool deleted_topic = false;
+  int last_cb1_assign_call_cnt = 0;
+  int last_cb2_assign_call_cnt = 0;
   while (!done) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1, NULL) == 0 && Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
+    if (Test::assignment_partition_count(c1, NULL) == 0 &&
+        Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
@@ -1684,38 +1693,52 @@ static void n_wildcard () {
       created_topics = true;
     }
 
-    if (Test::assignment_partition_count(c1, NULL) == 2 && Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb2.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 1 not: " << rebalance_cb2.assign_call_cnt);
+    if (Test::assignment_partition_count(c1, NULL) == 2 &&
+        Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
+      TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 1,
+                  "Expecting C_1's nonempty_assign_call_cnt to be 1 not %d ",
+                  rebalance_cb1.nonempty_assign_call_cnt);
+      TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 1,
+                  "Expecting C_2's nonempty_assign_call_cnt to be 1 not %d ",
+                  rebalance_cb2.nonempty_assign_call_cnt);
+      TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 0,
+                  "Expecting C_1's nonempty_revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb1.nonempty_assign_call_cnt);
+      TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 0,
+                  "Expecting C_2's nonempty_revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb2.nonempty_assign_call_cnt);
 
-      if (rebalance_cb1.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 0 not: " << rebalance_cb1.revoke_call_cnt);
-      if (rebalance_cb2.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.revoke_call_cnt);
+      last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
+      last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
 
       Test::Say("Deleting topic 1\n");
       Test::delete_topic(c1, topic_name_1.c_str());
       deleted_topic = true;
     }
 
-    if (Test::assignment_partition_count(c1, NULL) == 1 && Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
-      if (rebalance_cb1.revoke_call_cnt != 1) /* accumulated in lost case as well */
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
-      if (rebalance_cb2.revoke_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.revoke_call_cnt);
-
-      if (rebalance_cb1.lost_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 1 not: " << rebalance_cb1.lost_call_cnt);
-      if (rebalance_cb2.lost_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's lost_call_cnt to be 1 not: " << rebalance_cb2.lost_call_cnt);
+    if (Test::assignment_partition_count(c1, NULL) == 1 &&
+        Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
+      /* accumulated in lost case as well */
+      TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 1,
+                  "Expecting C_1's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb1.nonempty_revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 1,
+                  "Expecting C_2's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb2.nonempty_revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
+                  "Expecting C_1's lost_call_cnt to be 1 not %d",
+                  rebalance_cb1.lost_call_cnt);
+      TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
+                  "Expecting C_2's lost_call_cnt to be 1 not %d",
+                  rebalance_cb2.lost_call_cnt);
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
-       * it follows the revoke, which has alrady been confirmed to have happened. */
+       * it follows the revoke, which has alrady been confirmed to have
+       * happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
-      while (rebalance_cb1.assign_call_cnt != 2 || rebalance_cb2.assign_call_cnt != 2) {
+      while (rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt &&
+             rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt) {
         Test::poll_once(c1, 500);
         Test::poll_once(c2, 500);
       }
@@ -1725,26 +1748,35 @@ static void n_wildcard () {
     }
   }
 
+  last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
+  last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
+
   Test::Say("Closing consumer 1\n");
   c1->close();
   Test::Say("Closing consumer 2\n");
   c2->close();
 
   /* There should be no assign rebalance_cb calls on close */
-  if (rebalance_cb1.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
+              "Expecting C_1's assign_call_cnt to be 2 not %d",
+              rebalance_cb1.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
+              "Expecting C_2's assign_call_cnt to be 2 not %d",
+              rebalance_cb2.assign_call_cnt);
 
-  if (rebalance_cb1.revoke_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 2,
+              "Expecting C_1's revoke_call_cnt to be 2 not %d",
+              rebalance_cb1.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 2,
+              "Expecting C_2's revoke_call_cnt to be 2 not %d",
+              rebalance_cb2.assign_call_cnt);
 
-  if (rebalance_cb1.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 1, not: " << rebalance_cb1.lost_call_cnt);
-  if (rebalance_cb2.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 2's lost_call_cnt to be 1, not: " << rebalance_cb2.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
+              "Expecting C_1's lost_call_cnt to be 1, not %d",
+              rebalance_cb1.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
+              "Expecting C_2's lost_call_cnt to be 1, not %d",
+              rebalance_cb2.lost_call_cnt);
 
   delete c1;
   delete c2;

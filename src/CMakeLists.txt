@@ -151,7 +151,6 @@ if(WITHOUT_WIN32_CONFIG)
   else()
     list(APPEND rdkafka_compile_definitions ENABLE_DEVEL=0)
   endif(ENABLE_DEVEL)
-
   if(WITH_PLUGINS)
     list(APPEND rdkafka_compile_definitions WITH_PLUGIN=1)
   else()

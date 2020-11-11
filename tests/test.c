@@ -5783,8 +5783,9 @@ void test_fail0 (const char *file, int line, const char *function,
         if (t)
                 *t = '\0';
 
-        of = rd_snprintf(buf, sizeof(buf), "%s():%i: %s%s", function, line,
-                         test_curr->subtest, *test_curr->subtest ? " " : "");
+        of = rd_snprintf(buf, sizeof(buf), "%s%s%s():%i: ",
+                         test_curr->subtest, *test_curr->subtest ? ": " : "",
+                         function, line);
         rd_assert(of < sizeof(buf));
 
         va_start(ap, fmt);
@@ -5796,10 +5797,15 @@ void test_fail0 (const char *file, int line, const char *function,
                 *t = '\0';
 
         TEST_SAYL(0, "TEST FAILURE\n");
-        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s() at %s: "
+        fprintf(stderr,
+                "\033[31m### Test \"%s%s%s%s\" failed at %s:%i:%s() at %s: "
                 "###\n"
                 "%s\n",
-                test_curr->name, file, line, function, timestr, buf+of);
+                test_curr->name,
+                *test_curr->subtest ? " (" : "",
+                test_curr->subtest,
+                *test_curr->subtest ? ")" : "",
+                file, line, function, timestr, buf+of);
         if (do_lock)
                 TEST_LOCK();
         test_curr->state = TEST_FAILED;

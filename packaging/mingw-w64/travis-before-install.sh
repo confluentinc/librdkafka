@@ -22,13 +22,15 @@ case $TRAVIS_OS_NAME in
         choco upgrade --no-progress -y msys2
 
         ## Install more MSYS2 packages from https://packages.msys2.org/base here
-        $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd
+        $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd mingw-w64-x86_64-dlfcn
 
         # Removing the DLLs so cmake links against the static libs
         rm /C/tools/msys64/mingw64/lib/libzstd.dll.a
         rm /C/tools/msys64/mingw64/lib/libcrypto.dll.a
         rm /C/tools/msys64/mingw64/lib/liblz4.dll.a
         rm /C/tools/msys64/mingw64/lib/libssl.dll.a
+		rm /C/tools/msys64/mingw64/lib/libdl.dll.a
+		rm /C/tools/msys64/mingw64/lib/libz.dll.a
 
         taskkill //IM gpg-agent.exe //F  || true  # https://travis-ci.community/t/4967
         export PATH=/C/tools/msys64/mingw64/bin:$PATH

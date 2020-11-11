@@ -118,9 +118,9 @@ set(
 )
 
 if(NOT WIN32)
-  list(APPEND sources sockem.c sockem_ctrl.c)
+    list(APPEND sources sockem.c sockem_ctrl.c)
 else()
-  list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
+    list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
 endif()
 
 add_executable(test-runner ${sources})

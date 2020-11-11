@@ -5,14 +5,6 @@ set -e
 cmake \
     -G "MinGW Makefiles" \
     -D CMAKE_INSTALL_PREFIX="$PWD/dest/" \
-    -D WITHOUT_WIN32_CONFIG=ON  \
-    -D RDKAFKA_BUILD_EXAMPLES=ON \
-    -D RDKAFKA_BUILD_TESTS=ON \
-    -D WITH_LIBDL=OFF \
-    -D WITH_PLUGINS=OFF \
-    -D WITH_SASL=ON \
-    -D WITH_SSL=ON \
-    -D WITH_ZLIB=OFF \
     -D RDKAFKA_BUILD_STATIC=ON \
     .
 
@@ -26,6 +18,8 @@ cp /C/tools/msys64/mingw64/lib/libzstd.a ./
 cp /C/tools/msys64/mingw64/lib/libcrypto.a ./
 cp /C/tools/msys64/mingw64/lib/liblz4.a ./
 cp /C/tools/msys64/mingw64/lib/libssl.a ./
+cp /C/tools/msys64/mingw64/lib/libdl.a ./
+cp /C/tools/msys64/mingw64/lib/libz.a ./
 cp ../src/librdkafka.a ./
 
 # Have to rename because ar won't work with + in the name
@@ -37,6 +31,8 @@ addlib libzstd.a
 addlib libcrypto.a
 addlib liblz4.a
 addlib libssl.a
+addlib libdl.a
+addlib libz.a
 save
 end
 EOF

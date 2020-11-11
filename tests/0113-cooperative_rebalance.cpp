@@ -643,7 +643,7 @@ run_test (const std::string &t1, const std::string &t2,
 
 
 static void a_assign_tests () {
-    SUB_TEST_QUICK("");
+    SUB_TEST_QUICK();
 
     int msgcnt = 1000;
     const int msgsize1 = 100;
@@ -676,7 +676,7 @@ static void a_assign_tests () {
  * Makes use of the mock cluster to induce latency.
  */
 static void a_assign_rapid () {
-  SUB_TEST_QUICK("");
+  SUB_TEST_QUICK();
 
   std::string group_id = __FUNCTION__;
 
@@ -886,7 +886,7 @@ static void a_assign_rapid () {
  */
 
 static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
-  Test::Say("Executing b_subscribe_with_cb_test\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1010,6 +1010,8 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1022,7 +1024,7 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
  */
 
 static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
-  Test::Say("Executing c_subscribe_no_cb_test\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1063,6 +1065,8 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1074,7 +1078,7 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
  */
 
 static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
-  Test::Say("Executing d_change_subscription_add_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
@@ -1112,6 +1116,8 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
     Test::Say("Skipping close() of consumer\n");
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1123,7 +1129,7 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
  */
 
 static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
-  Test::Say("Executing e_change_subscription_remove_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
@@ -1161,6 +1167,8 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
     Test::Say("Skipping close() of consumer\n");
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1209,7 +1217,7 @@ public:
 
 
 static void f_assign_call_cooperative () {
-  Test::Say("Executing f_assign_call_cooperative\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1229,6 +1237,8 @@ static void f_assign_call_cooperative () {
 
   c->close();
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1281,7 +1291,7 @@ public:
 };
 
 static void g_incremental_assign_call_eager() {
-  Test::Say("Executing g_incremental_assign_call_eager\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1301,6 +1311,8 @@ static void g_incremental_assign_call_eager() {
 
   c->close();
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1312,7 +1324,7 @@ static void g_incremental_assign_call_eager() {
  */
 
 static void h_delete_topic () {
-  Test::Say("Executing h_delete_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1359,6 +1371,8 @@ static void h_delete_topic () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1370,7 +1384,7 @@ static void h_delete_topic () {
  */
 
 static void i_delete_topic_2 () {
-  Test::Say("Executing i_delete_topic_2\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1406,6 +1420,8 @@ static void i_delete_topic_2 () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1417,7 +1433,7 @@ static void i_delete_topic_2 () {
  */
 
 static void j_delete_topic_no_rb_callback () {
-  Test::Say("Executing j_delete_topic_no_rb_callback\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1451,6 +1467,8 @@ static void j_delete_topic_no_rb_callback () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1462,7 +1480,7 @@ static void j_delete_topic_no_rb_callback () {
  */
 
 static void k_add_partition () {
-  Test::Say("Executing k_add_partition\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1508,7 +1526,7 @@ static void k_add_partition () {
   if (rebalance_cb.revoke_call_cnt != 1)
     Test::Fail(tostr() << "Expected 1 revoke call, saw " << rebalance_cb.revoke_call_cnt);
 
-  delete c;
+  SUB_TEST_PASS();
 }
 
 
@@ -1520,7 +1538,7 @@ static void k_add_partition () {
  */
 
 static void l_unsubscribe () {
-  Test::Say("Executing l_unsubscribe\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1592,6 +1610,8 @@ static void l_unsubscribe () {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1603,7 +1623,7 @@ static void l_unsubscribe () {
  */
 
 static void m_unsubscribe_2 () {
-  Test::Say("Executing m_unsubscribe_2\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1634,6 +1654,8 @@ static void m_unsubscribe_2 () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1646,7 +1668,7 @@ static void m_unsubscribe_2 () {
  */
 
 static void n_wildcard () {
-  Test::Say("Executing n_wildcard\n");
+  SUB_TEST();
 
   const string topic_base_name = Test::mk_topic_name("0113-n_wildcard", 1);
   const string topic_name_1 = topic_base_name + "_1";
@@ -1780,6 +1802,8 @@ static void n_wildcard () {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1794,7 +1818,7 @@ static void n_wildcard () {
  */
 
 static void o_java_interop() {
-  Test::Say("Executing o_java_interop\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113_o_2", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113_o_6", 1);
@@ -1875,6 +1899,8 @@ static void o_java_interop() {
   test_waitpid(java_pid);
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1884,8 +1910,8 @@ static void o_java_interop() {
  *  - Soon after (timing such that rebalance is probably in progress) it subscribes to a different topic.
  */
 
-static void s_subscribe_when_rebalancing(int variation) {
-  Test::Say(tostr() << "Executing s_subscribe_when_rebalancing, variation: " << variation << "\n");
+static void s_subscribe_when_rebalancing (int variation) {
+  SUB_TEST("variation %d", variation);
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1927,6 +1953,8 @@ static void s_subscribe_when_rebalancing(int variation) {
   }
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1937,7 +1965,7 @@ static void s_subscribe_when_rebalancing(int variation) {
  */
 
 static void t_max_poll_interval_exceeded(int variation) {
-  Test::Say(tostr() << "Executing t_max_poll_interval_exceeded, variation: " << variation << "\n");
+  SUB_TEST("variation %d", variation);
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -2003,6 +2031,8 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -2040,16 +2070,14 @@ static void poll_all_consumers (RdKafka::KafkaConsumer **consumers,
  */
 
 static void u_stress (bool use_rebalance_cb, int subscription_variation) {
-
   const int N_CONSUMERS = 8;
   const int N_TOPICS = 2;
   const int N_PARTS_PER_TOPIC = N_CONSUMERS * N_TOPICS;
   const int N_PARTITIONS = N_PARTS_PER_TOPIC * N_TOPICS;
   const int N_MSGS_PER_PARTITION = 1000;
 
-  Test::Say(tostr() << _C_MAG "[ Executing u_stress, use_rebalance_cb: " <<
-            use_rebalance_cb << ", subscription_variation: " <<
-            subscription_variation << " ]\n");
+  SUB_TEST("use_rebalance_cb: %d, subscription_variation: %d",
+           (int)use_rebalance_cb, subscription_variation);
 
   string topic_name_1 = Test::mk_topic_name("0113u_1", 1);
   string topic_name_2 = Test::mk_topic_name("0113u_2", 1);
@@ -2362,9 +2390,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
     delete consumers[i];
   }
 
-  Test::Say(tostr() << _C_GRN "[ PASS u_stress, use_rebalance_cb: " <<
-            use_rebalance_cb << ", subscription_variation: " <<
-            subscription_variation << " ]\n");
+  SUB_TEST_PASS();
 }
 
 
@@ -2455,7 +2481,7 @@ extern "C" {
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
 
-    SUB_TEST_QUICK("");
+    SUB_TEST_QUICK();
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2635,7 +2661,7 @@ extern "C" {
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
 
-    SUB_TEST("");
+    SUB_TEST();
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2697,12 +2723,6 @@ extern "C" {
     test_mock_cluster_destroy(mcluster);
   }
 
-    /* Separate test output */
-#define _RUN(CALL) do {                         \
-      Test::Say(_C_MAG "[ " #CALL " ]\n"); \
-      CALL;                                     \
-    } while (0)
-
   /* Local tests not needing a cluster */
   int main_0113_cooperative_rebalance_local (int argc, char **argv) {
     a_assign_rapid();
@@ -2716,39 +2736,39 @@ extern "C" {
   int main_0113_cooperative_rebalance (int argc, char **argv) {
     int i;
 
-    _RUN(a_assign_tests());
-    _RUN(b_subscribe_with_cb_test(true/*close consumer*/));
-    _RUN(b_subscribe_with_cb_test(false/*don't close consumer*/));
-    _RUN(c_subscribe_no_cb_test(true/*close consumer*/));
+    a_assign_tests();
+    b_subscribe_with_cb_test(true/*close consumer*/);
+    b_subscribe_with_cb_test(false/*don't close consumer*/);
+    c_subscribe_no_cb_test(true/*close consumer*/);
 
     if (test_quick) {
       Test::Say("Skipping tests c -> s due to quick mode\n");
       return 0;
     }
 
-    _RUN(c_subscribe_no_cb_test(false/*don't close consumer*/));
-    _RUN(d_change_subscription_add_topic(true/*close consumer*/));
-    _RUN(d_change_subscription_add_topic(false/*don't close consumer*/));
-    _RUN(e_change_subscription_remove_topic(true/*close consumer*/));
-    _RUN(e_change_subscription_remove_topic(false/*don't close consumer*/));
-    _RUN(f_assign_call_cooperative());
-    _RUN(g_incremental_assign_call_eager());
-    _RUN(h_delete_topic());
-    _RUN(i_delete_topic_2());
-    _RUN(j_delete_topic_no_rb_callback());
-    _RUN(k_add_partition());
-    _RUN(l_unsubscribe());
-    _RUN(m_unsubscribe_2());
-    _RUN(n_wildcard());
-    _RUN(o_java_interop());
+    c_subscribe_no_cb_test(false/*don't close consumer*/);
+    d_change_subscription_add_topic(true/*close consumer*/);
+    d_change_subscription_add_topic(false/*don't close consumer*/);
+    e_change_subscription_remove_topic(true/*close consumer*/);
+    e_change_subscription_remove_topic(false/*don't close consumer*/);
+    f_assign_call_cooperative();
+    g_incremental_assign_call_eager();
+    h_delete_topic();
+    i_delete_topic_2();
+    j_delete_topic_no_rb_callback();
+    k_add_partition();
+    l_unsubscribe();
+    m_unsubscribe_2();
+    n_wildcard();
+    o_java_interop();
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
-      _RUN(s_subscribe_when_rebalancing(i));
+      s_subscribe_when_rebalancing(i);
     for (i = 1 ; i <= 2 ; i++)
-      _RUN(t_max_poll_interval_exceeded(i));
+      t_max_poll_interval_exceeded(i);
     /* Run all 2*3 variations of the u_.. test */
     for (i = 0 ; i < 3 ; i++) {
-      _RUN(u_stress(true/*with rebalance_cb*/, i));
-      _RUN(u_stress(false/*without rebalance_cb*/, i));
+      u_stress(true/*with rebalance_cb*/, i);
+      u_stress(false/*without rebalance_cb*/, i);
     }
 
     return 0;

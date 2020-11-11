@@ -79,7 +79,7 @@ endif()
 # }
 
 # WITH_PLUGINS {
-if(WITH_LIBDL)
+if(WITH_LIBDL OR WIN32)
   set(with_plugins_default ON)
 else()
   set(with_plugins_default OFF)

@@ -18,7 +18,6 @@ cp /C/tools/msys64/mingw64/lib/libzstd.a ./
 cp /C/tools/msys64/mingw64/lib/libcrypto.a ./
 cp /C/tools/msys64/mingw64/lib/liblz4.a ./
 cp /C/tools/msys64/mingw64/lib/libssl.a ./
-cp /C/tools/msys64/mingw64/lib/libdl.a ./
 cp /C/tools/msys64/mingw64/lib/libz.a ./
 cp ../src/librdkafka.a ./
 
@@ -31,7 +30,6 @@ addlib libzstd.a
 addlib libcrypto.a
 addlib liblz4.a
 addlib libssl.a
-addlib libdl.a
 addlib libz.a
 save
 end

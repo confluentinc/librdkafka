@@ -75,7 +75,8 @@ int          test_rusage = 0; /**< Check resource usage */
  *   >1.0: CPU is slower than base line system,
  *   <1.0: CPU is faster than base line system. */
 double       test_rusage_cpu_calibration = 1.0;
-static  const char *tests_to_run = NULL; /* all */
+static const char *tests_to_run = NULL; /* all */
+static const char *subtests_to_run = NULL; /* all */
 int          test_write_report = 0; /**< Write test report file */
 
 static int show_summary = 1;
@@ -1124,9 +1125,12 @@ static void check_test_timeouts (void) {
                         test_summary(0/*no-locks*/);
                         TEST_FAIL0(__FILE__,__LINE__,0/*nolock*/,
                                    0/*fail-later*/,
-                                   "Test %s timed out "
+                                   "Test %s%s%s%s timed out "
                                    "(timeout set to %d seconds)\n",
                                    test->name,
+                                   *test->subtest ? " (" : "",
+                                   test->subtest,
+                                   *test->subtest ? ")" : "",
                                    (int)(test->timeout-
                                          test->start)/
                                    1000000);
@@ -1554,6 +1558,7 @@ int main(int argc, char **argv) {
         signal(SIGINT, test_sig_term);
 #endif
         tests_to_run = test_getenv("TESTS", NULL);
+        subtests_to_run = test_getenv("SUBTESTS", NULL);
         tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
@@ -1645,6 +1650,8 @@ int main(int argc, char **argv) {
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
+                               "  SUBTESTS - substring matched subtest to run "
+                               "(e.g., n_wildcard)\n"
 			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
                                "  TEST_SCENARIO - Test scenario\n"
 			       "  TEST_LEVEL - Test verbosity level\n"
@@ -1716,6 +1723,8 @@ int main(int argc, char **argv) {
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
+        if (subtests_to_run)
+                TEST_SAY("Sub tests    : %s\n", subtests_to_run);
         TEST_SAY("Test mode    : %s%s%s\n",
                  test_quick ? "quick, ":"",
                  test_mode,
@@ -5870,6 +5879,9 @@ int test_sub_start (const char *func, int line, int is_quick,
                     const char *fmt, ...) {
 
         if (!is_quick && test_quick)
+                return 0;
+
+        if (subtests_to_run && !strstr(func, subtests_to_run))
                 return 0;
 
         if (fmt && *fmt) {

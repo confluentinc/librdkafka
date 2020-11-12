@@ -215,8 +215,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * 2. In WAIT_SYNC waiting for the group to rebalance on the broker.
  * 3. in *_WAIT_UNASSIGN_TO_COMPLETE waiting for unassigned partitions to
  *    stop fetching, et.al.
- * 4. In _WAIT_*_REBALANCE_CB waiting for the application to handle the
- *    assignment changes in its rebalance callback and then call assign().
+ * 4. In _WAIT_*ASSIGN_CALL waiting for the application to handle the
+ *    assignment changes in its rebalance callback and then call *assign().
  * 5. An incremental rebalancing is in progress.
  * 6. A rebalance-induced rejoin is in progress.
  */
@@ -233,6 +233,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE ||     \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL ||                   \
+         (rkcg)->rkcg_join_state ==                                     \
+         RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL ||                 \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE ||          \
          (rkcg)->rkcg_rebalance_incr_assignment != NULL ||              \

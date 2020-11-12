@@ -1166,7 +1166,7 @@ void
 rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
                                       rd_kafka_resp_err_t err,
                                       rd_kafka_topic_partition_list_t *offsets){
-        if (err) {
+        if (err)
                 rd_kafka_consumer_err(rktp->rktp_fetchq,
                                       /* FIXME: propagate broker_id */
                                       RD_KAFKA_NODEID_UA,
@@ -1174,11 +1174,10 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
                                       NULL, rktp, RD_KAFKA_OFFSET_INVALID,
                                       "Offset commit failed: %s",
                                       rd_kafka_err2str(err));
-                return;
-        }
 
 	rd_kafka_toppar_lock(rktp);
-	rktp->rktp_committed_offset = offsets->elems[0].offset;
+        if (!err)
+                rktp->rktp_committed_offset = offsets->elems[0].offset;
 
 	/* When stopping toppars:
 	 * Final commit is now done (or failed), propagate. */

@@ -24,6 +24,11 @@ list(APPEND BUILT_WITH "${CMAKE_C_COMPILER_ID}")
 list(APPEND BUILT_WITH "${CMAKE_CXX_COMPILER_ID}")
 # }
 
+if (MINGW AND RDKAFKA_BUILD_STATIC)
+  # ".dll.a" takes precedence over ".a" by default
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif()
+
 # PkgConfig {
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)

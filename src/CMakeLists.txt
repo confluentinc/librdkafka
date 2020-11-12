@@ -255,10 +255,28 @@ endif(MINGW)
 
 # Generate pkg-config file
 set(PKG_CONFIG_VERSION "${PROJECT_VERSION}")
+set(PKG_CONFIG_REQUIRES "")
+if (WIN32)
+  set(PKG_CONFIG_LIBS_PRIVATE "-lws2_32 -lsecur32 -lcrypt32")
+else()
+  set(PKG_CONFIG_LIBS_PRIVATE "-lpthread")
+  find_library(RT_LIBRARY rt)
+  if(RT_LIBRARY)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
+  endif()
+
+  if(WITH_PLUGINS)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
+  endif()
+
+  if(WITH_HDRHISTOGRAM)
+    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
+  endif()
+endif()
+
 if(NOT RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_NAME "librdkafka")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
-  set(PKG_CONFIG_REQUIRES "")
   if(WITH_ZLIB)
     string(APPEND PKG_CONFIG_REQUIRES "zlib ")
   endif()
@@ -281,19 +299,6 @@ if(NOT RDKAFKA_BUILD_STATIC)
 
   set(PKG_CONFIG_CFLAGS "-I\${includedir}")
   set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka")
-  set(PKG_CONFIG_LIBS_PRIVATE "-lpthread")
-  find_library(RT_LIBRARY rt)
-  if(RT_LIBRARY)
-    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
-  endif()
-
-  if(WITH_PLUGINS)
-    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
-  endif()
-
-  if(WITH_HDRHISTOGRAM)
-    string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lm")
-  endif()
 
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
@@ -305,19 +310,10 @@ if(NOT RDKAFKA_BUILD_STATIC)
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
   )
 else()
-  set(PKG_CONFIG_REQUIRES "")
   set(PKG_CONFIG_NAME "librdkafka-static")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
-  if(WIN32)
-    set(
-      PKG_CONFIG_LIBS
-      "-L\${libdir} \${libdir}/librdkafka.a -lws2_32 -lsecur32 -lcrypt32"
-    )
-  else()
-    set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
-  endif()
-
+  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka-static.pc"

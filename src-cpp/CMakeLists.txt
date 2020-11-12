@@ -59,11 +59,11 @@ else()
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
   set(PKG_CONFIG_REQUIRES "")
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
+  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a")
   if(WIN32)
-    set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a -lws2_32 -lsecur32 -lcrypt32")
-  else()
-    set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a")
+    set(PKG_CONFIG_LIBS_PRIVATE "-lws2_32 -lsecur32 -lcrypt32")
   endif()
+
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka++-static.pc"

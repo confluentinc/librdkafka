@@ -521,7 +521,6 @@ struct rd_kafka_s {
         TAILQ_HEAD(, rd_kafka_coord_req_s) rk_coord_reqs; /**< Coordinator
                                                            *   requests */
 
-	const rd_kafkap_bytes_t *rk_null_bytes;
 
 	struct {
 		mtx_t lock;       /* Protects acces to this struct */

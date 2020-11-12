@@ -3164,10 +3164,6 @@ rd_kafka_position (rd_kafka_t *rk,
 		   rd_kafka_topic_partition_list_t *partitions) {
  	int i;
 
-	/* Set default offsets. */
-	rd_kafka_topic_partition_list_reset_offsets(partitions,
-						    RD_KAFKA_OFFSET_INVALID);
-
 	for (i = 0 ; i < partitions->cnt ; i++) {
 		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
 		rd_kafka_toppar_t *rktp;

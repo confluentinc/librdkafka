@@ -1759,7 +1759,7 @@ static void n_wildcard () {
        * it follows the revoke, which has alrady been confirmed to have
        * happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
-      while (rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt &&
+      while (rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt ||
              rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt) {
         Test::poll_once(c1, 500);
         Test::poll_once(c2, 500);
@@ -1770,21 +1770,28 @@ static void n_wildcard () {
     }
   }
 
-  last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
-  last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
-
   Test::Say("Closing consumer 1\n");
+  last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
   c1->close();
-  Test::Say("Closing consumer 2\n");
-  c2->close();
 
   /* There should be no assign rebalance_cb calls on close */
   TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
-              "Expecting C_1's assign_call_cnt to be 2 not %d",
-              rebalance_cb1.assign_call_cnt);
+              "Expecting C_1's assign_call_cnt to be %d not %d",
+              last_cb1_assign_call_cnt, rebalance_cb1.assign_call_cnt);
+
+  /* Let C_2 catch up on the rebalance and get assigned C_1's partitions. */
+  last_cb2_assign_call_cnt = rebalance_cb2.nonempty_assign_call_cnt;
+  while (rebalance_cb2.nonempty_assign_call_cnt == last_cb2_assign_call_cnt)
+    Test::poll_once(c2, 500);
+
+  Test::Say("Closing consumer 2\n");
+  last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
+  c2->close();
+
+  /* There should be no assign rebalance_cb calls on close */
   TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
-              "Expecting C_2's assign_call_cnt to be 2 not %d",
-              rebalance_cb2.assign_call_cnt);
+              "Expecting C_2's assign_call_cnt to be %d not %d",
+              last_cb2_assign_call_cnt, rebalance_cb2.assign_call_cnt);
 
   TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 2,
               "Expecting C_1's revoke_call_cnt to be 2 not %d",

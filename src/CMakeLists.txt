@@ -158,15 +158,18 @@ endif()
 set(CMAKE_DEBUG_POSTFIX d)
 
 add_library(rdkafka SHARED ${sources})
-add_library(rdkafka_static STATIC ${sources})
 set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
 target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
-target_compile_definitions(rdkafka_static PUBLIC LIBRDKAFKA_STATICLIB)
 
-set_target_properties(rdkafka_static
-    PROPERTIES COMPILE_PDB_NAME rdkafka_static)
-set_target_properties(rdkafka_static
-    PROPERTIES COMPILE_PDB_NAME_DEBUG rdkafka_static${CMAKE_DEBUG_POSTFIX})
+if(RDKAFKA_BUILD_STATIC)
+  add_library(rdkafka_static STATIC ${sources})
+  target_compile_definitions(rdkafka_static PUBLIC LIBRDKAFKA_STATICLIB)
+
+  set_target_properties(rdkafka_static
+      PROPERTIES COMPILE_PDB_NAME rdkafka_static)
+  set_target_properties(rdkafka_static
+      PROPERTIES COMPILE_PDB_NAME_DEBUG rdkafka_static${CMAKE_DEBUG_POSTFIX})
+endif()
 
 if(MINGW)
   # Target Windows 8.1 to match the VS projects (MinGW defaults to an older WinAPI version)
@@ -179,66 +182,70 @@ file(MAKE_DIRECTORY "${dummy}")
 
 foreach(target rdkafka rdkafka_static)
 
-  # Support '#include <rdkafka.h>'
-  target_include_directories(${target}
-    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>"
-    PUBLIC "$<BUILD_INTERFACE:${dummy}>")
-  target_compile_definitions(${target} PUBLIC ${rdkafka_compile_definitions})
+  if(TARGET ${target})
 
-  if(WIN32)  
-    target_link_libraries(${target} PUBLIC crypt32 ws2_32 secur32)
-  endif()
+    # Support '#include <rdkafka.h>'
+    target_include_directories(${target}
+      PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>"
+      PUBLIC "$<BUILD_INTERFACE:${dummy}>")
+    target_compile_definitions(${target} PUBLIC ${rdkafka_compile_definitions})
 
-  if(WITH_HDRHISTOGRAM)
-    target_link_libraries(${target} PUBLIC m)
-  endif()
-
-  if(WITH_ZLIB)
-    find_package(ZLIB REQUIRED)
-    target_include_directories(${target} PUBLIC ${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(${target} PUBLIC ZLIB::ZLIB)
-  endif()
-
-  if(WITH_ZSTD)
-    target_link_libraries(${target} PUBLIC ${ZSTD_LIBRARY})
-    target_include_directories(${target} PUBLIC ${ZSTD_INCLUDE_DIR})
-    message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")
-  endif()
-
-  if(WITH_SSL)
-    if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
-      if(NOT TARGET bundled-ssl)
-        message(FATAL_ERROR "bundled-ssl target not exist")
-      endif()
-      target_include_directories(${target} BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
-      target_link_libraries(${target} PUBLIC ${BUNDLED_SSL_LIBRARIES})
-      add_dependencies(${target} bundled-ssl)
-    else()
-      find_package(OpenSSL REQUIRED)
-      target_include_directories(${target} PUBLIC ${OPENSSL_INCLUDE_DIR})
-      target_link_libraries(${target} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    if(WIN32)  
+      target_link_libraries(${target} PUBLIC crypt32 ws2_32 secur32)
     endif()
-  endif()
 
-  if(LINK_ATOMIC)
-    target_link_libraries(${target} PUBLIC "-latomic")
-  endif()
+    if(WITH_HDRHISTOGRAM)
+      target_link_libraries(${target} PUBLIC m)
+    endif()
 
-  find_package(Threads REQUIRED)
-  target_link_libraries(${target} PUBLIC Threads::Threads)
+    if(WITH_ZLIB)
+      find_package(ZLIB REQUIRED)
+      target_include_directories(${target} PUBLIC ${ZLIB_INCLUDE_DIRS})
+      target_link_libraries(${target} PUBLIC ZLIB::ZLIB)
+    endif()
 
-  if(WITH_SASL_CYRUS)
-    target_include_directories(${target} PUBLIC ${SASL_INCLUDE_DIRS})
-    target_link_libraries(${target} PUBLIC ${SASL_LIBRARIES})
-  endif()
+    if(WITH_ZSTD)
+      target_link_libraries(${target} PUBLIC ${ZSTD_LIBRARY})
+      target_include_directories(${target} PUBLIC ${ZSTD_INCLUDE_DIR})
+      message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")
+    endif()
 
-  if(WITH_LIBDL)
-    target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
-  endif()
+    if(WITH_SSL)
+      if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
+        if(NOT TARGET bundled-ssl)
+          message(FATAL_ERROR "bundled-ssl target not exist")
+        endif()
+        target_include_directories(${target} BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
+        target_link_libraries(${target} PUBLIC ${BUNDLED_SSL_LIBRARIES})
+        add_dependencies(${target} bundled-ssl)
+      else()
+        find_package(OpenSSL REQUIRED)
+        target_include_directories(${target} PUBLIC ${OPENSSL_INCLUDE_DIR})
+        target_link_libraries(${target} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+      endif()
+    endif()
 
-  if(WITH_LZ4_EXT)
-    target_include_directories(${target} PUBLIC ${LZ4_INCLUDE_DIRS})
-    target_link_libraries(${target} PUBLIC LZ4::LZ4)
+    if(LINK_ATOMIC)
+      target_link_libraries(${target} PUBLIC "-latomic")
+    endif()
+
+    find_package(Threads REQUIRED)
+    target_link_libraries(${target} PUBLIC Threads::Threads)
+
+    if(WITH_SASL_CYRUS)
+      target_include_directories(${target} PUBLIC ${SASL_INCLUDE_DIRS})
+      target_link_libraries(${target} PUBLIC ${SASL_LIBRARIES})
+    endif()
+
+    if(WITH_LIBDL)
+      target_link_libraries(${target} PUBLIC ${CMAKE_DL_LIBS})
+    endif()
+
+    if(WITH_LZ4_EXT)
+      target_include_directories(${target} PUBLIC ${LZ4_INCLUDE_DIRS})
+      target_link_libraries(${target} PUBLIC LZ4::LZ4)
+    endif()
+    
   endif()
 
 endforeach()
@@ -301,9 +308,29 @@ configure_file(
 install(FILES ${GENERATED_DIR}/rdkafka.pc
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
 )
+if(TARGET rdkafka_static)
+  set(PKG_CONFIG_NAME
+    "librdkafka-static"
+  )
+  set(PKG_CONFIG_DESCRIPTION
+    "The Apache Kafka C/C++ library (static)"
+  )
+  set(PKG_CONFIG_LIBS
+    "-L\${libdir} \${libdir}/librdkafka.a"
+  )
+  configure_file(
+    "../packaging/cmake/rdkafka.pc.in"
+    "${GENERATED_DIR}/rdkafka-static.pc"
+    @ONLY
+  )
+  install(FILES ${GENERATED_DIR}/rdkafka-static.pc
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+  )  
+  set(static_target_for_install rdkafka_static)
+endif()
 
 install(
-    TARGETS rdkafka rdkafka_static
+    TARGETS rdkafka ${static_target_for_install}
     EXPORT "${targets_export_name}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -311,11 +338,13 @@ install(
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
-if (MSVC)
-    set_target_properties(rdkafka_static
-        PROPERTIES
-        COMPILE_PDB_NAME_RELWITHDEBINFO rdkafka_static
-        COMPILE_PDB_NAME_DEBUG          rdkafka_static${CMAKE_DEBUG_POSTFIX})
+if(TARGET rdkafka_static)
+  if (MSVC)
+      set_target_properties(${static_target}
+          PROPERTIES
+          COMPILE_PDB_NAME_RELWITHDEBINFO rdkafka_static
+          COMPILE_PDB_NAME_DEBUG          rdkafka_static${CMAKE_DEBUG_POSTFIX})
+  endif()
 endif()
 
 install(
@@ -327,7 +356,10 @@ if (MSVC)
     install(FILES $<TARGET_PDB_FILE:rdkafka>
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         CONFIGURATIONS Debug RelWithDebInfo)
-    install(FILES $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        CONFIGURATIONS Debug RelWithDebInfo)
+    if(TARGET rdkafka_static)
+      install(FILES $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          CONFIGURATIONS Debug RelWithDebInfo)
+    endif()
 endif()
+

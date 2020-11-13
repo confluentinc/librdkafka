@@ -182,6 +182,7 @@ if(ENABLE_LZ4_EXT)
 endif()
 # }
 
+option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)
@@ -277,19 +278,6 @@ install(
     FILES LICENSES.txt
     DESTINATION "share/licenses/librdkafka"
 )
-
-if (MSVC)
-    install(FILES
-        $<TARGET_FILE_DIR:rdkafka_static>/$<TARGET_FILE_BASE_NAME:rdkafka_static>.pdb
-        $<TARGET_FILE_DIR:rdkafka++_static>/$<TARGET_FILE_BASE_NAME:rdkafka++_static>.pdb
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        CONFIGURATIONS Debug RelWithDebInfo)
-    install(FILES
-        $<TARGET_PDB_FILE:rdkafka>
-        $<TARGET_PDB_FILE:rdkafka++>
-        DESTINATION "${CMAKE_INSTALL_BINDIR}"
-        CONFIGURATIONS Debug RelWithDebInfo)
-endif()
 
 # }
 

@@ -119,9 +119,11 @@ endif()
 add_executable(test-runner ${sources})
 target_link_libraries(test-runner PUBLIC rdkafka++)
 
-# we don't really need this but it's good to test static linking
-add_executable(test-runner-static ${sources})
-target_link_libraries(test-runner-static PUBLIC rdkafka++_static)
+if (TARGET rdkafka++_static)
+  # we don't really need this but it's good to test static linking
+  add_executable(test-runner-static ${sources})
+  target_link_libraries(test-runner-static PUBLIC rdkafka++_static)
+endif()
 
 add_test(NAME RdKafkaTestInParallel COMMAND test-runner -p5)
 add_test(NAME RdKafkaTestSequentially COMMAND test-runner -p1)

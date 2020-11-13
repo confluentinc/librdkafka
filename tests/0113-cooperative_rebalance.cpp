@@ -1520,6 +1520,7 @@ static void k_add_partition () {
 
   Test::Say("Closing consumer\n");
   c->close();
+  delete c;
 
   if (rebalance_cb.assign_call_cnt != 2)
     Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);

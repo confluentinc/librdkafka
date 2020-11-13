@@ -198,6 +198,12 @@ static void rd_kafka_mock_cgrp_sync_done (rd_kafka_mock_cgrp_t *mcgrp,
  */
 static void rd_kafka_mock_cgrp_sync_check (rd_kafka_mock_cgrp_t *mcgrp) {
 
+        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
+                     "Mock consumer group %s: awaiting %d/%d syncing members "
+                     "in state %s",
+                     mcgrp->id, mcgrp->assignment_cnt, mcgrp->member_cnt,
+                     rd_kafka_mock_cgrp_state_names[mcgrp->state]);
+
         if (mcgrp->assignment_cnt < mcgrp->member_cnt)
                 return;
 

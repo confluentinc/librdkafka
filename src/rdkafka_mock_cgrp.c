@@ -184,10 +184,16 @@ static void rd_kafka_mock_cgrp_sync_done (rd_kafka_mock_cgrp_t *mcgrp,
 
                 rd_kafka_mock_cgrp_member_assignment_set(mcgrp, member, NULL);
 
-                rd_kafka_mock_connection_set_blocking(member->conn, rd_false);
-                if (resp)
-                        rd_kafka_mock_connection_send_response(member->conn,
-                                                               resp);
+                if (member->conn) {
+                        rd_kafka_mock_connection_set_blocking(member->conn,
+                                                              rd_false);
+                        if (resp)
+                                rd_kafka_mock_connection_send_response(
+                                        member->conn, resp);
+                } else if (resp) {
+                        /* Member has disconnected. */
+                        rd_kafka_buf_destroy(resp);
+                }
         }
 }
 

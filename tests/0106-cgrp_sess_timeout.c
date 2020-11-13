@@ -206,7 +206,7 @@ static void do_test_session_timeout (const char *use_commit_type) {
                          RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS, 5+2);
 
         /* Final rebalance in close().
-         * It's commit will work. */
+         * Its commit will work. */
         rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         commit_exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 

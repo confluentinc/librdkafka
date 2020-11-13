@@ -2815,6 +2815,11 @@ void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                       tconf);
 }
 
+rd_kafka_topic_conf_t *
+rd_kafka_conf_get_default_topic_conf (rd_kafka_conf_t *conf) {
+        return conf->topic_conf;
+}
+
 
 void
 rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,

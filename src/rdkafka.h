@@ -2332,6 +2332,20 @@ RD_EXPORT
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf);
 
+/**
+ * @brief Gets the default topic configuration as previously set with
+ *        rd_kafka_conf_set_default_topic_conf() or that was implicitly created
+ *        by configuring a topic-level property on the global \p conf object.
+ *
+ * @returns the \p conf's default topic configuration (if any), or NULL.
+ *
+ * @warning The returned topic configuration object is owned by the \p conf
+ *          object. It may be modified but not destroyed and its lifetime is
+ *          the same as the \p conf object or the next call to
+ *          rd_kafka_conf_set_default_topic_conf().
+ */
+RD_EXPORT rd_kafka_topic_conf_t *
+rd_kafka_conf_get_default_topic_conf (rd_kafka_conf_t *conf);
 
 
 /**

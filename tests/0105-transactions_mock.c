@@ -113,7 +113,7 @@ static void do_test_txn_recoverable_errors (void) {
         const char *groupid = "myGroupId";
         const char *txnid = "myTxnId";
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         rk = create_txn_producer(&mcluster, txnid, 3, NULL);
 
@@ -216,7 +216,7 @@ static void do_test_txn_recoverable_errors (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 
@@ -233,7 +233,7 @@ static void do_test_txn_requires_abort_errors (void) {
         rd_kafka_consumer_group_metadata_t *cgmetadata;
         int r;
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
 
@@ -365,7 +365,7 @@ static void do_test_txn_requires_abort_errors (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 
@@ -395,7 +395,7 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
                 down_what = "leader";
         }
 
-        TEST_SAY(_C_MAG "[ Test %s down ]\n", down_what);
+        SUB_TEST_QUICK("Test %s down", down_what);
 
         rk = create_txn_producer(&mcluster, transactional_id, 3, NULL);
 
@@ -442,7 +442,7 @@ static void do_test_txn_broker_down_in_txn (rd_bool_t down_coord) {
 
         test_curr->is_fatal_cb = NULL;
 
-        TEST_SAY(_C_GRN "[ Test %s down: PASS ]\n", down_what);
+        SUB_TEST_PASS();
 
 }
 
@@ -482,7 +482,7 @@ static void do_test_txn_switch_coordinator (void) {
 
         test_timeout_set(iterations * 10);
 
-        TEST_SAY(_C_MAG "[ Test switching coordinators ]\n");
+        SUB_TEST("Test switching coordinators");
 
         rk = create_txn_producer(&mcluster, transactional_id, broker_cnt, NULL);
 
@@ -533,7 +533,7 @@ static void do_test_txn_switch_coordinator (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ Test switching coordinators: PASS ]\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -548,7 +548,7 @@ static void do_test_txns_not_supported (void) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         test_conf_init(&conf, NULL, 10);
 
@@ -596,7 +596,7 @@ static void do_test_txns_not_supported (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s: PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 
@@ -611,7 +611,7 @@ static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
 
@@ -682,7 +682,7 @@ static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 
@@ -697,7 +697,7 @@ static void do_test_txns_no_timeout_crash (void) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         rk = create_txn_producer(&mcluster, "txnid", 3,
                                  "socket.timeout.ms", "1000",
@@ -763,7 +763,7 @@ static void do_test_txns_no_timeout_crash (void) {
         /* All done */
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 
@@ -776,8 +776,9 @@ static void do_test_txn_auth_failure (int16_t ApiKey,
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_error_t *error;
 
-        TEST_SAY(_C_MAG "[ %s ApiKey=%s ErrorCode=%s ]\n", __FUNCTION__,
-                 rd_kafka_ApiKey2str(ApiKey), rd_kafka_err2name(ErrorCode));
+        SUB_TEST_QUICK("ApiKey=%s ErrorCode=%s",
+                       rd_kafka_ApiKey2str(ApiKey),
+                       rd_kafka_err2name(ErrorCode));
 
         rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
 
@@ -806,8 +807,7 @@ static void do_test_txn_auth_failure (int16_t ApiKey,
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s ApiKey=%s ErrorCode=%s PASS ]\n", __FUNCTION__,
-                 rd_kafka_ApiKey2str(ApiKey), rd_kafka_err2name(ErrorCode));
+        SUB_TEST_PASS();
 }
 
 
@@ -828,7 +828,7 @@ static void do_test_txn_flush_timeout (void) {
         int msgcounter = 0;
         rd_bool_t is_retry = rd_false;
 
-        TEST_SAY(_C_MAG "[ %s ]\n", __FUNCTION__);
+        SUB_TEST_QUICK();
 
         rk = create_txn_producer(&mcluster, txnid, 3,
                                  "message.timeout.ms", "10000",
@@ -842,7 +842,7 @@ static void do_test_txn_flush_timeout (void) {
         test_curr->is_fatal_cb = error_is_fatal_cb;
         allowed_error = RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
 
         /* Set coordinator so we can disconnect it later */
         rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, coord_id);
@@ -960,7 +960,7 @@ static void do_test_txn_flush_timeout (void) {
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ %s PASS ]\n", __FUNCTION__);
+        SUB_TEST_PASS();
 }
 
 

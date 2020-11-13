@@ -3952,6 +3952,18 @@ char *test_conf_get (const rd_kafka_conf_t *conf, const char *name) {
 }
 
 
+char *test_topic_conf_get (const rd_kafka_topic_conf_t *tconf,
+                           const char *name) {
+        static RD_TLS char ret[256];
+        size_t ret_sz = sizeof(ret);
+        if (rd_kafka_topic_conf_get(tconf, name, ret, &ret_sz) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to get topic config \"%s\": %s\n", name,
+                          "unknown property");
+        return ret;
+}
+
+
 /**
  * @brief Check if property \name matches \p val in \p conf.
  *        If \p conf is NULL the test config will be used. */

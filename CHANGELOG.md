@@ -31,11 +31,16 @@ and the sticky consumer group partition assignor.
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
  * Updated to OpenSSL v1.1.1h when building dependencies.
+ * Added `rd_kafka_conf_get_default_topic_conf()` to retrieve the
+   default topic configuration object from a global configuration object.
 
 
 ## Fixes
 
 ### General fixes
+
+ * Fix a use-after-free crash when certain coordinator requests were retried.
+
 
 ### Consumer fixes
 
@@ -45,8 +50,8 @@ and the sticky consumer group partition assignor.
    undefined.
  * Consumer destroy without prior `close()` could hang in certain
    cgrp states (@gridaphobe, #3127).
-
-
+ * Fix possible null dereference in `Message::errstr()` (#3140).
+ * Partition fetch state was not set to STOPPED if OffsetCommit failed.
 
 # librdkafka v1.5.2
 

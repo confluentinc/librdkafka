@@ -31,6 +31,8 @@ and the sticky consumer group partition assignor.
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
  * Updated to OpenSSL v1.1.1h when building dependencies.
+ * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to v1.9.3
+   which has vast performance improvements.
 
 
 ## Fixes

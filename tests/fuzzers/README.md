@@ -13,4 +13,4 @@ sudo python3 infra/helper.py build_image librdkafka
 sudo python3 infra/helper.py build_fuzzers librdkafka
 sudo python3 infra/helper.py run_fuzzer librdkafka FUZZ_NAME
 ```
-where FUZZ_NAME references the name opf the fuzzer. Currently the only fuzzer wave is fuzz_regex
+where FUZZ_NAME references the name of the fuzzer. Currently the only fuzzer we have is fuzz_regex

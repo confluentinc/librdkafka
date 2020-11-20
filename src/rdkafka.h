@@ -5249,10 +5249,10 @@ typedef rd_kafka_resp_err_t
  * @param errstr A human readable error string in case the interceptor fails.
  * @param errstr_size Maximum space (including \0) in \p errstr.
  *
- * @returns RD_KAFKA_CONF_RES_OK if the property was known and successfully
- *          handled by the interceptor, RD_KAFKA_CONF_RES_INVALID if the
+ * @returns RD_KAFKA_CONF_OK if the property was known and successfully
+ *          handled by the interceptor, RD_KAFKA_CONF_INVALID if the
  *          property was handled by the interceptor but the value was invalid,
- *          or RD_KAFKA_CONF_RES_UNKNOWN if the interceptor did not handle
+ *          or RD_KAFKA_CONF_UNKNOWN if the interceptor did not handle
  *          this property, in which case the property is passed on on the
  *          interceptor in the chain, finally ending up at the built-in
  *          configuration handler.

@@ -838,12 +838,12 @@ Configuration is applied prior to object creation using the
 
     res = rd_kafka_conf_set(conf, "compression.codec", "snappy",
                             errstr, sizeof(errstr));
-    if (res != RD_KAFKA_CONF_RES_OK)
+    if (res != RD_KAFKA_CONF_OK)
         fail("%s\n", errstr);
 
     res = rd_kafka_conf_set(conf, "batch.num.messages", "100",
                             errstr, sizeof(errstr));
-    if (res != RD_KAFKA_CONF_RES_OK)
+    if (res != RD_KAFKA_CONF_OK)
         fail("%s\n", errstr);
 
     rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));

@@ -843,11 +843,19 @@ Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp)
 	Reinst *split, *jump;
 	int i;
         unsigned int ncount;
+        size_t pattern_len = strlen(pattern);
+
+        if (pattern_len > 10000) {
+                /* Avoid stack exhaustion in recursive parseatom() et.al. */
+                if (errorp)
+                        *errorp = "regexp pattern too long (max 10000)";
+                return NULL;
+        }
 
 	prog = rd_calloc(1, sizeof (Reprog));
         g = &prog->g;
         g->prog = prog;
-	g->pstart = g->pend = rd_malloc(sizeof (Renode) * strlen(pattern) * 2);
+	g->pstart = g->pend = rd_malloc(sizeof (Renode) * pattern_len * 2);
 
 	if (setjmp(g->kaboom)) {
 		if (errorp) *errorp = g->error;

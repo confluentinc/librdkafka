@@ -60,9 +60,15 @@ int LLVMFuzzerTestOneInput(uint8_t *data, size_t size) {
 }
 
 #if WITH_MAIN
+#include "helpers.h"
+
 int main (int argc, char **argv) {
         int i;
-        for (i = 1 ; i < argc ; i++)
-                LLVMFuzzerTestOneInput((uint8_t *)argv[i], strlen(argv[i]));
+        for (i = 1 ; i < argc ; i++) {
+                size_t size;
+                uint8_t *buf = read_file(argv[i], &size);
+                LLVMFuzzerTestOneInput(buf, size);
+                free(buf);
+        }
 }
 #endif

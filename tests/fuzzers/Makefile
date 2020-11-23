@@ -4,7 +4,8 @@ all: $(PROGRAMS)
 
 
 fuzz_%:
-	$(CC) -D WITH_MAIN -g -Wall -I../../src $@.c -o $@ ../../src/librdkafka.a
+	$(CC) -fsanitize=address -D WITH_MAIN -g -Wall \
+		-I../../src $@.c -o $@ ../../src/librdkafka.a
 
 
 clean:

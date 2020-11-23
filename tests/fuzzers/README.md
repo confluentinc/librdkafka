@@ -22,10 +22,10 @@ Notice that the OSS-Fuzz `helper.py` script above will create a Docker image in 
 
 Download the reproducer file from the OSS-Fuzz issue tracker, then build
 the failed test case by running `make` in this directory, and then
-run the test case and pass it the contents of the reproducer file, e.g:
+run the test case and pass it the reproducer files, e.g:
 
     $ make
-    $ ./fuzz_regex $(cat ~/Downloads/clusterfuzz-testcase-...)
+    $ ./fuzz_regex ~/Downloads/clusterfuzz-testcase-...
 
 **Note:** Some test cases, such as fuzz_regex, requires specific librdkafka
           build configuration. See the test case source for details.

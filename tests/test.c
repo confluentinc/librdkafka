@@ -5071,6 +5071,10 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                                 int tmout) {
         int64_t abs_timeout;
         test_timing_t t_md;
+        rd_kafka_t *our_rk = NULL;
+
+        if (!rk)
+                rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
         abs_timeout = test_clock() + (tmout * 1000);
 
@@ -5095,6 +5099,9 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                 rd_sleep(1);
         } while (test_clock() < abs_timeout);
         TIMING_STOP(&t_md);
+
+        if (our_rk)
+                rd_kafka_destroy(our_rk);
 
         if (abs_timeout)
                 TEST_FAIL("Expected topics not seen in given time.");

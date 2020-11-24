@@ -1,3 +1,24 @@
+# librdkafka v1.5.3
+
+
+librdkafka v1.5.3 is a maintenance release:
+
+### General fixes
+
+ * Fix a use-after-free crash when certain coordinator requests were retried.
+
+
+### Consumer fixes
+
+ * Consumer destroy without prior `close()` could hang in certain
+   cgrp states (@gridaphobe, #3127).
+ * Fix possible null dereference in `Message::errstr()` (#3140).
+ * The `roundrobin` partition assignment strategy could get stuck in an
+   endless loop or generate uneven assignments in case the group members
+   had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
+   subscribes to t2,t3).  (#3159)
+
+
 # librdkafka v1.5.2
 
 librdkafka v1.5.2 is a maintenance release.

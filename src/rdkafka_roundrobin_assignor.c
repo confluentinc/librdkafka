@@ -35,7 +35,7 @@
  * The roundrobin assignor lays out all the available partitions and all the
  * available consumers. It then proceeds to do a roundrobin assignment from
  * partition to consumer. If the subscriptions of all consumer instances are
- * identical, then the partitions will be uniformly distributed. (i.e., the 
+ * identical, then the partitions will be uniformly distributed. (i.e., the
  * partition ownership counts will be within a delta of exactly one across all
  * consumers.)
  *
@@ -85,8 +85,7 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
                         /* Scan through members until we find one with a
                          * subscription to this topic. */
                         do {
-                                next = (next+1) %
-                                        rd_list_cnt(&eligible_topic->members);
+                                next = (next+1) % member_cnt;
                         } while (!rd_kafka_group_member_find_subscription(
                                          rk, &members[next],
                                          eligible_topic->metadata->topic));

@@ -42,7 +42,7 @@ non_sparse_connections: $(BIN)
 		--conf '{"parallel":1, "args": "-L -Q", "sparse_connections": "false"}' $(KAFKA_VERSION)
 
 sasl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --debug $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' $(KAFKA_VERSION)
 
 # Run the full test suite(s)
 full: broker broker_idempotent sasl

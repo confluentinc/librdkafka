@@ -111,6 +111,7 @@ set(
     0117-mock_errors.c
     0118-commit_rebalance.c
     0119-consumer_auth.cpp
+    0120-asymmetric_subscription.c
     8000-idle.cpp
     test.c
     testcpp.cpp

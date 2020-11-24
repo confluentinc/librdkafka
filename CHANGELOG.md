@@ -54,6 +54,10 @@ and the sticky consumer group partition assignor.
    cgrp states (@gridaphobe, #3127).
  * Fix possible null dereference in `Message::errstr()` (#3140).
  * Partition fetch state was not set to STOPPED if OffsetCommit failed.
+ * The `roundrobin` partition assignment strategy could get stuck in an
+   endless loop or generate uneven assignments in case the group members
+   had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
+   subscribes to t2,t3).  (#3159)
 
 # librdkafka v1.5.2
 

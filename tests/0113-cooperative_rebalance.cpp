@@ -260,7 +260,6 @@ public:
   int assign_call_cnt;
   int revoke_call_cnt;
   int nonempty_assign_call_cnt; /**< ASSIGN_PARTITIONS with partitions */
-  int nonempty_revoke_call_cnt; /**< REVOKE_PARTITIONS with partitions */
   int lost_call_cnt;
   int partitions_assigned_net;
   bool wait_rebalance;
@@ -271,7 +270,6 @@ public:
     assign_call_cnt(0),
     revoke_call_cnt(0),
     nonempty_assign_call_cnt(0),
-    nonempty_revoke_call_cnt(0),
     lost_call_cnt(0),
     partitions_assigned_net(0),
     wait_rebalance(false),
@@ -315,8 +313,8 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: " <<
                    error->str());
-      if (partitions.size() > 0)
-        nonempty_revoke_call_cnt++;
+      if (partitions.size() == 0)
+        Test::Fail("revoked partitions size should never be 0");
       revoke_call_cnt += 1;
       partitions_assigned_net -= (int)partitions.size();
     }
@@ -994,7 +992,7 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   if (rebalance_cb1.revoke_call_cnt != 2)
     Test::Fail(tostr() << "Expecting 2 revoke calls on consumer 1, not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting 1 revoke calls on consumer 2, not: " << rebalance_cb2.revoke_call_cnt);
+    Test::Fail(tostr() << "Expecting 1 revoke call on consumer 2, not: " << rebalance_cb2.revoke_call_cnt);
 
   /* ..and net assigned partitions should drop to 0 in both cases: */
   if (rebalance_cb1.partitions_assigned_net != 0)
@@ -1580,9 +1578,9 @@ static void l_unsubscribe () {
       if (rebalance_cb2.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
       if (rebalance_cb1.revoke_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
+        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
       if (rebalance_cb2.revoke_call_cnt != 0) /* the rebalance_cb should not be called if the revoked partition list is empty */
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.assign_call_cnt);
+        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.revoke_call_cnt);
       Test::Say("Unsubscribe completed");
       done = true;
     }
@@ -1600,9 +1598,9 @@ static void l_unsubscribe () {
     Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
 
   if (rebalance_cb1.revoke_call_cnt != 1) /* should not be called a second revoke rebalance_cb */
-    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
+    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.assign_call_cnt);
+    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.revoke_call_cnt);
 
   if (rebalance_cb1.lost_call_cnt != 0)
     Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 0, not: " << rebalance_cb1.lost_call_cnt);
@@ -1724,12 +1722,12 @@ static void n_wildcard () {
       TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 1,
                   "Expecting C_2's nonempty_assign_call_cnt to be 1 not %d ",
                   rebalance_cb2.nonempty_assign_call_cnt);
-      TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 0,
-                  "Expecting C_1's nonempty_revoke_call_cnt to be 0 not %d ",
-                  rebalance_cb1.nonempty_assign_call_cnt);
-      TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 0,
-                  "Expecting C_2's nonempty_revoke_call_cnt to be 0 not %d ",
-                  rebalance_cb2.nonempty_assign_call_cnt);
+      TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 0,
+                  "Expecting C_1's revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb1.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 0,
+                  "Expecting C_2's revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb2.revoke_call_cnt);
 
       last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
       last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
@@ -1742,12 +1740,12 @@ static void n_wildcard () {
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
       /* accumulated in lost case as well */
-      TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 1,
+      TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
                   "Expecting C_1's revoke_call_cnt to be 1 not %d",
-                  rebalance_cb1.nonempty_revoke_call_cnt);
-      TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 1,
+                  rebalance_cb1.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 1,
                   "Expecting C_2's revoke_call_cnt to be 1 not %d",
-                  rebalance_cb2.nonempty_revoke_call_cnt);
+                  rebalance_cb2.revoke_call_cnt);
       TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
                   "Expecting C_1's lost_call_cnt to be 1 not %d",
                   rebalance_cb1.lost_call_cnt);
@@ -1794,12 +1792,12 @@ static void n_wildcard () {
               "Expecting C_2's assign_call_cnt to be %d not %d",
               last_cb2_assign_call_cnt, rebalance_cb2.assign_call_cnt);
 
-  TEST_ASSERT(rebalance_cb1.nonempty_revoke_call_cnt == 2,
+  TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 2,
               "Expecting C_1's revoke_call_cnt to be 2 not %d",
-              rebalance_cb1.assign_call_cnt);
-  TEST_ASSERT(rebalance_cb2.nonempty_revoke_call_cnt == 2,
+              rebalance_cb1.revoke_call_cnt);
+  TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 2,
               "Expecting C_2's revoke_call_cnt to be 2 not %d",
-              rebalance_cb2.assign_call_cnt);
+              rebalance_cb2.revoke_call_cnt);
 
   TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
               "Expecting C_1's lost_call_cnt to be 1, not %d",
@@ -2035,7 +2033,7 @@ static void t_max_poll_interval_exceeded(int variation) {
   if (rebalance_cb1.revoke_call_cnt != 1)
     Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
+    Test::Fail(tostr() << "Expected consumer 2 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
 
   delete c1;
   delete c2;

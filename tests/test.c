@@ -228,6 +228,7 @@ _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
 _TEST_DECL(0118_commit_rebalance);
 _TEST_DECL(0119_consumer_auth);
+_TEST_DECL(0120_asymmetric_subscription);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -426,6 +427,7 @@ struct test tests[] = {
         _TEST(0117_mock_errors, TEST_F_LOCAL),
         _TEST(0118_commit_rebalance, 0),
         _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
+        _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -1886,7 +1888,8 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
                         test_socket_enable(conf);
 #endif
         } else {
-                test_conf_set(conf, "client.id", test_curr->name);
+                if (!strcmp(test_conf_get(conf, "client.id"), "rdkafka"))
+                        test_conf_set(conf, "client.id", test_curr->name);
         }
 
 
@@ -2599,7 +2602,8 @@ void test_consumer_wait_assignment (rd_kafka_t *rk) {
                 test_consumer_poll_once(rk, NULL, 1000);
         }
 
-        TEST_SAY("Assignment (%d partition(s)): ", assignment->cnt);
+        TEST_SAY("%s: Assignment (%d partition(s)): ",
+                 rd_kafka_name(rk), assignment->cnt);
         for (i = 0 ; i < assignment->cnt ; i++)
                 TEST_SAY0("%s%s[%"PRId32"]",
                           i == 0 ? "" : ", ",

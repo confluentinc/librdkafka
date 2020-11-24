@@ -193,9 +193,13 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                         rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
                                    "PROTOUFLOW",                        \
                                    "Protocol read buffer underflow "    \
+                                   "for %s v%hd "                       \
                                    "at %"PRIusz"/%"PRIusz" (%s:%i): "   \
                                    "expected %"PRIusz" bytes > "        \
                                    "%"PRIusz" remaining bytes (%s)%s",  \
+                                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr. \
+                                                       ApiKey),         \
+                                   rkbuf->rkbuf_reqhdr.ApiVersion,      \
                                    rd_slice_offset(&rkbuf->rkbuf_reader), \
                                    rd_slice_size(&rkbuf->rkbuf_reader), \
                                    __FUNCTION__, __LINE__,              \

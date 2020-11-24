@@ -95,6 +95,9 @@ static void do_test_consumer (bool allow_auto_create_topics,
   }
 
 
+  /* Wait for topic to be fully created */
+  test_wait_topic_exists(NULL, topic_exists.c_str(), 10*1000);
+
 
   /*
    * Subscribe

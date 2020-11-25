@@ -392,7 +392,9 @@ static void rd_kafka_mock_cgrp_rebalance (rd_kafka_mock_cgrp_t *mcgrp,
         if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_JOINING)
                 return; /* Do nothing, group is already rebalancing. */
         else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
-                timeout_ms = 1000; /* First join, low timeout */
+                timeout_ms = 3000; /* First join, low timeout.
+                                    * Same as group.initial.rebalance.delay.ms
+                                    * on the broker. */
         else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_REBALANCING &&
                  mcgrp->member_cnt == mcgrp->last_member_cnt)
                 timeout_ms = 100; /* All members rejoined, quickly transition

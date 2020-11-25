@@ -3567,6 +3567,7 @@ static void rd_kafka_sw_str_sanitize_inplace (char *str) {
  */
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf) {
+        const char *errstr;
 
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
@@ -3747,9 +3748,37 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         }
 
         /* Finalize and verify the default.topic.config */
-        if (conf->topic_conf)
-                return rd_kafka_topic_conf_finalize(cltype, conf,
-                                                    conf->topic_conf);
+        if (conf->topic_conf) {
+
+                if (cltype == RD_KAFKA_PRODUCER) {
+                        rd_kafka_topic_conf_t *tconf = conf->topic_conf;
+
+                        if (tconf->message_timeout_ms != 0 &&
+                            (double)tconf->message_timeout_ms <=
+                            conf->buffering_max_ms_dbl) {
+                                if (rd_kafka_topic_conf_is_modified(
+                                            tconf, "linger.ms"))
+                                        return "`message.timeout.ms` must be "
+                                                "greater than `linger.ms`";
+                                else /* Auto adjust linger.ms to be lower
+                                      * than message.timeout.ms */
+                                        conf->buffering_max_ms_dbl =
+                                                (double)tconf->
+                                                message_timeout_ms - 0.1;
+                        }
+                }
+
+                errstr = rd_kafka_topic_conf_finalize(cltype, conf,
+                                                      conf->topic_conf);
+                if (errstr)
+                        return errstr;
+        }
+
+        /* Convert double linger.ms to internal int microseconds after
+         * finalizing default_topic_conf since it may
+         * update buffering_max_ms_dbl. */
+        conf->buffering_max_us = (rd_ts_t)(conf->buffering_max_ms_dbl * 1000);
+
 
         return NULL;
 }
@@ -3763,8 +3792,11 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
  * @returns an error string if configuration is incorrect, else NULL.
  */
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          rd_kafka_conf_t *conf,
+                                          const rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf) {
+
+        if (cltype != RD_KAFKA_PRODUCER)
+                return NULL;
 
         if (conf->eos.idempotence) {
                 /* Ensure acks=all */
@@ -3777,7 +3809,8 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                 }
 
                 /* Ensure FIFO queueing */
-                if (rd_kafka_topic_conf_is_modified(tconf, "queuing.strategy")) {
+                if (rd_kafka_topic_conf_is_modified(tconf,
+                                                    "queuing.strategy")) {
                         if (tconf->queuing_strategy != RD_KAFKA_QUEUE_FIFO)
                                 return "`queuing.strategy` must be set to "
                                         "`fifo` when `enable.idempotence` is "
@@ -3799,24 +3832,10 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                  }
         }
 
-
-        if (cltype == RD_KAFKA_PRODUCER) {
-                if (tconf->message_timeout_ms != 0 &&
-                    (double)tconf->message_timeout_ms <=
-                    conf->buffering_max_ms_dbl) {
-                        if (rd_kafka_topic_conf_is_modified(tconf, "linger.ms"))
-                                return "`message.timeout.ms` must be greater "
-                                        "than `linger.ms`";
-                        else
-                                conf->buffering_max_ms_dbl =
-                                        (double)tconf->message_timeout_ms - 0.1;
-                }
-
-                /* Convert double linger.ms to internal int microseconds */
-                conf->buffering_max_us = (rd_ts_t)(conf->buffering_max_ms_dbl *
-                                                   1000);
-        }
-
+        if (tconf->message_timeout_ms != 0 &&
+            (double)tconf->message_timeout_ms <= conf->buffering_max_ms_dbl &&
+            rd_kafka_topic_conf_is_modified(tconf, "linger.ms"))
+                return "`message.timeout.ms` must be greater than `linger.ms`";
 
         return NULL;
 }

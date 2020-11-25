@@ -59,6 +59,17 @@ and the sticky consumer group partition assignor.
    had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
    subscribes to t2,t3).  (#3159)
 
+
+### Producer fixes
+
+ * Calling `rd_kafka_topic_new()` with a topic config object with
+   `message.timeout.ms` set could sometimes adjust the global `linger.ms`
+   property (if not explicitly configured) which was not desired, this is now
+   fixed and the auto adjustment is only done based on the
+   `default_topic_conf` at producer creation.
+
+
+
 # librdkafka v1.5.2
 
 librdkafka v1.5.2 is a maintenance release.

@@ -567,7 +567,7 @@ void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf);
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf);
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          rd_kafka_conf_t *conf,
+                                          const rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf);
 
 

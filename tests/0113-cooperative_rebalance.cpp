@@ -1709,19 +1709,39 @@ static void n_wildcard () {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
-      test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 10*1000);
-      test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 10*1000);
+      /* The consumers should autonomously discover these topics and start
+       * consuming from them. This happens in the background - is not
+       * influenced by whether we wait for the topics to be created before
+       * continuing the main loop. It is possible that both topics are
+       * discovered simultaneously, requiring a single rebalance OR that
+       * topic 1 is discovered first (it was created first), a rebalance
+       * initiated, then topic 2 discovered, then another rebalance
+       * initiated to include it.
+       */
       created_topics = true;
     }
 
     if (Test::assignment_partition_count(c1, NULL) == 2 &&
         Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
-      TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 1,
-                  "Expecting C_1's nonempty_assign_call_cnt to be 1 not %d ",
-                  rebalance_cb1.nonempty_assign_call_cnt);
-      TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 1,
-                  "Expecting C_2's nonempty_assign_call_cnt to be 1 not %d ",
-                  rebalance_cb2.nonempty_assign_call_cnt);
+
+      if (rebalance_cb1.nonempty_assign_call_cnt == 1) {
+        /* just one rebalance was required */
+        TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 1,
+                    "Expecting C_1's nonempty_assign_call_cnt to be 1 not %d ",
+                    rebalance_cb1.nonempty_assign_call_cnt);
+        TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 1,
+                    "Expecting C_2's nonempty_assign_call_cnt to be 1 not %d ",
+                    rebalance_cb2.nonempty_assign_call_cnt);
+      } else {
+        /* two rebalances were required (occurs infrequently) */
+        TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 2,
+                    "Expecting C_1's nonempty_assign_call_cnt to be 2 not %d ",
+                    rebalance_cb1.nonempty_assign_call_cnt);
+        TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 2,
+                    "Expecting C_2's nonempty_assign_call_cnt to be 2 not %d ",
+                    rebalance_cb2.nonempty_assign_call_cnt);
+      }
+
       TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 0,
                   "Expecting C_1's revoke_call_cnt to be 0 not %d ",
                   rebalance_cb1.revoke_call_cnt);
@@ -1755,7 +1775,7 @@ static void n_wildcard () {
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
-       * it follows the revoke, which has alrady been confirmed to have
+       * it follows the revoke, which has already been confirmed to have
        * happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
       while (rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt ||
@@ -2071,11 +2091,10 @@ static void poll_all_consumers (RdKafka::KafkaConsumer **consumers,
  *
  * @param subscription_variation 0..2
  *
- * FIXME: What's the stressy part?
  * TODO: incorporate committing offsets.
  */
 
-static void u_stress (bool use_rebalance_cb, int subscription_variation) {
+static void u_complex (bool use_rebalance_cb, int subscription_variation) {
   const int N_CONSUMERS = 8;
   const int N_TOPICS = 2;
   const int N_PARTS_PER_TOPIC = N_CONSUMERS * N_TOPICS;
@@ -2110,7 +2129,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
 
   /*
    * Seed all partitions with the same number of messages so we later can
-   * verify that consumtion is working.
+   * verify that consumption is working.
    */
   vector<pair<Toppar,int> >ptopics;
   ptopics.push_back(pair<Toppar,int>(Toppar(topic_name_1, N_PARTS_PER_TOPIC),
@@ -2166,32 +2185,32 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
     const vector<string> *topics;
   } playbook[] = {
                   /* timestamp_ms, consumer_number, subscribe-to-topics */
-                  { 0,     0, &SUBSCRIPTION_1 },
+                  { 0,     0, &SUBSCRIPTION_1 },  /* Cmd 0 */
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  2, &SUBSCRIPTION_1 },
-                  { 6000,  3, &SUBSCRIPTION_1 },
+                  { 6000,  3, &SUBSCRIPTION_1 },  /* Cmd 5 */
                   { 6000,  4, &SUBSCRIPTION_1 },
                   { 6000,  5, &SUBSCRIPTION_1 },
                   { 6000,  6, &SUBSCRIPTION_1 },
                   { 6000,  7, &SUBSCRIPTION_2 },
-                  { 6000,  1, &SUBSCRIPTION_1 },
+                  { 6000,  1, &SUBSCRIPTION_1 },  /* Cmd 10 */
                   { 6000,  1, &SUBSCRIPTION_2 },
                   { 6000,  1, &SUBSCRIPTION_1 },
                   { 6000,  2, &SUBSCRIPTION_2 },
                   { 7000,  2, &SUBSCRIPTION_1 },
-                  { 7000,  1, &SUBSCRIPTION_2 },
+                  { 7000,  1, &SUBSCRIPTION_2 },  /* Cmd 15 */
                   { 8000,  0, &SUBSCRIPTION_2 },
                   { 8000,  1, &SUBSCRIPTION_1 },
                   { 8000,  0, &SUBSCRIPTION_1 },
                   { 13000, 2, &SUBSCRIPTION_1 },
-                  { 13000, 1, &SUBSCRIPTION_2 },
+                  { 13000, 1, &SUBSCRIPTION_2 },  /* Cmd 20 */
                   { 13000, 5, &SUBSCRIPTION_2 },
                   { 14000, 6, &SUBSCRIPTION_2 },
                   { 15000, 7, &SUBSCRIPTION_1 },
                   { 15000, 1, &SUBSCRIPTION_1 },
-                  { 15000, 5, &SUBSCRIPTION_1 },
+                  { 15000, 5, &SUBSCRIPTION_1 },  /* Cmd 25 */
                   { 15000, 6, &SUBSCRIPTION_1 },
                   { INT_MAX, 0, 0 }
   };
@@ -2773,8 +2792,8 @@ extern "C" {
       t_max_poll_interval_exceeded(i);
     /* Run all 2*3 variations of the u_.. test */
     for (i = 0 ; i < 3 ; i++) {
-      u_stress(true/*with rebalance_cb*/, i);
-      u_stress(false/*without rebalance_cb*/, i);
+      u_complex(true/*with rebalance_cb*/, i);
+      u_complex(false/*without rebalance_cb*/, i);
     }
 
     return 0;

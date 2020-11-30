@@ -3886,9 +3886,8 @@ static void rd_kafka_cgrp_revoke_all_rejoin (rd_kafka_cgrp_t *rkcg,
                            "current assignment and rebalance");
         }
 
-
-        if (rkcg->rkcg_group_assignment) {
-
+        if (rkcg->rkcg_group_assignment &&
+            rkcg->rkcg_group_assignment->cnt > 0) {
                 if (assignment_lost)
                         rd_kafka_cgrp_assignment_set_lost(
                                 rkcg,

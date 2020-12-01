@@ -1838,6 +1838,14 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
  *
+ * rebalance_cb is always triggered exactly once when a rebalance completes
+ * with a new assignment, even if that assignment is empty. If an
+ * eager/non-cooperative assignor is configured, there will eventually be
+ * exactly one corresponding call to rebalance_cb to revoke these partitions
+ * (even if empty), whether this is due to a group rebalance or lost
+ * partitions. In the cooperative case, rebalance_cb will never be called if
+ * the set of partitions being revoked is empty (whether or not lost).
+ *
  * The callback's \p opaque argument is the opaque set with
  * rd_kafka_conf_set_opaque().
  *

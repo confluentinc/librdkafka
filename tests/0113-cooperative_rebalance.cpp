@@ -2094,7 +2094,7 @@ static void poll_all_consumers (RdKafka::KafkaConsumer **consumers,
  * TODO: incorporate committing offsets.
  */
 
-static void u_complex (bool use_rebalance_cb, int subscription_variation) {
+static void u_multiple_subscription_changes (bool use_rebalance_cb, int subscription_variation) {
   const int N_CONSUMERS = 8;
   const int N_TOPICS = 2;
   const int N_PARTS_PER_TOPIC = N_CONSUMERS * N_TOPICS;
@@ -2792,8 +2792,8 @@ extern "C" {
       t_max_poll_interval_exceeded(i);
     /* Run all 2*3 variations of the u_.. test */
     for (i = 0 ; i < 3 ; i++) {
-      u_complex(true/*with rebalance_cb*/, i);
-      u_complex(false/*without rebalance_cb*/, i);
+      u_multiple_subscription_changes(true/*with rebalance_cb*/, i);
+      u_multiple_subscription_changes(false/*without rebalance_cb*/, i);
     }
 
     return 0;

@@ -68,8 +68,6 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
         const char *groupid = assignor;
         int i;
 
-        SUB_TEST_QUICK("%s assignor", assignor);
-
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "partition.assignment.strategy", assignor);
@@ -151,9 +149,6 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
                         test_consumer_close(c[i]);
                 rd_kafka_destroy(c[i]);
         }
-
-
-        SUB_TEST_PASS();
 }
 
 
@@ -178,7 +173,6 @@ int main_0120_asymmetric_subscription (int argc, char **argv) {
 
         do_test_asymmetric("roundrobin", bootstraps);
         do_test_asymmetric("range", bootstraps);
-        do_test_asymmetric("cooperative-sticky", bootstraps);
 
         test_mock_cluster_destroy(mcluster);
 

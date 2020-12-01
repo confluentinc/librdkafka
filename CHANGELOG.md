@@ -1,7 +1,6 @@
 # librdkafka v1.5.3
 
-
-librdkafka v1.5.3 is a maintenance release:
+librdkafka v1.5.3 is a maintenance release.
 
 ### General fixes
 

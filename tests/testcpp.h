@@ -158,6 +158,34 @@ namespace Test {
         Test::Fail("subscribe failed: " + RdKafka::err2str(err));
   }
 
+  /**
+   * @brief Produce \p msgcnt messages to \p topic \p partition.
+   */
+  static RD_UNUSED void produce_msgs (RdKafka::Producer *p,
+                                      const std::string &topic,
+                                      int32_t partition,
+                                      int msgcnt, int msgsize,
+                                      bool flush) {
+    char *buf = (char *)malloc(msgsize);
+
+    for (int i = 0 ; i < msgsize ; i++)
+      buf[i] = (char)((int)'a' + (i % 25));
+
+    for (int i = 0 ; i < msgcnt ; i++) {
+      RdKafka::ErrorCode err;
+      err = p->produce(topic, partition,
+                       RdKafka::Producer::RK_MSG_COPY,
+                       (void *)buf, (size_t)msgsize,
+                       NULL, 0, 0, NULL);
+      TEST_ASSERT(!err, "produce() failed: %s", RdKafka::err2str(err).c_str());
+      p->poll(0);
+    }
+
+    if (flush)
+      p->flush(10*1000);
+  }
+
+
 
   /**
    * @brief Delivery report class

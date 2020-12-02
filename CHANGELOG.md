@@ -11,16 +11,24 @@ and the sticky consumer group partition assignor.
    of random partition.
  * AdminAPI: Add support for `DeleteRecords()`, `DeleteGroups()` and
    `DeleteConsumerGroupOffsets()` (by @gridaphobe)
+ * [KIP-447 Producer scalability for exactly once semantics](https://cwiki.apache.org/confluence/display/KAFKA/KIP-447%3A+Producer+scalability+for+exactly+once+semantics) -
+   allows a single transactional producer to be used for multiple input
+   partitions. Requires Apache Kafka 2.5 or later.
 
 
 ## Upgrade considerations
 
- * Sticky producer partitioning is enabled by default (10 milliseconds) which
-   affects the distribution of randomly partitioned messages, where previously
-   these messages would be evenly distributed over the available partitions
-   they are now partitioned to a single partition for the duration of the
-   sticky time (10 milliseconds by default) before a new random sticky
-   partition is selected.
+ * Sticky producer partitioning (`sticky.partitioning.linger.ms`) is
+   enabled by default (10 milliseconds) which affects the distribution of
+   randomly partitioned messages, where previously these messages would be
+   evenly distributed over the available partitions they are now partitioned
+   to a single partition for the duration of the sticky time
+   (10 milliseconds by default) before a new random sticky partition
+   is selected.
+ * The new KIP-447 transactional producer scalability guarantees are only
+   supported on Apache Kafka 2.5 or later, on earlier releases you will
+   need to use one producer per input partition for EOS. This limitation
+   is not enforced by the producer or broker.
 
 
 ## Enhancements

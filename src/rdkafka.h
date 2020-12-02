@@ -3973,6 +3973,11 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
  * stored offset or to RD_KAFKA_OFFSET_INVALID in case there was no stored
  * offset for that partition.
  *
+ * Committed offsets will be returned according to the `isolation.level`
+ * configuration property, if set to `read_committed` (default) then only
+ * stable offsets for fully committed transactions will be returned, while
+ * `read_uncommitted` may return offsets for not yet committed transactions.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
  *          \p offset or \p err field of each \p partitions' element is filled
  *          in with the stored offset, or a partition specific error.

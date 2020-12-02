@@ -1388,7 +1388,8 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_false, rd_true);
+        partitions = rd_kafka_buf_read_topic_partitions(rkbuf, 0,
+                                                        rd_false, rd_true);
         if (!partitions)
                 goto err_parse;
 
@@ -1445,6 +1446,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
         case RD_KAFKA_RESP_ERR__TRANSPORT:
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
         case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
@@ -1474,6 +1476,12 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
                 break;
 
+        case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+        case RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID:
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                break;
+
         default:
                 /* Unhandled error, fail transaction */
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
@@ -1491,7 +1499,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                         rd_kafka_coord_req(
                                 rk,
                                 RD_KAFKA_COORD_GROUP,
-                                rko->rko_u.txn.group_id,
+                                rko->rko_u.txn.cgmetadata->group_id,
                                 rd_kafka_txn_send_TxnOffsetCommitRequest,
                                 rko,
                                 rd_timeout_remains_limit0(
@@ -1538,6 +1546,8 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
         rd_kafka_pid_t pid;
+        const rd_kafka_consumer_group_metadata_t *cgmetadata =
+                rko->rko_u.txn.cgmetadata;
         int cnt;
 
         rd_kafka_rdlock(rk);
@@ -1555,25 +1565,37 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-                rkb, RD_KAFKAP_TxnOffsetCommit, 0, 0, NULL);
+                rkb, RD_KAFKAP_TxnOffsetCommit, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_kafka_op_destroy(rko);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb,
-                                         RD_KAFKAP_TxnOffsetCommit, 1,
-                                         rko->rko_u.txn.offsets->cnt * 50);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+                rkb,
+                RD_KAFKAP_TxnOffsetCommit, 1,
+                rko->rko_u.txn.offsets->cnt * 50,
+                ApiVersion >= 3);
 
         /* transactional_id */
         rd_kafka_buf_write_str(rkbuf, rk->rk_conf.eos.transactional_id, -1);
 
         /* group_id */
-        rd_kafka_buf_write_str(rkbuf, rko->rko_u.txn.group_id, -1);
+        rd_kafka_buf_write_str(rkbuf, rko->rko_u.txn.cgmetadata->group_id, -1);
 
         /* PID */
         rd_kafka_buf_write_i64(rkbuf, pid.id);
         rd_kafka_buf_write_i16(rkbuf, pid.epoch);
+
+        if (ApiVersion >= 3) {
+                /* GenerationId */
+                rd_kafka_buf_write_i32(rkbuf, cgmetadata->generation_id);
+                /* MemberId */
+                rd_kafka_buf_write_str(rkbuf, cgmetadata->member_id, -1);
+                /* GroupInstanceId */
+                rd_kafka_buf_write_str(rkbuf, cgmetadata->group_instance_id,
+                                       -1);
+        }
 
         /* Write per-partition offsets list */
         cnt = rd_kafka_buf_write_topic_partitions(
@@ -1581,7 +1603,7 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
                 rko->rko_u.txn.offsets,
                 rd_true /*skip invalid offsets*/,
                 rd_true /*write offsets*/,
-                rd_false/*dont write Epoch*/,
+                ApiVersion >= 2 /*write Epoch (-1) */,
                 rd_true /*write Metadata*/);
 
         if (!cnt) {
@@ -1736,7 +1758,7 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
 
                 rd_kafka_coord_req(rk,
                                    RD_KAFKA_COORD_GROUP,
-                                   rko->rko_u.txn.group_id,
+                                   rko->rko_u.txn.cgmetadata->group_id,
                                    rd_kafka_txn_send_TxnOffsetCommitRequest,
                                    rko,
                                    rd_timeout_remains_limit0(
@@ -1809,7 +1831,7 @@ rd_kafka_txn_op_send_offsets_to_transaction (rd_kafka_t *rk,
                 rk->rk_eos.txn_coord,
                 rk->rk_conf.eos.transactional_id,
                 pid,
-                rko->rko_u.txn.group_id,
+                rko->rko_u.txn.cgmetadata->group_id,
                 errstr, sizeof(errstr),
                 RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                 rd_kafka_txn_handle_AddOffsetsToTxn,
@@ -1866,7 +1888,8 @@ rd_kafka_send_offsets_to_transaction (
         rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
                                  rd_kafka_txn_op_send_offsets_to_transaction);
         rko->rko_u.txn.offsets = valid_offsets;
-        rko->rko_u.txn.group_id = rd_strdup(cgmetadata->group_id);
+        rko->rko_u.txn.cgmetadata =
+                rd_kafka_consumer_group_metadata_dup(cgmetadata);
         if (timeout_ms > rk->rk_conf.eos.transaction_timeout_ms)
                 timeout_ms = rk->rk_conf.eos.transaction_timeout_ms;
         rko->rko_u.txn.abs_timeout = rd_timeout_init(timeout_ms);
@@ -1956,7 +1979,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
         }
 
         rd_kafka_dbg(rk, EOS, "ENDTXN",
-                     "EndTxn failed due to %s in state %s (may_retry=%s)",
+                     "EndTxn returned %s in state %s (may_retry=%s)",
                      rd_kafka_err2name(err),
                      rd_kafka_txn_state2str(rk->rk_eos.txn_state),
                      RD_STR_ToF(may_retry));

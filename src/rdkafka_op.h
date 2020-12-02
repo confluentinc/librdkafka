@@ -276,6 +276,8 @@ struct rd_kafka_op_s {
 
 		struct {
 			rd_kafka_topic_partition_list_t *partitions;
+                        /** Require stable (txn-commited) offsets */
+                        rd_bool_t require_stable;
 			int do_free; /* free .partitions on destroy() */
 		} offset_fetch;
 
@@ -558,7 +560,10 @@ struct rd_kafka_op_s {
                 } broker_monitor;
 
                 struct {
-                        char *group_id; /**< Consumer group id for commits */
+                        /** Consumer group metadata for send_offsets_to.. */
+                        rd_kafka_consumer_group_metadata_t *cgmetadata;
+                        /** Consumer group id for AddOffsetsTo.. */
+                        char *group_id;
                         int   timeout_ms; /**< Operation timeout */
                         rd_ts_t abs_timeout; /**< Absolute time */
                         /**< Offsets to commit */

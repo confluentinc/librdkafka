@@ -79,6 +79,8 @@ static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp,
         test_conf_init(&conf, NULL, 60);
 
         test_conf_set(conf, "transactional.id", transactional_id);
+        /* Speed up reconnects */
+        test_conf_set(conf, "reconnect.backoff.max.ms", "2000");
         test_conf_set(conf, "test.mock.num.brokers", numstr);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 

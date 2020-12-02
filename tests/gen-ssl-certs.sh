@@ -28,6 +28,8 @@ L=NN
 O=NN
 OU=NN
 CN="$HOST"
+MSGCOLOR="\033[32;1m"
+ENDCOLOR="\033[0m"
  
 
 # Password
@@ -59,7 +61,7 @@ EOF
 elif [[ $OP == "server" && ! -z "$CA_CERT" && ! -z "$PFX" && ! -z "$CN" ]]; then
 
     #Step 1
-    echo "############ Generating key"
+    echo -e ${MSGCOLOR}"############ Generating key"${ENDCOLOR}
     keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias localhost -validity $VALIDITY -genkey -keyalg RSA <<EOF
 $CN
 $OU
@@ -72,38 +74,38 @@ yes
 EOF
 	
     #Step 2
-    echo "############ Adding CA"
+    echo -e ${MSGCOLOR}"############ Adding CA"${ENDCOLOR}
     keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.truststore.jks -alias CARoot -import -file $CA_CERT <<EOF
 yes
 EOF
     
     #Step 3
-    echo "############ Export certificate"
+    echo -e ${MSGCOLOR}"############ Export certificate"${ENDCOLOR}
     keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias localhost -certreq -file ${PFX}cert-file
 
-    echo "############ Sign certificate"
+    echo -e ${MSGCOLOR}"############ Sign certificate"${ENDCOLOR}
     openssl x509 -req -CA $CA_CERT -CAkey ${CA_CERT}.key -in ${PFX}cert-file -out ${PFX}cert-signed -days $VALIDITY -CAcreateserial -passin "pass:$PASS"
     
     
-    echo "############ Import CA"
+    echo -e ${MSGCOLOR}"############ Import CA"${ENDCOLOR}
     keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias CARoot -import -file $CA_CERT <<EOF
 yes
 EOF
     
-    echo "############ Import signed CA"
+    echo -e ${MSGCOLOR}"############ Import signed CA"${ENDCOLOR}
     keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias localhost -import -file ${PFX}cert-signed    
 
     
 elif [[ $OP == "client" && ! -z "$CA_CERT" && ! -z "$PFX" && ! -z "$CN" ]]; then
 
     if [[ $USE_KEYTOOL == 1 ]]; then
-	echo "############ Creating client truststore"
+	echo -e ${MSGCOLOR}"############ Creating client truststore"${ENDCOLOR}
 
 	[[ -f ${PFX}client.truststore.jks ]] || keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.truststore.jks -alias CARoot -import -file $CA_CERT <<EOF
 yes
 EOF
 
-	echo "############ Generating key"
+	echo -e ${MSGCOLOR}"############ Generating key"${ENDCOLOR}
 	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -validity $VALIDITY -genkey -keyalg RSA <<EOF
 $CN
 $OU
@@ -114,26 +116,26 @@ $C
 yes
 yes
 EOF
-	echo "########### Export certificate"
+	echo -e ${MSGCOLOR}"########### Export certificate"${ENDCOLOR}
 	keytool -storepass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -certreq -file ${PFX}cert-file
 
-	echo "########### Sign certificate"
+	echo -e ${MSGCOLOR}"########### Sign certificate"${ENDCOLOR}
 	openssl x509 -req -CA ${CA_CERT} -CAkey ${CA_CERT}.key -in ${PFX}cert-file -out ${PFX}cert-signed -days $VALIDITY -CAcreateserial -passin pass:$PASS	
 
-	echo "########### Import CA"
+	echo -e ${MSGCOLOR}"########### Import CA"${ENDCOLOR}
 	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias CARoot -import -file ${CA_CERT} <<EOF
 yes
 EOF
 
-	echo "########### Import signed CA"
+	echo -e ${MSGCOLOR}"########### Import signed CA"${ENDCOLOR}
 	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -import -file ${PFX}cert-signed
 
     else
 	# Standard OpenSSL keys
-	echo "############ Generating key"
+	echo -e ${MSGCOLOR}"############ Generating key"${ENDCOLOR}
 	openssl genrsa -des3 -passout "pass:$PASS" -out ${PFX}client.key 2048 
 	
-	echo "############ Generating request"
+	echo -e ${MSGCOLOR}"############ Generating request"${ENDCOLOR}
 	openssl req -passin "pass:$PASS" -passout "pass:$PASS" -key ${PFX}client.key -new -out ${PFX}client.req \
 		<<EOF
 $C
@@ -147,7 +149,7 @@ $PASS
 .
 EOF
 
-	echo "########### Signing key"
+	echo -e ${MSGCOLOR}"########### Signing key"${ENDCOLOR}
 	openssl x509 -req -passin "pass:$PASS" -in ${PFX}client.req -CA $CA_CERT -CAkey ${CA_CERT}.key -CAcreateserial -out ${PFX}client.pem -days $VALIDITY
 
     fi
@@ -162,4 +164,3 @@ else
     echo "       -k = Use keytool/Java Keystore, else standard SSL keys"
     exit 1
 fi
-

@@ -2085,8 +2085,6 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         mcluster = rd_calloc(1, sizeof(*mcluster));
         mcluster->rk = rk;
 
-        rd_kafka_timers_init(&mcluster->timers, rk);
-
         mcluster->dummy_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
                                                   RD_KAFKA_PROTO_PLAINTEXT,
                                                   "mock", 0,
@@ -2127,6 +2125,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         mcluster->ops->rkq_serve = rd_kafka_mock_cluster_op_serve;
         mcluster->ops->rkq_opaque = mcluster;
 
+        rd_kafka_timers_init(&mcluster->timers, rk, mcluster->ops);
 
         if ((r = rd_pipe_nonblocking(mcluster->wakeup_fds)) == -1) {
                 rd_kafka_log(rk, LOG_ERR, "MOCK",

@@ -31,6 +31,8 @@
 
 #include "rd.h"
 
+struct rd_kafka_q_s; /**< Forward decl */
+
 /* A timer engine. */
 typedef struct rd_kafka_timers_s {
 
@@ -40,6 +42,12 @@ typedef struct rd_kafka_timers_s {
 
 	mtx_t       rkts_lock;
 	cnd_t       rkts_cond;
+
+        /** Optional wake-up (q_yield()) to wake up when a new timer
+         *  is scheduled that will fire prior to any existing timers.
+         *  This is used to wake up blocking IO or queue polls that run
+         *  in the same loop as timers_run(). */
+        struct rd_kafka_q_s *rkts_wakeq;
 
         int         rkts_enabled;
 } rd_kafka_timers_t;
@@ -81,6 +89,7 @@ rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_ms,
 			      int do_lock);
 void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us);
 void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts);
-void rd_kafka_timers_init (rd_kafka_timers_t *rkte, rd_kafka_t *rk);
+void rd_kafka_timers_init (rd_kafka_timers_t *rkte, rd_kafka_t *rk,
+                           struct rd_kafka_q_s *wakeq);
 
 #endif /* _RDKAFKA_TIMER_H_ */

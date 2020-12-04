@@ -1127,8 +1127,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                 if (err == RD_KAFKA_RESP_ERR__ABORTED) {
                     /* MessageSet comprises messages in an aborted txn */
                     rd_kafka_buf_skip(rkbuf, payload_size);
-                    rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
-                    goto done;
+                    err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
 
                 /* Restore wider slice */

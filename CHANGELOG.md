@@ -2,6 +2,13 @@
 
 librdkafka v1.5.3 is a maintenance release.
 
+## Upgrade considerations
+
+ * CentOS 6 is now EOL and is no longer included in binary librdkafka packages,
+   such as NuGet.
+
+## Fixes
+
 ### General fixes
 
  * Fix a use-after-free crash when certain coordinator requests were retried.

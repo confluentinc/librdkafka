@@ -29,11 +29,6 @@ matrix:
    os: linux
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
-   before_script:
-     # Starting mid October 2020 Travis-CI has a broken docker image cache
-     # for one of the centos:6 layers, so we explicitly refresh it before
-     # doing the ADDITIONAL_BUILDS.
-     - docker pull centos:6
  - name: "Linux clang: +alpine"
    os: linux
    compiler: clang

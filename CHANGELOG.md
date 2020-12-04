@@ -39,6 +39,13 @@ and the sticky consumer group partition assignor.
 
 ## Fixes
 
+## Upgrade considerations
+
+ * CentOS 6 is now EOL and is no longer included in binary librdkafka packages,
+   such as NuGet.
+
+## Fixes
+
 ### General fixes
 
  * Fix a use-after-free crash when certain coordinator requests were retried.

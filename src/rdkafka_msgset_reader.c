@@ -208,7 +208,8 @@ typedef struct rd_kafka_msgset_reader_s {
 static rd_kafka_resp_err_t
 rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr);
 static rd_kafka_resp_err_t
-rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr);
+rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr,
+                              size_t payload_size);
 
 
 /**
@@ -504,10 +505,7 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                 msetr->msetr_rkbuf = rkbufz;
 
                 /* Read messages */
-                err = rd_kafka_msgset_read_msgs_v2(msetr);
-                if (err == RD_KAFKA_RESP_ERR__ABORTED)
-                        /* MessageSet comprises messages in an aborted txn */
-                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                err = rd_kafka_msgset_read_msgs_v2(msetr, compressed_size);
 
                 /* Restore original buffer */
                 msetr->msetr_rkbuf = orig_rkbuf;
@@ -949,8 +947,13 @@ unexpected_abort_txn:
  * @brief Read v2 messages from current buffer position.
  */
 static rd_kafka_resp_err_t
-rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
+rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr,
+                              size_t payload_size) {
+        rd_kafka_buf_t *rkbuf = msetr->msetr_rkbuf;
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
+        /* Only log decoding errors if protocol debugging enabled. */
+        int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
+                                 RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
 
         if (msetr->msetr_aborted_txns != NULL &&
             (msetr->msetr_v2_hdr->Attributes &
@@ -977,7 +980,8 @@ rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
                                     rktp->rktp_partition,
                                     msetr->msetr_v2_hdr->RecordCount,
                                     txn_start_offset);
-                        return RD_KAFKA_RESP_ERR__ABORTED;
+                        rd_kafka_buf_skip(msetr->msetr_rkbuf, payload_size);
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
         }
 
@@ -989,6 +993,12 @@ rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        /* Count all parse errors as partial message errors. */
+        rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_partial, 1);
+        msetr->msetr_v2_hdr = NULL;
+        return rkbuf->rkbuf_err;
 }
 
 
@@ -1123,12 +1133,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                         rd_kafka_buf_check_len(rkbuf, payload_size);
 
                 /* Read messages */
-                err = rd_kafka_msgset_read_msgs_v2(msetr);
-                if (err == RD_KAFKA_RESP_ERR__ABORTED) {
-                    /* MessageSet comprises messages in an aborted txn */
-                    rd_kafka_buf_skip(rkbuf, payload_size);
-                    err = RD_KAFKA_RESP_ERR_NO_ERROR;
-                }
+                err = rd_kafka_msgset_read_msgs_v2(msetr, payload_size);
 
                 /* Restore wider slice */
                 rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);

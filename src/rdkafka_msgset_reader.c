@@ -505,6 +505,8 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
 
                 /* Read messages */
                 err = rd_kafka_msgset_reader_msgs_v2(msetr);
+                if (err == RD_KAFKA_RESP_ERR__ABORTED)
+                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 /* Restore original buffer */
                 msetr->msetr_rkbuf = orig_rkbuf;
@@ -947,6 +949,37 @@ unexpected_abort_txn:
  */
 static rd_kafka_resp_err_t
 rd_kafka_msgset_reader_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
+        rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
+
+        if (msetr->msetr_aborted_txns != NULL &&
+            (msetr->msetr_v2_hdr->Attributes &
+             (RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL|
+              RD_KAFKA_MSGSET_V2_ATTR_CONTROL)) ==
+            RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL) {
+                /* Transactional non-control MessageSet:
+                 * check if it is part of an aborted transaction. */
+                int64_t txn_start_offset =
+                        rd_kafka_aborted_txns_get_offset(
+                                msetr->msetr_aborted_txns,
+                                msetr->msetr_v2_hdr->PID);
+
+                if (txn_start_offset != -1 &&
+                    msetr->msetr_v2_hdr->BaseOffset >=
+                    txn_start_offset) {
+                        /* MessageSet is part of aborted transaction */
+                        rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
+                                    "%s [%"PRId32"]: "
+                                    "Skipping %"PRId32" message(s) "
+                                    "in aborted transaction "
+                                    "at offset %"PRId64,
+                                    rktp->rktp_rkt->rkt_topic->str,
+                                    rktp->rktp_partition,
+                                    msetr->msetr_v2_hdr->RecordCount,
+                                    txn_start_offset);
+                        return RD_KAFKA_RESP_ERR__ABORTED;
+                }
+        }
+
         while (rd_kafka_buf_read_remain(msetr->msetr_rkbuf)) {
                 rd_kafka_resp_err_t err;
                 err = rd_kafka_msgset_reader_msg_v2(msetr);
@@ -1088,40 +1121,13 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                               &save_slice, payload_size))
                         rd_kafka_buf_check_len(rkbuf, payload_size);
 
-                if (msetr->msetr_aborted_txns != NULL &&
-                    (msetr->msetr_v2_hdr->Attributes &
-                     (RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL|
-                      RD_KAFKA_MSGSET_V2_ATTR_CONTROL)) ==
-                    RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL) {
-                        /* Transactional non-control MessageSet:
-                         * check if it is part of an aborted transaction. */
-                        int64_t txn_start_offset =
-                                rd_kafka_aborted_txns_get_offset(
-                                        msetr->msetr_aborted_txns,
-                                        msetr->msetr_v2_hdr->PID);
-
-                        if (txn_start_offset != -1 &&
-                            msetr->msetr_v2_hdr->BaseOffset >=
-                            txn_start_offset) {
-                                /* MessageSet is part of aborted transaction */
-                                rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
-                                           "%s [%"PRId32"]: "
-                                           "Skipping %"PRId32" message(s) "
-                                           "in aborted transaction "
-                                           "at offset %"PRId64,
-                                           rktp->rktp_rkt->rkt_topic->str,
-                                           rktp->rktp_partition,
-                                           msetr->msetr_v2_hdr->RecordCount,
-                                           txn_start_offset);
-                                rd_kafka_buf_skip(rkbuf, payload_size);
-                                rd_slice_widen(&rkbuf->rkbuf_reader,
-                                               &save_slice);
-                                goto done;
-                        }
-                }
-
                 /* Read messages */
                 err = rd_kafka_msgset_reader_msgs_v2(msetr);
+                if (err == RD_KAFKA_RESP_ERR__ABORTED) {
+                    rd_kafka_buf_skip(rkbuf, payload_size);
+                    rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
+                    goto done;
+                }
 
                 /* Restore wider slice */
                 rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);

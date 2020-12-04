@@ -387,6 +387,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__APPLICATION = -143,
         /** Assignment lost */
         RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
+        /** Aborted */
+        RD_KAFKA_RESP_ERR__ABORTED = -141,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

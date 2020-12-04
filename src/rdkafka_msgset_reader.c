@@ -208,7 +208,7 @@ typedef struct rd_kafka_msgset_reader_s {
 static rd_kafka_resp_err_t
 rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr);
 static rd_kafka_resp_err_t
-rd_kafka_msgset_reader_msgs_v2 (rd_kafka_msgset_reader_t *msetr);
+rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr);
 
 
 /**
@@ -504,8 +504,9 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                 msetr->msetr_rkbuf = rkbufz;
 
                 /* Read messages */
-                err = rd_kafka_msgset_reader_msgs_v2(msetr);
+                err = rd_kafka_msgset_read_msgs_v2(msetr);
                 if (err == RD_KAFKA_RESP_ERR__ABORTED)
+                        /* MessageSet comprises messages in an aborted txn */
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 /* Restore original buffer */
@@ -948,7 +949,7 @@ unexpected_abort_txn:
  * @brief Read v2 messages from current buffer position.
  */
 static rd_kafka_resp_err_t
-rd_kafka_msgset_reader_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
+rd_kafka_msgset_read_msgs_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
 
         if (msetr->msetr_aborted_txns != NULL &&
@@ -1122,8 +1123,9 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                         rd_kafka_buf_check_len(rkbuf, payload_size);
 
                 /* Read messages */
-                err = rd_kafka_msgset_reader_msgs_v2(msetr);
+                err = rd_kafka_msgset_read_msgs_v2(msetr);
                 if (err == RD_KAFKA_RESP_ERR__ABORTED) {
+                    /* MessageSet comprises messages in an aborted txn */
                     rd_kafka_buf_skip(rkbuf, payload_size);
                     rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                     goto done;

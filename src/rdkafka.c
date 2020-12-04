@@ -497,6 +497,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Application generated error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST,
                   "Local: Group partition assignment lost"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__ABORTED,
+                  "Local: Aborted"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),

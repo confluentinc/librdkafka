@@ -14,7 +14,7 @@ if [[ ! -f configure.self ]]; then
     exit 1
 fi
 
-_DOCKER_IMAGES="centos:6 centos:7 centos:8"
+_DOCKER_IMAGES="centos:7 centos:8"
 _RPMDIR=artifacts
 
 if [[ -n $1 ]]; then

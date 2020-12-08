@@ -16,6 +16,8 @@ librdkafka v1.5.3 is a maintenance release.
 
 ### Consumer fixes
 
+ * Consumer would not filter out messages for aborted transactions
+   if the messages were compressed (#3020).
  * Consumer destroy without prior `close()` could hang in certain
    cgrp states (@gridaphobe, #3127).
  * Fix possible null dereference in `Message::errstr()` (#3140).

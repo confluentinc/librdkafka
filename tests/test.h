@@ -144,6 +144,7 @@ struct test {
         test_state_t state;
         int     failcnt;     /**< Number of failures, useful with FAIL_LATER */
         char    failstr[512];/**< First test failure reason */
+        char    subtest[400];/**< Current subtest, if any */
 
 #if WITH_SOCKEM
         rd_list_t sockets;
@@ -539,6 +540,8 @@ void test_flush (rd_kafka_t *rk, int timeout_ms);
 
 void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_conf_get (const rd_kafka_conf_t *conf, const char *name);
+char *test_topic_conf_get (const rd_kafka_topic_conf_t *tconf,
+                           const char *name);
 int test_conf_match (rd_kafka_conf_t *conf, const char *name, const char *val);
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val);

@@ -95,6 +95,11 @@ static void rebalance_cb (rd_kafka_t *rk,
 
                 test_consumer_unassign("unassign", rk);
         }
+
+        /* Make sure only one rebalance callback is served per poll()
+         * so that expect_rebalance() returns to the test logic on each
+         * rebalance. */
+        rd_kafka_yield(rk);
 }
 
 
@@ -143,8 +148,8 @@ static void do_test_session_timeout (const char *use_commit_type) {
         rebalance_cnt = 0;
         commit_type = use_commit_type;
 
-        TEST_SAY(_C_MAG "[ Test session timeout with %s commit ]\n",
-                 commit_type);
+        SUB_TEST0(!strcmp(use_commit_type, "sync") /*quick*/,
+                  "Test session timeout with %s commit", use_commit_type);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -201,7 +206,7 @@ static void do_test_session_timeout (const char *use_commit_type) {
                          RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS, 5+2);
 
         /* Final rebalance in close().
-         * It's commit will work. */
+         * Its commit will work. */
         rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         commit_exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -211,8 +216,7 @@ static void do_test_session_timeout (const char *use_commit_type) {
 
         test_mock_cluster_destroy(mcluster);
 
-        TEST_SAY(_C_GRN "[ Test session timeout with %s commit PASSED ]\n",
-                 commit_type);
+        SUB_TEST_PASS();
 }
 
 
@@ -224,11 +228,8 @@ int main_0106_cgrp_sess_timeout (int argc, char **argv) {
         }
 
         do_test_session_timeout("sync");
-
-        if (!test_quick) {
-                do_test_session_timeout("async");
-                do_test_session_timeout("auto");
-        }
+        do_test_session_timeout("async");
+        do_test_session_timeout("auto");
 
         return 0;
 }

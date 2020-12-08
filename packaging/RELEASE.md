@@ -38,6 +38,35 @@ The github release asset/artifact checksums will be added later when the
 final tag is pushed.
 
 
+## Update protocol requests and error codes
+
+Check out the latest version of Apache Kafka (not trunk, needs to be a released
+version since protocol may change on trunk).
+
+### Protocol request types
+
+Generate protocol request type codes with:
+
+    $ src/generate_proto.sh ~/src/your-kafka-dir
+
+Cut'n'paste the new defines and strings to `rdkafka_protocol.h` and
+`rdkafka_proto.h`.
+
+### Error codes
+
+Error codes must currently be parsed manually, open
+`clients/src/main/java/org/apache/kafka/common/protocol/Errors.java`
+in the Kafka source directory and update the `rd_kafka_resp_err_t` and
+`RdKafka::ErrorCode` enums in `rdkafka.h` and `rdkafkacpp.h`
+respectively.
+Add the error strings to `rdkafka.c`.
+The Kafka error strings are sometimes a bit too verbose for our taste,
+so feel free to rewrite them (usually removing a couple of 'the's).
+
+**NOTE**: Only add **new** error codes, do not alter existing ones since that
+          will be a breaking API change.
+
+
 ## Run regression tests
 
 **Build tests:**

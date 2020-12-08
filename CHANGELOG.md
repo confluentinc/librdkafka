@@ -33,11 +33,16 @@ and the sticky consumer group partition assignor.
  * Updated to OpenSSL v1.1.1h when building dependencies.
  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to v1.9.3
    which has vast performance improvements.
+ * Added `rd_kafka_conf_get_default_topic_conf()` to retrieve the
+   default topic configuration object from a global configuration object.
 
 
 ## Fixes
 
 ### General fixes
+
+ * Fix a use-after-free crash when certain coordinator requests were retried.
+
 
 ### Consumer fixes
 
@@ -47,8 +52,8 @@ and the sticky consumer group partition assignor.
    undefined.
  * Consumer destroy without prior `close()` could hang in certain
    cgrp states (@gridaphobe, #3127).
-
-
+ * Fix possible null dereference in `Message::errstr()` (#3140).
+ * Partition fetch state was not set to STOPPED if OffsetCommit failed.
 
 # librdkafka v1.5.2
 

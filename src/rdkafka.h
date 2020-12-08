@@ -1838,6 +1838,14 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
  *
+ * rebalance_cb is always triggered exactly once when a rebalance completes
+ * with a new assignment, even if that assignment is empty. If an
+ * eager/non-cooperative assignor is configured, there will eventually be
+ * exactly one corresponding call to rebalance_cb to revoke these partitions
+ * (even if empty), whether this is due to a group rebalance or lost
+ * partitions. In the cooperative case, rebalance_cb will never be called if
+ * the set of partitions being revoked is empty (whether or not lost).
+ *
  * The callback's \p opaque argument is the opaque set with
  * rd_kafka_conf_set_opaque().
  *
@@ -2332,6 +2340,20 @@ RD_EXPORT
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf);
 
+/**
+ * @brief Gets the default topic configuration as previously set with
+ *        rd_kafka_conf_set_default_topic_conf() or that was implicitly created
+ *        by configuring a topic-level property on the global \p conf object.
+ *
+ * @returns the \p conf's default topic configuration (if any), or NULL.
+ *
+ * @warning The returned topic configuration object is owned by the \p conf
+ *          object. It may be modified but not destroyed and its lifetime is
+ *          the same as the \p conf object or the next call to
+ *          rd_kafka_conf_set_default_topic_conf().
+ */
+RD_EXPORT rd_kafka_topic_conf_t *
+rd_kafka_conf_get_default_topic_conf (rd_kafka_conf_t *conf);
 
 
 /**
@@ -5235,10 +5257,10 @@ typedef rd_kafka_resp_err_t
  * @param errstr A human readable error string in case the interceptor fails.
  * @param errstr_size Maximum space (including \0) in \p errstr.
  *
- * @returns RD_KAFKA_CONF_RES_OK if the property was known and successfully
- *          handled by the interceptor, RD_KAFKA_CONF_RES_INVALID if the
+ * @returns RD_KAFKA_CONF_OK if the property was known and successfully
+ *          handled by the interceptor, RD_KAFKA_CONF_INVALID if the
  *          property was handled by the interceptor but the value was invalid,
- *          or RD_KAFKA_CONF_RES_UNKNOWN if the interceptor did not handle
+ *          or RD_KAFKA_CONF_UNKNOWN if the interceptor did not handle
  *          this property, in which case the property is passed on on the
  *          interceptor in the chain, finally ending up at the built-in
  *          configuration handler.

@@ -315,6 +315,23 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 }
 
 
+/**
+ * Sub-tests
+ */
+int test_sub_start (const char *func, int line, int is_quick,
+                    const char *fmt, ...);
+void test_sub_pass (void);
+#define SUB_TEST0(IS_QUICK,...) do {                                    \
+                if (!test_sub_start(__FUNCTION__, __LINE__,             \
+                                    IS_QUICK, __VA_ARGS__))             \
+                        return;                                         \
+        } while (0)
+
+#define SUB_TEST(...) SUB_TEST0(rd_false, "" __VA_ARGS__)
+#define SUB_TEST_QUICK(...) SUB_TEST0(rd_true, "" __VA_ARGS__)
+#define SUB_TEST_PASS() test_sub_pass()
+
+
 #ifndef _WIN32
 #define rd_sleep(S) sleep(S)
 #else

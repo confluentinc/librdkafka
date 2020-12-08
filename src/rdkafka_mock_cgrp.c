@@ -184,10 +184,16 @@ static void rd_kafka_mock_cgrp_sync_done (rd_kafka_mock_cgrp_t *mcgrp,
 
                 rd_kafka_mock_cgrp_member_assignment_set(mcgrp, member, NULL);
 
-                rd_kafka_mock_connection_set_blocking(member->conn, rd_false);
-                if (resp)
-                        rd_kafka_mock_connection_send_response(member->conn,
-                                                               resp);
+                if (member->conn) {
+                        rd_kafka_mock_connection_set_blocking(member->conn,
+                                                              rd_false);
+                        if (resp)
+                                rd_kafka_mock_connection_send_response(
+                                        member->conn, resp);
+                } else if (resp) {
+                        /* Member has disconnected. */
+                        rd_kafka_buf_destroy(resp);
+                }
         }
 }
 
@@ -197,6 +203,12 @@ static void rd_kafka_mock_cgrp_sync_done (rd_kafka_mock_cgrp_t *mcgrp,
  *        assignment to members.
  */
 static void rd_kafka_mock_cgrp_sync_check (rd_kafka_mock_cgrp_t *mcgrp) {
+
+        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
+                     "Mock consumer group %s: awaiting %d/%d syncing members "
+                     "in state %s",
+                     mcgrp->id, mcgrp->assignment_cnt, mcgrp->member_cnt,
+                     rd_kafka_mock_cgrp_state_names[mcgrp->state]);
 
         if (mcgrp->assignment_cnt < mcgrp->member_cnt)
                 return;
@@ -369,14 +381,20 @@ static void rd_kafka_mock_cgrp_rebalance (rd_kafka_mock_cgrp_t *mcgrp,
                                           const char *reason) {
         int timeout_ms;
 
-        if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
+        if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_JOINING)
+                return; /* Do nothing, group is already rebalancing. */
+        else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
                 timeout_ms = 1000; /* First join, low timeout */
         else if (mcgrp->state == RD_KAFKA_MOCK_CGRP_STATE_REBALANCING &&
                  mcgrp->member_cnt == mcgrp->last_member_cnt)
                 timeout_ms = 100; /* All members rejoined, quickly transition
                                    * to election. */
-        else
-                timeout_ms = mcgrp->session_timeout_ms;
+        else /* Let the rebalance delay be a bit shorter than the
+              * session timeout so that we don't time out waiting members
+              * who are also subject to the session timeout. */
+                timeout_ms = mcgrp->session_timeout_ms > 1000 ?
+                        mcgrp->session_timeout_ms - 1000 :
+                        mcgrp->session_timeout_ms;
 
         rd_kafka_mock_cgrp_set_state(mcgrp, RD_KAFKA_MOCK_CGRP_STATE_JOINING,
                                      reason);

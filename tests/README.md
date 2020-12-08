@@ -125,6 +125,9 @@ Some additional guidelines:
    To make sure your test remains sturdy in these type of environments, make
    sure to use the `tmout_multip(milliseconds)` macro when passing timeout
    values to non-test functions, e.g, `rd_kafka_poll(rk, tmout_multip(3000))`.
+ * If your test file contains multiple separate sub-tests, use the
+   `SUB_TEST()`, `SUB_TEST_QUICK()` and `SUB_TEST_PASS()` from inside
+   the test functions to help differentiate test failures.
 
 
 ## Test scenarios
@@ -166,6 +169,8 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
 
  * `TESTS=0nnn` - only run a single test identified by its full number, e.g.
                   `TESTS=0102 make`. (Yes, the var should have been called TEST)
+ * `SUBTESTS=...` - only run sub-tests (tests that are using `SUB_TEST()`)
+                      that contains this string.
  * `TEST_DEBUG=...` - this will automatically set the `debug` config property
                       of all instantiated clients to the value.
                       E.g.. `TEST_DEBUG=broker,protocol TESTS=0001 make`

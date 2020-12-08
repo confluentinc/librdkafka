@@ -29,6 +29,11 @@ matrix:
    os: linux
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
+   before_script:
+     # Starting mid October 2020 Travis-CI has a broken docker image cache
+     # for one of the centos:6 layers, so we explicitly refresh it before
+     # doing the ADDITIONAL_BUILDS.
+     - docker pull centos:6
  - name: "Linux clang: +alpine"
    os: linux
    compiler: clang
@@ -88,7 +93,7 @@ matrix:
     - ./packaging/tools/rdutcoverage.sh
  - name: "Linux GCC s390x: +devel"
    os: linux
-   arch: s390x   
+   arch: s390x
    dist: bionic
    compiler: gcc
    env: NO_ARTIFACTS=y
@@ -96,6 +101,7 @@ matrix:
     - sudo apt update
     - sudo apt install -y gdb
     - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
+
 install:
  - ccache -s || echo "CCache is not available."
  - rm -rf artifacts dest
@@ -104,16 +110,15 @@ install:
 before_cache:
  - if [[ $TRAVIS_OS_NAME == windows ]]; then $msys2 pacman --sync --clean --noconfirm ; fi
 
-before_script:
 script:
-- if [[ $SKIP_MAKE != y ]]; then make -j2 all examples check && make -j2 -C tests build ; fi
+- if [[ $SKIP_MAKE != y ]]; then (make -j2 all examples check && make -j2 -C tests build) || travis_terminate 1 ; fi
 - if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
-- if [[ $SKIP_MAKE != y ]]; then make install ; fi
+- if [[ $SKIP_MAKE != y ]]; then make install || travis_terminate 1 ; fi
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
-- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || exit 1 ; done
-- if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check ; fi
-- if [[ $DOC_CHECK == y ]]; then make docs ; fi
-- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.6.0) ; fi
+- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || travis_terminate 1 ; done
+- if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check || travis_terminate 1; fi
+- if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
+- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.6.0) || travis_terminate 1 ; fi
 - if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
 
 deploy:

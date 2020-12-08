@@ -259,6 +259,7 @@ public:
 
   int assign_call_cnt;
   int revoke_call_cnt;
+  int nonempty_assign_call_cnt; /**< ASSIGN_PARTITIONS with partitions */
   int lost_call_cnt;
   int partitions_assigned_net;
   bool wait_rebalance;
@@ -268,6 +269,7 @@ public:
   DefaultRebalanceCb ():
     assign_call_cnt(0),
     revoke_call_cnt(0),
+    nonempty_assign_call_cnt(0),
     lost_call_cnt(0),
     partitions_assigned_net(0),
     wait_rebalance(false),
@@ -298,6 +300,8 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_assign() failed: " <<
                    error->str());
+      if (partitions.size() > 0)
+        nonempty_assign_call_cnt++;
       assign_call_cnt += 1;
       partitions_assigned_net += (int)partitions.size();
       ts_last_assign = test_clock();
@@ -309,6 +313,8 @@ public:
       if (error)
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: " <<
                    error->str());
+      if (partitions.size() == 0)
+        Test::Fail("revoked partitions size should never be 0");
       revoke_call_cnt += 1;
       partitions_assigned_net -= (int)partitions.size();
     }
@@ -635,7 +641,7 @@ run_test (const std::string &t1, const std::string &t2,
 
 
 static void a_assign_tests () {
-    Test::Say("Executing a_assign_tests\n");
+    SUB_TEST_QUICK();
 
     int msgcnt = 1000;
     const int msgsize1 = 100;
@@ -654,6 +660,8 @@ static void a_assign_tests () {
     run_test(topic1_str, topic2_str, assign_test_3);
     run_test(topic1_str, topic2_str, assign_test_4);
     run_test(topic1_str, topic2_str, assign_test_5);
+
+    SUB_TEST_PASS();
 }
 
 
@@ -666,6 +674,7 @@ static void a_assign_tests () {
  * Makes use of the mock cluster to induce latency.
  */
 static void a_assign_rapid () {
+  SUB_TEST_QUICK();
 
   std::string group_id = __FUNCTION__;
 
@@ -862,6 +871,8 @@ static void a_assign_rapid () {
   delete consumer;
 
   test_mock_cluster_destroy(mcluster);
+
+  SUB_TEST_PASS();
 }
 
 
@@ -873,7 +884,7 @@ static void a_assign_rapid () {
  */
 
 static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
-  Test::Say("Executing b_subscribe_with_cb_test\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -981,7 +992,7 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
   if (rebalance_cb1.revoke_call_cnt != 2)
     Test::Fail(tostr() << "Expecting 2 revoke calls on consumer 1, not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting 1 revoke calls on consumer 2, not: " << rebalance_cb2.revoke_call_cnt);
+    Test::Fail(tostr() << "Expecting 1 revoke call on consumer 2, not: " << rebalance_cb2.revoke_call_cnt);
 
   /* ..and net assigned partitions should drop to 0 in both cases: */
   if (rebalance_cb1.partitions_assigned_net != 0)
@@ -997,6 +1008,8 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1009,7 +1022,7 @@ static void b_subscribe_with_cb_test (rd_bool_t close_consumer) {
  */
 
 static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
-  Test::Say("Executing c_subscribe_no_cb_test\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1050,6 +1063,8 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1061,7 +1076,7 @@ static void c_subscribe_no_cb_test (rd_bool_t close_consumer) {
  */
 
 static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
-  Test::Say("Executing d_change_subscription_add_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
@@ -1099,6 +1114,8 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
     Test::Say("Skipping close() of consumer\n");
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1110,7 +1127,7 @@ static void d_change_subscription_add_topic (rd_bool_t close_consumer) {
  */
 
 static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
-  Test::Say("Executing e_change_subscription_remove_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
@@ -1148,6 +1165,8 @@ static void e_change_subscription_remove_topic (rd_bool_t close_consumer) {
     Test::Say("Skipping close() of consumer\n");
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1196,7 +1215,7 @@ public:
 
 
 static void f_assign_call_cooperative () {
-  Test::Say("Executing f_assign_call_cooperative\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1216,6 +1235,8 @@ static void f_assign_call_cooperative () {
 
   c->close();
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1268,7 +1289,7 @@ public:
 };
 
 static void g_incremental_assign_call_eager() {
-  Test::Say("Executing g_incremental_assign_call_eager\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1288,6 +1309,8 @@ static void g_incremental_assign_call_eager() {
 
   c->close();
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1299,7 +1322,7 @@ static void g_incremental_assign_call_eager() {
  */
 
 static void h_delete_topic () {
-  Test::Say("Executing h_delete_topic\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1346,6 +1369,8 @@ static void h_delete_topic () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1357,7 +1382,7 @@ static void h_delete_topic () {
  */
 
 static void i_delete_topic_2 () {
-  Test::Say("Executing i_delete_topic_2\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1393,6 +1418,8 @@ static void i_delete_topic_2 () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1404,7 +1431,7 @@ static void i_delete_topic_2 () {
  */
 
 static void j_delete_topic_no_rb_callback () {
-  Test::Say("Executing j_delete_topic_no_rb_callback\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name_1.c_str(), 1, 1);
@@ -1438,6 +1465,8 @@ static void j_delete_topic_no_rb_callback () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1449,7 +1478,7 @@ static void j_delete_topic_no_rb_callback () {
  */
 
 static void k_add_partition () {
-  Test::Say("Executing k_add_partition\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
@@ -1489,13 +1518,14 @@ static void k_add_partition () {
 
   Test::Say("Closing consumer\n");
   c->close();
+  delete c;
 
   if (rebalance_cb.assign_call_cnt != 2)
     Test::Fail(tostr() << "Expected 2 assign calls, saw " << rebalance_cb.assign_call_cnt);
   if (rebalance_cb.revoke_call_cnt != 1)
     Test::Fail(tostr() << "Expected 1 revoke call, saw " << rebalance_cb.revoke_call_cnt);
 
-  delete c;
+  SUB_TEST_PASS();
 }
 
 
@@ -1507,7 +1537,7 @@ static void k_add_partition () {
  */
 
 static void l_unsubscribe () {
-  Test::Say("Executing l_unsubscribe\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1548,9 +1578,9 @@ static void l_unsubscribe () {
       if (rebalance_cb2.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
       if (rebalance_cb1.revoke_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
+        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
       if (rebalance_cb2.revoke_call_cnt != 0) /* the rebalance_cb should not be called if the revoked partition list is empty */
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.assign_call_cnt);
+        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.revoke_call_cnt);
       Test::Say("Unsubscribe completed");
       done = true;
     }
@@ -1568,9 +1598,9 @@ static void l_unsubscribe () {
     Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
 
   if (rebalance_cb1.revoke_call_cnt != 1) /* should not be called a second revoke rebalance_cb */
-    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
+    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.assign_call_cnt);
+    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.revoke_call_cnt);
 
   if (rebalance_cb1.lost_call_cnt != 0)
     Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 0, not: " << rebalance_cb1.lost_call_cnt);
@@ -1579,6 +1609,8 @@ static void l_unsubscribe () {
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1590,7 +1622,7 @@ static void l_unsubscribe () {
  */
 
 static void m_unsubscribe_2 () {
-  Test::Say("Executing m_unsubscribe_2\n");
+  SUB_TEST();
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1621,6 +1653,8 @@ static void m_unsubscribe_2 () {
   c->close();
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1633,15 +1667,13 @@ static void m_unsubscribe_2 () {
  */
 
 static void n_wildcard () {
-  Test::Say("Executing n_wildcard\n");
+  SUB_TEST();
 
-  uint64_t random = test_id_generate();
-  string topic_sub_name = tostr() << "0113-coop_regex_" << random;
-
-  std::string topic_name_1 = Test::mk_topic_name(topic_sub_name, 1);
-  std::string topic_name_2 = Test::mk_topic_name(topic_sub_name, 1);
-  std::string group_name = Test::mk_unique_group_name("0113-coop_regex");
-  std::string topic_regex = tostr() << "^rdkafkatest.*" << topic_sub_name;
+  const string topic_base_name = Test::mk_topic_name("0113-n_wildcard", 1);
+  const string topic_name_1 = topic_base_name + "_1";
+  const string topic_name_2 = topic_base_name + "_2";
+  const string topic_regex = "^" + topic_base_name + "_.";
+  const string group_name = Test::mk_unique_group_name("0113-n_wildcard");
 
   std::vector<std::pair<std::string, std::string> > additional_conf;
   additional_conf.push_back(std::pair<std::string, std::string>(std::string("topic.metadata.refresh.interval.ms"), std::string("3000")));
@@ -1666,51 +1698,88 @@ static void n_wildcard () {
   bool done = false;
   bool created_topics = false;
   bool deleted_topic = false;
+  int last_cb1_assign_call_cnt = 0;
+  int last_cb2_assign_call_cnt = 0;
   while (!done) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
-    if (Test::assignment_partition_count(c1, NULL) == 0 && Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
+    if (Test::assignment_partition_count(c1, NULL) == 0 &&
+        Test::assignment_partition_count(c2, NULL) == 0 && !created_topics) {
       Test::Say("Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
-      test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), 10*1000);
-      test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), 10*1000);
+      /* The consumers should autonomously discover these topics and start
+       * consuming from them. This happens in the background - is not
+       * influenced by whether we wait for the topics to be created before
+       * continuing the main loop. It is possible that both topics are
+       * discovered simultaneously, requiring a single rebalance OR that
+       * topic 1 is discovered first (it was created first), a rebalance
+       * initiated, then topic 2 discovered, then another rebalance
+       * initiated to include it.
+       */
       created_topics = true;
     }
 
-    if (Test::assignment_partition_count(c1, NULL) == 2 && Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: " << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb2.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 1 not: " << rebalance_cb2.assign_call_cnt);
+    if (Test::assignment_partition_count(c1, NULL) == 2 &&
+        Test::assignment_partition_count(c2, NULL) == 2 && !deleted_topic) {
 
-      if (rebalance_cb1.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 0 not: " << rebalance_cb1.revoke_call_cnt);
-      if (rebalance_cb2.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: " << rebalance_cb2.revoke_call_cnt);
+      if (rebalance_cb1.nonempty_assign_call_cnt == 1) {
+        /* just one rebalance was required */
+        TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 1,
+                    "Expecting C_1's nonempty_assign_call_cnt to be 1 not %d ",
+                    rebalance_cb1.nonempty_assign_call_cnt);
+        TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 1,
+                    "Expecting C_2's nonempty_assign_call_cnt to be 1 not %d ",
+                    rebalance_cb2.nonempty_assign_call_cnt);
+      } else {
+        /* two rebalances were required (occurs infrequently) */
+        TEST_ASSERT(rebalance_cb1.nonempty_assign_call_cnt == 2,
+                    "Expecting C_1's nonempty_assign_call_cnt to be 2 not %d ",
+                    rebalance_cb1.nonempty_assign_call_cnt);
+        TEST_ASSERT(rebalance_cb2.nonempty_assign_call_cnt == 2,
+                    "Expecting C_2's nonempty_assign_call_cnt to be 2 not %d ",
+                    rebalance_cb2.nonempty_assign_call_cnt);
+      }
+
+      TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 0,
+                  "Expecting C_1's revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb1.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 0,
+                  "Expecting C_2's revoke_call_cnt to be 0 not %d ",
+                  rebalance_cb2.revoke_call_cnt);
+
+      last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
+      last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
 
       Test::Say("Deleting topic 1\n");
       Test::delete_topic(c1, topic_name_1.c_str());
       deleted_topic = true;
     }
 
-    if (Test::assignment_partition_count(c1, NULL) == 1 && Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
-      if (rebalance_cb1.revoke_call_cnt != 1) /* accumulated in lost case as well */
-        Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: " << rebalance_cb1.revoke_call_cnt);
-      if (rebalance_cb2.revoke_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: " << rebalance_cb2.revoke_call_cnt);
-
-      if (rebalance_cb1.lost_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 1 not: " << rebalance_cb1.lost_call_cnt);
-      if (rebalance_cb2.lost_call_cnt != 1)
-        Test::Fail(tostr() << "Expecting consumer 2's lost_call_cnt to be 1 not: " << rebalance_cb2.lost_call_cnt);
+    if (Test::assignment_partition_count(c1, NULL) == 1 &&
+        Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
+      /* accumulated in lost case as well */
+      TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
+                  "Expecting C_1's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb1.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 1,
+                  "Expecting C_2's revoke_call_cnt to be 1 not %d",
+                  rebalance_cb2.revoke_call_cnt);
+      TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
+                  "Expecting C_1's lost_call_cnt to be 1 not %d",
+                  rebalance_cb1.lost_call_cnt);
+      TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
+                  "Expecting C_2's lost_call_cnt to be 1 not %d",
+                  rebalance_cb2.lost_call_cnt);
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
-       * it follows the revoke, which has alrady been confirmed to have happened. */
+       * it follows the revoke, which has already been confirmed to have
+       * happened. */
       Test::Say("Waiting for rebalance_cb assigns\n");
-      while (rebalance_cb1.assign_call_cnt != 2 || rebalance_cb2.assign_call_cnt != 2) {
+      while (rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt ||
+             rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt) {
         Test::poll_once(c1, 500);
         Test::poll_once(c2, 500);
       }
@@ -1721,28 +1790,46 @@ static void n_wildcard () {
   }
 
   Test::Say("Closing consumer 1\n");
+  last_cb1_assign_call_cnt = rebalance_cb1.assign_call_cnt;
   c1->close();
+
+  /* There should be no assign rebalance_cb calls on close */
+  TEST_ASSERT(rebalance_cb1.assign_call_cnt == last_cb1_assign_call_cnt,
+              "Expecting C_1's assign_call_cnt to be %d not %d",
+              last_cb1_assign_call_cnt, rebalance_cb1.assign_call_cnt);
+
+  /* Let C_2 catch up on the rebalance and get assigned C_1's partitions. */
+  last_cb2_assign_call_cnt = rebalance_cb2.nonempty_assign_call_cnt;
+  while (rebalance_cb2.nonempty_assign_call_cnt == last_cb2_assign_call_cnt)
+    Test::poll_once(c2, 500);
+
   Test::Say("Closing consumer 2\n");
+  last_cb2_assign_call_cnt = rebalance_cb2.assign_call_cnt;
   c2->close();
 
   /* There should be no assign rebalance_cb calls on close */
-  if (rebalance_cb1.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb2.assign_call_cnt == last_cb2_assign_call_cnt,
+              "Expecting C_2's assign_call_cnt to be %d not %d",
+              last_cb2_assign_call_cnt, rebalance_cb2.assign_call_cnt);
 
-  if (rebalance_cb1.revoke_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 2 not: " << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 2 not: " << rebalance_cb2.assign_call_cnt);
+  TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 2,
+              "Expecting C_1's revoke_call_cnt to be 2 not %d",
+              rebalance_cb1.revoke_call_cnt);
+  TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 2,
+              "Expecting C_2's revoke_call_cnt to be 2 not %d",
+              rebalance_cb2.revoke_call_cnt);
 
-  if (rebalance_cb1.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 1, not: " << rebalance_cb1.lost_call_cnt);
-  if (rebalance_cb2.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 2's lost_call_cnt to be 1, not: " << rebalance_cb2.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
+              "Expecting C_1's lost_call_cnt to be 1, not %d",
+              rebalance_cb1.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
+              "Expecting C_2's lost_call_cnt to be 1, not %d",
+              rebalance_cb2.lost_call_cnt);
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1757,7 +1844,7 @@ static void n_wildcard () {
  */
 
 static void o_java_interop() {
-  Test::Say("Executing o_java_interop\n");
+  SUB_TEST();
 
   std::string topic_name_1 = Test::mk_topic_name("0113_o_2", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113_o_6", 1);
@@ -1838,6 +1925,8 @@ static void o_java_interop() {
   test_waitpid(java_pid);
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1847,8 +1936,8 @@ static void o_java_interop() {
  *  - Soon after (timing such that rebalance is probably in progress) it subscribes to a different topic.
  */
 
-static void s_subscribe_when_rebalancing(int variation) {
-  Test::Say(tostr() << "Executing s_subscribe_when_rebalancing, variation: " << variation << "\n");
+static void s_subscribe_when_rebalancing (int variation) {
+  SUB_TEST("variation %d", variation);
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1890,6 +1979,8 @@ static void s_subscribe_when_rebalancing(int variation) {
   }
 
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1900,7 +1991,7 @@ static void s_subscribe_when_rebalancing(int variation) {
  */
 
 static void t_max_poll_interval_exceeded(int variation) {
-  Test::Say(tostr() << "Executing t_max_poll_interval_exceeded, variation: " << variation << "\n");
+  SUB_TEST("variation %d", variation);
 
   std::string topic_name_1 = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name = Test::mk_unique_group_name("0113-cooperative_rebalance");
@@ -1962,10 +2053,12 @@ static void t_max_poll_interval_exceeded(int variation) {
   if (rebalance_cb1.revoke_call_cnt != 1)
     Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
   if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
+    Test::Fail(tostr() << "Expected consumer 2 revoke count to be 1, not: " << rebalance_cb1.revoke_call_cnt);
 
   delete c1;
   delete c2;
+
+  SUB_TEST_PASS();
 }
 
 
@@ -1998,21 +2091,18 @@ static void poll_all_consumers (RdKafka::KafkaConsumer **consumers,
  *
  * @param subscription_variation 0..2
  *
- * FIXME: What's the stressy part?
  * TODO: incorporate committing offsets.
  */
 
-static void u_stress (bool use_rebalance_cb, int subscription_variation) {
-
+static void u_multiple_subscription_changes (bool use_rebalance_cb, int subscription_variation) {
   const int N_CONSUMERS = 8;
   const int N_TOPICS = 2;
   const int N_PARTS_PER_TOPIC = N_CONSUMERS * N_TOPICS;
   const int N_PARTITIONS = N_PARTS_PER_TOPIC * N_TOPICS;
   const int N_MSGS_PER_PARTITION = 1000;
 
-  Test::Say(tostr() << _C_MAG "[ Executing u_stress, use_rebalance_cb: " <<
-            use_rebalance_cb << ", subscription_variation: " <<
-            subscription_variation << " ]\n");
+  SUB_TEST("use_rebalance_cb: %d, subscription_variation: %d",
+           (int)use_rebalance_cb, subscription_variation);
 
   string topic_name_1 = Test::mk_topic_name("0113u_1", 1);
   string topic_name_2 = Test::mk_topic_name("0113u_2", 1);
@@ -2039,7 +2129,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
 
   /*
    * Seed all partitions with the same number of messages so we later can
-   * verify that consumtion is working.
+   * verify that consumption is working.
    */
   vector<pair<Toppar,int> >ptopics;
   ptopics.push_back(pair<Toppar,int>(Toppar(topic_name_1, N_PARTS_PER_TOPIC),
@@ -2095,32 +2185,32 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
     const vector<string> *topics;
   } playbook[] = {
                   /* timestamp_ms, consumer_number, subscribe-to-topics */
-                  { 0,     0, &SUBSCRIPTION_1 },
+                  { 0,     0, &SUBSCRIPTION_1 },  /* Cmd 0 */
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  1, &SUBSCRIPTION_1 },
                   { 4000,  2, &SUBSCRIPTION_1 },
-                  { 6000,  3, &SUBSCRIPTION_1 },
+                  { 6000,  3, &SUBSCRIPTION_1 },  /* Cmd 5 */
                   { 6000,  4, &SUBSCRIPTION_1 },
                   { 6000,  5, &SUBSCRIPTION_1 },
                   { 6000,  6, &SUBSCRIPTION_1 },
                   { 6000,  7, &SUBSCRIPTION_2 },
-                  { 6000,  1, &SUBSCRIPTION_1 },
+                  { 6000,  1, &SUBSCRIPTION_1 },  /* Cmd 10 */
                   { 6000,  1, &SUBSCRIPTION_2 },
                   { 6000,  1, &SUBSCRIPTION_1 },
                   { 6000,  2, &SUBSCRIPTION_2 },
                   { 7000,  2, &SUBSCRIPTION_1 },
-                  { 7000,  1, &SUBSCRIPTION_2 },
+                  { 7000,  1, &SUBSCRIPTION_2 },  /* Cmd 15 */
                   { 8000,  0, &SUBSCRIPTION_2 },
                   { 8000,  1, &SUBSCRIPTION_1 },
                   { 8000,  0, &SUBSCRIPTION_1 },
                   { 13000, 2, &SUBSCRIPTION_1 },
-                  { 13000, 1, &SUBSCRIPTION_2 },
+                  { 13000, 1, &SUBSCRIPTION_2 },  /* Cmd 20 */
                   { 13000, 5, &SUBSCRIPTION_2 },
                   { 14000, 6, &SUBSCRIPTION_2 },
                   { 15000, 7, &SUBSCRIPTION_1 },
                   { 15000, 1, &SUBSCRIPTION_1 },
-                  { 15000, 5, &SUBSCRIPTION_1 },
+                  { 15000, 5, &SUBSCRIPTION_1 },  /* Cmd 25 */
                   { 15000, 6, &SUBSCRIPTION_1 },
                   { INT_MAX, 0, 0 }
   };
@@ -2325,9 +2415,7 @@ static void u_stress (bool use_rebalance_cb, int subscription_variation) {
     delete consumers[i];
   }
 
-  Test::Say(tostr() << _C_GRN "[ PASS u_stress, use_rebalance_cb: " <<
-            use_rebalance_cb << ", subscription_variation: " <<
-            subscription_variation << " ]\n");
+  SUB_TEST_PASS();
 }
 
 
@@ -2374,15 +2462,16 @@ extern "C" {
   /**
    * @brief Wait for an expected rebalance event, or fail.
    */
-  static void expect_rebalance (const char *what, rd_kafka_t *c,
-                                rd_kafka_resp_err_t exp_event,
-                                rd_bool_t exp_lost,
-                                int timeout_s) {
+  static void expect_rebalance0 (const char *func, int line,
+                                 const char *what, rd_kafka_t *c,
+                                 rd_kafka_resp_err_t exp_event,
+                                 rd_bool_t exp_lost,
+                                 int timeout_s) {
     int64_t tmout = test_clock() + (timeout_s * 1000000);
     int start_cnt = rebalance_cnt;
 
-    TEST_SAY("Waiting for %s (%s) for %ds\n",
-      what, rd_kafka_err2name(exp_event), timeout_s);
+    TEST_SAY("%s:%d: Waiting for %s (%s) for %ds\n",
+             func, line, what, rd_kafka_err2name(exp_event), timeout_s);
 
     rebalance_exp_lost = exp_lost;
     rebalance_exp_event = exp_event;
@@ -2397,24 +2486,27 @@ extern "C" {
       return;
     }
 
-    TEST_FAIL("Timed out waiting for %s (%s)",
-      what, rd_kafka_err2name(exp_event));
+    TEST_FAIL("%s:%d: Timed out waiting for %s (%s)",
+              func, line, what, rd_kafka_err2name(exp_event));
   }
 
+#define expect_rebalance(WHAT,C,EXP_EVENT,EXP_LOST,TIMEOUT_S)    \
+  expect_rebalance0(__FUNCTION__, __LINE__,                      \
+                    WHAT, C, EXP_EVENT, EXP_LOST, TIMEOUT_S)
 
 
   /* Check lost partitions revoke occurs on ILLEGAL_GENERATION heartbeat error.
    */
 
   static void p_lost_partitions_heartbeat_illegal_generation_test () {
-    TEST_SAY("Executing p_lost_partitions_heartbeat_illegal_generation_test\n");
-
     const char *bootstraps;
     rd_kafka_mock_cluster_t *mcluster;
     const char *groupid = "mygroup";
     const char *topic = "test";
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
+
+    SUB_TEST_QUICK();
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2473,6 +2565,8 @@ extern "C" {
 
     TEST_SAY("Destroying mock cluster\n");
     test_mock_cluster_destroy(mcluster);
+
+    SUB_TEST_PASS();
   }
 
 
@@ -2484,8 +2578,6 @@ extern "C" {
   static void q_lost_partitions_illegal_generation_test (
       rd_bool_t test_joingroup_fail) {
 
-    TEST_SAY("Executing q_lost_partitions_illegal_generation_test\n");
-
     const char *bootstraps;
     rd_kafka_mock_cluster_t *mcluster;
     const char *groupid = "mygroup";
@@ -2495,6 +2587,9 @@ extern "C" {
     rd_kafka_conf_t *conf;
     rd_kafka_resp_err_t err;
     rd_kafka_topic_partition_list_t *topics;
+
+    SUB_TEST0(!test_joingroup_fail/*quick*/,
+              "test_joingroup_fail=%d", test_joingroup_fail);
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2572,6 +2667,8 @@ extern "C" {
 
     TEST_SAY("Destroying mock cluster\n");
     test_mock_cluster_destroy(mcluster);
+
+    SUB_TEST_PASS();
   }
 
 
@@ -2588,6 +2685,8 @@ extern "C" {
     const int msgcnt = 100;
     rd_kafka_t *c;
     rd_kafka_conf_t *conf;
+
+    SUB_TEST();
 
     mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -2649,60 +2748,52 @@ extern "C" {
     test_mock_cluster_destroy(mcluster);
   }
 
-    /* Separate test output */
-#define _RUN(CALL) do {                         \
-      Test::Say(_C_MAG "[ " #CALL " ]\n"); \
-      CALL;                                     \
-    } while (0)
-
   /* Local tests not needing a cluster */
   int main_0113_cooperative_rebalance_local (int argc, char **argv) {
-    _RUN(a_assign_rapid());
-    _RUN(p_lost_partitions_heartbeat_illegal_generation_test());
-    _RUN(q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/));
-    if (test_quick)
-      return 0;
-    _RUN(q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/));
-    _RUN(r_lost_partitions_commit_illegal_generation_test_local());
+    a_assign_rapid();
+    p_lost_partitions_heartbeat_illegal_generation_test();
+    q_lost_partitions_illegal_generation_test(rd_false/*joingroup*/);
+    q_lost_partitions_illegal_generation_test(rd_true/*syncgroup*/);
+    r_lost_partitions_commit_illegal_generation_test_local();
     return 0;
   }
 
   int main_0113_cooperative_rebalance (int argc, char **argv) {
     int i;
 
-    _RUN(a_assign_tests());
-    _RUN(b_subscribe_with_cb_test(true/*close consumer*/));
-    _RUN(b_subscribe_with_cb_test(false/*don't close consumer*/));
-    _RUN(c_subscribe_no_cb_test(true/*close consumer*/));
+    a_assign_tests();
+    b_subscribe_with_cb_test(true/*close consumer*/);
+    b_subscribe_with_cb_test(false/*don't close consumer*/);
+    c_subscribe_no_cb_test(true/*close consumer*/);
 
     if (test_quick) {
       Test::Say("Skipping tests c -> s due to quick mode\n");
       return 0;
     }
 
-    _RUN(c_subscribe_no_cb_test(false/*don't close consumer*/));
-    _RUN(d_change_subscription_add_topic(true/*close consumer*/));
-    _RUN(d_change_subscription_add_topic(false/*don't close consumer*/));
-    _RUN(e_change_subscription_remove_topic(true/*close consumer*/));
-    _RUN(e_change_subscription_remove_topic(false/*don't close consumer*/));
-    _RUN(f_assign_call_cooperative());
-    _RUN(g_incremental_assign_call_eager());
-    _RUN(h_delete_topic());
-    _RUN(i_delete_topic_2());
-    _RUN(j_delete_topic_no_rb_callback());
-    _RUN(k_add_partition());
-    _RUN(l_unsubscribe());
-    _RUN(m_unsubscribe_2());
-    _RUN(n_wildcard());
-    _RUN(o_java_interop());
+    c_subscribe_no_cb_test(false/*don't close consumer*/);
+    d_change_subscription_add_topic(true/*close consumer*/);
+    d_change_subscription_add_topic(false/*don't close consumer*/);
+    e_change_subscription_remove_topic(true/*close consumer*/);
+    e_change_subscription_remove_topic(false/*don't close consumer*/);
+    f_assign_call_cooperative();
+    g_incremental_assign_call_eager();
+    h_delete_topic();
+    i_delete_topic_2();
+    j_delete_topic_no_rb_callback();
+    k_add_partition();
+    l_unsubscribe();
+    m_unsubscribe_2();
+    n_wildcard();
+    o_java_interop();
     for (i = 1 ; i <= 6 ; i++) /* iterate over 6 different test variations */
-      _RUN(s_subscribe_when_rebalancing(i));
+      s_subscribe_when_rebalancing(i);
     for (i = 1 ; i <= 2 ; i++)
-      _RUN(t_max_poll_interval_exceeded(i));
+      t_max_poll_interval_exceeded(i);
     /* Run all 2*3 variations of the u_.. test */
     for (i = 0 ; i < 3 ; i++) {
-      _RUN(u_stress(true/*with rebalance_cb*/, i));
-      _RUN(u_stress(false/*without rebalance_cb*/, i));
+      u_multiple_subscription_changes(true/*with rebalance_cb*/, i);
+      u_multiple_subscription_changes(false/*without rebalance_cb*/, i);
     }
 
     return 0;

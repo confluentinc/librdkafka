@@ -94,7 +94,7 @@ void do_produce_batch (rd_kafka_t *rk, const char *topic, uint64_t testid,
  *        (only consumed output for verification).
  *        e.g., no consumer offsets to commit with transaction.
  */
-static void do_test_basic_producer_txn (void) {
+static void do_test_basic_producer_txn (rd_bool_t enable_compression) {
         const char *topic = test_mk_topic_name("0103_transactions", 1);
         const int partition_cnt = 4;
 #define _TXNCNT 6
@@ -131,6 +131,8 @@ static void do_test_basic_producer_txn (void) {
         p_conf = rd_kafka_conf_dup(conf);
         rd_kafka_conf_set_dr_msg_cb(p_conf, test_dr_msg_cb);
         test_conf_set(p_conf, "transactional.id", topic);
+        if (enable_compression)
+                test_conf_set(p_conf, "compression.type", "lz4");
         p = test_create_handle(RD_KAFKA_PRODUCER, p_conf);
 
         // FIXME: add testing were the txn id is reused (and thus fails)
@@ -771,7 +773,8 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
 int main_0103_transactions (int argc, char **argv) {
 
         do_test_misuse_txn();
-        do_test_basic_producer_txn();
+        do_test_basic_producer_txn(rd_false /* without compression */);
+        do_test_basic_producer_txn(rd_true /* with compression */);
         do_test_consumer_producer_txn();
         do_test_fenced_txn(rd_false /* no produce after fencing */);
         do_test_fenced_txn(rd_true /* produce after fencing */);

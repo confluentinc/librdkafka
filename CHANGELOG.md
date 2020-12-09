@@ -38,6 +38,7 @@ and the sticky consumer group partition assignor.
  * Added `conf` debugging context to `debug` - shows set configuration
    properties on client and topic instantiation. Sensitive properties
    are redacted.
+ * Added `rd_kafka_queue_yield()` to cancel a blocking queue call.
 
 
 ## Fixes

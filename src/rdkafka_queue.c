@@ -765,6 +765,11 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 }
 
 
+void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu) {
+        rd_kafka_q_yield(rkqu->rkqu_q, rd_true);
+}
+
+
 /**
  * @brief Enable or disable(event_cb==NULL) callback-based wake-ups for queue
  */

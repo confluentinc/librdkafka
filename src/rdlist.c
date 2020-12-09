@@ -361,6 +361,20 @@ void *rd_list_last (const rd_list_t *rl) {
 }
 
 
+void *rd_list_find_duplicate (const rd_list_t *rl,
+                              int (*cmp) (const void *, const void *)) {
+        int i;
+
+        rd_assert(rl->rl_flags & RD_LIST_F_SORTED);
+
+        for (i = 1 ; i < rl->rl_cnt ; i++) {
+                if (!cmp(rl->rl_elems[i-1],
+                         rl->rl_elems[i]))
+                        return rl->rl_elems[i];
+        }
+
+        return NULL;
+}
 
 int rd_list_cmp (const rd_list_t *a, const rd_list_t *b,
 		 int (*cmp) (const void *, const void *)) {

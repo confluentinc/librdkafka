@@ -516,7 +516,7 @@ void rd_kafka_coord_reqs_term (rd_kafka_t *rk) {
         rd_kafka_coord_req_t *creq;
 
         while ((creq = TAILQ_FIRST(&rk->rk_coord_reqs)))
-                rd_kafka_coord_req_destroy(rk, creq);
+                rd_kafka_coord_req_fail(rk, creq, RD_KAFKA_RESP_ERR__DESTROY);
 }
 
 

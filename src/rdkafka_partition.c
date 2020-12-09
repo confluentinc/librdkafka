@@ -3802,7 +3802,7 @@ rd_kafka_topic_partition_list_has_duplicates (
                 const rd_kafka_topic_partition_t *p1 = &rktparlist->elems[i-1];
                 const rd_kafka_topic_partition_t *p2 = &rktparlist->elems[i];
 
-                if (((p1->partition != p2->partition) && !ignore_partition) &&
+                if (((p1->partition == p2->partition) || ignore_partition) &&
                     !strcmp(p1->topic, p2->topic)) {
                         return rd_true;
                 }

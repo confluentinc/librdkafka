@@ -551,6 +551,8 @@ void test_any_conf_set (rd_kafka_conf_t *conf,
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
+int test_partition_list_cmp (rd_kafka_topic_partition_list_t *al,
+                             rd_kafka_topic_partition_list_t *bl);
 
 void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (rd_kafka_t *use_rk,
@@ -648,6 +650,14 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
                            rd_kafka_queue_t *useq,
                            const rd_kafka_topic_partition_list_t *offsets,
                            void *opaque);
+
+rd_kafka_resp_err_t
+test_DeleteConsumerGroupOffsets_simple (
+        rd_kafka_t *rk,
+        rd_kafka_queue_t *useq,
+        const char *group_id,
+        const rd_kafka_topic_partition_list_t *offsets,
+        void *opaque);
 
 rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
 

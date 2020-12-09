@@ -719,10 +719,20 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         struct waiting id4 = {RD_KAFKA_EVENT_DELETEGROUPS_RESULT};
         struct waiting id5 = {RD_KAFKA_EVENT_DELETERECORDS_RESULT};
         struct waiting id6 = {RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT};
-        rd_kafka_topic_partition_list_t *offsets = rd_kafka_topic_partition_list_new(3);
-        rd_kafka_topic_partition_list_add(offsets, topics[0], 0)->offset = RD_KAFKA_OFFSET_END;
-        rd_kafka_topic_partition_list_add(offsets, topics[1], 0)->offset = RD_KAFKA_OFFSET_END;
-        rd_kafka_topic_partition_list_add(offsets, topics[2], 0)->offset = RD_KAFKA_OFFSET_END;
+        struct waiting id7 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
+        struct waiting id8 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
+        rd_kafka_topic_partition_list_t *offsets;
+
+
+        SUB_TEST_QUICK();
+
+        offsets = rd_kafka_topic_partition_list_new(3);
+        rd_kafka_topic_partition_list_add(offsets, topics[0], 0)->offset =
+                RD_KAFKA_OFFSET_END;
+        rd_kafka_topic_partition_list_add(offsets, topics[1], 0)->offset =
+                RD_KAFKA_OFFSET_END;
+        rd_kafka_topic_partition_list_add(offsets, topics[2], 0)->offset =
+                RD_KAFKA_OFFSET_END;
 
         TEST_SAY(_C_MAG "[ Mixed mode test on %s]\n", rd_kafka_name(rk));
 
@@ -732,8 +742,13 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         test_DeleteGroups_simple(rk, rkqu, topics, 3, &id4);
         test_DeleteRecords_simple(rk, rkqu, offsets, &id5);
         test_CreatePartitions_simple(rk, rkqu, "topicD", 15, &id6);
+        test_DeleteConsumerGroupOffsets_simple(rk, rkqu, "mygroup", offsets,
+                                               &id7);
+        test_DeleteConsumerGroupOffsets_simple(rk, rkqu, NULL, NULL, &id8);
 
-        while (cnt < 6) {
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        while (cnt < 8) {
                 rd_kafka_event_t *rkev;
                 struct waiting *w;
 
@@ -759,6 +774,8 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
                 rd_kafka_event_destroy(rkev);
         }
+
+        SUB_TEST_PASS();
 }
 
 
@@ -932,10 +949,11 @@ static void do_test_options (rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS, \
                     RD_KAFKA_ADMIN_OP_DELETEGROUPS, \
                     RD_KAFKA_ADMIN_OP_DELETERECORDS, \
+                    RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS, \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */}
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[8];
+                const rd_kafka_admin_op_t valid_apis[9];
         } matrix[] = {
                 { "request_timeout", _all_apis },
                 { "operation_timeout", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
@@ -1096,6 +1114,10 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_DeleteRecords("temp queue, options", rk, NULL, 1, rd_false);
         do_test_DeleteRecords("main queue, options", rk, mainq, 1, rd_false);
 
+        do_test_DeleteConsumerGroupOffsets("temp queue, no options",
+                                           rk, NULL, 0);
+        do_test_DeleteConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
+        do_test_DeleteConsumerGroupOffsets("main queue, options", rk, mainq, 1);
 
         do_test_mix(rk, mainq);
 

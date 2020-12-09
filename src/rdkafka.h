@@ -4831,6 +4831,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
 #define RD_KAFKA_EVENT_DELETERECORDS_RESULT 105 /**< DeleteRecords_result_t */
 #define RD_KAFKA_EVENT_DELETEGROUPS_RESULT 106 /**< DeleteGroups_result_t */
+/** DeleteConsumerGroupOffsets_result_t */
+#define RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT 107
 #define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
                                                              token needs to be
                                                              refreshed */
@@ -4980,6 +4982,7 @@ int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ *  - RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
  *  - RD_KAFKA_EVENT_DELETERECORDS_RESULT
  */
 RD_EXPORT
@@ -5070,6 +5073,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
 /*! DeleteGroups result type */
 typedef rd_kafka_event_t rd_kafka_DeleteGroups_result_t;
+/*! DeleteConsumerGroupOffsets result type */
+typedef rd_kafka_event_t rd_kafka_DeleteConsumerGroupOffsets_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -5152,6 +5157,18 @@ rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_DeleteGroups_result_t *
 rd_kafka_event_DeleteGroups_result (rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DeleteConsumerGroupOffsets result.
+ *
+ * @returns the result of a DeleteConsumerGroupOffsets request, or NULL if
+ *          event is of different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteConsumerGroupOffsets_result_t *
+rd_kafka_event_DeleteConsumerGroupOffsets_result (rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -5869,6 +5886,15 @@ rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres);
 RD_EXPORT const char *
 rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres);
 
+/**
+ * @returns the partitions/offsets for the given group result, if applicable
+ *          to the request type, else NULL.
+ * @remark lifetime of the returned list is the same as the \p groupres.
+ */
+RD_EXPORT const rd_kafka_topic_partition_list_t *
+rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres);
+
+
 /**@}*/
 
 
@@ -5924,6 +5950,8 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
         RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
         RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
+        /** DeleteConsumerGroupOffsets */
+        RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
         RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -6845,6 +6873,7 @@ rd_kafka_DeleteRecords_result_offsets (
  *
  */
 
+/*! Represents a group to be deleted. */
 typedef struct rd_kafka_DeleteGroup_s rd_kafka_DeleteGroup_t;
 
 /**
@@ -6913,6 +6942,98 @@ RD_EXPORT const rd_kafka_group_result_t **
 rd_kafka_DeleteGroups_result_groups (
         const rd_kafka_DeleteGroups_result_t *result,
         size_t *cntp);
+
+
+/*
+ * DeleteConsumerGroupOffsets - delete groups from cluster
+ *
+ *
+ */
+
+/*! Represents consumer group committed offsets to be deleted. */
+typedef struct rd_kafka_DeleteConsumerGroupOffsets_s
+rd_kafka_DeleteConsumerGroupOffsets_t;
+
+/**
+ * @brief Create a new DeleteConsumerGroupOffsets object.
+ *        This object is later passed to rd_kafka_DeleteConsumerGroupOffsets().
+ *
+ * @param group Consumer group id.
+ * @param partitions Partitions to delete committed offsets for.
+ *                   Only the topic and partition fields are used.
+ *
+ * @returns a new allocated DeleteConsumerGroupOffsets object.
+ *          Use rd_kafka_DeleteConsumerGroupOffsets_destroy() to free
+ *          object when done.
+ */
+RD_EXPORT rd_kafka_DeleteConsumerGroupOffsets_t *
+rd_kafka_DeleteConsumerGroupOffsets_new (const char *group,
+                                         const rd_kafka_topic_partition_list_t
+                                         *partitions);
+
+/**
+ * @brief Destroy and free a DeleteConsumerGroupOffsets object previously
+ *        created with rd_kafka_DeleteConsumerGroupOffsets_new()
+ */
+RD_EXPORT void
+rd_kafka_DeleteConsumerGroupOffsets_destroy (
+        rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets);
+
+/**
+ * @brief Helper function to destroy all DeleteConsumerGroupOffsets objects in
+ *        the \p del_grpoffsets array (of \p del_grpoffsets_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_DeleteConsumerGroupOffsets_destroy_array (
+        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+        size_t del_grpoffset_cnt);
+
+/**
+ * @brief Delete committed offsets for a set of partitions in a conusmer
+ *        group. This will succeed at the partition level only if the group
+ *        is not actively subscribed to the corresponding topic.
+ *
+ * @param rk Client instance.
+ * @param del_grpoffsets Array of group committed offsets to delete.
+ *                       MUST only be one single element.
+ * @param del_grpoffsets_cnt Number of elements in \p del_grpoffsets array.
+ *                           MUST always be 1.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
+ *
+ * @remark The current implementation only supports one group per invocation.
+ */
+RD_EXPORT
+void rd_kafka_DeleteConsumerGroupOffsets (
+        rd_kafka_t *rk,
+        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+        size_t del_grpoffsets_cnt,
+        const rd_kafka_AdminOptions_t *options,
+        rd_kafka_queue_t *rkqu);
+
+
+
+/*
+ * DeleteConsumerGroupOffsets result type and methods
+ */
+
+/**
+ * @brief Get an array of results from a DeleteConsumerGroupOffsets result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_DeleteConsumerGroupOffsets_result_groups (
+        const rd_kafka_DeleteConsumerGroupOffsets_result_t *result,
+        size_t *cntp);
+
 
 /**@}*/
 

@@ -4052,6 +4052,36 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
         }
 }
 
+/**
+ * @brief Compare two lists, returning 0 if equal.
+ *
+ * @remark The lists may be sorted by this function.
+ */
+int test_partition_list_cmp (rd_kafka_topic_partition_list_t *al,
+                             rd_kafka_topic_partition_list_t *bl) {
+        int i;
+
+        if (al->cnt < bl->cnt)
+                return -1;
+        else if (al->cnt > bl->cnt)
+                return 1;
+        else if (al->cnt == 0)
+                return 0;
+
+        rd_kafka_topic_partition_list_sort(al, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(bl, NULL, NULL);
+
+        for (i = 0 ; i < al->cnt ; i++) {
+                const rd_kafka_topic_partition_t *a = &al->elems[i];
+                const rd_kafka_topic_partition_t *b = &bl->elems[i];
+                if (a->partition != b->partition ||
+                    strcmp(a->topic, b->topic))
+                        return -1;
+        }
+
+        return 0;
+}
+
 
 /**
  * @brief Execute script from the Kafka distribution bin/ path.
@@ -5652,6 +5682,81 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
 
         if (err)
                 TEST_FAIL("Failed to delete records: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
+
+rd_kafka_resp_err_t
+test_DeleteConsumerGroupOffsets_simple (
+        rd_kafka_t *rk,
+        rd_kafka_queue_t *useq,
+        const char *group_id,
+        const rd_kafka_topic_partition_list_t *offsets,
+        void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+        rd_kafka_DeleteConsumerGroupOffsets_t *cgoffsets;
+
+        options = rd_kafka_AdminOptions_new(
+                rk, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options,
+                        tmout-5000,
+                        errstr,
+                        sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        if (offsets) {
+                TEST_SAY("Deleting committed offsets for group %s and "
+                         "%d partitions\n",
+                         group_id, offsets->cnt);
+
+                cgoffsets = rd_kafka_DeleteConsumerGroupOffsets_new(group_id,
+                                                                    offsets);
+        } else {
+                TEST_SAY("Provoking invalid DeleteConsumerGroupOffsets call\n");
+                cgoffsets = NULL;
+        }
+
+        rd_kafka_DeleteConsumerGroupOffsets(rk, &cgoffsets,
+                                            cgoffsets ? 1 : 0,
+                                            options, useq);
+
+        if (cgoffsets)
+                rd_kafka_DeleteConsumerGroupOffsets_destroy(cgoffsets);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(
+                q,
+                RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT,
+                NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete committed offsets: %s",
                           rd_kafka_err2str(err));
 
         return err;

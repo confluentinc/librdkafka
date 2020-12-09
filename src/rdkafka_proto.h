@@ -117,31 +117,31 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_ExpireDelegationToken] = "ExpireDelegationToken",
                 [RD_KAFKAP_DescribeDelegationToken] = "DescribeDelegationToken",
                 [RD_KAFKAP_DeleteGroups] = "DeleteGroups",
-                [RD_KAFKAP_ElectLeadersRequest] = "ElectLeadersRequest",
-                [RD_KAFKAP_IncrementalAlterConfigsRequest] =
+                [RD_KAFKAP_ElectLeaders] = "ElectLeadersRequest",
+                [RD_KAFKAP_IncrementalAlterConfigs] =
                 "IncrementalAlterConfigsRequest",
-                [RD_KAFKAP_AlterPartitionReassignmentsRequest] =
+                [RD_KAFKAP_AlterPartitionReassignments] =
                 "AlterPartitionReassignmentsRequest",
-                [RD_KAFKAP_ListPartitionReassignmentsRequest] =
+                [RD_KAFKAP_ListPartitionReassignments] =
                 "ListPartitionReassignmentsRequest",
-                [RD_KAFKAP_OffsetDeleteRequest] = "OffsetDeleteRequest",
-                [RD_KAFKAP_DescribeClientQuotasRequest] =
+                [RD_KAFKAP_OffsetDelete] = "OffsetDeleteRequest",
+                [RD_KAFKAP_DescribeClientQuotas] =
                 "DescribeClientQuotasRequest",
-                [RD_KAFKAP_AlterClientQuotasRequest] =
+                [RD_KAFKAP_AlterClientQuotas] =
                 "AlterClientQuotasRequest",
-                [RD_KAFKAP_DescribeUserScramCredentialsRequest] =
+                [RD_KAFKAP_DescribeUserScramCredentials] =
                 "DescribeUserScramCredentialsRequest",
-                [RD_KAFKAP_AlterUserScramCredentialsRequest] =
+                [RD_KAFKAP_AlterUserScramCredentials] =
                 "AlterUserScramCredentialsRequest",
-                [RD_KAFKAP_VoteRequest] = "VoteRequest",
-                [RD_KAFKAP_BeginQuorumEpochRequest] = "BeginQuorumEpochRequest",
-                [RD_KAFKAP_EndQuorumEpochRequest] = "EndQuorumEpochRequest",
-                [RD_KAFKAP_DescribeQuorumRequest] = "DescribeQuorumRequest",
-                [RD_KAFKAP_AlterIsrRequest] = "AlterIsrRequest",
-                [RD_KAFKAP_UpdateFeaturesRequest] = "UpdateFeaturesRequest",
-                [RD_KAFKAP_EnvelopeRequest] = "EnvelopeRequest",
+                [RD_KAFKAP_Vote] = "VoteRequest",
+                [RD_KAFKAP_BeginQuorumEpoch] = "BeginQuorumEpochRequest",
+                [RD_KAFKAP_EndQuorumEpoch] = "EndQuorumEpochRequest",
+                [RD_KAFKAP_DescribeQuorum] = "DescribeQuorumRequest",
+                [RD_KAFKAP_AlterIsr] = "AlterIsrRequest",
+                [RD_KAFKAP_UpdateFeatures] = "UpdateFeaturesRequest",
+                [RD_KAFKAP_Envelope] = "EnvelopeRequest",
         };
-        static RD_TLS char ret[32];
+        static RD_TLS char ret[64];
 
         if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names) ||
             !names[ApiKey]) {

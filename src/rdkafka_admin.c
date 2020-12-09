@@ -3737,4 +3737,196 @@ rd_kafka_DeleteGroups_result_groups (
                                                 cntp);
 }
 
+
+/**@}*/
+
+
+/**
+ * @name Delete consumer group offsets (committed offsets)
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+rd_kafka_DeleteConsumerGroupOffsets_t *
+rd_kafka_DeleteConsumerGroupOffsets_new (const char *group,
+                                         const rd_kafka_topic_partition_list_t
+                                         *partitions) {
+        size_t tsize = strlen(group) + 1;
+        rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets;
+
+        rd_assert(group && partitions);
+
+        /* Single allocation */
+        del_grpoffsets = rd_malloc(sizeof(*del_grpoffsets) + tsize);
+        del_grpoffsets->group = del_grpoffsets->data;
+        memcpy(del_grpoffsets->group, group, tsize);
+        del_grpoffsets->partitions =
+                rd_kafka_topic_partition_list_copy(partitions);
+
+        return del_grpoffsets;
+}
+
+void rd_kafka_DeleteConsumerGroupOffsets_destroy (
+        rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets) {
+        rd_kafka_topic_partition_list_destroy(del_grpoffsets->partitions);
+        rd_free(del_grpoffsets);
+}
+
+static void rd_kafka_DeleteConsumerGroupOffsets_free (void *ptr) {
+        rd_kafka_DeleteConsumerGroupOffsets_destroy(ptr);
+}
+
+void rd_kafka_DeleteConsumerGroupOffsets_destroy_array (
+        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+        size_t del_grpoffsets_cnt) {
+        size_t i;
+        for (i = 0 ; i < del_grpoffsets_cnt ; i++)
+                rd_kafka_DeleteConsumerGroupOffsets_destroy(del_grpoffsets[i]);
+}
+
+
+/**
+ * @brief Allocate a new DeleteGroup and make a copy of \p src
+ */
+static rd_kafka_DeleteConsumerGroupOffsets_t *
+rd_kafka_DeleteConsumerGroupOffsets_copy (
+        const rd_kafka_DeleteConsumerGroupOffsets_t *src) {
+        return rd_kafka_DeleteConsumerGroupOffsets_new(src->group,
+                                                       src->partitions);
+}
+
+
+/**
+ * @brief Parse OffsetDeleteResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_OffsetDeleteResponse_parse (rd_kafka_op_t *rko_req,
+                                     rd_kafka_op_t **rko_resultp,
+                                     rd_kafka_buf_t *reply,
+                                     char *errstr, size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result;
+        int16_t ErrorCode;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        const rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets =
+                rd_list_elem(&rko_req->rko_u.admin_request.args, 0);
+
+        rd_kafka_buf_read_i16(reply, &ErrorCode);
+        if (ErrorCode) {
+                rd_snprintf(errstr, errstr_size,
+                            "OffsetDelete response error: %s",
+                            rd_kafka_err2str(ErrorCode));
+                return ErrorCode;
+        }
+
+        rd_kafka_buf_read_throttle_time(reply);
+
+        partitions = rd_kafka_buf_read_topic_partitions(reply,
+                                                        16,
+                                                        rd_false/*no offset */,
+                                                        rd_true/*read error*/);
+        if (!partitions) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to parse OffsetDeleteResponse partitions");
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+
+        /* Create result op and group_result_t */
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_group_result_free);
+        rd_list_add(&rko_result->rko_u.admin_result.results,
+                    rd_kafka_group_result_new(del_grpoffsets->group, -1,
+                                              partitions, NULL));
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        rd_snprintf(errstr, errstr_size,
+                    "OffsetDelete response protocol parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+
+void rd_kafka_DeleteConsumerGroupOffsets (
+        rd_kafka_t *rk,
+        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+        size_t del_grpoffsets_cnt,
+        const rd_kafka_AdminOptions_t *options,
+        rd_kafka_queue_t *rkqu) {
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_OffsetDeleteRequest,
+                rd_kafka_OffsetDeleteResponse_parse,
+        };
+        rd_kafka_op_t *rko;
+
+        rd_assert(rkqu);
+
+        rko = rd_kafka_admin_request_op_new(
+                rk,
+                RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS,
+                RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT,
+                &cbs, options, rkqu->rkqu_q);
+
+        if (del_grpoffsets_cnt != 1) {
+                /* For simplicity we only support one single group for now */
+                rd_kafka_admin_result_fail(rko,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Exactly one "
+                                           "DeleteConsumerGroupOffsets must "
+                                           "be passed");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true/*destroy*/);
+                return;
+        }
+
+
+        rko->rko_u.admin_request.broker_id =
+                RD_KAFKA_ADMIN_TARGET_COORDINATOR;
+        rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
+        rko->rko_u.admin_request.coordkey =
+                rd_strdup(del_grpoffsets[0]->group);
+
+        /* Store copy of group on request so the group name can be reached
+         * from the response parser. */
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_DeleteConsumerGroupOffsets_free);
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_kafka_DeleteConsumerGroupOffsets_copy(
+                            del_grpoffsets[0]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+/**
+ * @brief Get an array of group results from a DeleteGroups result.
+ *
+ * The returned \p groups life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_group_result_t **
+rd_kafka_DeleteConsumerGroupOffsets_result_groups (
+        const rd_kafka_DeleteConsumerGroupOffsets_result_t *result,
+        size_t *cntp) {
+        return rd_kafka_admin_result_ret_groups((const rd_kafka_op_t *)result,
+                                                cntp);
+}
+
+RD_EXPORT
+void rd_kafka_DeleteConsumerGroupOffsets (
+        rd_kafka_t *rk,
+        rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
+        size_t del_grpoffsets_cnt,
+        const rd_kafka_AdminOptions_t *options,
+        rd_kafka_queue_t *rkqu);
+
 /**@}*/

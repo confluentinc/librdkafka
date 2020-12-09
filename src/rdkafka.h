@@ -3289,6 +3289,18 @@ void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
                                                        void *qev_opaque),
                                      void *qev_opaque);
 
+
+/**
+ * @brief Cancels the current rd_kafka_queue_poll() on \p rkqu.
+ *
+ * An application may use this from another thread to force
+ * an immediate return to the calling code (caller of rd_kafka_queue_poll()).
+ * Must not be used from signal handlers since that may cause deadlocks.
+ */
+RD_EXPORT
+void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu);
+
+
 /**@}*/
 
 /**

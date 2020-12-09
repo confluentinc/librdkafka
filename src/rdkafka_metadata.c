@@ -238,7 +238,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id = -1;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int broadcast_changes = 0;
+        int broker_changes = 0;
+        int topic_changes = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -503,7 +504,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                                            (void*)strcmp));
                         if (!all_topics) {
                                 rd_kafka_wrlock(rk);
-                                rd_kafka_metadata_cache_topic_update(rk, mdt);
+                                rd_kafka_metadata_cache_topic_update(
+                                        rk, mdt,
+                                        rd_false/*propagate later*/);
+                                topic_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
                 }
@@ -566,7 +570,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                            "ControllerId update %"PRId32" -> %"PRId32,
                            rkb->rkb_rk->rk_controllerid, controller_id);
                 rkb->rkb_rk->rk_controllerid = controller_id;
-                broadcast_changes++;
+                broker_changes++;
         }
 
         if (all_topics) {
@@ -583,6 +587,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                            "%d broker(s) and %d topic(s): %s",
                            md->broker_cnt, md->topic_cnt, reason);
         } else {
+                if (topic_changes)
+                        rd_kafka_metadata_cache_propagate_changes(rk);
                 rd_kafka_metadata_cache_expiry_start(rk);
         }
 
@@ -592,8 +598,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
-        if (broadcast_changes) {
-                /* Broadcast metadata changes to listeners. */
+        if (broker_changes) {
+                /* Broadcast broker metadata changes to listeners. */
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
         }
 
@@ -859,11 +865,19 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
                                                        RD_DONT_LOCK, 0,
                                                        reason))) {
+                        /* Hint cache that something is interested in
+                         * these topics so that they will be included in
+                         * a future all known_topics query. */
+                        rd_kafka_metadata_cache_hint(rk, topics, NULL,
+                                                     RD_KAFKA_RESP_ERR__NOENT,
+                                                     0/*dont replace*/);
+
                         rd_kafka_wrunlock(rk);
                         rd_kafka_dbg(rk, METADATA, "METADATA",
                                      "Skipping metadata refresh of %d topic(s):"
-                                     " no usable brokers",
-                                     rd_list_cnt(topics));
+                                     " %s: no usable brokers",
+                                     rd_list_cnt(topics), reason);
+
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 }
                 destroy_rkb = 1;
@@ -877,7 +891,8 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                  * out any topics that are already being requested.
                  * q_topics will contain remaining topics to query. */
                 rd_kafka_metadata_cache_hint(rk, topics, &q_topics,
-                                             0/*dont replace*/);
+                                             RD_KAFKA_RESP_ERR__WAIT_CACHE,
+                                             rd_false/*dont replace*/);
                 rd_kafka_wrunlock(rk);
 
                 if (rd_list_cnt(&q_topics) == 0) {

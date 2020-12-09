@@ -103,14 +103,24 @@ struct rd_kafka_metadata_cache_entry {
         /* rkmce_partitions memory points here. */
 };
 
-#define RD_KAFKA_METADATA_CACHE_VALID(rkmce) \
-        ((rkmce)->rkmce_mtopic.err != RD_KAFKA_RESP_ERR__WAIT_CACHE)
+
+#define RD_KAFKA_METADATA_CACHE_ERR_IS_TEMPORARY(ERR)                   \
+        ((ERR) == RD_KAFKA_RESP_ERR__WAIT_CACHE ||                      \
+         (ERR) == RD_KAFKA_RESP_ERR__NOENT)
+
+#define RD_KAFKA_METADATA_CACHE_VALID(rkmce)                            \
+        !RD_KAFKA_METADATA_CACHE_ERR_IS_TEMPORARY((rkmce)->rkmce_mtopic.err)
+
+
 
 struct rd_kafka_metadata_cache {
         rd_avl_t         rkmc_avl;
         TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
         rd_kafka_timer_t rkmc_expiry_tmr;
         int              rkmc_cnt;
+
+        /* Protected by rk_lock */
+        rd_list_t        rkmc_observers; /**< (rd_kafka_enq_once_t*) */
 
         /* Protected by full_lock: */
         mtx_t            rkmc_full_lock;
@@ -133,17 +143,21 @@ struct rd_kafka_metadata_cache {
 void rd_kafka_metadata_cache_expiry_start (rd_kafka_t *rk);
 void
 rd_kafka_metadata_cache_topic_update (rd_kafka_t *rk,
-                                      const rd_kafka_metadata_topic_t *mdt);
+                                      const rd_kafka_metadata_topic_t *mdt,
+                                      rd_bool_t propagate);
 void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
                                      const rd_kafka_metadata_t *md,
                                      int abs_update);
+void rd_kafka_metadata_cache_propagate_changes (rd_kafka_t *rk);
 struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_find (rd_kafka_t *rk, const char *topic, int valid);
 void rd_kafka_metadata_cache_purge_hints (rd_kafka_t *rk,
                                           const rd_list_t *topics);
 int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
                                   const rd_list_t *topics, rd_list_t *dst,
-                                  int replace);
+                                  rd_kafka_resp_err_t err,
+                                  rd_bool_t replace);
+
 int rd_kafka_metadata_cache_hint_rktparlist (
         rd_kafka_t *rk,
         const rd_kafka_topic_partition_list_t *rktparlist,
@@ -169,6 +183,13 @@ void rd_kafka_metadata_cache_init (rd_kafka_t *rk);
 void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk);
 int  rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms);
 void rd_kafka_metadata_cache_dump (FILE *fp, rd_kafka_t *rk);
+
+void rd_kafka_metadata_cache_topics_to_list (rd_kafka_t *rk,
+                                             rd_list_t *topics);
+
+void
+rd_kafka_metadata_cache_wait_state_change_async (rd_kafka_t *rk,
+                                                 rd_kafka_enq_once_t *eonce);
 
 /**@}*/
 #endif /* _RDKAFKA_METADATA_H_ */

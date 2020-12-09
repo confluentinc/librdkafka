@@ -84,6 +84,14 @@ void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
 rd_ts_t rd_kafka_timer_next (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
                              int do_lock);
 
+/**
+ * @returns true if timer is started.
+ *
+ * @remark Must only be called in the timer's thread (not thread-safe)
+ */
+rd_bool_t rd_kafka_timer_is_started (rd_kafka_timers_t *rkts,
+                                     const rd_kafka_timer_t *rtmr);
+
 void rd_kafka_timers_interrupt (rd_kafka_timers_t *rkts);
 rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_ms,
 			      int do_lock);

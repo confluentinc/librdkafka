@@ -91,6 +91,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_BROKER_MONITOR] = "REPLY:BROKER_MONITOR",
                 [RD_KAFKA_OP_TXN] = "REPLY:TXN",
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = "REPLY:GET_REBALANCE_PROTOCOL",
+                [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -365,6 +366,14 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_TXN:
                 RD_IF_FREE(rko->rko_u.txn.group_id, rd_free);
                 RD_IF_FREE(rko->rko_u.txn.offsets,
+                           rd_kafka_topic_partition_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_LEADERS:
+                rd_assert(!rko->rko_u.leaders.eonce);
+                rd_assert(!rko->rko_u.leaders.replyq.q);
+                RD_IF_FREE(rko->rko_u.leaders.leaders, rd_list_destroy);
+                RD_IF_FREE(rko->rko_u.leaders.partitions,
                            rd_kafka_topic_partition_list_destroy);
                 break;
 

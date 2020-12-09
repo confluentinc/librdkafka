@@ -119,6 +119,19 @@ int rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
 
 
 /**
+ * @returns true if timer is started, else false.
+ */
+rd_bool_t rd_kafka_timer_is_started (rd_kafka_timers_t *rkts,
+                                     const rd_kafka_timer_t *rtmr) {
+        rd_bool_t ret;
+        rd_kafka_timers_lock(rkts);
+        ret = rtmr->rtmr_interval != 0;
+        rd_kafka_timers_unlock(rkts);
+        return ret;
+}
+
+
+/**
  * @brief Start the provided timer with the given interval.
  *
  * Upon expiration of the interval (us) the callback will be called in the

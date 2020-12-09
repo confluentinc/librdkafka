@@ -1717,7 +1717,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
 /**
  * @brief Populate list \p topics with the topic names (strdupped char *) of
- *        all locally known topics.
+ *        all locally known or cached topics.
  *
  * @remark \p rk lock MUST NOT be held
  */
@@ -1728,6 +1728,7 @@ void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
         rd_list_grow(topics, rk->rk_topic_cnt);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
+        rd_kafka_metadata_cache_topics_to_list(rk, topics);
         rd_kafka_rdunlock(rk);
 }
 
@@ -1754,7 +1755,7 @@ void rd_ut_kafka_topic_set_topic_exists (rd_kafka_topic_t *rkt,
         }
 
         rd_kafka_wrlock(rkt->rkt_rk);
-        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt);
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, rd_true);
         rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
 }

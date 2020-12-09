@@ -665,16 +665,20 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
                                               *rktparlist,
                                               rd_bool_t create_on_miss);
 
-int
-rd_kafka_topic_partition_list_get_leaders (
+
+void
+rd_kafka_topic_partition_list_query_leaders_async (
         rd_kafka_t *rk,
         const rd_kafka_topic_partition_list_t *rktparlist,
-        rd_list_t *leaders, rd_list_t *query_topics);
+        int timeout_ms,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_op_cb_t *cb,
+        void *opaque);
 
 rd_kafka_resp_err_t
 rd_kafka_topic_partition_list_query_leaders (
         rd_kafka_t *rk,
-        const rd_kafka_topic_partition_list_t *rktparlist,
+        rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders, int timeout_ms);
 
 int
@@ -740,6 +744,9 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_get_err (
 
 int rd_kafka_topic_partition_list_regex_cnt (
         const rd_kafka_topic_partition_list_t *rktparlist);
+
+void *
+rd_kafka_topic_partition_list_copy_opaque (const void *src, void *opaque);
 
 /**
  * @brief Toppar + Op version tuple used for mapping Fetched partitions
@@ -817,6 +824,8 @@ rd_kafka_partition_leader_destroy (struct rd_kafka_partition_leader *leader) {
         rd_kafka_topic_partition_list_destroy(leader->partitions);
         rd_free(leader);
 }
+
+void rd_kafka_partition_leader_destroy_free (void *ptr);
 
 static RD_UNUSED struct rd_kafka_partition_leader *
 rd_kafka_partition_leader_new (rd_kafka_broker_t *rkb) {

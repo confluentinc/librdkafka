@@ -132,6 +132,7 @@ typedef enum {
         RD_KAFKA_OP_BROKER_MONITOR,    /**< Broker state change */
         RD_KAFKA_OP_TXN,             /**< Transaction command */
         RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
+        RD_KAFKA_OP_LEADERS,         /**< Partition leader query */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -560,6 +561,48 @@ struct rd_kafka_op_s {
                         /**< Offsets to commit */
                         rd_kafka_topic_partition_list_t *offsets;
                 } txn;
+
+                struct {
+                        /* This struct serves two purposes, the fields
+                         * with "Request:" are used for the async workers state
+                         * while the "Reply:" fields is a separate reply
+                         * rko that is enqueued for the caller upon
+                         * completion or failure. */
+
+                        /** Request: Partitions to query.
+                         *  Reply:   Queried partitions with .err field set. */
+                        rd_kafka_topic_partition_list_t *partitions;
+
+                        /** Request: Absolute timeout */
+                        rd_ts_t ts_timeout;
+
+                        /** Request: Metadata query timer */
+                        rd_kafka_timer_t query_tmr;
+
+                        /** Request: Timeout timer */
+                        rd_kafka_timer_t timeout_tmr;
+
+                        /** Request: Enqueue op only once, used to (re)trigger
+                         *  metadata cache lookups, topic refresh, timeout. */
+                        struct rd_kafka_enq_once_s *eonce;
+
+                        /** Request: Caller's replyq */
+                        rd_kafka_replyq_t replyq;
+
+                        /** Request: Number of metadata queries made. */
+                        int query_cnt;
+
+                        /** Reply: Leaders (result)
+                         * (rd_kafka_partition_leader*) */
+                        rd_list_t *leaders;
+
+                        /** Reply: Callback on completion (or failure) */
+                        rd_kafka_op_cb_t *cb;
+
+                        /** Reply: Callback opaque */
+                        void *opaque;
+
+                } leaders;
 
         } rko_u;
 };

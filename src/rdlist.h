@@ -193,7 +193,7 @@ void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *));
 
 
 /**
- * Empties the list (but does not free any memory)
+ * Empties the list and frees elements (if there is a free_cb).
  */
 void rd_list_clear (rd_list_t *rl);
 

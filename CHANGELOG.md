@@ -23,8 +23,11 @@ and the sticky consumer group partition assignor.
 
 ## Enhancements
 
- * AdminAPI: Added `DeleteGroups()`, `DeleteRecords()`, and
-   `DeleteConsumerGroupOffsets()` (by @gridaphobe).
+ * KIP-107, KIP-204: AdminAPI: Added `DeleteRecords()` (by @gridaphobe).
+ * KIP-229: AdminAPI: Added `DeleteGroups()` (by @gridaphobe).
+ * KIP-496: AdminAPI: Added `DeleteConsumerGroupOffsets()`.
+ * KIP-464: AdminAPI: Added support for broker-side default partition count
+   and replication factor for `CreateTopics()`.
  * Windows: Added `ssl.ca.certificate.stores` to specify a list of
    Windows Certificate Stores to read CA certificates from, e.g.,
    `CA,Root`. `Root` remains the default store.

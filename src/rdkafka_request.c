@@ -3501,7 +3501,7 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-                rkb, RD_KAFKAP_CreateTopics, 0, 2, &features);
+                rkb, RD_KAFKAP_CreateTopics, 0, 4, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
@@ -3519,8 +3519,6 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-
-
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
                                          4 +
                                          (rd_list_cnt(new_topics) * 200) +
@@ -3533,6 +3531,30 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 int partition;
                 int ei = 0;
                 const rd_kafka_ConfigEntry_t *entry;
+
+                if (ApiVersion < 4) {
+                        if (newt->num_partitions == -1) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Default partition count (KIP-464) "
+                                            "not supported by broker, "
+                                            "requires broker version <= 2.4.0");
+                                rd_kafka_replyq_destroy(&replyq);
+                                rd_kafka_buf_destroy(rkbuf);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+
+                        if (newt->replication_factor == -1 &&
+                            rd_list_empty(&newt->replicas)) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Default replication factor "
+                                            "(KIP-464) "
+                                            "not supported by broker, "
+                                            "requires broker version <= 2.4.0");
+                                rd_kafka_replyq_destroy(&replyq);
+                                rd_kafka_buf_destroy(rkbuf);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                }
 
                 /* topic */
                 rd_kafka_buf_write_str(rkbuf, newt->topic, -1);

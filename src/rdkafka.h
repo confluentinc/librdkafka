@@ -6137,10 +6137,12 @@ typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
  *        rd_kafka_CreateTopics().
  *
  * @param topic Topic name to create.
- * @param num_partitions Number of partitions in topic.
+ * @param num_partitions Number of partitions in topic, or -1 to use the
+ *                       broker's default partition count (>= 2.4.0).
  * @param replication_factor Default replication factor for the topic's
- *                           partitions, or -1 if set_replica_assignment()
- *                           will be used.
+ *                           partitions, or -1 to use the broker's default
+ *                           replication factor (>= 2.4.0) or if
+ *                           set_replica_assignment() will be used.
  * @param errstr A human readable error string (nul-terminated) is written to
  *               this location that must be of at least \p errstr_size bytes.
  *               The \p errstr is only written in case of error.

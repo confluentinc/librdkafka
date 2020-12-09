@@ -44,7 +44,7 @@ static void do_test_CreateTopics (const char *what,
                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                   int op_timeout, rd_bool_t validate_only) {
         rd_kafka_queue_t *q;
-#define MY_NEW_TOPICS_CNT 6
+#define MY_NEW_TOPICS_CNT 7
         char *topics[MY_NEW_TOPICS_CNT];
         rd_kafka_NewTopic_t *new_topics[MY_NEW_TOPICS_CNT];
         rd_kafka_AdminOptions_t *options = NULL;
@@ -86,10 +86,12 @@ static void do_test_CreateTopics (const char *what,
          */
         for (i = 0 ; i < MY_NEW_TOPICS_CNT ; i++) {
                 char *topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
-                int num_parts = i * 7 + 1;
+                int use_defaults = i == 6 &&
+                        test_broker_version >= TEST_BRKVER(2,4,0,0);
+                int num_parts = !use_defaults ? (i * 7 + 1) : -1;
                 int set_config = (i & 1);
                 int add_invalid_config = (i == 1);
-                int set_replicas = !(i % 3);
+                int set_replicas = !use_defaults && !(i % 3);
                 rd_kafka_resp_err_t this_exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 topics[i] = topic;
@@ -122,11 +124,12 @@ static void do_test_CreateTopics (const char *what,
                         this_exp_err = RD_KAFKA_RESP_ERR_INVALID_CONFIG;
                 }
 
-                TEST_SAY("Expected result for topic #%d: %s "
+                TEST_SAY("Expecting result for topic #%d: %s "
                          "(set_config=%d, add_invalid_config=%d, "
-                         "set_replicas=%d)\n",
+                         "set_replicas=%d, use_defaults=%d)\n",
                          i, rd_kafka_err2name(this_exp_err),
-                         set_config, add_invalid_config, set_replicas);
+                         set_config, add_invalid_config, set_replicas,
+                         use_defaults);
 
                 if (set_replicas) {
                         int32_t p;

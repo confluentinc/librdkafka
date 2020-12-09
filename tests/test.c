@@ -4979,7 +4979,7 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
                                 fails++;
                         }
 
-                        if (exp_mdt->partition_cnt != 0 &&
+                        if (exp_mdt->partition_cnt > 0 &&
                             mdt->partition_cnt != exp_mdt->partition_cnt) {
                                 TEST_SAY("metadata: "
                                          "Topic %s, expected %d partitions"

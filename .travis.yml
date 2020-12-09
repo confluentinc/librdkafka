@@ -86,6 +86,13 @@ matrix:
     - sudo apt install -y gdb
     - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
     - ./packaging/tools/rdutcoverage.sh
+ - name: "Linux GCC arm64 --disable-gssapi"
+   os: linux
+   arch: arm64
+   compiler: gcc
+   env: LINKAGE=std
+   before_script:
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --disable-lz4-ext --prefix="$PWD/dest"
  - name: "Linux GCC s390x: +devel"
    os: linux
    arch: s390x

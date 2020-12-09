@@ -1864,7 +1864,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-436 - Start time in stats                                            | 2.3.0                       | Supported                                                                                     |   |
 | KIP-455 - AdminAPI: Replica assignment                                   | 2.4.0 (WIP)                 | Not supported                                                                                 |   |
 | KIP-460 - AdminAPI: electPreferredLeader                                 | 2.4.0                       | Not supported                                                                                 |   |
-| KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                       | Not supported                                                                                 |   |
+| KIP-464 - AdminAPI: defaults for createTopics                            | 2.4.0                       | Supported                                                                                     |   |
 | KIP-467 - Per-message (sort of) error codes in ProduceResponse           | 2.4.0 (WIP)                 | Not supported                                                                                 |   |
 | KIP-480 - Sticky partitioner                                             | 2.4.0                       | Not supported                                                                                 |   |
 | KIP-482 - Optional fields in Kafka protocol                              | 2.4.0                       | Partially supported (ApiVersionRequest)                                                       |   |

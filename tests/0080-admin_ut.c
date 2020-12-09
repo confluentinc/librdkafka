@@ -721,6 +721,7 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         struct waiting id6 = {RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT};
         struct waiting id7 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
         struct waiting id8 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
+        struct waiting id9 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
         rd_kafka_topic_partition_list_t *offsets;
 
 
@@ -745,10 +746,12 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         test_DeleteConsumerGroupOffsets_simple(rk, rkqu, "mygroup", offsets,
                                                &id7);
         test_DeleteConsumerGroupOffsets_simple(rk, rkqu, NULL, NULL, &id8);
+        /* Use broker-side defaults for partition count */
+        test_CreateTopics_simple(rk, rkqu, topics, 2, -1, &id9);
 
         rd_kafka_topic_partition_list_destroy(offsets);
 
-        while (cnt < 8) {
+        while (cnt < 9) {
                 rd_kafka_event_t *rkev;
                 struct waiting *w;
 

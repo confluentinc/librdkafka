@@ -1423,9 +1423,9 @@ rd_kafka_NewTopic_new (const char *topic,
                 return NULL;
         }
 
-        if (num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX) {
+        if (num_partitions < -1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX) {
                 rd_snprintf(errstr, errstr_size, "num_partitions out of "
-                            "expected range %d..%d",
+                            "expected range %d..%d or -1 for broker default",
                             1, RD_KAFKAP_PARTITIONS_MAX);
                 return NULL;
         }
@@ -1446,7 +1446,8 @@ rd_kafka_NewTopic_new (const char *topic,
         /* List of int32 lists */
         rd_list_init(&new_topic->replicas, 0, rd_list_destroy_free);
         rd_list_prealloc_elems(&new_topic->replicas, 0,
-                               num_partitions, 0/*nozero*/);
+                               num_partitions == -1 ? 0 : num_partitions,
+                               0/*nozero*/);
 
         /* List of ConfigEntrys */
         rd_list_init(&new_topic->config, 0, rd_kafka_ConfigEntry_free);
@@ -1522,6 +1523,11 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
                 rd_snprintf(errstr, errstr_size,
                             "Specifying a replication factor and "
                             "a replica assignment are mutually exclusive");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        } else if (new_topic->num_partitions == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Specifying a default partition count and a "
+                            "replica assignment are mutually exclusive");
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 

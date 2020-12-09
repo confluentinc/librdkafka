@@ -6951,14 +6951,6 @@ rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
  * will acquire the internal producer id and epoch, used in all future
  * transactional messages issued by this producer instance.
  *
- * Upon successful return from this function the application has to perform at
- * least one of the following operations within \c transaction.timeout.ms to
- * avoid timing out the transaction on the broker:
- *   * rd_kafka_produce() (et.al)
- *   * rd_kafka_send_offsets_to_transaction()
- *   * rd_kafka_commit_transaction()
- *   * rd_kafka_abort_transaction()
- *
  * @param rk Producer instance.
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
@@ -7006,6 +6998,14 @@ rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms);
  *
  * rd_kafka_init_transactions() must have been called successfully (once)
  * before this function is called.
+ *
+ * Upon successful return from this function the application has to perform at
+ * least one of the following operations within \c transaction.timeout.ms to
+ * avoid timing out the transaction on the broker:
+ *   * rd_kafka_produce() (et.al)
+ *   * rd_kafka_send_offsets_to_transaction()
+ *   * rd_kafka_commit_transaction()
+ *   * rd_kafka_abort_transaction()
  *
  * Any messages produced, offsets sent (rd_kafka_send_offsets_to_transaction()),
  * etc, after the successful return of this function will be part of

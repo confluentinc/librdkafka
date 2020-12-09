@@ -42,7 +42,7 @@ rd_atomic32_t rd_kafka_op_cnt;
 
 const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
         int skiplen = 6;
-        static const char *names[] = {
+        static const char *names[RD_KAFKA_OP__END] = {
                 [RD_KAFKA_OP_NONE] = "REPLY:NONE",
                 [RD_KAFKA_OP_FETCH] = "REPLY:FETCH",
                 [RD_KAFKA_OP_ERR] = "REPLY:ERR",
@@ -92,13 +92,16 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_MOCK] = "REPLY:MOCK",
                 [RD_KAFKA_OP_BROKER_MONITOR] = "REPLY:BROKER_MONITOR",
                 [RD_KAFKA_OP_TXN] = "REPLY:TXN",
-                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = "REPLY:GET_REBALANCE_PROTOCOL",
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
+                "REPLY:GET_REBALANCE_PROTOCOL",
                 [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
                 skiplen = 0;
 
+        rd_assert((names[type & ~RD_KAFKA_OP_FLAGMASK] != NULL) ||
+                  !*"add OP type to rd_kafka_op2str()");
         return names[type & ~RD_KAFKA_OP_FLAGMASK]+skiplen;
 }
 
@@ -174,7 +177,11 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 
 
 rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
-	rd_kafka_op_t *rko;
+        rd_kafka_op_t *rko;
+#define _RD_KAFKA_OP_EMPTY  1234567 /* Special value to be able to assert
+                                     * on default-initialized (0) sizes
+                                     * if we forgot to add an op type to
+                                     * this list. */
         static const size_t op2size[RD_KAFKA_OP__END] = {
                 [RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
                 [RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
@@ -187,15 +194,15 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
                 [RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
                 [RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
-                [RD_KAFKA_OP_FETCH_STOP] = 0,
+                [RD_KAFKA_OP_FETCH_STOP] = _RD_KAFKA_OP_EMPTY,
                 [RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
                 [RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
                 [RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
-                [RD_KAFKA_OP_PARTITION_JOIN] = 0,
-                [RD_KAFKA_OP_PARTITION_LEAVE] = 0,
+                [RD_KAFKA_OP_PARTITION_JOIN] = _RD_KAFKA_OP_EMPTY,
+                [RD_KAFKA_OP_PARTITION_LEAVE] = _RD_KAFKA_OP_EMPTY,
                 [RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
-                [RD_KAFKA_OP_TERMINATE] = 0,
-                [RD_KAFKA_OP_COORD_QUERY] = 0,
+                [RD_KAFKA_OP_TERMINATE] = _RD_KAFKA_OP_EMPTY,
+                [RD_KAFKA_OP_COORD_QUERY] = _RD_KAFKA_OP_EMPTY,
                 [RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
                 [RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
                 [RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
@@ -206,12 +213,14 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
                 [RD_KAFKA_OP_METADATA] = sizeof(rko->rko_u.metadata),
                 [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log),
-                [RD_KAFKA_OP_WAKEUP] = 0,
+                [RD_KAFKA_OP_WAKEUP] = _RD_KAFKA_OP_EMPTY,
                 [RD_KAFKA_OP_CREATETOPICS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETETOPICS] = sizeof(rko->rko_u.admin_request),
-                [RD_KAFKA_OP_CREATEPARTITIONS] = sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_CREATEPARTITIONS] =
+                sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ALTERCONFIGS] = sizeof(rko->rko_u.admin_request),
-                [RD_KAFKA_OP_DESCRIBECONFIGS] = sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_DESCRIBECONFIGS] =
+                sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETERECORDS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
@@ -219,14 +228,21 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_ADMIN_FANOUT] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
                 [RD_KAFKA_OP_PURGE] = sizeof(rko->rko_u.purge),
-                [RD_KAFKA_OP_CONNECT] = 0,
-                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = 0,
+                [RD_KAFKA_OP_CONNECT] = _RD_KAFKA_OP_EMPTY,
+                [RD_KAFKA_OP_OAUTHBEARER_REFRESH] = _RD_KAFKA_OP_EMPTY,
                 [RD_KAFKA_OP_MOCK] = sizeof(rko->rko_u.mock),
-                [RD_KAFKA_OP_BROKER_MONITOR] = sizeof(rko->rko_u.broker_monitor),
+                [RD_KAFKA_OP_BROKER_MONITOR] =
+                sizeof(rko->rko_u.broker_monitor),
                 [RD_KAFKA_OP_TXN] = sizeof(rko->rko_u.txn),
-                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] = sizeof(rko->rko_u.rebalance_protocol),
-	};
-	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
+                [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
+                sizeof(rko->rko_u.rebalance_protocol),
+                [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
+        };
+        size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
+
+        rd_assert(tsize > 0 || !*"add OP type to rd_kafka_op_new0()");
+        if (tsize == _RD_KAFKA_OP_EMPTY)
+                tsize = 0;
 
 	rko = rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
 	rko->rko_type = type;
@@ -240,6 +256,17 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
+
+        /* Call ops callback with ERR__DESTROY to let it
+         * clean up its resources. */
+        if ((rko->rko_type & RD_KAFKA_OP_CB) && rko->rko_op_cb) {
+                rd_kafka_op_res_t res;
+                rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
+                res = rko->rko_op_cb(rko->rko_rk, NULL, rko);
+                rd_assert(res != RD_KAFKA_OP_RES_YIELD);
+                rd_assert(res != RD_KAFKA_OP_RES_KEEP);
+        }
+
 
 	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
 	{
@@ -385,15 +412,6 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	default:
 		break;
 	}
-
-        if (rko->rko_type & RD_KAFKA_OP_CB && rko->rko_op_cb) {
-                rd_kafka_op_res_t res;
-                /* Let callback clean up */
-                rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
-                res = rko->rko_op_cb(rko->rko_rk, NULL, rko);
-                rd_assert(res != RD_KAFKA_OP_RES_YIELD);
-                rd_assert(res != RD_KAFKA_OP_RES_KEEP);
-        }
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
 

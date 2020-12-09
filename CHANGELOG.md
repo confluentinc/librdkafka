@@ -12,6 +12,8 @@ librdkafka v1.6.0 is feature release:
  * [KIP-447 Producer scalability for exactly once semantics](https://cwiki.apache.org/confluence/display/KAFKA/KIP-447%3A+Producer+scalability+for+exactly+once+semantics) -
    allows a single transactional producer to be used for multiple input
    partitions. Requires Apache Kafka 2.5 or later.
+ * The [librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/)
+   NuGet package now supports Linux ARM64/Aarch64.
 
 
 ## Upgrade considerations

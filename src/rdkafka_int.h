@@ -216,6 +216,9 @@ struct rd_kafka_s {
 	rd_kafka_q_t *rk_rep;   /* kafka -> application reply queue */
 	rd_kafka_q_t *rk_ops;   /* any -> rdkafka main thread ops */
 
+        int rk_dogstatsd_sockfd; /* TODO: put it in a better place */
+        rd_sockaddr_inx_t rk_dogstatsd_addr; /* TODO: better place */
+
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t                  rk_broker_by_id; /* Fast id lookups. */
 	rd_atomic32_t              rk_broker_cnt;

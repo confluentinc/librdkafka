@@ -5368,6 +5368,35 @@ typedef rd_kafka_resp_err_t
                                     void *ic_opaque);
 
 /**
+ * @brief on_send() is called from rd_kafka_produce*() (et.al) prior to
+ *        the partitioner being called.
+ *
+ * @param rk The client instance.
+ * @param socket The socket used to send the message
+ * @param addr The address to send the message to
+ * @param message The message sent
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark This interceptor is only used by producer instances.
+ *
+ * @remark The \p rkmessage object is NOT mutable and MUST NOT be modified
+ *         by the interceptor.
+ *
+ * @remark If the partitioner fails or an unknown partition was specified,
+ *         the on_acknowledgement() interceptor chain will be called from
+ *         within the rd_kafka_produce*() call to maintain send-acknowledgement
+ *         symmetry.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_sendto_t) (rd_kafka_t *rk,
+                                      int socket,
+                                      struct sockaddr *addr,
+                                      const char *message,
+                                      void *ic_opaque);
+
+/**
  * @brief on_acknowledgement() is called to inform interceptors that a message
  *        was succesfully delivered or permanently failed delivery.
  *        The interceptor chain is called from internal librdkafka background
@@ -5651,6 +5680,26 @@ rd_kafka_interceptor_add_on_send (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_send_t *on_send,
         void *ic_opaque);
+
+
+/**
+ * @brief Append an on_send() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_send Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_sendto (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_sendto_t *on_sendto,
+        void *ic_opaque);
+
 
 /**
  * @brief Append an on_acknowledgement() interceptor.
@@ -7229,6 +7278,13 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms);
 
 
 /**@}*/
+
+/* TODO: should it be here? */
+typedef struct rd_kafka_dogstatsd_metric_s {
+        char *name;
+        char type;
+        int64_t value;
+} rd_kafka_dogstatsd_metric_t;
 
 /* @cond NO_DOC */
 #ifdef __cplusplus

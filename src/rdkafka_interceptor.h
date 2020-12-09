@@ -46,6 +46,9 @@ rd_kafka_interceptors_on_destroy (rd_kafka_t *rk);
 void
 rd_kafka_interceptors_on_send (rd_kafka_t *rk, rd_kafka_message_t *rkmessage);
 void
+rd_kafka_interceptors_on_sendto (rd_kafka_t *rk, int socket,
+                                 struct sockaddr *addr, const char *message);
+void
 rd_kafka_interceptors_on_acknowledgement (rd_kafka_t *rk,
                                           rd_kafka_message_t *rkmessage);
 void

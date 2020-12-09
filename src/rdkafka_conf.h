@@ -156,7 +156,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*27)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*28) // TODO
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -206,6 +206,7 @@ struct rd_kafka_conf_s {
         int     socket_max_fails;
 	char   *client_id_str;
 	char   *brokerlist;
+        char   *dogstatsd_endpoint;
 	int     stats_interval_ms;
 	int     term_sig;
         int     reconnect_backoff_ms;
@@ -296,6 +297,7 @@ struct rd_kafka_conf_s {
                 rd_list_t on_new;             /* .. (copied) */
                 rd_list_t on_destroy;         /* .. (copied) */
                 rd_list_t on_send;            /* .. (copied) */
+                rd_list_t on_sendto;
                 rd_list_t on_acknowledgement; /* .. (copied) */
                 rd_list_t on_consume;         /* .. (copied) */
                 rd_list_t on_commit;          /* .. (copied) */

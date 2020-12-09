@@ -283,6 +283,14 @@ void *rd_list_first (const rd_list_t *rl);
 void *rd_list_last (const rd_list_t *rl);
 
 
+/**
+ * @returns the first duplicate in the list or NULL if no duplicates.
+ *
+ * @warning The list MUST be sorted.
+ */
+void *rd_list_find_duplicate (const rd_list_t *rl,
+                              int (*cmp) (const void *, const void *));
+
 
 /**
  * @brief Compare list \p a to \p b.

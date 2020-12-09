@@ -109,11 +109,17 @@ rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres) {
         return groupres->group;
 }
 
+const rd_kafka_topic_partition_list_t *
+rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres) {
+        return groupres->partitions;
+}
+
 rd_kafka_group_result_t *
 rd_kafka_group_result_copy (const rd_kafka_group_result_t *groupres) {
         return rd_kafka_group_result_new(groupres->group,
                                          -1,
-                                         groupres->error ? 
+                                         groupres->partitions,
+                                         groupres->error ?
                                          rd_kafka_error_copy(groupres->error) :
                                          NULL);
 }
@@ -142,6 +148,7 @@ rd_kafka_group_result_copy_opaque (const void *src_groupres,
 
 rd_kafka_group_result_t *
 rd_kafka_group_result_new (const char *group, ssize_t group_size,
+                           const rd_kafka_topic_partition_list_t *partitions,
                            rd_kafka_error_t *error) {
         size_t glen = group_size != -1 ? (size_t)group_size : strlen(group);
         rd_kafka_group_result_t *groupres;
@@ -153,6 +160,10 @@ rd_kafka_group_result_new (const char *group, ssize_t group_size,
         memcpy(groupres->group, group, glen);
         groupres->group[glen] = '\0';
 
+        if (partitions)
+                groupres->partitions = rd_kafka_topic_partition_list_copy(
+                        partitions);
+
         groupres->error = error;
 
         return groupres;
@@ -163,9 +174,10 @@ rd_kafka_group_result_new (const char *group, ssize_t group_size,
  * @brief Destroy group_result
  */
 void rd_kafka_group_result_destroy (rd_kafka_group_result_t *groupres) {
-        if (groupres->error) {
+        if (groupres->partitions)
+                rd_kafka_topic_partition_list_destroy(groupres->partitions);
+        if (groupres->error)
                 rd_kafka_error_destroy(groupres->error);
-        }
         rd_free(groupres);
 }
 

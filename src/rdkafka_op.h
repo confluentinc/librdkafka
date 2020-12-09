@@ -123,6 +123,9 @@ typedef enum {
         RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
                                       *   u.admin_request*/
         RD_KAFKA_OP_DELETEGROUPS,    /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
+                                                 *   DeleteConsumerGroupOffsets
+                                                 *   u.admin_request */
         RD_KAFKA_OP_ADMIN_FANOUT,    /**< Admin: fanout request */
         RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
         RD_KAFKA_OP_PURGE,           /**< Purge queues */

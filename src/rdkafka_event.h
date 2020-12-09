@@ -97,6 +97,7 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
         case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
         case RD_KAFKA_EVENT_DELETEGROUPS_RESULT:
+        case RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT:
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
 		return 1;
 

@@ -280,4 +280,26 @@ struct rd_kafka_DeleteGroup_s {
 
 /**@}*/
 
+
+/**
+ * @name DeleteConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief DeleteConsumerGroupOffsets result
+ */
+struct rd_kafka_DeleteConsumerGroupOffsets_result_s {
+        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_DeleteConsumerGroupOffsets_s {
+        char *group;   /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

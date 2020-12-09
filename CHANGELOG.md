@@ -23,6 +23,8 @@ and the sticky consumer group partition assignor.
 
 ## Enhancements
 
+ * AdminAPI: Added `DeleteGroups()`, `DeleteRecords()`, and
+   `DeleteConsumerGroupOffsets()` (by @gridaphobe).
  * Windows: Added `ssl.ca.certificate.stores` to specify a list of
    Windows Certificate Stores to read CA certificates from, e.g.,
    `CA,Root`. `Root` remains the default store.

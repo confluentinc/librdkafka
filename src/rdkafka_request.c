@@ -1263,6 +1263,70 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @brief Construct and send OffsetDeleteRequest to \p rkb
+ *        with the partitions in del_grpoffsets (DeleteConsumerGroupOffsets_t*)
+ *        using \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @remark Only one del_grpoffsets element is supported.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_OffsetDeleteRequest (rd_kafka_broker_t *rkb,
+                              /** (rd_kafka_DeleteConsumerGroupOffsets_t*) */
+                              const rd_list_t *del_grpoffsets,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        const rd_kafka_DeleteConsumerGroupOffsets_t *grpoffsets =
+                rd_list_elem(del_grpoffsets, 0);
+
+        rd_assert(rd_list_cnt(del_grpoffsets) == 1);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_OffsetDelete, 0, 0, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "OffsetDelete API (KIP-496) not supported "
+                            "by broker, requires broker version >= 2.4.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_OffsetDelete, 1,
+                                         2 + strlen(grpoffsets->group) +
+                                         (64 * grpoffsets->partitions->cnt));
+
+        /* GroupId */
+        rd_kafka_buf_write_str(rkbuf, grpoffsets->group, -1);
+
+        rd_kafka_buf_write_topic_partitions(
+                rkbuf,
+                grpoffsets->partitions,
+                rd_false/*dont skip invalid offsets*/,
+                rd_false/*dont write offsets*/,
+                rd_false/*dont write epoch*/,
+                rd_false/*dont write metadata*/);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 
 /**
  * @brief Write "consumer" protocol type MemberState for SyncGroupRequest to

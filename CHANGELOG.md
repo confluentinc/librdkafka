@@ -79,6 +79,8 @@ librdkafka v1.5.3 is a maintenance release.
 ### General fixes
 
  * Fix a use-after-free crash when certain coordinator requests were retried.
+ * Coordinator requests could be left uncollected on instance destroy which
+   could lead to hang.
  * Fix rare 1 second stalls by forcing rdkafka main thread wakeup when a new
    next-timer-to-be-fired is scheduled.
 

@@ -925,8 +925,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_metadata_cache_destroy(rk);
-
         /* Terminate SASL provider */
         if (rk->rk_conf.sasl.provider)
                 rd_kafka_sasl_term(rk);
@@ -1144,9 +1142,6 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
 
-        /* Destroy the coordinator cache */
-        rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
-
         /* Trigger any state-change waiters (which should check the
          * terminate flag whenever they wake up). */
         rd_kafka_brokers_broadcast_state_change(rk);
@@ -1216,6 +1211,15 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_free(rk->rk_clusterid);
                 rk->rk_clusterid = NULL;
         }
+
+        /* Destroy coord requests */
+        rd_kafka_coord_reqs_term(rk);
+
+        /* Destroy the coordinator cache */
+        rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
+
+        /* Destroy metadata cache */
+        rd_kafka_metadata_cache_destroy(rk);
 
         rd_kafka_wrunlock(rk);
 

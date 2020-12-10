@@ -305,8 +305,19 @@ rd_kafka_sasl_cyrus_cb_getopt (void *context, const char *plugin_name,
         return SASL_OK;
 }
 
-static int rd_kafka_sasl_cyrus_cb_log (void *context, int level, const char *message){
+static int rd_kafka_sasl_cyrus_cb_log (void *context, int level,
+                                       const char *message) {
         rd_kafka_transport_t *rktrans = context;
+
+        /* Provide a more helpful error message in case Kerberos
+         * plugins are missing. */
+        if (strstr(message, "No worthy mechs found") &&
+            strstr(rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.mechanisms,
+                   "GSSAPI"))
+                message =
+                        "Cyrus/libsasl2 is missing a GSSAPI module: "
+                        "make sure the libsasl2-modules-gssapi-mit or "
+                        "cyrus-sasl-gssapi packages are installed";
 
         if (level >= LOG_DEBUG)
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
@@ -314,6 +325,7 @@ static int rd_kafka_sasl_cyrus_cb_log (void *context, int level, const char *mes
         else
                 rd_rkb_log(rktrans->rktrans_rkb, level, "LIBSASL",
                            "%s", message);
+
         return SASL_OK;
 }
 

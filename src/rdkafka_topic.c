@@ -266,6 +266,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_topic_t *rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
         const char *conf_err;
+        const char *used_conf_str;
 
 	/* Verify configuration.
 	 * Maximum topic name size + headers must never exceed message.max.bytes
@@ -292,10 +293,15 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         }
 
         if (!conf) {
-                if (rk->rk_conf.topic_conf)
+                if (rk->rk_conf.topic_conf) {
                         conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-                else
+                        used_conf_str = "default_topic_conf";
+                } else {
                         conf = rd_kafka_topic_conf_new();
+                        used_conf_str = "empty";
+                }
+        } else {
+                used_conf_str = "user-supplied";
         }
 
 
@@ -473,6 +479,14 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 
         if (do_lock)
                 rd_kafka_wrunlock(rk);
+
+        if (rk->rk_conf.debug & RD_KAFKA_DBG_CONF) {
+                char desc[256];
+                rd_snprintf(desc, sizeof(desc),
+                            "Topic \"%s\" configuration (%s)",
+                            topic, used_conf_str);
+                rd_kafka_anyconf_dump_dbg(rk, _RK_TOPIC, &rkt->rkt_conf, desc);
+        }
 
 	return rkt;
 }

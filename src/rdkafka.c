@@ -2460,6 +2460,18 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         /* Log warnings for deprecated configuration */
         rd_kafka_conf_warn(rk);
 
+        /* Debug dump configuration */
+        if (rk->rk_conf.debug & RD_KAFKA_DBG_CONF) {
+                rd_kafka_anyconf_dump_dbg(rk, _RK_GLOBAL,
+                                       &rk->rk_conf,
+                                       "Client configuration");
+                if (rk->rk_conf.topic_conf)
+                        rd_kafka_anyconf_dump_dbg(
+                                rk, _RK_TOPIC,
+                                rk->rk_conf.topic_conf,
+                                "Default topic configuration");
+        }
+
         /* Free user supplied conf's base pointer on success,
          * but not the actual allocated fields since the struct
          * will have been copied in its entirety above. */

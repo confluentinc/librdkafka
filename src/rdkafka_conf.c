@@ -458,6 +458,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_DBG_EOS,      "eos" },
                         { RD_KAFKA_DBG_MOCK,     "mock" },
                         { RD_KAFKA_DBG_ASSIGNOR, "assignor" },
+                        { RD_KAFKA_DBG_CONF,     "conf" },
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -724,7 +725,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`SSL_CTX_set1_sigalgs_list(3)`. OpenSSL >= 1.0.2 required.",
           _UNSUPPORTED_OPENSSL_1_0_2
         },
-        { _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.key.location", _RK_C_STR,
           _RK(ssl.key_location),
           "Path to client's private key (PEM) used for authentication.",
           _UNSUPPORTED_SSL
@@ -740,7 +741,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Client's private key string (PEM format) used for authentication.",
           _UNSUPPORTED_SSL
         },
-        { _RK_GLOBAL, "ssl_key", _RK_C_INTERNAL,
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl_key", _RK_C_INTERNAL,
           _RK(ssl.key),
           "Client's private key as set by rd_kafka_conf_set_ssl_cert()",
           .dtor = rd_kafka_conf_cert_dtor,
@@ -911,13 +912,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           0, 86400*1000, 60*1000,
           _UNSUPPORTED_WIN32_GSSAPI
         },
-	{ _RK_GLOBAL|_RK_HIGH, "sasl.username", _RK_C_STR,
-	  _RK(sasl.username),
-	  "SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms" },
-	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
-	  _RK(sasl.password),
-	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
-        { _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
+        { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.username", _RK_C_STR,
+          _RK(sasl.username),
+          "SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms" },
+        { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.password", _RK_C_STR,
+          _RK(sasl.password),
+          "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+        { _RK_GLOBAL|_RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
           _RK(sasl.oauthbearer_config),
           "SASL/OAUTHBEARER configuration. The format is "
           "implementation-dependent and must be parsed accordingly. The "
@@ -959,8 +960,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "plugin.library.paths", _RK_C_STR,
           _RK(plugin_paths),
           "List of plugin libraries to load (; separated). "
-          "The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows). If no filename extension is specified the "
-          "platform-specific extension (such as .dll or .so) will be appended automatically.",
+          "The library search path is platform dependent (see dlopen(3) for "
+          "Unix and LoadLibrary() for Windows). If no filename extension is "
+          "specified the platform-specific extension (such as .dll or .so) "
+          "will be appended automatically.",
 #if WITH_PLUGINS
           .set = rd_kafka_plugins_conf_set
 #else
@@ -2345,6 +2348,13 @@ rd_kafka_anyconf_prop_desensitize (int scope, void *conf,
                 break;
         }
 
+        case _RK_C_INTERNAL:
+                /* This is typically a pointer to something, the
+                 * _RK_SENSITIVE flag is set to get it redacted in
+                 * ..dump_dbg(), but we don't have to desensitize
+                 * anything here. */
+                break;
+
         default:
                 rd_assert(!*"BUG: Don't know how to desensitize prop type");
                 break;
@@ -3068,7 +3078,9 @@ rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
 
 
 static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
-					   size_t *cntp) {
+                                           size_t *cntp,
+                                           rd_bool_t only_modified,
+                                           rd_bool_t redact_sensitive) {
 	const struct rd_kafka_property *prop;
 	char **arr;
 	int cnt = 0;
@@ -3082,19 +3094,27 @@ static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
 		if (!(prop->scope & scope))
 			continue;
 
+                if (only_modified && !rd_kafka_anyconf_is_modified(conf, prop))
+                        continue;
+
 		/* Skip aliases, show original property instead.
                  * Skip invalids. */
 		if (prop->type == _RK_C_ALIAS || prop->type == _RK_C_INVALID)
 			continue;
 
-                /* Query value size */
-                if (rd_kafka_anyconf_get0(conf, prop, NULL, &val_size) !=
-                    RD_KAFKA_CONF_OK)
-                        continue;
+                if (redact_sensitive && (prop->scope & _RK_SENSITIVE)) {
+                        val = rd_strdup("[redacted]");
+                } else {
+                        /* Query value size */
+                        if (rd_kafka_anyconf_get0(conf, prop, NULL,
+                                                  &val_size) !=
+                            RD_KAFKA_CONF_OK)
+                                continue;
 
-                /* Get value */
-                val = malloc(val_size);
-                rd_kafka_anyconf_get0(conf, prop, val, &val_size);
+                        /* Get value */
+                        val = rd_malloc(val_size);
+                        rd_kafka_anyconf_get0(conf, prop, val, &val_size);
+                }
 
                 arr[cnt++] = rd_strdup(prop->name);
                 arr[cnt++] = val;
@@ -3107,12 +3127,16 @@ static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
 
 
 const char **rd_kafka_conf_dump (rd_kafka_conf_t *conf, size_t *cntp) {
-	return rd_kafka_anyconf_dump(_RK_GLOBAL, conf, cntp);
+	return rd_kafka_anyconf_dump(_RK_GLOBAL, conf, cntp,
+                                     rd_false/*all*/,
+                                     rd_false/*don't redact*/);
 }
 
 const char **rd_kafka_topic_conf_dump (rd_kafka_topic_conf_t *conf,
 				       size_t *cntp) {
-	return rd_kafka_anyconf_dump(_RK_TOPIC, conf, cntp);
+	return rd_kafka_anyconf_dump(_RK_TOPIC, conf, cntp,
+                                     rd_false/*all*/,
+                                     rd_false/*don't redact*/);
 }
 
 void rd_kafka_conf_dump_free (const char **arr, size_t cnt) {
@@ -3124,6 +3148,28 @@ void rd_kafka_conf_dump_free (const char **arr, size_t cnt) {
 			rd_free(_arr[i]);
 
 	rd_free(_arr);
+}
+
+
+
+/**
+ * @brief Dump configured properties to debug log.
+ */
+void rd_kafka_anyconf_dump_dbg (rd_kafka_t *rk, int scope, const void *conf,
+                                const char *description) {
+        const char **arr;
+        size_t cnt;
+        size_t i;
+
+        arr = rd_kafka_anyconf_dump(scope, conf, &cnt,
+                                    rd_true/*modified only*/,
+                                    rd_true/*redact sensitive*/);
+        if (cnt > 0)
+                rd_kafka_dbg(rk, CONF, "CONF", "%s:", description);
+        for (i = 0 ; i < cnt ; i += 2)
+                rd_kafka_dbg(rk, CONF, "CONF", "  %s = %s", arr[i], arr[i+1]);
+
+        rd_kafka_conf_dump_free(arr, cnt);
 }
 
 void rd_kafka_conf_properties_show (FILE *fp) {

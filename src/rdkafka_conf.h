@@ -573,6 +573,8 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 int rd_kafka_conf_warn (rd_kafka_t *rk);
 
+void rd_kafka_anyconf_dump_dbg (rd_kafka_t *rk, int scope, const void *conf,
+                                const char *description);
 
 #include "rdkafka_confval.h"
 

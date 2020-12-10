@@ -88,6 +88,8 @@ librdkafka v1.5.3 is a maintenance release.
    could lead to hang.
  * Fix rare 1 second stalls by forcing rdkafka main thread wakeup when a new
    next-timer-to-be-fired is scheduled.
+ * Fix additional cases where broker-side automatic topic creation might be
+   triggered unexpectedly.
 
 
 ### Consumer fixes

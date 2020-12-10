@@ -744,11 +744,14 @@ int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
  *
  * Element type is (char *topic_name).
  *
+ * @returns the number of elements added to \p topics
+ *
  * @locks_required rd_kafka_*lock()
  */
-void rd_kafka_metadata_cache_topics_to_list (rd_kafka_t *rk,
+int rd_kafka_metadata_cache_topics_to_list (rd_kafka_t *rk,
                                              rd_list_t *topics) {
         const struct rd_kafka_metadata_cache_entry *rkmce;
+        int precnt = rd_list_cnt(topics);
 
         TAILQ_FOREACH(rkmce, &rk->rk_metadata_cache.rkmc_expiry, rkmce_link) {
                 /* Ignore topics that have up to date metadata info */
@@ -761,6 +764,8 @@ void rd_kafka_metadata_cache_topics_to_list (rd_kafka_t *rk,
 
                 rd_list_add(topics, rd_strdup(rkmce->rkmce_mtopic.topic));
         }
+
+        return rd_list_cnt(topics) - precnt;
 }
 
 

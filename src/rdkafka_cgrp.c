@@ -1793,6 +1793,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 rd_kafka_MetadataRequest(
                         rkb, &topics,
                         "partition assignor",
+                        rd_false/*!allow_auto_create*/,
                         /* cgrp_update=false:
                          * Since the subscription list may not be identical
                          * across all members of the group and thus the
@@ -2002,6 +2003,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
         err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
+                                        rd_false/*!allow auto create */,
                                         rd_true/*cgrp_update*/,
                                         reason, rko);
         if (err) {

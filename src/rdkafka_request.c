@@ -1888,6 +1888,9 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
  *  topics.cnt >0   - only specified topics are requested
  *
  * @param reason    - metadata request reason
+ * @param allow_auto_create_topics - allow broker-side auto topic creation.
+ *                                   This is best-effort, depending on broker
+ *                                   config and version.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
@@ -1902,6 +1905,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                           const rd_list_t *topics, const char *reason,
+                          rd_bool_t allow_auto_create_topics,
                           rd_bool_t cgrp_update,
                           rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
@@ -1996,12 +2000,9 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
         }
 
         if (ApiVersion >= 4) {
-                /* AllowAutoTopicCreation (only used by consumer) */
-                rd_kafka_buf_write_bool(
-                        rkbuf,
-                        rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER ?
-                        rkb->rkb_rk->rk_conf.allow_auto_create_topics :
-                        rd_true /*producer*/);
+                /* AllowAutoTopicCreation */
+                rd_kafka_buf_write_bool(rkbuf, allow_auto_create_topics);
+
         } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER &&
                    !rkb->rkb_rk->rk_conf.allow_auto_create_topics &&
                    rd_kafka_conf_is_modified(&rkb->rkb_rk->rk_conf,

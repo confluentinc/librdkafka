@@ -1553,11 +1553,13 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
         rd_kafka_rdunlock(rk);
 
         if (!rd_list_empty(&query_topics))
-                rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
-                                                 rd_true/*force even if cached
-                                                          * info exists*/,
-                                                 rd_false/*!cgrp_update*/,
-                                                 "refresh unavailable topics");
+                rd_kafka_metadata_refresh_topics(
+                        rk, NULL, &query_topics,
+                        rd_true/*force even if cached
+                                * info exists*/,
+                        rk->rk_conf.allow_auto_create_topics,
+                        rd_false/*!cgrp_update*/,
+                        "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 }
 
@@ -1707,6 +1709,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
         rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
                                          rd_false/*dont force*/,
+                                         rk->rk_conf.allow_auto_create_topics,
                                          rd_false/*!cgrp_update*/,
                                          "leader query");
 
@@ -1719,16 +1722,23 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  * @brief Populate list \p topics with the topic names (strdupped char *) of
  *        all locally known or cached topics.
  *
+ * @param cache_cntp is an optional pointer to an int that will be set to the
+ *                   number of entries added to \p topics from the
+ *                   metadata cache.
  * @remark \p rk lock MUST NOT be held
  */
-void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
+void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics,
+                                    int *cache_cntp) {
         rd_kafka_topic_t *rkt;
+        int cache_cnt;
 
         rd_kafka_rdlock(rk);
         rd_list_grow(topics, rk->rk_topic_cnt);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
-        rd_kafka_metadata_cache_topics_to_list(rk, topics);
+        cache_cnt = rd_kafka_metadata_cache_topics_to_list(rk, topics);
+        if (cache_cntp)
+                *cache_cntp = cache_cnt;
         rd_kafka_rdunlock(rk);
 }
 

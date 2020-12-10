@@ -3793,6 +3793,15 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                         RD_MAX(11, RD_MIN(conf->reconnect_backoff_ms/2, 1000));
         }
 
+        if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {
+                /* Consumer: Do not allow auto create by default.
+                 * Producer: Allow auto create by default. */
+                if (cltype == RD_KAFKA_CONSUMER)
+                        conf->allow_auto_create_topics = rd_false;
+                else if (cltype == RD_KAFKA_PRODUCER)
+                        conf->allow_auto_create_topics = rd_true;
+        }
+
         /* Finalize and verify the default.topic.config */
         if (conf->topic_conf) {
 

@@ -39,6 +39,32 @@ and the sticky consumer group partition assignor.
 
 ## Fixes
 
+### General fixes
+
+ * Fix a use-after-free crash when certain coordinator requests were retried.
+
+### Consumer fixes
+
+ * The consumer assignment and consumer group implementations have been
+   decoupled, simplified and made more strict and robust. This will sort out
+   a number of edge cases for the consumer where the behaviour was previously
+   undefined.
+ * Partition fetch state was not set to STOPPED if OffsetCommit failed.
+
+### Producer fixes
+
+ * Calling `rd_kafka_topic_new()` with a topic config object with
+   `message.timeout.ms` set could sometimes adjust the global `linger.ms`
+   property (if not explicitly configured) which was not desired, this is now
+   fixed and the auto adjustment is only done based on the
+   `default_topic_conf` at producer creation.
+
+
+
+# librdkafka v1.5.3
+
+librdkafka v1.5.3 is a maintenance release.
+
 ## Upgrade considerations
 
  * CentOS 6 is now EOL and is no longer included in binary librdkafka packages,
@@ -53,27 +79,15 @@ and the sticky consumer group partition assignor.
 
 ### Consumer fixes
 
- * The consumer assignment and consumer group implementations have been
-   decoupled, simplified and made more strict and robust. This will sort out
-   a number of edge cases for the consumer where the behaviour was previously
-   undefined.
+ * Consumer would not filter out messages for aborted transactions
+   if the messages were compressed (#3020).
  * Consumer destroy without prior `close()` could hang in certain
    cgrp states (@gridaphobe, #3127).
  * Fix possible null dereference in `Message::errstr()` (#3140).
- * Partition fetch state was not set to STOPPED if OffsetCommit failed.
  * The `roundrobin` partition assignment strategy could get stuck in an
    endless loop or generate uneven assignments in case the group members
    had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
    subscribes to t2,t3).  (#3159)
-
-
-### Producer fixes
-
- * Calling `rd_kafka_topic_new()` with a topic config object with
-   `message.timeout.ms` set could sometimes adjust the global `linger.ms`
-   property (if not explicitly configured) which was not desired, this is now
-   fixed and the auto adjustment is only done based on the
-   `default_topic_conf` at producer creation.
 
 
 

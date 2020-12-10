@@ -95,6 +95,9 @@ librdkafka v1.5.3 is a maintenance release.
    triggered unexpectedly.
  * AdminAPI: The operation_timeout (on-broker timeout) previously defaulted to 0,
    but now defaults to `socket.timeout.ms` (60s).
+ * Fix possible crash for Admin API protocol requests that fail at the
+   transport layer or prior to sending.
+
 
 ### Consumer fixes
 

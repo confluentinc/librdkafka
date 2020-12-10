@@ -6029,7 +6029,7 @@ rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
  *
  * CreateTopics: values <= 0 will return immediately after triggering topic
  * creation, while > 0 will wait this long for topic creation to propagate
- * in cluster. Default: 0.
+ * in cluster. Default: 60 seconds.
  *
  * DeleteTopics: same semantics as CreateTopics.
  * CreatePartitions: same semantics as CreateTopics.
@@ -6233,7 +6233,7 @@ rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
  *
  * Supported admin options:
  *  - rd_kafka_AdminOptions_set_validate_only() - default false
- *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 60 seconds
  *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
@@ -6435,7 +6435,7 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_par
  *
  * Supported admin options:
  *  - rd_kafka_AdminOptions_set_validate_only() - default false
- *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 60 seconds
  *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
@@ -6837,7 +6837,7 @@ rd_kafka_DescribeConfigs_result_resources (
  * @param rkqu Queue to emit result on.
  *
  * Supported admin options:
- *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0.
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 60 seconds.
  *    Controls how long the brokers will wait for records to be deleted.
  *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms.
  *    Controls how long \c rdkafka will wait for the request to complete.

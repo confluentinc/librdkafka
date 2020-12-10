@@ -558,20 +558,31 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
 
         rd_kafka_wrlock(rkb->rkb_rk);
+
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&
-            (!rkb->rkb_rk->rk_clusterid ||
-             rd_kafkap_str_cmp_str(&cluster_id, rkb->rkb_rk->rk_clusterid))) {
+            (!rk->rk_clusterid ||
+             rd_kafkap_str_cmp_str(&cluster_id, rk->rk_clusterid))) {
                 rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_GENERIC, "CLUSTERID",
                            "ClusterId update \"%s\" -> \"%.*s\"",
-                           rkb->rkb_rk->rk_clusterid ?
-                           rkb->rkb_rk->rk_clusterid : "",
+                           rk->rk_clusterid ?
+                           rk->rk_clusterid : "",
                            RD_KAFKAP_STR_PR(&cluster_id));
-                if (rkb->rkb_rk->rk_clusterid)
-                        rd_free(rkb->rkb_rk->rk_clusterid);
-                rkb->rkb_rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
+                if (rk->rk_clusterid) {
+                        rd_kafka_log(rk, LOG_WARNING, "CLUSTERID",
+                                     "Broker %s reports different ClusterId "
+                                     "\"%.*s\" than previously known \"%s\": "
+                                     "a client must not be simultaneously "
+                                     "connected to multiple clusters",
+                                     rd_kafka_broker_name(rkb),
+                                     RD_KAFKAP_STR_PR(&cluster_id),
+                                     rk->rk_clusterid);
+                        rd_free(rk->rk_clusterid);
+                }
+
+                rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
         }
 
         /* Update controller id. */

@@ -112,6 +112,7 @@ set(
     0118-commit_rebalance.c
     0119-consumer_auth.cpp
     0120-asymmetric_subscription.c
+    0121-clusterid.c
     8000-idle.cpp
     test.c
     testcpp.cpp

@@ -161,7 +161,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     is enqueued. Go to 16.
  *
  * 15. [rdkafka main thread] The buffer callback (..handle_response())
- *     is called, which attempts to extra the original rko from the eonce,
+ *     is called, which attempts to extract the original rko from the eonce,
  *     but if the eonce has already been triggered by some other source
  *     (the timeout timer) the buffer callback simply returns and does nothing
  *     since the admin request is over and a result (probably a timeout)
@@ -801,8 +801,17 @@ static void rd_kafka_admin_response_parse (rd_kafka_op_t *rko) {
         rd_kafka_op_t *rko_result = NULL;
         char errstr[512];
 
+        if (rko->rko_err) {
+                rd_kafka_admin_result_fail(
+                        rko, rko->rko_err,
+                        "%s worker request failed: %s",
+                        rd_kafka_op2str(rko->rko_type),
+                        rd_kafka_err2str(rko->rko_err));
+                return;
+        }
+
         /* Response received.
-         * Let callbakc parse response and provide result in rko_result
+         * Let callback parse response and provide result in rko_result
          * which is then enqueued on the reply queue. */
         err = rko->rko_u.admin_request.cbs->parse(
                 rko, &rko_result,
@@ -842,6 +851,15 @@ rd_kafka_admin_coord_response_parse (rd_kafka_t *rk,
         if (!rko)
                 /* Admin request has timed out and been destroyed */
                 return;
+
+        if (err) {
+                rd_kafka_admin_result_fail(
+                        rko, err,
+                        "%s worker coordinator request failed: %s",
+                        rd_kafka_op2str(rko->rko_type),
+                        rd_kafka_err2str(err));
+                return;
+        }
 
         err = rko->rko_u.admin_request.cbs->parse(
                 rko, &rko_result, rkbuf,

@@ -35,6 +35,9 @@ and the sticky consumer group partition assignor.
    which has vast performance improvements.
  * Added `rd_kafka_conf_get_default_topic_conf()` to retrieve the
    default topic configuration object from a global configuration object.
+ * Added `conf` debugging context to `debug` - shows set configuration
+   properties on client and topic instantiation. Sensitive properties
+   are redacted.
 
 
 ## Fixes

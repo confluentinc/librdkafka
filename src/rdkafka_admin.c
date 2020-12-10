@@ -1343,7 +1343,8 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
             options->for_api == RD_KAFKA_ADMIN_OP_DELETERECORDS)
                 rd_kafka_confval_init_int(&options->operation_timeout,
                                           "operation_timeout",
-                                          -1, 3600*1000, 0);
+                                          -1, 3600*1000,
+                                          rk->rk_conf.admin.request_timeout_ms);
         else
                 rd_kafka_confval_disable(&options->operation_timeout,
                                          "operation_timeout");

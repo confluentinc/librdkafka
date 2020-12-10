@@ -93,7 +93,8 @@ librdkafka v1.5.3 is a maintenance release.
    next-timer-to-be-fired is scheduled.
  * Fix additional cases where broker-side automatic topic creation might be
    triggered unexpectedly.
-
+ * AdminAPI: The operation_timeout (on-broker timeout) previously defaulted to 0,
+   but now defaults to `socket.timeout.ms` (60s).
 
 ### Consumer fixes
 
@@ -106,6 +107,7 @@ librdkafka v1.5.3 is a maintenance release.
    endless loop or generate uneven assignments in case the group members
    had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
    subscribes to t2,t3).  (#3159)
+
 
 
 

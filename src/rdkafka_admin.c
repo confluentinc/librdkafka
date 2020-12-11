@@ -288,6 +288,9 @@ struct rd_kafka_admin_fanout_worker_cbs {
 };
 
 /* Forward declarations */
+static void rd_kafka_admin_common_worker_destroy (rd_kafka_t *rk,
+                                                  rd_kafka_op_t *rko,
+                                                  rd_bool_t do_destroy);
 static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                                         rd_kafka_AdminOptions_t *options);
 static rd_kafka_op_res_t
@@ -405,13 +408,17 @@ static RD_UNUSED RD_FORMAT(printf, 3, 4)
  */
 static RD_INLINE
 void rd_kafka_admin_result_enq (rd_kafka_op_t *rko_req,
-                                       rd_kafka_op_t *rko_result) {
-        rd_kafka_replyq_enq(&rko_req->rko_u.admin_request.replyq, rko_result,
+                                rd_kafka_op_t *rko_result) {
+        rd_kafka_replyq_enq(&rko_req->rko_u.admin_request.replyq,
+                            rko_result,
                             rko_req->rko_u.admin_request.replyq.version);
 }
 
 /**
  * @brief Set request-level error code and string in reply op.
+ *
+ * @remark This function will NOT destroy the \p rko_req, so don't forget to
+ *         call rd_kafka_admin_common_worker_destroy() when done with the rko.
  */
 static RD_FORMAT(printf, 3, 4)
         void rd_kafka_admin_result_fail (rd_kafka_op_t *rko_req,
@@ -419,6 +426,9 @@ static RD_FORMAT(printf, 3, 4)
                                          const char *fmt, ...) {
         va_list ap;
         rd_kafka_op_t *rko_result;
+
+        if (!rko_req->rko_u.admin_request.replyq.q)
+                return;
 
         rko_result = rd_kafka_admin_result_new(rko_req);
 
@@ -445,6 +455,7 @@ rd_kafka_admin_coord_request (rd_kafka_broker_t *rkb,
                               rd_kafka_replyq_t replyq,
                               rd_kafka_resp_cb_t *resp_cb,
                               void *opaque) {
+        rd_kafka_t *rk = rkb->rkb_rk;
         rd_kafka_enq_once_t *eonce = opaque;
         rd_kafka_op_t *rko;
         char errstr[512];
@@ -472,6 +483,8 @@ rd_kafka_admin_coord_request (rd_kafka_broker_t *rkb,
                         rko, err,
                         "%s worker failed to send request: %s",
                         rd_kafka_op2str(rko->rko_type), errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true/*destroy*/);
         }
         return err;
 }
@@ -601,7 +614,8 @@ static RD_INLINE int rd_kafka_admin_timeout_remains (rd_kafka_op_t *rko) {
 /**
  * @returns the remaining request timeout in microseconds.
  */
-static RD_INLINE int rd_kafka_admin_timeout_remains_us (rd_kafka_op_t *rko) {
+static RD_INLINE rd_ts_t
+rd_kafka_admin_timeout_remains_us (rd_kafka_op_t *rko) {
         return rd_timeout_remains_us(rko->rko_u.admin_request.abs_timeout);
 }
 
@@ -858,6 +872,8 @@ rd_kafka_admin_coord_response_parse (rd_kafka_t *rk,
                         "%s worker coordinator request failed: %s",
                         rd_kafka_op2str(rko->rko_type),
                         rd_kafka_err2str(err));
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true/*destroy*/);
                 return;
         }
 
@@ -871,6 +887,8 @@ rd_kafka_admin_coord_response_parse (rd_kafka_t *rk,
                         rd_kafka_op2str(rko->rko_type),
                         rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
                         errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true/*destroy*/);
                 return;
         }
 
@@ -923,11 +941,17 @@ rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
                              rd_kafka_admin_state_desc[rko->rko_u.
                                                        admin_request.state],
                              rd_kafka_err2str(rko->rko_err));
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__DESTROY,
+                                           "Handle is terminating: %s",
+                                           rd_kafka_err2str(rko->rko_err));
                 goto destroy;
         }
 
-        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY) {
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__DESTROY,
+                                           "Destroyed");
                 goto destroy; /* rko being destroyed (silent) */
+        }
 
         rd_kafka_dbg(rk, ADMIN, name,
                      "%s worker called in state %s: %s",
@@ -1224,17 +1248,14 @@ rd_kafka_admin_fanout_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq,
 
         if (rd_kafka_terminating(rk)) {
                 rd_kafka_dbg(rk, ADMIN, name,
-                             "%s fanout worker called: "
+                             "%s fanout worker called for fanned out op %s: "
                              "handle is terminating: %s",
                              name,
+                             rd_kafka_op2str(rko->rko_type),
                              rd_kafka_err2str(rko_fanout->rko_err));
-                goto destroy;
+                if (!rko->rko_err)
+                        rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
         }
-
-        if (rko_fanout->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                goto destroy; /* rko being destroyed (silent) */
-
-        rd_assert(thrd_is_current(rk->rk_thread));
 
         rd_kafka_dbg(rk, ADMIN, name,
                      "%s fanout worker called for %s with %d request(s) "
@@ -1265,8 +1286,6 @@ rd_kafka_admin_fanout_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                             rko_fanout->rko_u.admin_request.replyq.version);
 
         /* FALLTHRU */
- destroy:
-
         if (rko_fanout->rko_u.admin_request.fanout.outstanding == 0)
                 rd_kafka_op_destroy(rko_fanout);
 
@@ -3748,7 +3767,7 @@ void rd_kafka_DeleteGroups (rd_kafka_t *rk,
         rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
                      (int)del_group_cnt,
                      rd_kafka_group_result_free);
-        rko_fanout->rko_u.admin_request.fanout.outstanding = del_group_cnt;
+        rko_fanout->rko_u.admin_request.fanout.outstanding = (int)del_group_cnt;
 
         /* Create individual request ops for each group.
          * FIXME: A future optimization is to coalesce all groups for a single
@@ -3759,7 +3778,7 @@ void rd_kafka_DeleteGroups (rd_kafka_t *rk,
                         rd_kafka_DeleteGroupsResponse_parse,
                 };
                 rd_kafka_DeleteGroup_t *grp = rd_list_elem(
-                        &rko_fanout->rko_u.admin_request.args, i);
+                        &rko_fanout->rko_u.admin_request.args, (int)i);
                 rd_kafka_op_t *rko =
                         rd_kafka_admin_request_op_new(
                                 rk,

@@ -474,14 +474,18 @@ static void do_test_DeleteGroups (const char *what,
         /* The returned groups should be in the original order, and
          * should all have timed out. */
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
-                TEST_ASSERT(strcmp(group_names[i], rd_kafka_group_result_name(resgroups[i])) == 0,
+                TEST_ASSERT(!strcmp(group_names[i],
+                                    rd_kafka_group_result_name(resgroups[i])),
                             "expected group '%s' at position %d, not '%s'",
-                            group_names[i], i, rd_kafka_group_result_name(resgroups[i]));
-                TEST_ASSERT(rd_kafka_error_code(rd_kafka_group_result_error(resgroups[i])) ==
+                            group_names[i], i,
+                            rd_kafka_group_result_name(resgroups[i]));
+                TEST_ASSERT(rd_kafka_error_code(rd_kafka_group_result_error(
+                                                        resgroups[i])) ==
                             RD_KAFKA_RESP_ERR__TIMED_OUT,
                             "expected group '%s' to have timed out, got %s",
                             group_names[i],
-                            rd_kafka_error_string(rd_kafka_group_result_error(resgroups[i])));
+                            rd_kafka_error_string(
+                                    rd_kafka_group_result_error(resgroups[i])));
         }
 
         rd_kafka_event_destroy(rkev);
@@ -1054,7 +1058,7 @@ static void do_test_options (rd_kafka_t *rk) {
 
         /* Try an invalid for_api */
         options = rd_kafka_AdminOptions_new(rk, (rd_kafka_admin_op_t)1234);
-        TEST_ASSERT(!options, "Expectred AdminOptions_new() to fail "
+        TEST_ASSERT(!options, "Expected AdminOptions_new() to fail "
                     "with an invalid for_api, didn't.");
 
         TEST_LATER_CHECK();

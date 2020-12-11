@@ -1903,7 +1903,7 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_unclean_destroy(cltype, 0/*tempq*/);
         do_test_unclean_destroy(cltype, 1/*mainq*/);
 
-        test_conf_init(&conf, NULL, 120);
+        test_conf_init(&conf, NULL, 180);
         test_conf_set(conf, "socket.timeout.ms", "10000");
         rk = test_create_handle(cltype, conf);
 

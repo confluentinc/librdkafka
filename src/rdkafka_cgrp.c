@@ -3855,13 +3855,17 @@ static void rd_kafka_cgrp_revoke_all_rejoin (rd_kafka_cgrp_t *rkcg,
                  * assignment (albeit perhaps empty) and there is no
                  * outstanding rebalance op in progress. */
                 if (rkcg->rkcg_group_assignment &&
-                    !RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg))
+                    !RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg)) {
                         rd_kafka_rebalance_op(
                                 rkcg,
                                 RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                                 rkcg->rkcg_group_assignment, reason);
-                else
+                } else {
+                        /* Skip the join backoff */
+                        rd_interval_reset(&rkcg->rkcg_join_intvl);
+
                         rd_kafka_cgrp_rejoin(rkcg, "%s", reason);
+                }
 
                 return;
         }

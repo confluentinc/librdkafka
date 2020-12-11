@@ -9,6 +9,8 @@ and the sticky consumer group partition assignor.
  * Sticky producer partitioning (`sticky.partitioning.linger.ms`) -
    achieves higher throughput and lower latency through sticky selection
    of random partition.
+ * AdminAPI: Add support for `DeleteRecords()`, `DeleteGroups()` and
+   `DeleteConsumerGroupOffsets()` (by @gridaphobe)
 
 
 ## Upgrade considerations

@@ -508,7 +508,8 @@ static void do_test_DeleteRecords (const char *what,
         rd_kafka_queue_t *q;
 #define MY_DEL_RECORDS_CNT 4
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_topic_partition_list_t *del_records = NULL;
+        rd_kafka_topic_partition_list_t *offsets = NULL;
+        rd_kafka_DeleteRecords_t *del_records;
         const rd_kafka_DeleteRecords_result_t *res;
         char *topics[MY_DEL_RECORDS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
@@ -544,17 +545,21 @@ static void do_test_DeleteRecords (const char *what,
                 }
         }
 
-        del_records = rd_kafka_topic_partition_list_new(MY_DEL_RECORDS_CNT);
+        offsets = rd_kafka_topic_partition_list_new(MY_DEL_RECORDS_CNT);
 
-        for (i = 0; i < MY_DEL_RECORDS_CNT; i++) {
-                rd_kafka_topic_partition_list_add(del_records,topics[i], i)->
+        for (i = 0; i < MY_DEL_RECORDS_CNT; i++)
+                rd_kafka_topic_partition_list_add(offsets,topics[i], i)->
                         offset = RD_KAFKA_OFFSET_END;
-        }
+
+        del_records = rd_kafka_DeleteRecords_new(offsets);
+        rd_kafka_topic_partition_list_destroy(offsets);
 
         TIMING_START(&timing, "DeleteRecords");
         TEST_SAY("Call DeleteRecords, timeout is %dms\n", exp_timeout);
-        rd_kafka_DeleteRecords(rk, del_records, options, q);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
+
+        rd_kafka_DeleteRecords_destroy(del_records);
 
         if (destroy)
                 goto destroy;
@@ -583,7 +588,6 @@ static void do_test_DeleteRecords (const char *what,
         rd_kafka_event_destroy(rkev);
 
  destroy:
-        rd_kafka_topic_partition_list_destroy(del_records);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
@@ -735,8 +739,6 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         rd_kafka_topic_partition_list_add(offsets, topics[2], 0)->offset =
                 RD_KAFKA_OFFSET_END;
 
-        TEST_SAY(_C_MAG "[ Mixed mode test on %s]\n", rd_kafka_name(rk));
-
         test_CreateTopics_simple(rk, rkqu, topics, 2, 1, &id1);
         test_DeleteTopics_simple(rk, rkqu, &topics[1], 1, &id2);
         test_CreateTopics_simple(rk, rkqu, &topics[2], 1, 1, &id3);
@@ -886,7 +888,7 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
 
 /**
- * @brief Verify that an unclean rd_kafka_destroy() does not hang.
+ * @brief Verify that an unclean rd_kafka_destroy() does not hang or crash.
  */
 static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_t *rk;
@@ -897,7 +899,8 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_DeleteTopic_t *topic;
         test_timing_t t_destroy;
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("Test unclean destroy using %s",
+                       with_mainq ? "mainq" : "tempq");
 
         test_conf_init(&conf, NULL, 0);
         /* Remove brokers, if any, since this is a local test and we
@@ -907,9 +910,6 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
-
-        TEST_SAY(_C_MAG "[ Test unclean destroy for %s using %s]\n", rd_kafka_name(rk),
-                 with_mainq ? "mainq" : "tempq");
 
         if (with_mainq)
                 q = rd_kafka_queue_get_main(rk);
@@ -923,7 +923,8 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         /* We're not expecting a result yet since DeleteTopics will attempt
          * to look up the controller for socket.timeout.ms (1 minute). */
         rkev = rd_kafka_queue_poll(q, 100);
-        TEST_ASSERT(!rkev, "Did not expect result: %s", rd_kafka_event_name(rkev));
+        TEST_ASSERT(!rkev, "Did not expect result: %s",
+                    rd_kafka_event_name(rkev));
 
         rd_kafka_queue_destroy(q);
 

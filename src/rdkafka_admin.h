@@ -265,17 +265,23 @@ struct rd_kafka_DescribeConfigs_result_s {
  * @{
  */
 
-/**
- * @brief DeleteGroups result
- */
-struct rd_kafka_DeleteGroups_result_s {
-        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
-};
 
 struct rd_kafka_DeleteGroup_s {
         char *group;   /**< Points to data */
         char  data[1]; /**< The group name is allocated along with
                         *   the struct here. */
+};
+
+/**@}*/
+
+
+/**
+ * @name DeleteRecords
+ * @{
+ */
+
+struct rd_kafka_DeleteRecords_s {
+        rd_kafka_topic_partition_list_t *offsets;
 };
 
 /**@}*/

@@ -1178,7 +1178,7 @@ static void do_test_DeleteRecords (const char *what,
                                    int op_timeout) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_topic_partition_list_t *del_records = NULL;
+        rd_kafka_topic_partition_list_t *offsets = NULL;
         rd_kafka_event_t *rkev = NULL;
         rd_kafka_resp_err_t err;
         char errstr[512];
@@ -1193,6 +1193,7 @@ static void do_test_DeleteRecords (const char *what,
         int exp_mdtopic_cnt = 0;
         test_timing_t timing;
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_DeleteRecords_t *del_records;
         const rd_kafka_DeleteRecords_result_t *res;
 
         SUB_TEST_QUICK("%s DeleteRecords with %s, op_timeout %d",
@@ -1242,32 +1243,36 @@ static void do_test_DeleteRecords (const char *what,
                 }
         }
 
-        del_records = rd_kafka_topic_partition_list_new(10);
+        offsets = rd_kafka_topic_partition_list_new(10);
 
         /* Wipe all data from topic 0 */
         for (i = 0 ; i < partitions_cnt; i++)
-                rd_kafka_topic_partition_list_add(del_records, topics[0], i)->
+                rd_kafka_topic_partition_list_add(offsets, topics[0], i)->
                         offset = RD_KAFKA_OFFSET_END;
 
         /* Wipe all data from partition 0 in topic 1 */
-        rd_kafka_topic_partition_list_add(del_records, topics[1], 0)->
+        rd_kafka_topic_partition_list_add(offsets, topics[1], 0)->
                 offset = RD_KAFKA_OFFSET_END;
 
         /* Wipe some data from partition 2 in topic 1 */
-        rd_kafka_topic_partition_list_add(del_records, topics[1], 2)->
+        rd_kafka_topic_partition_list_add(offsets, topics[1], 2)->
                 offset = msgs_cnt / 2;
 
         /* Not changing the offset (out of range) for topic 2 partition 0 */
-        rd_kafka_topic_partition_list_add(del_records, topics[2], 0);
+        rd_kafka_topic_partition_list_add(offsets, topics[2], 0);
 
         /* Offset out of range for topic 2 partition 1 */
-        rd_kafka_topic_partition_list_add(del_records, topics[2], 1)->
+        rd_kafka_topic_partition_list_add(offsets, topics[2], 1)->
                 offset = msgs_cnt + 1;
+
+        del_records = rd_kafka_DeleteRecords_new(offsets);
 
         TIMING_START(&timing, "DeleteRecords");
         TEST_SAY("Call DeleteRecords\n");
-        rd_kafka_DeleteRecords(rk, del_records, options, q);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        rd_kafka_DeleteRecords_destroy(del_records);
 
         TIMING_START(&timing, "DeleteRecords.queue_poll");
 
@@ -1314,22 +1319,22 @@ static void do_test_DeleteRecords (const char *what,
                 rd_kafka_DeleteRecords_result_offsets(res));
 
         /* Sort both input and output list */
-        rd_kafka_topic_partition_list_sort(del_records, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(offsets, NULL, NULL);
         rd_kafka_topic_partition_list_sort(results, NULL, NULL);
 
         TEST_SAY("Input partitions:\n");
-        test_print_partition_list(del_records);
+        test_print_partition_list(offsets);
         TEST_SAY("Result partitions:\n");
         test_print_partition_list(results);
 
-        TEST_ASSERT(del_records->cnt == results->cnt,
+        TEST_ASSERT(offsets->cnt == results->cnt,
                     "expected DeleteRecords_result_offsets to return %d items, "
                     "not %d",
-                    del_records->cnt,
+                    offsets->cnt,
                     results->cnt);
 
         for (i = 0 ; i < results->cnt ; i++) {
-                const rd_kafka_topic_partition_t *input =&del_records->elems[i];
+                const rd_kafka_topic_partition_t *input =&offsets->elems[i];
                 const rd_kafka_topic_partition_t *output = &results->elems[i];
                 int64_t expected_offset = input->offset;
                 rd_kafka_resp_err_t expected_err = 0;
@@ -1435,8 +1440,8 @@ static void do_test_DeleteRecords (const char *what,
         if (results)
                 rd_kafka_topic_partition_list_destroy(results);
 
-        if (del_records)
-                rd_kafka_topic_partition_list_destroy(del_records);
+        if (offsets)
+                rd_kafka_topic_partition_list_destroy(offsets);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
@@ -1898,7 +1903,7 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_unclean_destroy(cltype, 0/*tempq*/);
         do_test_unclean_destroy(cltype, 1/*mainq*/);
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 120);
         test_conf_set(conf, "socket.timeout.ms", "10000");
         rk = test_create_handle(cltype, conf);
 

@@ -3198,6 +3198,33 @@ rd_kafka_DescribeConfigs_result_resources (
  *
  */
 
+rd_kafka_DeleteRecords_t *
+rd_kafka_DeleteRecords_new (const rd_kafka_topic_partition_list_t *
+                            before_offsets) {
+        rd_kafka_DeleteRecords_t *del_records;
+
+        del_records = rd_calloc(1, sizeof(*del_records));
+        del_records->offsets =
+                rd_kafka_topic_partition_list_copy(before_offsets);
+
+        return del_records;
+}
+
+void rd_kafka_DeleteRecords_destroy (rd_kafka_DeleteRecords_t *del_records) {
+        rd_kafka_topic_partition_list_destroy(del_records->offsets);
+        rd_free(del_records);
+}
+
+void rd_kafka_DeleteRecords_destroy_array (rd_kafka_DeleteRecords_t **
+                                           del_records,
+                                           size_t del_record_cnt) {
+        size_t i;
+        for (i = 0 ; i < del_record_cnt ; i++)
+                rd_kafka_DeleteRecords_destroy(del_records[i]);
+}
+
+
+
 /** @brief Merge the DeleteRecords response from a single broker
  *         into the user response list.
  */
@@ -3390,7 +3417,8 @@ rd_kafka_DeleteRecords_leaders_queried_cb (rd_kafka_t *rk,
 
 
 void rd_kafka_DeleteRecords (rd_kafka_t *rk,
-                             const rd_kafka_topic_partition_list_t *offsets,
+                             rd_kafka_DeleteRecords_t **del_records,
+                             size_t del_record_cnt,
                              const rd_kafka_AdminOptions_t *options,
                              rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko_fanout;
@@ -3398,6 +3426,7 @@ void rd_kafka_DeleteRecords (rd_kafka_t *rk,
                 rd_kafka_DeleteRecords_response_merge,
                 rd_kafka_topic_partition_list_copy_opaque,
         };
+        const rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_list_t *copied_offsets;
 
         rd_assert(rkqu);
@@ -3407,6 +3436,21 @@ void rd_kafka_DeleteRecords (rd_kafka_t *rk,
                 RD_KAFKA_OP_DELETERECORDS,
                 RD_KAFKA_EVENT_DELETERECORDS_RESULT,
                 &fanout_cbs, options, rkqu->rkqu_q);
+
+        if (del_record_cnt != 1) {
+                /* We only support one DeleteRecords per call since there
+                 * is no point in passing multiples, but the API still
+                 * needs to be extensible/future-proof. */
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Exactly one DeleteRecords must be "
+                                           "passed");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true/*destroy*/);
+                return;
+        }
+
+        offsets = del_records[0]->offsets;
 
         if (offsets == NULL || offsets->cnt == 0) {
                 rd_kafka_admin_result_fail(rko_fanout,

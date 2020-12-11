@@ -6820,9 +6820,12 @@ rd_kafka_DescribeConfigs_result_resources (
  *
  */
 
+/**! Represents records to be deleted */
+typedef struct rd_kafka_DeleteRecords_s rd_kafka_DeleteRecords_t;
+
 /**
- * @brief Delete records (messages) in topic partitions as older than the
- *        offsets provided in \p before_offsets.
+ * @brief Create a new DeleteRecords object. This object is later passed to
+ *        rd_kafka_DeleteRecords().
  *
  * \p before_offsets must contain \c topic, \c partition, and
  * \c offset is the offset before which the messages will
@@ -6830,9 +6833,41 @@ rd_kafka_DescribeConfigs_result_resources (
  * Set \c offset to RD_KAFKA_OFFSET_END (high-watermark) in order to
  * delete all data in the partition.
  *
- * @param rk Client instance.
  * @param before_offsets For each partition delete all messages up to but not
  *                       including the specified offset.
+ *
+ * @returns a new allocated DeleteRecords object.
+ *          Use rd_kafka_DeleteRecords_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_DeleteRecords_t *
+rd_kafka_DeleteRecords_new (const rd_kafka_topic_partition_list_t *
+                            before_offsets);
+
+/**
+ * @brief Destroy and free a DeleteRecords object previously created with
+ *        rd_kafka_DeleteRecords_new()
+ */
+RD_EXPORT void
+rd_kafka_DeleteRecords_destroy (rd_kafka_DeleteRecords_t *del_records);
+
+/**
+ * @brief Helper function to destroy all DeleteRecords objects in
+ *        the \p del_groups array (of \p del_group_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_DeleteRecords_destroy_array (rd_kafka_DeleteRecords_t **del_records,
+                                      size_t del_record_cnt);
+
+/**
+ * @brief Delete records (messages) in topic partitions older than the
+ *        offsets provided.
+ *
+ * @param rk Client instance.
+ * @param del_records The offsets to delete (up to).
+ *                    Currently only one DeleteRecords_t (but containing
+ *                    multiple offsets) is supported.
+ * @param del_record_cnt The number of elements in del_records, must be 1.
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
  *
@@ -6847,7 +6882,8 @@ rd_kafka_DescribeConfigs_result_resources (
  */
 RD_EXPORT void
 rd_kafka_DeleteRecords (rd_kafka_t *rk,
-                        const rd_kafka_topic_partition_list_t *before_offsets,
+                        rd_kafka_DeleteRecords_t **del_records,
+                        size_t del_record_cnt,
                         const rd_kafka_AdminOptions_t *options,
                         rd_kafka_queue_t *rkqu);
 

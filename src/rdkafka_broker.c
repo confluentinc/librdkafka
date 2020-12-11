@@ -5958,9 +5958,9 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                  * update the nodeid. */
                 needs_update = 1;
 
-        } else {
-		rd_kafka_broker_add(rk, RD_KAFKA_LEARNED,
-				    proto, mdb->host, mdb->port, mdb->id);
+        } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
+					      mdb->host, mdb->port, mdb->id))){
+		rd_kafka_broker_keep(rkb);
 	}
 
 	rd_kafka_wrunlock(rk);

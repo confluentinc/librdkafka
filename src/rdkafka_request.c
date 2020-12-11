@@ -2133,7 +2133,7 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 	rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
 		   "Broker API support:");
 
-	*apis = malloc(sizeof(**apis) * ApiArrayCnt);
+	*apis = rd_malloc(sizeof(**apis) * ApiArrayCnt);
 
 	for (i = 0 ; i < ApiArrayCnt ; i++) {
 		struct rd_kafka_ApiVersion *api = &(*apis)[i];

@@ -5724,10 +5724,10 @@ static int unittest_set_intersect (void) {
                 rd_kafka_topic_partition_destroy_free,
                 PartitionMemberInfo_free);
 
-        gm1 = calloc(1, sizeof(*gm1));
+        gm1 = rd_calloc(1, sizeof(*gm1));
         gm1->rkgm_member_id = &id1;
         gm1->rkgm_group_instance_id = &id1;
-        gm2 = calloc(1, sizeof(*gm2));
+        gm2 = rd_calloc(1, sizeof(*gm2));
         gm2->rkgm_member_id = &id2;
         gm2->rkgm_group_instance_id = &id2;
 

@@ -96,7 +96,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 
 		if (pass == 1) {
 			*decompressed_lenp = strm.total_out;
-			if (!(decompressed = malloc((size_t)(*decompressed_lenp)+1))) {
+			if (!(decompressed = rd_malloc((size_t)(*decompressed_lenp)+1))) {
 				inflateEnd(&strm);
 				return NULL;
 			}
@@ -113,6 +113,6 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 
 fail:
 	if (decompressed)
-		free(decompressed);
+		rd_free(decompressed);
 	return NULL;
 }

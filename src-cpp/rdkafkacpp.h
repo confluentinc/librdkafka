@@ -146,6 +146,34 @@ std::string get_debug_contexts();
 RD_EXPORT
 int          wait_destroyed(int timeout_ms);
 
+/**
+ * @brief Allocate memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the malloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * @remark Memory allocated by mem_malloc() must be freed using
+ *         mem_free().
+ */
+RD_EXPORT
+void *mem_malloc (size_t size);
+
+/**
+ * @brief Free pointer returned by librdkafka
+ *
+ * This is typically an abstraction for the free(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * freeing pointers returned by librdkafka.
+ *
+ * In standard setups it is usually not necessary to use this interface
+ * rather than the free(3) function.
+ *
+ * @remark mem_free() must only be used for pointers returned by APIs
+ *         that explicitly mention using this function for freeing.
+ */
+RD_EXPORT
+void mem_free (void *ptr);
 
 /**@}*/
 
@@ -1736,6 +1764,33 @@ class RD_EXPORT Handle {
      * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
      */
     virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
+
+   /**
+     * @brief Allocate memory using the same allocator librdkafka uses.
+     *
+     * This is typically an abstraction for the malloc(3) call and makes sure
+     * the application can use the same memory allocator as librdkafka for
+     * allocating pointers that are used by librdkafka.
+     *
+     * @remark Memory allocated by mem_malloc() must be freed using
+     *         mem_free().
+     */
+    virtual void *mem_malloc (size_t size) = 0;
+
+   /**
+     * @brief Free pointer returned by librdkafka
+     *
+     * This is typically an abstraction for the free(3) call and makes sure
+     * the application can use the same memory allocator as librdkafka for
+     * freeing pointers returned by librdkafka.
+     *
+     * In standard setups it is usually not necessary to use this interface
+     * rather than the free(3) function.
+     *
+     * @remark mem_free() must only be used for pointers returned by APIs
+     *         that explicitly mention using this function for freeing.
+     */
+    virtual void mem_free (void *ptr) = 0;
 };
 
 
@@ -2003,7 +2058,7 @@ public:
       value_size_ = other.value_size_;
 
       if (value_ != NULL)
-        free(value_);
+        mem_free(value_);
 
       value_ = copy_value(other.value_, value_size_);
 
@@ -2012,7 +2067,7 @@ public:
 
     ~Header() {
       if (value_ != NULL)
-        free(value_);
+        mem_free(value_);
     }
 
     /** @returns the key/name associated with this Header */
@@ -2046,7 +2101,7 @@ public:
       if (!value)
         return NULL;
 
-      char *dest = (char *)malloc(value_size + 1);
+      char *dest = (char *)mem_malloc(value_size + 1);
       memcpy(dest, (const char *)value, value_size);
       dest[value_size] = '\0';
 
@@ -3488,5 +3543,6 @@ class Metadata {
 /**@}*/
 
 }
+
 
 #endif /* _RDKAFKACPP_H_ */

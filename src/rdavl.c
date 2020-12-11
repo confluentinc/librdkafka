@@ -192,13 +192,13 @@ void rd_avl_destroy (rd_avl_t *ravl) {
                 rwlock_destroy(&ravl->ravl_rwlock);
 
         if (ravl->ravl_flags & RD_AVL_F_OWNER)
-                free(ravl);
+                rd_free(ravl);
 }
 
 rd_avl_t *rd_avl_init (rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags) {
 
         if (!ravl) {
-                ravl = calloc(1, sizeof(*ravl));
+                ravl = rd_calloc(1, sizeof(*ravl));
                 flags |= RD_AVL_F_OWNER;
         } else {
                 memset(ravl, 0, sizeof(*ravl));

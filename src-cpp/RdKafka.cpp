@@ -50,3 +50,10 @@ int RdKafka::wait_destroyed (int timeout_ms) {
   return rd_kafka_wait_destroyed(timeout_ms);
 }
 
+void *RdKafka::mem_malloc (size_t size) {
+  return rd_kafka_mem_malloc(NULL, size);
+}
+
+void RdKafka::mem_free (void *ptr) {
+  rd_kafka_mem_free(NULL, ptr);
+}

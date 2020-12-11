@@ -1188,7 +1188,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
          * reaches 1 and then decommissions itself. */
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
                 /* Add broker's thread to wait_thrds list for later joining */
-                thrd = malloc(sizeof(*thrd));
+                thrd = rd_malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
                 rd_kafka_wrunlock(rk);
@@ -1262,7 +1262,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                                rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
                 rk->rk_internal_rkb = NULL;
-                thrd = malloc(sizeof(*thrd));
+                thrd = rd_malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
         }
@@ -1279,7 +1279,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 int res;
                 if (thrd_join(*thrd, &res) != thrd_success)
                         ;
-                free(thrd);
+                rd_free(thrd);
         }
 
         rd_list_destroy(&wait_thrds);
@@ -4784,8 +4784,16 @@ rd_bool_t rd_kafka_dir_is_empty (const char *path) {
 }
 
 
+void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size) {
+        return rd_malloc(size);
+}
+
+void *rd_kafka_mem_calloc(rd_kafka_t *rk, size_t num, size_t size) {
+        return rd_calloc(num, size);
+}
+
 void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr) {
-        free(ptr);
+        rd_free(ptr);
 }
 
 

@@ -65,7 +65,7 @@ char *rd_string_render (const char *template,
 #define _assure_space(SZ) do {				\
 		if (of + (SZ) + 1 >= size) {		\
 			size = (size + (SZ) + 1) * 2;	\
-			buf = realloc(buf, size);	\
+			buf = rd_realloc(buf, size);	\
 		}					\
 	} while (0)
 	

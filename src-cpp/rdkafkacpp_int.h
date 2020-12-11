@@ -992,6 +992,13 @@ class HandleImpl : virtual public Handle {
                                                 rk_, errstr.c_str()));
   };
 
+  void *mem_malloc (size_t size) {
+    return rd_kafka_mem_malloc(rk_, size);
+  };
+
+  void mem_free (void *ptr) {
+    rd_kafka_mem_free(rk_, ptr);
+  };
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and

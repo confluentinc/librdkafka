@@ -5197,7 +5197,7 @@ test_wait_admin_result (rd_kafka_queue_t *q,
 /**
  * @brief Wait for up to \p tmout for an admin API result and return the
  *        distilled error code.
- * 
+ *
  *        Supported APIs:
  *        - AlterConfigs
  *        - CreatePartitions
@@ -5205,6 +5205,7 @@ test_wait_admin_result (rd_kafka_queue_t *q,
  *        - DeleteGroups
  *        - DeleteRecords
  *        - DeleteTopics
+ *        * DeleteConsumerGroupOffsets
  *        - DescribeConfigs
  */
 rd_kafka_resp_err_t
@@ -5284,7 +5285,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 gres = rd_kafka_DeleteGroups_result_groups(res, &gres_cnt);
-        
+
         } else if (evtype == RD_KAFKA_EVENT_DELETERECORDS_RESULT) {
                 const rd_kafka_DeleteRecords_result_t *res;
                 if (!(res = rd_kafka_event_DeleteRecords_result(rkev)))
@@ -5292,6 +5293,17 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 offsets = rd_kafka_DeleteRecords_result_offsets(res);
+
+        } else if (evtype == RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT) {
+                const rd_kafka_DeleteConsumerGroupOffsets_result_t *res;
+                if (!(res =
+                      rd_kafka_event_DeleteConsumerGroupOffsets_result(rkev)))
+                        TEST_FAIL("Expected a DeleteConsumerGroupOffsets "
+                                  "result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                gres = rd_kafka_DeleteConsumerGroupOffsets_result_groups(
+                        rkev, &gres_cnt);
 
         } else {
                 TEST_FAIL("Bad evtype: %d", evtype);
@@ -5323,12 +5335,35 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
 
         /* Check group errors */
         for (i = 0 ; i < gres_cnt ; i++) {
+                const rd_kafka_topic_partition_list_t *parts;
+
                 if (rd_kafka_group_result_error(gres[i])) {
-                        TEST_WARN("DeleteGroups result: %s: error: %s\n",
+
+                        TEST_WARN("%s result: %s: error: %s\n",
+                                  rd_kafka_event_name(rkev),
                                   rd_kafka_group_result_name(gres[i]),
                                   rd_kafka_error_string(rd_kafka_group_result_error(gres[i])));
                         if (!(errcnt++))
                                 err = rd_kafka_error_code(rd_kafka_group_result_error(gres[i]));
+                }
+
+                parts = rd_kafka_group_result_partitions(gres[i]);
+                if (parts) {
+                        int j;
+                        for (j = 0 ; j < parts->cnt ; i++) {
+                                if (!parts->elems[j].err)
+                                        continue;
+
+                                TEST_WARN("%s result: %s: "
+                                          "%s [%"PRId32"] error: %s\n",
+                                          rd_kafka_event_name(rkev),
+                                          rd_kafka_group_result_name(gres[i]),
+                                          parts->elems[j].topic,
+                                          parts->elems[j].partition,
+                                          rd_kafka_err2str(
+                                                  parts->elems[j].err));
+                                errcnt++;
+                        }
                 }
         }
 
@@ -5641,6 +5676,8 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options;
         rd_kafka_resp_err_t err;
+        rd_kafka_DeleteRecords_t *del_records =
+                rd_kafka_DeleteRecords_new(offsets);
         const int tmout = 30*1000;
 
         options = rd_kafka_AdminOptions_new(rk,
@@ -5669,7 +5706,9 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
 
         TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
 
-        rd_kafka_DeleteRecords(rk, offsets, options, useq);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, useq);
+
+        rd_kafka_DeleteRecords_destroy(del_records);
 
         rd_kafka_AdminOptions_destroy(options);
 

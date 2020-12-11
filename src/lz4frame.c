@@ -72,10 +72,10 @@
  * by modifying below section.
  */
 #ifndef LZ4_SRC_INCLUDED   /* avoid redefinition when sources are coalesced */
-#  include <stdlib.h>   /* malloc, calloc, free */
-#  define ALLOC(s)          malloc(s)
-#  define ALLOC_AND_ZERO(s) calloc(1,(s))
-#  define FREEMEM(p)        free(p)
+#include "rd.h"   /* rd_malloc, rd_calloc, rd_free */
+#  define ALLOC(s)          rd_malloc(s)
+#  define ALLOC_AND_ZERO(s) rd_calloc(1,(s))
+#  define FREEMEM(p)        rd_free(p)
 #endif
 
 #include <string.h>   /* memset, memcpy, memmove */

@@ -188,7 +188,7 @@ static int rd_base64_decode (const rd_chariov_t *in, rd_chariov_t *out) {
 
         if (EVP_DecodeBlock((uint8_t*)out->ptr, (uint8_t*)in->ptr,
                             (int)in->size) == -1) {
-                free(out->ptr);
+                rd_free(out->ptr);
                 out->ptr = NULL;
                 return -1;
         }

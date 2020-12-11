@@ -198,10 +198,13 @@ void  LZ4_free(void* p);
 # define ALLOC_AND_ZERO(s) LZ4_calloc(1,s)
 # define FREEMEM(p)        LZ4_free(p)
 #else
-# include <stdlib.h>   /* malloc, calloc, free */
-# define ALLOC(s)          malloc(s)
-# define ALLOC_AND_ZERO(s) calloc(1,s)
-# define FREEMEM(p)        free(p)
+struct rdkafka_s;
+extern void *rd_kafka_mem_malloc(struct rdkafka_s *rk, size_t s);
+extern void *rd_kafka_mem_calloc(struct rdkafka_s *rk, size_t n, size_t s);
+extern void rd_kafka_mem_free(struct rdkafka_s *rk, void *p);
+# define ALLOC(s)          rd_kafka_mem_malloc(NULL, s)
+# define ALLOC_AND_ZERO(s) rd_kafka_mem_calloc(NULL, 1, s)
+# define FREEMEM(p)        rd_kafka_mem_free(NULL, p)
 #endif
 
 #include <string.h>   /* memset, memcpy */

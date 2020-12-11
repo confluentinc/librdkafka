@@ -3093,6 +3093,43 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                             int timeout_ms);
 
 
+
+/**
+ * @brief Allocate and zero memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the calloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * \p rk can be set to return memory allocated by a specific \c rk instance
+ * otherwise pass NULL for \p rk.
+ *
+ * @remark Memory allocated by rd_kafka_mem_calloc() must be freed using
+ *         rd_kafka_mem_free()
+ */
+RD_EXPORT
+void *rd_kafka_mem_calloc (rd_kafka_t *rk, size_t num, size_t size);
+
+
+
+/**
+ * @brief Allocate memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the malloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * \p rk can be set to return memory allocated by a specific \c rk instance
+ * otherwise pass NULL for \p rk.
+ *
+ * @remark Memory allocated by rd_kafka_mem_malloc() must be freed using
+ *         rd_kafka_mem_free()
+ */
+RD_EXPORT
+void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size);
+
+
+
 /**
  * @brief Free pointer returned by librdkafka
  *

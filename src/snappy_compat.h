@@ -74,22 +74,6 @@ struct iovec {
 };
 #endif
 
-#define get_unaligned_memcpy(x) ({ \
-		typeof(*(x)) _ret; \
-		memcpy(&_ret, (x), sizeof(*(x))); \
-		_ret; })
-#define put_unaligned_memcpy(v,x) ({ \
-		typeof((v)) _v = (v); \
-		memcpy((x), &_v, sizeof(*(x))); })
-
-#define get_unaligned get_unaligned_memcpy
-#define put_unaligned put_unaligned_memcpy
-#define get_unaligned64 get_unaligned_memcpy
-#define put_unaligned64 put_unaligned_memcpy
-
-#define get_unaligned_le32(x) (le32toh(get_unaligned((u32 *)(x))))
-#define put_unaligned_le16(v,x) (put_unaligned(htole16(v), (u16 *)(x)))
-
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned u32;

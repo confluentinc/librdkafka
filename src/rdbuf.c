@@ -220,7 +220,7 @@ rd_buf_get_segment_at_offset (const rd_buf_t *rbuf, const rd_segment_t *hint,
                               size_t absof) {
         const rd_segment_t *seg = hint;
 
-        if (unlikely(absof > rbuf->rbuf_len))
+        if (unlikely(absof >= rbuf->rbuf_len))
                 return NULL;
 
         /* Only use current write position if possible and if it helps */
@@ -303,7 +303,6 @@ static void rd_buf_destroy_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
         rbuf->rbuf_segment_cnt--;
         rbuf->rbuf_len  -= seg->seg_of;
         rbuf->rbuf_size -= seg->seg_size;
-        rd_dassert(rbuf->rbuf_len <= seg->seg_absof);
         if (rbuf->rbuf_wpos == seg)
                 rbuf->rbuf_wpos = NULL;
 
@@ -560,8 +559,8 @@ size_t rd_buf_write_update (rd_buf_t *rbuf, size_t absof,
 /**
  * @brief Push reference memory segment to current write position.
  */
-void rd_buf_push (rd_buf_t *rbuf, const void *payload, size_t size,
-                  void (*free_cb)(void *)) {
+void rd_buf_push0 (rd_buf_t *rbuf, const void *payload, size_t size,
+                   void (*free_cb)(void *), rd_bool_t writable) {
         rd_segment_t *prevseg, *seg, *tailseg = NULL;
 
         if ((prevseg = rbuf->rbuf_wpos) &&
@@ -578,7 +577,8 @@ void rd_buf_push (rd_buf_t *rbuf, const void *payload, size_t size,
         seg->seg_size   = size;
         seg->seg_of     = size;
         seg->seg_free   = free_cb;
-        seg->seg_flags |= RD_SEGMENT_F_RDONLY;
+        if (!writable)
+                seg->seg_flags |= RD_SEGMENT_F_RDONLY;
 
         rd_buf_append_segment(rbuf, seg);
 
@@ -588,6 +588,81 @@ void rd_buf_push (rd_buf_t *rbuf, const void *payload, size_t size,
 
 
 
+/**
+ * @brief Erase \p size bytes at \p absof from buffer.
+ *
+ * @returns the number of bytes erased.
+ *
+ * @remark This is costly since it forces a memory move.
+ */
+size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
+        rd_segment_t *seg, *next = NULL;
+        size_t of;
+
+        /* Find segment for offset */
+        seg = rd_buf_get_segment_at_offset(rbuf, NULL, absof);
+
+        /* Adjust segments until size is exhausted, then continue scanning to
+         * update the absolute offset. */
+        for (of = 0 ; seg && of < size ; seg = next) {
+                /* Example:
+                 *   seg_absof = 10
+                 *   seg_of    = 7
+                 *   absof     = 12
+                 *   of        = 1
+                 *   size      = 4
+                 *
+                 * rof          = 3   relative segment offset where to erase
+                 * eraseremains = 3   remaining bytes to erase
+                 * toerase      = 3   available bytes to erase in segment
+                 * segremains   = 1   remaining bytes in segment after to
+                 *                    the right of the erased part, i.e.,
+                 *                    the memory that needs to be moved to the
+                 *                    left.
+                 */
+                /** Relative offset in segment for the absolute offset */
+                size_t rof = (absof + of) - seg->seg_absof;
+                /** How much remains to be erased */
+                size_t eraseremains = size - of;
+                /** How much can be erased from this segment */
+                size_t toerase = RD_MIN(seg->seg_of - rof, eraseremains);
+                /** How much remains in the segment after the erased part */
+                size_t segremains = seg->seg_of - (rof + toerase);
+
+                next = TAILQ_NEXT(seg, seg_link);
+
+                seg->seg_absof -= of;
+
+                if (unlikely(toerase == 0))
+                        continue;
+
+                if (unlikely((seg->seg_flags & RD_SEGMENT_F_RDONLY)))
+                        RD_BUG("rd_buf_erase() called on read-only segment");
+
+                if (likely(segremains > 0))
+                        memmove(seg->seg_p+rof, seg->seg_p+rof+toerase,
+                                segremains);
+
+                seg->seg_of -= toerase;
+                rbuf->rbuf_len -= toerase;
+
+                of += toerase;
+
+                /* If segment is now empty, remove it */
+                if (seg->seg_of == 0)
+                        rd_buf_destroy_segment(rbuf, seg);
+        }
+
+        /* Update absolute offset of remaining segments */
+        for (seg = next ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
+                rd_assert(seg->seg_absof >= of);
+                seg->seg_absof -= of;
+        }
+
+        rbuf->rbuf_erased += of;
+
+        return of;
+}
 
 
 
@@ -755,7 +830,7 @@ size_t rd_slice_reader0 (rd_slice_t *slice, const void **p, int update_pos) {
         /* Find segment with non-zero payload */
         for (seg = slice->seg ;
              seg && seg->seg_absof+rof < slice->end && seg->seg_of == rof ;
-              seg = TAILQ_NEXT(seg, seg_link))
+             seg = TAILQ_NEXT(seg, seg_link))
                 rof = 0;
 
         if (unlikely(!seg || seg->seg_absof+rof >= slice->end))
@@ -1531,7 +1606,8 @@ static int do_unittest_iov_verify0 (rd_buf_t *b,
 
         rd_assert(exp_iovcnt <= MY_IOV_MAX);
 
-        totsize = rd_buf_get_write_iov(b, iov, &iovcnt, MY_IOV_MAX, exp_totsize);
+        totsize = rd_buf_get_write_iov(b, iov, &iovcnt,
+                                       MY_IOV_MAX, exp_totsize);
         RD_UT_ASSERT(totsize >= exp_totsize,
                      "iov total size %"PRIusz" expected >= %"PRIusz,
                      totsize, exp_totsize);
@@ -1582,6 +1658,189 @@ static int do_unittest_write_iov (void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief Verify that erasing parts of the buffer works.
+ */
+static int do_unittest_erase (void) {
+        static const struct {
+                const char *segs[4];
+                const char *writes[4];
+                struct {
+                        size_t of;
+                        size_t size;
+                        size_t retsize;
+                } erasures[4];
+
+                const char *expect;
+        } in[] = {
+                /* 12|3|45
+                 *  x x xx */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 1, 4, 4 } },
+                  .expect = "1",
+                },
+                /* 12|3|45
+                 * xx */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 0, 2, 2 } },
+                  .expect = "345",
+                },
+                /* 12|3|45
+                 *      xx */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 3, 2, 2 } },
+                  .expect = "123",
+                },
+                /* 12|3|45
+                 *  x
+                 * 1 |3|45
+                 *    x
+                 * 1 |  45
+                 *       x */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 1, 1, 1 },
+                                { 1, 1, 1 },
+                                { 2, 1, 1 } },
+                  .expect = "14",
+                },
+                /* 12|3|45
+                 * xxxxxxx */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 0, 5, 5 } },
+                  .expect = "",
+                },
+                /* 12|3|45
+                 * x       */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 0, 1, 1 } },
+                  .expect = "2345",
+                },
+                /* 12|3|45
+                 *       x  */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 4, 1, 1 } },
+                  .expect = "1234",
+                },
+                /* 12|3|45
+                 *        x  */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 5, 10, 0 } },
+                  .expect = "12345",
+                },
+                /* 12|3|45
+                 *       xxx */
+                { .segs = { "12", "3", "45" },
+                  .erasures = { { 4, 3, 1 }, { 4, 3, 0 }, { 4, 3, 0 } },
+                  .expect = "1234",
+                },
+                /* 1
+                 * xxx */
+                { .segs = { "1" },
+                  .erasures = { { 0, 3, 1 } },
+                  .expect = "",
+                },
+                /* 123456
+                 * xxxxxx */
+                { .segs = { "123456" },
+                  .erasures = { { 0, 6, 6 } },
+                  .expect = "",
+                },
+                /* 123456789a
+                 *     xxx    */
+                { .segs = { "123456789a" },
+                  .erasures = { { 4, 3, 3 } },
+                  .expect = "123489a",
+                },
+                /* 1234|5678
+                 *    x xx   */
+                { .segs = { "1234", "5678" },
+                  .erasures = { { 3, 3, 3 } },
+                  .writes = { "9abc" },
+                  .expect = "123789abc"
+                },
+
+                { .expect = NULL }
+        };
+        int i;
+
+        for (i = 0 ; in[i].expect ; i++) {
+                rd_buf_t b;
+                rd_slice_t s;
+                size_t expsz = strlen(in[i].expect);
+                char *out;
+                int j;
+                size_t r;
+                int r2;
+
+                rd_buf_init(&b, 0, 0);
+
+                /* Write segments to buffer */
+                for (j = 0 ; in[i].segs[j] ; j++)
+                        rd_buf_push_writable(&b, rd_strdup(in[i].segs[j]),
+                                             strlen(in[i].segs[j]), rd_free);
+
+                /* Perform erasures */
+                for (j = 0 ; in[i].erasures[j].retsize ; j++) {
+                        r = rd_buf_erase(&b,
+                                         in[i].erasures[j].of,
+                                         in[i].erasures[j].size);
+                        RD_UT_ASSERT(r == in[i].erasures[j].retsize,
+                                     "expected retsize %"PRIusz" for i=%d,j=%d"
+                                     ", not %"PRIusz,
+                                     in[i].erasures[j].retsize, i, j, r);
+                }
+
+                /* Perform writes */
+                for (j = 0 ; in[i].writes[j] ; j++)
+                        rd_buf_write(&b, in[i].writes[j],
+                                     strlen(in[i].writes[j]));
+
+                RD_UT_ASSERT(expsz == rd_buf_len(&b),
+                             "expected buffer to be %"PRIusz" bytes, not "
+                             "%"PRIusz" for i=%d",
+                             expsz, rd_buf_len(&b), i);
+
+                /* Read back and verify */
+                r2 = rd_slice_init(&s, &b, 0, rd_buf_len(&b));
+                RD_UT_ASSERT((r2 == -1 && rd_buf_len(&b) == 0) ||
+                             (r2 == 0 && rd_buf_len(&b) > 0),
+                             "slice_init(%"PRIusz") returned %d for i=%d",
+                             rd_buf_len(&b), r2, i);
+                if (r2 == -1)
+                        continue; /* Empty buffer */
+
+                RD_UT_ASSERT(expsz == rd_slice_size(&s),
+                             "expected slice to be %"PRIusz" bytes, not %"PRIusz
+                             " for i=%d",
+                             expsz, rd_slice_size(&s), i);
+
+                out = rd_malloc(expsz);
+
+                r = rd_slice_read(&s, out, expsz);
+                RD_UT_ASSERT(r == expsz,
+                             "expected to read %"PRIusz" bytes, not %"PRIusz
+                             " for i=%d",
+                             expsz, r, i);
+
+                RD_UT_ASSERT(!memcmp(out, in[i].expect, expsz),
+                             "Expected \"%.*s\", not \"%.*s\" for i=%d",
+                             (int)expsz, in[i].expect,
+                             (int)r, out, i);
+
+                rd_free(out);
+
+                RD_UT_ASSERT(rd_slice_remains(&s) == 0,
+                             "expected no remaining bytes in slice, but got "
+                             "%"PRIusz" for i=%d",
+                             rd_slice_remains(&s), i);
+
+                rd_buf_destroy(&b);
+        }
+
+
+        RD_UT_PASS();
+}
+
 
 int unittest_rdbuf (void) {
         int fails = 0;
@@ -1590,6 +1849,7 @@ int unittest_rdbuf (void) {
         fails += do_unittest_write_split_seek();
         fails += do_unittest_write_read_payload_correctness();
         fails += do_unittest_write_iov();
+        fails += do_unittest_erase();
 
         return fails;
 }

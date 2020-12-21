@@ -29,6 +29,11 @@ and the sticky consumer group partition assignor.
    supported on Apache Kafka 2.5 or later, on earlier releases you will
    need to use one producer per input partition for EOS. This limitation
    is not enforced by the producer or broker.
+ * The default for the producer configuration property
+   `transaction.timeout.ms` has been decreased from 60 to 10 seconds as
+   recommended by KIP-447. Transactional producer users on older versions of
+   Apache Kafka (< 2.5) should configure this property to 60 seconds (60000).
+
 
 
 ## Enhancements

@@ -1253,8 +1253,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "transaction timeout (`socket.timeout.ms` must be at least 100ms "
           "lower than `transaction.timeout.ms`). "
           "This is also the default timeout value if no timeout (-1) is "
-          "supplied to the transactional API methods.",
-          1000, INT_MAX, 60000 },
+          "supplied to the transactional API methods. "
+          "Users on older versions of Apache Kafka (older than 2.5) "
+          "are recommended to set this value to 60000.",
+          1000, INT_MAX, 10000 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.idempotence", _RK_C_BOOL,
           _RK(eos.idempotence),
           "When set to `true`, the producer will ensure that messages are "

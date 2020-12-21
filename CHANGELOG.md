@@ -82,6 +82,14 @@ and the sticky consumer group partition assignor.
    property (if not explicitly configured) which was not desired, this is now
    fixed and the auto adjustment is only done based on the
    `default_topic_conf` at producer creation.
+ * Transactional producer retry count for transactional control protocol
+   requests has been increased from 3 to infinite, retriable errors
+   are now automatically retried by the producer until success or the
+   transaction timeout is exceeded. This fixes the case where
+   `rd_kafka_send_offsets_to_transaction()` would fail the current
+   transaction into an abortable state when `CONCURRENT_TRANSACTIONS` was
+   returned by the broker (which is a transient error) and the 3 retries
+   were exhausted.
 
 
 

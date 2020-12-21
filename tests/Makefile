@@ -172,5 +172,8 @@ release-test: | asan tsan pristine-full scenarios compat
 rusage:
 	./run-test.sh -R bare
 
+# Remove test reports, temporary test files, crash dumps, etc.
+clean-reports:
+	rm -f *.offset stats_*.json core vgcore.*
 
 -include $(DEPS)

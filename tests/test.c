@@ -2251,6 +2251,53 @@ void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
 
 
 /**
+ * @brief Produce messages to multiple topic-partitions.
+ *
+ * @param ...vararg is a tuple of:
+ *           const char *topic
+ *           int32_t partition (or UA)
+ *           int msg_base
+ *           int msg_cnt
+ *
+ * End with a NULL topic
+ */
+void test_produce_msgs_easy_multi (uint64_t testid, ...) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *p;
+        va_list ap;
+        const char *topic;
+        int msgcounter = 0;
+
+        test_conf_init(&conf, NULL, 0);
+
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        va_start(ap, testid);
+        while ((topic = va_arg(ap, const char *))) {
+                int32_t partition = va_arg(ap, int32_t);
+                int msg_base = va_arg(ap, int);
+                int msg_cnt = va_arg(ap, int);
+                rd_kafka_topic_t *rkt;
+
+                rkt = test_create_producer_topic(p, topic, NULL);
+
+                test_produce_msgs_nowait(p, rkt, testid, partition,
+                                         msg_base, msg_cnt,
+                                         NULL, 0, 0, &msgcounter);
+
+                rd_kafka_topic_destroy(rkt);
+        }
+        va_end(ap);
+
+        test_flush(p, tmout_multip(10*1000));
+
+        rd_kafka_destroy(p);
+}
+
+
+/**
  * @brief A standard rebalance callback.
  */
 void test_rebalance_cb (rd_kafka_t *rk,

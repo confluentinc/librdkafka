@@ -34,32 +34,17 @@
 
 
 
-
-int main_0015_offsets_seek (int argc, char **argv) {
-	const char *topic = test_mk_topic_name("0015", 1);
-	rd_kafka_t *rk_p, *rk_c;
-	rd_kafka_topic_t *rkt_p, *rkt_c;
-        int msg_cnt = test_quick ? 100 : 1000;
-	int msg_base = 0;
+static void do_legacy_seek (const char *topic, uint64_t testid, int msg_cnt) {
+        rd_kafka_t *rk_c;
+	rd_kafka_topic_t *rkt_c;
 	int32_t partition = 0;
 	int i;
 	int64_t offset_last, offset_base;
-	uint64_t testid;
 	int dance_iterations = 10;
 	int msgs_per_dance = 10;
+        const int msg_base = 0;
 
-	testid = test_id_generate();
-
-	/* Produce messages */
-	rk_p = test_create_producer();
-	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-
-	test_produce_msgs(rk_p, rkt_p, testid, partition, msg_base, msg_cnt,
-			  NULL, 0);
-
-	rd_kafka_topic_destroy(rkt_p);
-	rd_kafka_destroy(rk_p);
-
+        SUB_TEST_QUICK();
 
 	rk_c = test_create_consumer(NULL, NULL, NULL, NULL);
 	rkt_c = test_create_consumer_topic(rk_c, topic);
@@ -98,5 +83,89 @@ int main_0015_offsets_seek (int argc, char **argv) {
 	rd_kafka_topic_destroy(rkt_c);
 	rd_kafka_destroy(rk_c);
 
-	return 0;
+        SUB_TEST_PASS();
+}
+
+
+static void do_seek (const char *topic, uint64_t testid,
+                     int msg_cnt, rd_bool_t with_timeout) {
+        rd_kafka_t *c;
+        rd_kafka_topic_partition_list_t *partitions;
+        char errstr[512];
+        int i;
+
+        SUB_TEST_QUICK("%s timeout", with_timeout ? "with" : "without");
+
+        c = test_create_consumer(topic, NULL, NULL, NULL);
+
+        partitions = rd_kafka_topic_partition_list_new(3);
+        for (i = 0 ; i < 3 ; i++)
+                rd_kafka_topic_partition_list_add(partitions, topic, i)->
+                        offset = RD_KAFKA_OFFSET_END;
+
+        TEST_CALL__(rd_kafka_assign(c, partitions));
+
+        /* Should see no messages */
+        test_consumer_poll_no_msgs("NO.MSGS", c, testid, 3000);
+
+        /* Seek to beginning */
+        for (i = 0 ; i < 3 ; i++) {
+                /* Sentinel to verify that this field is reset by
+                 * seek_partitions() */
+                partitions->elems[i].err = RD_KAFKA_RESP_ERR__BAD_MSG;
+                partitions->elems[i].offset = i == 0 ?
+                        /* Logical and absolute offsets for the same thing */
+                        RD_KAFKA_OFFSET_BEGINNING : 0;
+        }
+
+        TEST_SAY("Seeking\n");
+        TEST_CALL_ERROR__(rd_kafka_seek_partitions(c, partitions,
+                                                   with_timeout ? 7000 : -1));
+
+        /* Verify that there are no per-partition errors */
+        for (i = 0 ; i < 3 ; i++)
+                TEST_ASSERT_LATER(!partitions->elems[i].err,
+                                  "Partition #%d has unexpected error: %s",
+                                  i,
+                                  rd_kafka_err2name(partitions->elems[i].err));
+        TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Should now see all messages */
+        test_consumer_poll("MSGS", c, testid, -1, 0, msg_cnt, NULL);
+
+        /* Some close/destroy variation */
+        if (with_timeout)
+                test_consumer_close(c);
+
+        rd_kafka_destroy(c);
+
+        SUB_TEST_PASS();
+}
+
+
+int main_0015_offsets_seek (int argc, char **argv) {
+        const char *topic = test_mk_topic_name("0015", 1);
+        int msg_cnt_per_part = test_quick ? 100 : 1000;
+        int msg_cnt = 3 * msg_cnt_per_part;
+        uint64_t testid;
+
+        testid = test_id_generate();
+
+        test_produce_msgs_easy_multi(
+                testid,
+                topic, 0, 0*msg_cnt_per_part, msg_cnt_per_part,
+                topic, 1, 1*msg_cnt_per_part, msg_cnt_per_part,
+                topic, 2, 2*msg_cnt_per_part, msg_cnt_per_part,
+                NULL);
+
+        /* legacy seek: only reads partition 0 */
+        do_legacy_seek(topic, testid, msg_cnt_per_part);
+
+        do_seek(topic, testid, msg_cnt, rd_true/*with timeout*/);
+
+        do_seek(topic, testid, msg_cnt, rd_true/*without timeout*/);
+
+        return 0;
 }

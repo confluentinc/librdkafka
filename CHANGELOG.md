@@ -57,6 +57,8 @@ and the sticky consumer group partition assignor.
  * Will now log a warning when multiple ClusterIds are seen, which is an
    indication that the client might be erroneously configured to connect to
    multiple clusters which is not supported.
+ * Added `rd_kafka_seek_partitions()` to seek multiple partitions to
+   per-partition specific offsets.
 
 
 ## Fixes

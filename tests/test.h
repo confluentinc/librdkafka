@@ -444,6 +444,7 @@ rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
                                int32_t partition,
                                int msg_base, int cnt, size_t size, ...);
+void test_produce_msgs_easy_multi (uint64_t testid, ...);
 
 void test_rebalance_cb (rd_kafka_t *rk,
                         rd_kafka_resp_err_t err,

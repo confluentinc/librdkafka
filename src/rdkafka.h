@@ -3417,15 +3417,60 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
  *
- * This call triggers a fetch queue barrier flush.
+ * This call will purge all pre-fetched messages for the given partition, which
+ * may be up to \c queued.max.message.kbytes in size. Repeated use of seek
+ * may thus lead to increased network usage as messages are re-fetched from
+ * the broker.
+ *
+ * @remark Seek must only be performed for already assigned/consumed partitions,
+ *         use rd_kafka_assign() (et.al) to set the initial starting offset
+ *         for a new assignmenmt.
  *
  * @returns `RD_KAFKA_RESP_ERR__NO_ERROR` on success else an error code.
+ *
+ * @deprecated Use rd_kafka_seek_partitions().
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
                                    int32_t partition,
                                    int64_t offset,
                                    int timeout_ms);
+
+
+
+/**
+ * @brief Seek consumer for partitions in \p partitions to the per-partition
+ *        offset in the \c .offset field of \p partitions.
+ *
+ * The offset may be either absolute (>= 0) or a logical offset.
+ *
+ * If \p timeout_ms is not 0 the call will wait this long for the
+ * seeks to be performed. If the timeout is reached the internal state
+ * will be unknown for the remaining partitions to seek and this function
+ * will return an error with the error code set to
+ * `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ *
+ * If \p timeout_ms is 0 it will initiate the seek but return
+ * immediately without any error reporting (e.g., async).
+ *
+ * This call will purge all pre-fetched messages for the given partition, which
+ * may be up to \c queued.max.message.kbytes in size. Repeated use of seek
+ * may thus lead to increased network usage as messages are re-fetched from
+ * the broker.
+ *
+ * Individual partition errors are reported in the per-partition \c .err field
+ * of \p partitions.
+ *
+ * @remark Seek must only be performed for already assigned/consumed partitions,
+ *         use rd_kafka_assign() (et.al) to set the initial starting offset
+ *         for a new assignmenmt.
+ *
+ * @returns NULL on success or an error object on failure.
+ */
+RD_EXPORT rd_kafka_error_t *
+rd_kafka_seek_partitions (rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *partitions,
+                          int timeout_ms);
 
 
 /**

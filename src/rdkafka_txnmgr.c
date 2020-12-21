@@ -1602,6 +1602,7 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
                 rkbuf,
                 rko->rko_u.txn.offsets,
                 rd_true /*skip invalid offsets*/,
+                rd_false /*any offset*/,
                 rd_true /*write offsets*/,
                 ApiVersion >= 2 /*write Epoch (-1) */,
                 rd_true /*write Metadata*/);

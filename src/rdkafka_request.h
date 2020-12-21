@@ -64,6 +64,7 @@ int rd_kafka_buf_write_topic_partitions (
         rd_kafka_buf_t *rkbuf,
         const rd_kafka_topic_partition_list_t *parts,
         rd_bool_t skip_invalid_offsets,
+        rd_bool_t only_invalid_offsets,
         rd_bool_t write_Offset,
         rd_bool_t write_Epoch,
         rd_bool_t write_Metadata);

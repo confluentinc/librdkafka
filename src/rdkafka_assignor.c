@@ -152,6 +152,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
                         rkbuf,
                         owned_partitions,
                         rd_false /*don't skip invalid offsets*/,
+                        rd_false /*any offset*/,
                         rd_false /*don't write offsets*/,
                         rd_false /*don't write epoch*/,
                         rd_false /*don't write metadata*/);

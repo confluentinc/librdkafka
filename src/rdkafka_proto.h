@@ -65,6 +65,21 @@ struct rd_kafkap_reshdr {
 };
 
 
+/**
+ * Request type v1 (flexible version)
+ *
+ * i32            Size
+ * i16            ApiKey
+ * i16            ApiVersion
+ * i32            CorrId
+ * string         ClientId   (2-byte encoding, not compact string)
+ * uvarint        Tags
+ * <Request payload>
+ * uvarint        EndTags
+ *
+ * Any struct-type (non-primitive or array type) field in the request payload
+ * must also have a trailing tags list, this goes for structs in arrays as well.
+ */
 
 /**
  * @brief Protocol request type (ApiKey) to name/string.

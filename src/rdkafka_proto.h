@@ -40,7 +40,14 @@
 
 /** Default generic retry count for failed requests.
  *  This may be overriden for specific request types. */
-#define RD_KAFKA_REQUEST_MAX_RETRIES 2
+#define RD_KAFKA_REQUEST_DEFAULT_RETRIES 2
+
+/** Max (practically infinite) retry count */
+#define RD_KAFKA_REQUEST_MAX_RETRIES  INT_MAX
+
+/** Do not retry request */
+#define RD_KAFKA_REQUEST_NO_RETRIES 0
+
 
 /**
  * Request types

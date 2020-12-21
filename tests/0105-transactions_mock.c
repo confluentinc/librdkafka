@@ -603,12 +603,11 @@ static void do_test_txns_not_supported (void) {
 
 
 /**
- * @brief CONCURRENT_TRANSACTION on AddOffsets.. should be marked as retriable.
+ * @brief CONCURRENT_TRANSACTION on AddOffsets.. should be retried.
  */
-static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
+static void do_test_txns_send_offsets_concurrent_is_retried (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
-        rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
@@ -634,12 +633,15 @@ static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
 
 
         /*
-         * Have AddOffsetsToTxn fail.
+         * Have AddOffsetsToTxn fail but eventually succeed due to
+         * infinite retries.
          */
         rd_kafka_mock_push_request_errors(
                 mcluster,
                 RD_KAFKAP_AddOffsetsToTxn,
-                1+3,/* first request + number of internal retries */
+                1+5,/* first request + some retries */
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
                 RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
                 RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
                 RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
@@ -650,33 +652,11 @@ static void do_test_txns_send_offsets_concurrent_is_retriable (void) {
 
         cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
 
-        error = rd_kafka_send_offsets_to_transaction(rk, offsets,
-                                                     cgmetadata, -1);
-
-        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
-        rd_kafka_topic_partition_list_destroy(offsets);
-
-        TEST_ASSERT(error, "expected error");
-        TEST_SAY("Error %s: %s\n",
-                 rd_kafka_error_name(error),
-                 rd_kafka_error_string(error));
-        TEST_ASSERT(rd_kafka_error_is_retriable(error),
-                    "expected retriable error, not %s",
-                    rd_kafka_error_string(error));
-        rd_kafka_error_destroy(error);
-
-        /* Retry */
-        offsets = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 12;
-
-        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
-
         TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(rk, offsets,
                                                                cgmetadata, -1));
 
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         rd_kafka_topic_partition_list_destroy(offsets);
-
 
         TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
 
@@ -984,7 +964,7 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         do_test_txns_not_supported();
 
-        do_test_txns_send_offsets_concurrent_is_retriable();
+        do_test_txns_send_offsets_concurrent_is_retried();
 
         do_test_txns_no_timeout_crash();
 

@@ -2751,6 +2751,99 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 }
 
 
+rd_kafka_error_t *
+rd_kafka_seek_partitions (rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *partitions,
+                          int timeout_ms) {
+        rd_kafka_q_t *tmpq = NULL;
+        rd_kafka_topic_partition_t *rktpar;
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+        int cnt = 0;
+
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+                return rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__INVALID_ARG,
+                        "Must only be used on consumer instance");
+
+        if (!partitions || partitions->cnt == 0)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "partitions must be specified");
+
+        if (timeout_ms)
+                tmpq = rd_kafka_q_new(rk);
+
+        RD_KAFKA_TPLIST_FOREACH(rktpar, partitions) {
+                rd_kafka_toppar_t *rktp;
+                rd_kafka_resp_err_t err;
+
+                rktp = rd_kafka_toppar_get2(rk,
+                                            rktpar->topic,
+                                            rktpar->partition,
+                                            rd_false/*no-ua-on-miss*/,
+                                            rd_false/*no-create-on-miss*/);
+                if (!rktp) {
+                        rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        continue;
+                }
+
+                err = rd_kafka_toppar_op_seek(rktp, rktpar->offset,
+                                              RD_KAFKA_REPLYQ(tmpq, 0));
+                if (err) {
+                        rktpar->err = err;
+                } else {
+                        rktpar->err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+                        cnt++;
+                }
+
+                rd_kafka_toppar_destroy(rktp); /* refcnt from toppar_get2() */
+        }
+
+        if (!timeout_ms)
+                return NULL;
+
+
+        while (cnt > 0) {
+                rd_kafka_op_t *rko;
+
+                rko = rd_kafka_q_pop(tmpq, rd_timeout_remains(abs_timeout), 0);
+                if (!rko) {
+                        rd_kafka_q_destroy_owner(tmpq);
+
+                        return rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__TIMED_OUT,
+                                "Timed out waiting for %d remaining partition "
+                                "seek(s) to finish", cnt);
+                }
+
+                if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY) {
+                        rd_kafka_q_destroy_owner(tmpq);
+                        rd_kafka_op_destroy(rko);
+
+                        return rd_kafka_error_new(RD_KAFKA_RESP_ERR__DESTROY,
+                                                  "Instance is terminating");
+                }
+
+                rd_assert(rko->rko_rktp);
+
+                rktpar = rd_kafka_topic_partition_list_find(
+                        partitions,
+                        rko->rko_rktp->rktp_rkt->rkt_topic->str,
+                        rko->rko_rktp->rktp_partition);
+                rd_assert(rktpar);
+
+                rktpar->err = rko->rko_err;
+
+                rd_kafka_op_destroy(rko);
+
+                cnt--;
+        }
+
+        rd_kafka_q_destroy_owner(tmpq);
+
+        return NULL;
+}
+
+
 
 static ssize_t rd_kafka_consume_batch0 (rd_kafka_q_t *rkq,
 					int timeout_ms,

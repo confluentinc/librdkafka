@@ -119,13 +119,19 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (int segcnt, size_t size, int flags) {
  * @brief Create new request buffer with the request-header written (will
  *        need to be updated with Length, etc, later)
  */
-rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey,
-                                          int segcnt, size_t size) {
+rd_kafka_buf_t *rd_kafka_buf_new_request0 (rd_kafka_broker_t *rkb,
+                                           int16_t ApiKey,
+                                           int segcnt, size_t size,
+                                           rd_bool_t is_flexver) {
         rd_kafka_buf_t *rkbuf;
 
         /* Make room for common protocol request headers */
         size += RD_KAFKAP_REQHDR_SIZE +
-                RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_client_id);
+                RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_client_id) +
+                /* Flexible version adds a tag list to the headers
+                 * and to the end of the payload, both of which we send
+                 * as empty (1 byte each). */
+                (is_flexver ? 1 + 1 : 0);
         segcnt += 1; /* headers */
 
         rkbuf = rd_kafka_buf_new0(segcnt, size, 0);
@@ -148,8 +154,17 @@ rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey
         /* CorrId: updated later */
         rd_kafka_buf_write_i32(rkbuf, 0);
 
-        /* ClientId: possibly updated later if a flexible version */
+        /* ClientId */
         rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->rk_client_id);
+
+        if (is_flexver) {
+                /* Must set flexver after writing the client id since
+                 * it is still a standard non-compact string. */
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+
+                /* Empty request header tags */
+                rd_kafka_buf_write_i8(rkbuf, 0);
+        }
 
         return rkbuf;
 }

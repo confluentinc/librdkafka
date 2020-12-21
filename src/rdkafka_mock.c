@@ -821,7 +821,6 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
         } else if (rd_buf_write_pos(&rkbuf->rkbuf_buf) -
                    RD_KAFKAP_REQHDR_SIZE == rkbuf->rkbuf_totlen) {
                 /* The full request is now read into the buffer. */
-                rd_kafkap_str_t clientid;
 
                 /* Set up response reader slice starting past the
                  * request header */
@@ -831,7 +830,7 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                               RD_KAFKAP_REQHDR_SIZE);
 
                 /* For convenience, shave off the ClientId */
-                rd_kafka_buf_read_compact_str(rkbuf, &clientid);
+                rd_kafka_buf_skip_str(rkbuf);
 
                 /* Return the buffer to the caller */
                 *rkbufp = rkbuf;

@@ -1977,6 +1977,7 @@ rd_kafka_sticky_assignor_get_metadata (const rd_kafka_assignor_t *rkas,
                 rkbuf,
                 state->prev_assignment,
                 rd_false /*skip invalid offsets*/,
+                rd_false /*any offset*/,
                 rd_false /*write offsets*/,
                 rd_false /*write epoch*/,
                 rd_false /*write metadata*/);

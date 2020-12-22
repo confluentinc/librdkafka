@@ -2159,7 +2159,7 @@ function mkl_usage {
 
     echo "Honoured environment variables:
   CC, CPP, CXX, CFLAGS, CPPFLAGS, CXXFLAGS, LDFLAGS, LIBS,
-  LD, NM, OBJDUMP, STRIP, PKG_CONFIG, PKG_CONFIG_PATH,
+  LD, NM, OBJDUMP, STRIP, RANLIB, PKG_CONFIG, PKG_CONFIG_PATH,
   STATIC_LIB_<libname>=.../libname.a
 
 "

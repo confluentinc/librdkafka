@@ -27,6 +27,7 @@ else:
 # Rename token values
 rename_vals = {'plat': {'windows': 'win'},
                'arch': {'x86_64': 'x64',
+                        'amd64': 'x64',
                         'i386': 'x86',
                         'win32': 'x86'}}
 

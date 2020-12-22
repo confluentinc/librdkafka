@@ -24,7 +24,7 @@ matrix:
    compiler: gcc
    env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest"
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
  - name: "RPM packages"
    os: linux
    compiler: gcc
@@ -34,19 +34,19 @@ matrix:
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
  - name: "Linux clang: +static +alpine-static"
    os: linux
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
    before_script:
-    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
  - name: "OSX GCC"
    os: osx
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
  - name: "OSX clang: +static"
    os: osx
    # Use an older image to disable syslog and for broader compatibility
@@ -55,7 +55,7 @@ matrix:
    compiler: clang
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog --enable-strip
  - name: "Windows MinGW-w64"
    os: windows
    env:
@@ -92,7 +92,7 @@ matrix:
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
  - name: "Linux GCC s390x: +devel"
    os: linux
    arch: s390x

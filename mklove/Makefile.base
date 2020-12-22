@@ -34,10 +34,12 @@ _UNAME_S := $(shell uname -s)
 ifeq ($(_UNAME_S),Darwin)
 	LIBFILENAME=$(LIBNAME).$(LIBVER)$(SOLIB_EXT)
 	LIBFILENAMELINK=$(LIBNAME)$(SOLIB_EXT)
+	LIBFILENAMEDBG=$(LIBNAME)-dbg.$(LIBVER)$(SOLIB_EXT)
 	LDD_PRINT="otool -L"
 else
 	LIBFILENAME=$(LIBNAME)$(SOLIB_EXT).$(LIBVER)
 	LIBFILENAMELINK=$(LIBNAME)$(SOLIB_EXT)
+	LIBFILENAMEDBG=$(LIBNAME)-dbg$(SOLIB_EXT).$(LIBVER)
 	LDD_PRINT="ldd"
 endif
 
@@ -106,10 +108,19 @@ $(LIBNAME_LDS):
 $(LIBFILENAME): $(OBJS) $(LIBNAME_LDS)
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
 	$(CC_LD) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
+ifeq ($(WITH_STRIP),y)
+	cp $@ $(LIBFILENAMEDBG)
+	$(STRIP) -S $@
+endif
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
+ifeq ($(WITH_STRIP),y)
+	cp $@ $(LIBNAME)-dbg.a
+	$(STRIP) -S $@
+	$(RANLIB) $@
+endif
 
 ifeq ($(MKL_NO_SELFCONTAINED_STATIC_LIB),y)
 $(LIBNAME)-static.a:
@@ -134,15 +145,20 @@ else
 	rm $$_tmp)
 endif
 	cp $@ $(LIBNAME)-static-dbg.a
-	strip -S $@
-	ranlib $@
+# The self-contained static library is always stripped, regardless
+# of --enable-strip, since otherwise it would become too big.
+	$(STRIP) -S $@
+	$(RANLIB) $@
 ifneq ($(MKL_DYNAMIC_LIBS),)
 	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: The following libraries were not available as static libraries and need to be linked dynamically: $(MKL_DYNAMIC_LIBS)$(MKL_CLR_RESET)\n"
 endif
 else
 	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: Not creating self-contained static library $@: no static libraries available/enabled$(MKL_CLR_RESET)\n"
+	@printf "$(MKL_YELLOW)         Using standard static library in $(LIBNAME0)-static.pc$(MKL_CLR_RESET)\n"
 endif
 endif
+
+_STATIC_FILENAME=$(LIBNAME)$(if $(MKL_STATIC_LIBS),-static,).a
 
 
 $(LIBFILENAMELINK): $(LIBFILENAME)
@@ -178,7 +194,7 @@ Description: $(MKL_APP_DESC_ONELINE) (static)
 Version: $(MKL_APP_VERSION)
 Requires: $(MKL_PKGCONFIG_REQUIRES:rdkafka=rdkafka-static)
 Cflags: -I$${includedir}
-Libs: -L$${libdir} $${pc_sysrootdir}$${libdir}/$(LIBNAME)-static.a $(MKL_PKGCONFIG_LIBS_PRIVATE)
+Libs: -L$${libdir} $${pc_sysrootdir}$${libdir}/$(_STATIC_FILENAME) $(MKL_PKGCONFIG_LIBS_PRIVATE)
 endef
 
 export _PKG_CONFIG_STATIC_DEF
@@ -290,8 +306,8 @@ generic-clean:
 	rm -f $(OBJS) $(DEPS)
 
 lib-clean: generic-clean lib-clean-pkg-config
-	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMELINK) \
-		$(LIBNAME_LDS)
+	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMEDBG) \
+		$(LIBFILENAMELINK) $(LIBNAME_LDS)
 
 bin-clean: generic-clean
 	rm -f $(BIN)

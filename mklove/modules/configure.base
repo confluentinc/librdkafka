@@ -1560,11 +1560,13 @@ function mkl_lib_check0 {
     fi
 
     local libs="$5"
+    local is_static=0
 
     if [[ -z $nostaticopt ]]; then
         local stlibs=$(mkl_lib_check_static $1 "$libs")
         if [[ -n $stlibs ]]; then
             libs=$stlibs
+            is_static=1
         fi
     fi
 
@@ -1578,7 +1580,12 @@ function mkl_lib_check0 {
         # E.g., check for crypto and then ssl should result in -lssl -lcrypto
         mkl_dbg "$1: from lib_check: LIBS: prepend $libs"
         mkl_mkvar_prepend "$1" LIBS "$libs"
-        mkl_mkvar_prepend "$1" MKL_PKGCONFIG_LIBS_PRIVATE "$libs"
+        if [[ $is_static == 0 ]]; then
+            # Static libraries are automatically bundled with
+            # librdkafka-static.a so there is no need to add them as an
+            # external linkage dependency.
+            mkl_mkvar_prepend "$1" MKL_PKGCONFIG_LIBS_PRIVATE "$libs"
+        fi
     fi
 
     return 0

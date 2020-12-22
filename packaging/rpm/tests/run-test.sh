@@ -41,9 +41,7 @@ $_INST /rpms/librdkafka1-*el${_EL}.x86_64.rpm /rpms/librdkafka-devel-*el${_EL}.x
 
 make clean all
 
-./test
-
-./testcpp
+make run
 
 make clean
 

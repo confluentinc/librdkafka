@@ -3,10 +3,6 @@ dist: trusty
 sudo: false
 cache: ccache
 
-env:
- global:
-  - ARCH=x64
-
 addons:
   apt:
     packages:
@@ -133,7 +129,7 @@ deploy:
   region: us-west-1
   skip_cleanup: true
   local-dir: artifacts
-  upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}__lnk-${LINKAGE}
+  upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${TRAVIS_CPU_ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}__lnk-${LINKAGE}
   on:
     repo: edenhill/librdkafka
     all_branches: true

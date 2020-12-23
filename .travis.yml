@@ -113,7 +113,7 @@ script:
 - if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
 - if [[ $SKIP_MAKE != y ]]; then make install || travis_terminate 1 ; fi
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
-- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro || travis_terminate 1 ; done
+- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro --enable-strip || travis_terminate 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check || travis_terminate 1; fi
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
 - if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.6.0) || travis_terminate 1 ; fi

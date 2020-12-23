@@ -22,7 +22,7 @@ if [ "$1" = "--in-docker" ]; then
     # Create a tarball in artifacts/
     cd src
     ldd librdkafka.so.1
-    tar cvzf /v/artifacts/alpine-librdkafka.tgz librdkafka.so.1 librdkafka-static.a rdkafka-static.pc
+    tar cvzf /v/artifacts/alpine-librdkafka.tgz librdkafka.so.1 librdkafka*.a rdkafka-static.pc
     cd ../..
 
 else

@@ -15,10 +15,13 @@
 set -ex
 
 LRK_DIR=$1
-OUT_TGZ=$2
+shift
+OUT_TGZ=$1
+shift
+CONFIG_ARGS=$*
 
 if [[ ! -f $LRK_DIR/configure.self || -z $OUT_TGZ ]]; then
-    echo "Usage: $0 <librdkafka-root-direcotry> <output-tgz>"
+    echo "Usage: $0 <librdkafka-root-direcotry> <output-tgz> [<configure-args..>]"
     exit 1
 fi
 
@@ -40,7 +43,7 @@ mkdir -p $DEST_DIR
 
 (cd $LRK_DIR ; git archive --format tar HEAD) | tar xf -
 
-./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR
+./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR $CONFIG_ARGS
 make -j
 examples/rdkafka_example -X builtin.features
 CI=true make -C tests run_local_quick

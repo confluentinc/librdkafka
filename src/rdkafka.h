@@ -3780,18 +3780,44 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @remark on_consume() interceptors may be called from this function prior to
  *         passing message to application.
  *
- * @remark When subscribing to topics the application must call poll at
- *         least every \c max.poll.interval.ms to remain a member of the
- *         consumer group.
+ * @remark When subscribing to topics the application must call poll or
+ *         rd_kafka_consumer_heartbeat() at least every \c max.poll.interval.ms
+ *         to remain a member of the consumer group.
+ *         An application may use rd_kafka_consumer_heartbeat() during message
+ *         processing to remain in the group without having to poll for new
+ *         messages.
  *
  * Noteworthy errors returned in \c ->err:
  * - RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED - application failed to call
  *   poll within `max.poll.interval.ms`.
  *
  * @sa rd_kafka_message_t
+ * @sa rd_kafka_consumer_heartbeat
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
+
+
+
+/**
+ * @brief Indicate to the consumer and consumer group coordinator broker that
+ *        the application is still alive and processing messages.
+ *
+ * This API serves as a supplement to rd_kafka_consumer_poll() for applications
+ * that perform long time message processing that could potentially exceed
+ * the \c max.poll.interval.ms.
+ * As opposed to rd_kafka_consumer_poll(), this heartbeat API does not return
+ * any message but only marks the application as responsive, resetting the
+ * \c max.poll.interval.ms timer.
+ *
+ * @returns NULL if the consumer is in a steady state, or an error if the
+ *          group is rebalancing (or otherwise in a non-steady state), in the
+ *          error case the application needs to abort its current processing
+ *          and call rd_kafka_consumer_poll() to handle the rebalance.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_consumer_heartbeat (rd_kafka_t *rk);
+
 
 /**
  * @brief Close down the KafkaConsumer.

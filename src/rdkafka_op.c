@@ -95,6 +95,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 "REPLY:GET_REBALANCE_PROTOCOL",
                 [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
+                [RD_KAFKA_OP_HEARTBEAT] = "REPLY:HEARTBEAT",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -237,6 +238,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 sizeof(rko->rko_u.rebalance_protocol),
                 [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
+                [RD_KAFKA_OP_HEARTBEAT] = _RD_KAFKA_OP_EMPTY,
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

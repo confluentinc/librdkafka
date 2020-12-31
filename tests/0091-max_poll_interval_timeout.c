@@ -85,6 +85,21 @@ static void do_consume (struct _consumer *cons, int timeout_s) {
         rd_sleep(timeout_s);
 }
 
+static void do_heartbeat (struct _consumer *cons, int processing_time_s) {
+        rd_kafka_error_t *error;
+
+        error = rd_kafka_consumer_heartbeat(cons->rk);
+        TEST_ASSERT(!error,
+                    "Heartbeat failed for %s: %s: %s",
+                    rd_kafka_name(cons->rk),
+                    rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
+
+        TEST_SAY("%s: simulate processing by sleeping for %ds\n",
+                 rd_kafka_name(cons->rk), processing_time_s);
+        rd_sleep(processing_time_s);
+}
+
 
 static void rebalance_cb (rd_kafka_t *rk,
                           rd_kafka_resp_err_t err,
@@ -118,8 +133,9 @@ static void do_test_with_subscribe (const char *topic) {
         const int msgcnt = 3;
         struct _consumer c[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_kafka_conf_t *conf;
+        int64_t ts_until;
 
-        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms with subscribe() ]\n");
+        SUB_TEST("Test max.poll.interval.ms with subscribe()");
 
         testid = test_id_generate();
 
@@ -182,6 +198,15 @@ static void do_test_with_subscribe (const char *topic) {
                 do_consume(&c[1], 10/*10s*/);
         }
 
+        /* Use heartbeat() to stay alive for 30 seconds even though
+         * max.poll.interval.ms is 20 seconds. */
+        ts_until = test_clock() + (30*1000000)/*30s*/;
+
+        while (ts_until > test_clock()) {
+                do_heartbeat(&c[0], 3/*3s*/);
+                do_heartbeat(&c[1], 0/*0s*/);
+        }
+
         /* Allow the extra revoke rebalance on close() */
         c[0].max_rebalance_cnt++;
         c[1].max_rebalance_cnt++;
@@ -192,8 +217,7 @@ static void do_test_with_subscribe (const char *topic) {
         rd_kafka_destroy(c[0].rk);
         rd_kafka_destroy(c[1].rk);
 
-        TEST_SAY(_C_GRN
-                 "[ Test max.poll.interval.ms with subscribe(): PASS ]\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -206,7 +230,7 @@ static void do_test_with_assign (const char *topic) {
         rd_kafka_conf_t *conf;
         rd_kafka_message_t *rkm;
 
-        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms with assign() ]\n");
+        SUB_TEST_QUICK("Test max.poll.interval.ms with assign()");
 
         test_conf_init(&conf, NULL, 60);
 
@@ -238,8 +262,7 @@ static void do_test_with_assign (const char *topic) {
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN
-                 "[ Test max.poll.interval.ms with assign(): PASS ]\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -247,13 +270,13 @@ static void do_test_with_assign (const char *topic) {
  * @brief Verify that max.poll.interval.ms kicks in even if
  *        the application hasn't called poll once.
  */
-static void do_test_no_poll (const char *topic) {
+static void do_test_no_poll (const char *topic, rd_bool_t heartbeat) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_message_t *rkm;
-        rd_bool_t raised = rd_false;
 
-        TEST_SAY(_C_MAG "[ Test max.poll.interval.ms without calling poll ]\n");
+        SUB_TEST_QUICK("Test max.poll.interval.ms without calling %s",
+                       heartbeat ? "consumer_heartbeat()" : "consumer_poll()");
 
         test_conf_init(&conf, NULL, 60);
 
@@ -270,20 +293,35 @@ static void do_test_no_poll (const char *topic) {
         rd_sleep(10);
 
         /* Make sure the error is raised */
-        while ((rkm = rd_kafka_consumer_poll(rk, 0))) {
-                if (rkm->err == RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED)
-                        raised = rd_true;
+        if (heartbeat) {
+                rd_kafka_error_t *error;
 
-                rd_kafka_message_destroy(rkm);
+                error = rd_kafka_consumer_heartbeat(rk);
+                TEST_ASSERT(error != NULL,
+                            "Expected heartbeat() error");
+
+                TEST_SAY("Heartbeat error (expected): %s: %s\n",
+                         rd_kafka_error_name(error),
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        } else {
+                rd_bool_t raised = rd_false;
+
+                while ((rkm = rd_kafka_consumer_poll(rk, 0))) {
+                        if (rkm->err == RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED)
+                                raised = rd_true;
+
+                        rd_kafka_message_destroy(rkm);
+                }
+
+                TEST_ASSERT(raised,
+                            "Expected to have seen ERR__MAX_POLL_EXCEEDED");
         }
-
-        TEST_ASSERT(raised, "Expected to have seen ERR__MAX_POLL_EXCEEDED");
 
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN
-                 "[ Test max.poll.interval.ms without calling poll: PASS ]\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -297,7 +335,9 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
 
         do_test_with_assign(topic);
 
-        do_test_no_poll(topic);
+        do_test_no_poll(topic, rd_false/*poll()*/);
+
+        do_test_no_poll(topic, rd_true/*heartbeat()*/);
 
         return 0;
 }

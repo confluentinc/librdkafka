@@ -2503,6 +2503,25 @@ public:
   virtual Message *consume (int timeout_ms) = 0;
 
   /**
+   * @brief Indicate to the consumer and consumer group coordinator broker that
+   *        the application is still alive and processing messages.
+   *
+   * This API serves as a supplement to RdKafka::KafkaConsumer::consume()
+   * for applications hat perform long time message processing that could
+   * potentially exceed the \c max.poll.interval.ms.
+   * As opposed to consume, this heartbeat API does not return
+   * any message but only marks the application as responsive, resetting the
+   * \c max.poll.interval.ms timer.
+   *
+   * @returns NULL if the consumer is in a steady state, or an error if the
+   *          group is rebalancing (or otherwise in a non-steady state), in the
+   *          error case the application needs to abort its current processing
+   *          and call RdKafka::KafkaConsuner::consume() to handle the
+   *          rebalance.
+   */
+  virtual Error *heartbeat () = 0;
+
+  /**
    * @brief Commit offsets for the current assignment.
    *
    * @remark This is the synchronous variant that blocks until offsets

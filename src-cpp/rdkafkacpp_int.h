@@ -1130,6 +1130,15 @@ public:
   Error *incremental_unassign (const std::vector<TopicPartition*> &partitions);
 
   Message *consume (int timeout_ms);
+
+  Error *heartbeat () {
+    rd_kafka_error_t *c_error;
+    c_error = rd_kafka_consumer_heartbeat(rk_);
+    if (c_error)
+      return new ErrorImpl(c_error);
+    return NULL;
+  }
+
   ErrorCode commitSync () {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));
   }

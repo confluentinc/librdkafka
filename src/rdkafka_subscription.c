@@ -287,3 +287,19 @@ rd_kafka_resume_partitions (rd_kafka_t *rk,
                                              partitions);
 }
 
+
+
+rd_kafka_error_t *
+rd_kafka_consumer_heartbeat (rd_kafka_t *rk) {
+        rd_kafka_cgrp_t *rkcg;
+
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+                                          "Requires a consumer with group.id "
+                                          "configured");
+
+        return rd_kafka_op_error_destroy(
+                rd_kafka_op_req(rkcg->rkcg_ops,
+                                rd_kafka_op_new(RD_KAFKA_OP_HEARTBEAT),
+                                RD_POLL_INFINITE));
+}

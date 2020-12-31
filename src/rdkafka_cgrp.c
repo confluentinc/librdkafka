@@ -4667,6 +4667,7 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
         rd_kafka_cgrp_t *rkcg = opaque;
         rd_kafka_toppar_t *rktp;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         const int silent_op = rko->rko_type == RD_KAFKA_OP_RECV_BUF;
 
         rktp = rko->rko_rktp;
@@ -4819,6 +4820,37 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         rd_kafka_rebalance_protocol2str(
                                 rd_kafka_cgrp_rebalance_protocol(rkcg));
                 rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
+                rko = NULL;
+                break;
+
+        case RD_KAFKA_OP_HEARTBEAT:
+                /* Application preventing max.poll.interval.ms from expiring
+                 * by calling rd_kafka_consumer_heartbeat() rather than
+                 * ..consumer_poll().
+                 * Return an error if the current state is not steady,
+                 * e.g., if rebalancing, else NULL. */
+                rd_kafka_app_polled(rkcg->rkcg_rk);
+
+                if (rd_kafka_max_poll_exceeded(rkcg->rkcg_rk))
+                        error = rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED,
+                                "Application maximum poll interval exceeded "
+                                "in join-state %s",
+                                rd_kafka_cgrp_join_state_names[
+                                        rkcg->rkcg_join_state]);
+                else if (rkcg->rkcg_join_state ==
+                         RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                        error = NULL;
+                else
+                        error = rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__STATE,
+                                RD_KAFKA_CGRP_REBALANCING(rkcg) ?
+                                "Group is rebalancing in join-state %s" :
+                                "Heartbeat not allowed in join-state %s",
+                                rd_kafka_cgrp_join_state_names[
+                                        rkcg->rkcg_join_state]);
+
+                rd_kafka_op_error_reply(rko, error);
                 rko = NULL;
                 break;
 

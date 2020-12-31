@@ -71,6 +71,8 @@ librdkafka v1.6.0 is feature release:
 ### General fixes
 
  * Fix a use-after-free crash when certain coordinator requests were retried.
+ * The C++ `oauthbearer_set_token()` function would call `free()` on
+   a `new`-created pointer, possibly leading to crashes or heap corruption (#3194)
 
 ### Consumer fixes
 

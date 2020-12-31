@@ -100,7 +100,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
 
         testid = test_id_generate();
 
-        test_conf_init(&conf, NULL, 15*60*2);
+        test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
         test_conf_set(conf, "metadata.max.age.ms", "10000");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");

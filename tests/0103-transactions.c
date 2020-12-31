@@ -142,8 +142,16 @@ static void do_test_basic_producer_txn (rd_bool_t enable_compression) {
 
         /* Create consumer */
         c_conf = conf;
-        test_conf_set(c_conf, "isolation.level", "read_committed");
+        /* Make sure default isolation.level is transaction aware */
+        TEST_ASSERT(!strcmp(test_conf_get(c_conf, "isolation.level"),
+                            "read_committed"),
+                    "expected isolation.level=read_committed, not %s",
+                    test_conf_get(c_conf, "isolation.level"));
+
         c = test_create_consumer(topic, NULL, c_conf, NULL);
+
+        /* Wait for topic to propagate to avoid test flakyness */
+        test_wait_topic_exists(c, topic, tmout_multip(5000));
 
         /* Subscribe to topic */
         test_consumer_subscribe(c, topic);

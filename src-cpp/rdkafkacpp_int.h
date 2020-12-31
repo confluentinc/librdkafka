@@ -977,7 +977,7 @@ class HandleImpl : virtual public Handle {
                                                extensions_copy,
                                                extensions.size(),
                                                errbuf, sizeof(errbuf)));
-          free(extensions_copy);
+          delete extensions_copy;
 
           if (err != ERR_NO_ERROR)
               errstr = errbuf;

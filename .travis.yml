@@ -104,8 +104,9 @@ install:
  - ccache -s || echo "CCache is not available."
  - rm -rf artifacts dest
  - mkdir dest artifacts
- - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt update ; fi
- - if [[ $TRAVIS_DIST == "bionic" || $TRAVIS_DIST == "xenial" ]]; then sudo apt-get install -y libssl1.1 ; fi
+ - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt update || true; fi
+ - if [[ $TRAVIS_DIST == "trusty" || $TRAVIS_DIST == "xenial" ]]; then sudo apt-get install -y libssl1.0.0 libssl-dev ; fi
+ - if [[ $TRAVIS_DIST == "bionic" || $TRAVIS_DIST == "focal" ]]; then sudo apt-get install -y libssl1.1 libssl-dev ; fi
 
 before_cache:
  - if [[ $TRAVIS_OS_NAME == windows ]]; then $msys2 pacman --sync --clean --noconfirm ; fi

@@ -6,7 +6,7 @@ librdkafka v1.6.0 is feature release:
    consumer group partition assignor (KIP-54) (by @mhowlett).
  * [KIP-480 Sticky producer partitioning](https://cwiki.apache.org/confluence/display/KAFKA/KIP-480%3A+Sticky+Partitioner) (`sticky.partitioning.linger.ms`) -
    achieves higher throughput and lower latency through sticky selection
-   of random partition.
+   of random partition (by @abbycriswell).
  * AdminAPI: Add support for `DeleteRecords()`, `DeleteGroups()` and
    `DeleteConsumerGroupOffsets()` (by @gridaphobe)
  * [KIP-447 Producer scalability for exactly once semantics](https://cwiki.apache.org/confluence/display/KAFKA/KIP-447%3A+Producer+scalability+for+exactly+once+semantics) -

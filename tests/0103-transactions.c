@@ -142,6 +142,7 @@ static void do_test_basic_producer_txn (rd_bool_t enable_compression) {
 
         /* Create consumer */
         c_conf = conf;
+        test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Make sure default isolation.level is transaction aware */
         TEST_ASSERT(!strcmp(test_conf_get(c_conf, "isolation.level"),
                             "read_committed"),

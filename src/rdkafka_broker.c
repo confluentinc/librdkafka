@@ -6233,7 +6233,8 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
                  * to get a clean protocol socket. */
                 if (partial_cnt)
                         rd_kafka_broker_fail(
-                                rkb, LOG_NOTICE,
+                                rkb,
+                                LOG_DEBUG,
                                 RD_KAFKA_RESP_ERR__PURGE_QUEUE,
                                 "Purged %d partially sent request: "
                                 "forcing disconnect", partial_cnt);

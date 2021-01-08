@@ -33,7 +33,7 @@
 #include "rdkafka_sasl_int.h"
 #include "rdstring.h"
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <sys/wait.h>  /* For WIF.. */
 #endif
 

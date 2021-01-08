@@ -544,6 +544,11 @@ struct rd_kafka_s {
                                    *   before rd_kafka_new() returns. */
         mtx_t rk_init_lock;       /**< Lock for rk_init_wait and _cmd */
 
+
+        /** Oneshot timer to trigger immediate
+         *  topic scans to retrieve topic metadata. */
+        rd_kafka_timer_t rk_immediate_topic_scan_tmr;
+
         /**
          * Background thread and queue,
          * enabled by setting `background_event_cb()`.

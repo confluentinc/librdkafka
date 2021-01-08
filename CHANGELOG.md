@@ -92,6 +92,9 @@ librdkafka v1.6.0 is feature release:
    transaction into an abortable state when `CONCURRENT_TRANSACTIONS` was
    returned by the broker (which is a transient error) and the 3 retries
    were exhausted.
+ * It could take up to an extra second to deliver the first message due to
+   the one-second topic scan timer. Topic scan and metadata refresh is now
+   done immediately for unknown topics being produced to (#3202).
 
 
 

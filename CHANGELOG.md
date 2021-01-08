@@ -45,7 +45,7 @@ librdkafka v1.6.0 is feature release:
    contention (@azat).
  * Added `assignor` debug context for troubleshooting consumer partition
    assignments.
- * Updated to OpenSSL v1.1.1h when building dependencies.
+ * Updated to OpenSSL v1.1.1i when building dependencies.
  * Update bundled lz4 (used when `./configure --disable-lz4-ext`) to v1.9.3
    which has vast performance improvements.
  * Added `rd_kafka_conf_get_default_topic_conf()` to retrieve the

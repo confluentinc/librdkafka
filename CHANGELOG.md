@@ -132,6 +132,10 @@ librdkafka v1.5.3 is a maintenance release.
    endless loop or generate uneven assignments in case the group members
    had asymmetric subscriptions (e.g., c1 subscribes to t1,t2 while c2
    subscribes to t2,t3).  (#3159)
+ * Mixing committed and logical or absolute offsets in the partitions
+   passed to `rd_kafka_assign()` would in previous released ignore the
+   logical or absolute offsets and use the committed offsets for all partitions.
+   This is now fixed. (#2938)
 
 
 

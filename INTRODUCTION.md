@@ -1041,10 +1041,9 @@ from any thread at any time:
 
 On initialization, librdkafka only needs a partial list of
 brokers (at least one), called the bootstrap brokers.
-The client will connect to the bootstrap brokers, specified by the
-`bootstrap.servers` (or `metadata.broker.list`) configuration property or
-by `rd_kafka_brokers_add()`, and query cluster Metadata information
-which contains the full list of brokers, topic, partitions and their
+The client will connect to the bootstrap brokers specified by the
+`bootstrap.servers` configuration property and query cluster Metadata
+information which contains the full list of brokers, topic, partitions and their
 leaders in the Kafka cluster.
 
 Broker names are specified as `host[:port]` where the port is optional
@@ -1143,7 +1142,7 @@ Examples of needed broker connections are:
 
 When there is no broker connection and a connection to any broker
 is needed, such as on startup to retrieve metadata, the client randomly selects
-a broker from its list of brokers, which includes both the configure bootstrap
+a broker from its list of brokers, which includes both the configured bootstrap
 brokers (including brokers manually added with `rd_kafka_brokers_add()`), as
 well as the brokers discovered from cluster metadata.
 Brokers with no prior connection attempt are tried first.

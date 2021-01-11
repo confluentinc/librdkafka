@@ -4691,6 +4691,9 @@ void rd_kafka_group_list_destroy (const struct rd_kafka_group_list *grplist);
  *
  * @remark Brokers may also be defined with the \c metadata.broker.list or
  *         \c bootstrap.servers configuration property (preferred method).
+ *
+ * @deprecated Set bootstrap servers with the \c bootstrap.servers
+ *             configuration property.
  */
 RD_EXPORT
 int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);

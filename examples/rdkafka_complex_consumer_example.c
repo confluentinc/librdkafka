@@ -510,6 +510,13 @@ int main (int argc, char **argv) {
                                   NULL, 0);
         }
 
+        /* Set bootstrap servers */
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
+                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%% %s\n", errstr);
+                exit(1);
+        }
+
         /* Create Kafka handle */
         if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
                                 errstr, sizeof(errstr)))) {
@@ -518,13 +525,6 @@ int main (int argc, char **argv) {
                         errstr);
                 exit(1);
         }
-
-        /* Add brokers */
-        if (rd_kafka_brokers_add(rk, brokers) == 0) {
-                fprintf(stderr, "%% No valid brokers specified\n");
-                exit(1);
-        }
-
 
         if (mode == 'D') {
                 int r;

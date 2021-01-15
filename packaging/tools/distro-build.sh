@@ -11,6 +11,10 @@ shift
 config_args=$*
 
 case $distro in
+    manylinux*)
+        # Any pypa/manylinux docker image build.
+        docker run -t -v "$PWD:/v" quay.io/pypa/$distro /v/packaging/tools/build-manylinux.sh /v /v/artifacts/librdkafka-${distro}.tgz $config_args
+        ;;
     centos)
         if [[ -n $config_args ]]; then
             echo "Warning: configure arguments ignored for centos RPM build"

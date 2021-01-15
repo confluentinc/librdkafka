@@ -336,8 +336,8 @@ class NugetPackage (Package):
 
             # Travis OSX build
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
-            # Travis Debian 9 / Ubuntu 16.04 build
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-debian9.tgz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/debian9-librdkafka.so'],
+            # Travis Manylinux build
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-manylinux*x86_64.tgz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/centos6-librdkafka.so'],
             # Travis Ubuntu 14.04 build
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
             # Travis CentOS 7 RPM build

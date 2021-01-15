@@ -25,10 +25,10 @@ matrix:
    os: linux
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
- - name: "Linux clang: +alpine"
+ - name: "Linux clang: +alpine +manylinux"
    os: linux
    compiler: clang
-   env: ADDITIONAL_BUILDS="alpine" LINKAGE=std
+   env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
  - name: "Linux clang: +static +alpine-static -gssapi"

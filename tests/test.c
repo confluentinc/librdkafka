@@ -554,6 +554,13 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
 }
 #endif /* WITH_SOCKEM */
 
+/**
+ * @brief For use as the is_fatal_cb(), treating no errors as test-fatal.
+ */
+int test_error_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                                const char *reason) {
+        return 0;
+}
 
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
@@ -6192,6 +6199,7 @@ void test_fail0 (const char *file, int line, const char *function,
                 TEST_LOCK();
         test_curr->state = TEST_FAILED;
         test_curr->failcnt += 1;
+        test_curr->is_fatal_cb = NULL;
 
         if (!*test_curr->failstr) {
                 strncpy(test_curr->failstr, buf, sizeof(test_curr->failstr));
@@ -6301,4 +6309,5 @@ void test_sub_pass (void) {
 
         TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
         *test_curr->subtest = '\0';
+        test_curr->is_fatal_cb = NULL;
 }

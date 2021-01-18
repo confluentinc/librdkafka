@@ -2878,6 +2878,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         rd_kafka_buf_t *rkbuf;
         rd_kafka_op_t *reply;
 
+        if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
+                /* wait_commit_cnt has already been increased for
+                 * reprocessed ops. */
+                rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
+        }
+
         /* If offsets is NULL we shall use the current assignment
          * (not the group assignment). */
         if (!rko->rko_u.offset_commit.partitions &&
@@ -2907,12 +2913,6 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                 valid_offsets = (int)rd_kafka_topic_partition_list_sum(
                         offsets,
                         rd_kafka_topic_partition_has_absolute_offset, NULL);
-        }
-
-        if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
-                /* wait_commit_cnt has already been increased for
-                 * reprocessed ops. */
-                rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
         }
 
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {

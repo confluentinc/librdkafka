@@ -668,6 +668,11 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                                                 const char **bootstraps);
 
 
+
+int test_error_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                                const char *reason);
+
+
 /**
  * @brief Calls rdkafka function (with arguments)
  *        and checks its return value (must be rd_kafka_resp_err_t) for

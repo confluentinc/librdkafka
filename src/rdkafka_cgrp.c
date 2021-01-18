@@ -4945,9 +4945,6 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg) {
 		break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
-                if (rd_kafka_cgrp_session_timeout_check(rkcg, now))
-                        return;
-                /* FALLTHRU */
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL:
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL:
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
@@ -4992,6 +4989,11 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         /* Bail out if we're terminating. */
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))
                 return;
+
+        /* Check session timeout regardless of current coordinator
+         * connection state (rkcg_state) */
+        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                rd_kafka_cgrp_session_timeout_check(rkcg, now);
 
  retry:
         switch (rkcg->rkcg_state)

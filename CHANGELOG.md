@@ -76,6 +76,9 @@ librdkafka v1.6.0 is feature release:
    a number of edge cases for the consumer where the behaviour was previously
    undefined.
  * Partition fetch state was not set to STOPPED if OffsetCommit failed.
+ * The session timeout is now enforced locally also when the coordinator
+   connection is down, which was not previously the case.
+
 
 ### Producer fixes
 

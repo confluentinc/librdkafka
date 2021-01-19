@@ -1082,7 +1082,16 @@ rd_kafka_msgset_writer_compress_snappy (rd_kafka_msgset_writer_t *msetw,
         int r;
 
         /* Initialize snappy compression environment */
-        rd_kafka_snappy_init_env_sg(&senv, 1/*iov enable*/);
+        if ((r = rd_kafka_snappy_init_env_sg(&senv, 1/*iov enable*/)) != 0) {
+                rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
+                           "Failed to initialize snappy compression environment "
+                           "for topic %.*s [%"PRId32"]: %s: "
+                           "sending uncompressed",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           rd_strerror(-r));
+                return -1;
+        }
 
         /* Calculate maximum compressed size and
          * allocate an output buffer accordingly. */

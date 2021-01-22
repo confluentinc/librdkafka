@@ -80,13 +80,6 @@ librdkafka v1.6.0 is feature release:
    connection is down, which was not previously the case.
 
 
-### Producer fixes
-
- * Calling `rd_kafka_topic_new()` with a topic config object with
-   `message.timeout.ms` set could sometimes adjust the global `linger.ms`
-   property (if not explicitly configured) which was not desired, this is now
-   fixed and the auto adjustment is only done based on the
-   `default_topic_conf` at producer creation.
  * Transactional producer retry count for transactional control protocol
    requests has been increased from 3 to infinite, retriable errors
    are now automatically retried by the producer until success or the
@@ -95,6 +88,19 @@ librdkafka v1.6.0 is feature release:
    transaction into an abortable state when `CONCURRENT_TRANSACTIONS` was
    returned by the broker (which is a transient error) and the 3 retries
    were exhausted.
+
+
+### Producer fixes
+
+ * Calling `rd_kafka_topic_new()` with a topic config object with
+   `message.timeout.ms` set could sometimes adjust the global `linger.ms`
+   property (if not explicitly configured) which was not desired, this is now
+   fixed and the auto adjustment is only done based on the
+   `default_topic_conf` at producer creation.
+ * `rd_kafka_flush()` could previously return `RD_KAFKA_RESP_ERR__TIMED_OUT`
+   just as the timeout was reached if the messages had been flushed but
+   there were now no more messages. This has been fixed.
+
 
 
 

@@ -6310,4 +6310,5 @@ void test_sub_pass (void) {
         TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
         *test_curr->subtest = '\0';
         test_curr->is_fatal_cb = NULL;
+        test_curr->ignore_dr_err = rd_false;
 }

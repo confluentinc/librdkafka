@@ -4477,8 +4477,7 @@ rd_kafka_EndTxnRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
-        /* Let the handler perform retries */
-        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_MAX_RETRIES;
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 

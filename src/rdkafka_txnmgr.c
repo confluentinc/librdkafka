@@ -699,12 +699,34 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
         err = rkbuf->rkbuf_err;
 
  done:
-        if (err)
+        if (err) {
+                rd_assert(rk->rk_eos.txn_req_cnt > 0);
                 rk->rk_eos.txn_req_cnt--;
+        }
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY ||
-            err == RD_KAFKA_RESP_ERR__OUTDATED)
+        /* Handle local request-level errors */
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR_NO_ERROR:
+                break;
+
+        case RD_KAFKA_RESP_ERR__DESTROY:
+        case RD_KAFKA_RESP_ERR__OUTDATED:
+                /* Terminating or outdated, ignore response */
                 return;
+
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        default:
+                /* For these errors we can't be sure if the
+                 * request was received by the broker or not,
+                 * so increase the txn_req_cnt back up as if
+                 * they were received so that and EndTxnRequest
+                 * is sent on abort_transaction(). */
+                rk->rk_eos.txn_req_cnt++;
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                break;
+        }
 
         if (reset_coord_err) {
                 rd_kafka_wrlock(rk);
@@ -1315,7 +1337,7 @@ rd_kafka_txn_op_begin_transaction (rd_kafka_t *rk,
 
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_IN_TRANSACTION);
 
-                rk->rk_eos.txn_req_cnt = 0;
+                rd_assert(rk->rk_eos.txn_req_cnt == 0);
                 rd_atomic64_set(&rk->rk_eos.txn_dr_fails, 0);
                 rk->rk_eos.txn_err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 RD_IF_FREE(rk->rk_eos.txn_errstr, rd_free);
@@ -1423,8 +1445,6 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
  done:
         if (err) {
-                rk->rk_eos.txn_req_cnt--;
-
                 if (!*errstr) {
                         rd_snprintf(errstr, sizeof(errstr),
                                     "Failed to commit offsets to "
@@ -1673,8 +1693,10 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
         err = rkbuf->rkbuf_err;
 
  done:
-        if (err)
+        if (err) {
+                rd_assert(rk->rk_eos.txn_req_cnt > 0);
                 rk->rk_eos.txn_req_cnt--;
+        }
 
         remains_ms = rd_timeout_remains(rko->rko_u.txn.abs_timeout);
 
@@ -1694,12 +1716,19 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                 actions = RD_KAFKA_ERR_ACTION_SPECIAL;
                 break;
 
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                /* For these errors we can't be sure if the
+                 * request was received by the broker or not,
+                 * so increase the txn_req_cnt back up as if
+                 * they were received so that and EndTxnRequest
+                 * is sent on abort_transaction(). */
+                rk->rk_eos.txn_req_cnt++;
+                /* FALLTHRU */
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
-        case RD_KAFKA_RESP_ERR__TRANSPORT:
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
-        case RD_KAFKA_RESP_ERR__TIMED_OUT:
-        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY|
                         RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
@@ -1742,8 +1771,10 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 if (!rd_timeout_expired(remains_ms) &&
-                    rd_kafka_buf_retry(rk->rk_eos.txn_coord, request))
+                    rd_kafka_buf_retry(rk->rk_eos.txn_coord, request)) {
+                        rk->rk_eos.txn_req_cnt++;
                         return;
+                }
                 /* Propagate as retriable error through api_reply() below */
 
         } else if (err) {
@@ -1852,6 +1883,8 @@ rd_kafka_txn_op_send_offsets_to_transaction (rd_kafka_t *rk,
                 goto err;
         }
 
+        rk->rk_eos.txn_req_cnt++;
+
         return RD_KAFKA_OP_RES_KEEP; /* the rko is passed to AddOffsetsToTxn */
 
  err:
@@ -1931,6 +1964,8 @@ static void rd_kafka_txn_complete (rd_kafka_t *rk) {
         /* Clear all transaction partition state */
         rd_kafka_txn_clear_pending_partitions(rk);
         rd_kafka_txn_clear_partitions(rk);
+
+        rk->rk_eos.txn_req_cnt = 0;
 
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
 }

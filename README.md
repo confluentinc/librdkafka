@@ -13,6 +13,11 @@ the producer and 3 million msgs/second for the consumer.
 
 **librdkafka** is licensed under the 2-clause BSD license.
 
+KAFKA is a registered trademark of The Apache Software Foundation and
+has been licensed for use by librdkafka. librdkafka has no
+affiliation with and is not endorsed by The Apache Software Foundation.
+
+
 # Features #
   * Full Exactly-Once-Semantics (EOS) support
   * High-level producer, including Idempotent and Transactional producers

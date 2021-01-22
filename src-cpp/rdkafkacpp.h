@@ -3292,6 +3292,13 @@ class RD_EXPORT Producer : public virtual Handle {
    * @param timeout_ms The maximum time to block. On timeout the operation
    *                   may continue in the background, depending on state,
    *                   and it is okay to call this function again.
+   *                   Pass -1 to use the remaining transaction timeout,
+   *                   this is the recommended use.
+   *
+   * @remark It is strongly recommended to always pass -1 (remaining transaction
+   *         time) as the \p timeout_ms. Using other values risk internal
+   *         state desynchronization in case any of the underlying protocol
+   *         requests fail.
    *
    * @returns an RdKafka::Error object on error, or NULL on success.
    *          Check whether the returned error object permits retrying
@@ -3319,6 +3326,13 @@ class RD_EXPORT Producer : public virtual Handle {
    * @param timeout_ms The maximum time to block. On timeout the operation
    *                   may continue in the background, depending on state,
    *                   and it is okay to call this function again.
+   *                   Pass -1 to use the remaining transaction timeout,
+   *                   this is the recommended use.
+   *
+   * @remark It is strongly recommended to always pass -1 (remaining transaction
+   *         time) as the \p timeout_ms. Using other values risk internal
+   *         state desynchronization in case any of the underlying protocol
+   *         requests fail.
    *
    * @returns an RdKafka::Error object on error, or NULL on success.
    *          Check whether the returned error object permits retrying

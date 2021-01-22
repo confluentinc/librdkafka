@@ -2373,6 +2373,10 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms) {
         /* Wait for queued messages to be delivered, limited by
          * the remaining transaction lifetime. */
         if ((err = rd_kafka_flush(rk, rd_timeout_remains(abs_timeout)))) {
+                rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
+                             "Flush failed (with %d messages remaining): %s",
+                             rd_kafka_outq_len(rk), rd_kafka_err2str(err));
+
                 if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
                         error = rd_kafka_error_new_retriable(
                                 err,
@@ -2380,8 +2384,15 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms) {
                                 "within the transaction timeout: "
                                 "%d message(s) remaining%s",
                                 rd_kafka_outq_len(rk),
-                                (rk->rk_conf.enabled_events &
-                                 RD_KAFKA_EVENT_DR) ?
+                                /* In case event queue delivery reports
+                                 * are enabled and there is no dr callback
+                                 * we instruct the developer to poll
+                                 * the event queue separately, since we
+                                 * can't do it for them. */
+                                ((rk->rk_conf.enabled_events &
+                                 RD_KAFKA_EVENT_DR) &&
+                                 !rk->rk_conf.dr_msg_cb &&
+                                 !rk->rk_conf.dr_cb) ?
                                 ": the event queue must be polled "
                                 "for delivery report events in a separate "
                                 "thread or prior to calling commit" : "");
@@ -2398,6 +2409,8 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms) {
                 return error;
         }
 
+        rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
+                     "Transaction commit message flush complete");
 
         /* Commit transaction */
         return rd_kafka_txn_curr_api_req(
@@ -2591,6 +2604,8 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms) {
                 return error;
         }
 
+        rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
+                     "Transaction abort message purge and flush complete");
 
         return rd_kafka_txn_curr_api_req(
                 rk, "abort_transaction",

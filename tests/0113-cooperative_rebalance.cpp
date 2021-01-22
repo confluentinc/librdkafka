@@ -266,6 +266,10 @@ public:
   int64_t ts_last_assign; /**< Timestamp of last rebalance assignment */
   map<Toppar,int> msg_cnt; /**< Number of consumed messages per partition. */
 
+  ~DefaultRebalanceCb () {
+    reset_msg_cnt();
+  }
+
   DefaultRebalanceCb ():
     assign_call_cnt(0),
     revoke_call_cnt(0),

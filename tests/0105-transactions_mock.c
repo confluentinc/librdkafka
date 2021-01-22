@@ -228,7 +228,7 @@ static void do_test_txn_recoverable_errors (void) {
  */
 static void do_test_txn_endtxn_errors (void) {
         rd_kafka_t *rk = NULL;
-        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
         rd_kafka_resp_err_t err;
         struct {
                 size_t error_cnt;
@@ -519,7 +519,7 @@ static void do_test_txn_endtxn_errors (void) {
  */
 static void do_test_txn_endtxn_infinite (void) {
         rd_kafka_t *rk;
-        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
         const char *txnid = "myTxnId";
         int i;
 
@@ -598,7 +598,7 @@ static void do_test_txn_endtxn_infinite (void) {
  */
 static void do_test_txn_endtxn_timeout (void) {
         rd_kafka_t *rk;
-        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
         const char *txnid = "myTxnId";
         int i;
 

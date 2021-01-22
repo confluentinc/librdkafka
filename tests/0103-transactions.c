@@ -690,9 +690,8 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
         rd_kafka_error_t *error;
         uint64_t testid;
 
-        TEST_SAY(_C_BLU "[ Fenced producer transactions "
-                 "(%sproduce after fence)]\n",
-                 produce_after_fence ? "" : "do not ");
+        SUB_TEST_QUICK("%sproduce after fence",
+                       produce_after_fence ? "" : "do not ");
 
         if (produce_after_fence)
                 test_curr->is_fatal_cb = fenced_txn_is_fatal_cb;
@@ -734,36 +733,27 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
 
         error = rd_kafka_commit_transaction(p1, 30*1000);
 
-        if (produce_after_fence) {
-                TEST_ASSERT(rd_kafka_fatal_error(p1, NULL, 0),
-                            "Expected a fatal error to have been raised");
-
-                TEST_ASSERT(error, "Expected commit_transaction() to fail");
-                TEST_ASSERT(rd_kafka_error_is_fatal(error),
-                            "Expected commit_transaction() to return a "
-                            "fatal error");
-                TEST_ASSERT(!rd_kafka_error_txn_requires_abort(error),
-                            "Expected commit_transaction() not to return an "
-                            "abortable error");
-                TEST_ASSERT(!rd_kafka_error_is_retriable(error),
-                            "Expected commit_transaction() not to return a "
-                            "retriable error");
-                TEST_ASSERT(rd_kafka_error_code(error) ==
-                            RD_KAFKA_RESP_ERR__STATE /* FIXME ? */,
-                            "Expected commit_transaction() to return %s, "
-                            "not %s: %s",
-                            rd_kafka_err2name(RD_KAFKA_RESP_ERR__STATE),
-                            rd_kafka_error_name(error),
-                            rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
-        } else {
-                TEST_ASSERT(!error,
-                            "commit_transaction() should not have failed: "
-                            "%s: %s",
-                            rd_kafka_error_name(error),
-                            rd_kafka_error_string(error));
-        }
-
+        TEST_ASSERT(error, "Expected commit to fail");
+        TEST_ASSERT(rd_kafka_fatal_error(p1, NULL, 0),
+                    "Expected a fatal error to have been raised");
+        TEST_ASSERT(error, "Expected commit_transaction() to fail");
+        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                    "Expected commit_transaction() to return a "
+                    "fatal error");
+        TEST_ASSERT(!rd_kafka_error_txn_requires_abort(error),
+                    "Expected commit_transaction() not to return an "
+                    "abortable error");
+        TEST_ASSERT(!rd_kafka_error_is_retriable(error),
+                    "Expected commit_transaction() not to return a "
+                    "retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR__FENCED,
+                    "Expected commit_transaction() to return %s, "
+                    "not %s: %s",
+                    rd_kafka_err2name(RD_KAFKA_RESP_ERR__FENCED),
+                    rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_destroy(p1);
         rd_kafka_destroy(p2);
@@ -774,9 +764,7 @@ static void do_test_fenced_txn (rd_bool_t produce_after_fence) {
                                                             10*1000),
                                    0, NULL);
 
-        TEST_SAY(_C_GRN "[ Fenced producer transactions "
-                 "(produce_after_fence=%s) succeeded ]\n",
-                 produce_after_fence ? "yes" : "no");
+        SUB_TEST_PASS();
 }
 
 int main_0103_transactions (int argc, char **argv) {

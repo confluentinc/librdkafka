@@ -1965,12 +1965,13 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-
         err = ErrorCode;
-        /* FALLTHRU */
+        goto err;
 
  err_parse:
         err = rkbuf->rkbuf_err;
+        /* FALLTHRU */
+
  err:
         rd_kafka_wrlock(rk);
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION) {

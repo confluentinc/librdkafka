@@ -1059,13 +1059,18 @@ rd_kafka_txn_curr_api_init_timeout_cb (rd_kafka_timers_t *rkts, void *arg) {
  * @brief Reset the current API, typically because it was completed
  *        without timeout.
  *
+ * @param for_reuse If true there will be a sub-sequent curr_api_req
+ *                  for the same API. E.g., the op_commit_transaction
+ *                  following the op_begin_commit_transaction().
+ *
  * @locality rdkafka main thread
  * @locks rd_kafka_wrlock(rk) MUST be held
  */
-static void rd_kafka_txn_curr_api_reset (rd_kafka_t *rk) {
+static void rd_kafka_txn_curr_api_reset (rd_kafka_t *rk, rd_bool_t for_reuse) {
         rd_bool_t timer_was_stopped;
         rd_kafka_q_t *rkq;
 
+        /* Always stop timer and loose refcnt to reply queue. */
         rkq = rk->rk_eos.txn_curr_api.tmr.rtmr_arg;
         timer_was_stopped = rd_kafka_timer_stop(
                 &rk->rk_timers,
@@ -1078,6 +1083,10 @@ static void rd_kafka_txn_curr_api_reset (rd_kafka_t *rk) {
                  * we stopped the timer. */
                 rd_kafka_q_destroy(rkq);
         }
+
+        /* Don't reset current API if it is to be reused */
+        if (for_reuse)
+                return;
 
         *rk->rk_eos.txn_curr_api.name = '\0';
         rk->rk_eos.txn_curr_api.flags = 0;
@@ -1100,7 +1109,7 @@ static void rd_kafka_txn_curr_api_reset (rd_kafka_t *rk) {
  * Use rd_kafka_txn_curr_api_reset() when operation finishes prior
  * to the timeout.
  *
- * @param rko Op to send to txnmgr, or NULL if no op to send (yet).
+ * @param rko Op to send to txnmgr.
  * @param flags See RD_KAFKA_TXN_CURR_API_F_.. flags in rdkafka_int.h.
  *
  * @returns an error, or NULL on success.
@@ -1145,8 +1154,7 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
                         "Conflicting %s call already in progress",
                         rk->rk_eos.txn_curr_api.name);
                 rd_kafka_wrunlock(rk);
-                if (rko)
-                        rd_kafka_op_destroy(rko);
+                rd_kafka_op_destroy(rko);
                 return error;
         }
 
@@ -1156,8 +1164,7 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
                     sizeof(rk->rk_eos.txn_curr_api.name),
                     "%s", name);
 
-        if (rko)
-                tmpq = rd_kafka_q_new(rk);
+        tmpq = rd_kafka_q_new(rk);
 
         rk->rk_eos.txn_curr_api.flags |= flags;
 
@@ -1170,12 +1177,12 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
         if (timeout_ms < 0)
                 timeout_ms = rk->rk_conf.eos.transaction_timeout_ms;
 
-        if (!reuse && timeout_ms >= 0) {
+        if (timeout_ms >= 0) {
                 rd_kafka_q_keep(tmpq);
                 rd_kafka_timer_start_oneshot(
                         &rk->rk_timers,
                         &rk->rk_eos.txn_curr_api.tmr,
-                        rd_false,
+                        rd_true,
                         timeout_ms * 1000,
                         !strcmp(name, "init_transactions") ?
                         rd_kafka_txn_curr_api_init_timeout_cb :
@@ -1187,9 +1194,6 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
                         tmpq);
         }
         rd_kafka_wrunlock(rk);
-
-        if (!rko)
-                return NULL;
 
         /* Send op to rdkafka main thread and wait for reply */
         reply = rd_kafka_op_req0(rk->rk_ops, tmpq, rko, RD_POLL_INFINITE);
@@ -1203,8 +1207,7 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
 
         rd_kafka_op_destroy(reply);
 
-        if (!for_reuse)
-                rd_kafka_txn_curr_api_reset(rk);
+        rd_kafka_txn_curr_api_reset(rk, for_reuse);
 
         return error;
 }
@@ -2388,7 +2391,7 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms) {
                                 "Failed to flush outstanding messages: %s",
                                 rd_kafka_err2str(err));
 
-                rd_kafka_txn_curr_api_reset(rk);
+                rd_kafka_txn_curr_api_reset(rk, rd_false);
 
                 /* FIXME: What to do here? Add test case */
 
@@ -2581,7 +2584,7 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms) {
                                 "Failed to flush outstanding messages: %s",
                                 rd_kafka_err2str(err));
 
-                rd_kafka_txn_curr_api_reset(rk);
+                rd_kafka_txn_curr_api_reset(rk, rd_false);
 
                 /* FIXME: What to do here? */
 
@@ -2593,8 +2596,10 @@ rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms) {
                 rk, "abort_transaction",
                 rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
                                    rd_kafka_txn_op_abort_transaction),
-                0,
-                RD_KAFKA_TXN_CURR_API_F_REUSE);
+                rd_timeout_remains(abs_timeout),
+                RD_KAFKA_TXN_CURR_API_F_REUSE|
+                RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT);
+
 }
 
 

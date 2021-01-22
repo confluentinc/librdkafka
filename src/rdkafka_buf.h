@@ -324,6 +324,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 struct {
                         rd_kafka_msgbatch_t batch; /**< MessageSet/batch */
                 } Produce;
+                struct {
+                        rd_bool_t commit;      /**< true = txn commit,
+                                                *   false = txn abort */
+                } EndTxn;
         } rkbuf_u;
 
 #define rkbuf_batch rkbuf_u.Produce.batch

@@ -4473,7 +4473,7 @@ rd_kafka_EndTxnRequest (rd_kafka_broker_t *rkb,
 
         /* Committed */
         rd_kafka_buf_write_bool(rkbuf, committed);
-
+        rkbuf->rkbuf_u.EndTxn.commit = committed;
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

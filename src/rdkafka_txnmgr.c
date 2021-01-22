@@ -1953,12 +1953,14 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
         rd_kafka_q_t *rkq = opaque;
         int16_t ErrorCode;
         int actions = 0;
-        rd_bool_t is_commit = rd_false, may_retry = rd_false;
+        rd_bool_t is_commit, may_retry = rd_false;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_kafka_q_destroy(rkq);
                 return;
         }
+
+        is_commit = request->rkbuf_u.EndTxn.commit;
 
         if (err)
                 goto err;
@@ -1974,15 +1976,64 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
  err:
         rd_kafka_wrlock(rk);
+
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION) {
-                is_commit = rd_true;
                 may_retry = rd_true;
+
         } else if (rk->rk_eos.txn_state ==
                    RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION) {
-                is_commit = rd_false;
                 may_retry = rd_true;
-        } else if (!err)
+
+        } else if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR) {
+                /* Transaction has failed locally, typically due to timeout.
+                 * Get the transaction error and return that instead of
+                 * this error.
+                 * This is a tricky state since the transaction will have
+                 * failed locally but the EndTxn(commit) may have succeeded. */
+
+                rd_kafka_wrunlock(rk);
+
+                if (err) {
+                        rd_kafka_txn_curr_api_reply(
+                                rkq,
+                                RD_KAFKA_ERR_ACTION_PERMANENT,
+                                rk->rk_eos.txn_err,
+                                "EndTxn failed with %s but transaction "
+                                "had already failed due to: %s",
+                                rd_kafka_err2name(err),
+                                rk->rk_eos.txn_errstr);
+                } else {
+                        /* If the transaction has failed locally but
+                         * this EndTxn commit succeeded we'll raise
+                         * a fatal error. */
+                        if (is_commit)
+                                rd_kafka_txn_curr_api_reply(
+                                        rkq,
+                                        RD_KAFKA_ERR_ACTION_FATAL,
+                                        rk->rk_eos.txn_err,
+                                        "Transaction commit succeeded on the "
+                                        "broker but the transaction "
+                                        "had already failed locally due to: %s",
+                                        rk->rk_eos.txn_errstr);
+
+                        else
+                                rd_kafka_txn_curr_api_reply(
+                                        rkq,
+                                        RD_KAFKA_ERR_ACTION_PERMANENT,
+                                        rk->rk_eos.txn_err,
+                                        "Transaction abort succeeded on the "
+                                        "broker but the transaction"
+                                        "had already failed locally due to: %s",
+                                        rk->rk_eos.txn_errstr);
+                }
+
+                return;
+
+        } else if (!err) {
+                /* Request is outdated */
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
+        }
+
 
         if (!err) {
                 /* EndTxn successful: complete the transaction */
@@ -2012,9 +2063,13 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                  * outdated response. */
                 break;
 
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+                actions |= RD_KAFKA_ERR_ACTION_RETRY|
+                        RD_KAFKA_ERR_ACTION_REFRESH;
+                break;
+
         case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
-        case RD_KAFKA_RESP_ERR__TRANSPORT:
                 rd_kafka_wrlock(rk);
                 rd_kafka_txn_coord_set(rk, NULL,
                                        "EndTxn failed: %s",
@@ -2023,7 +2078,18 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                 actions |= RD_KAFKA_ERR_ACTION_RETRY;
                 break;
 
+        case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
+        case RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS:
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID:
+        case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING:
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                break;
+
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
+        case RD_KAFKA_RESP_ERR_PRODUCER_FENCED:
         case RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED:
         case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
         case RD_KAFKA_RESP_ERR_INVALID_TXN_STATE:
@@ -2040,18 +2106,19 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                 rd_kafka_txn_set_fatal_error(rk, RD_DO_LOCK, err,
                                              "Failed to end transaction: %s",
                                              rd_kafka_err2str(err));
+        } else {
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+                        rd_kafka_txn_coord_timer_restart(rk, 500);
 
-        } else if (may_retry && actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
-                        return;
-                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
-        }
-
-        if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
-                rd_kafka_txn_set_abortable_error(rk, err,
+                if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
+                        rd_kafka_txn_set_abortable_error(rk, err,
                                                  "Failed to end transaction: "
                                                  "%s",
                                                  rd_kafka_err2str(err));
+                else if (may_retry && actions & RD_KAFKA_ERR_ACTION_RETRY &&
+                         rd_kafka_buf_retry(rkb, request))
+                        return;
+        }
 
         if (err)
                 rd_kafka_txn_curr_api_reply(

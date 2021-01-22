@@ -94,16 +94,21 @@ rd_kafka_txn_require_states0 (rd_kafka_t *rk,
                 if (rk->rk_eos.txn_state == states[i])
                         return NULL;
 
-        error = rd_kafka_error_new(
-                RD_KAFKA_RESP_ERR__STATE,
-                "Operation not valid in state %s",
-                rd_kafka_txn_state2str(rk->rk_eos.txn_state));
-
-
+        /* For fatal and abortable states return the last transactional
+         * error, for all other states just return a state error. */
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_FATAL_ERROR)
-                rd_kafka_error_set_fatal(error);
-        else if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR)
+                error = rd_kafka_error_new_fatal(rk->rk_eos.txn_err,
+                                                 "%s", rk->rk_eos.txn_errstr);
+        else if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR) {
+                error = rd_kafka_error_new(rk->rk_eos.txn_err,
+                                           "%s", rk->rk_eos.txn_errstr);
                 rd_kafka_error_set_txn_requires_abort(error);
+        } else
+                error = rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__STATE,
+                        "Operation not valid in state %s",
+                        rd_kafka_txn_state2str(rk->rk_eos.txn_state));
+
 
         return error;
 }
@@ -323,7 +328,8 @@ void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
         rk->rk_eos.txn_errstr = rd_strdup(errstr);
 
         rd_kafka_log(rk, LOG_ERR, "TXNERR",
-                     "Current transaction failed: %s (%s)",
+                     "Current transaction failed in state %s: %s (%s)",
+                     rd_kafka_txn_state2str(rk->rk_eos.txn_state),
                      errstr, rd_kafka_err2name(err));
 
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORTABLE_ERROR);
@@ -379,8 +385,9 @@ rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error) {
  * @param rkq is the queue to send the reply on, which may be NULL or disabled.
  *            The \p rkq refcount is decreased by this function.
  * @param actions Optional response actions (RD_KAFKA_ERR_ACTION_..).
- *                If RD_KAFKA_ERR_ACTION_RETRY is set the error returned to
- *                the application will be retriable.
+ *                RD_KAFKA_ERR_ACTION_FATAL -> set_fatal(),
+ *                RD_KAFKA_ERR_ACTION_PERMANENT -> set_txn_requires_abort(),
+ *                RD_KAFKA_ERR_ACTION_RETRY -> set_retriable(),
  * @param err API error code.
  * @param errstr_fmt If err is set, a human readable error format string.
  *
@@ -400,9 +407,11 @@ rd_kafka_txn_curr_api_reply (rd_kafka_q_t *rkq,
                 error = rd_kafka_error_new_v(err, errstr_fmt, ap);
                 va_end(ap);
 
-                if ((actions & (RD_KAFKA_ERR_ACTION_RETRY|
-                                RD_KAFKA_ERR_ACTION_PERMANENT)) ==
-                    RD_KAFKA_ERR_ACTION_RETRY)
+                if (actions & RD_KAFKA_ERR_ACTION_FATAL)
+                        rd_kafka_error_set_fatal(error);
+                else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
+                        rd_kafka_error_set_txn_requires_abort(error);
+                else if (actions & RD_KAFKA_ERR_ACTION_RETRY)
                         rd_kafka_error_set_retriable(error);
         }
 
@@ -1519,7 +1528,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
 
         if (err)
                 rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
-                                            0, err, "%s", errstr);
+                                            actions, err, "%s", errstr);
         else
                 rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
                                             0, RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -2045,7 +2054,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
 
         if (err)
                 rd_kafka_txn_curr_api_reply(
-                        rkq, 0, err,
+                        rkq, actions, err,
                         "EndTxn %s failed: %s", is_commit ? "commit" : "abort",
                         rd_kafka_err2str(err));
         else

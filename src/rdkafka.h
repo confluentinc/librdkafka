@@ -7536,6 +7536,13 @@ rd_kafka_send_offsets_to_transaction (
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call this function again.
+ *                   Pass -1 to use the remaining transaction timeout,
+ *                   this is the recommended use.
+ *
+ * @remark It is strongly recommended to always pass -1 (remaining transaction
+ *         time) as the \p timeout_ms. Using other values risk internal
+ *         state desynchronization in case any of the underlying protocol
+ *         requests fail.
  *
  * @remark This function will block until all outstanding messages are
  *         delivered and the transaction commit request has been successfully
@@ -7594,6 +7601,13 @@ rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms);
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call this function again.
+ *                   Pass -1 to use the remaining transaction timeout,
+ *                   this is the recommended use.
+ *
+ * @remark It is strongly recommended to always pass -1 (remaining transaction
+ *         time) as the \p timeout_ms. Using other values risk internal
+ *         state desynchronization in case any of the underlying protocol
+ *         requests fail.
  *
  * @remark This function will block until all outstanding messages are purged
  *         and the transaction abort request has been successfully

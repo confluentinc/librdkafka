@@ -1558,9 +1558,11 @@ void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
 }
 
 
-void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
-                                        int16_t ApiKey, size_t cnt, ...) {
-        va_list ap;
+void
+rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
+                                         int16_t ApiKey,
+                                         size_t cnt,
+                                         const rd_kafka_resp_err_t *errors) {
         rd_kafka_mock_error_stack_t *errstack;
         size_t totcnt;
 
@@ -1577,13 +1579,23 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
                                             sizeof(*errstack->errs));
         }
 
-        va_start(ap, cnt);
-        while (cnt-- > 0)
-                errstack->errs[errstack->cnt++] =
-                        va_arg(ap, rd_kafka_resp_err_t);
-        va_end(ap);
+        while (cnt > 0)
+                errstack->errs[errstack->cnt++] = errors[--cnt];
 
         mtx_unlock(&mcluster->lock);
+}
+
+void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
+                                        int16_t ApiKey, size_t cnt, ...) {
+        va_list ap;
+        rd_kafka_resp_err_t *errors = rd_alloca(sizeof(*errors) * cnt);
+        size_t i;
+
+        va_start(ap, cnt);
+        for (i = 0 ; i < cnt ; i++)
+                errors[i] = va_arg(ap, rd_kafka_resp_err_t);
+
+        rd_kafka_mock_push_request_errors_array(mcluster, ApiKey, cnt, errors);
 }
 
 

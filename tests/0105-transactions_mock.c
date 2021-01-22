@@ -519,7 +519,7 @@ static void do_test_txn_endtxn_errors (void) {
  */
 static void do_test_txn_endtxn_infinite (void) {
         rd_kafka_t *rk;
-        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
         const char *txnid = "myTxnId";
         int i;
 

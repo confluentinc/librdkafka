@@ -43,14 +43,15 @@
  * messages to verify it takes effect.
  */
 static void do_test_sticky_partitioning (int sticky_delay) {
-  
+
   std::string topic = Test::mk_topic_name(__FILE__, 1);
   Test::create_topic(NULL, topic.c_str(), 3, 1);
 
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);
 
-  Test::conf_set(conf, "sticky.partitioning.linger.ms", tostr() << sticky_delay);
+  Test::conf_set(conf, "sticky.partitioning.linger.ms",
+                 tostr() << sticky_delay);
 
   std::string errstr;
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
@@ -60,6 +61,7 @@ static void do_test_sticky_partitioning (int sticky_delay) {
   RdKafka::Consumer *c = RdKafka::Consumer::create(conf, errstr);
   if (!c)
           Test::Fail("Failed to create Consumer: " + errstr);
+  delete conf;
 
   RdKafka::Topic *t = RdKafka::Topic::create(c, topic, NULL, errstr);
   if (!t)
@@ -131,19 +133,20 @@ static void do_test_sticky_partitioning (int sticky_delay) {
 
   for(int i = 0; i < 3; i++){
 
-        /* Partitions must receive 100+ messages to be deemed 'active'. This
-         * is because while topics are being updated, it is possible for some 
-         * number of messages to be partitioned to joining partitions before
-         * they become available. This can cause some initial turnover in 
-         * selecting a sticky partition. This behavior is acceptable, and is 
-         * not important for the purpose of this segment of the test. */
+    /* Partitions must receive 100+ messages to be deemed 'active'. This
+     * is because while topics are being updated, it is possible for some
+     * number of messages to be partitioned to joining partitions before
+     * they become available. This can cause some initial turnover in
+     * selecting a sticky partition. This behavior is acceptable, and is
+     * not important for the purpose of this segment of the test. */
 
-        if(partition_msgcnt[i] > (msgrate - 1)) num_partitions_active++;
+    if (partition_msgcnt[i] > (msgrate - 1))
+      num_partitions_active++;
   }
 
   Test::Say("Partition Message Count: \n");
   for(int i = 0; i < 3; i++){
-        Test::Say(tostr() << " " << i << ": " << 
+        Test::Say(tostr() << " " << i << ": " <<
                   partition_msgcnt[i] << "\n");
   }
 
@@ -151,21 +154,22 @@ static void do_test_sticky_partitioning (int sticky_delay) {
    * length of run), one partition should be sticky and receive messages. */
   if (sticky_delay == 5000  &&
       num_partitions_active > 1)
-    Test::Fail(tostr() 
-               << "Expected only 1 partition to receive msgs" 
-               << " but " << num_partitions_active 
+    Test::Fail(tostr()
+               << "Expected only 1 partition to receive msgs"
+               << " but " << num_partitions_active
                << " partitions received msgs.");
-  
-  /* When sticky.partitioning.linger.ms is short (sufficiently smaller than 
+
+  /* When sticky.partitioning.linger.ms is short (sufficiently smaller than
    * length of run), it is extremely likely that all partitions are sticky
    * at least once and receive messages. */
   if (sticky_delay == 1000 &&
       num_partitions_active <= 1)
-    Test::Fail(tostr() 
+    Test::Fail(tostr()
                << "Expected more than one partition to receive msgs"
                << " but only " << num_partitions_active
                << " partition received msgs.");
 
+  delete t;
   delete p;
   delete c;
 }

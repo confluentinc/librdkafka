@@ -115,7 +115,7 @@ script:
 - if [[ $SKIP_MAKE != y ]]; then (make -j2 all examples check && make -j2 -C tests build) || travis_terminate 1 ; fi
 - if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
 - if [[ $SKIP_MAKE != y ]]; then make install || travis_terminate 1 ; fi
-- if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
+- if [[ $SKIP_MAKE != y && -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
 - for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro --enable-strip || travis_terminate 1 ; done
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check || travis_terminate 1; fi
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi

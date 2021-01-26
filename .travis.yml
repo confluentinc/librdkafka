@@ -30,7 +30,9 @@ matrix:
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
    before_script:
+    - git status
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+    - git status
  - name: "Linux clang: +static +alpine-static -gssapi"
    os: linux
    compiler: clang
@@ -112,6 +114,7 @@ before_cache:
  - if [[ $TRAVIS_OS_NAME == windows ]]; then $msys2 pacman --sync --clean --noconfirm ; fi
 
 script:
+- git status
 - if [[ $SKIP_MAKE != y ]]; then (make -j2 all examples check && make -j2 -C tests build) || travis_terminate 1 ; fi
 - if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
 - if [[ $SKIP_MAKE != y ]]; then make install || travis_terminate 1 ; fi

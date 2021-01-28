@@ -1042,6 +1042,11 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
         size_t totsize;
 
+        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+                /* Empty struct tags */
+                rd_kafka_buf_write_i8(rkbuf, 0);
+        }
+
         /* Calculate total request buffer length. */
         totsize = rd_buf_len(&rkbuf->rkbuf_buf) - 4;
 
@@ -1051,7 +1056,7 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
         /**
          * Update request header fields
          */
-        /* Total reuqest length */
+        /* Total request length */
         rd_kafka_buf_update_i32(rkbuf, 0, (int32_t)totsize);
 
         /* ApiVersion */
@@ -1716,6 +1721,7 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 				  rd_kafka_buf_t *rkbuf) {
 	rd_kafka_buf_t *req;
+        int log_decode_errors = LOG_ERR;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -1753,6 +1759,12 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
                       RD_KAFKAP_RESHDR_SIZE,
                       rd_buf_len(&rkbuf->rkbuf_buf) - RD_KAFKAP_RESHDR_SIZE);
 
+        /* In case of flexibleVersion, skip the response header tags.
+         * The ApiVersion request/response is different since it needs
+         * be backwards compatible and thus has no header tags. */
+        if (req->rkbuf_reqhdr.ApiKey != RD_KAFKAP_ApiVersion)
+                rd_kafka_buf_skip_tags(rkbuf);
+
         if (!rkbuf->rkbuf_rkb) {
                 rkbuf->rkbuf_rkb = rkb;
                 rd_kafka_broker_keep(rkbuf->rkbuf_rkb);
@@ -1763,6 +1775,12 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
         rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, rkbuf, req);
 
 	return 0;
+
+ err_parse:
+        rd_atomic64_add(&rkb->rkb_c.rx_err, 1);
+        rd_kafka_buf_callback(rkb->rkb_rk, rkb, rkbuf->rkbuf_err, NULL, req);
+        rd_kafka_buf_destroy(rkbuf);
+        return -1;
 }
 
 
@@ -5528,11 +5546,11 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	rd_kafka_broker_unlock(rkb);
 
-        /* Add broker state monitor for the (txn) coordinator request to use */
-        if (rd_kafka_is_transactional(rk))
-                rd_kafka_broker_monitor_add(&rkb->rkb_coord_monitor, rkb,
-                                            rk->rk_ops,
-                                            rd_kafka_coord_rkb_monitor_cb);
+        /* Add broker state monitor for the coordinator request to use.
+         * This is needed by the transactions implementation and DeleteGroups. */
+        rd_kafka_broker_monitor_add(&rkb->rkb_coord_monitor, rkb,
+                                    rk->rk_ops,
+                                    rd_kafka_coord_rkb_monitor_cb);
 
 
 #ifndef _WIN32
@@ -5958,9 +5976,9 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                  * update the nodeid. */
                 needs_update = 1;
 
-        } else {
-		rd_kafka_broker_add(rk, RD_KAFKA_LEARNED,
-				    proto, mdb->host, mdb->port, mdb->id);
+        } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
+					      mdb->host, mdb->port, mdb->id))){
+		rd_kafka_broker_keep(rkb);
 	}
 
 	rd_kafka_wrunlock(rk);
@@ -6215,7 +6233,8 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
                  * to get a clean protocol socket. */
                 if (partial_cnt)
                         rd_kafka_broker_fail(
-                                rkb, LOG_NOTICE,
+                                rkb,
+                                LOG_DEBUG,
                                 RD_KAFKA_RESP_ERR__PURGE_QUEUE,
                                 "Purged %d partially sent request: "
                                 "forcing disconnect", partial_cnt);

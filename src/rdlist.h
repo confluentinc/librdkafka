@@ -193,7 +193,7 @@ void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *));
 
 
 /**
- * Empties the list (but does not free any memory)
+ * Empties the list and frees elements (if there is a free_cb).
  */
 void rd_list_clear (rd_list_t *rl);
 
@@ -283,6 +283,14 @@ void *rd_list_first (const rd_list_t *rl);
 void *rd_list_last (const rd_list_t *rl);
 
 
+/**
+ * @returns the first duplicate in the list or NULL if no duplicates.
+ *
+ * @warning The list MUST be sorted.
+ */
+void *rd_list_find_duplicate (const rd_list_t *rl,
+                              int (*cmp) (const void *, const void *));
+
 
 /**
  * @brief Compare list \p a to \p b.
@@ -314,13 +322,13 @@ void rd_list_apply (rd_list_t *rl,
 
 
 
+typedef void *(rd_list_copy_cb_t) (const void *elem, void *opaque);
 /**
  * @brief Copy list \p src, returning a new list,
  *        using optional \p copy_cb (per elem)
  */
 rd_list_t *rd_list_copy (const rd_list_t *src,
-                         void *(*copy_cb) (const void *elem, void *opaque),
-                         void *opaque);
+                         rd_list_copy_cb_t *copy_cb, void *opaque);
 
 
 /**

@@ -215,8 +215,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
  * 2. In WAIT_SYNC waiting for the group to rebalance on the broker.
  * 3. in *_WAIT_UNASSIGN_TO_COMPLETE waiting for unassigned partitions to
  *    stop fetching, et.al.
- * 4. In _WAIT_*_REBALANCE_CB waiting for the application to handle the
- *    assignment changes in its rebalance callback and then call assign().
+ * 4. In _WAIT_*ASSIGN_CALL waiting for the application to handle the
+ *    assignment changes in its rebalance callback and then call *assign().
  * 5. An incremental rebalancing is in progress.
  * 6. A rebalance-induced rejoin is in progress.
  */
@@ -233,6 +233,8 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE ||     \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL ||                   \
+         (rkcg)->rkcg_join_state ==                                     \
+         RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL ||                 \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE ||          \
          (rkcg)->rkcg_rebalance_incr_assignment != NULL ||              \
@@ -1562,7 +1564,7 @@ rd_kafka_group_MemberMetadata_consumer_read (
 
         if (Version >= 1 &&
             !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                        rkbuf, 0, rd_false)))
+                        rkbuf, 0, rd_false, rd_false)))
                 goto err;
 
         rd_kafka_buf_destroy(rkbuf);
@@ -1791,6 +1793,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 rd_kafka_MetadataRequest(
                         rkb, &topics,
                         "partition assignor",
+                        rd_false/*!allow_auto_create*/,
                         /* cgrp_update=false:
                          * Since the subscription list may not be identical
                          * across all members of the group and thus the
@@ -2000,6 +2003,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
         err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
+                                        rd_false/*!allow auto create */,
                                         rd_true/*cgrp_update*/,
                                         reason, rko);
         if (err) {
@@ -2874,6 +2878,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         rd_kafka_buf_t *rkbuf;
         rd_kafka_op_t *reply;
 
+        if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
+                /* wait_commit_cnt has already been increased for
+                 * reprocessed ops. */
+                rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
+        }
+
         /* If offsets is NULL we shall use the current assignment
          * (not the group assignment). */
         if (!rko->rko_u.offset_commit.partitions &&
@@ -2903,12 +2913,6 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                 valid_offsets = (int)rd_kafka_topic_partition_list_sum(
                         offsets,
                         rd_kafka_topic_partition_has_absolute_offset, NULL);
-        }
-
-        if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
-                /* wait_commit_cnt has already been increased for
-                 * reprocessed ops. */
-                rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
         }
 
         if (rd_kafka_fatal_error_code(rkcg->rkcg_rk)) {
@@ -3851,13 +3855,17 @@ static void rd_kafka_cgrp_revoke_all_rejoin (rd_kafka_cgrp_t *rkcg,
                  * assignment (albeit perhaps empty) and there is no
                  * outstanding rebalance op in progress. */
                 if (rkcg->rkcg_group_assignment &&
-                    !RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg))
+                    !RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg)) {
                         rd_kafka_rebalance_op(
                                 rkcg,
                                 RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                                 rkcg->rkcg_group_assignment, reason);
-                else
+                } else {
+                        /* Skip the join backoff */
+                        rd_interval_reset(&rkcg->rkcg_join_intvl);
+
                         rd_kafka_cgrp_rejoin(rkcg, "%s", reason);
+                }
 
                 return;
         }
@@ -3884,9 +3892,8 @@ static void rd_kafka_cgrp_revoke_all_rejoin (rd_kafka_cgrp_t *rkcg,
                            "current assignment and rebalance");
         }
 
-
-        if (rkcg->rkcg_group_assignment) {
-
+        if (rkcg->rkcg_group_assignment &&
+            rkcg->rkcg_group_assignment->cnt > 0) {
                 if (assignment_lost)
                         rd_kafka_cgrp_assignment_set_lost(
                                 rkcg,
@@ -4721,8 +4728,9 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 }
 
                 rd_kafka_OffsetFetchRequest(
-                        rkcg->rkcg_coord, 1,
+                        rkcg->rkcg_coord,
                         rko->rko_u.offset_fetch.partitions,
+                        rko->rko_u.offset_fetch.require_stable,
                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                         rd_kafka_op_handle_OffsetFetch, rko);
                 rko = NULL; /* rko now owned by request */
@@ -4937,9 +4945,6 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg) {
 		break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_STEADY:
-                if (rd_kafka_cgrp_session_timeout_check(rkcg, now))
-                        return;
-                /* FALLTHRU */
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL:
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL:
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
@@ -4984,6 +4989,11 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         /* Bail out if we're terminating. */
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))
                 return;
+
+        /* Check session timeout regardless of current coordinator
+         * connection state (rkcg_state) */
+        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                rd_kafka_cgrp_session_timeout_check(rkcg, now);
 
  retry:
         switch (rkcg->rkcg_state)
@@ -5316,6 +5326,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         if (!(assignment = rd_kafka_buf_read_topic_partitions(rkbuf, 0,
+                                                              rd_false,
                                                               rd_false)))
                 goto err_parse;
         rd_kafka_buf_read_bytes(rkbuf, &UserData);

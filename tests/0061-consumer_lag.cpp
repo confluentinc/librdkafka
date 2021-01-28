@@ -131,6 +131,7 @@ static void produce_aborted_txns (const std::string &topic,
   p = RdKafka::Producer::create(conf, errstr);
   if (!p)
     Test::Fail("Failed to create Producer:  " + errstr);
+  delete conf;
 
   error = p->init_transactions(-1);
   if (error)

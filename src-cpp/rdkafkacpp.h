@@ -111,7 +111,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x01060000
+#define RD_KAFKA_VERSION  0x010600ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -292,6 +292,8 @@ enum ErrorCode {
         ERR__APPLICATION = -143,
         /** Assignment lost */
         ERR__ASSIGNMENT_LOST = -142,
+        /** No operation performed */
+        ERR__NOOP = -141,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -483,12 +485,33 @@ enum ErrorCode {
         ERR_ELECTION_NOT_NEEDED = 84,
         /** No partition reassignment is in progress */
         ERR_NO_REASSIGNMENT_IN_PROGRESS = 85,
-        /** Deleting offsets of a topic while the consumer group is subscribed to it */
+        /** Deleting offsets of a topic while the consumer group is
+         *  subscribed to it */
         ERR_GROUP_SUBSCRIBED_TO_TOPIC = 86,
         /** Broker failed to validate record */
         ERR_INVALID_RECORD = 87,
         /** There are unstable offsets that need to be cleared */
-        ERR_UNSTABLE_OFFSET_COMMIT = 88
+        ERR_UNSTABLE_OFFSET_COMMIT = 88,
+        /** Throttling quota has been exceeded */
+        ERR_THROTTLING_QUOTA_EXCEEDED = 89,
+        /** There is a newer producer with the same transactionalId
+         *  which fences the current one */
+        ERR_PRODUCER_FENCED = 90,
+        /** Request illegally referred to resource that does not exist */
+        ERR_RESOURCE_NOT_FOUND = 91,
+        /** Request illegally referred to the same resource twice */
+        ERR_DUPLICATE_RESOURCE = 92,
+        /** Requested credential would not meet criteria for acceptability */
+        ERR_UNACCEPTABLE_CREDENTIAL = 93,
+        /** Indicates that the either the sender or recipient of a
+         *  voter-only request is not one of the expected voters */
+        ERR_INCONSISTENT_VOTER_SET = 94,
+        /** Invalid update version */
+        ERR_INVALID_UPDATE_VERSION = 95,
+        /** Unable to update finalized features due to server error */
+        ERR_FEATURE_UPDATE_FAILED = 96,
+        /** Request principal deserialization failed during forwarding */
+        ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97
 };
 
 
@@ -2576,7 +2599,7 @@ public:
   /**
    * @brief Retrieve committed offsets for topics+partitions.
    *
-   * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+   * @returns ERR_NO_ERROR on success in which case the
    *          \p offset or \p err field of each \p partitions' element is filled
    *          in with the stored offset, or a partition specific error.
    *          Else returns an error code.
@@ -2587,7 +2610,7 @@ public:
   /**
    * @brief Retrieve current positions (offsets) for topics+partitions.
    *
-   * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+   * @returns ERR_NO_ERROR on success in which case the
    *          \p offset or \p err field of each \p partitions' element is filled
    *          in with the stored offset, or a partition specific error.
    *          Else returns an error code.
@@ -3269,6 +3292,13 @@ class RD_EXPORT Producer : public virtual Handle {
    * @param timeout_ms The maximum time to block. On timeout the operation
    *                   may continue in the background, depending on state,
    *                   and it is okay to call this function again.
+   *                   Pass -1 to use the remaining transaction timeout,
+   *                   this is the recommended use.
+   *
+   * @remark It is strongly recommended to always pass -1 (remaining transaction
+   *         time) as the \p timeout_ms. Using other values risk internal
+   *         state desynchronization in case any of the underlying protocol
+   *         requests fail.
    *
    * @returns an RdKafka::Error object on error, or NULL on success.
    *          Check whether the returned error object permits retrying
@@ -3296,6 +3326,13 @@ class RD_EXPORT Producer : public virtual Handle {
    * @param timeout_ms The maximum time to block. On timeout the operation
    *                   may continue in the background, depending on state,
    *                   and it is okay to call this function again.
+   *                   Pass -1 to use the remaining transaction timeout,
+   *                   this is the recommended use.
+   *
+   * @remark It is strongly recommended to always pass -1 (remaining transaction
+   *         time) as the \p timeout_ms. Using other values risk internal
+   *         state desynchronization in case any of the underlying protocol
+   *         requests fail.
    *
    * @returns an RdKafka::Error object on error, or NULL on success.
    *          Check whether the returned error object permits retrying

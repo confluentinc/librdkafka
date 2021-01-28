@@ -266,6 +266,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_topic_t *rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
         const char *conf_err;
+        const char *used_conf_str;
 
 	/* Verify configuration.
 	 * Maximum topic name size + headers must never exceed message.max.bytes
@@ -292,10 +293,15 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         }
 
         if (!conf) {
-                if (rk->rk_conf.topic_conf)
+                if (rk->rk_conf.topic_conf) {
                         conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-                else
+                        used_conf_str = "default_topic_conf";
+                } else {
                         conf = rd_kafka_topic_conf_new();
+                        used_conf_str = "empty";
+                }
+        } else {
+                used_conf_str = "user-supplied";
         }
 
 
@@ -383,7 +389,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
             rkt->rkt_conf.partitioner !=
             rd_kafka_msg_partitioner_murmur2 &&
             rkt->rkt_conf.partitioner !=
-            rd_kafka_msg_partitioner_fnv1a){
+            rd_kafka_msg_partitioner_fnv1a) {
                 rkt->rkt_conf.random_partitioner = rd_false;
         } else {
                 rkt->rkt_conf.random_partitioner = rd_true;
@@ -473,6 +479,14 @@ rd_kafka_topic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 
         if (do_lock)
                 rd_kafka_wrunlock(rk);
+
+        if (rk->rk_conf.debug & RD_KAFKA_DBG_CONF) {
+                char desc[256];
+                rd_snprintf(desc, sizeof(desc),
+                            "Topic \"%s\" configuration (%s)",
+                            topic, used_conf_str);
+                rd_kafka_anyconf_dump_dbg(rk, _RK_TOPIC, &rkt->rkt_conf, desc);
+        }
 
 	return rkt;
 }
@@ -622,7 +636,7 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
                                           rd_kafka_broker_t *leader) {
 	rd_kafka_toppar_t *rktp;
         rd_bool_t fetching_from_follower;
-	int r;
+        int r = 0;
 
 	rktp = rd_kafka_toppar_get(rkt, partition, 0);
         if (unlikely(!rktp)) {
@@ -654,13 +668,21 @@ static int rd_kafka_toppar_leader_update (rd_kafka_topic_t *rkt,
                         rktp->rktp_partition,
                         leader_id, rktp->rktp_broker_id);
                 r = 0;
+
         } else {
-                rktp->rktp_leader_id = leader_id;
-                if (rktp->rktp_leader)
-                        rd_kafka_broker_destroy(rktp->rktp_leader);
-                if (leader)
-                        rd_kafka_broker_keep(leader);
-                rktp->rktp_leader = leader;
+
+                if (rktp->rktp_leader_id != leader_id ||
+                    rktp->rktp_leader != leader) {
+                        /* Update leader if it has changed */
+                        rktp->rktp_leader_id = leader_id;
+                        if (rktp->rktp_leader)
+                                rd_kafka_broker_destroy(rktp->rktp_leader);
+                        if (leader)
+                                rd_kafka_broker_keep(leader);
+                        rktp->rktp_leader = leader;
+                }
+
+                /* Update handling broker */
                 r = rd_kafka_toppar_broker_update(rktp, leader_id, leader,
                                                   "leader updated");
         }
@@ -1110,7 +1132,7 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
         }
 
         /* Look up brokers before acquiring rkt lock to preserve lock order */
-        partbrokers = rd_alloca(mdt->partition_cnt * sizeof(*partbrokers));
+        partbrokers = rd_malloc(mdt->partition_cnt * sizeof(*partbrokers));
 
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {
 		if (mdt->partitions[j].leader == -1) {
@@ -1221,6 +1243,7 @@ rd_kafka_topic_metadata_update (rd_kafka_topic_t *rkt,
 		if (partbrokers[j])
 			rd_kafka_broker_destroy(partbrokers[j]);
 
+        rd_free(partbrokers);
 
 	return upd;
 }
@@ -1530,11 +1553,13 @@ void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
         rd_kafka_rdunlock(rk);
 
         if (!rd_list_empty(&query_topics))
-                rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
-                                                 rd_true/*force even if cached
-                                                          * info exists*/,
-                                                 rd_false/*!cgrp_update*/,
-                                                 "refresh unavailable topics");
+                rd_kafka_metadata_refresh_topics(
+                        rk, NULL, &query_topics,
+                        rd_true/*force even if cached
+                                * info exists*/,
+                        rk->rk_conf.allow_auto_create_topics,
+                        rd_false/*!cgrp_update*/,
+                        "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 }
 
@@ -1684,6 +1709,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
         rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
                                          rd_false/*dont force*/,
+                                         rk->rk_conf.allow_auto_create_topics,
                                          rd_false/*!cgrp_update*/,
                                          "leader query");
 
@@ -1694,17 +1720,25 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
 /**
  * @brief Populate list \p topics with the topic names (strdupped char *) of
- *        all locally known topics.
+ *        all locally known or cached topics.
  *
+ * @param cache_cntp is an optional pointer to an int that will be set to the
+ *                   number of entries added to \p topics from the
+ *                   metadata cache.
  * @remark \p rk lock MUST NOT be held
  */
-void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
+void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics,
+                                    int *cache_cntp) {
         rd_kafka_topic_t *rkt;
+        int cache_cnt;
 
         rd_kafka_rdlock(rk);
         rd_list_grow(topics, rk->rk_topic_cnt);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
+        cache_cnt = rd_kafka_metadata_cache_topics_to_list(rk, topics);
+        if (cache_cntp)
+                *cache_cntp = cache_cnt;
         rd_kafka_rdunlock(rk);
 }
 
@@ -1731,7 +1765,7 @@ void rd_ut_kafka_topic_set_topic_exists (rd_kafka_topic_t *rkt,
         }
 
         rd_kafka_wrlock(rkt->rkt_rk);
-        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt);
+        rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, rd_true);
         rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
 }

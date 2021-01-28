@@ -1321,15 +1321,24 @@ int main (int argc, char **argv) {
         if (mode == 'C' || mode == 'G')
                 rd_kafka_conf_set(conf, "enable.partition.eof", "true",
                                   NULL, 0);
-    if (read_hdrs && mode == 'P') {
-        fprintf(stderr, "%% producer can not read headers\n");
-        exit(1);
-    }
-    
-    if (hdrs && mode != 'P') {
-        fprintf(stderr, "%% consumer can not add headers\n");
-        exit(1);
-    }
+
+        if (read_hdrs && mode == 'P') {
+                fprintf(stderr, "%% producer can not read headers\n");
+                exit(1);
+        }
+
+        if (hdrs && mode != 'P') {
+                fprintf(stderr, "%% consumer can not add headers\n");
+                exit(1);
+        }
+
+        /* Set bootstrap servers */
+        if (brokers &&
+            rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
+                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%% %s\n", errstr);
+                exit(1);
+        }
 
 	if (mode == 'P') {
 		/*
@@ -1387,12 +1396,6 @@ int main (int argc, char **argv) {
 		}
 
                 global_rk = rk;
-
-		/* Add broker(s) */
-		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
-		}
 
 		/* Explicitly create topic to avoid per-msg lookups. */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -1549,12 +1552,6 @@ int main (int argc, char **argv) {
 
                 global_rk = rk;
 
-		/* Add broker(s) */
-		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
-		}
-
 		/* Create topic to consume from */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
@@ -1670,12 +1667,6 @@ int main (int argc, char **argv) {
 		rd_kafka_poll_set_consumer(rk);
 
                 global_rk = rk;
-
-		/* Add broker(s) */
-		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
-		}
 
 		err = rd_kafka_subscribe(rk, topics);
 		if (err) {

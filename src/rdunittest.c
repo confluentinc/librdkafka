@@ -504,7 +504,7 @@ int rd_unittest (void) {
         for (i = 0 ; unittests[i].name ; i++) {
                 int f;
 
-                if (match && strcmp(match, unittests[i].name))
+                if (match && !strstr(unittests[i].name, match))
                         continue;
 
                 f = unittests[i].call();

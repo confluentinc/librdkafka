@@ -29,6 +29,7 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_aux.h"
+#include "rdkafka_error.h"
 
 rd_kafka_resp_err_t
 rd_kafka_topic_result_error (const rd_kafka_topic_result_t *topicres) {
@@ -96,4 +97,93 @@ void rd_kafka_topic_result_destroy (rd_kafka_topic_result_t *terr) {
  */
 void rd_kafka_topic_result_free (void *ptr) {
         rd_kafka_topic_result_destroy((rd_kafka_topic_result_t *)ptr);
+}
+
+const rd_kafka_error_t *
+rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres) {
+        return groupres->error;
+}
+
+const char *
+rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres) {
+        return groupres->group;
+}
+
+const rd_kafka_topic_partition_list_t *
+rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres) {
+        return groupres->partitions;
+}
+
+rd_kafka_group_result_t *
+rd_kafka_group_result_copy (const rd_kafka_group_result_t *groupres) {
+        return rd_kafka_group_result_new(groupres->group,
+                                         -1,
+                                         groupres->partitions,
+                                         groupres->error ?
+                                         rd_kafka_error_copy(groupres->error) :
+                                         NULL);
+}
+
+/**
+ * @brief Same as rd_kafka_group_result_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+void *
+rd_kafka_group_result_copy_opaque (const void *src_groupres,
+                                   void *opaque) {
+       return rd_kafka_group_result_copy(src_groupres);
+}
+
+
+/**
+ * @brief Create new group_result (single allocation).
+ *
+ * @param group Group string, if group_size is != -1 it does not have to
+ *              be nul-terminated.
+ * @param group_size Size of group, or -1 to perform automatic strlen()
+ * @param error Error object, or NULL on success. Takes ownership of \p error.
+ *
+ * All input arguments are copied.
+ */
+
+rd_kafka_group_result_t *
+rd_kafka_group_result_new (const char *group, ssize_t group_size,
+                           const rd_kafka_topic_partition_list_t *partitions,
+                           rd_kafka_error_t *error) {
+        size_t glen = group_size != -1 ? (size_t)group_size : strlen(group);
+        rd_kafka_group_result_t *groupres;
+
+        groupres = rd_calloc(1, sizeof(*groupres) + glen + 1);
+
+
+        groupres->group = groupres->data;
+        memcpy(groupres->group, group, glen);
+        groupres->group[glen] = '\0';
+
+        if (partitions)
+                groupres->partitions = rd_kafka_topic_partition_list_copy(
+                        partitions);
+
+        groupres->error = error;
+
+        return groupres;
+}
+
+
+ /**
+ * @brief Destroy group_result
+ */
+void rd_kafka_group_result_destroy (rd_kafka_group_result_t *groupres) {
+        if (groupres->partitions)
+                rd_kafka_topic_partition_list_destroy(groupres->partitions);
+        if (groupres->error)
+                rd_kafka_error_destroy(groupres->error);
+        rd_free(groupres);
+}
+
+ /**
+ * @brief Destroy-variant suitable for rd_list free_cb use.
+ */
+void rd_kafka_group_result_free (void *ptr) {
+        rd_kafka_group_result_destroy((rd_kafka_group_result_t *)ptr);
 }

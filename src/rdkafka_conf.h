@@ -235,6 +235,8 @@ struct rd_kafka_conf_s {
                 rd_kafka_cert_t *cert;
                 char *ca_location;
                 rd_kafka_cert_t *ca;
+                /** CSV list of Windows certificate stores */
+                char *ca_cert_stores;
                 char *crl_location;
                 char *keystore_location;
                 char *keystore_password;
@@ -565,12 +567,14 @@ void rd_kafka_topic_conf_desensitize (rd_kafka_topic_conf_t *tconf);
 const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                     rd_kafka_conf_t *conf);
 const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
-                                          rd_kafka_conf_t *conf,
+                                          const rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf);
 
 
 int rd_kafka_conf_warn (rd_kafka_t *rk);
 
+void rd_kafka_anyconf_dump_dbg (rd_kafka_t *rk, int scope, const void *conf,
+                                const char *description);
 
 #include "rdkafka_confval.h"
 

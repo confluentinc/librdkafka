@@ -57,7 +57,9 @@ struct rd_kafka_AdminOptions_s {
         /* Specific for one or more APIs */
         rd_kafka_confval_t operation_timeout; /**< I32: Timeout on broker.
                                                *   Valid for:
+                                               *     CreateParititons
                                                *     CreateTopics
+                                               *     DeleteRecords
                                                *     DeleteTopics
                                                */
         rd_kafka_confval_t validate_only;  /**< BOOL: Only validate (on broker),
@@ -85,9 +87,6 @@ struct rd_kafka_AdminOptions_s {
         rd_kafka_confval_t opaque;         /**< PTR: Application opaque.
                                             *   Valid for all. */
 };
-
-
-
 
 
 /**
@@ -260,6 +259,52 @@ struct rd_kafka_DescribeConfigs_result_s {
 
 /**@}*/
 
+
+/**
+ * @name DeleteGroups
+ * @{
+ */
+
+
+struct rd_kafka_DeleteGroup_s {
+        char *group;   /**< Points to data */
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
+
+/**@}*/
+
+
+/**
+ * @name DeleteRecords
+ * @{
+ */
+
+struct rd_kafka_DeleteRecords_s {
+        rd_kafka_topic_partition_list_t *offsets;
+};
+
+/**@}*/
+
+
+/**
+ * @name DeleteConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief DeleteConsumerGroupOffsets result
+ */
+struct rd_kafka_DeleteConsumerGroupOffsets_result_s {
+        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_DeleteConsumerGroupOffsets_s {
+        char *group;   /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
 
 /**@}*/
 

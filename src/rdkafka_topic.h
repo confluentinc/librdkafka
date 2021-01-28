@@ -261,7 +261,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 #define rd_kafka_topic_fast_leader_query(rk) \
         rd_kafka_metadata_fast_leader_query(rk)
 
-void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);
+void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics,
+                                    int *cache_cntp);
 
 void rd_ut_kafka_topic_set_topic_exists (rd_kafka_topic_t *rkt,
                                          int partition_cnt,

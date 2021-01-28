@@ -12,9 +12,9 @@ CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 # Latest Kafka version
-KAFKA_VERSION?=2.4.0
+KAFKA_VERSION?=2.7.0
 # Kafka versions for compatibility tests
-COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 $(KAFKA_VERSION)
+COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 2.4.1 $(KAFKA_VERSION)
 
 # Non-default scenarios (FIXME: read from scenarios/*)
 SCENARIOS?=noautocreate
@@ -42,7 +42,7 @@ non_sparse_connections: $(BIN)
 		--conf '{"parallel":1, "args": "-L -Q", "sparse_connections": "false"}' $(KAFKA_VERSION)
 
 sasl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --debug $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' $(KAFKA_VERSION)
 
 # Run the full test suite(s)
 full: broker broker_idempotent sasl
@@ -172,5 +172,8 @@ release-test: | asan tsan pristine-full scenarios compat
 rusage:
 	./run-test.sh -R bare
 
+# Remove test reports, temporary test files, crash dumps, etc.
+clean-reports:
+	rm -f *.offset stats_*.json core vgcore.*
 
 -include $(DEPS)

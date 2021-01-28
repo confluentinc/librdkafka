@@ -152,6 +152,17 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Same as rd_kafka_mock_push_request_errors() but takes
+ *        an array of errors.
+ */
+RD_EXPORT void
+rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
+                                         int16_t ApiKey,
+                                         size_t cnt,
+                                         const rd_kafka_resp_err_t *errors);
+
+
+/**
  * @brief Same as rd_kafka_mock_push_request_errors() but for a specific broker.
  *
  * @remark The broker errors take precedence over the cluster errors.

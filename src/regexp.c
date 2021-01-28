@@ -842,13 +842,21 @@ Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp)
 	Renode *node;
 	Reinst *split, *jump;
 	int i;
+        unsigned int ncount;
+        size_t pattern_len = strlen(pattern);
+
+        if (pattern_len > 10000) {
+                /* Avoid stack exhaustion in recursive parseatom() et.al. */
+                if (errorp)
+                        *errorp = "regexp pattern too long (max 10000)";
+                return NULL;
+        }
 
 	prog = rd_calloc(1, sizeof (Reprog));
         g = &prog->g;
         g->prog = prog;
-	g->pstart = g->pend = rd_malloc(sizeof (Renode) * strlen(pattern) * 2);
+	g->pstart = g->pend = rd_malloc(sizeof (Renode) * pattern_len * 2);
 
-        memcpy(((char *)prog)+1, prog, 4);
 	if (setjmp(g->kaboom)) {
 		if (errorp) *errorp = g->error;
 		rd_free(g->pstart);
@@ -872,7 +880,10 @@ Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp)
 		die(g, "syntax error");
 
 	g->prog->nsub = g->nsub;
-	g->prog->start = g->prog->end = rd_malloc((count(node) + 6) * sizeof (Reinst));
+        ncount = count(node);
+        if (ncount > 10000)
+                die(g, "regexp graph too large");
+        g->prog->start = g->prog->end = rd_malloc((ncount + 6) * sizeof (Reinst));
 
 	split = emit(g->prog, I_SPLIT);
 	split->x = split + 3;

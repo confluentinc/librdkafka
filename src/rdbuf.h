@@ -89,6 +89,14 @@ typedef struct rd_buf_s {
 
         rd_segment_t     *rbuf_wpos;          /**< Current write position seg */
         size_t            rbuf_len;           /**< Current (written) length */
+        size_t            rbuf_erased;        /**< Total number of bytes
+                                               *   erased from segments.
+                                               *   This amount is taken into
+                                               *   account when checking for
+                                               *   writable space which is
+                                               *   always at the end of the
+                                               *   buffer and thus can't make
+                                               *   use of the erased parts. */
         size_t            rbuf_size;          /**< Total allocated size of
                                                *   all segments. */
 
@@ -139,7 +147,7 @@ static RD_INLINE RD_UNUSED size_t rd_buf_write_pos (const rd_buf_t *rbuf) {
  * @returns the number of bytes available for writing (before growing).
  */
 static RD_INLINE RD_UNUSED size_t rd_buf_write_remains (const rd_buf_t *rbuf) {
-        return rbuf->rbuf_size - rbuf->rbuf_len;
+        return rbuf->rbuf_size - (rbuf->rbuf_len + rbuf->rbuf_erased);
 }
 
 
@@ -184,9 +192,14 @@ size_t rd_buf_write (rd_buf_t *rbuf, const void *payload, size_t size);
 size_t rd_buf_write_slice (rd_buf_t *rbuf, rd_slice_t *slice);
 size_t rd_buf_write_update (rd_buf_t *rbuf, size_t absof,
                             const void *payload, size_t size);
-void rd_buf_push (rd_buf_t *rbuf, const void *payload, size_t size,
-                  void (*free_cb)(void *));
+void rd_buf_push0 (rd_buf_t *rbuf, const void *payload, size_t size,
+                   void (*free_cb)(void *), rd_bool_t writable);
+#define rd_buf_push(rbuf,payload,size,free_cb)                          \
+        rd_buf_push0(rbuf,payload,size,free_cb,rd_false/*not-writable*/)
+#define rd_buf_push_writable(rbuf,payload,size,free_cb)                 \
+        rd_buf_push0(rbuf,payload,size,free_cb,rd_true/*writable*/)
 
+size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size);
 
 size_t rd_buf_get_writable (rd_buf_t *rbuf, void **p);
 

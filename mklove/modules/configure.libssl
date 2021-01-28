@@ -82,10 +82,10 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.0.2u
-        local url=https://www.openssl.org/source/old/1.0.2/openssl-1.0.2u.tar.gz
+        local ver=1.1.1i
+        local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
-        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib"
+        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
         if [[ $ver == 1.0.* ]]; then
             extra_conf_args="${extra_conf_args} no-krb5"
         fi
@@ -103,7 +103,11 @@ if [[ $MKL_DISTRO != osx ]]; then
         make
 
         echo "### Installing to $destdir"
-        make INSTALL_PREFIX="$destdir" install_sw
+        if [[ $ver == 1.0.* ]]; then
+            make INSTALL_PREFIX="$destdir" install_sw
+        else
+            make DESTDIR="$destdir" install
+        fi
 
         return $?
     }

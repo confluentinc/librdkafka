@@ -359,11 +359,13 @@ class MessageImpl : public Message {
   }
 
   std::string         errstr() const {
+    const char *es;
     /* message_errstr() is only available for the consumer. */
     if (rk_type_ == RD_KAFKA_CONSUMER)
-      return std::string(rd_kafka_message_errstr(rkmessage_));
+      es = rd_kafka_message_errstr(rkmessage_);
+    else
+      es = rd_kafka_err2str(rkmessage_->err);
 
-    const char *es = rd_kafka_err2str(rkmessage_->err);
     return std::string(es ? es : "");
   }
 
@@ -975,7 +977,7 @@ class HandleImpl : virtual public Handle {
                                                extensions_copy,
                                                extensions.size(),
                                                errbuf, sizeof(errbuf)));
-          free(extensions_copy);
+          delete[] extensions_copy;
 
           if (err != ERR_NO_ERROR)
               errstr = errbuf;

@@ -221,8 +221,11 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
                                           reply, request, &offsets,
                                           rd_true/* Update toppars */,
                                           rd_true/* Add parts */);
-        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                if (offsets)
+                        rd_kafka_topic_partition_list_destroy(offsets);
                 return; /* retrying */
+        }
 
         /* offsets may be NULL for certain errors, such
          * as ERR__TRANSPORT. */
@@ -508,8 +511,10 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
                              partitions_to_query->cnt);
 
                 rd_kafka_OffsetFetchRequest(
-                        coord, 1,
+                        coord,
                         partitions_to_query,
+                        rk->rk_conf.isolation_level ==
+                        RD_KAFKA_READ_COMMITTED/*require_stable*/,
                         RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                         rd_kafka_assignment_handle_OffsetFetch,
                         NULL);

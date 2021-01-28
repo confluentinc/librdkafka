@@ -56,37 +56,37 @@ if __name__ == '__main__':
     # Collect common local artifacts, such as support files.
     arts.collect_local('common', req_tag=False)
 
-    if not args.no_s3:
-        arts.collect_s3()
-    else:
-        arts.collect_local(arts.dlpath)
-
-    if len(arts.artifacts) == 0:
-        raise ValueError('No artifacts found for %s' % match)
-
-    print('Collected artifacts (%s):' % (arts.dlpath))
-    for a in arts.artifacts:
-        print(' %s' % a.lpath)
-    print('')
-
-    package_version = match['tag']
-    if args.nuget_version is not None:
-        package_version = args.nuget_version
-
-    print('')
-
-    if dry_run:
-        sys.exit(0)
-
-    print('Building packages:')
-
     while True:
+        if not args.no_s3:
+            arts.collect_s3()
+        else:
+            arts.collect_local(arts.dlpath)
+
+        if len(arts.artifacts) == 0:
+            raise ValueError('No artifacts found for %s' % match)
+
+        print('Collected artifacts (%s):' % (arts.dlpath))
+        for a in arts.artifacts:
+            print(' %s' % a.lpath)
+        print('')
+
+        package_version = match['tag']
+        if args.nuget_version is not None:
+            package_version = args.nuget_version
+
+        print('')
+
+        if dry_run:
+            sys.exit(0)
+
+        print('Building packages:')
+
         try:
             p = pkgclass(package_version, arts)
             pkgfile = p.build(buildtype='release')
             break
         except packaging.MissingArtifactError as e:
-            if retries <= 0:
+            if retries <= 0 or args.no_s3:
                 if not args.no_cleanup:
                     p.cleanup()
                 raise e

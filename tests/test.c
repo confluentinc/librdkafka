@@ -75,7 +75,8 @@ int          test_rusage = 0; /**< Check resource usage */
  *   >1.0: CPU is slower than base line system,
  *   <1.0: CPU is faster than base line system. */
 double       test_rusage_cpu_calibration = 1.0;
-static  const char *tests_to_run = NULL; /* all */
+static const char *tests_to_run = NULL; /* all */
+static const char *subtests_to_run = NULL; /* all */
 int          test_write_report = 0; /**< Write test report file */
 
 static int show_summary = 1;
@@ -227,6 +228,8 @@ _TEST_DECL(0116_kafkaconsumer_close);
 _TEST_DECL(0117_mock_errors);
 _TEST_DECL(0118_commit_rebalance);
 _TEST_DECL(0119_consumer_auth);
+_TEST_DECL(0120_asymmetric_subscription);
+_TEST_DECL(0121_clusterid);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -425,6 +428,8 @@ struct test tests[] = {
         _TEST(0117_mock_errors, TEST_F_LOCAL),
         _TEST(0118_commit_rebalance, 0),
         _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
+        _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
+        _TEST(0121_clusterid, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -549,6 +554,13 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
 }
 #endif /* WITH_SOCKEM */
 
+/**
+ * @brief For use as the is_fatal_cb(), treating no errors as test-fatal.
+ */
+int test_error_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                                const char *reason) {
+        return 0;
+}
 
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
@@ -1124,9 +1136,12 @@ static void check_test_timeouts (void) {
                         test_summary(0/*no-locks*/);
                         TEST_FAIL0(__FILE__,__LINE__,0/*nolock*/,
                                    0/*fail-later*/,
-                                   "Test %s timed out "
+                                   "Test %s%s%s%s timed out "
                                    "(timeout set to %d seconds)\n",
                                    test->name,
+                                   *test->subtest ? " (" : "",
+                                   test->subtest,
+                                   *test->subtest ? ")" : "",
                                    (int)(test->timeout-
                                          test->start)/
                                    1000000);
@@ -1554,6 +1569,7 @@ int main(int argc, char **argv) {
         signal(SIGINT, test_sig_term);
 #endif
         tests_to_run = test_getenv("TESTS", NULL);
+        subtests_to_run = test_getenv("SUBTESTS", NULL);
         tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
@@ -1645,6 +1661,8 @@ int main(int argc, char **argv) {
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
+                               "  SUBTESTS - substring matched subtest to run "
+                               "(e.g., n_wildcard)\n"
 			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
                                "  TEST_SCENARIO - Test scenario\n"
 			       "  TEST_LEVEL - Test verbosity level\n"
@@ -1716,6 +1734,8 @@ int main(int argc, char **argv) {
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
+        if (subtests_to_run)
+                TEST_SAY("Sub tests    : %s\n", subtests_to_run);
         TEST_SAY("Test mode    : %s%s%s\n",
                  test_quick ? "quick, ":"",
                  test_mode,
@@ -1877,7 +1897,8 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
                         test_socket_enable(conf);
 #endif
         } else {
-                test_conf_set(conf, "client.id", test_curr->name);
+                if (!strcmp(test_conf_get(conf, "client.id"), "rdkafka"))
+                        test_conf_set(conf, "client.id", test_curr->name);
         }
 
 
@@ -2237,6 +2258,53 @@ void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
 
 
 /**
+ * @brief Produce messages to multiple topic-partitions.
+ *
+ * @param ...vararg is a tuple of:
+ *           const char *topic
+ *           int32_t partition (or UA)
+ *           int msg_base
+ *           int msg_cnt
+ *
+ * End with a NULL topic
+ */
+void test_produce_msgs_easy_multi (uint64_t testid, ...) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *p;
+        va_list ap;
+        const char *topic;
+        int msgcounter = 0;
+
+        test_conf_init(&conf, NULL, 0);
+
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        va_start(ap, testid);
+        while ((topic = va_arg(ap, const char *))) {
+                int32_t partition = va_arg(ap, int32_t);
+                int msg_base = va_arg(ap, int);
+                int msg_cnt = va_arg(ap, int);
+                rd_kafka_topic_t *rkt;
+
+                rkt = test_create_producer_topic(p, topic, NULL);
+
+                test_produce_msgs_nowait(p, rkt, testid, partition,
+                                         msg_base, msg_cnt,
+                                         NULL, 0, 0, &msgcounter);
+
+                rd_kafka_topic_destroy(rkt);
+        }
+        va_end(ap);
+
+        test_flush(p, tmout_multip(10*1000));
+
+        rd_kafka_destroy(p);
+}
+
+
+/**
  * @brief A standard rebalance callback.
  */
 void test_rebalance_cb (rd_kafka_t *rk,
@@ -2590,7 +2658,8 @@ void test_consumer_wait_assignment (rd_kafka_t *rk) {
                 test_consumer_poll_once(rk, NULL, 1000);
         }
 
-        TEST_SAY("Assignment (%d partition(s)): ", assignment->cnt);
+        TEST_SAY("%s: Assignment (%d partition(s)): ",
+                 rd_kafka_name(rk), assignment->cnt);
         for (i = 0 ; i < assignment->cnt ; i++)
                 TEST_SAY0("%s%s[%"PRId32"]",
                           i == 0 ? "" : ", ",
@@ -3943,6 +4012,18 @@ char *test_conf_get (const rd_kafka_conf_t *conf, const char *name) {
 }
 
 
+char *test_topic_conf_get (const rd_kafka_topic_conf_t *tconf,
+                           const char *name) {
+        static RD_TLS char ret[256];
+        size_t ret_sz = sizeof(ret);
+        if (rd_kafka_topic_conf_get(tconf, name, ret, &ret_sz) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to get topic config \"%s\": %s\n", name,
+                          "unknown property");
+        return ret;
+}
+
+
 /**
  * @brief Check if property \name matches \p val in \p conf.
  *        If \p conf is NULL the test config will be used. */
@@ -4025,6 +4106,36 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 			 partitions->elems[i].err ?
 			 rd_kafka_err2str(partitions->elems[i].err) : "");
         }
+}
+
+/**
+ * @brief Compare two lists, returning 0 if equal.
+ *
+ * @remark The lists may be sorted by this function.
+ */
+int test_partition_list_cmp (rd_kafka_topic_partition_list_t *al,
+                             rd_kafka_topic_partition_list_t *bl) {
+        int i;
+
+        if (al->cnt < bl->cnt)
+                return -1;
+        else if (al->cnt > bl->cnt)
+                return 1;
+        else if (al->cnt == 0)
+                return 0;
+
+        rd_kafka_topic_partition_list_sort(al, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(bl, NULL, NULL);
+
+        for (i = 0 ; i < al->cnt ; i++) {
+                const rd_kafka_topic_partition_t *a = &al->elems[i];
+                const rd_kafka_topic_partition_t *b = &bl->elems[i];
+                if (a->partition != b->partition ||
+                    strcmp(a->topic, b->topic))
+                        return -1;
+        }
+
+        return 0;
 }
 
 
@@ -4924,7 +5035,7 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
                                 fails++;
                         }
 
-                        if (exp_mdt->partition_cnt != 0 &&
+                        if (exp_mdt->partition_cnt > 0 &&
                             mdt->partition_cnt != exp_mdt->partition_cnt) {
                                 TEST_SAY("metadata: "
                                          "Topic %s, expected %d partitions"
@@ -5050,6 +5161,10 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                                 int tmout) {
         int64_t abs_timeout;
         test_timing_t t_md;
+        rd_kafka_t *our_rk = NULL;
+
+        if (!rk)
+                rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
         abs_timeout = test_clock() + (tmout * 1000);
 
@@ -5074,6 +5189,9 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                 rd_sleep(1);
         } while (test_clock() < abs_timeout);
         TIMING_STOP(&t_md);
+
+        if (our_rk)
+                rd_kafka_destroy(our_rk);
 
         if (abs_timeout)
                 TEST_FAIL("Expected topics not seen in given time.");
@@ -5131,10 +5249,18 @@ test_wait_admin_result (rd_kafka_queue_t *q,
 
 
 /**
- * @brief Wait for up to \p tmout for a
- *        CreateTopics/DeleteTopics/CreatePartitions or
- *        DescribeConfigs/AlterConfigs result and return the
+ * @brief Wait for up to \p tmout for an admin API result and return the
  *        distilled error code.
+ *
+ *        Supported APIs:
+ *        - AlterConfigs
+ *        - CreatePartitions
+ *        - CreateTopics
+ *        - DeleteGroups
+ *        - DeleteRecords
+ *        - DeleteTopics
+ *        * DeleteConsumerGroupOffsets
+ *        - DescribeConfigs
  */
 rd_kafka_resp_err_t
 test_wait_topic_admin_result (rd_kafka_queue_t *q,
@@ -5149,6 +5275,9 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
         size_t cres_cnt = 0;
         int errcnt = 0;
         rd_kafka_resp_err_t err;
+        const rd_kafka_group_result_t **gres = NULL;
+        size_t gres_cnt = 0;
+        const rd_kafka_topic_partition_list_t *offsets = NULL;
 
         rkev = test_wait_admin_result(q, evtype, tmout);
 
@@ -5203,6 +5332,33 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
 
                 cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
+                const rd_kafka_DeleteGroups_result_t *res;
+                if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))
+                        TEST_FAIL("Expected a DeleteGroups result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                gres = rd_kafka_DeleteGroups_result_groups(res, &gres_cnt);
+
+        } else if (evtype == RD_KAFKA_EVENT_DELETERECORDS_RESULT) {
+                const rd_kafka_DeleteRecords_result_t *res;
+                if (!(res = rd_kafka_event_DeleteRecords_result(rkev)))
+                        TEST_FAIL("Expected a DeleteRecords result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                offsets = rd_kafka_DeleteRecords_result_offsets(res);
+
+        } else if (evtype == RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT) {
+                const rd_kafka_DeleteConsumerGroupOffsets_result_t *res;
+                if (!(res =
+                      rd_kafka_event_DeleteConsumerGroupOffsets_result(rkev)))
+                        TEST_FAIL("Expected a DeleteConsumerGroupOffsets "
+                                  "result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                gres = rd_kafka_DeleteConsumerGroupOffsets_result_groups(
+                        rkev, &gres_cnt);
+
         } else {
                 TEST_FAIL("Bad evtype: %d", evtype);
                 RD_NOTREACHED();
@@ -5228,6 +5384,51 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                                   rd_kafka_ConfigResource_error_string(cres[i]));
                         if (!(errcnt++))
                                 err = rd_kafka_ConfigResource_error(cres[i]);
+                }
+        }
+
+        /* Check group errors */
+        for (i = 0 ; i < gres_cnt ; i++) {
+                const rd_kafka_topic_partition_list_t *parts;
+
+                if (rd_kafka_group_result_error(gres[i])) {
+
+                        TEST_WARN("%s result: %s: error: %s\n",
+                                  rd_kafka_event_name(rkev),
+                                  rd_kafka_group_result_name(gres[i]),
+                                  rd_kafka_error_string(rd_kafka_group_result_error(gres[i])));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(rd_kafka_group_result_error(gres[i]));
+                }
+
+                parts = rd_kafka_group_result_partitions(gres[i]);
+                if (parts) {
+                        int j;
+                        for (j = 0 ; j < parts->cnt ; i++) {
+                                if (!parts->elems[j].err)
+                                        continue;
+
+                                TEST_WARN("%s result: %s: "
+                                          "%s [%"PRId32"] error: %s\n",
+                                          rd_kafka_event_name(rkev),
+                                          rd_kafka_group_result_name(gres[i]),
+                                          parts->elems[j].topic,
+                                          parts->elems[j].partition,
+                                          rd_kafka_err2str(
+                                                  parts->elems[j].err));
+                                errcnt++;
+                        }
+                }
+        }
+
+        /* Check offset errors */
+        for (i = 0 ; (offsets && i < (size_t)offsets->cnt) ; i++) {
+                if (offsets->elems[i].err) {
+                        TEST_WARN("DeleteRecords result: %s [%d]: error: %s\n",
+                                  offsets->elems[i].topic, offsets->elems[i].partition,
+                                  rd_kafka_err2str(offsets->elems[i].err));
+                        if (!(errcnt++))
+                                err = offsets->elems[i].err;
                 }
         }
 
@@ -5446,7 +5647,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         err = test_wait_topic_admin_result(q,
-                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           RD_KAFKA_EVENT_DELETETOPICS_RESULT,
                                            NULL, tmout+5000);
 
         rd_kafka_queue_destroy(q);
@@ -5458,6 +5659,203 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
         return err;
 }
 
+rd_kafka_resp_err_t
+test_DeleteGroups_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **groups, size_t group_cnt,
+                          void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_DeleteGroup_t **del_groups;
+        rd_kafka_AdminOptions_t *options;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+
+        del_groups = malloc(sizeof(*del_groups) * group_cnt);
+
+        for (i = 0 ; i < group_cnt ; i++) {
+                del_groups[i] = rd_kafka_DeleteGroup_new(groups[i]);
+                TEST_ASSERT(del_groups[i]);
+        }
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEGROUPS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting %"PRIusz" groups\n", group_cnt);
+
+        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, useq);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
+        free(del_groups);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_DELETEGROUPS_RESULT,
+                                           NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
+
+        if (err)
+                TEST_FAIL("Failed to delete groups: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
+
+rd_kafka_resp_err_t
+test_DeleteRecords_simple (rd_kafka_t *rk,
+                           rd_kafka_queue_t *useq,
+                           const rd_kafka_topic_partition_list_t *offsets,
+                           void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t err;
+        rd_kafka_DeleteRecords_t *del_records =
+                rd_kafka_DeleteRecords_new(offsets);
+        const int tmout = 30*1000;
+
+        options = rd_kafka_AdminOptions_new(rk,
+                                            RD_KAFKA_ADMIN_OP_DELETERECORDS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options,
+                        tmout-5000,
+                        errstr,
+                        sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
+
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, useq);
+
+        rd_kafka_DeleteRecords_destroy(del_records);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_DELETERECORDS_RESULT,
+                                           NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete records: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
+
+rd_kafka_resp_err_t
+test_DeleteConsumerGroupOffsets_simple (
+        rd_kafka_t *rk,
+        rd_kafka_queue_t *useq,
+        const char *group_id,
+        const rd_kafka_topic_partition_list_t *offsets,
+        void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+        rd_kafka_DeleteConsumerGroupOffsets_t *cgoffsets;
+
+        options = rd_kafka_AdminOptions_new(
+                rk, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options,
+                        tmout-5000,
+                        errstr,
+                        sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        if (offsets) {
+                TEST_SAY("Deleting committed offsets for group %s and "
+                         "%d partitions\n",
+                         group_id, offsets->cnt);
+
+                cgoffsets = rd_kafka_DeleteConsumerGroupOffsets_new(group_id,
+                                                                    offsets);
+        } else {
+                TEST_SAY("Provoking invalid DeleteConsumerGroupOffsets call\n");
+                cgoffsets = NULL;
+        }
+
+        rd_kafka_DeleteConsumerGroupOffsets(rk, &cgoffsets,
+                                            cgoffsets ? 1 : 0,
+                                            options, useq);
+
+        if (cgoffsets)
+                rd_kafka_DeleteConsumerGroupOffsets_destroy(cgoffsets);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(
+                q,
+                RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT,
+                NULL, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete committed offsets: %s",
+                          rd_kafka_err2str(err));
+
+        return err;
+}
 
 /**
  * @brief Delta Alter configuration for the given resource,
@@ -5774,7 +6172,9 @@ void test_fail0 (const char *file, int line, const char *function,
         if (t)
                 *t = '\0';
 
-        of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
+        of = rd_snprintf(buf, sizeof(buf), "%s%s%s():%i: ",
+                         test_curr->subtest, *test_curr->subtest ? ": " : "",
+                         function, line);
         rd_assert(of < sizeof(buf));
 
         va_start(ap, fmt);
@@ -5786,14 +6186,20 @@ void test_fail0 (const char *file, int line, const char *function,
                 *t = '\0';
 
         TEST_SAYL(0, "TEST FAILURE\n");
-        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s() at %s: "
+        fprintf(stderr,
+                "\033[31m### Test \"%s%s%s%s\" failed at %s:%i:%s() at %s: "
                 "###\n"
                 "%s\n",
-                test_curr->name, file, line, function, timestr, buf+of);
+                test_curr->name,
+                *test_curr->subtest ? " (" : "",
+                test_curr->subtest,
+                *test_curr->subtest ? ")" : "",
+                file, line, function, timestr, buf+of);
         if (do_lock)
                 TEST_LOCK();
         test_curr->state = TEST_FAILED;
         test_curr->failcnt += 1;
+        test_curr->is_fatal_cb = NULL;
 
         if (!*test_curr->failstr) {
                 strncpy(test_curr->failstr, buf, sizeof(test_curr->failstr));
@@ -5850,4 +6256,59 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                 *bootstraps = rd_kafka_mock_cluster_bootstraps(mcluster);
 
         return mcluster;
+}
+
+
+
+/**
+ * @name Sub-tests
+ */
+
+
+/**
+ * @brief Start a sub-test. \p fmt is optional and allows additional
+ *        sub-test info to be displayed, e.g., test parameters.
+ *
+ * @returns 0 if sub-test should not be run, else 1.
+ */
+int test_sub_start (const char *func, int line, int is_quick,
+                    const char *fmt, ...) {
+
+        if (!is_quick && test_quick)
+                return 0;
+
+        if (subtests_to_run && !strstr(func, subtests_to_run))
+                return 0;
+
+        if (fmt && *fmt) {
+                va_list ap;
+                char buf[256];
+
+                va_start(ap, fmt);
+                rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+                va_end(ap);
+
+                rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
+                            "%s:%d: %s", func, line, buf);
+        } else {
+                rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
+                            "%s:%d", func, line);
+        }
+
+        TEST_SAY(_C_MAG "[ %s ]\n", test_curr->subtest);
+
+        return 1;
+}
+
+
+/**
+ * @brief Sub-test has passed.
+ */
+void test_sub_pass (void) {
+        TEST_ASSERT(*test_curr->subtest);
+
+        TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
+        *test_curr->subtest = '\0';
+        test_curr->is_fatal_cb = NULL;
+        test_curr->ignore_dr_err = rd_false;
 }

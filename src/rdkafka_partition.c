@@ -146,7 +146,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
          * broker supports FETCH >= v5, since this will be set when
          * doing fetch requests.
          */
-        if (rd_kafka_broker_ApiVersion_supported(rktp->rktp_broker, 
+        if (rd_kafka_broker_ApiVersion_supported(rktp->rktp_broker,
                                                  RD_KAFKAP_Fetch, 0,
                                                  5, NULL) == 5) {
                 rd_kafka_toppar_unlock(rktp);
@@ -356,9 +356,6 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[fetch_state]);
 
         rktp->rktp_fetch_state = fetch_state;
-
-        /* Clear the last error */
-        rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
@@ -1166,7 +1163,7 @@ void
 rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
                                       rd_kafka_resp_err_t err,
                                       rd_kafka_topic_partition_list_t *offsets){
-        if (err) {
+        if (err)
                 rd_kafka_consumer_err(rktp->rktp_fetchq,
                                       /* FIXME: propagate broker_id */
                                       RD_KAFKA_NODEID_UA,
@@ -1174,11 +1171,10 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
                                       NULL, rktp, RD_KAFKA_OFFSET_INVALID,
                                       "Offset commit failed: %s",
                                       rd_kafka_err2str(err));
-                return;
-        }
 
 	rd_kafka_toppar_lock(rktp);
-	rktp->rktp_committed_offset = offsets->elems[0].offset;
+        if (!err)
+                rktp->rktp_committed_offset = offsets->elems[0].offset;
 
 	/* When stopping toppars:
 	 * Final commit is now done (or failed), propagate. */
@@ -1287,6 +1283,8 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
 	rko->rko_replyq = replyq;
 
 	rko->rko_u.offset_fetch.partitions = part;
+        rko->rko_u.offset_fetch.require_stable =
+                rk->rk_conf.isolation_level == RD_KAFKA_READ_COMMITTED;
 	rko->rko_u.offset_fetch.do_free = 1;
 
         rd_kafka_q_enq(rktp->rktp_cgrp->rkcg_ops, rko);
@@ -2007,6 +2005,10 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
                 rktp->rktp_fetch_version = version;
 
+                /* Clear last error to propagate new fetch
+                 * errors if encountered. */
+                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+
                 rd_kafka_q_purge_toppar_version(rktp->rktp_fetchq, rktp,
                                                 version);
         }
@@ -2144,23 +2146,19 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 	switch ((int)rko->rko_type)
 	{
 	case RD_KAFKA_OP_FETCH_START:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_start(rktp,
 					    rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_FETCH_STOP:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_fetch_stop(rktp, rko);
 		break;
 
 	case RD_KAFKA_OP_SEEK:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_seek(rktp, rko->rko_u.fetch_start.offset, rko);
 		break;
 
 	case RD_KAFKA_OP_PAUSE:
-                rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 		rd_kafka_toppar_pause_resume(rktp, rko);
 		break;
 
@@ -2912,6 +2910,15 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
 }
 
 /**
+ * @brief Same as rd_kafka_topic_partition_list_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+void *
+rd_kafka_topic_partition_list_copy_opaque (const void *src, void *opaque) {
+        return rd_kafka_topic_partition_list_copy(src);
+}
+
+/**
  * @brief Append copies of all elements in \p src to \p dst.
  *        No duplicate-checks are performed.
  */
@@ -3346,8 +3353,14 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
  *        If the partition does not exist \c .err will be set to
  *        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION.
  *
+ * @param rktparlist The partitions to look up leaders for, the .err field
+ *                   will be set according to outcome, e.g., ERR_NO_ERROR,
+ *                   ERR_UNKNOWN_TOPIC_OR_PART, etc.
  * @param leaders rd_list_t of allocated (struct rd_kafka_partition_leader *)
  * @param query_topics (optional) rd_list of strdupped (char *)
+ * @param query_unknown Add unknown topics to \p query_topics.
+ * @param eonce (optional) For triggering asynchronously on cache change
+ *              in case not all leaders are known now.
  *
  * @remark This is based on the current topic_t and partition state
  *         which may lag behind the last metadata update due to internal
@@ -3355,22 +3368,28 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
  *
  * @param leaders rd_list_t of type (struct rd_kafka_partition_leader *)
  *
- * @returns the number of leaders added.
+ * @returns true if all partitions have leaders, else false.
  *
  * @sa rd_kafka_topic_partition_list_get_leaders_by_metadata
  *
  * @locks rd_kafka_*lock() MUST NOT be held
  */
-int
+static rd_bool_t
 rd_kafka_topic_partition_list_get_leaders (
         rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders,
-        rd_list_t *query_topics) {
+        rd_list_t *query_topics,
+        rd_bool_t query_unknown,
+        rd_kafka_enq_once_t *eonce) {
+        rd_bool_t complete;
         int cnt = 0;
         int i;
 
-        rd_kafka_rdlock(rk);
+        if (eonce)
+                rd_kafka_wrlock(rk);
+        else
+                rd_kafka_rdlock(rk);
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
@@ -3380,12 +3399,19 @@ rd_kafka_topic_partition_list_get_leaders (
                 struct rd_kafka_partition_leader *leader;
                 const rd_kafka_metadata_topic_t *mtopic;
                 const rd_kafka_metadata_partition_t *mpart;
+                rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(
                         rk, &mtopic, &mpart,
-                        rktpar->topic, rktpar->partition, 1/*valid*/);
+                        rktpar->topic, rktpar->partition,
+                        0/*negative entries too*/);
 
-                if (mtopic &&
+                topic_wait_cache =
+                        !mtopic ||
+                        RD_KAFKA_METADATA_CACHE_ERR_IS_TEMPORARY(mtopic->err);
+
+                if (!topic_wait_cache &&
+                    mtopic &&
                     mtopic->err != RD_KAFKA_RESP_ERR_NO_ERROR &&
                     mtopic->err != RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE) {
                         /* Topic permanently errored */
@@ -3405,15 +3431,18 @@ rd_kafka_topic_partition_list_get_leaders (
                      !(rkb = rd_kafka_broker_find_by_nodeid0(
                                rk, mpart->leader, -1/*any state*/,
                                rd_false)))) {
-                        /* Partition has no (valid) leader */
+                        /* Partition has no (valid) leader.
+                         * This is a permanent error. */
                         rktpar->err =
                                 mtopic->err ? mtopic->err :
                                 RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+                        continue;
                 }
 
-                if (!mtopic || !rkb) {
+                if (topic_wait_cache || !rkb) {
                         /* Topic unknown or no current leader for partition,
                          * add topic to query list. */
+                        rktpar->err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
                         if (query_topics &&
                             !rd_list_find(query_topics, rktpar->topic,
                                           (void *)strcmp))
@@ -3435,7 +3464,6 @@ rd_kafka_topic_partition_list_get_leaders (
                 if (!leader) {
                         leader = rd_kafka_partition_leader_new(rkb);
                         rd_list_add(leaders, leader);
-                        cnt++;
                 }
 
                 rktpar2 = rd_kafka_topic_partition_list_find(leader->partitions,
@@ -3450,16 +3478,258 @@ rd_kafka_topic_partition_list_get_leaders (
                                 leader->partitions, rktpar);
                 }
 
+                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
                 rd_kafka_broker_destroy(rkb);    /* loose refcount */
+                cnt++;
         }
 
-        rd_kafka_rdunlock(rk);
+        complete = cnt == rktparlist->cnt;
 
-        return cnt;
+        if (!complete && eonce)
+                /* Add eonce to cache observers */
+                rd_kafka_metadata_cache_wait_state_change_async(rk, eonce);
 
+        if (eonce)
+                rd_kafka_wrunlock(rk);
+        else
+                rd_kafka_rdunlock(rk);
+
+        return complete;
 }
 
 
+/**
+ * @brief Timer timeout callback for query_leaders_async rko's eonce object.
+ */
+static void
+rd_kafka_partition_leader_query_eonce_timeout_cb (rd_kafka_timers_t *rkts,
+                                                  void *arg) {
+        rd_kafka_enq_once_t *eonce = arg;
+        rd_kafka_enq_once_trigger(eonce, RD_KAFKA_RESP_ERR__TIMED_OUT,
+                                  "timeout timer");
+}
+
+
+/**
+ * @brief Query timer callback for query_leaders_async rko's eonce object.
+ */
+static void
+rd_kafka_partition_leader_query_eonce_timer_cb (rd_kafka_timers_t *rkts,
+                                                void *arg) {
+        rd_kafka_enq_once_t *eonce = arg;
+        rd_kafka_enq_once_trigger(eonce, RD_KAFKA_RESP_ERR_NO_ERROR,
+                                  "query timer");
+}
+
+
+/**
+ * @brief Query metadata cache for partition leaders, or trigger metadata
+ *        refresh if leaders not known.
+ *
+ * @locks_required none
+ * @locality any
+ */
+static rd_kafka_op_res_t
+rd_kafka_topic_partition_list_query_leaders_async_worker (rd_kafka_op_t *rko) {
+        rd_kafka_t *rk = rko->rko_rk;
+        rd_list_t query_topics, *leaders = NULL;
+        rd_kafka_op_t *reply;
+
+        RD_KAFKA_OP_TYPE_ASSERT(rko, RD_KAFKA_OP_LEADERS);
+
+        if (rko->rko_err)
+                goto reply; /* Timeout or ERR__DESTROY */
+
+        /* Since we're iterating over get_leaders() until all partition leaders
+         * are known we need to re-enable the eonce to be triggered again (which
+         * is not necessary the first time we get here, but there
+         * is no harm doing it then either). */
+        rd_kafka_enq_once_reenable(rko->rko_u.leaders.eonce,
+                                   rko, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
+
+        /* Look up the leaders in the metadata cache, if not all leaders
+         * are known the eonce is registered for metadata cache changes
+         * which will cause our function to be called
+         * again on (any) metadata cache change.
+         *
+         * When we are called again we perform the cache lookup again and
+         * hopefully get all leaders, otherwise defer a new async wait.
+         * Repeat until success or timeout. */
+
+        rd_list_init(&query_topics, 4 + rko->rko_u.leaders.partitions->cnt/2,
+                     rd_free);
+
+        leaders = rd_list_new(1 + rko->rko_u.leaders.partitions->cnt / 2,
+                              rd_kafka_partition_leader_destroy_free);
+
+        if (rd_kafka_topic_partition_list_get_leaders(
+                    rk, rko->rko_u.leaders.partitions,
+                    leaders,
+                    &query_topics,
+                    /* Add unknown topics to query_topics only on the
+                     * first query, after that we consider them permanently
+                     * non-existent */
+                    rko->rko_u.leaders.query_cnt == 0,
+                    rko->rko_u.leaders.eonce)) {
+                /* All leaders now known (or failed), reply to caller */
+                rd_list_destroy(&query_topics);
+                goto reply;
+        }
+
+        if (rd_list_empty(&query_topics)) {
+                /* Not all leaders known but no topics left to query,
+                 * reply to caller. */
+                rd_list_destroy(&query_topics);
+                goto reply;
+        }
+
+        /* Need to refresh topic metadata, but at most every interval. */
+        if (!rd_kafka_timer_is_started(&rk->rk_timers,
+                                       &rko->rko_u.leaders.query_tmr)) {
+
+                /* Add query interval timer. */
+                rd_kafka_enq_once_add_source(rko->rko_u.leaders.eonce,
+                                             "query timer");
+                rd_kafka_timer_start_oneshot(
+                        &rk->rk_timers,
+                        &rko->rko_u.leaders.query_tmr,
+                        rd_true,
+                        3*1000*1000 /* 3s */,
+                        rd_kafka_partition_leader_query_eonce_timer_cb,
+                        rko->rko_u.leaders.eonce);
+
+                /* Request metadata refresh */
+                rd_kafka_metadata_refresh_topics(
+                        rk, NULL, &query_topics,
+                        rd_true/*force*/,
+                        rd_false/*!allow_auto_create*/,
+                        rd_false/*!cgrp_update*/,
+                        "query partition leaders");
+
+                rko->rko_u.leaders.query_cnt++;
+        }
+
+        rd_list_destroy(leaders);
+        rd_list_destroy(&query_topics);
+
+        /* Wait for next eonce trigger */
+        return RD_KAFKA_OP_RES_KEEP; /* rko is still used */
+
+ reply:
+        /* Decommission worker state and reply to caller */
+
+        if (rd_kafka_timer_stop(&rk->rk_timers,
+                                &rko->rko_u.leaders.query_tmr,
+                                RD_DO_LOCK))
+                rd_kafka_enq_once_del_source(rko->rko_u.leaders.eonce,
+                                             "query timer");
+        if (rd_kafka_timer_stop(&rk->rk_timers,
+                                &rko->rko_u.leaders.timeout_tmr,
+                                RD_DO_LOCK))
+                rd_kafka_enq_once_del_source(rko->rko_u.leaders.eonce,
+                                             "timeout timer");
+
+        if (rko->rko_u.leaders.eonce) {
+                rd_kafka_enq_once_disable(rko->rko_u.leaders.eonce);
+                rko->rko_u.leaders.eonce = NULL;
+        }
+
+        /* No leaders found, set a request-level error */
+        if (leaders && rd_list_cnt(leaders) == 0) {
+                if (!rko->rko_err)
+                        rko->rko_err = RD_KAFKA_RESP_ERR__NOENT;
+                rd_list_destroy(leaders);
+                leaders = NULL;
+        }
+
+        /* Create and enqueue reply rko */
+        if (rko->rko_u.leaders.replyq.q) {
+                reply = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_LEADERS,
+                                           rko->rko_u.leaders.cb);
+                rd_kafka_op_get_reply_version(reply, rko);
+                reply->rko_err = rko->rko_err;
+                reply->rko_u.leaders.partitions =
+                        rko->rko_u.leaders.partitions; /* Transfer ownership for
+                                                        * partition list that
+                                                        * now contains
+                                                        * per-partition errors*/
+                rko->rko_u.leaders.partitions = NULL;
+                reply->rko_u.leaders.leaders = leaders; /* Possibly NULL */
+                reply->rko_u.leaders.opaque = rko->rko_u.leaders.opaque;
+
+                rd_kafka_replyq_enq(&rko->rko_u.leaders.replyq, reply, 0);
+        }
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+
+static rd_kafka_op_res_t
+rd_kafka_topic_partition_list_query_leaders_async_worker_op_cb (
+        rd_kafka_t *rk,
+        rd_kafka_q_t *rkq,
+        rd_kafka_op_t *rko) {
+        return rd_kafka_topic_partition_list_query_leaders_async_worker(rko);
+}
+
+/**
+ * @brief Async variant of rd_kafka_topic_partition_list_query_leaders().
+ *
+ * The reply rko op will contain:
+ * - .leaders which is a list of leaders and their partitions, this may be
+ *    NULL for overall errors (such as no leaders are found), or a
+ *    partial or complete list of leaders.
+ * - .partitions which is a copy of the input list of partitions with the
+ *   .err field set to the outcome of the leader query, typically ERR_NO_ERROR
+ *   or ERR_UNKNOWN_TOPIC_OR_PART.
+ *
+ * @locks_acquired rd_kafka_*lock()
+ *
+ * @remark rd_kafka_*lock() MUST NOT be held
+ */
+void
+rd_kafka_topic_partition_list_query_leaders_async (
+        rd_kafka_t *rk,
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        int timeout_ms,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_op_cb_t *cb,
+        void *opaque) {
+        rd_kafka_op_t *rko;
+
+        rd_assert(rktparlist && rktparlist->cnt > 0);
+        rd_assert(replyq.q);
+
+        rko = rd_kafka_op_new_cb(
+                rk,
+                RD_KAFKA_OP_LEADERS,
+                rd_kafka_topic_partition_list_query_leaders_async_worker_op_cb);
+        rko->rko_u.leaders.replyq = replyq;
+        rko->rko_u.leaders.partitions =
+                rd_kafka_topic_partition_list_copy(rktparlist);
+        rko->rko_u.leaders.ts_timeout = rd_timeout_init(timeout_ms);
+        rko->rko_u.leaders.cb = cb;
+        rko->rko_u.leaders.opaque = opaque;
+
+        /* Create an eonce to be triggered either by metadata cache update
+         * (from refresh_topics()), query interval, or timeout. */
+        rko->rko_u.leaders.eonce = rd_kafka_enq_once_new(
+                rko, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
+
+        rd_kafka_enq_once_add_source(rko->rko_u.leaders.eonce, "timeout timer");
+        rd_kafka_timer_start_oneshot(
+                &rk->rk_timers,
+                &rko->rko_u.leaders.timeout_tmr,
+                rd_true,
+                rd_timeout_remains_us(rko->rko_u.leaders.ts_timeout),
+                rd_kafka_partition_leader_query_eonce_timeout_cb,
+                rko->rko_u.leaders.eonce);
+
+        if (rd_kafka_topic_partition_list_query_leaders_async_worker(rko) ==
+            RD_KAFKA_OP_RES_HANDLED)
+                rd_kafka_op_destroy(rko); /* Reply queue already disabled */
+}
 
 
 /**
@@ -3469,6 +3739,8 @@ rd_kafka_topic_partition_list_get_leaders (
  * @param leaders is a pre-initialized (empty) list which will be populated
  *        with the leader brokers and their partitions
  *        (struct rd_kafka_partition_leader *)
+ *
+ * @remark Will not trigger topic auto creation (unless configured).
  *
  * @returns an error code on error.
  *
@@ -3482,6 +3754,7 @@ rd_kafka_topic_partition_list_query_leaders (
         rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_ts_t ts_query = 0;
         rd_ts_t now;
+        int query_cnt = 0;
         int i = 0;
 
         /* Get all the partition leaders, try multiple times:
@@ -3496,7 +3769,12 @@ rd_kafka_topic_partition_list_query_leaders (
                 rd_list_init(&query_topics, rktparlist->cnt, rd_free);
 
                 rd_kafka_topic_partition_list_get_leaders(
-                        rk, rktparlist, leaders, &query_topics);
+                        rk, rktparlist, leaders, &query_topics,
+                        /* Add unknown topics to query_topics only on the
+                         * first query, after that we consider them
+                         * permanently non-existent */
+                        query_cnt == 0,
+                        NULL);
 
                 if (rd_list_empty(&query_topics)) {
                         /* No remaining topics to query: leader-list complete.*/
@@ -3511,6 +3789,7 @@ rd_kafka_topic_partition_list_query_leaders (
                 }
 
                 now = rd_clock();
+
                 /*
                  * Missing leader for some partitions
                  */
@@ -3524,9 +3803,12 @@ rd_kafka_topic_partition_list_query_leaders (
                         rd_kafka_metadata_refresh_topics(
                                 rk, NULL, &query_topics,
                                 rd_true/*force*/,
+                                rd_false/*!allow_auto_create*/,
                                 rd_false/*!cgrp_update*/,
                                 "query partition leaders");
                         ts_query = now;
+                        query_cnt++;
+
                 } else {
                         /* Wait for broker ids to be updated from
                          * metadata refresh above. */
@@ -3543,7 +3825,10 @@ rd_kafka_topic_partition_list_query_leaders (
                                  * since wait_change() will block.
                                  * This gives us one more chance to spin thru*/
 
-        return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+        if (rd_atomic32_get(&rk->rk_broker_up_cnt) == 0)
+                return RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN;
+
+        return RD_KAFKA_RESP_ERR__TIMED_OUT;
 }
 
 
@@ -3806,7 +4091,7 @@ rd_kafka_topic_partition_list_has_duplicates (
                 const rd_kafka_topic_partition_t *p1 = &rktparlist->elems[i-1];
                 const rd_kafka_topic_partition_t *p2 = &rktparlist->elems[i];
 
-                if (((p1->partition != p2->partition) && !ignore_partition) &&
+                if (((p1->partition == p2->partition) || ignore_partition) &&
                     !strcmp(p1->topic, p2->topic)) {
                         return rd_true;
                 }
@@ -4046,4 +4331,10 @@ void rd_kafka_purge_ua_toppar_queues (rd_kafka_t *rk) {
         rd_kafka_dbg(rk, QUEUE|RD_KAFKA_DBG_TOPIC, "PURGEQ",
                      "Purged %i message(s) from %d UA-partition(s)",
                      msg_cnt, part_cnt);
+}
+
+
+void rd_kafka_partition_leader_destroy_free (void *ptr) {
+        struct rd_kafka_partition_leader *leader = ptr;
+        rd_kafka_partition_leader_destroy(leader);
 }

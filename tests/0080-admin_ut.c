@@ -80,7 +80,7 @@ static void do_test_CreateTopics (const char *what,
                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                   int with_background_event_cb,
                                   int with_options) {
-        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_queue_t *q;
 #define MY_NEW_TOPICS_CNT 6
         rd_kafka_NewTopic_t *new_topics[MY_NEW_TOPICS_CNT];
         rd_kafka_AdminOptions_t *options = NULL;
@@ -96,8 +96,10 @@ static void do_test_CreateTopics (const char *what,
         size_t restopic_cnt;
         void *my_opaque = NULL, *opaque;
 
-        TEST_SAY(_C_MAG "[ %s CreateTopics with %s, timeout %dms ]\n",
-                 rd_kafka_name(rk), what, exp_timeout);
+        SUB_TEST_QUICK("%s CreateTopics with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
 
         /**
          * Construct NewTopic array with different properties for
@@ -267,6 +269,8 @@ static void do_test_CreateTopics (const char *what,
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -283,7 +287,7 @@ static void do_test_CreateTopics (const char *what,
 static void do_test_DeleteTopics (const char *what,
                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
                                   int with_options) {
-        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_queue_t *q;
 #define MY_DEL_TOPICS_CNT 4
         rd_kafka_DeleteTopic_t *del_topics[MY_DEL_TOPICS_CNT];
         rd_kafka_AdminOptions_t *options = NULL;
@@ -299,8 +303,10 @@ static void do_test_DeleteTopics (const char *what,
         size_t restopic_cnt;
         void *my_opaque = NULL, *opaque;
 
-        TEST_SAY(_C_MAG "[ %s DeleteTopics with %s, timeout %dms ]\n",
-                 rd_kafka_name(rk), what, exp_timeout);
+        SUB_TEST_QUICK("%s DeleteTopics with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
 
         for (i = 0 ; i < MY_DEL_TOPICS_CNT ; i++)
                 del_topics[i] = rd_kafka_DeleteTopic_new(test_mk_topic_name(__FUNCTION__, 1));
@@ -367,7 +373,335 @@ static void do_test_DeleteTopics (const char *what,
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+#undef MY_DEL_TOPICS_CNT
+
+        SUB_TEST_QUICK();
 }
+
+/**
+ * @brief DeleteGroups tests
+ *
+ *
+ *
+ */
+static void do_test_DeleteGroups (const char *what,
+                                  rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                  int with_options,
+                                  rd_bool_t destroy) {
+        rd_kafka_queue_t *q;
+#define MY_DEL_GROUPS_CNT 4
+        char *group_names[MY_DEL_GROUPS_CNT];
+        rd_kafka_DeleteGroup_t *del_groups[MY_DEL_GROUPS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DeleteGroups_result_t *res;
+        const rd_kafka_group_result_t **resgroups;
+        size_t resgroup_cnt;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DeleteGroups with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        for (i = 0 ; i < MY_DEL_GROUPS_CNT ; i++) {
+                group_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                del_groups[i] = rd_kafka_DeleteGroup_new(group_names[i]);
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_DELETEGROUPS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                        options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DeleteGroups");
+        TEST_SAY("Call DeleteGroups, timeout is %dms\n", exp_timeout);
+        rd_kafka_DeleteGroups(rk, del_groups, MY_DEL_GROUPS_CNT,
+                              options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (destroy)
+                goto destroy;
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DeleteGroups.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout-100, exp_timeout+100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DeleteGroups: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteGroups_result(rkev);
+        TEST_ASSERT(res, "expected DeleteGroups_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting no error (errors will be per-group) */
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected DeleteGroups to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
+                    rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        /* Extract groups, should return MY_DEL_GROUPS_CNT groups. */
+        resgroups = rd_kafka_DeleteGroups_result_groups(res, &resgroup_cnt);
+        TEST_ASSERT(resgroups && resgroup_cnt == MY_DEL_GROUPS_CNT,
+                    "expected %d result_groups, got %p cnt %"PRIusz,
+                    MY_DEL_GROUPS_CNT, resgroups, resgroup_cnt);
+
+        /* The returned groups should be in the original order, and
+         * should all have timed out. */
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                TEST_ASSERT(!strcmp(group_names[i],
+                                    rd_kafka_group_result_name(resgroups[i])),
+                            "expected group '%s' at position %d, not '%s'",
+                            group_names[i], i,
+                            rd_kafka_group_result_name(resgroups[i]));
+                TEST_ASSERT(rd_kafka_error_code(rd_kafka_group_result_error(
+                                                        resgroups[i])) ==
+                            RD_KAFKA_RESP_ERR__TIMED_OUT,
+                            "expected group '%s' to have timed out, got %s",
+                            group_names[i],
+                            rd_kafka_error_string(
+                                    rd_kafka_group_result_error(resgroups[i])));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+ destroy:
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                rd_kafka_DeleteGroup_destroy(del_groups[i]);
+                rd_free(group_names[i]);
+        }
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+#undef MY_DEL_GROUPS_CNT
+
+        SUB_TEST_QUICK();
+}
+
+static void do_test_DeleteRecords (const char *what,
+                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                   int with_options, rd_bool_t destroy) {
+        rd_kafka_queue_t *q;
+#define MY_DEL_RECORDS_CNT 4
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *offsets = NULL;
+        rd_kafka_DeleteRecords_t *del_records;
+        const rd_kafka_DeleteRecords_result_t *res;
+        char *topics[MY_DEL_RECORDS_CNT];
+        int exp_timeout = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DeleteRecords with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++) {
+                topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_DELETERECORDS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                        options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)4567;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        offsets = rd_kafka_topic_partition_list_new(MY_DEL_RECORDS_CNT);
+
+        for (i = 0; i < MY_DEL_RECORDS_CNT; i++)
+                rd_kafka_topic_partition_list_add(offsets,topics[i], i)->
+                        offset = RD_KAFKA_OFFSET_END;
+
+        del_records = rd_kafka_DeleteRecords_new(offsets);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TIMING_START(&timing, "DeleteRecords");
+        TEST_SAY("Call DeleteRecords, timeout is %dms\n", exp_timeout);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 10);
+
+        rd_kafka_DeleteRecords_destroy(del_records);
+
+        if (destroy)
+                goto destroy;
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DeleteRecords.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT(&timing, exp_timeout-100,  exp_timeout+100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DeleteRecords: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteRecords_result(rkev);
+        TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error (pre-fanout leader_req will fail) */
+        err = rd_kafka_event_error(rkev);
+        TEST_ASSERT(err, "expected DeleteRecords to fail");
+
+        rd_kafka_event_destroy(rkev);
+
+ destroy:
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++)
+                rd_free(topics[i]);
+
+#undef MY_DEL_RECORDS_CNT
+
+        SUB_TEST_PASS();
+}
+
+
+static void do_test_DeleteConsumerGroupOffsets (const char *what,
+                                                rd_kafka_t *rk,
+                                                rd_kafka_queue_t *useq,
+                                                int with_options) {
+        rd_kafka_queue_t *q;
+#define MY_DEL_CGRPOFFS_CNT 1
+        rd_kafka_AdminOptions_t *options = NULL;
+        const rd_kafka_DeleteConsumerGroupOffsets_result_t *res;
+        rd_kafka_DeleteConsumerGroupOffsets_t *cgoffsets[MY_DEL_CGRPOFFS_CNT];
+        int exp_timeout = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DeleteConsumerGroupOffsets with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        for (i = 0 ; i < MY_DEL_CGRPOFFS_CNT ; i++) {
+                rd_kafka_topic_partition_list_t *partitions =
+                        rd_kafka_topic_partition_list_new(3);
+                rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+                rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
+                rd_kafka_topic_partition_list_add(partitions, "topic1", 1);
+                cgoffsets[i] = rd_kafka_DeleteConsumerGroupOffsets_new(
+                        "mygroup", partitions);
+                rd_kafka_topic_partition_list_destroy(partitions);
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                        options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)99981;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DeleteConsumerGroupOffsets");
+        TEST_SAY("Call DeleteConsumerGroupOffsets, timeout is %dms\n",
+                 exp_timeout);
+        rd_kafka_DeleteConsumerGroupOffsets(rk, cgoffsets,
+                                            MY_DEL_CGRPOFFS_CNT,
+                                            options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 10);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DeleteConsumerGroupOffsets.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT(&timing, exp_timeout-100,  exp_timeout+100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DeleteConsumerGroupOffsets: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected DeleteConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        TEST_ASSERT(err, "expected DeleteConsumerGroupOffsets to fail");
+
+        rd_kafka_event_destroy(rkev);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        rd_kafka_DeleteConsumerGroupOffsets_destroy_array(
+                cgoffsets, MY_DEL_CGRPOFFS_CNT);
+
+#undef MY_DEL_CGRPOFFSETS_CNT
+
+        SUB_TEST_PASS();
+}
+
 
 
 /**
@@ -376,6 +710,8 @@ static void do_test_DeleteTopics (const char *what,
  *  - Create topics A,B
  *  - Delete topic B
  *  - Create topic C
+ *  - Delete groups A,B,C
+ *  - Delete records from A,B,C
  *  - Create extra partitions for topic D
  */
 static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
@@ -388,16 +724,40 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         struct waiting id1 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
         struct waiting id2 = {RD_KAFKA_EVENT_DELETETOPICS_RESULT};
         struct waiting id3 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
-        struct waiting id4 = {RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT};
+        struct waiting id4 = {RD_KAFKA_EVENT_DELETEGROUPS_RESULT};
+        struct waiting id5 = {RD_KAFKA_EVENT_DELETERECORDS_RESULT};
+        struct waiting id6 = {RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT};
+        struct waiting id7 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
+        struct waiting id8 = {RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT};
+        struct waiting id9 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
+        rd_kafka_topic_partition_list_t *offsets;
 
-        TEST_SAY(_C_MAG "[ Mixed mode test on %s]\n", rd_kafka_name(rk));
+
+        SUB_TEST_QUICK();
+
+        offsets = rd_kafka_topic_partition_list_new(3);
+        rd_kafka_topic_partition_list_add(offsets, topics[0], 0)->offset =
+                RD_KAFKA_OFFSET_END;
+        rd_kafka_topic_partition_list_add(offsets, topics[1], 0)->offset =
+                RD_KAFKA_OFFSET_END;
+        rd_kafka_topic_partition_list_add(offsets, topics[2], 0)->offset =
+                RD_KAFKA_OFFSET_END;
 
         test_CreateTopics_simple(rk, rkqu, topics, 2, 1, &id1);
         test_DeleteTopics_simple(rk, rkqu, &topics[1], 1, &id2);
         test_CreateTopics_simple(rk, rkqu, &topics[2], 1, 1, &id3);
-        test_CreatePartitions_simple(rk, rkqu, "topicD", 15, &id4);
+        test_DeleteGroups_simple(rk, rkqu, topics, 3, &id4);
+        test_DeleteRecords_simple(rk, rkqu, offsets, &id5);
+        test_CreatePartitions_simple(rk, rkqu, "topicD", 15, &id6);
+        test_DeleteConsumerGroupOffsets_simple(rk, rkqu, "mygroup", offsets,
+                                               &id7);
+        test_DeleteConsumerGroupOffsets_simple(rk, rkqu, NULL, NULL, &id8);
+        /* Use broker-side defaults for partition count */
+        test_CreateTopics_simple(rk, rkqu, topics, 2, -1, &id9);
 
-        while (cnt < 4) {
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        while (cnt < 9) {
                 rd_kafka_event_t *rkev;
                 struct waiting *w;
 
@@ -423,6 +783,8 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
                 rd_kafka_event_destroy(rkev);
         }
+
+        SUB_TEST_PASS();
 }
 
 
@@ -440,6 +802,8 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         size_t rconfig_cnt;
         char errstr[128];
         int i;
+
+        SUB_TEST_QUICK();
 
         /* Check invalids */
         configs[0] = rd_kafka_ConfigResource_new(
@@ -522,11 +886,13 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                     rconfig_cnt);
 
         rd_kafka_event_destroy(rkev);
+
+        SUB_TEST_PASS();
 }
 
 
 /**
- * @brief Verify that an unclean rd_kafka_destroy() does not hang.
+ * @brief Verify that an unclean rd_kafka_destroy() does not hang or crash.
  */
 static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_t *rk;
@@ -537,6 +903,9 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         rd_kafka_DeleteTopic_t *topic;
         test_timing_t t_destroy;
 
+        SUB_TEST_QUICK("Test unclean destroy using %s",
+                       with_mainq ? "mainq" : "tempq");
+
         test_conf_init(&conf, NULL, 0);
         /* Remove brokers, if any, since this is a local test and we
          * rely on the controller not being found. */
@@ -545,9 +914,6 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
-
-        TEST_SAY(_C_MAG "[ Test unclean destroy for %s using %s]\n", rd_kafka_name(rk),
-                 with_mainq ? "mainq" : "tempq");
 
         if (with_mainq)
                 q = rd_kafka_queue_get_main(rk);
@@ -561,7 +927,8 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         /* We're not expecting a result yet since DeleteTopics will attempt
          * to look up the controller for socket.timeout.ms (1 minute). */
         rkev = rd_kafka_queue_poll(q, 100);
-        TEST_ASSERT(!rkev, "Did not expect result: %s", rd_kafka_event_name(rkev));
+        TEST_ASSERT(!rkev, "Did not expect result: %s",
+                    rd_kafka_event_name(rkev));
 
         rd_kafka_queue_destroy(q);
 
@@ -571,6 +938,8 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         TIMING_START(&t_destroy, "rd_kafka_destroy()");
         rd_kafka_destroy(rk);
         TIMING_STOP(&t_destroy);
+
+        SUB_TEST_PASS();
 
         /* Restore timeout */
         test_timeout_set(60);
@@ -586,15 +955,19 @@ static void do_test_options (rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, \
                     RD_KAFKA_ADMIN_OP_ALTERCONFIGS, \
                     RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS, \
+                    RD_KAFKA_ADMIN_OP_DELETEGROUPS, \
+                    RD_KAFKA_ADMIN_OP_DELETERECORDS, \
+                    RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS, \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */}
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[8];
+                const rd_kafka_admin_op_t valid_apis[9];
         } matrix[] = {
                 { "request_timeout", _all_apis },
                 { "operation_timeout", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
                                          RD_KAFKA_ADMIN_OP_DELETETOPICS,
-                                         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS } },
+                                         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
+                                         RD_KAFKA_ADMIN_OP_DELETERECORDS } },
                 { "validate_only", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
                                      RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
                                      RD_KAFKA_ADMIN_OP_ALTERCONFIGS } },
@@ -605,6 +978,7 @@ static void do_test_options (rd_kafka_t *rk) {
         int i;
         rd_kafka_AdminOptions_t *options;
 
+        SUB_TEST_QUICK();
 
         for (i = 0 ; matrix[i].setter ; i++) {
                 static const rd_kafka_admin_op_t all_apis[] = _all_apis;
@@ -684,24 +1058,19 @@ static void do_test_options (rd_kafka_t *rk) {
 
         /* Try an invalid for_api */
         options = rd_kafka_AdminOptions_new(rk, (rd_kafka_admin_op_t)1234);
-        TEST_ASSERT(!options, "Expectred AdminOptions_new() to fail "
+        TEST_ASSERT(!options, "Expected AdminOptions_new() to fail "
                     "with an invalid for_api, didn't.");
 
         TEST_LATER_CHECK();
+
+        SUB_TEST_PASS();
 }
 
 
-static void do_test_apis (rd_kafka_type_t cltype) {
+static rd_kafka_t *create_admin_client (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         char errstr[512];
-        rd_kafka_queue_t *mainq, *backgroundq;
         rd_kafka_conf_t *conf;
-
-        mtx_init(&last_event_lock, mtx_plain);
-        cnd_init(&last_event_cnd);
-
-        do_test_unclean_destroy(cltype, 0/*tempq*/);
-        do_test_unclean_destroy(cltype, 1/*mainq*/);
 
         test_conf_init(&conf, NULL, 0);
         /* Remove brokers, if any, since this is a local test and we
@@ -713,6 +1082,22 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
+
+        return rk;
+}
+
+
+static void do_test_apis (rd_kafka_type_t cltype) {
+        rd_kafka_t *rk;
+        rd_kafka_queue_t *mainq, *backgroundq;
+
+        mtx_init(&last_event_lock, mtx_plain);
+        cnd_init(&last_event_cnd);
+
+        do_test_unclean_destroy(cltype, 0/*tempq*/);
+        do_test_unclean_destroy(cltype, 1/*mainq*/);
+
+        rk = create_admin_client(cltype);
 
         mainq = rd_kafka_queue_get_main(rk);
         backgroundq = rd_kafka_queue_get_background(rk);
@@ -729,6 +1114,19 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_DeleteTopics("temp queue, options", rk, NULL, 1);
         do_test_DeleteTopics("main queue, options", rk, mainq, 1);
 
+        do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
+        do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_DeleteGroups("main queue, options", rk, mainq, 1, rd_false);
+
+        do_test_DeleteRecords("temp queue, no options", rk, NULL, 0, rd_false);
+        do_test_DeleteRecords("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_DeleteRecords("main queue, options", rk, mainq, 1, rd_false);
+
+        do_test_DeleteConsumerGroupOffsets("temp queue, no options",
+                                           rk, NULL, 0);
+        do_test_DeleteConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
+        do_test_DeleteConsumerGroupOffsets("main queue, options", rk, mainq, 1);
+
         do_test_mix(rk, mainq);
 
         do_test_configs(rk, mainq);
@@ -738,9 +1136,27 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
         rd_kafka_destroy(rk);
 
+        /*
+         * Tests which require a unique unused client instance.
+         */
+        rk = create_admin_client(cltype);
+        mainq = rd_kafka_queue_get_main(rk);
+        do_test_DeleteRecords("main queue, options, destroy", rk, mainq, 1,
+                              rd_true/*destroy instance before finishing*/);
+        rd_kafka_queue_destroy(mainq);
+        rd_kafka_destroy(rk);
+
+        rk = create_admin_client(cltype);
+        mainq = rd_kafka_queue_get_main(rk);
+        do_test_DeleteGroups("main queue, options, destroy", rk, mainq, 1,
+                             rd_true/*destroy instance before finishing*/);
+        rd_kafka_queue_destroy(mainq);
+        rd_kafka_destroy(rk);
+
+
+        /* Done */
         mtx_destroy(&last_event_lock);
         cnd_destroy(&last_event_cnd);
-
 }
 
 

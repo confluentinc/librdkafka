@@ -269,27 +269,36 @@ void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *)) {
 	rl->rl_flags |= RD_LIST_F_SORTED;
 }
 
-void rd_list_clear (rd_list_t *rl) {
+static void rd_list_destroy_elems (rd_list_t *rl) {
+        int i;
+
+        if (!rl->rl_elems)
+                return;
+
+        if (rl->rl_free_cb) {
+                /* Free in reverse order to allow deletions */
+                for (i = rl->rl_cnt - 1 ; i >= 0 ; i--)
+                        if (rl->rl_elems[i])
+                                rl->rl_free_cb(rl->rl_elems[i]);
+        }
+
+        rd_free(rl->rl_elems);
+        rl->rl_elems = NULL;
         rl->rl_cnt = 0;
-	rl->rl_flags &= ~RD_LIST_F_SORTED;
+        rl->rl_size = 0;
+        rl->rl_flags &= ~RD_LIST_F_SORTED;
+}
+
+
+void rd_list_clear (rd_list_t *rl) {
+        rd_list_destroy_elems(rl);
 }
 
 
 void rd_list_destroy (rd_list_t *rl) {
-
-        if (rl->rl_elems) {
-                int i;
-                if (rl->rl_free_cb) {
-                        for (i = 0 ; i < rl->rl_cnt ; i++)
-                                if (rl->rl_elems[i])
-                                        rl->rl_free_cb(rl->rl_elems[i]);
-                }
-
-		rd_free(rl->rl_elems);
-        }
-
-	if (rl->rl_flags & RD_LIST_F_ALLOCATED)
-		rd_free(rl);
+        rd_list_destroy_elems(rl);
+        if (rl->rl_flags & RD_LIST_F_ALLOCATED)
+                rd_free(rl);
 }
 
 void rd_list_destroy_free (void *rl) {
@@ -352,6 +361,20 @@ void *rd_list_last (const rd_list_t *rl) {
 }
 
 
+void *rd_list_find_duplicate (const rd_list_t *rl,
+                              int (*cmp) (const void *, const void *)) {
+        int i;
+
+        rd_assert(rl->rl_flags & RD_LIST_F_SORTED);
+
+        for (i = 1 ; i < rl->rl_cnt ; i++) {
+                if (!cmp(rl->rl_elems[i-1],
+                         rl->rl_elems[i]))
+                        return rl->rl_elems[i];
+        }
+
+        return NULL;
+}
 
 int rd_list_cmp (const rd_list_t *a, const rd_list_t *b,
 		 int (*cmp) (const void *, const void *)) {
@@ -406,8 +429,7 @@ static void *rd_list_nocopy_ptr (const void *elem, void *opaque) {
 }
 
 rd_list_t *rd_list_copy (const rd_list_t *src,
-                         void *(*copy_cb) (const void *elem, void *opaque),
-                         void *opaque) {
+                         rd_list_copy_cb_t *copy_cb, void *opaque) {
         rd_list_t *dst;
 
         dst = rd_list_new(src->rl_cnt, src->rl_free_cb);

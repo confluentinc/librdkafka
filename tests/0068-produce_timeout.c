@@ -44,7 +44,7 @@
 static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
 
         /* Let delay be high to trigger the local timeout */
-        sockem_set(skm, "delay", 2000, NULL);
+        sockem_set(skm, "delay", 10000, NULL);
         return 0;
 }
 
@@ -106,7 +106,7 @@ int main_0068_produce_timeout (int argc, char **argv) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic,
-                                         "message.timeout.ms", "100", NULL);
+                                         "message.timeout.ms", "2000", NULL);
 
         TEST_SAY("Auto-creating topic %s\n", topic);
         test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));

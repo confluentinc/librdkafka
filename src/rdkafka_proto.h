@@ -40,7 +40,14 @@
 
 /** Default generic retry count for failed requests.
  *  This may be overriden for specific request types. */
-#define RD_KAFKA_REQUEST_MAX_RETRIES 2
+#define RD_KAFKA_REQUEST_DEFAULT_RETRIES 2
+
+/** Max (practically infinite) retry count */
+#define RD_KAFKA_REQUEST_MAX_RETRIES  INT_MAX
+
+/** Do not retry request */
+#define RD_KAFKA_REQUEST_NO_RETRIES 0
+
 
 /**
  * Request types
@@ -65,7 +72,27 @@ struct rd_kafkap_reshdr {
 };
 
 
+/**
+ * Request type v1 (flexible version)
+ *
+ * i32            Size
+ * i16            ApiKey
+ * i16            ApiVersion
+ * i32            CorrId
+ * string         ClientId   (2-byte encoding, not compact string)
+ * uvarint        Tags
+ * <Request payload>
+ * uvarint        EndTags
+ *
+ * Any struct-type (non-primitive or array type) field in the request payload
+ * must also have a trailing tags list, this goes for structs in arrays as well.
+ */
 
+/**
+ * @brief Protocol request type (ApiKey) to name/string.
+ *
+ * Generate updates to this list with generate_proto.sh.
+ */
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
         static const char *names[] = {
@@ -111,10 +138,32 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_RenewDelegationToken] = "RenewDelegationToken",
                 [RD_KAFKAP_ExpireDelegationToken] = "ExpireDelegationToken",
                 [RD_KAFKAP_DescribeDelegationToken] = "DescribeDelegationToken",
-                [RD_KAFKAP_DeleteGroups] = "DeleteGroups"
-
+                [RD_KAFKAP_DeleteGroups] = "DeleteGroups",
+                [RD_KAFKAP_ElectLeaders] = "ElectLeadersRequest",
+                [RD_KAFKAP_IncrementalAlterConfigs] =
+                "IncrementalAlterConfigsRequest",
+                [RD_KAFKAP_AlterPartitionReassignments] =
+                "AlterPartitionReassignmentsRequest",
+                [RD_KAFKAP_ListPartitionReassignments] =
+                "ListPartitionReassignmentsRequest",
+                [RD_KAFKAP_OffsetDelete] = "OffsetDeleteRequest",
+                [RD_KAFKAP_DescribeClientQuotas] =
+                "DescribeClientQuotasRequest",
+                [RD_KAFKAP_AlterClientQuotas] =
+                "AlterClientQuotasRequest",
+                [RD_KAFKAP_DescribeUserScramCredentials] =
+                "DescribeUserScramCredentialsRequest",
+                [RD_KAFKAP_AlterUserScramCredentials] =
+                "AlterUserScramCredentialsRequest",
+                [RD_KAFKAP_Vote] = "VoteRequest",
+                [RD_KAFKAP_BeginQuorumEpoch] = "BeginQuorumEpochRequest",
+                [RD_KAFKAP_EndQuorumEpoch] = "EndQuorumEpochRequest",
+                [RD_KAFKAP_DescribeQuorum] = "DescribeQuorumRequest",
+                [RD_KAFKAP_AlterIsr] = "AlterIsrRequest",
+                [RD_KAFKAP_UpdateFeatures] = "UpdateFeaturesRequest",
+                [RD_KAFKAP_Envelope] = "EnvelopeRequest",
         };
-        static RD_TLS char ret[32];
+        static RD_TLS char ret[64];
 
         if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names) ||
             !names[ApiKey]) {

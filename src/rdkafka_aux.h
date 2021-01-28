@@ -58,7 +58,35 @@ rd_kafka_topic_result_new (const char *topic, ssize_t topic_size,
                            rd_kafka_resp_err_t err,
                            const char *errstr);
 
+/**@}*/
 
+/**
+ * @brief Group [ + Error object ]
+ *
+ * @remark Public type.
+ * @remark Single allocation.
+ */
+struct rd_kafka_group_result_s {
+        char *group;             /**< Points to data */
+        rd_kafka_error_t *error; /**< Error object, or NULL on success */
+        /** Partitions, used by DeleteConsumerGroupOffsets. */
+        rd_kafka_topic_partition_list_t *partitions;
+        char  data[1];           /**< Group name */
+};
+
+void rd_kafka_group_result_destroy (rd_kafka_group_result_t *terr);
+void rd_kafka_group_result_free (void *ptr);
+
+rd_kafka_group_result_t *
+rd_kafka_group_result_new (const char *group, ssize_t group_size,
+                           const rd_kafka_topic_partition_list_t *partitions,
+                           rd_kafka_error_t *error);
+
+rd_kafka_group_result_t *
+rd_kafka_group_result_copy (const rd_kafka_group_result_t *groupres);
+void *
+rd_kafka_group_result_copy_opaque (const void *src_groupres,
+                                   void *opaque);
 /**@}*/
 
 #endif /* _RDKAFKA_AUX_H_ */

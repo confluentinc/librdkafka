@@ -11,7 +11,7 @@
 set -ex
 
 _DOCKER_IMAGE=fedora:33
-_MOCK_CONFIGS="epel-6-x86_64 epel-7-x86_64 epel-8-x86_64"
+_MOCK_CONFIGS="epel-7-x86_64 epel-8-x86_64"
 
 if [[ $1 == "--build" ]]; then
     on_builder=1

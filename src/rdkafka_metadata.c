@@ -49,6 +49,8 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_op_t *rko;
 	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_list_t topics;
+        rd_bool_t allow_auto_create_topics =
+                rk->rk_conf.allow_auto_create_topics;
 
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
@@ -64,8 +66,15 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                 if (only_rkt)
                         rd_list_add(&topics,
                                     rd_strdup(rd_kafka_topic_name(only_rkt)));
-                else
-                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics);
+                else {
+                        int cache_cnt;
+                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics,
+                                                      &cache_cnt);
+                        /* Don't trigger auto-create for cached topics */
+                        if (rd_list_cnt(&topics) == cache_cnt)
+                                allow_auto_create_topics = rd_true;
+                }
+
         }
 
         /* Async: request metadata */
@@ -74,6 +83,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rko->rko_u.metadata.force = 1; /* Force metadata request regardless
                                         * of outstanding metadata requests. */
         rd_kafka_MetadataRequest(rkb, &topics, "application requested",
+                                 allow_auto_create_topics,
                                  /* cgrp_update:
                                   * Only update consumer group state
                                   * on response if this lists all
@@ -238,7 +248,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id = -1;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int broadcast_changes = 0;
+        int broker_changes = 0;
+        int topic_changes = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -503,7 +514,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                                            (void*)strcmp));
                         if (!all_topics) {
                                 rd_kafka_wrlock(rk);
-                                rd_kafka_metadata_cache_topic_update(rk, mdt);
+                                rd_kafka_metadata_cache_topic_update(
+                                        rk, mdt,
+                                        rd_false/*propagate later*/);
+                                topic_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
                 }
@@ -544,20 +558,31 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
 
         rd_kafka_wrlock(rkb->rkb_rk);
+
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
 
         /* Update cached cluster id. */
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&
-            (!rkb->rkb_rk->rk_clusterid ||
-             rd_kafkap_str_cmp_str(&cluster_id, rkb->rkb_rk->rk_clusterid))) {
+            (!rk->rk_clusterid ||
+             rd_kafkap_str_cmp_str(&cluster_id, rk->rk_clusterid))) {
                 rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_GENERIC, "CLUSTERID",
                            "ClusterId update \"%s\" -> \"%.*s\"",
-                           rkb->rkb_rk->rk_clusterid ?
-                           rkb->rkb_rk->rk_clusterid : "",
+                           rk->rk_clusterid ?
+                           rk->rk_clusterid : "",
                            RD_KAFKAP_STR_PR(&cluster_id));
-                if (rkb->rkb_rk->rk_clusterid)
-                        rd_free(rkb->rkb_rk->rk_clusterid);
-                rkb->rkb_rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
+                if (rk->rk_clusterid) {
+                        rd_kafka_log(rk, LOG_WARNING, "CLUSTERID",
+                                     "Broker %s reports different ClusterId "
+                                     "\"%.*s\" than previously known \"%s\": "
+                                     "a client must not be simultaneously "
+                                     "connected to multiple clusters",
+                                     rd_kafka_broker_name(rkb),
+                                     RD_KAFKAP_STR_PR(&cluster_id),
+                                     rk->rk_clusterid);
+                        rd_free(rk->rk_clusterid);
+                }
+
+                rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
         }
 
         /* Update controller id. */
@@ -566,7 +591,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                            "ControllerId update %"PRId32" -> %"PRId32,
                            rkb->rkb_rk->rk_controllerid, controller_id);
                 rkb->rkb_rk->rk_controllerid = controller_id;
-                broadcast_changes++;
+                broker_changes++;
         }
 
         if (all_topics) {
@@ -583,6 +608,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                            "%d broker(s) and %d topic(s): %s",
                            md->broker_cnt, md->topic_cnt, reason);
         } else {
+                if (topic_changes)
+                        rd_kafka_metadata_cache_propagate_changes(rk);
                 rd_kafka_metadata_cache_expiry_start(rk);
         }
 
@@ -592,8 +619,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
-        if (broadcast_changes) {
-                /* Broadcast metadata changes to listeners. */
+        if (broker_changes) {
+                /* Broadcast broker metadata changes to listeners. */
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
         }
 
@@ -835,6 +862,10 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  * @param rk: used to look up usable broker if \p rkb is NULL.
  * @param rkb: use this broker, unless NULL then any usable broker from \p rk
  * @param force: force refresh even if topics are up-to-date in cache
+ * @param allow_auto_create: Enable/disable auto creation of topics
+ *                           (through MetadataRequest). Requires a modern
+ *                           broker version.
+ *                           Takes precedence over allow.auto.create.topics.
  * @param cgrp_update: Allow consumer group state update on response.
  *
  * @returns an error code
@@ -845,6 +876,7 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                   const rd_list_t *topics, rd_bool_t force,
+                                  rd_bool_t allow_auto_create,
                                   rd_bool_t cgrp_update,
                                   const char *reason) {
         rd_list_t q_topics;
@@ -859,11 +891,19 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
                                                        RD_DONT_LOCK, 0,
                                                        reason))) {
+                        /* Hint cache that something is interested in
+                         * these topics so that they will be included in
+                         * a future all known_topics query. */
+                        rd_kafka_metadata_cache_hint(rk, topics, NULL,
+                                                     RD_KAFKA_RESP_ERR__NOENT,
+                                                     0/*dont replace*/);
+
                         rd_kafka_wrunlock(rk);
                         rd_kafka_dbg(rk, METADATA, "METADATA",
                                      "Skipping metadata refresh of %d topic(s):"
-                                     " no usable brokers",
-                                     rd_list_cnt(topics));
+                                     " %s: no usable brokers",
+                                     rd_list_cnt(topics), reason);
+
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 }
                 destroy_rkb = 1;
@@ -877,7 +917,8 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                  * out any topics that are already being requested.
                  * q_topics will contain remaining topics to query. */
                 rd_kafka_metadata_cache_hint(rk, topics, &q_topics,
-                                             0/*dont replace*/);
+                                             RD_KAFKA_RESP_ERR__WAIT_CACHE,
+                                             rd_false/*dont replace*/);
                 rd_kafka_wrunlock(rk);
 
                 if (rd_list_cnt(&q_topics) == 0) {
@@ -902,7 +943,8 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                      "Requesting metadata for %d/%d topics: %s",
                      rd_list_cnt(&q_topics), rd_list_cnt(topics), reason);
 
-        rd_kafka_MetadataRequest(rkb, &q_topics, reason, cgrp_update, NULL);
+        rd_kafka_MetadataRequest(rkb, &q_topics, reason, allow_auto_create,
+                                 cgrp_update, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -930,20 +972,29 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                         rd_bool_t force, const char *reason) {
         rd_list_t topics;
         rd_kafka_resp_err_t err;
+        int cache_cnt = 0;
+        rd_bool_t allow_auto_create_topics;
 
         if (!rk)
                 rk = rkb->rkb_rk;
 
         rd_list_init(&topics, 8, rd_free);
-        rd_kafka_local_topics_to_list(rk, &topics);
+        rd_kafka_local_topics_to_list(rk, &topics, &cache_cnt);
+
+        /* Allow topic auto creation if there are locally known topics (rkt)
+         * and not just cached (to be queried) topics. */
+        allow_auto_create_topics = rk->rk_conf.allow_auto_create_topics &&
+                rd_list_cnt(&topics) > cache_cnt;
 
         if (rd_list_cnt(&topics) == 0)
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
-                err = rd_kafka_metadata_refresh_topics(rk, rkb,
-                                                       &topics, force,
-                                                       rd_false/*!cgrp_update*/,
-                                                       reason);
+                err = rd_kafka_metadata_refresh_topics(
+                        rk, rkb,
+                        &topics, force,
+                        allow_auto_create_topics,
+                        rd_false/*!cgrp_update*/,
+                        reason);
 
         rd_list_destroy(&topics);
 
@@ -971,6 +1022,9 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
         rd_list_t topics;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
+        rd_bool_t allow_auto_create_topics =
+                rk->rk_conf.allow_auto_create_topics;
+        int cache_cnt = 0;
 
         if (!rk)
                 rk = rkb->rkb_rk;
@@ -989,7 +1043,9 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
 
         /* Add locally known topics, i.e., those that are currently
          * being consumed or otherwise referenced through topic_t objects. */
-        rd_kafka_local_topics_to_list(rk, &topics);
+        rd_kafka_local_topics_to_list(rk, &topics, &cache_cnt);
+        if (rd_list_cnt(&topics) == cache_cnt)
+                allow_auto_create_topics = rd_false;
 
         /* Add subscribed (non-wildcard) topics, if any. */
         if (rkcg->rkcg_subscription)
@@ -1000,10 +1056,12 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
         if (rd_list_cnt(&topics) == 0)
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
-                err = rd_kafka_metadata_refresh_topics(rk, rkb, &topics,
-                                                       rd_true/*force*/,
-                                                       rd_true/*cgrp_update*/,
-                                                       reason);
+                err = rd_kafka_metadata_refresh_topics(
+                        rk, rkb, &topics,
+                        rd_true/*force*/,
+                        allow_auto_create_topics,
+                        rd_true/*cgrp_update*/,
+                        reason);
 
         rd_list_destroy(&topics);
 
@@ -1029,6 +1087,7 @@ rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                    const char *reason) {
         return rd_kafka_metadata_request(rk, rkb, NULL /*brokers only*/,
+                                         rd_false/*!allow auto create topics*/,
                                          rd_false/*no cgrp update */,
                                          reason, NULL);
 }
@@ -1061,7 +1120,10 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         }
 
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
-        rd_kafka_MetadataRequest(rkb, &topics, reason, rd_true, NULL);
+        rd_kafka_MetadataRequest(rkb, &topics, reason,
+                                 rd_false/*no auto create*/,
+                                 rd_true/*cgrp update*/,
+                                 NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1084,6 +1146,7 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 rd_kafka_resp_err_t
 rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                            const rd_list_t *topics,
+                           rd_bool_t allow_auto_create_topics,
                            rd_bool_t cgrp_update,
                            const char *reason, rd_kafka_op_t *rko) {
         int destroy_rkb = 0;
@@ -1096,7 +1159,9 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 destroy_rkb = 1;
         }
 
-        rd_kafka_MetadataRequest(rkb, topics, reason, cgrp_update, rko);
+        rd_kafka_MetadataRequest(rkb, topics, reason,
+                                 allow_auto_create_topics,
+                                 cgrp_update, rko);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);
@@ -1155,10 +1220,12 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 /* No leader-less topics+partitions, stop the timer. */
                 rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
         } else {
-                rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
-                                                 rd_true/*force*/,
-                                                 rd_false/*!cgrp_update*/,
-                                                 "partition leader query");
+                rd_kafka_metadata_refresh_topics(
+                        rk, NULL, &topics,
+                        rd_true/*force*/,
+                        rk->rk_conf.allow_auto_create_topics,
+                        rd_false/*!cgrp_update*/,
+                        "partition leader query");
                 /* Back off next query exponentially until we reach
                  * the standard query interval - then stop the timer
                  * since the intervalled querier will do the job for us. */

@@ -923,7 +923,8 @@ rd_kafka_broker_send (rd_kafka_broker_t *rkb, rd_slice_t *slice) {
 
 
 static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
-                                    const char *nodename) {
+                                    const char *nodename,
+                                    rd_bool_t forceResetAddress) {
 	const char *errstr;
         int save_idx = 0;
 
@@ -2072,6 +2073,10 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
         rd_kafka_broker_lock(rkb);
         rd_strlcpy(nodename, rkb->rkb_nodename, sizeof(nodename));
+
+        /* If the nodename was changed since the last connect,
+         * reset the address cache. */
+        forceResetAddress = (rkb->rkb_connect_epoch != rkb->rkb_nodename_epoch);
         rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
         /* Logical brokers might not have a hostname set, in which case
          * we should not try to connect. */
@@ -2088,7 +2093,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
         rd_kafka_broker_update_reconnect_backoff(rkb, &rkb->rkb_rk->rk_conf,
                                                  rd_clock());
 
-        if (rd_kafka_broker_resolve(rkb, nodename) == -1)
+        if (rd_kafka_broker_resolve(rkb, nodename, forceResetAddress) == -1)
                 return -1;
 
 	sinx = rd_sockaddr_list_next(rkb->rkb_rsal);

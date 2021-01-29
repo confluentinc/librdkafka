@@ -272,6 +272,74 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
                 return maxver;
 }
 
+/**
+ * @brief Setup the wake fd for IO events
+ *
+ * @locality broker creation or reconnection
+ * @locks none
+ */
+static void rd_kafka_broker_setup_queue_wakeup_fd(rd_kafka_broker_t* rkb) {
+    int r;
+
+    /*
+     * Fd-based queue wake-ups using a non-blocking pipe.
+     * Writes are best effort, if the socket queue is full
+     * the write fails (silently) but this has no effect on latency
+     * since the POLLIN flag will already have been raised for fd.
+     */
+    rkb->rkb_wakeup_fd[0] = -1;
+    rkb->rkb_wakeup_fd[1] = -1;
+    if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
+        rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
+            "Failed to setup broker queue wake-up fds: "
+            "%s: disabling low-latency mode",
+            rd_strerror(r));
+
+    }
+    else if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+        /* nop: internal broker has no IO transport. */
+
+    }
+    else {
+        char onebyte = 1;
+
+        rd_rkb_dbg(rkb, QUEUE, "WAKEUPFD",
+            "Enabled low-latency ops queue wake-ups");
+        rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
+            &onebyte, sizeof(onebyte));
+    }
+}
+
+/**
+ * @brief Set broker recovery action
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_broker_set_recovery_action(rd_kafka_broker_t* rkbs, uint32_t action) {
+    rkbs->rkb_recovery_actions |= action;
+}
+
+/**
+ * @brief Reinitialize queue wake up fd's
+ *
+ * @locality any
+ * @locks none
+ */
+static void rd_kafka_broker_reinitialize_wake_up_fd(rd_kafka_broker_t* rkb) {
+    if ((rkb->rkb_recovery_actions & RKB_RECOVERY_ACTIONS_REINITIALIZE_WAKEUP_FD) != 0) {
+        rd_rkb_log(rkb, LOG_WARNING, "WAKEUPFD",
+            "Reinitializing the wakeup fd's");
+
+        if (rkb->rkb_wakeup_fd[0] != -1)
+            rd_close(rkb->rkb_wakeup_fd[0]);
+        if (rkb->rkb_wakeup_fd[1] != -1)
+            rd_close(rkb->rkb_wakeup_fd[1]);
+
+        rd_kafka_broker_setup_queue_wakeup_fd(rkb);
+        rkb->rkb_recovery_actions &= ~RKB_RECOVERY_ACTIONS_REINITIALIZE_WAKEUP_FD;
+    }
+}
 
 /**
  * @brief Set broker state.
@@ -5174,6 +5242,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 continue;
                         }
 
+                        rd_kafka_broker_reinitialize_wake_up_fd(rkb);
+
 			/* Initiate asynchronous connection attempt.
 			 * Only the host lookup is blocking here. */
                         r = rd_kafka_broker_connect(rkb);
@@ -5385,7 +5455,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-        int r;
 #ifndef _WIN32
         sigset_t newset, oldset;
 #endif
@@ -5412,6 +5481,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rkb->rkb_proto = proto;
         rkb->rkb_port = port;
         rkb->rkb_origname = rd_strdup(name);
+        rkb->rkb_recovery_actions = RKB_RECOVERY_ACTIONS_NONE;
 
 	mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
@@ -5467,33 +5537,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-        /*
-         * Fd-based queue wake-ups using a non-blocking pipe.
-         * Writes are best effort, if the socket queue is full
-         * the write fails (silently) but this has no effect on latency
-         * since the POLLIN flag will already have been raised for fd.
-         */
-        rkb->rkb_wakeup_fd[0]     = -1;
-        rkb->rkb_wakeup_fd[1]     = -1;
-        rkb->rkb_toppar_wakeup_fd = -1;
-
-        if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
-                rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
-                           "Failed to setup broker queue wake-up fds: "
-                           "%s: disabling low-latency mode",
-                           rd_strerror(r));
-
-        } else if (source == RD_KAFKA_INTERNAL) {
-                /* nop: internal broker has no IO transport. */
-
-        } else {
-                char onebyte = 1;
-
-                rd_rkb_dbg(rkb, QUEUE, "WAKEUPFD",
-                           "Enabled low-latency ops queue wake-ups");
-                rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
-                                           &onebyte, sizeof(onebyte));
-        }
+        rd_kafka_broker_setup_queue_wakeup_fd(rkb);
 
         /* Lock broker's lock here to synchronise state, i.e., hold off
 	 * the broker thread until we've finalized the rkb. */

@@ -317,7 +317,16 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_kafka_resp_err_t err; /**< Last error code */
                 int  cnt;                /**< Number of identical errors */
         } rkb_last_err;
+
+        /** Recovery actions that need to be performed*/
+        uint32_t rkb_recovery_actions;
 };
+
+/* 
+ * Recovery actions bit flag
+ */
+#define RKB_RECOVERY_ACTIONS_NONE 0x0000
+#define RKB_RECOVERY_ACTIONS_REINITIALIZE_WAKEUP_FD 0x0001
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
 #define rd_kafka_broker_keep_fl(FUNC,LINE,RKB)  \
@@ -450,6 +459,7 @@ rd_kafka_broker_controller_async (rd_kafka_t *rk, int state,
 
 int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
+void rd_kafka_broker_set_recovery_action (rd_kafka_broker_t* rkbs, uint32_t action);
 
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
                            int level, rd_kafka_resp_err_t err,

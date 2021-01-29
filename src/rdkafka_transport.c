@@ -987,6 +987,22 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 			return 0;
 	} else if (r == RD_SOCKET_ERROR)
 		return -1;
+
+    /* In rare cases the local socket used for wake on IO could be
+     * disconnected and this will lead the WSAPoll to return immediately
+     * causing high CPU usage. To fix this set a broker recovery action flag
+     * to reinitialize the local io socket while also rebuildng the transport.
+     * Issue #3139 */
+    if (rktrans->rktrans_pfd[1].revents & POLLERR || rktrans->rktrans_pfd[1].revents & POLLHUP) {
+        char errstr[512];
+        rd_snprintf(errstr, sizeof(errstr),
+            "Internal IO event socket disconnected for broker: %s, revents %d",
+            rktrans->rktrans_rkb->rkb_name, rktrans->rktrans_pfd[1].revents);
+        rd_kafka_broker_set_recovery_action(rktrans->rktrans_rkb,
+            RKB_RECOVERY_ACTIONS_REINITIALIZE_WAKEUP_FD);
+        rd_kafka_transport_connect_done(rktrans, errstr);
+        return -1;
+    }
 #endif
         rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
 

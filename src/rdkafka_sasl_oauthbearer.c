@@ -747,7 +747,7 @@ static char *create_jws_compact_serialization (
 
                 while (*curr != '\0') {
                         /* Ignore empty elements (e.g. ",,") */
-                        while (*curr != '\0' && *curr == ',') {
+                        while (*curr == ',') {
                                 ++curr;
                                 ++start;
                         }

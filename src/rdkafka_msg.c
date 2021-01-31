@@ -825,16 +825,16 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
         rd_kafka_topic_rdunlock(rkt);
 
-	if (!multiple_partitions && good > 0 &&
-            rd_kafka_is_transactional(rkt->rkt_rk) &&
-            rktp->rktp_partition != RD_KAFKA_PARTITION_UA) {
+        if (rktp != NULL) {
+            if (!multiple_partitions && good > 0 &&
+                rd_kafka_is_transactional(rkt->rkt_rk) &&
+                rktp->rktp_partition != RD_KAFKA_PARTITION_UA) {
                 /* Add single destination partition to transaction */
                 rd_kafka_txn_add_partition(rktp);
+            }
+
+            rd_kafka_toppar_destroy(rktp);
         }
-
-        if (rktp != NULL)
-                rd_kafka_toppar_destroy(rktp);
-
         return good;
 }
 

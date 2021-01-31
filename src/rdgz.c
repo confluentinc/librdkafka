@@ -29,6 +29,7 @@
 #include "rd.h"
 #include "rdgz.h"
 
+#if WITH_ZLIB
 #include <zlib.h>
 
 
@@ -116,3 +117,4 @@ fail:
 		free(decompressed);
 	return NULL;
 }
+#endif // WITH_ZLIB

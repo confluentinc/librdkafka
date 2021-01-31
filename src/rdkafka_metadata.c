@@ -882,7 +882,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         rd_list_t q_topics;
         int destroy_rkb = 0;
 
-        if (!rk)
+        if (!rk && rkb)
                 rk = rkb->rkb_rk;
 
         rd_kafka_wrlock(rk);

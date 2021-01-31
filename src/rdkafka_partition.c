@@ -1307,7 +1307,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 					   void *opaque) {
         rd_kafka_toppar_t *rktp = opaque;
         rd_kafka_topic_partition_list_t *offsets;
-        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_t *rktpar = NULL;
         int64_t Offset;
 
 	rd_kafka_toppar_lock(rktp);
@@ -1406,10 +1406,10 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                 rd_kafka_toppar_destroy(rktp); /* from request.opaque */
                 return;
         }
-
-        Offset = rktpar->offset;
-        rd_kafka_topic_partition_list_destroy(offsets);
-
+        if (rktpar) {
+            Offset = rktpar->offset;
+            rd_kafka_topic_partition_list_destroy(offsets);
+        }
 	rd_kafka_toppar_lock(rktp);
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
                      "Offset %s request for %.*s [%"PRId32"] "

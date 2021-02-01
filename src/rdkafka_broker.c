@@ -2064,6 +2064,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	const rd_sockaddr_inx_t *sinx;
 	char errstr[512];
         char nodename[RD_KAFKA_NODENAME_SIZE];
+        rd_bool_t forceResetAddress = rd_false;
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		"broker in state %s connecting",

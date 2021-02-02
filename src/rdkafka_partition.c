@@ -2909,6 +2909,10 @@ rd_kafka_topic_partition_list_copy(const rd_kafka_topic_partition_list_t *src) {
         rd_kafka_topic_partition_list_t *dst;
         int i;
 
+        if (src == NULL) {
+                return NULL;
+        }
+
         dst = rd_kafka_topic_partition_list_new(src->size);
 
         for (i = 0; i < src->cnt; i++)

@@ -138,6 +138,12 @@ typedef enum {
         RD_KAFKA_OP_CREATEACLS,   /**< Admin: CreateAcls: u.admin_request*/
         RD_KAFKA_OP_DESCRIBEACLS, /**< Admin: DescribeAcls: u.admin_request*/
         RD_KAFKA_OP_DELETEACLS,   /**< Admin: DeleteAcls: u.admin_request*/
+        RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS, /**< Admin:
+                                                *   AlterConsumerGroupOffsets
+                                                *   u.admin_request */
+        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS, /**< Admin:
+                                               *   ListConsumerGroupOffsets
+                                               *   u.admin_request */
         RD_KAFKA_OP_ADMIN_FANOUT, /**< Admin: fanout request */
         RD_KAFKA_OP_ADMIN_RESULT, /**< Admin API .._result_t */
         RD_KAFKA_OP_PURGE,        /**< Purge queues */

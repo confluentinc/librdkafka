@@ -74,6 +74,10 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "DescribeAclsResult";
         case RD_KAFKA_EVENT_DELETEACLS_RESULT:
                 return "DeleteAclsResult";
+        case RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT:
+                return "AlterConsumerGroupOffsetsResult";
+        case RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT:
+                return "ListConsumerGroupOffsetsResult";
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
                 return "SaslOAuthBearerTokenRefresh";
         default:
@@ -378,4 +382,26 @@ rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_DeleteAcls_result_t *)rkev;
+}
+
+const rd_kafka_AlterConsumerGroupOffsets_result_t *
+rd_kafka_event_AlterConsumerGroupOffsets_result (rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype !=
+            RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_AlterConsumerGroupOffsets_result_t *)
+                        rkev;
+}
+
+const rd_kafka_ListConsumerGroupOffsets_result_t *
+rd_kafka_event_ListConsumerGroupOffsets_result (rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype !=
+            RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_ListConsumerGroupOffsets_result_t *)
+                        rkev;
 }

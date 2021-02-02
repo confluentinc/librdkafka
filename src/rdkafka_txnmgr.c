@@ -835,6 +835,8 @@ static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
         mtx_lock(&rk->rk_eos.txn_pending_lock);
         if (TAILQ_EMPTY(&rk->rk_eos.txn_pending_rktps)) {
                 mtx_unlock(&rk->rk_eos.txn_pending_lock);
+                rd_kafka_dbg(rk, EOS, "EXTRA",
+                             "Pending rktps list is empty");
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
@@ -842,6 +844,8 @@ static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
                                            RD_KAFKA_TXN_STATE_IN_TRANSACTION,
                                            RD_KAFKA_TXN_STATE_BEGIN_COMMIT);
         if (error) {
+                rd_kafka_dbg(rk, EOS, "EXTRA",
+                             "Unexpected txn state");
                 err = rd_kafka_error_to_legacy(error, errstr, sizeof(errstr));
                 goto err;
         }
@@ -900,7 +904,8 @@ static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
 static void rd_kafka_txn_register_partitions_tmr_cb (rd_kafka_timers_t *rkts,
                                                      void *arg) {
         rd_kafka_t *rk = arg;
-
+        rd_kafka_dbg(rk, EOS, "EXTRA",
+                     "Executing rd_kafka_txn_register_partitions_tmr_cb");
         rd_kafka_txn_register_partitions(rk);
 }
 
@@ -913,6 +918,8 @@ static void rd_kafka_txn_register_partitions_tmr_cb (rd_kafka_timers_t *rkts,
  */
 void rd_kafka_txn_schedule_register_partitions (rd_kafka_t *rk,
                                                 int backoff_ms) {
+        rd_kafka_dbg(rk, EOS, "EXTRA",
+                     "Executing rd_kafka_txn_schedule_register_partitions");
         rd_kafka_timer_start_oneshot(
                 &rk->rk_timers,
                 &rk->rk_eos.txn_register_parts_tmr, rd_false/*dont-restart*/,

@@ -2634,11 +2634,497 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
                 rd_kafka_queue_destroy(q);
 
         TEST_LATER_CHECK();
-#undef MY_DEL_RECORDS_CNT
+#undef MY_TOPIC_CNT
 
         SUB_TEST_PASS();
 }
 
+
+/**
+  * @brief Test altering of committed offsets.
+  *
+  *
+  */
+static void do_test_AlterConsumerGroupOffsets (const char *what,
+                                                rd_kafka_t *rk,
+                                                rd_kafka_queue_t *useq,
+                                                int op_timeout,
+                                                rd_bool_t sub_consumer) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *orig_offsets, *offsets,
+                *to_alter, *committed, *alterd, *subscription = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define MY_TOPIC_CNT 3
+        int i;
+        const int partitions_cnt = 3;
+        char *topics[MY_TOPIC_CNT];
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_TOPIC_CNT] = {{0}};
+        int exp_mdtopic_cnt = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
+        const rd_kafka_group_result_t **gres;
+        size_t gres_cnt;
+        rd_kafka_t *consumer;
+        char *groupid;
+
+        SUB_TEST_QUICK("%s AlterConsumerGroupOffsets with %s, op_timeout %d%s",
+                       rd_kafka_name(rk), what, op_timeout,
+                       sub_consumer ? ", with subscribing consumer" : "");
+
+        if (sub_consumer)
+                exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        subscription = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT);
+
+        for (i = 0 ; i < MY_TOPIC_CNT ; i++) {
+                char pfx[64];
+                char *topic;
+
+                rd_snprintf(pfx, sizeof(pfx),
+                            "DCGO-topic%d", i);
+                topic = rd_strdup(test_mk_topic_name(pfx, 1));
+
+                topics[i] = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+
+                rd_kafka_topic_partition_list_add(subscription, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+
+        groupid = topics[0];
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, topics, MY_TOPIC_CNT,
+                                 partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics, exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  15*1000);
+
+        consumer = test_create_consumer(groupid, NULL, NULL, NULL);
+
+        if (sub_consumer) {
+                TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
+                test_consumer_wait_assignment(consumer, rd_true);
+        }
+
+        /* Commit some offsets */
+        orig_offsets = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT * 2);
+        for (i = 0 ; i < MY_TOPIC_CNT * 2 ; i++)
+                rd_kafka_topic_partition_list_add(
+                        orig_offsets, topics[i/2],
+                        i % MY_TOPIC_CNT)->offset = (i+1)*10;
+
+        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0/*sync*/));
+
+        /* Verify committed offsets match */
+        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                           tmout_multip(5*1000)));
+
+        if (test_partition_list_cmp(committed, orig_offsets)) {
+                TEST_SAY("commit() list:\n");
+                test_print_partition_list(orig_offsets);
+                TEST_SAY("committed() list:\n");
+                test_print_partition_list(committed);
+                TEST_FAIL("committed offsets don't match");
+        }
+
+        rd_kafka_topic_partition_list_destroy(committed);
+
+        /* Now alter second half of the commits */
+        offsets = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
+        to_alter = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
+        for (i = 0 ; i < orig_offsets->cnt ; i++) {
+                if (i < orig_offsets->cnt / 2)
+                        rd_kafka_topic_partition_list_add(
+                                offsets,
+                                orig_offsets->elems[i].topic,
+                                orig_offsets->elems[i].partition);
+                else {
+                        rd_kafka_topic_partition_list_add(
+                                to_alter,
+                                orig_offsets->elems[i].topic,
+                                orig_offsets->elems[i].partition)->offset = 5;
+                        rd_kafka_topic_partition_list_add(
+                                offsets,
+                                orig_offsets->elems[i].topic,
+                                orig_offsets->elems[i].partition)->offset = 5;
+                }
+
+        }
+
+        cgoffsets = rd_kafka_AlterConsumerGroupOffsets_new(groupid, to_alter);
+
+        TIMING_START(&timing, "AlterConsumerGroupOffsets");
+        TEST_SAY("Call AlterConsumerGroupOffsets\n");
+        rd_kafka_AlterConsumerGroupOffsets(rk, &cgoffsets, 1, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        rd_kafka_AlterConsumerGroupOffsets_destroy(cgoffsets);
+
+        TIMING_START(&timing, "AlterConsumerGroupOffsets.queue_poll");
+        /* Poll result queue for AlterConsumerGroupOffsets result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(10*1000));
+                TEST_SAY("AlterConsumerGroupOffsets: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_AlterConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected AlterConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err,
+                    "expected AlterConsumerGroupOffsets to succeed, "
+                    "got %s (%s)",
+                    rd_kafka_err2name(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("AlterConsumerGroupOffsets: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        gres = rd_kafka_AlterConsumerGroupOffsets_result_groups(res,
+                                                                 &gres_cnt);
+        TEST_ASSERT(gres && gres_cnt == 1,
+                    "expected gres_cnt == 1, not %"PRIusz, gres_cnt);
+
+        alterd = rd_kafka_topic_partition_list_copy(
+                rd_kafka_group_result_partitions(gres[0]));
+
+        if (test_partition_list_cmp(alterd, to_alter)) {
+                TEST_SAY("Result list:\n");
+                test_print_partition_list(alterd);
+                TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
+                test_print_partition_list(to_alter);
+                TEST_FAIL("alterd/requested offsets don't match");
+        }
+
+        /* Verify expected errors */
+        for (i = 0 ; i < alterd->cnt ; i++) {
+                TEST_ASSERT_LATER(alterd->elems[i].err == exp_err,
+                                  "Result %s [%"PRId32"] has error %s, "
+                                  "expected %s",
+                                  alterd->elems[i].topic,
+                                  alterd->elems[i].partition,
+                                  rd_kafka_err2name(alterd->elems[i].err),
+                                  rd_kafka_err2name(exp_err));
+        }
+
+        TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(alterd);
+        rd_kafka_topic_partition_list_destroy(to_alter);
+
+        rd_kafka_event_destroy(rkev);
+
+
+        /* Verify committed offsets match */
+        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                           tmout_multip(5*1000)));
+
+        TEST_SAY("Original committed offsets:\n");
+        test_print_partition_list(orig_offsets);
+
+        TEST_SAY("Committed offsets after alter:\n");
+        test_print_partition_list(committed);
+
+        if (test_partition_list_cmp(committed, offsets)) {
+                TEST_SAY("expected list:\n");
+                test_print_partition_list(offsets);
+                TEST_SAY("committed() list:\n");
+                test_print_partition_list(committed);
+                TEST_FAIL("committed offsets don't match");
+        }
+
+        rd_kafka_topic_partition_list_destroy(committed);
+        rd_kafka_topic_partition_list_destroy(offsets);
+        rd_kafka_topic_partition_list_destroy(orig_offsets);
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        for (i = 0 ; i < MY_TOPIC_CNT ; i++)
+                rd_free(topics[i]);
+
+        rd_kafka_destroy(consumer);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef MY_TOPIC_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+  * @brief Test listing of committed offsets.
+  *
+  *
+  */
+static void do_test_ListConsumerGroupOffsets (const char *what,
+                                                rd_kafka_t *rk,
+                                                rd_kafka_queue_t *useq,
+                                                int op_timeout,
+                                                rd_bool_t sub_consumer,
+                                                rd_bool_t null_toppars) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *orig_offsets,
+                *to_list, *committed, *listd, *subscription = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define MY_TOPIC_CNT 3
+        int i;
+        const int partitions_cnt = 3;
+        char *topics[MY_TOPIC_CNT];
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_TOPIC_CNT] = {{0}};
+        int exp_mdtopic_cnt = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_result_t *res;
+        const rd_kafka_group_result_t **gres;
+        size_t gres_cnt;
+        rd_kafka_t *consumer;
+        char *groupid;
+
+        SUB_TEST_QUICK("%s ListConsumerGroupOffsets with %s, op_timeout %d%s",
+                       rd_kafka_name(rk), what, op_timeout,
+                       sub_consumer ? ", with subscribing consumer" : "");
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        subscription = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT);
+
+        for (i = 0 ; i < MY_TOPIC_CNT ; i++) {
+                char pfx[64];
+                char *topic;
+
+                rd_snprintf(pfx, sizeof(pfx),
+                            "DCGO-topic%d", i);
+                topic = rd_strdup(test_mk_topic_name(pfx, 1));
+
+                topics[i] = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+
+                rd_kafka_topic_partition_list_add(subscription, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+
+        groupid = topics[0];
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, topics, MY_TOPIC_CNT,
+                                 partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics, exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  15*1000);
+
+        consumer = test_create_consumer(groupid, NULL, NULL, NULL);
+
+        if (sub_consumer) {
+                TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
+                test_consumer_wait_assignment(consumer, rd_true);
+        }
+
+        /* Commit some offsets */
+        orig_offsets = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT * 2);
+        for (i = 0 ; i < MY_TOPIC_CNT * 2 ; i++)
+                rd_kafka_topic_partition_list_add(
+                        orig_offsets, topics[i/2],
+                        i % MY_TOPIC_CNT)->offset = (i+1)*10;
+
+        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0/*sync*/));
+
+        /* Verify committed offsets match */
+        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+        TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                           tmout_multip(5*1000)));
+
+        if (test_partition_list_cmp(committed, orig_offsets)) {
+                TEST_SAY("commit() list:\n");
+                test_print_partition_list(orig_offsets);
+                TEST_SAY("committed() list:\n");
+                test_print_partition_list(committed);
+                TEST_FAIL("committed offsets don't match");
+        }
+
+        rd_kafka_topic_partition_list_destroy(committed);
+
+        to_list = rd_kafka_topic_partition_list_new(orig_offsets->cnt);
+        for (i = 0 ; i < orig_offsets->cnt ; i++) {
+                rd_kafka_topic_partition_list_add(
+                        to_list,
+                        orig_offsets->elems[i].topic,
+                        orig_offsets->elems[i].partition);
+        }
+
+        if (null_toppars) {
+                cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(groupid, NULL);
+        }
+        else {
+                cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(groupid, to_list);
+        }
+
+        TIMING_START(&timing, "ListConsumerGroupOffsets");
+        TEST_SAY("Call ListConsumerGroupOffsets\n");
+        rd_kafka_ListConsumerGroupOffsets(rk, &cgoffsets, 1, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        rd_kafka_ListConsumerGroupOffsets_destroy(cgoffsets);
+
+        TIMING_START(&timing, "ListConsumerGroupOffsets.queue_poll");
+        /* Poll result queue for ListConsumerGroupOffsets result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(10*1000));
+                TEST_SAY("ListConsumerGroupOffsets: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_ListConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected ListConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!err,
+                    "expected ListConsumerGroupOffsets to succeed, "
+                    "got %s (%s)",
+                    rd_kafka_err2name(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("ListConsumerGroupOffsets: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        gres = rd_kafka_ListConsumerGroupOffsets_result_groups(res,
+                                                                 &gres_cnt);
+        TEST_ASSERT(gres && gres_cnt == 1,
+                    "expected gres_cnt == 1, not %"PRIusz, gres_cnt);
+
+        listd = rd_kafka_topic_partition_list_copy(
+                rd_kafka_group_result_partitions(gres[0]));
+
+        if (test_partition_list_and_offsets_cmp(listd, orig_offsets)) {
+                TEST_SAY("Result list:\n");
+                test_print_partition_list(listd);
+                TEST_SAY("Partitions passed to ListConsumerGroupOffsets:\n");
+                test_print_partition_list(orig_offsets);
+                TEST_FAIL("listd/requested offsets don't match");
+        }
+
+        /* Verify expected errors */
+        for (i = 0 ; i < listd->cnt ; i++) {
+                TEST_ASSERT_LATER(listd->elems[i].err == exp_err,
+                                  "Result %s [%"PRId32"] has error %s, "
+                                  "expected %s",
+                                  listd->elems[i].topic,
+                                  listd->elems[i].partition,
+                                  rd_kafka_err2name(listd->elems[i].err),
+                                  rd_kafka_err2name(exp_err));
+        }
+
+        TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(listd);
+        rd_kafka_topic_partition_list_destroy(to_list);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_topic_partition_list_destroy(orig_offsets);
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        for (i = 0 ; i < MY_TOPIC_CNT ; i++)
+                rd_free(topics[i]);
+
+        rd_kafka_destroy(consumer);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+
+#undef MY_TOPIC_CNT
+
+        SUB_TEST_PASS();
+}
 
 static void do_test_apis(rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
@@ -2720,8 +3206,36 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 do_test_DeleteConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500, rd_false);
                 do_test_DeleteConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
-                    rd_true /*with subscribing consumer*/);
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_true/*with subscribing consumer*/);
+
+                /* Alter committed offsets */
+                do_test_AlterConsumerGroupOffsets(
+                        "temp queue, op timeout 0", rk, NULL, 0, rd_false);
+                do_test_AlterConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_false);
+                do_test_AlterConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_true/*with subscribing consumer*/);
+
+                /* List committed offsets */
+                do_test_ListConsumerGroupOffsets(
+                        "temp queue, op timeout 0", rk, NULL, 0, rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_true/*with subscribing consumer*/, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                        "temp queue, op timeout 0", rk, NULL, 0, rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets(
+                        "main queue, op timeout 1500", rk, mainq, 1500,
+                        rd_true/*with subscribing consumer*/, rd_true);
         }
 
         rd_kafka_queue_destroy(mainq);

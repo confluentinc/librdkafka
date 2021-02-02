@@ -343,4 +343,48 @@ struct rd_kafka_DeleteAcls_result_response_s {
 
 /**@}*/
 
+
+/**
+ * @name AlterConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief AlterConsumerGroupOffsets result
+ */
+struct rd_kafka_AlterConsumerGroupOffsets_result_s {
+        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_AlterConsumerGroupOffsets_s {
+        char *group;   /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
+
+/**@}*/
+
+
+/**
+ * @name ListConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief ListConsumerGroupOffsets result
+ */
+struct rd_kafka_ListConsumerGroupOffsets_result_s {
+        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_ListConsumerGroupOffsets_s {
+        char *group;   /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char  data[1]; /**< The group name is allocated along with
+                        *   the struct here. */
+};
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

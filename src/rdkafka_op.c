@@ -84,6 +84,10 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_DELETEGROUPS] = "REPLY:DELETEGROUPS",
                 [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
+                [RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS] =
+                "REPLY:ALTERCONSUMERGROUPOFFSETS",
+                [RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS] =
+                "REPLY:LISTCONSUMERGROUPOFFSETS",
                 [RD_KAFKA_OP_ADMIN_FANOUT] = "REPLY:ADMIN_FANOUT",
                 [RD_KAFKA_OP_ADMIN_RESULT] = "REPLY:ADMIN_RESULT",
                 [RD_KAFKA_OP_PURGE] = "REPLY:PURGE",
@@ -225,6 +229,10 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_DELETERECORDS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
+                sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS] =
+                sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ADMIN_FANOUT] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
@@ -376,6 +384,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);

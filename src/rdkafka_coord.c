@@ -442,12 +442,14 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                                      replyq, creq->creq_resp_cb,
                                                      creq->creq_reply_opaque);
 
-                        if (err)
+                        if (err) {
                                 /* Permanent error, e.g., request not
                                  *  supported by broker. */
+                                rd_kafka_replyq_destroy(&replyq);
                                 rd_kafka_coord_req_fail(rk, creq, err);
-                        else
+                        } else {
                                 rd_kafka_coord_req_destroy(rk, creq);
+                        }
 
                 } else {
                         /* No connection yet. We'll be re-triggered on

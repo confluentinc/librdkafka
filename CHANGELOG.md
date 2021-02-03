@@ -1,3 +1,19 @@
+# librdkafka v1.6.1
+
+librdkafka v1.6.1 is a maintenance release.
+
+## Fixes
+
+### General fixes
+
+### Transactional Producer fixes
+
+ * Group coordinator requests for transactional
+   `send_offsets_to_transaction()` calls would leak memory if the
+   underlying request was attempted to be sent after the transaction had
+   failed.
+
+
 # librdkafka v1.6.0
 
 librdkafka v1.6.0 is feature release:

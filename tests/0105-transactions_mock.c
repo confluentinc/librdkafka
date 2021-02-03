@@ -1482,6 +1482,123 @@ static void do_test_txn_flush_timeout (void) {
 }
 
 
+/**
+ * @brief ESC-4424: rko is reused in response handler after destroy in coord_req
+ *        sender due to bad state.
+ *
+ * This is somewhat of a race condition so we need to perform a couple of
+ * iterations before it hits, usually 2 or 3, so we try at least 15 times.
+ */
+static void do_test_txn_coord_req_destroy (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        int i;
+        int errcnt = 0;
+
+        SUB_TEST();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        for (i = 0 ; i < 15 ; i++) {
+                rd_kafka_error_t *error;
+                rd_kafka_resp_err_t err;
+                rd_kafka_topic_partition_list_t *offsets;
+                rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+                test_timeout_set(10);
+
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+                /*
+                 * Inject errors to trigger retries
+                 */
+                rd_kafka_mock_push_request_errors(
+                        mcluster,
+                        RD_KAFKAP_AddPartitionsToTxn,
+                        2,/* first request + number of internal retries */
+                        RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                        RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
+
+                rd_kafka_mock_push_request_errors(
+                        mcluster,
+                        RD_KAFKAP_AddOffsetsToTxn,
+                        1,/* first request + number of internal retries */
+                        RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
+
+                err = rd_kafka_producev(rk,
+                                        RD_KAFKA_V_TOPIC("mytopic"),
+                                        RD_KAFKA_V_VALUE("hi", 2),
+                                        RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+                rd_kafka_mock_push_request_errors(
+                        mcluster,
+                        RD_KAFKAP_Produce,
+                        1,
+                        RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER);
+
+                err = rd_kafka_producev(rk,
+                                        RD_KAFKA_V_TOPIC("mytopic"),
+                                        RD_KAFKA_V_VALUE("hi", 2),
+                                        RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+
+                /*
+                 * Send offsets to transaction
+                 */
+
+                offsets = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->
+                        offset = 12;
+
+                cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+                error = rd_kafka_send_offsets_to_transaction(rk, offsets,
+                                                             cgmetadata, -1);
+
+                TEST_SAY("send_offsets_to_transaction() #%d: %s\n",
+                         i, rd_kafka_error_string(error));
+
+                /* As we can't control the exact timing and sequence
+                 * of requests this sometimes fails and sometimes succeeds,
+                 * but we run the test enough times to trigger at least
+                 * one failure. */
+                if (error) {
+                        TEST_SAY("send_offsets_to_transaction() #%d "
+                                 "failed (expectedly): %s\n",
+                                 i, rd_kafka_error_string(error));
+                        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
+                                    "Expected abortable error for #%d", i);
+                        rd_kafka_error_destroy(error);
+                        errcnt++;
+                }
+
+                rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+                rd_kafka_topic_partition_list_destroy(offsets);
+
+                /* Allow time for internal retries */
+                rd_sleep(2);
+
+                TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+        }
+
+        TEST_ASSERT(errcnt > 0,
+                    "Expected at least one send_offets_to_transaction() "
+                    "failure");
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -1512,6 +1629,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
         do_test_txns_not_supported();
 
         do_test_txns_send_offsets_concurrent_is_retried();
+
+        do_test_txn_coord_req_destroy();
 
         do_test_txns_no_timeout_crash();
 

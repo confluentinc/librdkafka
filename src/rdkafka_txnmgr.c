@@ -1497,7 +1497,7 @@ static void rd_kafka_txn_handle_TxnOffsetCommit (rd_kafka_t *rk,
                                     "Failed to commit offsets to "
                                     "transaction on broker %s: %s "
                                     "(after %d ms)",
-                                    rd_kafka_broker_name(rkb),
+                                    rkb ? rd_kafka_broker_name(rkb) : "(none)",
                                     rd_kafka_err2str(err),
                                     (int)(request->rkbuf_ts_sent/1000));
                 }
@@ -1631,21 +1631,27 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
         rd_kafka_rdlock(rk);
         if (rk->rk_eos.txn_state != RD_KAFKA_TXN_STATE_IN_TRANSACTION) {
                 rd_kafka_rdunlock(rk);
-                rd_kafka_op_destroy(rko);
-                return RD_KAFKA_RESP_ERR__OUTDATED;
+                /* Do not free the rko, it is passed as the reply_opaque
+                 * on the reply queue by coord_req_fsm() when we return
+                 * an error here. */
+                return RD_KAFKA_RESP_ERR__STATE;
         }
 
         pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK);
         rd_kafka_rdunlock(rk);
         if (!rd_kafka_pid_valid(pid)) {
-                rd_kafka_op_destroy(rko);
+                /* Do not free the rko, it is passed as the reply_opaque
+                 * on the reply queue by coord_req_fsm() when we return
+                 * an error here. */
                 return RD_KAFKA_RESP_ERR__STATE;
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
                 rkb, RD_KAFKAP_TxnOffsetCommit, 0, 3, NULL);
         if (ApiVersion == -1) {
-                rd_kafka_op_destroy(rko);
+                /* Do not free the rko, it is passed as the reply_opaque
+                 * on the reply queue by coord_req_fsm() when we return
+                 * an error here. */
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -1688,7 +1694,9 @@ rd_kafka_txn_send_TxnOffsetCommitRequest (rd_kafka_broker_t *rkb,
         if (!cnt) {
                 /* No valid partition offsets, don't commit. */
                 rd_kafka_buf_destroy(rkbuf);
-                rd_kafka_op_destroy(rko);
+                /* Do not free the rko, it is passed as the reply_opaque
+                 * on the reply queue by coord_req_fsm() when we return
+                 * an error here. */
                 return RD_KAFKA_RESP_ERR__NO_OFFSET;
         }
 
@@ -1809,6 +1817,11 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
 
         err = rd_kafka_txn_normalize_err(err);
 
+        rd_kafka_dbg(rk, EOS, "ADDOFFSETS",
+                     "AddOffsetsToTxn response from %s: %s (actions 0x%x)",
+                     rkb ? rd_kafka_broker_name(rkb) : "(none)",
+                     rd_kafka_err2name(err), actions);
+
         /* All unhandled errors are considered permanent */
         if (err && !actions)
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
@@ -1820,6 +1833,13 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                                              rd_kafka_err2str(err));
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                rd_rkb_dbg(rkb, EOS, "ADDOFFSETS",
+                           "Failed to add offsets to transaction on broker %s: "
+                           "%s (after %dms): error is retriable",
+                           rd_kafka_broker_name(rkb),
+                           rd_kafka_err2str(err),
+                           (int)(request->rkbuf_ts_sent/1000));
+
                 if (!rd_timeout_expired(remains_ms) &&
                     rd_kafka_buf_retry(rk->rk_eos.txn_coord, request)) {
                         rk->rk_eos.txn_req_cnt++;
@@ -1827,11 +1847,14 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                 }
                 /* Propagate as retriable error through api_reply() below */
 
-        } else if (err) {
-                rd_rkb_log(rkb, LOG_ERR, "ADDOFFSETS",
-                           "Failed to add offsets to transaction: %s",
-                           rd_kafka_err2str(err));
         }
+
+        if (err)
+                rd_rkb_log(rkb, LOG_ERR, "ADDOFFSETS",
+                           "Failed to add offsets to transaction on broker %s: "
+                           "%s",
+                           rkb ? rd_kafka_broker_name(rkb) : "(none)",
+                           rd_kafka_err2str(err));
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
                 rd_kafka_txn_set_abortable_error(

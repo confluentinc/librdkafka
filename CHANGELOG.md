@@ -8,6 +8,8 @@ librdkafka v1.6.1 is a maintenance release.
 
 ### Transactional Producer fixes
 
+ * The transactional producer could crash if the transaction failed while
+   `send_offsets_to_transaction()` was called.
  * Group coordinator requests for transactional
    `send_offsets_to_transaction()` calls would leak memory if the
    underlying request was attempted to be sent after the transaction had

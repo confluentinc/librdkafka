@@ -69,6 +69,17 @@ void rd_kafka_interceptors_on_request_sent (rd_kafka_t *rk,
                                             int32_t CorrId,
                                             size_t  size);
 
+void rd_kafka_interceptors_on_response_received (rd_kafka_t *rk,
+                                                 int sockfd,
+                                                 const char *brokername,
+                                                 int32_t brokerid,
+                                                 int16_t ApiKey,
+                                                 int16_t ApiVersion,
+                                                 int32_t CorrId,
+                                                 size_t  size,
+                                                 int64_t rtt,
+                                                 rd_kafka_resp_err_t err);
+
 void rd_kafka_interceptors_on_thread_start (rd_kafka_t *rk,
                                             rd_kafka_thread_type_t thread_type);
 void rd_kafka_interceptors_on_thread_exit (rd_kafka_t *rk,

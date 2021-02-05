@@ -707,6 +707,10 @@ class RD_EXPORT OAuthBearerTokenRefreshCb {
  public:
   /**
    * @brief SASL/OAUTHBEARER token refresh callback class.
+   *
+   * @param handle The RdKafka::Handle which requires a refreshed token.
+   * @param oauthbearer_config The value of the
+   * \p sasl.oauthbearer.config configuration property for \p handle.
    */
   virtual void oauthbearer_token_refresh_cb (RdKafka::Handle* handle,
                                              const std::string &oauthbearer_config) = 0;

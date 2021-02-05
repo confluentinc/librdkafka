@@ -6,6 +6,10 @@ librdkafka v1.6.1 is a maintenance release.
 
 ### General fixes
 
+ * Admin API and transactional `send_offsets_to_transaction()` coordinator
+   requests, such as TxnOffsetCommitRequest, could in rare cases be sent
+   multiple times which could cause a crash.
+
 ### Transactional Producer fixes
 
  * The transactional producer could crash if the transaction failed while
@@ -14,6 +18,7 @@ librdkafka v1.6.1 is a maintenance release.
    `send_offsets_to_transaction()` calls would leak memory if the
    underlying request was attempted to be sent after the transaction had
    failed.
+
 
 
 # librdkafka v1.6.0

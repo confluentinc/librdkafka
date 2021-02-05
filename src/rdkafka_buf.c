@@ -29,6 +29,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_buf.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_interceptor.h"
 
 void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
 
@@ -450,6 +451,17 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request){
 
+        rd_kafka_interceptors_on_response_received(
+                rk,
+                -1,
+                rkb ? rd_kafka_broker_name(rkb) : "",
+                rkb ? rd_kafka_broker_id(rkb) : -1,
+                request->rkbuf_reqhdr.ApiKey,
+                request->rkbuf_reqhdr.ApiVersion,
+                request->rkbuf_reshdr.CorrId,
+                response ? response->rkbuf_totlen : 0,
+                response ? response->rkbuf_ts_sent : -1,
+                err);
 
         if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);

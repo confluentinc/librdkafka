@@ -4610,7 +4610,7 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         /* Query each broker for its list of groups */
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_lock(rkb);
-                if (rkb->rkb_nodeid == -1) {
+                if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_kafka_broker_unlock(rkb);
                         continue;
                 }

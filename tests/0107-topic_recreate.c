@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -63,10 +67,18 @@ static int is_error_fatal (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 /**
  * @brief Producing thread
  */
+#ifndef __OS400__
 static int run_producer (void *arg) {
+#else
+static void *run_producer (void *arg) {
+#endif
         const char *topic = arg;
         rd_kafka_t *producer = test_create_producer();
+#ifndef __OS400__
         int ret = 0;
+#else
+        void *ret = NULL;
+#endif
 
         test_curr = this_test;
 
@@ -121,7 +133,11 @@ static int run_producer (void *arg) {
                 TEST_SAY("%d message(s) in queue after purge\n",
                          rd_kafka_outq_len(producer));
 
+#ifndef __OS400__
                 ret = 1; /* Fail test from main thread */
+#else
+                ret = run_producer; /* definetely not NULL */
+#endif
         }
 
         rd_kafka_destroy(producer);
@@ -182,7 +198,11 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
         rd_kafka_t *consumer;
         thrd_t producer_thread;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+#ifndef __OS400__
         int ret = 0;
+#else
+        void *ret = NULL;
+#endif
 
         TEST_SAY(_C_MAG
                  "[ Test topic create(%d parts)+delete+create(%d parts) ]\n",

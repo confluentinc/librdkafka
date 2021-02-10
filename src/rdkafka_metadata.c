@@ -25,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 
 #include "rd.h"
@@ -1367,6 +1370,9 @@ rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...) {
         rd_kafka_metadata_topic_t *topics;
         va_list ap;
         size_t i;
+#ifdef __OS400__
+        rd_kafka_metadata_t *ret;
+#endif
 
         topics = rd_alloca(sizeof(*topics) * topic_cnt);
 
@@ -1377,5 +1383,12 @@ rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...) {
         }
         va_end(ap);
 
+#ifndef __OS400__
         return rd_kafka_metadata_new_topic_mock(topics, topic_cnt);
+#else
+        /* to free ret - it was allocated by malloc-based rd_alloca */
+        ret = rd_kafka_metadata_new_topic_mock(topics, topic_cnt);
+        rd_free_alloca(topics);
+        return ret;
+#endif
 }

@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -237,7 +241,11 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		exp->result = _EXP_NONE; /* Not expecting a rebalance */
 		while (exp->result == _EXP_NONE && test_clock() < ts_end)
 			consumer_poll_once(rk);
+#ifndef __OS400__
 		TEST_ASSERT(exp->result == _EXP_NONE);
+#else
+		TEST_ASSERT(exp->result == _EXP_NONE, "");
+#endif
 	}
 
 	/* Unsubscribe */
@@ -264,7 +272,11 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 		exp->result = _EXP_NONE; /* Not expecting a rebalance */
 		while (exp->result == _EXP_NONE && test_clock() < ts_end)
 			consumer_poll_once(rk);
+#ifndef __OS400__
 		TEST_ASSERT(exp->result == _EXP_NONE);
+#else
+		TEST_ASSERT(exp->result == _EXP_NONE, "");
+#endif
 	}
 
 	TEST_SAY(_C_MAG "[ %s: done with %d failures ]\n", exp->name, exp->fails);

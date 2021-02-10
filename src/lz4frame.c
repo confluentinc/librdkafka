@@ -39,7 +39,9 @@
  * or redirected towards another library of user's choice
  * (see Memory Routines below).
  */
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 /*-************************************
 *  Compiler Options

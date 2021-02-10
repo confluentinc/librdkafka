@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -49,6 +53,9 @@ int main_0079_fork (int argc, char **argv) {
 #endif
 #ifdef _WIN32
         TEST_SKIP("No fork() support on Windows");
+        return 0;
+#elif defined(__OS400__)
+        TEST_SKIP("No fork() support on OS400");
         return 0;
 #else
         pid_t pid;

@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -169,12 +173,21 @@ static void expect_check (const char *what, const struct expect *expected,
                 TEST_ASSERT(!err,
                             "detach_headers() should not fail, got %s",
                             rd_kafka_err2str(err));
+#ifndef __OS400__
                 TEST_ASSERT(hdrs == dhdrs);
+#else
+                TEST_ASSERT(hdrs == dhdrs, "");
+#endif
 
                 /* Verify that a new headers object can be obtained */
                 err = rd_kafka_message_headers(rkmessage, &hdrs);
+#ifndef __OS400__
                 TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR);
                 TEST_ASSERT(hdrs != dhdrs);
+#else
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "");
+                TEST_ASSERT(hdrs != dhdrs, "");
+#endif
                 rd_kafka_headers_destroy(dhdrs);
 
                 expect_check("post_detach_headers", expected,

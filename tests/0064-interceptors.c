@@ -25,6 +25,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#define intptr_t int *
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -117,13 +122,23 @@ static void verify_msg (const char *what, int base, int bitid,
         int ic_id = (int)(intptr_t)ic_opaque;
 
         /* Verify opaque (base | ic id) */
+#ifndef __OS400__
         TEST_ASSERT((ic_id & base_mask) == base);
+#else
+        TEST_ASSERT((ic_id & base_mask) == base, "");
+#endif
         ic_id &= ~base_mask;
 
         /* Find message by id */
+#ifndef __OS400__
         TEST_ASSERT(rkmessage->key && rkmessage->key_len > 0 &&
                     id_str[(int)rkmessage->key_len-1] == '\0' &&
                     strlen(id_str) > 0 && isdigit(*id_str));
+#else
+        TEST_ASSERT(rkmessage->key && rkmessage->key_len > 0 &&
+                    id_str[(int)rkmessage->key_len-1] == '\0' &&
+                    strlen(id_str) > 0 && isdigit(*id_str), "");
+#endif
         id = atoi(id_str);
         TEST_ASSERT(id >= 0 && id < msgcnt,
                     "%s: bad message id %s", what, id_str);
@@ -137,7 +152,11 @@ static void verify_msg (const char *what, int base, int bitid,
         /* Verify message opaque */
         if (!strcmp(what, "on_send") ||
             !strncmp(what, "on_ack", 6))
+#ifndef __OS400__
                 TEST_ASSERT(rkmessage->_private == (void *)msg);
+#else
+                TEST_ASSERT(rkmessage->_private == (void *)msg, "");
+#endif
 
         TEST_SAYL(3, "%s: interceptor #%d called for message #%d (%d)\n",
                   what, ic_id, id, msg->id);
@@ -154,7 +173,11 @@ static void verify_msg (const char *what, int base, int bitid,
 static rd_kafka_resp_err_t on_send (rd_kafka_t *rk,
                                     rd_kafka_message_t *rkmessage,
                                     void *ic_opaque) {
+#ifndef __OS400__
         TEST_ASSERT(ic_opaque != NULL);
+#else
+        TEST_ASSERT(ic_opaque != NULL, "");
+#endif
         verify_msg("on_send", on_send_base, _ON_SEND, rkmessage, ic_opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -162,7 +185,11 @@ static rd_kafka_resp_err_t on_send (rd_kafka_t *rk,
 static rd_kafka_resp_err_t on_ack (rd_kafka_t *rk,
                                    rd_kafka_message_t *rkmessage,
                                    void *ic_opaque) {
+#ifndef __OS400__
         TEST_ASSERT(ic_opaque != NULL);
+#else
+        TEST_ASSERT(ic_opaque != NULL, "");
+#endif
         verify_msg("on_ack", on_ack_base, _ON_ACK, rkmessage, ic_opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -170,7 +197,11 @@ static rd_kafka_resp_err_t on_ack (rd_kafka_t *rk,
 static rd_kafka_resp_err_t on_consume (rd_kafka_t *rk,
                                        rd_kafka_message_t *rkmessage,
                                        void *ic_opaque) {
+#ifndef __OS400__
         TEST_ASSERT(ic_opaque != NULL);
+#else
+        TEST_ASSERT(ic_opaque != NULL, "");
+#endif
         verify_msg("on_consume", on_consume_base, _ON_CONSUME, rkmessage,
                    ic_opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -184,13 +215,25 @@ static rd_kafka_resp_err_t on_commit (
 
         /* Since on_commit is triggered a bit randomly and not per
          * message we only try to make sure it gets fully set at least once. */
+#ifndef __OS400__
         TEST_ASSERT(ic_opaque != NULL);
+#else
+        TEST_ASSERT(ic_opaque != NULL, "");
+#endif
 
         /* Verify opaque (base | ic id) */
+#ifndef __OS400__
         TEST_ASSERT((ic_id & base_mask) == on_commit_base);
+#else
+        TEST_ASSERT((ic_id & base_mask) == on_commit_base, "");
+#endif
         ic_id &= ~base_mask;
 
+#ifndef __OS400__
         TEST_ASSERT(ic_opaque != NULL);
+#else
+        TEST_ASSERT(ic_opaque != NULL, "");
+#endif
 
         TEST_SAYL(3, "on_commit: interceptor #%d called: %s\n", ic_id,
                   rd_kafka_err2str(err));
@@ -227,7 +270,11 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
         /* Message state should be empty, no interceptors should have
          * been called yet.. */
         for (i = 0 ; i < _ON_CNT ; i++)
+#ifndef __OS400__
                 TEST_ASSERT(msg->bits[i] == 0);
+#else
+                TEST_ASSERT(msg->bits[i] == 0, "");
+#endif
 
         mtx_init(&msg->lock, mtx_plain);
         msg->id = msgid;

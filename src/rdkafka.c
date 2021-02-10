@@ -26,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #define _GNU_SOURCE
 #include <errno.h>
@@ -1010,7 +1013,11 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
 #ifndef _WIN32
 	int term_sig = rk->rk_conf.term_sig;
 #endif
+#ifndef __OS400__
         int res;
+#else
+        void *res;
+#endif
         char flags_str[256];
         static const char *rd_kafka_destroy_flags_names[] = {
                 "Terminate",
@@ -1148,8 +1155,13 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
          * terminate flag whenever they wake up). */
         rd_kafka_brokers_broadcast_state_change(rk);
 
+#ifndef __OS400__
         if (rk->rk_background.thread) {
                 int res;
+#else
+        if (*(long long *)(void *)&rk->rk_background.thread_tid) {
+                void *res;
+#endif
                 /* Send op to trigger queue/io wake-up.
                  * The op itself is (likely) ignored by the receiver. */
                 rd_kafka_q_enq(rk->rk_background.q,
@@ -1267,7 +1279,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         /* Join broker threads */
         RD_LIST_FOREACH(thrd, &wait_thrds, i) {
+#ifndef __OS400__
                 int res;
+#else
+                void *res;
+#endif
                 if (thrd_join(*thrd, &res) != thrd_success)
                         ;
                 free(thrd);
@@ -1953,7 +1969,11 @@ static int rd_kafka_init_wait (rd_kafka_t *rk, int timeout_ms) {
 /**
  * Main loop for Kafka handler thread.
  */
+#ifndef __OS400__
 static int rd_kafka_thread_main (void *arg) {
+#else
+static void *rd_kafka_thread_main (void *arg) {
+#endif
         rd_kafka_t *rk = arg;
 	rd_kafka_timer_t tmr_1s = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
@@ -2033,8 +2053,11 @@ static int rd_kafka_thread_main (void *arg) {
                      "Internal main thread termination done");
 
 	rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
-
+#ifndef __OS400__
 	return 0;
+#else
+	return NULL;
+#endif
 }
 
 
@@ -2366,6 +2389,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 #endif
                         goto fail;
                 }
+#ifdef __OS400__
+                pthread_getunique_np(&rk->rk_background.thread, &rk->rk_background.thread_tid);
+#endif
 
                 rd_kafka_wrunlock(rk);
         }
@@ -2501,8 +2527,13 @@ fail:
         if (rk->rk_conf.sasl.provider)
                 rd_kafka_sasl_term(rk);
 
+#ifndef __OS400__
         if (rk->rk_background.thread) {
                 int res;
+#else
+        if (*(long long *)(void *)&rk->rk_background.thread_tid) {
+                void *res;
+#endif
                 thrd_join(rk->rk_background.thread, &res);
                 rd_kafka_q_destroy_owner(rk->rk_background.q);
         }
@@ -4744,12 +4775,17 @@ rd_bool_t rd_kafka_dir_is_empty (const char *path) {
                 if (!strcmp(d->d_name, ".") ||
                     !strcmp(d->d_name, ".."))
                         continue;
-
+#ifndef __OS400__
                 if (d->d_type == DT_REG || d->d_type == DT_LNK ||
                     d->d_type == DT_DIR) {
                         closedir(dir);
                         return rd_false;
                 }
+#else
+                /* we have something in dir - dir is not empty */
+                closedir(dir);
+                return rd_false;
+#endif
         }
 
         closedir(dir);

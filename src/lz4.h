@@ -620,7 +620,11 @@ typedef struct {
  *  note : only use this definition in association with static linking !
  *  this definition is not API/ABI safe, and may change in future versions.
  */
+#ifndef __OS400__
 #define LZ4_STREAMSIZE       16416  /* static size, for inter-version compatibility */
+#else
+#define LZ4_STREAMSIZE       16416*2 /* 16416 is not enought for OS400 */
+#endif
 #define LZ4_STREAMSIZE_VOIDP (LZ4_STREAMSIZE / sizeof(void*))
 union LZ4_stream_u {
     void* table[LZ4_STREAMSIZE_VOIDP];
@@ -652,7 +656,11 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
  *         this definition is not API/ABI safe,
  *         and may change in a future version !
  */
+#ifndef __OS400__
 #define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 2 : 0) /*AS-400*/ )
+#else
+#define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 4 : 0) /* seems like it was Ok at AS400 but not enough on IBMi */ )
+#endif
 #define LZ4_STREAMDECODESIZE     (LZ4_STREAMDECODESIZE_U64 * sizeof(unsigned long long))
 union LZ4_streamDecode_u {
     unsigned long long table[LZ4_STREAMDECODESIZE_U64];
@@ -687,6 +695,8 @@ union LZ4_streamDecode_u {
 #    define LZ4_DEPRECATED(message) __attribute__((deprecated(message)))
 #  elif defined(__GNUC__) && (__GNUC__ * 10 + __GNUC_MINOR__ >= 31)
 #    define LZ4_DEPRECATED(message) __attribute__((deprecated))
+#  elif defined(__OS400__)
+#    define LZ4_DEPRECATED(message)   /* disabled */
 #  else
 #    pragma message("WARNING: LZ4_DEPRECATED needs custom implementation for this compiler")
 #    define LZ4_DEPRECATED(message)   /* disabled */

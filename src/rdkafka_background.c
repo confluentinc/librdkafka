@@ -31,6 +31,9 @@
  *
  * See rdkafka.h's rd_kafka_conf_set_background_event_cb() for details.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdkafka_int.h"
@@ -106,7 +109,11 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
 /**
  * @brief Main loop for background queue thread.
  */
+#ifndef __OS400__
 int rd_kafka_background_thread_main (void *arg) {
+#else
+void *rd_kafka_background_thread_main (void *arg) {
+#endif
         rd_kafka_t *rk = arg;
 
         rd_kafka_set_thread_name("background");
@@ -147,7 +154,10 @@ int rd_kafka_background_thread_main (void *arg) {
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BACKGROUND);
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
-
+#ifndef __OS400__
         return 0;
+#else
+        return NULL;
+#endif
 }
 

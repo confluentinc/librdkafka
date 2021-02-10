@@ -678,7 +678,7 @@ struct {								\
  * this by changing the head/tail sentinal values, but see the note above
  * this one.
  */
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__OS400__)
 #define __launder_type(x)  ((const void *)(x))
 #else
 static inline const void * __launder_type(const void *);

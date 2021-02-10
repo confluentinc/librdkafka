@@ -120,7 +120,7 @@
 #define le32toh(x) (x)
 #define le64toh(x) (x)
 
-#elif defined _AIX      /* AIX is always big endian */
+#elif defined(_AIX) || defined(__OS400__)      /* AIX is always big endian, OS400 too */
 #define be64toh(x) (x)
 #define be32toh(x) (x)
 #define be16toh(x) (x)

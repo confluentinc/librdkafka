@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 /**
  * @name Test rd_kafka_destroy_flags()
@@ -107,7 +111,11 @@ static void do_test_destroy_flags (const char *topic,
         } else {
                 int i;
 
+#ifndef __OS400__
                 TEST_ASSERT(args->client_type == RD_KAFKA_CONSUMER);
+#else
+                TEST_ASSERT(args->client_type == RD_KAFKA_CONSUMER, "");
+#endif
 
                 rk = test_create_consumer(topic, destroy_flags_rebalance_cb,
                                           conf, NULL);

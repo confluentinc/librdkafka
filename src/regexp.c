@@ -7,6 +7,10 @@
  * You can do anything you want with them. You have no legal obligation to do anything else,
  * although I appreciate attribution.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 
 #include "rd.h"
 

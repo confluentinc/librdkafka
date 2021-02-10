@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -89,7 +93,11 @@ int main_0047_partial_buf_tmout (int argc, char **argv) {
 		rd_kafka_flush(rk, 100);
 	}
 
+#ifndef __OS400__
 	TEST_ASSERT(got_timeout_err > 0);
+#else
+	TEST_ASSERT(got_timeout_err > 0, "");
+#endif
 
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);

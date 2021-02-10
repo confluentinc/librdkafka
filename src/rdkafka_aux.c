@@ -26,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_aux.h"

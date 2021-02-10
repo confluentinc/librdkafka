@@ -30,6 +30,10 @@
  * Tests messages are produced in order.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 

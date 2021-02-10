@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -762,14 +766,23 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 struct waiting *w;
 
                 rkev = rd_kafka_queue_poll(rkqu, -1);
+#ifndef __OS400__
                 TEST_ASSERT(rkev);
+#else
+                TEST_ASSERT(rkev, "");
+#endif
 
                 TEST_SAY("Got event %s: %s\n",
                          rd_kafka_event_name(rkev),
                          rd_kafka_event_error_string(rkev));
 
                 w = rd_kafka_event_opaque(rkev);
+
+#ifndef __OS400__
                 TEST_ASSERT(w);
+#else
+                TEST_ASSERT(w, "");
+#endif
 
                 TEST_ASSERT(w->evtype == rd_kafka_event_type(rkev),
                             "Expected evtype %d, not %d (%s)",
@@ -808,12 +821,19 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /* Check invalids */
         configs[0] = rd_kafka_ConfigResource_new(
                 (rd_kafka_ResourceType_t)-1, "something");
+#ifndef __OS400__
         TEST_ASSERT(!configs[0]);
+#else
+        TEST_ASSERT(!configs[0], "");
+#endif
 
         configs[0] = rd_kafka_ConfigResource_new(
                 (rd_kafka_ResourceType_t)0, NULL);
+#ifndef __OS400__
         TEST_ASSERT(!configs[0]);
-
+#else
+        TEST_ASSERT(!configs[0], "");
+#endif
 
         for (i = 0 ; i < MY_CONFRES_CNT ; i++) {
                 int set_config = !(i % 2);
@@ -822,7 +842,11 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                  * or unknown settings, they are enforced by the broker. */
                 configs[i] = rd_kafka_ConfigResource_new(
                         (rd_kafka_ResourceType_t)i, "3");
+#ifndef __OS400__
                 TEST_ASSERT(configs[i] != NULL);
+#else
+                TEST_ASSERT(configs[i] != NULL, "");
+#endif
 
                 if (set_config) {
                         rd_kafka_ConfigResource_set_config(configs[i],
@@ -853,7 +877,11 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                     rd_kafka_event_error_string(rkev));
 
         res = rd_kafka_event_AlterConfigs_result(rkev);
+#ifndef __OS400__
         TEST_ASSERT(res);
+#else
+        TEST_ASSERT(res, "");
+#endif
 
         rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
         TEST_ASSERT(!rconfigs && !rconfig_cnt,
@@ -878,7 +906,11 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                     rd_kafka_event_error_string(rkev));
 
         res = rd_kafka_event_DescribeConfigs_result(rkev);
+#ifndef __OS400__
         TEST_ASSERT(res);
+#else
+        TEST_ASSERT(res, "");
+#endif
 
         rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
         TEST_ASSERT(!rconfigs && !rconfig_cnt,

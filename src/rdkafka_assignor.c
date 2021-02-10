@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rdkafka_int.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
@@ -934,6 +938,11 @@ static int ut_assignors (void) {
 
                         if (!(rkas = rd_kafka_assignor_find(rk,
                                         tests[i].expect[ie].protocol_name))) {
+#ifdef __OS400__
+                                /* free allocated resources before return */
+                                rd_free_alloca(metadata.topics);
+                                rd_free_alloca(members);
+#endif
                                 RD_UT_FAIL("Assignor test case %s for %s failed: "
                                             "assignor not found",
                                             tests[i].name,
@@ -947,6 +956,12 @@ static int ut_assignors (void) {
                                 members, tests[i].member_cnt,
                                 errstr, sizeof(errstr));
 
+#ifdef __OS400__
+                        if(err) {
+                           rd_free_alloca(metadata.topics);
+                           rd_free_alloca(members);
+                        }
+#endif
                         RD_UT_ASSERT(!err, "Assignor case %s for %s failed: %s",
                                      tests[i].name,
                                      tests[i].expect[ie].protocol_name,
@@ -1032,6 +1047,10 @@ static int ut_assignors (void) {
                         rd_kafka_group_member_t *rkgm = &members[im];
                         rd_kafka_group_member_clear(rkgm);
                 }
+#ifdef __OS400__
+                rd_free_alloca(metadata.topics);
+                rd_free_alloca(members);
+#endif
         }
 
 

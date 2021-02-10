@@ -25,6 +25,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#include <locale.h>
+#endif
 
 
 #define _CRT_RAND_S  // rand_s() on MSVC
@@ -100,9 +105,13 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME)                                                \
         extern int main_ ## NAME (int, char **)
+#ifndef __OS400__
 #define _TEST(NAME,FLAGS,...)						\
         { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS, __VA_ARGS__ }
-
+#else
+#define _TEST(NAME,...)						\
+        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = ##__VA_ARGS__ }
+#endif
 
 /**
  * Declare all tests here
@@ -160,40 +169,60 @@ _TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
+#ifndef __OS400__
+// cpp tests
 _TEST_DECL(0053_stats_timing);
 _TEST_DECL(0053_stats);
 _TEST_DECL(0054_offset_time);
+#endif
 _TEST_DECL(0055_producer_latency);
 _TEST_DECL(0056_balanced_group_mt);
+#ifndef __OS400__
+// cpp tests
 _TEST_DECL(0057_invalid_topic);
 _TEST_DECL(0058_log);
 _TEST_DECL(0059_bsearch);
 _TEST_DECL(0060_op_prio);
 _TEST_DECL(0061_consumer_lag);
+#endif
 _TEST_DECL(0062_stats_event);
+#ifndef __OS400__
+// cpp tests
 _TEST_DECL(0063_clusterid);
+#endif
 _TEST_DECL(0064_interceptors);
+#ifndef __OS400__
+// cpp tests
 _TEST_DECL(0065_yield);
 _TEST_DECL(0066_plugins);
 _TEST_DECL(0067_empty_topic);
+#endif
 _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
+#ifndef __OS400__
 _TEST_DECL(0070_null_empty);
+#endif
 _TEST_DECL(0072_headers_ut);
 _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
+#ifndef __OS400__
 _TEST_DECL(0078_c_from_cpp);
+#endif
 _TEST_DECL(0079_fork);
 _TEST_DECL(0080_admin_ut);
 _TEST_DECL(0081_admin);
+#ifndef __OS400__
 _TEST_DECL(0082_fetch_max_bytes);
+#endif
 _TEST_DECL(0083_cb_event);
 _TEST_DECL(0084_destroy_flags_local);
 _TEST_DECL(0084_destroy_flags);
+#ifndef __OS400__
 _TEST_DECL(0085_headers);
+#endif
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
@@ -203,12 +232,16 @@ _TEST_DECL(0091_max_poll_interval_timeout);
 _TEST_DECL(0092_mixed_msgver);
 _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
+#ifndef __OS400__
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
 _TEST_DECL(0098_consumer_txn);
+#endif
 _TEST_DECL(0099_commit_metadata);
+#ifndef __OS400__
 _TEST_DECL(0100_thread_interceptors);
 _TEST_DECL(0101_fetch_from_follower);
+#endif
 _TEST_DECL(0102_static_group_rebalance);
 _TEST_DECL(0103_transactions_local);
 _TEST_DECL(0103_transactions);
@@ -216,24 +249,32 @@ _TEST_DECL(0104_fetch_from_follower_mock);
 _TEST_DECL(0105_transactions_mock);
 _TEST_DECL(0106_cgrp_sess_timeout);
 _TEST_DECL(0107_topic_recreate);
+#ifndef __OS400__
 _TEST_DECL(0109_auto_create_topics);
 _TEST_DECL(0110_batch_size);
 _TEST_DECL(0111_delay_create_topics);
+#endif
 _TEST_DECL(0112_assign_unknown_part);
+#ifndef __OS400__
 _TEST_DECL(0113_cooperative_rebalance_local);
 _TEST_DECL(0113_cooperative_rebalance);
 _TEST_DECL(0114_sticky_partitioning);
 _TEST_DECL(0115_producer_auth);
 _TEST_DECL(0116_kafkaconsumer_close);
+#endif
 _TEST_DECL(0117_mock_errors);
 _TEST_DECL(0118_commit_rebalance);
+#ifndef __OS400__
 _TEST_DECL(0119_consumer_auth);
+#endif
 _TEST_DECL(0120_asymmetric_subscription);
 _TEST_DECL(0121_clusterid);
 
+#ifndef __OS400__
 /* Manual tests */
 _TEST_DECL(8000_idle);
 
+#endif
 
 /* Define test resource usage thresholds if the default limits
  * are not tolerable.
@@ -339,30 +380,45 @@ struct test tests[] = {
         _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0,10,0,0)),
+#ifndef __OS400__
+// cpp tests
         _TEST(0053_stats_timing, TEST_F_LOCAL),
         _TEST(0053_stats, 0),
         _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,1,0)),
+#endif
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
+#ifndef __OS400__
+// cpp tests
         _TEST(0057_invalid_topic, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0058_log, TEST_F_LOCAL),
         _TEST(0059_bsearch, 0, TEST_BRKVER(0,10,0,0)),
         _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0061_consumer_lag, 0),
+#endif
         _TEST(0062_stats_event, TEST_F_LOCAL),
+#ifndef __OS400__
+// cpp tests
         _TEST(0063_clusterid, 0, TEST_BRKVER(0,10,1,0)),
+#endif
         _TEST(0064_interceptors, 0, TEST_BRKVER(0,9,0,0)),
+#ifndef __OS400__
+// cpp tests
         _TEST(0065_yield, 0),
         _TEST(0066_plugins,
               TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
               .extra = "dynamic loading of tests might not be fixed for this platform"),
         _TEST(0067_empty_topic, 0),
+#endif
 #if WITH_SOCKEM
         _TEST(0068_produce_timeout, TEST_F_SOCKEM),
 #endif
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(1,0,0,0)),
+#ifndef __OS400__
+// cpp tests
         _TEST(0070_null_empty, 0),
+#endif
         _TEST(0072_headers_ut, TEST_F_LOCAL),
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
@@ -373,17 +429,24 @@ struct test tests[] = {
         _TEST(0077_compaction, 0,
               /* The test itself requires message headers */
               TEST_BRKVER(0,11,0,0)),
+#ifndef __OS400__
+// cpp tests
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
+#endif
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
               .extra = "using a fork():ed rd_kafka_t is not supported and will "
               "most likely hang"),
         _TEST(0080_admin_ut, TEST_F_LOCAL),
         _TEST(0081_admin, 0, TEST_BRKVER(0,10,2,0)),
+#ifndef __OS400__
         _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
+#endif
         _TEST(0083_cb_event, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
         _TEST(0084_destroy_flags, 0),
+#ifndef __OS400__
         _TEST(0085_headers, 0, TEST_BRKVER(0,11,0,0)),
+#endif
         _TEST(0086_purge_local, TEST_F_LOCAL),
         _TEST(0086_purge_remote, 0),
 #if WITH_SOCKEM
@@ -398,14 +461,18 @@ struct test tests[] = {
         _TEST(0094_idempotence_msg_timeout, TEST_F_SOCKEM,
               TEST_BRKVER(0,11,0,0)),
 #endif
+#ifndef __OS400__
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
         _TEST(0098_consumer_txn, 0, TEST_BRKVER(0,11,0,0)),
+#endif
         _TEST(0099_commit_metadata, 0),
+#ifndef __OS400__
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),
         _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0102_static_group_rebalance, 0,
               TEST_BRKVER(2,3,0,0)),
+#endif
         _TEST(0103_transactions_local, TEST_F_LOCAL),
         _TEST(0103_transactions, 0, TEST_BRKVER(0, 11, 0, 0)),
         _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
@@ -414,26 +481,33 @@ struct test tests[] = {
         _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
         _TEST(0107_topic_recreate, 0, TEST_BRKVER_TOPIC_ADMINAPI,
               .scenario = "noautocreate"),
+#ifndef __OS400__
         _TEST(0109_auto_create_topics, 0),
         _TEST(0110_batch_size, 0),
         _TEST(0111_delay_create_topics, 0, TEST_BRKVER_TOPIC_ADMINAPI,
               .scenario = "noautocreate"),
+#endif
         _TEST(0112_assign_unknown_part, 0),
+#ifndef __OS400__
         _TEST(0113_cooperative_rebalance_local, TEST_F_LOCAL,
               TEST_BRKVER(2,4,0,0)),
         _TEST(0113_cooperative_rebalance, 0, TEST_BRKVER(2,4,0,0)),
         _TEST(0114_sticky_partitioning, 0),
         _TEST(0115_producer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0116_kafkaconsumer_close, TEST_F_LOCAL),
+#endif
         _TEST(0117_mock_errors, TEST_F_LOCAL),
         _TEST(0118_commit_rebalance, 0),
+#ifndef __OS400__
         _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
+#endif
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
 
         /* Manual tests */
+#ifndef __OS400__
         _TEST(8000_idle, TEST_F_MANUAL),
-
+#endif
         { NULL }
 };
 
@@ -1098,8 +1172,11 @@ static int run_test0 (struct run_args *run_args) {
 
 
 
-
+#ifndef __OS400__
 static int run_test_from_thread (void *arg) {
+#else
+static void *run_test_from_thread (void *arg) {
+#endif
         struct run_args *run_args = arg;
 
 	thrd_detach(thrd_current());
@@ -1112,7 +1189,11 @@ static int run_test_from_thread (void *arg) {
 
         free(run_args);
 
+#ifndef __OS400__
         return 0;
+#else
+        return NULL;
+#endif
 }
 
 
@@ -1177,8 +1258,14 @@ static int run_test (struct test *test, int argc, char **argv) {
                 check_test_timeouts();
         }
         tests_running_cnt++;
+#ifndef __OS400__
         test->timeout = test_clock() + (int64_t)(30.0 * 1000000.0 *
                                                  test_timeout_multiplier);
+#else
+        /* Sometimes my IBM i can be quite slow :) */
+        test->timeout = test_clock() + (int64_t)(3000.0 * 1000000.0 *
+                                                 test_timeout_multiplier);
+#endif
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 
@@ -1327,6 +1414,7 @@ static int test_summary (int do_lock) {
         if (do_lock)
                 TEST_LOCK();
 
+#ifndef __OS400__
 	if (test_sql_cmd) {
 #ifdef _WIN32
 		sql_fp = _popen(test_sql_cmd, "w");
@@ -1343,6 +1431,7 @@ static int test_summary (int do_lock) {
 			"tests(runid text, mode text, name text, state text, "
 			"extra text, duration numeric);\n");
 	}
+#endif
 
 	if (show_summary)
 		printf("TEST %s (%s, scenario %s) SUMMARY\n"
@@ -1567,6 +1656,10 @@ int main(int argc, char **argv) {
 
 #ifndef _WIN32
         signal(SIGINT, test_sig_term);
+#endif
+#ifdef __OS400__
+        setlocale(LC_ALL, ""); 
+        setlocale(LC_NUMERIC, "/QSYS.LIB/EN_US.LOCALE"); /* required for decimal separator = '.' */
 #endif
         tests_to_run = test_getenv("TESTS", NULL);
         subtests_to_run = test_getenv("SUBTESTS", NULL);
@@ -2356,7 +2449,11 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 		if (rebalance_cb)
 			rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 	} else {
+#ifndef __OS400__
 		TEST_ASSERT(!rebalance_cb);
+#else
+		TEST_ASSERT(!rebalance_cb, "");
+#endif
 	}
 
         if (default_topic_conf)
@@ -3022,7 +3119,11 @@ int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
 	uint64_t in_testid;
 	int in_part;
 	int in_msgnum = -1;
+#ifndef __OS400__
 	char buf[128];
+#else
+	char buf[1000];
+#endif
         const void *val;
         size_t valsize;
 
@@ -3151,7 +3252,11 @@ static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
         struct test_mv_mvec *corr_mvec;
         int verifycnt = 0;
 
+#ifndef __OS400__
         TEST_ASSERT(vs->corr);
+#else
+        TEST_ASSERT(vs->corr, "");
+#endif
 
         /* Get correct mvec for comparison. */
         if (p)
@@ -4145,6 +4250,8 @@ int test_partition_list_cmp (rd_kafka_topic_partition_list_t *al,
 void test_kafka_cmd (const char *fmt, ...) {
 #ifdef _WIN32
 	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
+#elif defined(__OS400)
+	TEST_FAIL("%s not supported on OS400, yet", __FUNCTION__);
 #else
 	char cmd[1024];
 	int r;
@@ -4160,8 +4267,11 @@ void test_kafka_cmd (const char *fmt, ...) {
 
 	r = rd_snprintf(cmd, sizeof(cmd),
 			"%s/bin/", kpath);
+#ifndef __OS400__
 	TEST_ASSERT(r < (int)sizeof(cmd));
-
+#else
+	TEST_ASSERT(r < (int)sizeof(cmd), "");
+#endif
 	va_start(ap, fmt);
 	rd_vsnprintf(cmd+r, sizeof(cmd)-r, fmt, ap);
 	va_end(ap);
@@ -4188,6 +4298,8 @@ void test_kafka_cmd (const char *fmt, ...) {
 void test_kafka_topics (const char *fmt, ...) {
 #ifdef _WIN32
 	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
+#elif defined(__OS400__)
+	TEST_FAIL("%s not supported on OS400, yet", __FUNCTION__);
 #else
 	char cmd[512];
 	int r;
@@ -4204,8 +4316,11 @@ void test_kafka_topics (const char *fmt, ...) {
 
 	r = rd_snprintf(cmd, sizeof(cmd),
 			"%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
+#ifndef __OS400__
 	TEST_ASSERT(r < (int)sizeof(cmd));
-
+#else
+	TEST_ASSERT(r < (int)sizeof(cmd), "");
+#endif
 	va_start(ap, fmt);
 	rd_vsnprintf(cmd+r, sizeof(cmd)-r, fmt, ap);
 	va_end(ap);
@@ -4663,7 +4778,11 @@ int test_check_auto_create_topic (void) {
  * @returns -1 if the application could not be started, else the pid.
  */
 int test_run_java (const char *cls, const char **argv) {
-#ifdef _WIN32
+#ifdef __OS400__
+        TEST_WARN("%s(%s) not supported OS400, yet",
+                  __FUNCTION__, cls);
+        return -1;
+#elif defined(_WIN32)
         TEST_WARN("%s(%s) not supported Windows, yet",
                   __FUNCTION__, cls);
         return -1;
@@ -4737,7 +4856,11 @@ int test_run_java (const char *cls, const char **argv) {
  * @returns -1 if the child process exited successfully, else -1.
  */
 int test_waitpid (int pid) {
-#ifdef _WIN32
+#ifdef __OS400__
+        TEST_WARN("%s() not supported OS400, yet",
+                  __FUNCTION__);
+        return -1;
+#elif defined(_WIN32)
         TEST_WARN("%s() not supported Windows, yet",
                   __FUNCTION__);
         return -1;
@@ -4818,7 +4941,11 @@ void test_report_add (struct test *test, const char *fmt, ...) {
 	char buf[512];
 
 	va_start(ap, fmt);
+#ifndef __OS400__
 	vsnprintf(buf, sizeof(buf), fmt, ap);
+#else
+	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+#endif
 	va_end(ap);
 
 	if (test->report_cnt == test->report_size) {
@@ -4851,6 +4978,10 @@ int test_can_create_topics (int skip) {
 #ifdef _WIN32
 	if (skip)
 		TEST_SKIP("Cannot create topics on Win32\n");
+	return 0;
+#elif defined(__OS400__)
+	if (skip)
+		TEST_SKIP("Cannot create topics on OS400\n");
 	return 0;
 #else
 
@@ -5608,7 +5739,11 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
 
         for (i = 0 ; i < topic_cnt ; i++) {
                 del_topics[i] = rd_kafka_DeleteTopic_new(topics[i]);
+#ifndef __OS400__
                 TEST_ASSERT(del_topics[i]);
+#else
+                TEST_ASSERT(del_topics[i], "");
+#endif
         }
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
@@ -5675,7 +5810,11 @@ test_DeleteGroups_simple (rd_kafka_t *rk,
 
         for (i = 0 ; i < group_cnt ; i++) {
                 del_groups[i] = rd_kafka_DeleteGroup_new(groups[i]);
+#ifndef __OS400__
                 TEST_ASSERT(del_groups[i]);
+#else
+                TEST_ASSERT(del_groups[i], "");
+#endif
         }
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEGROUPS);
@@ -6305,7 +6444,11 @@ int test_sub_start (const char *func, int line, int is_quick,
  * @brief Sub-test has passed.
  */
 void test_sub_pass (void) {
+#ifndef __OS400__
         TEST_ASSERT(*test_curr->subtest);
+#else
+        TEST_ASSERT(*test_curr->subtest, "");
+#endif
 
         TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
         *test_curr->subtest = '\0';

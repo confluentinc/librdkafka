@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -41,7 +45,7 @@ static char jmx_cmd[512];
  *        in JMX metrics.
  */
 static void jmx_verify (const char *exp_swname, const char *exp_swversion) {
-#if _WIN32
+#if defined(_WIN32) || defined(__OS400__)
         return;
 #else
         int r;

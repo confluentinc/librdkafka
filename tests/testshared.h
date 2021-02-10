@@ -137,6 +137,7 @@ void test_fail0 (const char *file, int line, const char *function,
                 fprintf(stderr, "\033[0m");                             \
        } while (0)
 
+#ifndef __OS400__
 /* "..." is a failure reason in printf format, include as much info as needed */
 #define TEST_ASSERT(expr,...) do {            \
         if (!(expr)) {                        \
@@ -154,6 +155,22 @@ void test_fail0 (const char *file, int line, const char *function,
                                    __VA_ARGS__);                        \
                 }                                                       \
         } while (0)
+#else
+#define TEST_ASSERT(expr,...) do {            \
+        if (!(expr)) {                        \
+                      TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
+                                ## __VA_ARGS__);                        \
+                      }                                                 \
+        } while (0)
+#define TEST_ASSERT_LATER(expr,...) do {                                \
+                if (!(expr)) {                                          \
+                        TEST_FAIL0(__FILE__, __LINE__, 1, 0,            \
+                                   "Test assertion failed: \"" # expr  "\": " \
+                                   ## __VA_ARGS__);                      \
+                }                                                       \
+        } while (0)
+#endif
+
 
 
 void test_SAY (const char *file, int line, int level, const char *str);
@@ -210,12 +227,12 @@ extern const char *test_curr_name (void);
 * A microsecond monotonic clock
 */
 static RD_INLINE int64_t test_clock (void)
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__OS400__)
 __attribute__((unused))
 #endif
 ;
 static RD_INLINE int64_t test_clock (void) {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__OS400__)
         /* No monotonic clock on Darwin */
         struct timeval tv;
         gettimeofday(&tv, NULL);

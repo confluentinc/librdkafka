@@ -138,7 +138,15 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         memcpy(extpath+pathlen, solib_ext, strlen(solib_ext) + 1);
 
         /* Try again with extension */
+#ifndef __OS400__
         return rd_dl_open0(extpath, errstr, errstr_size);
+#else
+        /* rd_alloca made on base of malloc function.     */
+        /* we have to free allocated memory before return */
+        handle = rd_dl_open0(extpath, errstr, errstr_size);
+        rd_free_alloca(extpath);
+        return handle;
+#endif
 }
 
 

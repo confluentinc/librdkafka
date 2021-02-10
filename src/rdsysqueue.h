@@ -222,6 +222,25 @@
 } while(0)
 #endif
 
+/**
+ * @brief Add all elements from \p srchead to \p dsthead using sort
+ *        comparator \p cmpfunc.
+ *        \p src will be re-initialized on completion.
+ */
+#define TAILQ_CONCAT_SORTED(dsthead,srchead,elmtype,field,cmpfunc) do { \
+        elmtype _cstmp;                                                 \
+        elmtype _cstmp2;                                                \
+        if (TAILQ_EMPTY(dsthead)) {                                     \
+                TAILQ_CONCAT(dsthead, srchead,field);                   \
+                break;                                                  \
+        }                                                               \
+        TAILQ_FOREACH_SAFE(_cstmp, srchead, field, _cstmp2) {           \
+                TAILQ_INSERT_SORTED(dsthead, _cstmp, elmtype,           \
+                                    field, cmpfunc);                    \
+        }                                                               \
+        TAILQ_INIT(srchead);                                            \
+        } while (0)
+
 #define TAILQ_MOVE(newhead, oldhead, field) do { \
         if(TAILQ_FIRST(oldhead)) { \
            TAILQ_FIRST(oldhead)->field.tqe_prev = &(newhead)->tqh_first;  \

@@ -18,6 +18,11 @@ librdkafka v1.6.1 is a maintenance release.
    `send_offsets_to_transaction()` calls would leak memory if the
    underlying request was attempted to be sent after the transaction had
    failed.
+ * When gradually producing to multiple partitions (resulting in multiple
+   underlying AddPartitionsToTxnRequests) sub-sequent partitions could get
+   stuck in pending state under certain conditions. These pending partitions
+   would not send queued messages to the broker and eventually trigger
+   message timeouts, failing the current transaction. This is now fixed.
 
 
 

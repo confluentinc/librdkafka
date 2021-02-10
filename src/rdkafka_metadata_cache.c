@@ -194,7 +194,7 @@ int rd_kafka_metadata_partition_id_cmp (const void *_a,
  *
  * This makes a copy of \p topic
  *
- * @locks rd_kafka_wrlock()
+ * @locks_required rd_kafka_wrlock()
  */
 static struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
@@ -443,7 +443,7 @@ void rd_kafka_metadata_cache_purge_hints (rd_kafka_t *rk,
  *
  * @returns the number of topic hints inserted.
  *
- * @locks rd_kafka_wrlock()
+ * @locks_required rd_kafka_wrlock()
  */
 int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
                                   const rd_list_t *topics, rd_list_t *dst,
@@ -494,6 +494,8 @@ int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
 /**
  * @brief Same as rd_kafka_metadata_cache_hint() but takes
  *        a topic+partition list as input instead.
+ *
+ * @locks_acquired rd_kafka_wrlock()
  */
 int rd_kafka_metadata_cache_hint_rktparlist (
         rd_kafka_t *rk,
@@ -506,9 +508,12 @@ int rd_kafka_metadata_cache_hint_rktparlist (
         rd_list_init(&topics, rktparlist->cnt, rd_free);
         rd_kafka_topic_partition_list_get_topic_names(rktparlist, &topics,
                                                       0/*dont include regex*/);
+        rd_kafka_wrlock(rk);
         r = rd_kafka_metadata_cache_hint(rk, &topics, dst,
                                          RD_KAFKA_RESP_ERR__WAIT_CACHE,
                                          replace);
+        rd_kafka_wrunlock(rk);
+
         rd_list_destroy(&topics);
         return r;
 }

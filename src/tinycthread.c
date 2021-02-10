@@ -21,6 +21,9 @@ freely, subject to the following restrictions:
     3. This notice may not be removed or altered from any source
     distribution.
 */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include <stdlib.h>
@@ -28,7 +31,7 @@ freely, subject to the following restrictions:
 #if !WITH_C11THREADS
 
 /* Platform specific includes */
-#if defined(_TTHREAD_POSIX_)
+#if defined(_TTHREAD_POSIX_) || defined(__OS400__)
   #include <signal.h>
   #include <sched.h>
   #include <unistd.h>
@@ -181,6 +184,15 @@ int mtx_timedlock(mtx_t *mtx, const struct timespec *ts)
   }
 
   return thrd_success;
+#elif defined(__OS400__)
+  switch (pthread_mutex_timedlock_np(mtx, ts)) {
+    case 0:
+      return thrd_success;
+    case EBUSY:
+      return thrd_timedout;
+    default:
+      return thrd_error;
+  }  
 #elif defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS >= 200112L) && defined(_POSIX_THREADS) && (_POSIX_THREADS >= 200112L)
   switch (pthread_mutex_timedlock(mtx, ts)) {
     case 0:
@@ -562,7 +574,11 @@ static void * _thrd_wrapper_function(void * aArg)
 {
   thrd_start_t fun;
   void *arg;
+#ifndef __OS400__
   int  res;
+#else
+  void *res;
+#endif
 
   /* Get thread startup information */
   _thread_start_info *ti = (_thread_start_info *) aArg;
@@ -582,6 +598,8 @@ static void * _thrd_wrapper_function(void * aArg)
   }
 
   return (DWORD)res;
+#elif defined(__OS400__)
+  return res;
 #else
   return (void*)(intptr_t)res;
 #endif
@@ -589,6 +607,9 @@ static void * _thrd_wrapper_function(void * aArg)
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
 {
+#ifdef __OS400__
+  int did_we_fail=0;
+#endif
   /* Fill out the thread startup information (passed to the thread wrapper,
      which will eventually free it) */
   _thread_start_info* ti = (_thread_start_info*)malloc(sizeof(_thread_start_info));
@@ -608,13 +629,22 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
           if((err = pthread_create(thr, NULL, _thrd_wrapper_function,
                                    (void *)ti)) != 0) {
                   errno = err;
+#ifndef __OS400__
                   *thr = 0;
+#else
+                  memset(thr, 0, sizeof(thrd_t));
+                  did_we_fail=1;
+#endif
           }
   }
 #endif
 
   /* Did we fail to create the thread? */
+#ifndef __OS400__
   if(!*thr)
+#else
+  if(did_we_fail)
+#endif
   {
     free(ti);
     return thrd_error;
@@ -652,7 +682,11 @@ int thrd_equal(thrd_t thr0, thrd_t thr1)
 #endif
 }
 
+#ifndef __OS400__
 void thrd_exit(int res)
+#else
+void thrd_exit(void *res)
+#endif
 {
 #if defined(_TTHREAD_WIN32_)
   if (_tinycthread_tss_head != NULL)
@@ -662,11 +696,19 @@ void thrd_exit(int res)
 
   ExitThread(res);
 #else
+#ifndef __OS400__
   pthread_exit((void*)(intptr_t)res);
+#else
+  pthread_exit(res);
+#endif
 #endif
 }
 
+#ifndef __OS400__
 int thrd_join(thrd_t thr, int *res)
+#else
+int thrd_join(thrd_t thr, void **res)
+#endif
 {
 #if defined(_TTHREAD_WIN32_)
   DWORD dwRes;
@@ -695,7 +737,11 @@ int thrd_join(thrd_t thr, int *res)
   }
   if (res != NULL)
   {
+#ifndef __OS400__
     *res = (int)(intptr_t)pres;
+#else
+    *res = pres;
+#endif
   }
 #endif
   return thrd_success;
@@ -704,7 +750,37 @@ int thrd_join(thrd_t thr, int *res)
 int thrd_sleep(const struct timespec *duration, struct timespec *remaining)
 {
 #if !defined(_TTHREAD_WIN32_)
+#ifndef __OS400__
   return nanosleep(duration, remaining);
+#else
+#define TIMEVAL_TO_TIMESPEC(tv,ts) do {		\
+    (ts)->tv_sec = (tv)->tv_sec;		\
+    (ts)->tv_nsec = (tv)->tv_usec * 1000;	\
+  } while (0)
+
+  struct timeval tv;
+  struct timespec start;
+  int t;
+  gettimeofday(&tv, NULL);
+  TIMEVAL_TO_TIMESPEC(&tv, &start);
+
+  t=usleep(duration->tv_sec * 1000 + duration->tv_nsec/1000);
+  if (t == 0) {
+    return 0;
+  } else if (remaining != NULL) {
+    gettimeofday(&tv, NULL);
+    TIMEVAL_TO_TIMESPEC(&tv, remaining);
+    remaining->tv_sec -= start.tv_sec;
+    remaining->tv_nsec -= start.tv_nsec;
+    if (remaining->tv_nsec < 0)
+    {
+      remaining->tv_nsec += 1000000000;
+      remaining->tv_sec -= 1;
+    }
+  } else {
+    return -1;
+  }
+#endif
 #else
   struct timespec start;
   DWORD t;

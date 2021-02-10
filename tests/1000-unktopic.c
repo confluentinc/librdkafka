@@ -33,6 +33,10 @@
  * NOTE! This test requires auto.create.topics.enable=false to be
  *       configured on the broker!
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #define _GNU_SOURCE
 #include <sys/time.h>

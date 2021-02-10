@@ -44,6 +44,9 @@
    1.0  10 Feb 2013  First version
    1.1   1 Aug 2013  Correct comments on why three crc instructions in parallel
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 
@@ -100,7 +103,11 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
     uint64_t crc;
 
     crc = crci ^ 0xffffffff;
+#ifndef __OS400__
     while (len && ((uintptr_t)next & 7) != 0) {
+#else
+    while (len && ((next-(const unsigned char *)buf) & 7) != 0) {
+#endif
         crc = crc32c_table[0][(crc ^ *next++) & 0xff] ^ (crc >> 8);
         len--;
     }

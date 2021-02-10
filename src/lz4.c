@@ -31,6 +31,9 @@
     - LZ4 homepage : http://www.lz4.org
     - LZ4 source repository : https://github.com/lz4/lz4
 */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 /*-************************************
 *  Tuning parameters

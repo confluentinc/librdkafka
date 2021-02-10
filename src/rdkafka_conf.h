@@ -156,8 +156,11 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
+#ifndef __OS400__
 #define RD_KAFKA_CONF_PROPS_IDX_MAX (64*27)
-
+#else
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*54) /* was not enough in OS400 */
+#endif
 /**
  * @struct rd_kafka_anyconf_t
  * @brief The anyconf header must be the first field in the

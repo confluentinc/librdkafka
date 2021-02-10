@@ -30,6 +30,9 @@
  * Mocks
  *
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rdkafka_int.h"
 #include "rdbuf.h"
@@ -557,7 +560,11 @@ rd_kafka_mock_cgrp_member_add (rd_kafka_mock_cgrp_t *mcgrp,
 
                 if (!RD_KAFKAP_STR_LEN(MemberId)) {
                         /* Generate a member id */
+#ifndef __OS400__
                         char memberid[32];
+#else
+                        char memberid[100];
+#endif
                         rd_snprintf(memberid, sizeof(memberid), "%p", member);
                         member->id = rd_strdup(memberid);
                 } else

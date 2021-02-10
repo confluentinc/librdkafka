@@ -33,6 +33,11 @@
  * Only one of these interfaces may be used on a given rd_kafka_t handle.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
+
 #include "rdkafka_int.h"
 
 

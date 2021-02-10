@@ -26,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdbuf.h"
@@ -97,7 +100,11 @@ static rd_segment_t *rd_buf_append_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
  * @remark the returned pointer is memory-aligned to be safe.
  */
 static void *extra_alloc (rd_buf_t *rbuf, size_t size) {
+#ifndef __OS400__
         size_t of = RD_ROUNDUP(rbuf->rbuf_extra_len, 8); /* FIXME: 32-bit */
+#else
+        size_t of = RD_ROUNDUP(rbuf->rbuf_extra_len, 16); /* OS400 *p128 uses 16-bytes pointers alignment */
+#endif
         void *p;
 
         if (of + size > rbuf->rbuf_extra_size)
@@ -360,7 +367,11 @@ void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
         /* Pre-allocate memory for a fixed set of segments that are known
          * before-hand, to minimize the number of extra allocations
          * needed for well-known layouts (such as headers, etc) */
+#ifndef __OS400__
         totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 8) * fixed_seg_cnt;
+#else
+        totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 16) * fixed_seg_cnt; /* OS400 *p128 uses 16-bytes alignment */
+#endif
 
         /* Pre-allocate extra space for the backing buffer. */
         totalloc += buf_size;

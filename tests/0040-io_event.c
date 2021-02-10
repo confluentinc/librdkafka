@@ -29,6 +29,10 @@
 /**
  * Tests the queue IO event signalling.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 
 #include "test.h"
@@ -43,7 +47,11 @@
 #pragma comment(lib, "ws2_32.lib")
 #else
 #include <unistd.h>
+#ifndef __OS400__
 #include <poll.h>
+#else
+#include <sys/poll.h>
+#endif
 #endif
 
 

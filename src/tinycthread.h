@@ -28,6 +28,8 @@ freely, subject to the following restrictions:
 /* Include config to know if C11 threads are available */
 #ifdef _WIN32
 #include "win32_config.h"
+#elif defined(__OS400__)
+#include "os400_config.h"
 #else
 #include "../config.h"
 #endif
@@ -347,7 +349,11 @@ typedef pthread_t thrd_t;
 * @return The thread return value, which can be obtained by another thread
 * by using the @ref thrd_join() function.
 */
+#ifndef __OS400__
 typedef int (*thrd_start_t)(void *arg);
+#else
+typedef void *(*thrd_start_t)(void *arg);
+#endif
 
 /** Create a new thread.
 * @param thr Identifier of the newly created thread.
@@ -384,7 +390,11 @@ int thrd_equal(thrd_t thr0, thrd_t thr1);
 /** Terminate execution of the calling thread.
 * @param res Result code of the calling thread.
 */
+#ifndef __OS400__
 TTHREAD_NORETURN void thrd_exit(int res);
+#else
+TTHREAD_NORETURN void thrd_exit(void *res);
+#endif
 
 /** Wait for a thread to terminate.
 * The function joins the given thread with the current thread by blocking
@@ -395,7 +405,11 @@ TTHREAD_NORETURN void thrd_exit(int res);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
+#ifndef __OS400__
 int thrd_join(thrd_t thr, int *res);
+#else
+int thrd_join(thrd_t thr, void **res);
+#endif
 
 /** Put the calling thread to sleep.
 * Suspend execution of the calling thread.

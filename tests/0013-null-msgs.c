@@ -29,6 +29,10 @@
 /**
  * Produce NULL payload messages, then consume them.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 

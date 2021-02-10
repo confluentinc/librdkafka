@@ -68,11 +68,20 @@
  *
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rd.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#ifdef __OS400__
+/* handmade log2 */
+static double log2( double n )  {  return log( n ) / log( 2 );  } 
+#endif
 
 #include "rdhdrhistogram.h"
 #include "rdunittest.h"
@@ -618,6 +627,8 @@ static int ut_reset (void) {
 }
 
 
+#ifndef __OS400__
+/* isnan is not implemented on OS400 */
 static int ut_nan (void) {
         rd_hdr_histogram_t *hdr = rd_hdr_histogram_new(1, 100000, 3);
         double v;
@@ -630,7 +641,7 @@ static int ut_nan (void) {
         rd_hdr_histogram_destroy(hdr);
         RD_UT_PASS();
 }
-
+#endif
 
 static int ut_sigfigs (void) {
         int sigfigs;
@@ -717,7 +728,10 @@ int unittest_rdhdrhistogram (void) {
         fails += ut_max();
         fails += ut_min();
         fails += ut_reset();
+#ifndef __OS400__
+        /* isnan is not implemented on OS400 */
         fails += ut_nan();
+#endif
         fails += ut_sigfigs();
         fails += ut_minmax_trackable();
         fails += ut_unitmagnitude_overflow();

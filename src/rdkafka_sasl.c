@@ -25,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_transport.h"
@@ -205,8 +208,13 @@ void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
                 rktrans->rktrans_rkb->rkb_rk->rk_conf.
                 sasl.provider;
 
+#ifndef __OS400__
         if (provider && provider->close)
                 provider->close(rktrans);
+#else
+        if (provider && provider->close_fn)
+                provider->close_fn(rktrans);
+#endif
 }
 
 
@@ -391,6 +399,7 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
         }
 
         if (!provider) {
+#ifndef __OS400__
                 rd_snprintf(errstr, errstr_size,
                             "No provider for SASL mechanism %s"
                             ": recompile librdkafka with "
@@ -414,6 +423,20 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 #endif
                             ,
                             rk->rk_conf.sasl.mechanisms);
+#else
+                /* compiler specific - can't understand inner #if's */
+                rd_snprintf(errstr, errstr_size,
+                            "No provider for SASL mechanism %s"
+                            ": recompile librdkafka with "
+                            "libsasl2 or "
+                            "openssl support. "
+                            "Current build options:"
+                            " PLAIN"
+                            " SASL_SCRAM"
+                            " OAUTHBEARER"
+                            ,
+                            rk->rk_conf.sasl.mechanisms);
+#endif
                 return -1;
         }
 

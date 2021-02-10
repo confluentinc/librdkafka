@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rdkafka_int.h"
 #include "rd.h"
 #include "rdfloat.h"
@@ -2504,6 +2508,10 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                 size_t fi;
                 size_t nlen;
 
+#ifdef __OS400__
+                valstr=NULL;
+#endif
+
 		if (!(prop->scope & scope))
 			continue;
 
@@ -2593,6 +2601,9 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
 
                 rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
                                            _RK_CONF_PROP_SET_REPLACE, NULL, 0);
+#ifdef __OS400__
+                rd_free_alloca(valstr); /* free memory allocated by rd_alloca */
+#endif
 	}
 }
 
@@ -2926,7 +2937,11 @@ size_t rd_kafka_conf_flags2str (char *dest, size_t dest_size, const char *delim,
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
                        char *dest, size_t *dest_size) {
+#ifndef __OS400__
         char tmp[22];
+#else
+        char tmp[100]; /* 22 is not enough for %p pointer printing */
+#endif
         const char *val = NULL;
         size_t val_len = 0;
         int j;
@@ -4036,7 +4051,11 @@ int unittest_conf (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;
         rd_kafka_conf_res_t res, res2;
+#ifndef __OS400__
         char errstr[128];
+#else
+        char errstr[1024]; /* 128 is not enougth for errstr, mainly because of %p formats */
+#endif
         int iteration;
         const struct rd_kafka_property *prop;
         char readval[512];

@@ -551,6 +551,9 @@ struct rd_kafka_s {
         struct {
                 rd_kafka_q_t *q;  /**< Queue served by background thread. */
                 thrd_t thread;    /**< Background thread. */
+#ifdef __OS400__
+                pthread_id_np_t   thread_tid;
+#endif
                 int calling;      /**< Indicates whether the event callback
                                    *   is being called, reset back to 0
                                    *   when the callback returns.
@@ -1017,6 +1020,10 @@ rd_kafka_app_polled (rd_kafka_t *rk) {
 /**
  * rdkafka_background.c
  */
+#ifndef __OS400__
 int rd_kafka_background_thread_main (void *arg);
+#else
+void *rd_kafka_background_thread_main (void *arg);
+#endif
 
 #endif /* _RDKAFKA_INT_H_ */

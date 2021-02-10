@@ -29,7 +29,9 @@
 #ifndef _RDKAFKA_TRANSPORT_H_
 #define _RDKAFKA_TRANSPORT_H_
 
-#ifndef _WIN32
+#ifdef __OS400__
+#include <sys/poll.h>
+#elif !defined(_WIN32)
 #include <poll.h>
 #endif
 

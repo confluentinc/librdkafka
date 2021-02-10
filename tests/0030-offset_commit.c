@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -359,7 +363,11 @@ static void empty_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 			 rd_kafka_err2str(offsets->elems[i].err));
 
 		if (expected == RD_KAFKA_RESP_ERR_NO_ERROR)
+#ifndef __OS400__
 			TEST_ASSERT(offsets->elems[i].err == expected);
+#else
+			TEST_ASSERT(offsets->elems[i].err == expected, "");
+#endif
 		if (offsets->elems[i].offset > 0)
 			valid_offsets++;
 	}
@@ -367,7 +375,11 @@ static void empty_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 	if (expected == RD_KAFKA_RESP_ERR_NO_ERROR) {
 		/* If no error is expected we instead expect one proper offset
 		 * to have been committed. */
+#ifndef __OS400__
 		TEST_ASSERT(valid_offsets > 0);
+#else
+		TEST_ASSERT(valid_offsets > 0, "");
+#endif
 	}
 }
 
@@ -435,7 +447,11 @@ static void nonexist_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 		 offsets ? offsets->cnt : 0,
 		 rd_kafka_err2str(err));
 
+#ifndef __OS400__
 	TEST_ASSERT(offsets != NULL);
+#else
+	TEST_ASSERT(offsets != NULL, "");
+#endif
 
 	for (i = 0 ; i < offsets->cnt ; i++) {
 		TEST_SAY("committed: %s [%"PRId32"] offset %"PRId64

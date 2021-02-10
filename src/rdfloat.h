@@ -25,8 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#pragma once
+#ifndef __RDFLOAT_H__
+#define __RDFLOAT_H__
 
 #include <math.h>
 
@@ -66,3 +66,5 @@ int rd_dbl_eq0 (double a, double b, double prec) {
  * Checks if the double `a' is zero (or close enough).
  */
 #define rd_dbl_zero(a)  rd_dbl_eq0(a,0.0,RD_DBL_EPSILON)
+
+#endif

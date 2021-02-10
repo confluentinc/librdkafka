@@ -32,7 +32,9 @@
        - LZ4 public forum : https://groups.google.com/forum/#!forum/lz4c
 */
 /* note : lz4hc is not an independent module, it requires lz4.h/lz4.c for proper compilation */
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 /* *************************************
 *  Tuning Parameter

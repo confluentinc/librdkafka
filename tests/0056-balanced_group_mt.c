@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -48,13 +52,20 @@ static int exp_msg_cnt;
 
 static mtx_t lock;
 static thrd_t tids[MAX_THRD_CNT];
+#ifdef __OS400__
+static int tids_started[MAX_THRD_CNT];
+#endif
 
 typedef struct part_consume_info_s {
         rd_kafka_queue_t * rkqu;
         int partition;
 } part_consume_info_t;
 
+#ifndef __OS400__
 static int is_consuming () {
+#else
+static int is_consuming (void) {
+#endif
         int result;
         mtx_lock(&lock);
         result = consumers_running;
@@ -62,7 +73,11 @@ static int is_consuming () {
         return result;
 }
 
+#ifndef __OS400__
 static int partition_consume (void *args) {
+#else
+static void *partition_consume (void *args) {
+#endif
         part_consume_info_t *info = (part_consume_info_t *)args;
         rd_kafka_queue_t *rkqu = info->rkqu;
         int partition = info->partition;
@@ -112,20 +127,38 @@ static int partition_consume (void *args) {
 
         rd_kafka_queue_destroy(rkqu);
 
+#ifndef __OS400__
         return thrd_success;
+#else
+        return NULL;
+#endif
 }
 
+#ifndef __OS400__
 static thrd_t spawn_thread (rd_kafka_queue_t *rkqu, int partition) {
         thrd_t thr;
+#else
+static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
+        int failed=0;
+#endif
         part_consume_info_t *info = malloc(sizeof(part_consume_info_t));
 
         info->rkqu = rkqu;
         info->partition = partition;
-
+#ifndef __OS400__
         if (thrd_create(&thr, &partition_consume, info) != thrd_success) {
+#else
+        if (thrd_create(thr, &partition_consume, info) != thrd_success) {
+#endif
+                failed=1;
                 TEST_FAIL("Failed to create consumer thread.");
         }
+
+#ifndef __OS400__
         return thr;
+#else
+        return failed;
+#endif
 }
 
 static int rebalanced = 0;
@@ -161,8 +194,13 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                                                             part.partition);
 
                         rd_kafka_queue_forward(rkqu, NULL);
+#ifndef __OS400__
                         tids[part.partition] = spawn_thread(rkqu,
                                                             part.partition);
+#else
+                        tids_started[part.partition] = !spawn_thread(rkqu,
+                                                            part.partition, &(tids[part.partition]));
+#endif
                 }
 
                 rebalanced = 1;
@@ -259,8 +297,13 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
 
         TIMING_START(&t_consume, "CONSUME.WAIT");
         for (i = 0; i < MAX_THRD_CNT; ++i) {
+#ifndef __OS400__
                 int res;
                 if (tids[i] != 0)
+#else
+                void *res;
+                if (tids_started[i])
+#endif
                         thrd_join(tids[i], &res);
         }
         TIMING_STOP(&t_consume);

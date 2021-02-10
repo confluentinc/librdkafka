@@ -31,6 +31,11 @@
  * Issue #20
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
+
 #include "test.h"
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program

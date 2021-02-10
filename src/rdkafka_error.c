@@ -31,6 +31,9 @@
  * @name Public API complex error type implementation.
  *
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rdkafka_int.h"
 #include "rdkafka_error.h"
@@ -53,9 +56,17 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
         ssize_t strsz = 0;
 
         if (fmt && *fmt) {
+#ifdef __OS400__
+                char tmps[10000]; /* should be enough? */
+#endif
                 va_list ap2;
                 va_copy(ap2, ap);
+#ifndef __OS400__
                 strsz = rd_vsnprintf(NULL, 0, fmt, ap2) + 1;
+#else
+                /* qadrt has no vsnprintf equivalent, so we have to make a trick */
+                strsz = rd_vsnprintf(tmps, sizeof(tmps), fmt, ap2) + 1;
+#endif
                 va_end(ap2);
         }
 

@@ -25,7 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdkafka_int.h"
@@ -212,12 +214,22 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
          * any pointer fields needs to be copied explicitly to update
          * the pointer address. */
         topic_len = strlen(mtopic->topic) + 1;
+#ifndef __OS400__
         rd_tmpabuf_new(&tbuf,
                        RD_ROUNDUP(sizeof(*rkmce), 8) +
                        RD_ROUNDUP(topic_len, 8) +
                        (mtopic->partition_cnt *
                         RD_ROUNDUP(sizeof(*mtopic->partitions), 8)),
                        1/*assert on fail*/);
+#else
+        /* 16-bytes pointer alignment */
+        rd_tmpabuf_new(&tbuf,
+                       RD_ROUNDUP(sizeof(*rkmce), 16) +
+                       RD_ROUNDUP(topic_len, 16) +
+                       (mtopic->partition_cnt *
+                        RD_ROUNDUP(sizeof(*mtopic->partitions), 16)),
+                       1/*assert on fail*/);
+#endif
 
         rkmce = rd_tmpabuf_alloc(&tbuf, sizeof(*rkmce));
 

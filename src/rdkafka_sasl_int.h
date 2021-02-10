@@ -48,8 +48,12 @@ struct rd_kafka_sasl_provider {
         int (*recv) (struct rd_kafka_transport_s *s,
                      const void *buf, size_t size,
                      char *errstr, size_t errstr_size);
+#ifndef __OS400__
         void (*close) (struct rd_kafka_transport_s *);
-
+#else
+        /* 'close' is reserved by qadrt */
+        void (*close_fn) (struct rd_kafka_transport_s *);
+#endif
         void (*broker_init) (rd_kafka_broker_t *rkb);
         void (*broker_term) (rd_kafka_broker_t *rkb);
 

@@ -25,8 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdaddr.h"
@@ -86,7 +87,18 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
                         break;
                 }
 
-		
+#ifdef __OS400__
+                /* getnameinfo has no Ascii eqivalent in Qadrt               */
+                /* we have to convert returned name and port string to ascii */
+                {
+                   int namelength = strlen(ret[reti]+of);
+  		   QadrtConvertE2A(ret[reti]+of, ret[reti]+of, namelength, namelength);
+                   if(flags & RD_SOCKADDR2STR_F_PORT) {
+                      namelength = strlen(portstr);
+    		      QadrtConvertE2A(portstr, portstr, namelength, namelength);
+                   }
+                }
+#endif
 		if (flags & RD_SOCKADDR2STR_F_PORT) {
 			size_t len = strlen(ret[reti]);
 			rd_snprintf(ret[reti]+len, sizeof(ret[reti])-len,
@@ -175,16 +187,34 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 	int r;
 	int cnt = 0;
 	rd_sockaddr_list_t *rsal;
+#ifdef __OS400__       
+        char *node_e, *defsvc_e; /* to convert to ebcdic */
+        int cvtlength;
+#endif
 
+#ifndef __OS400__
 	if ((*errstr = rd_addrinfo_prepare(nodesvc, &node, &svc))) {
+#else
+        *errstr=rd_addrinfo_prepare(nodesvc, &node, &svc);
+	if (*errstr) {
+                *errstr=strdup(*errstr);
+#endif
 		errno = EINVAL;
 		return NULL;
 	}
 
 	if (*svc)
 		defsvc = svc;
-		
+
+#ifndef __OS400__
 	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
+#else
+        /* getaddrinfo has no Ascii eqivalent in Qadrt               */
+        /* we have to convert name and service string to ascii       */
+        node_e=strdup(node);      cvtlength = strlen(node_e);   QadrtConvertA2E(node_e, node_e, cvtlength, cvtlength);
+        defsvc_e=strdup(defsvc);  cvtlength = strlen(defsvc_e); QadrtConvertA2E(defsvc_e, defsvc_e, cvtlength, cvtlength);
+	if ((r = getaddrinfo(node_e, defsvc_e, &hints, &ais))) {
+#endif
 #ifdef EAI_SYSTEM
 		if (r == EAI_SYSTEM)
 #else
@@ -196,11 +226,28 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 			*errstr = gai_strerrorA(r);
 #else
 			*errstr = gai_strerror(r);
+#ifdef __OS400__
+                        {
+                           /* gai_strerror returns error text in ebcdic encoding */
+                           /* we have to convert it to ascii                     */
+                           /* and not forget to free allocated copy when used    */
+                           char *errstr_a = strdup(*errstr);
+                           int errl = strlen(errstr_a);
+                           QadrtConvertE2A(errstr_a, errstr_a, errl, errl);
+                           *errstr = errstr_a;
+                        }
+#endif
 #endif
 			errno = EFAULT;
 		}
+#ifdef __OS400__
+                free(node_e); free(defsvc_e); /* cleanup strdup copies */
+#endif
 		return NULL;
 	}
+#ifdef __OS400__
+        free(node_e); free(defsvc_e); /* cleanup strdup copies */
+#endif
 	
 	/* Count number of addresses */
 	for (ai = ais ; ai != NULL ; ai = ai->ai_next)

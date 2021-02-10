@@ -30,6 +30,10 @@
  * Produce messages, then consume them.
  * Consume both through the standard interface and through the queue interface.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 
 #include "test.h"

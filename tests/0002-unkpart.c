@@ -30,6 +30,10 @@
  * Tests that producing to unknown partitions fails.
  * Issue #39
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 

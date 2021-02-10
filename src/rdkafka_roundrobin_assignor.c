@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rdkafka_int.h"
 #include "rdkafka_assignor.h"
 

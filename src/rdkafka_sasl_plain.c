@@ -25,7 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 /**
  * Builtin SASL PLAIN support when Cyrus SASL is not available
@@ -95,11 +97,21 @@ int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
 
         if (rd_kafka_sasl_send(rktrans, buf, of,
                                errstr, errstr_size))
+#ifndef __OS400__
                 return -1;
+#else
+        {
+                rd_free_alloca(buf);
+                return -1;
+        }
+#endif
 
         /* PLAIN is appearantly done here, but we still need to make sure
          * the PLAIN frame is sent and we get a response back (empty) */
         rktrans->rktrans_sasl.complete = 1;
+#ifdef __OS400__
+        rd_free_alloca(buf);
+#endif
         return 0;
 }
 

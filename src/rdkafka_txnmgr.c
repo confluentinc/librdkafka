@@ -787,9 +787,10 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
          * on the waitresp list.
          */
         mtx_lock(&rk->rk_eos.txn_pending_lock);
-        TAILQ_CONCAT(&rk->rk_eos.txn_pending_rktps,
-                     &rk->rk_eos.txn_waitresp_rktps,
-                     rktp_txnlink);
+        TAILQ_CONCAT_SORTED(&rk->rk_eos.txn_pending_rktps,
+                            &rk->rk_eos.txn_waitresp_rktps,
+                            rd_kafka_toppar_t *, rktp_txnlink,
+                            rd_kafka_toppar_topic_cmp);
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
         err = rd_kafka_txn_normalize_err(err);
@@ -801,7 +802,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                                              rd_kafka_err2str(err));
 
         } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
-                /* Treat all other errors as abortable errors */
+                /* Treat all other permanent errors as abortable errors */
                 rd_kafka_txn_set_abortable_error(
                         rk, err,
                         "Failed to add partition(s) to transaction "
@@ -810,8 +811,12 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
                         rd_kafka_err2str(err),
                         (int)(request->rkbuf_ts_sent/1000));
 
-        } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                rd_kafka_txn_schedule_register_partitions(rk, retry_backoff_ms);
+        } else {
+                /* Schedule registration of any new or remaining partitions */
+                rd_kafka_txn_schedule_register_partitions(
+                        rk,
+                        (actions & RD_KAFKA_ERR_ACTION_RETRY) ?
+                        retry_backoff_ms : 1/*immediate*/);
 
         }
 }
@@ -820,46 +825,68 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn (rd_kafka_t *rk,
 /**
  * @brief Send AddPartitionsToTxnRequest to the transaction coordinator.
  *
- * @returns an error code if the transaction coordinator is not known
- *          or not available.
- *
  * @locality rdkafka main thread
  * @locks none
  */
-static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
+static void rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
         char errstr[512];
         rd_kafka_resp_err_t err;
         rd_kafka_error_t *error;
         rd_kafka_pid_t pid;
 
-        mtx_lock(&rk->rk_eos.txn_pending_lock);
-        if (TAILQ_EMPTY(&rk->rk_eos.txn_pending_rktps)) {
-                mtx_unlock(&rk->rk_eos.txn_pending_lock);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
-
+        /* Require operational state */
+        rd_kafka_rdlock(rk);
         error = rd_kafka_txn_require_state(rk,
                                            RD_KAFKA_TXN_STATE_IN_TRANSACTION,
                                            RD_KAFKA_TXN_STATE_BEGIN_COMMIT);
-        if (error) {
-                err = rd_kafka_error_to_legacy(error, errstr, sizeof(errstr));
-                goto err;
+
+        if (unlikely(error != NULL)) {
+                rd_kafka_rdunlock(rk);
+                rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                             "Not registering partitions: %s",
+                             rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+                return;
         }
 
+        /* Get pid, checked later */
         pid = rd_kafka_idemp_get_pid0(rk, rd_false/*dont-lock*/);
-        if (!rd_kafka_pid_valid(pid)) {
-                rd_dassert(!*"BUG: No PID despite proper transaction state");
-                err = RD_KAFKA_RESP_ERR__STATE;
-                rd_snprintf(errstr, sizeof(errstr),
-                            "No PID available (idempotence state %s)",
-                            rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
-                goto err;
+
+        rd_kafka_rdunlock(rk);
+
+        /* Transaction coordinator needs to be up */
+        if (!rd_kafka_broker_is_up(rk->rk_eos.txn_coord)) {
+                rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                             "Not registering partitions: "
+                             "coordinator is not available");
+                return;
         }
 
-        if (!rd_kafka_broker_is_up(rk->rk_eos.txn_coord)) {
-                err = RD_KAFKA_RESP_ERR__TRANSPORT;
-                rd_snprintf(errstr, sizeof(errstr), "Broker is not up");
-                goto err;
+        mtx_lock(&rk->rk_eos.txn_pending_lock);
+        if (TAILQ_EMPTY(&rk->rk_eos.txn_pending_rktps)) {
+                /* No pending partitions to register */
+                mtx_unlock(&rk->rk_eos.txn_pending_lock);
+                return;
+        }
+
+        if (!TAILQ_EMPTY(&rk->rk_eos.txn_waitresp_rktps)) {
+                /* Only allow one outstanding AddPartitionsToTxnRequest */
+                mtx_unlock(&rk->rk_eos.txn_pending_lock);
+                rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                             "Not registering partitions: waiting for "
+                             "previous AddPartitionsToTxn request to complete");
+                return;
+        }
+
+        /* Require valid pid */
+        if (unlikely(!rd_kafka_pid_valid(pid))) {
+                mtx_unlock(&rk->rk_eos.txn_pending_lock);
+                rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                             "Not registering partitions: "
+                             "No PID available (idempotence state %s)",
+                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
+                rd_dassert(!*"BUG: No PID despite proper transaction state");
+                return;
         }
 
 
@@ -872,9 +899,15 @@ static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
                 errstr, sizeof(errstr),
                 RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                 rd_kafka_txn_handle_AddPartitionsToTxn, NULL);
-        if (err)
-                goto err;
+        if (err) {
+                mtx_unlock(&rk->rk_eos.txn_pending_lock);
+                rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                             "Not registering partitions: %s", errstr);
+                return;
+        }
 
+        /* Move all pending partitions to wait-response list.
+         * No need to keep waitresp sorted. */
         TAILQ_CONCAT(&rk->rk_eos.txn_waitresp_rktps,
                      &rk->rk_eos.txn_pending_rktps,
                      rktp_txnlink);
@@ -884,23 +917,13 @@ static rd_kafka_resp_err_t rd_kafka_txn_register_partitions (rd_kafka_t *rk) {
         rk->rk_eos.txn_req_cnt++;
 
         rd_rkb_dbg(rk->rk_eos.txn_coord, EOS, "ADDPARTS",
-                   "Adding partitions to transaction");
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-
- err:
-        mtx_unlock(&rk->rk_eos.txn_pending_lock);
-
-        rd_kafka_dbg(rk, EOS, "ADDPARTS",
-                     "Unable to register partitions with transaction: "
-                     "%s", errstr);
-        return err;
+                   "Registering partitions with transaction");
 }
+
 
 static void rd_kafka_txn_register_partitions_tmr_cb (rd_kafka_timers_t *rkts,
                                                      void *arg) {
         rd_kafka_t *rk = arg;
-
         rd_kafka_txn_register_partitions(rk);
 }
 
@@ -2815,8 +2838,9 @@ rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason) {
                                         errstr, sizeof(errstr));
         if (!rkb) {
                 rd_kafka_dbg(rk, EOS, "TXNCOORD",
-                             "Unable to query for transaction coordinator: %s",
-                             errstr);
+                             "Unable to query for transaction coordinator: "
+                             "%s: %s",
+                             reason, errstr);
 
                 if (rd_kafka_idemp_check_error(rk, err, errstr))
                         return rd_true;
@@ -2825,6 +2849,9 @@ rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason) {
 
                 return rd_false;
         }
+
+        rd_kafka_dbg(rk, EOS, "TXNCOORD",
+                     "Querying for transaction coordinator: %s", reason);
 
         /* Send FindCoordinator request */
         err = rd_kafka_FindCoordinatorRequest(

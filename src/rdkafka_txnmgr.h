@@ -126,10 +126,18 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
         rd_kafka_toppar_keep(rktp);
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
+        rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                     "Marked %.*s [%"PRId32"] as part of transaction: "
+                     "%sscheduling registration",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition,
+                     schedule ? "" : "not ");
+
+
         /* Schedule registration of partitions by the rdkafka main thread */
         if (unlikely(schedule))
                 rd_kafka_txn_schedule_register_partitions(
-                        rk, rd_true/*immediate*/);
+                        rk, 1/*immediate*/);
 }
 
 

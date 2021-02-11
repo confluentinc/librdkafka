@@ -4,10 +4,15 @@ librdkafka - port to IBM i OS
 This document contains instructions for building, testing and using the **librdkafka** on the IBM i platform.
 
 # **librdkafka** on IBM i
-This project contains the source code and compiled binaries of the librdkafka library on the IBM i platform. 
-The supplied library RDKAFKA is *SRVPGM object that are compiled on the V7R2M0 version of IBM i, storage model=*SNGLVL, data model=*P128.
+This project contains the source code and compiled binaries of the **librdkafka** library on the IBM i platform.
+
+The supplied library RDKAFKA is a *SRVPGM object compiled on IBM i version V7R2M0, with storage model = *SNGLVL, data model = *P128.
+
 The service program uses ASCII Runtime for IBM i (QADRT). Thus, all text parameters of the service program functions are accepted and returned in ASCII coding. Programs that use this *SRVPGM, must convert values from/to EBCDIC themselves. For this purpose it is convenient to use the standard QADRT functions like QadrtConvertA2E and QadrtConvertE2A. 
 
+**Important!** The high performance of the librdkafka is achieved through the active use of the multi-threaded architecture. Library functions are available only in jobs with the ALWMLTTHD=*YES option enabled 
+
+# Building **librdkafka** on IBM i
 
 ## Prerequisites
 Required runtime object is inclded into OS400 - service program QSYS/QADRTTS. To be able to compile librdkafka on IBM i server, 
@@ -25,10 +30,12 @@ TODO
 # Compiled binaries
 TODO
 
-# How to run standard librdkafka tests
+# Testing **librdkafka** on IBM i
 You will need access to the kafka cluster to run the tests. You can use an external cluster for this or start a cluster on your server. 
 TODO
 
 ## How to run a test kafka cluster on your IBM i server 
 TODO
 
+## How to run librdkafka tests
+TODO

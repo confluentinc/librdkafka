@@ -239,6 +239,7 @@ void rd_kafka_coord_req (rd_kafka_t *rk,
         creq->creq_resp_cb = resp_cb;
         creq->creq_reply_opaque = reply_opaque;
         creq->creq_refcnt = 1;
+        creq->creq_done = rd_false;
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
 
@@ -249,16 +250,31 @@ void rd_kafka_coord_req (rd_kafka_t *rk,
 /**
  * @brief Decrease refcount of creq and free it if no more references.
  *
+ * @param done Mark creq as done, having performed its duties. There may still
+ *             be lingering references.
+ *
  * @returns true if creq was destroyed, else false.
  */
 static rd_bool_t
-rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
+rd_kafka_coord_req_destroy (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
+                            rd_bool_t done) {
+
         rd_assert(creq->creq_refcnt > 0);
+
+        if (done) {
+                /* Request has been performed, remove from rk_coord_reqs
+                 * list so creq won't be triggered again by state broadcasts,
+                 * etc. */
+                rd_dassert(!creq->creq_done);
+                TAILQ_REMOVE(&rk->rk_coord_reqs, creq, creq_link);
+                creq->creq_done = rd_true;
+        }
+
         if (--creq->creq_refcnt > 0)
                 return rd_false;
 
+        rd_dassert(creq->creq_done);
         rd_kafka_replyq_destroy(&creq->creq_replyq);
-        TAILQ_REMOVE(&rk->rk_coord_reqs, creq, creq_link);
         rd_free(creq->creq_coordkey);
         rd_free(creq);
 
@@ -287,7 +303,7 @@ static void rd_kafka_coord_req_fail (rd_kafka_t *rk, rd_kafka_coord_req_t *creq,
 
         rd_kafka_replyq_enq(&creq->creq_replyq, reply, 0);
 
-        rd_kafka_coord_req_destroy(rk, creq);
+        rd_kafka_coord_req_destroy(rk, creq, rd_true/*done*/);
 }
 
 
@@ -308,10 +324,10 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         rd_kafka_broker_t *coord;
         rd_kafka_metadata_broker_t mdb = RD_ZERO_INIT;
 
-        /* Drop refcount from FindCoord.. in req_fsm().
-         * If this is the last refcount it means whatever code triggered the
-         * creq is no longer interested, so we ignore the response. */
-        if (creq->creq_refcnt == 1)
+        /* If creq has finished (possibly because of an earlier FindCoordinator
+         * response or a broker state broadcast we simply ignore the
+         * response. */
+        if (creq->creq_done)
                 err = RD_KAFKA_RESP_ERR__DESTROY;
 
         if (err)
@@ -362,7 +378,7 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
         rd_kafka_coord_req_fsm(rk, creq);
 
         /* Drop refcount from req_fsm() */
-        rd_kafka_coord_req_destroy(rk, creq);
+        rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
 
         return;
 
@@ -394,17 +410,17 @@ rd_kafka_coord_req_handle_FindCoordinator (rd_kafka_t *rk,
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
                 rd_kafka_coord_req_fail(rk, creq, err);
+                return;
 
         } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 rd_kafka_buf_retry(rkb, request);
                 return; /* Keep refcnt from req_fsm() and retry */
-
-        } else {
-                /* Rely on state broadcast to trigger retry */
         }
 
+        /* Rely on state broadcast to trigger retry */
+
         /* Drop refcount from req_fsm() */
-        rd_kafka_coord_req_destroy(rk, creq);
+        rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
 }
 
 
@@ -424,6 +440,12 @@ static void
 rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
         rd_kafka_broker_t *rkb;
         rd_kafka_resp_err_t err;
+
+        if (creq->creq_done)
+                /* crqeq has already performed its actions, this is a
+                 * lingering reference, e.g., a late FindCoordinator response.
+                 * Just ignore. */
+                return;
 
         if (unlikely(rd_kafka_terminating(rk))) {
                 rd_kafka_coord_req_fail(rk, creq, RD_KAFKA_RESP_ERR__DESTROY);
@@ -451,7 +473,8 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                 rd_kafka_replyq_destroy(&replyq);
                                 rd_kafka_coord_req_fail(rk, creq, err);
                         } else {
-                                rd_kafka_coord_req_destroy(rk, creq);
+                                rd_kafka_coord_req_destroy(rk, creq,
+                                                           rd_true/*done*/);
                         }
 
                 } else {
@@ -489,7 +512,8 @@ rd_kafka_coord_req_fsm (rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
 
         if (err) {
                 rd_kafka_coord_req_fail(rk, creq, err);
-                rd_kafka_coord_req_destroy(rk, creq); /* from keep() above */
+                /* from keep() above */
+                rd_kafka_coord_req_destroy(rk, creq, rd_false/*!done*/);
         }
 }
 

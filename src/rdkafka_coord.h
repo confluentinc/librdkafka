@@ -107,6 +107,8 @@ typedef struct rd_kafka_coord_req_s {
                                               *   destroying the creq even
                                               *   with outstanding
                                               *   FindCoordinator requests. */
+        rd_bool_t           creq_done;      /**< True if request was sent */
+
 } rd_kafka_coord_req_t;
 
 

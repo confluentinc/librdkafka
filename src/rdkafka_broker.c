@@ -1412,7 +1412,8 @@ static int rd_kafka_broker_weight_usable (rd_kafka_broker_t *rkb) {
         if (!rd_kafka_broker_state_is_up(rkb->rkb_state))
                 return 0;
 
-        weight += 2000 * (rkb->rkb_nodeid != -1); /* is not a bootstrap */
+        weight += 2000 * (rkb->rkb_nodeid != -1 &&
+                          !RD_KAFKA_BROKER_IS_LOGICAL(rkb));
         weight += 10 * !RD_KAFKA_BROKER_IS_LOGICAL(rkb);
 
         if (likely(!rd_atomic32_get(&rkb->rkb_blocking_request_cnt))) {
@@ -1742,6 +1743,17 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		rd_rkb_dbg(rkb, BROKER, "RESPONSE",
 			   "Response for unknown CorrId %"PRId32" (timed out?)",
 			   rkbuf->rkbuf_reshdr.CorrId);
+                rd_kafka_interceptors_on_response_received(
+                        rkb->rkb_rk,
+                        -1,
+                        rd_kafka_broker_name(rkb),
+                        rkb->rkb_nodeid,
+                        -1,
+                        -1,
+                        rkbuf->rkbuf_reshdr.CorrId,
+                        rkbuf->rkbuf_totlen,
+                        -1,
+                        RD_KAFKA_RESP_ERR__NOENT);
                 rd_kafka_buf_destroy(rkbuf);
                 return -1;
 	}
@@ -2869,7 +2881,7 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
         rd_kafka_topic_t *rkt;
         int cnt = 0;
 
-        if (rkb->rkb_nodeid == -1)
+        if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                 return;
 
         rd_kafka_rdlock(rk);
@@ -2985,6 +2997,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 }
 
                 if (rko->rko_u.node.nodeid != -1 &&
+                    !RD_KAFKA_BROKER_IS_LOGICAL(rkb) &&
                     rko->rko_u.node.nodeid != rkb->rkb_nodeid) {
                         int32_t old_nodeid = rkb->rkb_nodeid;
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
@@ -5278,7 +5291,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 		rd_kafka_wrlock(rkb->rkb_rk);
 		TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-                if (rkb->rkb_nodeid != -1)
+                if (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                         rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
 		(void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 		rd_kafka_wrunlock(rkb->rkb_rk);
@@ -5554,7 +5567,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		TAILQ_INSERT_HEAD(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 
-                if (rkb->rkb_nodeid != -1) {
+                if (rkb->rkb_nodeid != -1 && !RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
                         rd_list_sort(&rkb->rkb_rk->rk_broker_by_id,
                                      rd_kafka_broker_cmp_by_id);
@@ -5676,6 +5689,14 @@ void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
                 rkb->rkb_nodename_epoch++;
                 changed = rd_true;
         }
+
+        if (rkb->rkb_nodeid != nodeid) {
+                rd_rkb_dbg(rkb, BROKER, "NODEID",
+                           "Broker nodeid changed from %"PRId32" to %"PRId32,
+                           rkb->rkb_nodeid, nodeid);
+                rkb->rkb_nodeid = nodeid;
+        }
+
         rd_kafka_broker_unlock(rkb);
 
         /* Update the log name to include (or exclude) the nodeid.

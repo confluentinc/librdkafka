@@ -1850,6 +1850,159 @@ static void do_test_txn_coord_req_multi_find (void) {
 }
 
 
+/**
+ * @brief ESC-4410: adding producer partitions gradually will trigger multiple
+ *        AddPartitionsToTxn requests. Due to a bug the third partition to be
+ *        registered would hang in PEND_TXN state.
+ *
+ * Trigger this behaviour by having two outstanding AddPartitionsToTxn requests
+ * at the same time, followed by a need for a third:
+ *
+ * 1. Set coordinator broker rtt high (to give us time to produce).
+ * 2. Produce to partition 0, will trigger first AddPartitionsToTxn.
+ * 3. Produce to partition 1, will trigger second AddPartitionsToTxn.
+ * 4. Wait for second AddPartitionsToTxn response.
+ * 5. Produce to partition 2, should trigger AddPartitionsToTxn, but bug
+ *    causes it to be stale in pending state.
+ */
+
+static rd_atomic32_t multi_addparts_resp_cnt;
+static rd_kafka_resp_err_t
+multi_addparts_response_received_cb (rd_kafka_t *rk,
+                                     int sockfd,
+                                     const char *brokername,
+                                     int32_t brokerid,
+                                     int16_t ApiKey,
+                                     int16_t ApiVersion,
+                                     int32_t CorrId,
+                                     size_t  size,
+                                     int64_t rtt,
+                                     rd_kafka_resp_err_t err,
+                                     void *ic_opaque) {
+
+        if (ApiKey == RD_KAFKAP_AddPartitionsToTxn) {
+                TEST_SAY("on_response_received_cb: %s: %s: brokerid %"PRId32
+                         ", ApiKey %hd, CorrId %d, rtt %.2fms, count %"PRId32
+                         ": %s\n",
+                         rd_kafka_name(rk), brokername, brokerid,
+                         ApiKey, CorrId,
+                         rtt != -1 ? (float)rtt / 1000.0 : 0.0,
+                         rd_atomic32_get(&multi_addparts_resp_cnt),
+                         rd_kafka_err2name(err));
+
+                rd_atomic32_add(&multi_addparts_resp_cnt, 1);
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+static void do_test_txn_addparts_req_multi (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid = "txnid", *topic = "mytopic";
+        int32_t txn_coord = 2;
+
+        SUB_TEST();
+
+        rd_atomic32_init(&multi_addparts_resp_cnt, 0);
+
+        on_response_received_cb = multi_addparts_response_received_cb;
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 "linger.ms", "0",
+                                 "message.timeout.ms", "9000",
+                                 /* Set up on_response_received interceptor */
+                                 "on_response_received", "", NULL);
+
+        /* Let broker 1 be txn coordinator. */
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
+                                      txn_coord);
+
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+
+        /* Set partition leaders to non-txn-coord broker so they wont
+         * be affected by rtt delay */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 1);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 2, 1);
+
+
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        /*
+         * Run one transaction first to let the client familiarize with
+         * the topic, this avoids metadata lookups, etc, when the real
+         * test is run.
+         */
+        TEST_SAY("Running seed transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC(topic),
+                                          RD_KAFKA_V_VALUE("seed", 4),
+                                          RD_KAFKA_V_END));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
+
+
+        /*
+         * Now perform test transaction with rtt delays
+         */
+        TEST_SAY("Running test transaction\n");
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        /* Reset counter */
+        rd_atomic32_set(&multi_addparts_resp_cnt, 0);
+
+        /* Add latency to txn coordinator so we can pace our produce() calls */
+        rd_kafka_mock_broker_set_rtt(mcluster, txn_coord, 1000);
+
+        /* Produce to partition 0 */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC(topic),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        rd_usleep(500*1000, NULL);
+
+        /* Produce to partition 1 */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC(topic),
+                                          RD_KAFKA_V_PARTITION(1),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        TEST_SAY("Waiting for two AddPartitionsToTxnResponse\n");
+        while (rd_atomic32_get(&multi_addparts_resp_cnt) < 2)
+                rd_usleep(10*1000, NULL);
+
+        TEST_SAY("%"PRId32" AddPartitionsToTxnResponses seen\n",
+                 rd_atomic32_get(&multi_addparts_resp_cnt));
+
+        /* Produce to partition 2, this message will hang in
+         * queue if the bug is not fixed. */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC(topic),
+                                          RD_KAFKA_V_PARTITION(2),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        /* Allow some extra time for things to settle before committing
+         * transaction. */
+        rd_usleep(1000*1000, NULL);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 10*1000));
+
+        /* All done */
+        rd_kafka_destroy(rk);
+
+        on_response_received_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -1884,6 +2037,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
         do_test_txn_coord_req_destroy();
 
         do_test_txn_coord_req_multi_find();
+
+        do_test_txn_addparts_req_multi();
 
         do_test_txns_no_timeout_crash();
 

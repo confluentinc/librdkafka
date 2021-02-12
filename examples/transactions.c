@@ -267,7 +267,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                 else
                         rd_kafka_topic_partition_list_destroy(offsets);
 
-                error = rd_kafka_abort_transaction(consumer, -1);
+                error = rd_kafka_abort_transaction(producer, -1);
                 if (error)
                         fatal_error("Failed to abort transaction", error);
 
@@ -295,7 +295,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                         rd_kafka_error_destroy(error);
 
                         /* Abort transaction */
-                        error = rd_kafka_abort_transaction(consumer, -1);
+                        error = rd_kafka_abort_transaction(producer, -1);
                         if (error)
                                 fatal_error("Failed to abort transaction",
                                             error);
@@ -318,7 +318,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                         rd_kafka_error_destroy(error);
 
                         /* Abort transaction */
-                        error = rd_kafka_abort_transaction(consumer, -1);
+                        error = rd_kafka_abort_transaction(producer, -1);
                         if (error)
                                 fatal_error("Failed to abort transaction",
                                             error);

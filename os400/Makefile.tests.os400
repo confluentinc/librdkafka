@@ -3,6 +3,8 @@
          tests
 
 DBGVIEW=*NONE
+NDEBUG=-DNDEBUG
+#NDEBUG=
 
 iccflags = -v                             \
             -qDTAMDL=*P128                 \
@@ -16,6 +18,7 @@ iccflags = -v                             \
             -I/QIBM/ProdData/qadrt/include \
             -qINCDIRFIRST                  \
             -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
 
 testlib=RDKAFKATST
 
@@ -389,7 +392,7 @@ $(testlib)/%.o : %.c            ./../os400/Makefile.tests.os400
             -I/QIBM/ProdData/qadrt/include \
             -qINCDIRFIRST                  \
             -D__cplusplus__strings__       \
-            -qOPTIMIZE=20                  \
+            $(NDEBUG)                      \
 
 tests: $(testlib)/test
 

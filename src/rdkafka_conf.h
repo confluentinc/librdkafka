@@ -157,9 +157,9 @@ typedef enum {
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
 #ifndef __OS400__
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*27)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*28)
 #else
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*54) /* was not enough in OS400 */
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*56) /* was not enough in OS400 */
 #endif
 /**
  * @struct rd_kafka_anyconf_t
@@ -303,6 +303,7 @@ struct rd_kafka_conf_s {
                 rd_list_t on_consume;         /* .. (copied) */
                 rd_list_t on_commit;          /* .. (copied) */
                 rd_list_t on_request_sent;    /* .. (copied) */
+                rd_list_t on_response_received;/* .. (copied) */
                 rd_list_t on_thread_start;    /* .. (copied) */
                 rd_list_t on_thread_exit;     /* .. (copied) */
 

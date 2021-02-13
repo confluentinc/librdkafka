@@ -149,8 +149,8 @@ static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
         if (thrd_create(&thr, &partition_consume, info) != thrd_success) {
 #else
         if (thrd_create(thr, &partition_consume, info) != thrd_success) {
-#endif
                 failed=1;
+#endif
                 TEST_FAIL("Failed to create consumer thread.");
         }
 

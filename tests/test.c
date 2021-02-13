@@ -105,13 +105,8 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME)                                                \
         extern int main_ ## NAME (int, char **)
-#ifndef __OS400__
 #define _TEST(NAME,FLAGS,...)						\
         { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS, __VA_ARGS__ }
-#else
-#define _TEST(NAME,...)						\
-        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = ##__VA_ARGS__ }
-#endif
 
 /**
  * Declare all tests here

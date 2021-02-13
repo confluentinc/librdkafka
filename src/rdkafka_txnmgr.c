@@ -275,7 +275,11 @@ void rd_kafka_txn_set_fatal_error (rd_kafka_t *rk, rd_dolock_t do_lock,
         va_list ap;
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#else
+        rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#endif
         va_end(ap);
 
         rd_kafka_log(rk, LOG_ALERT, "TXNERR",
@@ -329,7 +333,11 @@ void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
         }
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#else
+        rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#endif
         va_end(ap);
 
         rd_kafka_wrlock(rk);
@@ -2902,7 +2910,11 @@ rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         va_list ap;
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(buf, sizeof(buf), fmt, ap);
+#else
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+#endif
         va_end(ap);
 
 

@@ -9,6 +9,8 @@ prebuild:
 	-system "CRTLIB RDKAFKA"
 
 DBGVIEW=*NONE
+NDEBUG=-DNDEBUG
+#NDEBUG=
 
 librdkafka_objects = rdkafka.o                         \
                      rdkafka_broker.o                  \
@@ -91,6 +93,7 @@ librdkafka_objects = rdkafka.o                         \
             -I/QIBM/ProdData/qadrt/include \
             -qINCDIRFIRST                  \
             -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
 
 librdkafka: rdkafka
 

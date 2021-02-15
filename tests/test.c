@@ -5780,7 +5780,7 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
 
         TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
 
-        rd_kafka_DeleteRecords(rk, &del_records, 1, options, useq);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
 
         rd_kafka_DeleteRecords_destroy(del_records);
 

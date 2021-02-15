@@ -4,7 +4,7 @@
 # Test configuration
 #
 # For slow connections: multiply test timeouts by this much (float)
-#test.timeout.multiplier=3.5
+test.timeout.multiplier=3.5
 
 # Test topic names are constructed by:
 #  <prefix>_<suffix>, where default topic prefix is "rdkafkatest".

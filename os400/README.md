@@ -28,26 +28,58 @@ crtlib rdkafka
 crtlib rdkafkatst
 addlible rdkafka
 strqsh
-cd <path to librdkafka forler>
+cd <path to librdkafka folder>
 gmake -C src -f ../os400/Makefile.src.os400 
 gmake -C tests -f ../os400/Makefile.tests.os400 
 ```
 TODO
 
 ### Build steps using QShell script
+BRIEF
+```
+crtlib rdkafka
+crtlib rdkafkatst
+addlible rdkafka
+strsql
+cd <path to librdkafka folder>
+export KAFKALIB=RDKAFKA
+export KAFKATST=RDKAFKATST
+./os400/crtrdkafka.qsh
+```
 TODO
 
 # Compiled binaries
-TODO
+For those who are lazy - librdkafka_os400.zip contains a savf with compiled objects. For installation: 
+* Copy librdkafka_os400.zip to IFS
+* Extract librdkafka_os400.savf from zip:
+```
+strqsh
+cd <path where librdkafka_os400.zip stored>
+jar xMvf librdkafka_os400.zip
+```
+* Return to command line (press F12 in qshell)
+* Restore LIBRDKAFKA library:
+```
+CRTSAVF QTEMP/LIBRDKAFKA
+CPYFRMSTMF FROMSTMF('<path to librdkafka_os400.savf>') TOMBR('/QSYS.LIB/QTEMP.LIB/LIBRDKAFKA.FILE') MBROPT(*REPLACE)
+RSTLIB SAVLIB(LIBRDKAFKA) DEV(*SAVF) SAVF(QTEMP/LIBRDKAFKA)
+```
+* This will create LIBRDKAFKA containing two objects - RDKAFKA.SRVPGM and TEST.PGM
 
 # Testing **librdkafka** on IBM i
-You will need access to the kafka cluster to run the tests. You can use an external cluster for this or start a cluster on your server. 
-TODO
+You will need access to the kafka cluster to run the tests. You can use an external cluster for this or start a cluster on your IBM i server. 
 
 ## How to run a test kafka cluster on your IBM i server
 BRIEF
 * Download Apache Kafka tar, extract to IFS
-* Update server.config
+* Update server.config (set following values in addition to default):
+  * broker.id=0
+  * listeners=PLAINTEXT://:9092
+  * num.network.threads=3
+  * num.partitions=4              
+  * default.replication.factor=1  
+  * auto.create.topics.enable=true
+  * log.dirs=/tmp/kafka-logs
 * Start Zookeeper
 ```
 ADDENVVAR ENVVAR(JAVA_HOME) VALUE('/qopensys/QIBM/ProdData/JavaVM/jdk80/64bit')
@@ -80,4 +112,9 @@ or
 ```
 ./tests/rdkafkatst/test "0001 0002"
 ```
-TODO
+or (when librdkafka was compiled using qshell script or extracted from zipped binaries
+```
+liblist -a LIBRDKAFKA
+/QSYS.LIB/LIBRDKAFKA.LIB/TEST.PGM "0001 0002"
+```
+etc

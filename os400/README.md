@@ -21,6 +21,9 @@ it is necessary to install [ASCII Runtime for IBM i](https://www.ibm.com/support
 The preferred tool for building librdkafka on IBM i is gnu gmake, It was included in IBM Tools for Developers for IBM i (5799PTL).
 If you do not have this product installed, you can build the library using a QShell script that executes standard commands CRTCMOD, CRTSRVPGM, CRTPGM (see below)
 
+### Obtaining source codes
+To compile librdkafka on IBM i, you have to copy source files to the IFS folder. As an option, it is possible to copy zipped sources from https://github.com/AlexeiBaranov/librdkafka/archive/port-os400.zip to IFS folder and run `jar xMvf port-os400.zip`
+
 ### Build steps using GNU utilites
 BRIEF
 ```

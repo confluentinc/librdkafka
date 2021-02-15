@@ -2,6 +2,15 @@
 
 librdkafka v1.6.1 is a maintenance release.
 
+## Upgrade considerations
+
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer. This is a necessary step to maintain data integrity prior to
+   librdkafka supporting KIP-360. Applications should check any transactional
+   API errors for the is_fatal flag and decommission the transactional producer
+   if the flag is set.
+
+
 ## Fixes
 
 ### General fixes
@@ -12,6 +21,8 @@ librdkafka v1.6.1 is a maintenance release.
 
 ### Transactional Producer fixes
 
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer.
  * The transactional producer could crash if the transaction failed while
    `send_offsets_to_transaction()` was called.
  * Group coordinator requests for transactional

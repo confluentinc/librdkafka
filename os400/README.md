@@ -74,7 +74,7 @@ You will need access to the kafka cluster to run the tests. You can use an exter
 
 ## How to run a test kafka cluster on your IBM i server
 BRIEF
-* Download Apache Kafka tar, extract to IFS
+* Download Apache Kafka: https://www.apache.org/dyn/closer.cgi?path=/kafka/2.7.0/kafka_2.13-2.7.0.tgz, extract to IFS
 * Update server.config (set following values in addition to default):
   * broker.id=0
   * listeners=PLAINTEXT://:9092

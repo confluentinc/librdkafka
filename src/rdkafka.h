@@ -390,6 +390,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
         /** No operation performed */
         RD_KAFKA_RESP_ERR__NOOP = -141,
+        /** No offset to automatically reset to */
+        RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

@@ -43,4 +43,32 @@
 #define assert(expr) 
 #endif
 
+#define gai_strerror(n) gai_strerror_a(n)
+#include <netdb.h>
+/* Ascii version of gai_strerror.  gai_strerror is not included in QADRT */
+static char *gai_strerror_a(int n) {
+        static char msg[10][60];
+        static int  msgi=0;
+        switch(n) {
+        case 0: return "";
+        case EAI_AGAIN: return "The name could not be resolved at this time. Future attempts may succeed.";
+        case EAI_BADFLAGS: "The flags parameter had an invalid value.";
+        case EAI_FAIL: return "A non-recoverable error occurred when attempting to resolve the name.";
+        case EAI_FAMILY: return "The address family was not recognized or the address length was invalid for the specified family";
+        case EAI_MEMORY: return "There was a memory allocation failure when trying to allocate storage for the return value.";
+        case EAI_NONAME: return "The name does not resolve for the supplied parameters. Neither nodename nor servname were passed. At least one of these must be passed.";
+        case EAI_SERVICE: return "The service passed was not recognized for the specified socket type.";
+        case EAI_SOCKTYPE: return "The intended socket type was not recognized.";
+        case EAI_SYSTEM: return "A system error occurred; the error code can be found in errno";
+        case EAI_BADEXTFLAGS: return "The extended flags parameter had an invalid value.";
+        case EAI_OVERFLOW: return "There is not enough buffer space for the requested operation. The buffer pointed to by nodename or servname is not large enough.";
+        default: {
+                char *m=msg[(msgi++)%10];
+                sprintf(m, "Unknown error code at getaddrinfo/getnameinfo %d", n);
+                return m;
+                 }
+        }
+        return "";
+}
+
 #endif

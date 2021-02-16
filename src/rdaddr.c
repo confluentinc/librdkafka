@@ -192,13 +192,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
         int cvtlength;
 #endif
 
-#ifndef __OS400__
 	if ((*errstr = rd_addrinfo_prepare(nodesvc, &node, &svc))) {
-#else
-        *errstr=rd_addrinfo_prepare(nodesvc, &node, &svc);
-	if (*errstr) {
-                *errstr=strdup(*errstr);
-#endif
 		errno = EINVAL;
 		return NULL;
 	}
@@ -226,17 +220,6 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 			*errstr = gai_strerrorA(r);
 #else
 			*errstr = gai_strerror(r);
-#ifdef __OS400__
-                        {
-                           /* gai_strerror returns error text in ebcdic encoding */
-                           /* we have to convert it to ascii                     */
-                           /* and not forget to free allocated copy when used    */
-                           char *errstr_a = strdup(*errstr);
-                           int errl = strlen(errstr_a);
-                           QadrtConvertE2A(errstr_a, errstr_a, errl, errl);
-                           *errstr = errstr_a;
-                        }
-#endif
 #endif
 			errno = EFAULT;
 		}

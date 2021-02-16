@@ -966,9 +966,6 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
                                              RD_KAFKA_RESP_ERR__RESOLVE,
                                              "Failed to resolve '%s': %s",
                                              nodename, errstr);
-#ifdef __OS400__
-                        if(errstr) free((void *)errstr); /* free allocated copy of ebdcic errstr */
-#endif
 			return -1;
                 } else {
                         rkb->rkb_ts_rsal_last = rd_clock();

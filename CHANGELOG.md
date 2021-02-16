@@ -9,6 +9,9 @@ librdkafka v1.6.1 is a maintenance release.
    librdkafka supporting KIP-360. Applications should check any transactional
    API errors for the is_fatal flag and decommission the transactional producer
    if the flag is set.
+ * The consumer error raised by `auto.offset.reset=error` now has error-code
+   set to `ERR__AUTO_OFFSET_RESET` to allow an application to differentiate
+   between auto offset resets and other consumer errors.
 
 
 ## Fixes

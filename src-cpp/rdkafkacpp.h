@@ -294,6 +294,8 @@ enum ErrorCode {
         ERR__ASSIGNMENT_LOST = -142,
         /** No operation performed */
         ERR__NOOP = -141,
+        /** No offset to automatically reset to */
+        ERR__AUTO_OFFSET_RESET = -140,
 
         /** End internal error codes */
 	ERR__END = -100,

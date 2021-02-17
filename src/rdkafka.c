@@ -502,6 +502,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Group partition assignment lost"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__NOOP,
                   "Local: No operation performed"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET,
+                  "Local: No offset to automatically reset to"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -690,7 +692,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
         _ERR_DESC(RD_KAFKA_RESP_ERR_NO_REASSIGNMENT_IN_PROGRESS,
                   "Broker: No partition reassignment is in progress"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC,
-                  "Broker: Deleting offsets of a topic while the consumer group is subscribed to it"),
+                  "Broker: Deleting offsets of a topic while the consumer "
+                  "group is subscribed to it"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_RECORD,
                   "Broker: Broker failed to validate record"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,

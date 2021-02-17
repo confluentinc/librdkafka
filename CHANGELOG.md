@@ -2,6 +2,18 @@
 
 librdkafka v1.6.1 is a maintenance release.
 
+## Upgrade considerations
+
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer. This is a necessary step to maintain data integrity prior to
+   librdkafka supporting KIP-360. Applications should check any transactional
+   API errors for the is_fatal flag and decommission the transactional producer
+   if the flag is set.
+ * The consumer error raised by `auto.offset.reset=error` now has error-code
+   set to `ERR__AUTO_OFFSET_RESET` to allow an application to differentiate
+   between auto offset resets and other consumer errors.
+
+
 ## Fixes
 
 ### General fixes
@@ -12,6 +24,8 @@ librdkafka v1.6.1 is a maintenance release.
 
 ### Transactional Producer fixes
 
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer.
  * The transactional producer could crash if the transaction failed while
    `send_offsets_to_transaction()` was called.
  * Group coordinator requests for transactional

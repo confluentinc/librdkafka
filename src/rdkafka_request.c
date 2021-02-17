@@ -2785,7 +2785,12 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                 } else
 #endif
 
-                        if (!firstmsg->rkm_u.producer.retries &&
+                        /* Prior to supporting KIP-360 we treat these fatal
+                         * idempotent producer errors as fatal transactional
+                         * errors as well.
+                         * This is to maintain data integrity. */
+                        if (!rd_kafka_is_transactional(rk) &&
+                            !firstmsg->rkm_u.producer.retries &&
                            perr->next_err_seq == batch->first_seq) {
                         rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "UNKPID",
                                    "ProduceRequest for %.*s [%"PRId32"] "
@@ -2945,7 +2950,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER,
 
                 RD_KAFKA_ERR_ACTION_PERMANENT|
-                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID,
 
                 RD_KAFKA_ERR_ACTION_PERMANENT|

@@ -1547,8 +1547,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "or the desired offset is out of range: "
 	  "'smallest','earliest' - automatically reset the offset to the smallest offset, "
 	  "'largest','latest' - automatically reset the offset to the largest offset, "
-	  "'error' - trigger an error which is retrieved by consuming messages "
-	  "and checking 'message->err'.",
+          "'error' - trigger an error (ERR__AUTO_OFFSET_RESET) which is "
+          "retrieved by consuming messages and checking 'message->err'.",
 	  .vdef = RD_KAFKA_OFFSET_END,
 	  .s2i = {
 			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },

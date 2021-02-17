@@ -186,7 +186,6 @@ static rd_kafka_t *create_txn_producer (rd_kafka_mock_cluster_t **mclusterp,
 static void do_test_txn_recoverable_errors (void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
-        rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
         const char *groupid = "myGroupId";
@@ -194,7 +193,9 @@ static void do_test_txn_recoverable_errors (void) {
 
         SUB_TEST_QUICK();
 
-        rk = create_txn_producer(&mcluster, txnid, 3, NULL);
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 "batch.num.messages", "1",
+                                 NULL);
 
         /* Make sure transaction and group coordinators are different.
          * This verifies that AddOffsetsToTxnRequest isn't sent to the
@@ -223,23 +224,29 @@ static void do_test_txn_recoverable_errors (void) {
          */
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
+
+        /* Produce a message without error first */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
         /*
-         * Produce a message, let it first fail on a fatal idempotent error
-         * that is retryable by the transaction manager, then let it fail with
-         * a non-idempo/non-txn retryable error
+         * Produce a message, let it fail with a non-idempo/non-txn
+         * retryable error
          */
         rd_kafka_mock_push_request_errors(
                 mcluster,
                 RD_KAFKAP_Produce,
                 1,
-                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS);
 
-        err = rd_kafka_producev(rk,
-                                RD_KAFKA_V_TOPIC("mytopic"),
-                                RD_KAFKA_V_VALUE("hi", 2),
-                                RD_KAFKA_V_END);
-        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
 
         /* Make sure messages are produced */
         rd_kafka_flush(rk, -1);
@@ -294,6 +301,102 @@ static void do_test_txn_recoverable_errors (void) {
         /* All done */
 
         rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Test that fatal idempotence errors triggers abortable transaction
+ *        errors and that the producer can recover.
+ *
+ * @remark Until KIP-360 is supported the idempotent fatal errors are also
+ *         transactional fatal errors; thus this test-case is modified not to
+ *         recover but instead raise a fatal error. Change it back to recovery
+ *         tests when KIP-360 support is done.
+ */
+static void do_test_txn_fatal_idempo_errors (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
+        const char *txnid = "myTxnId";
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 "batch.num.messages", "1",
+                                 NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        allowed_error = RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        /*
+         * Start a transaction
+         */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+
+        /* Produce a message without error first */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        /* Produce a message, let it fail with a fatal idempo error. */
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_Produce,
+                1,
+                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID);
+
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        /* Commit the transaction, should fail */
+        error = rd_kafka_commit_transaction(rk, -1);
+        TEST_ASSERT(error != NULL, "Expected commit_transaction() to fail");
+
+        TEST_SAY("commit_transaction() failed (expectedly): %s\n",
+                 rd_kafka_error_string(error));
+
+        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                    "Expected fatal error (pre-KIP360)");
+        TEST_ASSERT(!rd_kafka_error_is_retriable(error),
+                    "Did not expect retriable error");
+        TEST_ASSERT(!rd_kafka_error_txn_requires_abort(error),
+                    "Did not expect txn_requires_abort");
+        rd_kafka_error_destroy(error);
+
+        goto prekip360_done;
+
+        /* Abort the transaction */
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+
+        /* Run a new transaction without errors to verify that the
+         * producer can recover. */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
+ prekip360_done:
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        allowed_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         SUB_TEST_PASS();
 }
@@ -1614,8 +1717,13 @@ static void do_test_txn_coord_req_destroy (void) {
                 rd_kafka_mock_push_request_errors(
                         mcluster,
                         RD_KAFKAP_Produce,
-                        1,
-                        RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER);
+                        4,
+                        RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+                        RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+                        RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+                        RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+                /* FIXME: When KIP-360 is supported, add this error:
+                 *        RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER */
 
                 err = rd_kafka_producev(rk,
                                         RD_KAFKA_V_TOPIC("mytopic"),
@@ -2010,6 +2118,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
         }
 
         do_test_txn_recoverable_errors();
+
+        do_test_txn_fatal_idempo_errors();
 
         do_test_txn_endtxn_errors();
 

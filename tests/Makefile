@@ -17,7 +17,7 @@ KAFKA_VERSION?=2.7.0
 COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 2.4.1 $(KAFKA_VERSION)
 
 # Non-default scenarios (FIXME: read from scenarios/*)
-SCENARIOS?=noautocreate
+SCENARIOS?=noautocreate ak23
 
 -include ../Makefile.config
 
@@ -159,6 +159,7 @@ compat:
 
 # Run non-default scenarios
 scenarios: .PHONY
+	@echo "### Running test scenarios: $(SCENARIOS)"
 	@(for _SCENARIO in $(SCENARIOS) ; do \
 		./broker_version_tests.py --scenario "$$_SCENARIO" $(KAFKA_VERSION) ; \
 	done)

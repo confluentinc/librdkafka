@@ -469,7 +469,8 @@ struct test tests[] = {
               TEST_BRKVER(2,3,0,0)),
 #endif
         _TEST(0103_transactions_local, TEST_F_LOCAL),
-        _TEST(0103_transactions, 0, TEST_BRKVER(0, 11, 0, 0)),
+        _TEST(0103_transactions, 0, TEST_BRKVER(0, 11, 0, 0),
+              .scenario = "default,ak23"),
         _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
@@ -1317,7 +1318,7 @@ static void run_tests (int argc, char **argv) {
 			skip_reason = tmp;
 		}
 
-                if (strcmp(scenario, test_scenario)) {
+                if (!strstr(scenario, test_scenario)) {
                         rd_snprintf(tmp, sizeof(tmp),
                                     "requires test scenario %s", scenario);
                         skip_silent = rd_true;
@@ -1934,11 +1935,14 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                 [RD_KAFKA_MSG_STATUS_PERSISTED] = "Persisted"
         };
 
-        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"]\n",
+        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"] "
+                  "at offset %"PRId64" latency %.2fms\n",
                   rd_kafka_err2str(rkmessage->err),
                   status_names[rd_kafka_message_status(rkmessage)],
                   rd_kafka_topic_name(rkmessage->rkt),
-                  rkmessage->partition);
+                  rkmessage->partition,
+                  rkmessage->offset,
+                  (float)rd_kafka_message_latency(rkmessage) / 1000.0);
 
         if (!test_curr->produce_sync) {
                 if (!test_curr->ignore_dr_err &&
@@ -1959,6 +1963,10 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                                     status_names[test_curr->exp_dr_status],
                                     status_names[status]);
                 }
+
+                /* Add message to msgver */
+                if (!rkmessage->err && test_curr->dr_mv)
+                        test_msgver_add_msg(rk, test_curr->dr_mv, rkmessage);
         }
 
 	if (remainsp) {
@@ -2908,6 +2916,10 @@ void test_msgver_init (test_msgver_t *mv, uint64_t testid) {
 	mv->log_max = (test_level + 1) * 100;
 }
 
+void test_msgver_ignore_eof (test_msgver_t *mv) {
+        mv->ignore_eof = rd_true;
+}
+
 #define TEST_MV_WARN(mv,...) do {			\
 		if ((mv)->log_cnt++ > (mv)->log_max)	\
 			(mv)->log_suppr_cnt++;		\
@@ -3065,8 +3077,15 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
         struct test_mv_m *m;
 
         if (testid != mv->testid) {
-                TEST_SAYL(3, "%s:%d: %s: mismatching testid %"PRIu64" != %"PRIu64"\n",
+                TEST_SAYL(3, "%s:%d: %s: mismatching testid %"PRIu64
+                          " != %"PRIu64"\n",
                           func, line, clientname, testid, mv->testid);
+                return 0; /* Ignore message */
+        }
+
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF && mv->ignore_eof) {
+                TEST_SAYL(3, "%s:%d: %s: ignoring EOF for %s [%"PRId32"]\n",
+                          func, line, clientname, topic, partition);
                 return 0; /* Ignore message */
         }
 
@@ -3109,7 +3128,8 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
  * @returns 1 if message is from the expected testid, else 0 (not added).
  */
 int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
-                          test_msgver_t *mv, rd_kafka_message_t *rkmessage,
+                          test_msgver_t *mv,
+                          const rd_kafka_message_t *rkmessage,
                           const char *override_topic) {
 	uint64_t in_testid;
 	int in_part;
@@ -5894,7 +5914,7 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
 
         TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
 
-        rd_kafka_DeleteRecords(rk, &del_records, 1, options, useq);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
 
         rd_kafka_DeleteRecords_destroy(del_records);
 
@@ -6449,4 +6469,6 @@ void test_sub_pass (void) {
         *test_curr->subtest = '\0';
         test_curr->is_fatal_cb = NULL;
         test_curr->ignore_dr_err = rd_false;
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->dr_mv = NULL;
 }

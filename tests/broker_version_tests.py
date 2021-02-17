@@ -157,15 +157,21 @@ if __name__ == '__main__':
     conf.update(args.conf)
     if args.rdkconf is not None:
         rdkconf.update(json.loads(args.rdkconf))
-    if args.tests is not None:
-        tests = args.tests.split(',')
-    else:
-        tests = None
 
     conf.update(read_scenario_conf(args.scenario))
 
+    if args.tests is not None:
+        tests = args.tests.split(',')
+    elif 'tests' in conf:
+        tests = conf.get('tests', '').split(',')
+    else:
+        tests = None
+
     # Test version + suite matrix
-    versions = args.versions
+    if 'versions' in conf:
+        versions = conf.get('versions')
+    else:
+        versions = args.versions
     suites = [{'name': 'standard'}]
 
     pass_cnt = 0

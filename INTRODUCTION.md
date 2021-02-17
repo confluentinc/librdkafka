@@ -1460,6 +1460,21 @@ The latest stored offset will be automatically committed every
           with offset 9, that offset will not be committed.
 
 
+##### Auto offset reset
+
+The consumer will by default try to acquire the last committed offsets for
+each topic+partition it is assigned using its configured `group.id`.
+If there is no committed offset available, or the consumer is unable to
+fetch the committed offsets, the policy of `auto.offset.reset` will kick in.
+This configuration property may be set to one the following values:
+
+ * `earliest` - start consuming the earliest message of the partition.
+ * `latest` - start consuming the next message to be produced to the partition.
+ * `error` - don't start consuming but isntead raise a consumer error
+              with error-code `RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET` for
+              the topic+partition. This allows the application to decide what
+              to do in case there is no committed start offset.
+
 
 ### Consumer groups
 

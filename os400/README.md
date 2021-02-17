@@ -16,7 +16,13 @@ The service program uses ASCII Runtime for IBM i (QADRT). Thus, all text paramet
 
 ## Prerequisites
 Required runtime object is included into OS400 - service program QSYS/QADRTTS. To be able to compile librdkafka on IBM i server, 
-it is necessary to install [ASCII Runtime for IBM i](https://www.ibm.com/support/pages/node/6258183) on your IBM i server.
+it is necessary to [install and configure ASCII Runtime Development Kit for IBM i](https://www.ibm.com/support/pages/node/6258183#devkit) on your IBM i server.
+
+As an additional step, you have to initialize the symbol translation tables: 
+
+```
+CALL QSYS/QADRTCINF PARM('update')
+```
 
 The preferred tool for building librdkafka on IBM i is gnu gmake, It was included in IBM Tools for Developers for IBM i (5799PTL).
 If you do not have this product installed, you can build the library using a QShell script that executes standard commands CRTCMOD, CRTSRVPGM, CRTPGM (see below)

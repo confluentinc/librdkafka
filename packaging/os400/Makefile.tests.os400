@@ -1,0 +1,405 @@
+.PHONY : all        \
+         prebuild   \
+         tests
+
+DBGVIEW=*NONE
+NDEBUG=-DNDEBUG
+#NDEBUG=
+
+iccflags = -v                             \
+            -qDTAMDL=*P128                 \
+            -qDBGVIEW=$(DBGVIEW)           \
+            -qENUM=*INT                    \
+            -qPACKSTRUCT=1                 \
+            -qOUTPUT=*PRINT                \
+            -qTGTCCSID=37                  \
+            -I.                            \
+            -I../src                       \
+            -I/QIBM/ProdData/qadrt/include \
+            -qINCDIRFIRST                  \
+            -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
+
+testlib=RDKAFKATST
+
+all: prebuild \
+     tests
+
+prebuild:
+	-system "CRTLIB $(testlib)"
+	-mkdir $(testlib)
+
+tests_objects = $(testlib)/test.o                                \
+                $(testlib)/rusage.o                              \
+                $(testlib)/test-0000-unittests.o                 \
+                $(testlib)/test-0001-multiobj.o                  \
+                $(testlib)/test-0002-unkpart.o                   \
+                $(testlib)/test-0003-msgmaxsize.o                \
+                $(testlib)/test-0004-conf.o                      \
+                $(testlib)/test-0005-order.o                     \
+                $(testlib)/test-0006-symbols.o                   \
+                $(testlib)/test-0007-autotopic.o                 \
+                $(testlib)/test-0008-reqacks.o                   \
+                $(testlib)/test-0009-mock_cluster.o              \
+                $(testlib)/test-0011-produce_batch.o             \
+                $(testlib)/test-0012-produce_consume.o           \
+                $(testlib)/test-0013-null-msgs.o                 \
+                $(testlib)/test-0014-reconsume-191.o             \
+                $(testlib)/test-0015-offset_seeks.o              \
+                $(testlib)/test-0016-client_swname.o             \
+                $(testlib)/test-0017-compression.o               \
+                $(testlib)/test-0018-cgrp_term.o                 \
+                $(testlib)/test-0019-list_groups.o               \
+                $(testlib)/test-0020-destroy_hang.o              \
+                $(testlib)/test-0021-rkt_destroy.o               \
+                $(testlib)/test-0022-consume_batch.o             \
+                $(testlib)/test-0025-timers.o                    \
+                $(testlib)/test-0026-consume_pause.o             \
+                $(testlib)/test-0028-long_topicnames.o           \
+                $(testlib)/test-0029-assign_offset.o             \
+                $(testlib)/test-0030-offset_commit.o             \
+                $(testlib)/test-0031-get_offsets.o               \
+                $(testlib)/test-0033-regex_subscribe.o           \
+                $(testlib)/test-0034-offset_reset.o              \
+                $(testlib)/test-0035-api_version.o               \
+                $(testlib)/test-0036-partial_fetch.o             \
+                $(testlib)/test-0037-destroy_hang_local.o        \
+                $(testlib)/test-0038-performance.o               \
+                $(testlib)/test-0039-event.o                     \
+                $(testlib)/test-0040-io_event.o                  \
+                $(testlib)/test-0041-fetch_max_bytes.o           \
+                $(testlib)/test-0042-many_topics.o               \
+                $(testlib)/test-0043-no_connection.o             \
+                $(testlib)/test-0044-partition_cnt.o             \
+                $(testlib)/test-0045-subscribe_update.o          \
+                $(testlib)/test-0046-rkt_cache.o                 \
+                $(testlib)/test-0047-partial_buf_tmout.o         \
+                $(testlib)/test-0048-partitioner.o               \
+                $(testlib)/test-0049-consume_conn_close.o        \
+                $(testlib)/test-0050-subscribe_adds.o            \
+                $(testlib)/test-0051-assign_adds.o               \
+                $(testlib)/test-0052-msg_timestamps.o            \
+                $(testlib)/test-0055-producer_latency.o          \
+                $(testlib)/test-0056-balanced_group_mt.o         \
+                $(testlib)/test-0062-stats_event.o               \
+                $(testlib)/test-0064-interceptors.o              \
+                $(testlib)/test-0068-produce_timeout.o           \
+                $(testlib)/test-0069-consumer_add_parts.o        \
+                $(testlib)/test-0072-headers_ut.o                \
+                $(testlib)/test-0073-headers.o                   \
+                $(testlib)/test-0074-producev.o                  \
+                $(testlib)/test-0075-retry.o                     \
+                $(testlib)/test-0076-produce_retry.o             \
+                $(testlib)/test-0077-compaction.o                \
+                $(testlib)/test-0079-fork.o                      \
+                $(testlib)/test-0080-admin_ut.o                  \
+                $(testlib)/test-0081-admin.o                     \
+                $(testlib)/test-0083-cb_event.o                  \
+                $(testlib)/test-0084-destroy_flags.o             \
+                $(testlib)/test-0086-purge.o                     \
+                $(testlib)/test-0088-produce_metadata_timeout.o  \
+                $(testlib)/test-0089-max_poll_interval.o         \
+                $(testlib)/test-0090-idempotence.o               \
+                $(testlib)/test-0091-max_poll_interval_timeout.o \
+                $(testlib)/test-0092-mixed_msgver.o              \
+                $(testlib)/test-0093-holb.o                      \
+                $(testlib)/test-0094-idempotence_msg_timeout.o   \
+                $(testlib)/test-0099-commit_metadata.o           \
+                $(testlib)/test-0102-static_group_rebalance.o    \
+                $(testlib)/test-0103-transactions.o              \
+                $(testlib)/test-0104-fetch_from_follower_mock.o  \
+                $(testlib)/test-0105-transactions_mock.o         \
+                $(testlib)/test-0106-cgrp_sess_timeout.o         \
+                $(testlib)/test-0107-topic_recreate.o            \
+                $(testlib)/test-0112-assign_unknown_part.o       \
+                $(testlib)/test-0117-mock_errors.o               \
+                $(testlib)/test-0118-commit_rebalance.o          \
+                $(testlib)/test-0120-asymmetric_subscription.o   \
+                $(testlib)/test-0121-clusterid.o                 \
+ 
+
+
+
+$(testlib)/test-0000-unittests.o : 0000-unittests.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0000-unittests.o -c 0000-unittests.c $(iccflags)
+
+$(testlib)/test-0001-multiobj.o : 0001-multiobj.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0001-multiobj.o -c 0001-multiobj.c $(iccflags)
+
+$(testlib)/test-0002-unkpart.o : 0002-unkpart.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0002-unkpart.o -c 0002-unkpart.c $(iccflags) 
+
+$(testlib)/test-0003-msgmaxsize.o : 0003-msgmaxsize.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0003-msgmaxsize.o -c 0003-msgmaxsize.c $(iccflags) 
+
+$(testlib)/test-0004-conf.o : 0004-conf.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0004-conf.o -c 0004-conf.c $(iccflags) 
+
+$(testlib)/test-0005-order.o : 0005-order.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0005-order.o -c 0005-order.c $(iccflags) 
+
+$(testlib)/test-0006-symbols.o : 0006-symbols.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0006-symbols.o -c 0006-symbols.c $(iccflags) 
+
+$(testlib)/test-0007-autotopic.o : 0007-autotopic.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0007-autotopic.o -c 0007-autotopic.c $(iccflags) 
+
+$(testlib)/test-0008-reqacks.o : 0008-reqacks.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0008-reqacks.o -c 0008-reqacks.c $(iccflags) 
+
+$(testlib)/test-0009-mock_cluster.o : 0009-mock_cluster.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0009-mock_cluster.o -c 0009-mock_cluster.c $(iccflags) 
+
+$(testlib)/test-0011-produce_batch.o : 0011-produce_batch.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0011-produce_batch.o -c 0011-produce_batch.c $(iccflags) 
+
+$(testlib)/test-0012-produce_consume.o : 0012-produce_consume.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0012-produce_consume.o -c 0012-produce_consume.c $(iccflags) 
+
+$(testlib)/test-0013-null-msgs.o : 0013-null-msgs.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0013-null-msgs.o -c 0013-null-msgs.c $(iccflags) 
+
+$(testlib)/test-0014-reconsume-191.o : 0014-reconsume-191.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0014-reconsume-191.o -c 0014-reconsume-191.c $(iccflags) 
+
+$(testlib)/test-0015-offset_seeks.o : 0015-offset_seeks.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0015-offset_seeks.o -c 0015-offset_seeks.c $(iccflags) 
+
+$(testlib)/test-0016-client_swname.o : 0016-client_swname.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0016-client_swname.o -c 0016-client_swname.c $(iccflags) 
+
+$(testlib)/test-0017-compression.o : 0017-compression.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0017-compression.o -c 0017-compression.c $(iccflags) 
+
+$(testlib)/test-0018-cgrp_term.o : 0018-cgrp_term.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0018-cgrp_term.o -c 0018-cgrp_term.c $(iccflags) 
+
+$(testlib)/test-0019-list_groups.o : 0019-list_groups.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0019-list_groups.o -c 0019-list_groups.c $(iccflags) 
+
+$(testlib)/test-0020-destroy_hang.o : 0020-destroy_hang.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0020-destroy_hang.o -c 0020-destroy_hang.c $(iccflags) 
+
+$(testlib)/test-0021-rkt_destroy.o : 0021-rkt_destroy.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0021-rkt_destroy.o -c 0021-rkt_destroy.c $(iccflags) 
+
+$(testlib)/test-0022-consume_batch.o : 0022-consume_batch.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0022-consume_batch.o -c 0022-consume_batch.c $(iccflags) 
+
+$(testlib)/test-0025-timers.o : 0025-timers.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0025-timers.o -c 0025-timers.c $(iccflags) 
+
+$(testlib)/test-0026-consume_pause.o : 0026-consume_pause.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0026-consume_pause.o -c 0026-consume_pause.c $(iccflags) 
+
+$(testlib)/test-0028-long_topicnames.o : 0028-long_topicnames.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0028-long_topicnames.o -c 0028-long_topicnames.c $(iccflags) 
+
+$(testlib)/test-0029-assign_offset.o : 0029-assign_offset.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0029-assign_offset.o -c 0029-assign_offset.c $(iccflags) 
+
+$(testlib)/test-0030-offset_commit.o : 0030-offset_commit.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0030-offset_commit.o -c 0030-offset_commit.c $(iccflags) 
+
+$(testlib)/test-0031-get_offsets.o : 0031-get_offsets.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0031-get_offsets.o -c 0031-get_offsets.c $(iccflags) 
+
+$(testlib)/test-0033-regex_subscribe.o : 0033-regex_subscribe.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0033-regex_subscribe.o -c 0033-regex_subscribe.c $(iccflags) 
+
+$(testlib)/test-0034-offset_reset.o : 0034-offset_reset.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0034-offset_reset.o -c 0034-offset_reset.c $(iccflags) 
+
+$(testlib)/test-0035-api_version.o : 0035-api_version.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0035-api_version.o -c 0035-api_version.c $(iccflags) 
+
+$(testlib)/test-0036-partial_fetch.o : 0036-partial_fetch.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0036-partial_fetch.o -c 0036-partial_fetch.c $(iccflags) 
+
+$(testlib)/test-0037-destroy_hang_local.o : 0037-destroy_hang_local.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0037-destroy_hang_local.o -c 0037-destroy_hang_local.c $(iccflags) 
+
+$(testlib)/test-0038-performance.o : 0038-performance.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0038-performance.o -c 0038-performance.c $(iccflags) 
+
+$(testlib)/test-0039-event.o : 0039-event.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0039-event.o -c 0039-event.c $(iccflags) 
+
+$(testlib)/test-0040-io_event.o : 0040-io_event.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0040-io_event.o -c 0040-io_event.c $(iccflags) 
+
+$(testlib)/test-0041-fetch_max_bytes.o : 0041-fetch_max_bytes.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0041-fetch_max_bytes.o -c 0041-fetch_max_bytes.c $(iccflags) 
+
+$(testlib)/test-0042-many_topics.o : 0042-many_topics.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0042-many_topics.o -c 0042-many_topics.c $(iccflags) 
+
+$(testlib)/test-0043-no_connection.o : 0043-no_connection.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0043-no_connection.o -c 0043-no_connection.c $(iccflags) 
+
+$(testlib)/test-0044-partition_cnt.o : 0044-partition_cnt.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0044-partition_cnt.o -c 0044-partition_cnt.c $(iccflags) 
+
+$(testlib)/test-0045-subscribe_update.o : 0045-subscribe_update.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0045-subscribe_update.o -c 0045-subscribe_update.c $(iccflags) 
+
+$(testlib)/test-0046-rkt_cache.o : 0046-rkt_cache.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0046-rkt_cache.o -c 0046-rkt_cache.c $(iccflags) 
+
+$(testlib)/test-0047-partial_buf_tmout.o : 0047-partial_buf_tmout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0047-partial_buf_tmout.o -c 0047-partial_buf_tmout.c $(iccflags) 
+
+$(testlib)/test-0048-partitioner.o : 0048-partitioner.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0048-partitioner.o -c 0048-partitioner.c $(iccflags) 
+
+$(testlib)/test-0049-consume_conn_close.o : 0049-consume_conn_close.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0049-consume_conn_close.o -c 0049-consume_conn_close.c $(iccflags) 
+
+$(testlib)/test-0050-subscribe_adds.o : 0050-subscribe_adds.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0050-subscribe_adds.o -c 0050-subscribe_adds.c $(iccflags) 
+
+$(testlib)/test-0051-assign_adds.o : 0051-assign_adds.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0051-assign_adds.o -c 0051-assign_adds.c $(iccflags) 
+
+$(testlib)/test-0052-msg_timestamps.o : 0052-msg_timestamps.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0052-msg_timestamps.o -c 0052-msg_timestamps.c $(iccflags) 
+
+$(testlib)/test-0055-producer_latency.o : 0055-producer_latency.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0055-producer_latency.o -c 0055-producer_latency.c $(iccflags) 
+
+$(testlib)/test-0056-balanced_group_mt.o : 0056-balanced_group_mt.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0056-balanced_group_mt.o -c 0056-balanced_group_mt.c $(iccflags) 
+
+$(testlib)/test-0062-stats_event.o : 0062-stats_event.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0062-stats_event.o -c 0062-stats_event.c $(iccflags) 
+
+$(testlib)/test-0064-interceptors.o : 0064-interceptors.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0064-interceptors.o -c 0064-interceptors.c $(iccflags) 
+
+$(testlib)/test-0068-produce_timeout.o : 0068-produce_timeout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0068-produce_timeout.o -c 0068-produce_timeout.c $(iccflags) 
+
+$(testlib)/test-0069-consumer_add_parts.o : 0069-consumer_add_parts.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0069-consumer_add_parts.o -c 0069-consumer_add_parts.c $(iccflags) 
+
+$(testlib)/test-0072-headers_ut.o : 0072-headers_ut.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0072-headers_ut.o -c 0072-headers_ut.c $(iccflags) 
+
+$(testlib)/test-0073-headers.o : 0073-headers.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0073-headers.o -c 0073-headers.c $(iccflags) 
+
+$(testlib)/test-0074-producev.o : 0074-producev.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0074-producev.o -c 0074-producev.c $(iccflags) 
+
+$(testlib)/test-0075-retry.o : 0075-retry.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0075-retry.o -c 0075-retry.c $(iccflags) 
+
+$(testlib)/test-0076-produce_retry.o : 0076-produce_retry.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0076-produce_retry.o -c 0076-produce_retry.c $(iccflags) 
+
+$(testlib)/test-0077-compaction.o : 0077-compaction.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0077-compaction.o -c 0077-compaction.c $(iccflags) 
+
+$(testlib)/test-0079-fork.o : 0079-fork.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0079-fork.o -c 0079-fork.c $(iccflags) 
+
+$(testlib)/test-0080-admin_ut.o : 0080-admin_ut.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0080-admin_ut.o -c 0080-admin_ut.c $(iccflags) 
+
+$(testlib)/test-0081-admin.o : 0081-admin.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0081-admin.o -c 0081-admin.c $(iccflags) 
+
+$(testlib)/test-0083-cb_event.o : 0083-cb_event.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0083-cb_event.o -c 0083-cb_event.c $(iccflags) 
+
+$(testlib)/test-0084-destroy_flags.o : 0084-destroy_flags.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0084-destroy_flags.o -c 0084-destroy_flags.c $(iccflags) 
+
+$(testlib)/test-0086-purge.o : 0086-purge.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0086-purge.o -c 0086-purge.c $(iccflags) 
+
+$(testlib)/test-0088-produce_metadata_timeout.o : 0088-produce_metadata_timeout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0088-produce_metadata_timeout.o -c 0088-produce_metadata_timeout.c $(iccflags) 
+
+$(testlib)/test-0089-max_poll_interval.o : 0089-max_poll_interval.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0089-max_poll_interval.o -c 0089-max_poll_interval.c $(iccflags) 
+
+$(testlib)/test-0090-idempotence.o : 0090-idempotence.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0090-idempotence.o -c 0090-idempotence.c $(iccflags) 
+
+$(testlib)/test-0091-max_poll_interval_timeout.o : 0091-max_poll_interval_timeout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0091-max_poll_interval_timeout.o -c 0091-max_poll_interval_timeout.c $(iccflags) 
+
+$(testlib)/test-0092-mixed_msgver.o : 0092-mixed_msgver.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0092-mixed_msgver.o -c 0092-mixed_msgver.c $(iccflags) 
+
+$(testlib)/test-0093-holb.o : 0093-holb.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0093-holb.o -c 0093-holb.c $(iccflags) 
+
+$(testlib)/test-0094-idempotence_msg_timeout.o : 0094-idempotence_msg_timeout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0094-idempotence_msg_timeout.o -c 0094-idempotence_msg_timeout.c $(iccflags) 
+
+$(testlib)/test-0099-commit_metadata.o : 0099-commit_metadata.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0099-commit_metadata.o -c 0099-commit_metadata.c $(iccflags) 
+
+$(testlib)/test-0102-static_group_rebalance.o : 0102-static_group_rebalance.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0102-static_group_rebalance.o -c 0102-static_group_rebalance.c $(iccflags) 
+
+$(testlib)/test-0103-transactions.o : 0103-transactions.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0103-transactions.o -c 0103-transactions.c $(iccflags) 
+
+$(testlib)/test-0104-fetch_from_follower_mock.o : 0104-fetch_from_follower_mock.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0104-fetch_from_follower_mock.o -c 0104-fetch_from_follower_mock.c $(iccflags) 
+
+$(testlib)/test-0105-transactions_mock.o : 0105-transactions_mock.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0105-transactions_mock.o -c 0105-transactions_mock.c $(iccflags) 
+
+$(testlib)/test-0106-cgrp_sess_timeout.o : 0106-cgrp_sess_timeout.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0106-cgrp_sess_timeout.o -c 0106-cgrp_sess_timeout.c $(iccflags) 
+
+$(testlib)/test-0107-topic_recreate.o : 0107-topic_recreate.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0107-topic_recreate.o -c 0107-topic_recreate.c $(iccflags) 
+
+$(testlib)/test-0112-assign_unknown_part.o : 0112-assign_unknown_part.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0112-assign_unknown_part.o -c 0112-assign_unknown_part.c $(iccflags) 
+
+$(testlib)/test-0117-mock_errors.o : 0117-mock_errors.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0117-mock_errors.o -c 0117-mock_errors.c $(iccflags) 
+
+$(testlib)/test-0118-commit_rebalance.o : 0118-commit_rebalance.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0118-commit_rebalance.o -c 0118-commit_rebalance.c $(iccflags) 
+
+$(testlib)/test-0120-asymmetric_subscription.o : 0120-asymmetric_subscription.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0120-asymmetric_subscription.o -c 0120-asymmetric_subscription.c $(iccflags) 
+
+$(testlib)/test-0121-clusterid.o : 0121-clusterid.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0121-clusterid.o -c 0121-clusterid.c $(iccflags) 
+
+$(testlib)/test-1000-unktopic.o : 1000-unktopic.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-1000-unktopic.o -c 1000-unktopic.c $(iccflags) 
+
+$(testlib)/%.o : %.c            ./../packaging/os400/Makefile.tests.os400
+	icc -o $@ -c $<                    \
+            -v                             \
+            -qDTAMDL=*P128                 \
+            -qDBGVIEW=$(DBGVIEW)           \
+            -qENUM=*INT                    \
+            -qPACKSTRUCT=1                 \
+            -qOUTPUT=*PRINT                \
+            -qTGTCCSID=37                  \
+            -I.                            \
+            -I../src                       \
+            -I/QIBM/ProdData/qadrt/include \
+            -qINCDIRFIRST                  \
+            -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
+
+tests: $(testlib)/test
+
+$(testlib)/test: $(tests_objects)
+	icc -v -o $(testlib)/test                     \
+             -rQADRTTS                                \
+             -rRDKAFKA                                \
+             -qACTGRP=*ENTMOD                         \
+             -qENTMOD=QADRT/QADRTMAIN2                \
+             $(tests_objects)

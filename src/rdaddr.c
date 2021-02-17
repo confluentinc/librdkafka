@@ -205,8 +205,12 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 #else
         /* getaddrinfo has no Ascii eqivalent in Qadrt               */
         /* we have to convert name and service string to ascii       */
-        node_e=strdup(node);      cvtlength = strlen(node_e);   QadrtConvertA2E(node_e, node_e, cvtlength, cvtlength);
-        defsvc_e=strdup(defsvc);  cvtlength = strlen(defsvc_e); QadrtConvertA2E(defsvc_e, defsvc_e, cvtlength, cvtlength);
+        node_e=strdup(node);
+        cvtlength = strlen(node_e);
+        QadrtConvertA2E(node_e, node_e, cvtlength, cvtlength);
+        defsvc_e=strdup(defsvc);
+        cvtlength = strlen(defsvc_e);
+        QadrtConvertA2E(defsvc_e, defsvc_e, cvtlength, cvtlength);
 	if ((r = getaddrinfo(node_e, defsvc_e, &hints, &ais))) {
 #endif
 #ifdef EAI_SYSTEM
@@ -224,12 +228,16 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 			errno = EFAULT;
 		}
 #ifdef __OS400__
-                free(node_e); free(defsvc_e); /* cleanup strdup copies */
+                /* cleanup strdup copies */
+                free(node_e); 
+                free(defsvc_e); 
 #endif
 		return NULL;
 	}
 #ifdef __OS400__
-        free(node_e); free(defsvc_e); /* cleanup strdup copies */
+        /* cleanup strdup copies */
+        free(node_e); 
+        free(defsvc_e); 
 #endif
 	
 	/* Count number of addresses */

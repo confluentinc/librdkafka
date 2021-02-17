@@ -424,7 +424,7 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                             ,
                             rk->rk_conf.sasl.mechanisms);
 #else
-                /* compiler specific - can't understand inner #if's */
+                /* OS400 compiler specific - can't understand inner #if's */
                 rd_snprintf(errstr, errstr_size,
                             "No provider for SASL mechanism %s"
                             ": recompile librdkafka with "

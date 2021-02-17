@@ -59,9 +59,6 @@ uint32_t rd_murmur2 (const void *key, size_t len) {
 
 #ifndef __OS400__
         if (likely(((intptr_t)key & 0x3) == 0)) {
-#else
-        if(0) { /* we'll try to use OS400 builtin implementation later */
-#endif
                 /* Input is 32-bit word aligned. */
                 const uint32_t *data = (const uint32_t *)key;
 
@@ -76,6 +73,9 @@ uint32_t rd_murmur2 (const void *key, size_t len) {
 
                 tail = (const unsigned char *)data;
 
+#else
+        if(0) { /* we'll try to use OS400 builtin implementation later */
+#endif
         } else {
                 /* Unaligned slower variant */
                 const unsigned char *data = (const unsigned char *)key;

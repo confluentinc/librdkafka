@@ -370,7 +370,8 @@ void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
 #ifndef __OS400__
         totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 8) * fixed_seg_cnt;
 #else
-        totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 16) * fixed_seg_cnt; /* OS400 *p128 uses 16-bytes alignment */
+        /* OS400 *p128 uses 16-bytes alignment */
+        totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 16) * fixed_seg_cnt; 
 #endif
 
         /* Pre-allocate extra space for the backing buffer. */

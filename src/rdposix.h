@@ -95,6 +95,7 @@
 #ifndef __OS400__
 #define rd_alloca(N)  alloca(N)
 #else
+/* we have no alloca function on OS400 - we'll use malloc/free pair */
 #define rd_alloca(N) (N?malloc(N):NULL)
 #define rd_free_alloca(P) {if(P) free(P);}
 #endif
@@ -126,15 +127,32 @@
 #else
 /* we have no qadrt equivalent for (v)snprintf.                */
 /* in this case we only can detect harmful results of overflow */
-static int guard_snprintf(int got, int desired, char *file, int line, const char *format, ...) {
-   if(got>desired) {
-      printf("\n\nALARM! (v)snprintf overflow at %s(%d). Available space=%d, printed=%d\n", file, line, desired, got);
-      return desired;
-   }
-   return got;
+static int guard_snprintf(int got, 
+                          int desired, 
+                          char *file, 
+                          int line, 
+                          const char *format, ...) {
+
+        if(got>desired) {
+                printf("\n\nALARM! (v)snprintf overflow at %s(%d). "
+                       "Available space=%d, printed=%d\n", 
+                       file, line, desired, got);
+                return desired;
+        }
+
+        return got;
 }
-#define rd_snprintf(s, n, ...)  (n)?(guard_snprintf(sprintf(s, __VA_ARGS__), n, __FILE__, __LINE__, __VA_ARGS__)):(n)
-#define rd_vsnprintf(s, n, ...) (n)?(guard_snprintf(vsprintf(s, __VA_ARGS__), n, __FILE__, __LINE__, __VA_ARGS__)):(n)
+#define rd_snprintf(s, n, ...)  (n)? \
+                                (guard_snprintf(sprintf(s, __VA_ARGS__), \
+                                                n, \
+                                                __FILE__, __LINE__, __VA_ARGS__)) \
+                                :(n)
+
+#define rd_vsnprintf(s, n, ...) (n)? \
+                                (guard_snprintf(vsprintf(s, __VA_ARGS__), \
+                                                n, \
+                                                __FILE__, __LINE__, __VA_ARGS__)) \
+                                :(n)
 #endif
 
 #define rd_strcasecmp(A,B) strcasecmp(A,B)

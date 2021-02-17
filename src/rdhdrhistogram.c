@@ -80,7 +80,9 @@
 
 #ifdef __OS400__
 /* handmade log2 */
-static double log2( double n )  {  return log( n ) / log( 2 );  } 
+static double log2( double n )  {
+        return log( n ) / log( 2 );  
+} 
 #endif
 
 #include "rdhdrhistogram.h"

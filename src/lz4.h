@@ -659,7 +659,8 @@ LZ4LIB_API LZ4_stream_t* LZ4_initStream (void* buffer, size_t size);
 #ifndef __OS400__
 #define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 2 : 0) /*AS-400*/ )
 #else
-#define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 4 : 0) /* seems like it was Ok at AS400 but not enough on IBMi */ )
+/* seems like it was Ok at AS400 but not enough on IBMi */
+#define LZ4_STREAMDECODESIZE_U64 (4 + ((sizeof(void*)==16) ? 4 : 0) )
 #endif
 #define LZ4_STREAMDECODESIZE     (LZ4_STREAMDECODESIZE_U64 * sizeof(unsigned long long))
 union LZ4_streamDecode_u {

@@ -29,6 +29,8 @@
 #ifndef __OS400_ASSERT_H_
 #define __OS400_ASSERT_H_
 
+#include <stdio.h>
+
 #ifndef NDEBUG
 // Of course, ILE C library has an assert function. But unfortunately, it has no Ascii equivalence for it. 
 // We have to implement handmade assert function to be able to use it with QAdrt ascii runtime

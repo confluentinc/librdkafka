@@ -49,7 +49,7 @@ BRIEF
 crtlib rdkafka
 crtlib rdkafkatst
 addlible rdkafka
-strsql
+strqsh
 cd <path to librdkafka folder>
 export KAFKALIB=RDKAFKA
 export KAFKATST=RDKAFKATST

@@ -254,7 +254,7 @@ static RD_INLINE int64_t test_clock (void) {
 
 
 typedef struct test_timing_s {
-        char name[400];
+        char name[450];
         int64_t ts_start;
         int64_t duration;
         int64_t ts_every; /* Last every */

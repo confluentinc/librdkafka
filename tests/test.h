@@ -529,7 +529,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv);
 
-void test_consumer_wait_assignment (rd_kafka_t *rk);
+void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll);
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
                            rd_kafka_topic_partition_list_t *parts);
 void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,

@@ -1695,6 +1695,9 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[rktp->rktp_fetch_state], version);
 
 	rktp->rktp_op_version = version;
+	rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
+	rko->rko_version = version;
+	rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 
 	/* Abort pending offset lookups. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)

@@ -3854,7 +3854,8 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 rd_assert(thrd_is_current(rk->rk_thread));
                 res = rd_kafka_op_call(rk, rkq, rko);
                 break;
-
+        case RD_KAFKA_OP_BARRIER:
+                break;
         case RD_KAFKA_OP_PURGE:
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
                 break;

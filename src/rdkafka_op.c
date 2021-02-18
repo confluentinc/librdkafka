@@ -95,6 +95,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 "REPLY:GET_REBALANCE_PROTOCOL",
                 [RD_KAFKA_OP_LEADERS] = "REPLY:LEADERS",
+                [RD_KAFKA_OP_BARRIER] = "REPLY:BARRIER",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -237,6 +238,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 sizeof(rko->rko_u.rebalance_protocol),
                 [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
+                [RD_KAFKA_OP_BARRIER] = sizeof(rko->rko_u.barrier),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -410,7 +412,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.leaders.partitions,
                            rd_kafka_topic_partition_list_destroy);
                 break;
-
+        case RD_KAFKA_OP_BARRIER:
+            break;
 	default:
 		break;
 	}

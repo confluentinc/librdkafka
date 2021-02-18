@@ -2209,7 +2209,9 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 
 
                         /* Propagate error to application */
-                        if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD) {
+                        if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD &&
+                            rko->rko_err !=
+                            RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT)
                                 rd_kafka_consumer_err(
                                         rktp->rktp_fetchq,
                                         RD_KAFKA_NODEID_UA,
@@ -2219,7 +2221,6 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                                         "Failed to fetch "
                                         "offsets from brokers: %s",
                                         rd_kafka_err2str(rko->rko_err));
-                        }
 
 			rd_kafka_toppar_destroy(rktp);
 

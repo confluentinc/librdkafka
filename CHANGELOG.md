@@ -42,6 +42,13 @@ librdkafka v1.6.1 is a maintenance release.
    on the transaction coordinator. We now allow empty/no-op transactions to
    be committed.
 
+### Consumer fixes
+
+ * The consumer will now retry indefinitely (or until the assignment is changed)
+   to retrieve committed offsets. This fixes the issue where only two retries
+   were attempted when outstanding transactions were blocking OffsetFetch
+   requests with `ERR_UNSTABLE_OFFSET_COMMIT`. #3265
+
 
 
 

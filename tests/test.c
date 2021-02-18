@@ -3924,19 +3924,28 @@ int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
 }
 
 
-int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
-                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
-			test_msgver_t *mv) {
+/**
+ * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
+ *              If false: poll until either one is reached.
+ */
+int test_consumer_poll_exact (const char *what, rd_kafka_t *rk, uint64_t testid,
+                              int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+                              rd_bool_t exact, test_msgver_t *mv) {
         int eof_cnt = 0;
         int cnt = 0;
         test_timing_t t_cons;
 
-        TEST_SAY("%s: consume %d messages\n", what, exp_cnt);
+        TEST_SAY("%s: consume %s%d messages\n", what,
+                 exact ? "exactly ": "", exp_cnt);
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while ((exp_eof_cnt <= 0 || eof_cnt < exp_eof_cnt) &&
-               (exp_cnt <= 0 || cnt < exp_cnt)) {
+        while ((!exact &&
+                ((exp_eof_cnt <= 0 || eof_cnt < exp_eof_cnt) &&
+                 (exp_cnt <= 0 || cnt < exp_cnt))) ||
+               (exact &&
+                (eof_cnt < exp_eof_cnt ||
+                 cnt < exp_cnt))) {
                 rd_kafka_message_t *rkmessage;
 
                 rkmessage = rd_kafka_consumer_poll(rk, tmout_multip(10*1000));
@@ -3987,12 +3996,28 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
         TEST_SAY("%s: consumed %d/%d messages (%d/%d EOFs)\n",
                  what, cnt, exp_cnt, eof_cnt, exp_eof_cnt);
 
+        TEST_ASSERT(!exact ||
+                    ((exp_cnt == -1 || exp_cnt == cnt) &&
+                     (exp_eof_cnt == -1 || exp_eof_cnt == eof_cnt)),
+                    "%s: mismatch between exact expected counts and actual: "
+                    "%d/%d EOFs, %d/%d msgs",
+                    what, eof_cnt, exp_eof_cnt, cnt, exp_cnt);
+
         if (exp_cnt == 0)
                 TEST_ASSERT(cnt == 0 && eof_cnt == exp_eof_cnt,
                             "%s: expected no messages and %d EOFs: "
                             "got %d messages and %d EOFs",
                             what, exp_eof_cnt, cnt, eof_cnt);
         return cnt;
+}
+
+
+int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+                        test_msgver_t *mv) {
+        return test_consumer_poll_exact(what, rk, testid,
+                                        exp_eof_cnt, exp_msg_base, exp_cnt,
+                                        rd_false/*not exact */, mv);
 }
 
 void test_consumer_close (rd_kafka_t *rk) {

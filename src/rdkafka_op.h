@@ -712,4 +712,14 @@ void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko);
          !(rko)->rko_err &&                                             \
          ((rko)->rko_u.fetch.rkm.rkm_flags & RD_KAFKA_MSG_F_CONTROL))
 
+
+
+/**
+ * @returns true if the rko's replyq is valid and the
+ *          rko's rktp version (if any) is not outdated.
+ */
+#define rd_kafka_op_replyq_is_valid(RKO)                        \
+        (rd_kafka_replyq_is_valid(&(RKO)->rko_replyq) &&        \
+         !rd_kafka_op_version_outdated((RKO), 0))
+
 #endif /* _RDKAFKA_OP_H_ */

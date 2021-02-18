@@ -45,6 +45,12 @@ typedef struct rd_kafka_assignment_s {
         int started_cnt;
         /** Number of partitions being stopped. */
         int wait_stop_cnt;
+        /** Assignment version: any change to the assignment will bump this
+         *  version by one. This is used to know if a protocol response is
+         *  outdated or not.
+         *  @locks_required none
+         *  @locality rdkafka main thread */
+        int64_t version;
 } rd_kafka_assignment_t;
 
 

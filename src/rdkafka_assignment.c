@@ -153,7 +153,27 @@ rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
                         continue;
                 }
 
-                if (rktpar->err) {
+                if (err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT ||
+                    rktpar->err == RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT) {
+                        /* Ongoing transactions are blocking offset retrieval.
+                         * This is typically retried from the OffsetFetch
+                         * handler but we can come here if the assignment
+                         * (and thus the assignment.version) was changed while
+                         * the OffsetFetch request was in-flight, in which case
+                         * we put this partition back on the pending list for
+                         * later handling by the assignment state machine. */
+
+                        rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
+                                     "Adding %s [%"PRId32"] back to pending "
+                                     "list because on-going transaction is "
+                                     "blocking offset retrieval",
+                                     rktpar->topic,
+                                     rktpar->partition);
+
+                        rd_kafka_topic_partition_list_add_copy(
+                                rk->rk_consumer.assignment.pending, rktpar);
+
+                } else if (rktpar->err) {
                         /* Partition-level error */
                         rd_kafka_consumer_err(
                                 rk->rk_consumer.q, RD_KAFKA_NODEID_UA,
@@ -202,6 +222,11 @@ rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
 
 /**
  * @brief Reply handler for OffsetFetch queries from the assignment code.
+ *
+ * @param opaque Is a malloced int64_t* containing the assignment version at the
+ *               time of the request.
+ *
+ * @locality rdkafka main thread
  */
 static void
 rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
@@ -211,25 +236,34 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
                                         rd_kafka_buf_t *request,
                                         void *opaque) {
         rd_kafka_topic_partition_list_t *offsets = NULL;
+        int64_t *req_assignment_version = (int64_t *)opaque;
+        /* Only allow retries if there's been no change to the assignment,
+         * otherwise rely on assignment state machine to retry. */
+        rd_bool_t allow_retry = *req_assignment_version ==
+                rk->rk_consumer.assignment.version;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination, quick cleanup. */
+                rd_free(req_assignment_version);
                 return;
         }
 
         err = rd_kafka_handle_OffsetFetch(rk, rkb, err,
                                           reply, request, &offsets,
                                           rd_true/* Update toppars */,
-                                          rd_true/* Add parts */);
+                                          rd_true/* Add parts */,
+                                          allow_retry);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 if (offsets)
                         rd_kafka_topic_partition_list_destroy(offsets);
                 return; /* retrying */
         }
 
+        rd_free(req_assignment_version);
+
         /* offsets may be NULL for certain errors, such
          * as ERR__TRANSPORT. */
-        if (!offsets) {
+        if (!offsets && !allow_retry) {
                 rd_dassert(err);
                 if (!err)
                         err = RD_KAFKA_RESP_ERR__NO_OFFSET;
@@ -505,6 +539,9 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
 
 
         if (partitions_to_query->cnt > 0) {
+                int64_t *req_assignment_version = rd_malloc(sizeof(int64_t));
+                *req_assignment_version = rk->rk_consumer.assignment.version;
+
                 rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
                              "Fetching committed offsets for "
                              "%d pending partition(s) in assignment",
@@ -517,7 +554,8 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
                         RD_KAFKA_READ_COMMITTED/*require_stable*/,
                         RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                         rd_kafka_assignment_handle_OffsetFetch,
-                        NULL);
+                        /* Must be freed by handler */
+                        (void *)req_assignment_version);
         }
 
         if (coord)
@@ -629,6 +667,8 @@ int rd_kafka_assignment_clear (rd_kafka_t *rk) {
                 rk->rk_consumer.assignment.all);
         rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.all);
 
+        rk->rk_consumer.assignment.version++;
+
         return cnt;
 }
 
@@ -726,6 +766,8 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
                      rk->rk_consumer.assignment.pending->cnt,
                      rk->rk_consumer.assignment.queried->cnt);
 
+        rk->rk_consumer.assignment.version++;
+
         return NULL;
 }
 
@@ -815,6 +857,8 @@ rd_kafka_assignment_subtract (rd_kafka_t *rk,
                 rd_assert(rk->rk_consumer.assignment.pending->cnt == 0);
                 rd_assert(rk->rk_consumer.assignment.queried->cnt == 0);
         }
+
+        rk->rk_consumer.assignment.version++;
 
         return NULL;
 }

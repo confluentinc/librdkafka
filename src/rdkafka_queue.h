@@ -652,6 +652,26 @@ rd_kafka_replyq_make (rd_kafka_q_t *rkq, int version, const char *id) {
 #define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0}
 #endif
 
+
+/**
+ * @returns true if the replyq is valid, else false.
+ */
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_replyq_is_valid (rd_kafka_replyq_t *replyq) {
+        rd_bool_t valid = rd_true;
+
+        if (!replyq->q)
+                return rd_false;
+
+        rd_kafka_q_lock(replyq->q);
+        valid = rd_kafka_q_ready(replyq->q);
+        rd_kafka_q_unlock(replyq->q);
+
+        return valid;
+}
+
+
+
 /**
  * Set up replyq.
  * Q refcnt is increased.

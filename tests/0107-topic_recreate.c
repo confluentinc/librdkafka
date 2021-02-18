@@ -195,7 +195,7 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
 
         /* Start consumer */
         test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer);
+        test_consumer_wait_assignment(consumer, rd_true);
 
         mtx_lock(&value_mtx);
         value = "before";

@@ -2646,8 +2646,11 @@ test_consume_txn_msgs_easy (const char *group_id, const char *topic,
 /**
  * @brief Waits for up to \p timeout_ms for consumer to receive assignment.
  *        If no assignment received without the timeout the test fails.
+ *
+ * @warning This method will poll the consumer and might thus read messages.
+ *          Set \p do_poll to false to use a sleep rather than poll.
  */
-void test_consumer_wait_assignment (rd_kafka_t *rk) {
+void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll) {
         rd_kafka_topic_partition_list_t *assignment = NULL;
         int i;
 
@@ -2663,7 +2666,10 @@ void test_consumer_wait_assignment (rd_kafka_t *rk) {
 
                 rd_kafka_topic_partition_list_destroy(assignment);
 
-                test_consumer_poll_once(rk, NULL, 1000);
+                if (do_poll)
+                        test_consumer_poll_once(rk, NULL, 1000);
+                else
+                        rd_usleep(1000*1000, NULL);
         }
 
         TEST_SAY("%s: Assignment (%d partition(s)): ",
@@ -3962,6 +3968,13 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_message_errstr(rkmessage));
 
                 } else {
+                        TEST_SAYL(4, "%s: consumed message on %s [%"PRId32"] "
+                                  "at offset %"PRId64"\n",
+                                  what,
+                                  rd_kafka_topic_name(rkmessage->rkt),
+                                  rkmessage->partition,
+                                  rkmessage->offset);
+
 			if (!mv || test_msgver_add_msg(rk, mv, rkmessage))
 				cnt++;
                 }

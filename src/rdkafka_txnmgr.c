@@ -429,6 +429,13 @@ static void
 rd_kafka_txn_curr_api_reply (rd_kafka_q_t *rkq,
                              int actions,
                              rd_kafka_resp_err_t err,
+                             const char *errstr_fmt, ...)
+        RD_FORMAT(printf, 4, 5);
+
+static void
+rd_kafka_txn_curr_api_reply (rd_kafka_q_t *rkq,
+                             int actions,
+                             rd_kafka_resp_err_t err,
                              const char *errstr_fmt, ...) {
         rd_kafka_error_t *error = NULL;
 
@@ -2300,6 +2307,23 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
         if ((error = rd_kafka_txn_require_state(
                      rk, RD_KAFKA_TXN_STATE_BEGIN_COMMIT)))
                 goto err;
+
+        if (!rk->rk_eos.txn_req_cnt) {
+                /* If there were no messages produced, or no send_offsets,
+                 * in this transaction, simply complete the transaction
+                 * without sending anything to the transaction coordinator
+                 * (since it will not have any txn state). */
+                rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
+                             "No partitions registered: not sending EndTxn");
+                rd_kafka_txn_set_state(
+                        rk, RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION);
+                rd_kafka_txn_complete(rk);
+                rd_kafka_wrunlock(rk);
+                rd_kafka_txn_curr_api_reply(rd_kafka_q_keep(rko->rko_replyq.q),
+                                            0, RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            NULL);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
 
         pid = rd_kafka_idemp_get_pid0(rk, rd_false/*dont-lock*/);
         if (!rd_kafka_pid_valid(pid)) {

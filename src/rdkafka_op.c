@@ -471,8 +471,8 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
  *                  if not applicable.
  * @param err Error code.
  * @param version Queue version barrier, or 0 if not applicable.
- * @param topic May be NULL. Mutually exclusive with \p rktp.
- * @param rktp May be NULL. Mutually exclusive with \p topic.
+ * @param topic May be NULL.
+ * @param rktp May be NULL. Takes precedence over \p topic.
  * @param offset RD_KAFKA_OFFSET_INVALID if not applicable.
  *
  * @sa rd_kafka_q_op_err()
@@ -496,10 +496,9 @@ void rd_kafka_consumer_err (rd_kafka_q_t *rkq, int32_t broker_id,
         rko->rko_u.err.errstr = rd_strdup(buf);
         rko->rko_u.err.rkm.rkm_broker_id = broker_id;
 
-        if (rktp) {
-                rd_assert(!topic);
+        if (rktp)
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-        } else if (topic)
+        else if (topic)
                 rko->rko_u.err.rkm.rkm_rkmessage.rkt =
                         (rd_kafka_topic_t *)rd_kafka_lwtopic_new(rkq->rkq_rk,
                                                                  topic);

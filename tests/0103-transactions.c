@@ -166,7 +166,7 @@ static void do_test_basic_producer_txn (rd_bool_t enable_compression) {
         /* Wait for assignment to make sure consumer is fetching messages
          * below, so we can use the poll_no_msgs() timeout to
          * determine that messages were indeed aborted. */
-        test_consumer_wait_assignment(c);
+        test_consumer_wait_assignment(c, rd_true);
 
         /* Init transactions */
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30*1000));
@@ -853,12 +853,6 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
         TEST_SAY(_C_BLU "Transaction 2: %d msgs\n", msgcnt[1]);
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
 
-        if (0) {
-        test_produce_msgs2(p, topic, testid, partition, 0,
-                           msgcnt[1]/2, NULL, 0);
-        test_flush(p, 5000);
-        }
-
         /* Now delete the messages from txn1 */
         TEST_SAY("Deleting records < %s [%"PRId32"] offset %d+1\n",
                  topic, partition, msgcnt[0]);
@@ -952,6 +946,104 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
 }
 
 
+/**
+ * @brief Check that empty transactions, with no messages produced, work
+ *        as expected.
+ */
+static void do_test_empty_txn (rd_bool_t send_offsets, rd_bool_t do_commit) {
+        const char *topic = test_mk_topic_name("0103_empty_txn", 1);
+        rd_kafka_conf_t *conf, *c_conf;
+        rd_kafka_t *p, *c;
+        uint64_t testid;
+        const int msgcnt = 10;
+        rd_kafka_topic_partition_list_t *committed;
+        int64_t offset;
+
+        SUB_TEST_QUICK("%ssend offsets, %s",
+                       send_offsets ? "" : "don't ",
+                       do_commit ? "commit" : "abort");
+
+        testid = test_id_generate();
+
+        test_conf_init(&conf, NULL, 30);
+        c_conf = rd_kafka_conf_dup(conf);
+
+        test_conf_set(conf, "transactional.id", topic);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        test_create_topic(p, topic, 1, 3);
+
+        /* Produce some non-txnn messages for the consumer to read and commit */
+        test_produce_msgs_easy(topic, testid, 0, msgcnt);
+
+        /* Create consumer and subscribe to the topic */
+        test_conf_set(c_conf, "auto.offset.reset", "earliest");
+        c = test_create_consumer(topic, NULL, c_conf, NULL);
+        test_consumer_subscribe(c, topic);
+        test_consumer_wait_assignment(c, rd_false);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, -1));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
+
+        /* send_offsets? Consume messages and send those offsets to the txn */
+        if (send_offsets) {
+                rd_kafka_topic_partition_list_t *offsets;
+                rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+                test_consumer_poll("consume", c, testid, -1, 0, msgcnt, NULL);
+
+                TEST_CALL_ERR__(rd_kafka_assignment(c, &offsets));
+                TEST_CALL_ERR__(rd_kafka_position(c, offsets));
+
+                cgmetadata = rd_kafka_consumer_group_metadata(c);
+                TEST_ASSERT(cgmetadata != NULL,
+                            "failed to get consumer group metadata");
+
+                TEST_CALL_ERROR__(
+                        rd_kafka_send_offsets_to_transaction(
+                                p, offsets, cgmetadata, -1));
+
+                rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+
+                rd_kafka_topic_partition_list_destroy(offsets);
+        }
+
+
+        if (do_commit)
+                TEST_CALL_ERROR__(rd_kafka_commit_transaction(p, -1));
+        else
+                TEST_CALL_ERROR__(rd_kafka_abort_transaction(p, -1));
+
+        /* Get the committed offsets */
+        TEST_CALL_ERR__(rd_kafka_assignment(c, &committed));
+        TEST_CALL_ERR__(rd_kafka_committed(c, committed, 10*1000));
+
+        TEST_ASSERT(committed->cnt == 1,
+                    "expected one committed offset, not %d",
+                    committed->cnt);
+        offset = committed->elems[0].offset;
+        TEST_SAY("Committed offset is %"PRId64"\n", offset);
+
+        if (do_commit && send_offsets)
+                TEST_ASSERT(offset >= msgcnt,
+                            "expected committed offset >= %d, got %"PRId64,
+                            msgcnt, offset);
+        else
+                TEST_ASSERT(offset < 0,
+                            "expected no committed offset, got %"PRId64,
+                            offset);
+
+        rd_kafka_topic_partition_list_destroy(committed);
+
+        rd_kafka_destroy(c);
+        rd_kafka_destroy(p);
+
+        SUB_TEST_PASS();
+}
+
+
 
 int main_0103_transactions (int argc, char **argv) {
 
@@ -962,7 +1054,10 @@ int main_0103_transactions (int argc, char **argv) {
         do_test_fenced_txn(rd_false /* no produce after fencing */);
         do_test_fenced_txn(rd_true /* produce after fencing */);
         do_test_fatal_idempo_error_without_kip360();
-
+        do_test_empty_txn(rd_false/*don't send offsets*/, rd_true/*commit*/);
+        do_test_empty_txn(rd_false/*don't send offsets*/, rd_false/*abort*/);
+        do_test_empty_txn(rd_true/*send offsets*/, rd_true/*commit*/);
+        do_test_empty_txn(rd_true/*send offsets*/, rd_false/*abort*/);
         return 0;
 }
 

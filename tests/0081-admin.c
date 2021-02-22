@@ -1716,7 +1716,7 @@ static void do_test_DeleteConsumerGroupOffsets (const char *what,
 
         if (sub_consumer) {
                 TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
-                test_consumer_wait_assignment(consumer);
+                test_consumer_wait_assignment(consumer, rd_true);
         }
 
         /* Commit some offsets */

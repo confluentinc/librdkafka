@@ -2111,6 +2111,143 @@ static void do_test_txn_addparts_req_multi (void) {
 }
 
 
+
+/**
+ * @brief Test handling of OffsetFetchRequest returning UNSTABLE_OFFSET_COMMIT.
+ *
+ * There are two things to test;
+ *  - OffsetFetch triggered by committed() (and similar code paths)
+ *  - OffsetFetch triggered by assign()
+ */
+static void do_test_unstable_offset_commit (void) {
+        rd_kafka_t *rk, *c;
+        rd_kafka_conf_t *c_conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *offsets;
+        const char *topic = "mytopic";
+        const int msgcnt = 100;
+        const int64_t offset_to_commit = msgcnt / 2;
+        int i;
+        int remains = 0;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_conf_init(&c_conf, NULL, 0);
+        test_conf_set(c_conf, "security.protocol", "PLAINTEXT");
+        test_conf_set(c_conf, "bootstrap.servers",
+                      rd_kafka_mock_cluster_bootstraps(mcluster));
+        test_conf_set(c_conf, "enable.partition.eof", "true");
+        test_conf_set(c_conf, "auto.offset.reset", "error");
+        c = test_create_consumer("mygroup", NULL, c_conf, NULL);
+
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
+
+        /* Produce some messages to the topic so that the consumer has
+         * something to read. */
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt,
+                                  NULL, 0, &remains);
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
+
+        /* Commit offset */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset =
+                offset_to_commit;
+        TEST_CALL_ERR__(rd_kafka_commit(c, offsets, 0/*sync*/));
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        /* Retrieve offsets by calling committed().
+         *
+         * Have OffsetFetch fail and retry, on the first iteration
+         * the API timeout is higher than the amount of time the retries will
+         * take and thus succeed, and on the second iteration the timeout
+         * will be lower and thus fail. */
+        for (i = 0 ; i < 2 ; i++) {
+                rd_kafka_resp_err_t err;
+                rd_kafka_resp_err_t exp_err = i == 0 ?
+                        RD_KAFKA_RESP_ERR_NO_ERROR :
+                        RD_KAFKA_RESP_ERR__TIMED_OUT;
+                int timeout_ms = exp_err ? 200 : 5*1000;
+
+                rd_kafka_mock_push_request_errors(
+                        mcluster,
+                        RD_KAFKAP_OffsetFetch,
+                        1+5,/* first request + some retries */
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                        RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT);
+
+                offsets = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(offsets, topic, 0);
+
+                err = rd_kafka_committed(c, offsets, timeout_ms);
+
+                TEST_SAY("#%d: committed() returned %s (expected %s)\n",
+                         i,
+                         rd_kafka_err2name(err),
+                         rd_kafka_err2name(exp_err));
+
+                TEST_ASSERT(err == exp_err,
+                            "#%d: Expected committed() to return %s, not %s",
+                            i,
+                            rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(err));
+                TEST_ASSERT(offsets->cnt == 1,
+                            "Expected 1 committed offset, not %d",
+                            offsets->cnt);
+                if (!exp_err)
+                        TEST_ASSERT(offsets->elems[0].offset == offset_to_commit,
+                                    "Expected committed offset %"PRId64", "
+                                    "not %"PRId64,
+                                    offset_to_commit,
+                                    offsets->elems[0].offset);
+                else
+                        TEST_ASSERT(offsets->elems[0].offset < 0,
+                                    "Expected no committed offset, "
+                                    "not %"PRId64,
+                                    offsets->elems[0].offset);
+
+                rd_kafka_topic_partition_list_destroy(offsets);
+        }
+
+        TEST_SAY("Phase 2: OffsetFetch lookup through assignment\n");
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset =
+                RD_KAFKA_OFFSET_STORED;
+
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_OffsetFetch,
+                1+5,/* first request + some retries */
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
+                RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT);
+
+        test_consumer_incremental_assign("assign", c, offsets);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        test_consumer_poll_exact("consume", c, 0,
+                                 1/*eof*/, 0, msgcnt/2,
+                                 rd_true/*exact counts*/, NULL);
+
+        /* All done */
+        rd_kafka_destroy(c);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -2161,6 +2298,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
                 RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED);
 
         do_test_txn_flush_timeout();
+
+        do_test_unstable_offset_commit();
 
         if (!test_quick)
                 do_test_txn_switch_coordinator();

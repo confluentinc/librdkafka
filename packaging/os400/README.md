@@ -99,7 +99,7 @@ SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/zookeeper-server-
 SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/kafka-server-start.sh config/server.properties')) CPYENVVAR(*YES)
 SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/kafka-server-start.sh config/server.properties --override broker.id=1 --override listeners=PLAINTEXT://:9093 --override port=9093 --override log.dirs=/tmp/kafka-logs-9093')) CPYENVVAR(*YES)
 SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/kafka-server-start.sh config/server.properties --override broker.id=2 --override listeners=PLAINTEXT://:9094 --override port=9094 --override log.dirs=/tmp/kafka-logs-9094')) CPYENVVAR(*YES) 
-SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/kafka-server-start.sh config/server.properties --override broker.id=2 --override listeners=PLAINTEXT://:9094 --override port=9094 --override log.dirs=/tmp/kafka-logs-9094')) CPYENVVAR(*YES) 
+SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/kafka-server-start.sh config/server.properties --override broker.id=3 --override listeners=PLAINTEXT://:9095 --override port=9095 --override log.dirs=/tmp/kafka-logs-9095')) CPYENVVAR(*YES) 
 ```
 TODO
 

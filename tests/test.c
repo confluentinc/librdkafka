@@ -690,7 +690,7 @@ void test_timeout_set (int timeout) {
         TEST_SAY("Setting test timeout to %ds * %.1f\n",
 		 timeout, test_timeout_multiplier);
 	timeout = (int)((double)timeout * test_timeout_multiplier);
-	test_curr->timeout = test_clock() + (timeout * 1000000);
+	test_curr->timeout = test_clock() + (unsigned int)(timeout * 1000000);
 	TEST_UNLOCK();
 }
 

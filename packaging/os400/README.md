@@ -6,7 +6,7 @@ This document contains instructions for building, testing and using the **librdk
 # **librdkafka** on IBM i
 This project contains the source code and compiled binaries of the **librdkafka** library on the IBM i platform.
 
-The supplied library RDKAFKA is a *SRVPGM object compiled on IBM i version V7R2M0, with storage model = *SNGLVL, data model = *P128.
+The supplied library RDKAFKA is a *SRVPGM object compiled on IBM i version V7R3M0, with storage model = *SNGLVL, data model = *P128.
 
 The service program uses ASCII Runtime for IBM i (QADRT). Thus, all text parameters of the service program functions are accepted and returned in ASCII coding. Programs that use this *SRVPGM, must convert values from/to EBCDIC themselves. For this purpose it is convenient to use the standard QADRT functions like QadrtConvertA2E and QadrtConvertE2A. 
 
@@ -110,7 +110,7 @@ addlible rdkafka
 strqsh
 cd <path to librdkafka forler>
 export QIBM_MULTI_THREADED=Y
-export RDKAFKA_TEST_CONF=./os400/test.conf.os400
+export RDKAFKA_TEST_CONF=./packaging/os400/test.conf.os400
 ./tests/rdkafkatst/test
 ```
 or

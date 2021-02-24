@@ -773,7 +773,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Defaults: "
           "On Windows the system's CA certificates are automatically looked "
           "up in the Windows Root certificate store. "
-          "On Mac OSX it is recommended to install openssl using Homebrew, "
+          "On Mac OSX this configuration defaults to `probe`. "
+          "It is recommended to install openssl using Homebrew, "
           "to provide CA certificates. "
           "On Linux install the distribution's ca-certificates package. "
           "If OpenSSL is statically linked or `ssl.ca.location` is set to "
@@ -781,6 +782,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "found will be used as the default CA certificate location path. "
           "If OpenSSL is dynamically linked the OpenSSL library's default "
           "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
+#ifdef __APPLE__
+          .sdef = "probe",
+#endif
           _UNSUPPORTED_SSL
         },
         { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,

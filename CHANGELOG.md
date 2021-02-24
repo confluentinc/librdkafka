@@ -21,6 +21,9 @@ librdkafka v1.6.1 is a maintenance release.
  * Admin API and transactional `send_offsets_to_transaction()` coordinator
    requests, such as TxnOffsetCommitRequest, could in rare cases be sent
    multiple times which could cause a crash.
+ * `ssl.ca.location=probe` is now enabled by default on Mac OSX since the
+   librdkafka-bundled OpenSSL might not have the same default CA search paths
+   as the system or brew installed OpenSSL. Probing scans all known locations.
 
 ### Transactional Producer fixes
 

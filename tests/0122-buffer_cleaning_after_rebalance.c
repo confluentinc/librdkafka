@@ -33,7 +33,7 @@
 
 static rd_kafka_t *c1;
 
-typedef struct rd_kafka_consumer_s {
+typedef struct consumer_s {
         char *what;
         rd_kafka_queue_t *rkq;
         int timeout_ms;
@@ -42,8 +42,8 @@ typedef struct rd_kafka_consumer_s {
         uint64_t testid;
 } consumer_t;
 
-static void test_consumer_batch_queue(const consumer_t *arguments) {
-	    consumer_t *args = (struct consumer_t *)arguments;
+static int test_consumer_batch_queue(void *arguments) {
+	    struct consumer_s *args = arguments;
         int eof_cnt = 0;
         int i;
         int correct;
@@ -80,6 +80,7 @@ static void test_consumer_batch_queue(const consumer_t *arguments) {
                 rd_kafka_message_destroy(rkmessage[i]);
 
         TIMING_STOP(&t_cons);
+        return 0;
 }
 
 static void rebalance_cb (rd_kafka_t *rk,
@@ -142,9 +143,8 @@ static int do_test_consume_batch (char *strategy) {
         rd_kafka_conf_t *conf;
         thrd_t thread_id;
         thrd_t thread_id2;
-        consumer_t *c1_args = (consumer_t *) malloc(sizeof(consumer_t));
-        consumer_t *c2_args = (consumer_t *) malloc(sizeof(consumer_t));
-
+        struct consumer_s c1_args;
+        struct consumer_s c2_args;
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "auto.offset.reset", "earliest");
@@ -176,28 +176,28 @@ static int do_test_consume_batch (char *strategy) {
         rkq1 = rd_kafka_queue_get_consumer(c1);
         rkq2 = rd_kafka_queue_get_consumer(c2);
 
-        c1_args->what = "C1.PRE";
-        c1_args->rkq = rkq1;
-        c1_args->timeout_ms = timeout_ms;
-        c1_args->consumemsgcnt = consumemsgcnt;
-        c1_args->rk = c1;
-        c1_args->testid = testid;
+        c1_args.what = "C1.PRE";
+        c1_args.rkq = rkq1;
+        c1_args.timeout_ms = timeout_ms;
+        c1_args.consumemsgcnt = consumemsgcnt;
+        c1_args.rk = c1;
+        c1_args.testid = testid;
 
-        thrd_create(&thread_id, test_consumer_batch_queue, c1_args);
+        if (thrd_create(&thread_id, test_consumer_batch_queue, (void *)&c1_args) != thrd_success)
+                TEST_FAIL("Failed to verify batch queue messages for %s", "C1.PRE");
 
-        c2_args->what = "C2.PRE";
-        c2_args->rkq = rkq2;
-        c2_args->timeout_ms = timeout_ms;
-        c2_args->consumemsgcnt = consumemsgcnt;
-        c2_args->rk = c2;
-        c2_args->testid = testid;
+        c2_args.what = "C2.PRE";
+        c2_args.rkq = rkq2;
+        c2_args.timeout_ms = timeout_ms;
+        c2_args.consumemsgcnt = consumemsgcnt;
+        c2_args.rk = c2;
+        c2_args.testid = testid;
 
-        thrd_create(&thread_id2, test_consumer_batch_queue, c2_args);
+        if (thrd_create(&thread_id2, test_consumer_batch_queue, (void *)&c2_args) != thrd_success)
+                TEST_FAIL("Failed to verify batch queue messages for %s", "C2.PRE");
+
         thrd_join(thread_id, NULL);
         thrd_join(thread_id2, NULL);
-
-        rd_free(c1_args);
-        rd_free(c2_args);
 
         rd_kafka_queue_destroy(rkq1);
         rd_kafka_queue_destroy(rkq2);

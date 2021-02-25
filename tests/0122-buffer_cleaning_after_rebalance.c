@@ -27,7 +27,6 @@
  */
 
 #include "test.h"
-#include <pthread.h>
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
@@ -41,10 +40,10 @@ typedef struct rd_kafka_consumer_s {
         int consumemsgcnt;
         rd_kafka_t *rk;
         uint64_t testid;
-} rd_kafka_consumer_t;
+} consumer_t;
 
-static void test_consumer_batch_queue(const rd_kafka_consumer_t *arguments) {
-	    rd_kafka_consumer_t *args = (struct rd_kafka_consumer_t *)arguments;
+static void test_consumer_batch_queue(const consumer_t *arguments) {
+	    consumer_t *args = (struct consumer_t *)arguments;
         int eof_cnt = 0;
         int i;
         int correct;
@@ -141,10 +140,10 @@ static int do_test_consume_batch (char *strategy) {
         uint64_t testid;
         int consumemsgcnt = 500;
         rd_kafka_conf_t *conf;
-        pthread_t thread_id;
-        pthread_t thread_id2;
-        rd_kafka_consumer_t *c1_args = (rd_kafka_consumer_t *) malloc(sizeof(rd_kafka_consumer_t));
-        rd_kafka_consumer_t *c2_args = (rd_kafka_consumer_t *) malloc(sizeof(rd_kafka_consumer_t));
+        thrd_t thread_id;
+        thrd_t thread_id2;
+        consumer_t *c1_args = (consumer_t *) malloc(sizeof(consumer_t));
+        consumer_t *c2_args = (consumer_t *) malloc(sizeof(consumer_t));
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
@@ -184,7 +183,7 @@ static int do_test_consume_batch (char *strategy) {
         c1_args->rk = c1;
         c1_args->testid = testid;
 
-        pthread_create(&thread_id, NULL, test_consumer_batch_queue, c1_args);
+        thrd_create(&thread_id, test_consumer_batch_queue, c1_args);
 
         c2_args->what = "C2.PRE";
         c2_args->rkq = rkq2;
@@ -193,9 +192,9 @@ static int do_test_consume_batch (char *strategy) {
         c2_args->rk = c2;
         c2_args->testid = testid;
 
-        pthread_create(&thread_id2, NULL, test_consumer_batch_queue, c2_args);
-        pthread_join(thread_id, NULL);
-        pthread_join(thread_id2, NULL);
+        thrd_create(&thread_id2, test_consumer_batch_queue, c2_args);
+        thrd_join(thread_id, NULL);
+        thrd_join(thread_id2, NULL);
 
         rd_free(c1_args);
         rd_free(c2_args);

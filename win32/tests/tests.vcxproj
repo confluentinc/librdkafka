@@ -203,6 +203,7 @@
     <ClCompile Include="..\..\tests\0119-consumer_auth.cpp" />
     <ClCompile Include="..\..\tests\0120-asymmetric_subscription.c" />
     <ClCompile Include="..\..\tests\0121-clusterid.c" />
+    <ClCompile Include="..\..\tests\0122-buffer_cleaning_after_rebalance.c" />
     <ClCompile Include="..\..\tests\0123-connections_max_idle.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />

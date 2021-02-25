@@ -413,7 +413,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                            rd_kafka_topic_partition_list_destroy);
                 break;
         case RD_KAFKA_OP_BARRIER:
-            break;
+                break;
 	default:
 		break;
 	}

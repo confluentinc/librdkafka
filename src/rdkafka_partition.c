@@ -1684,6 +1684,7 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
  */
 void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 				 rd_kafka_op_t *rko_orig) {
+		rd_kafka_op_t *rko;
         int32_t version = rko_orig->rko_version;
 
 	rd_kafka_toppar_lock(rktp);
@@ -1695,7 +1696,7 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[rktp->rktp_fetch_state], version);
 
 	rktp->rktp_op_version = version;
-	rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
+	rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
 	rko->rko_version = version;
 	rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 

@@ -614,7 +614,7 @@ struct rd_kafka_op_s {
                 } leaders;
 
                 struct {
-                    int32_t version;
+                        int32_t version;
                 } barrier;
 
         } rko_u;

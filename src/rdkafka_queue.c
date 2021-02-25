@@ -517,33 +517,22 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 }
 
 
-int invalid_all_old_msgs_in_array(rd_kafka_op_t **rkos,
-                                  int32_t version,
+static size_t rd_kafka_purge_outdated_messages(int32_t version,
                                   rd_kafka_message_t **rkmessages,
-                                  int cnt,
-                                  size_t rkmessages_size) {
-    TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
-    rd_kafka_op_t *rko, *next;
-    rd_kafka_message_t *tmp[rkmessages_size];
+                                  rd_kafka_message_t **rk_valid_messages,
+                                  int cnt) {
+    rd_kafka_op_t *rko;
+    size_t valid_count = 0;
+    int i;
 
-    int valid_count = 0;
-    for(int i = 0; i < cnt; i++) {
-        if(rd_kafka_op_version_outdated(rkos[i], version)) {
-            TAILQ_INSERT_TAIL(&tmpq, rkos[i], rko_link);
+    for(i = 0; i < cnt; i++) {
+        rko = rkmessages[i]->_private;
+        if(rd_kafka_op_version_outdated(rko, version)) {
+            rd_kafka_op_destroy(rko);
         } else {
-            tmp[valid_count++] = rd_kafka_message_get(rkos[i]);
+            rk_valid_messages[valid_count++] = rkmessages[i];
         }
     }
-
-    /* Discard non-desired and already handled ops */
-    next = TAILQ_FIRST(&tmpq);
-    while (next) {
-        rko = next;
-        next = TAILQ_NEXT(next, rko_link);
-        rd_kafka_op_destroy(rko);
-    }
-
-    rkmessages = tmp;
     return valid_count;
 }
 
@@ -565,7 +554,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
-        rd_kafka_op_t *rkos[rkmessages_size];
+        rd_kafka_message_t **rk_valid_messages;
 
 	mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -616,10 +605,12 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
                 if (res == RD_KAFKA_OP_RES_KEEP ||
                     res == RD_KAFKA_OP_RES_HANDLED) {
-                    if(rko->rko_type == RD_KAFKA_OP_BARRIER) {
-                        // For EAGER rebalancing, clean the whole buffer
-                        cnt = invalid_all_old_msgs_in_array(rkos, rko->rko_version, rkmessages, cnt, rkmessages_size);
-                    }
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER) {
+                                /* Clean outdated messages if rebalancing happens. */
+                                rk_valid_messages = malloc(rkmessages_size * sizeof(rd_kafka_message_t *));
+                                cnt = rd_kafka_purge_outdated_messages(rko->rko_version, rkmessages, rk_valid_messages, cnt);
+                                memcpy(rkmessages, rk_valid_messages, rkmessages_size);
+                        }
                         /* Callback served, rko is destroyed (if HANDLED). */
                         continue;
                 } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
@@ -642,7 +633,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 }
 
 		/* Get rkmessage from rko and append to array. */
-		rkos[cnt] = rko;
 		rkmessages[cnt++] = rd_kafka_message_get(rko);
 	}
 

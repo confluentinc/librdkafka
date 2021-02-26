@@ -2951,7 +2951,7 @@ rd_kafka_consume_cb (rd_kafka_t *rk,
 	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
 
-        if (unlikely(rd_kafka_op_version_outdated(rko, 0))) {
+        if (unlikely(rd_kafka_op_version_outdated(rko, 0)) || rko->rko_type == RD_KAFKA_OP_BARRIER) {
                 rd_kafka_op_destroy(rko);
                 return RD_KAFKA_OP_RES_HANDLED;
         }

@@ -605,15 +605,12 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
                 if (res == RD_KAFKA_OP_RES_KEEP ||
                     res == RD_KAFKA_OP_RES_HANDLED) {
-
                         if (rko->rko_type == RD_KAFKA_OP_BARRIER) {
                                 /* Clean outdated messages if rebalancing happens. */
                                 rk_valid_messages = malloc(rkmessages_size * sizeof(rd_kafka_message_t *));
                                 cnt = rd_kafka_purge_outdated_messages(rko->rko_version, rkmessages, rk_valid_messages, cnt);
                                 memcpy(rkmessages, rk_valid_messages, rkmessages_size);
-                                rd_kafka_op_destroy(rko);
                         }
-
                         /* Callback served, rko is destroyed (if HANDLED). */
                         continue;
                 } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||

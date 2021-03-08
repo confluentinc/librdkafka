@@ -101,6 +101,17 @@ const char *rd_kafka_secproto_names[] = {
 
 
 /**
+ * @returns true if the broker needs a persistent connection
+ * @locaility broker thread
+ */
+static RD_INLINE rd_bool_t
+rd_kafka_broker_needs_persistent_connection (rd_kafka_broker_t *rkb) {
+        return rkb->rkb_persistconn.internal ||
+                rd_atomic32_get(&rkb->rkb_persistconn.coord);
+}
+
+
+/**
  * @returns > 0 if a connection to this broker is needed, else 0.
  * @locality broker thread
  * @locks none
@@ -111,8 +122,7 @@ rd_kafka_broker_needs_connection (rd_kafka_broker_t *rkb) {
                 !rd_kafka_terminating(rkb->rkb_rk) &&
                 !rd_kafka_fatal_error_code(rkb->rkb_rk) &&
                 (!rkb->rkb_rk->rk_conf.sparse_connections ||
-                 rkb->rkb_persistconn.internal ||
-                 rd_atomic32_get(&rkb->rkb_persistconn.coord));
+                 rd_kafka_broker_needs_persistent_connection(rkb));
 }
 
 
@@ -560,6 +570,9 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Unlock broker since a requeue will try to lock it. */
 	rd_kafka_broker_unlock(rkb);
 
+        rd_atomic64_set(&rkb->rkb_c.ts_send, 0);
+        rd_atomic64_set(&rkb->rkb_c.ts_recv, 0);
+
 	/*
 	 * Purge all buffers
 	 * (put bufs on a temporary queue since bufs may be requeued,
@@ -653,7 +666,7 @@ void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
                 int inqueue = rd_kafka_bufq_cnt(&rkb->rkb_outbufs);
 
                 if (rkb->rkb_ts_state + minidle < now &&
-                    rd_atomic64_get(&rkb->rkb_ts_tx_last) + minidle < now &&
+                    rd_atomic64_get(&rkb->rkb_c.ts_send) + minidle < now &&
                     inflight + inqueue == 0)
                         log_level = LOG_DEBUG;
                 else if (inflight > 1)
@@ -1410,7 +1423,7 @@ static int rd_kafka_broker_weight_usable (rd_kafka_broker_t *rkb) {
         weight += 10 * !RD_KAFKA_BROKER_IS_LOGICAL(rkb);
 
         if (likely(!rd_atomic32_get(&rkb->rkb_blocking_request_cnt))) {
-                rd_ts_t tx_last = rd_atomic64_get(&rkb->rkb_ts_tx_last);
+                rd_ts_t tx_last = rd_atomic64_get(&rkb->rkb_c.ts_send);
                 int idle = (int)((rd_clock() -
                                   (tx_last > 0 ? tx_last : rkb->rkb_ts_state))
                                  / 1000000);
@@ -1838,6 +1851,8 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
                 rd_atomic64_add(&rkb->rkb_c.rx_err, 1);
                 goto err;
         }
+
+        rd_atomic64_set(&rkb->rkb_c.ts_recv, rd_clock());
 
 	if (rkbuf->rkbuf_totlen == 0) {
 		/* Packet length not known yet. */
@@ -2612,7 +2627,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                         return -1;
 
                 now = rd_clock();
-                rd_atomic64_set(&rkb->rkb_ts_tx_last, now);
+                rd_atomic64_set(&rkb->rkb_c.ts_send, now);
 
                 /* Partial send? Continue next time. */
                 if (rd_slice_remains(&rkbuf->rkbuf_reader) > 0) {
@@ -4981,6 +4996,40 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb,
 }
 
 
+
+/**
+ * @brief Check if connections.max.idle.ms has been exceeded and if so
+ *        close the connection.
+ *
+ * @remark Must only be called if connections.max.idle.ms > 0 and
+ *         the current broker state is UP (or UPDATE).
+ *
+ * @locality broker thread
+ */
+static RD_INLINE void rd_kafka_broker_idle_check (rd_kafka_broker_t *rkb) {
+        rd_ts_t ts_send = rd_atomic64_get(&rkb->rkb_c.ts_send);
+        rd_ts_t ts_recv = rd_atomic64_get(&rkb->rkb_c.ts_recv);
+        rd_ts_t ts_last_activity = RD_MAX(ts_send, ts_recv);
+        int idle_ms;
+
+        /* If nothing has been sent yet, use the connection time as
+         * last activity. */
+        if (unlikely(!ts_last_activity))
+                ts_last_activity = rkb->rkb_ts_state;
+
+        idle_ms = (int)((rd_clock() - ts_last_activity) / 1000);
+
+        if (likely(idle_ms < rkb->rkb_rk->rk_conf.connections_max_idle_ms))
+                return;
+
+        rd_kafka_broker_fail(rkb, LOG_DEBUG,
+                             RD_KAFKA_RESP_ERR__TRANSPORT,
+                             "Connection max idle time exceeded "
+                             "(%dms since last activity)",
+                             idle_ms);
+}
+
+
 /**
  * @brief Serve broker thread according to client type.
  *        May be called in any broker state.
@@ -5072,12 +5121,19 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
         rkb->rkb_persistconn.internal =
                 rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0;
 
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL)
+        if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
                 rd_kafka_broker_internal_serve(rkb, abs_timeout);
-        else if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
+                return;
+        }
+
+        if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
                 rd_kafka_broker_producer_serve(rkb, abs_timeout);
         else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER)
                 rd_kafka_broker_consumer_serve(rkb, abs_timeout);
+
+        if (rkb->rkb_rk->rk_conf.connections_max_idle_ms &&
+            rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
+            rd_kafka_broker_idle_check(rkb);
 }
 
 
@@ -5451,7 +5507,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
 
-        rd_atomic64_init(&rkb->rkb_ts_tx_last, 0);
+        rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
+        rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);
 
         /* ApiVersion fallback interval */
         if (rkb->rkb_rk->rk_conf.api_version_request) {

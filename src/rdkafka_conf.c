@@ -522,6 +522,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
+        { _RK_GLOBAL|_RK_MED, "connections.max.idle.ms",
+          _RK_C_INT,
+          _RK(connections_max_idle_ms),
+          "Close broker connections after the specified time of "
+          "inactivity. "
+          "Disable with 0. "
+          "If this property is left at its default value some heuristics are "
+          "performed to determine a suitable default value, this is currently "
+          "limited to identifying brokers on Azure "
+          "(see librdkafka issue #3109 for more info).",
+          0, INT_MAX, 0 },
         { _RK_GLOBAL|_RK_MED|_RK_HIDDEN, "enable.sparse.connections",
           _RK_C_BOOL,
           _RK(sparse_connections),
@@ -3795,6 +3806,14 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                  * 10 < reconnect.backoff.ms / 2 < 1000. */
                 conf->sparse_connect_intvl =
                         RD_MAX(11, RD_MIN(conf->reconnect_backoff_ms/2, 1000));
+        }
+
+        if (!rd_kafka_conf_is_modified(conf, "connections.max.idle.ms") &&
+            conf->brokerlist &&
+            rd_strcasestr(conf->brokerlist, "azure")) {
+                /* Issue #3109:
+                 * Default connections.max.idle.ms to 9 minutes on Azure. */
+                conf->connections_max_idle_ms = 9*1000*60; /* 9 minutes */
         }
 
         if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {

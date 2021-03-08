@@ -94,12 +94,14 @@ tx | int | | Total number of requests sent
 txbytes | int | | Total number of bytes sent
 txerrs | int | | Total number of transmission errors
 txretries | int | | Total number of request retries
+txidle | int | | Microseconds since last socket send (or -1 if no sends yet for current connection).
 req_timeouts | int | | Total number of requests timed out
 rx | int | | Total number of responses received
 rxbytes | int | | Total number of bytes received
 rxerrs | int | | Total number of receive errors
 rxcorriderrs | int | | Total number of unmatched correlation ids in response (typically for timed out requests)
 rxpartial | int | | Total number of partial MessageSets received. The broker may return partial responses if the full MessageSet could not fit in the remaining Fetch response size.
+rxidle | int | | Microseconds since last socket receive (or -1 if no receives yet for current connection).
 req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)

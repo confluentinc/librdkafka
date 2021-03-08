@@ -90,6 +90,14 @@
 #define rd_strcasecmp(A,B) strcasecmp(A,B)
 #define rd_strncasecmp(A,B,N) strncasecmp(A,B,N)
 
+
+#ifdef HAVE_STRCASESTR
+#define rd_strcasestr(HAYSTACK,NEEDLE) strcasestr(HAYSTACK,NEEDLE)
+#else
+#define rd_strcasestr(HAYSTACK,NEEDLE) _rd_strcasestr(HAYSTACK,NEEDLE)
+#endif
+
+
 /**
  * Errors
  */

@@ -267,9 +267,9 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
 /**
  * @brief Purge the metadata cache
  *
- * @locks rd_kafka_wrlock()
+ * @locks_required rd_kafka_wrlock()
  */
-static void rd_kafka_metadata_cache_purge (rd_kafka_t *rk) {
+void rd_kafka_metadata_cache_purge (rd_kafka_t *rk, rd_bool_t purge_observers) {
         struct rd_kafka_metadata_cache_entry *rkmce;
         int was_empty = TAILQ_EMPTY(&rk->rk_metadata_cache.rkmc_expiry);
 
@@ -281,6 +281,9 @@ static void rd_kafka_metadata_cache_purge (rd_kafka_t *rk) {
 
         if (!was_empty)
                 rd_kafka_metadata_cache_propagate_changes(rk);
+
+        if (purge_observers)
+                rd_list_clear(&rk->rk_metadata_cache.rkmc_observers);
 }
 
 
@@ -369,7 +372,7 @@ void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
                      md->topic_cnt);
 
         if (abs_update)
-                rd_kafka_metadata_cache_purge(rk);
+                rd_kafka_metadata_cache_purge(rk, rd_false/*not observers*/);
 
 
         for (i = 0 ; i < md->topic_cnt ; i++)
@@ -545,15 +548,15 @@ void rd_kafka_metadata_cache_init (rd_kafka_t *rk) {
 }
 
 /**
- * @brief Purge and destroy metadata cache
+ * @brief Purge and destroy metadata cache.
  *
- * @locks rd_kafka_wrlock()
+ * @locks_required rd_kafka_wrlock()
  */
 void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_metadata_cache.rkmc_observers);
         rd_kafka_timer_stop(&rk->rk_timers,
                             &rk->rk_metadata_cache.rkmc_query_tmr, 1/*lock*/);
-        rd_kafka_metadata_cache_purge(rk);
+        rd_kafka_metadata_cache_purge(rk, rd_true/*observers too*/);
         mtx_destroy(&rk->rk_metadata_cache.rkmc_full_lock);
         mtx_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
         cnd_destroy(&rk->rk_metadata_cache.rkmc_cnd);

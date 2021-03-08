@@ -184,6 +184,7 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk);
 
 void rd_kafka_metadata_cache_init (rd_kafka_t *rk);
 void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk);
+void rd_kafka_metadata_cache_purge (rd_kafka_t *rk, rd_bool_t purge_observers);
 int  rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms);
 void rd_kafka_metadata_cache_dump (FILE *fp, rd_kafka_t *rk);
 

@@ -1223,8 +1223,14 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Destroy the coordinator cache */
         rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
 
-        /* Destroy metadata cache */
-        rd_kafka_metadata_cache_destroy(rk);
+        /* Purge metadata cache.
+         * #3279:
+         * We mustn't call cache_destroy() here since there might be outstanding
+         * broker rkos that hold references to the metadata cache lock,
+         * and these brokers are destroyed below. So to avoid a circular
+         * dependency refcnt deadlock we first purge the cache here
+         * and destroy it after the brokers are destroyed. */
+        rd_kafka_metadata_cache_purge(rk, rd_true/*observers too*/);
 
         rd_kafka_wrunlock(rk);
 
@@ -1292,6 +1298,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_assert(!*"All mock clusters must be destroyed prior to "
                           "rd_kafka_t destroy");
         }
+
+        /* Destroy metadata cache */
+        rd_kafka_wrlock(rk);
+        rd_kafka_metadata_cache_destroy(rk);
+        rd_kafka_wrunlock(rk);
 }
 
 /**

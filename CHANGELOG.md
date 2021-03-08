@@ -2,6 +2,16 @@
 
 ## Fixes
 
+## Enhancements
+
+ * Added `connections.max.idle.ms` to automatically close idle broker
+   connections.
+   This feature is disabled by default unless `bootstrap.servers` contains
+   the string `azure` in which case the default is set to 9 minutes to improve
+   connection reliability and circumvent limitations with the Azure load
+   balancers (see #3109 for more information).
+
+
 ### General fixes
 
  * Fix accesses to freed metadata cache mutexes on client termination (#3279)

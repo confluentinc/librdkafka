@@ -1649,8 +1649,26 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_toppar_t *rktp;
+                rd_ts_t txidle = -1, rxidle = -1;
 
 		rd_kafka_broker_lock(rkb);
+
+                if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
+                        /* Calculate tx and rx idle time in usecs */
+                        txidle = rd_atomic64_get(&rkb->rkb_c.ts_send);
+                        rxidle = rd_atomic64_get(&rkb->rkb_c.ts_recv);
+
+                        if (txidle)
+                                txidle = RD_MAX(now - txidle, 0);
+                        else
+                                txidle = -1;
+
+                        if (rxidle)
+                                rxidle = RD_MAX(now - rxidle, 0);
+                        else
+                                rxidle = -1;
+                }
+
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -1666,12 +1684,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
 			   "\"txretries\":%"PRIu64", "
+                           "\"txidle\":%"PRIu64", "
 			   "\"req_timeouts\":%"PRIu64", "
 			   "\"rx\":%"PRIu64", "
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
+                           "\"rxidle\":%"PRIu64", "
                            "\"zbuf_grow\":%"PRIu64", "
                            "\"buf_grow\":%"PRIu64", "
                            "\"wakeups\":%"PRIu64", "
@@ -1693,12 +1713,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.tx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.tx_err),
 			   rd_atomic64_get(&rkb->rkb_c.tx_retries),
+                           txidle,
 			   rd_atomic64_get(&rkb->rkb_c.req_timeouts),
 			   rd_atomic64_get(&rkb->rkb_c.rx),
 			   rd_atomic64_get(&rkb->rkb_c.rx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.rx_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_corrid_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
+                           rxidle,
                            rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
                            rd_atomic64_get(&rkb->rkb_c.buf_grow),
                            rd_atomic64_get(&rkb->rkb_c.wakeups),

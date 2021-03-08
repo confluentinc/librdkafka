@@ -1,3 +1,12 @@
+# librdkafka NEXT
+
+## Fixes
+
+### General fixes
+
+ * Fix accesses to freed metadata cache mutexes on client termination (#3279)
+
+
 # librdkafka v1.6.1
 
 librdkafka v1.6.1 is a maintenance release.

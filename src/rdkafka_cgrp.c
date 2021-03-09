@@ -235,8 +235,6 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL ||                   \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL ||                 \
-         (rkcg)->rkcg_join_state ==                                     \
-         RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE ||          \
          (rkcg)->rkcg_rebalance_incr_assignment != NULL ||              \
          (rkcg)->rkcg_rebalance_rejoin)
 

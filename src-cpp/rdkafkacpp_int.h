@@ -155,11 +155,11 @@ class EventImpl : public Event {
   EventImpl (Type type, ErrorCode err, Severity severity,
              const char *fac, const char *str):
   type_(type), err_(err), severity_(severity), fac_(fac ? fac : ""),
-	  str_(str), id_(0), throttle_time_(0) {};
+  str_(str), id_(0), throttle_time_(0), fatal_(false) {};
 
   EventImpl (Type type):
   type_(type), err_(ERR_NO_ERROR), severity_(EVENT_SEVERITY_EMERG),
-	  fac_(""), str_(""), id_(0), throttle_time_(0) {};
+  fac_(""), str_(""), id_(0), throttle_time_(0), fatal_(false) {};
 
   Type        type () const { return type_; }
   ErrorCode   err () const { return err_; }
@@ -467,7 +467,7 @@ private:
 
 class ConfImpl : public Conf {
  public:
-  ConfImpl()
+  ConfImpl(ConfType conf_type)
       :consume_cb_(NULL),
       dr_cb_(NULL),
       event_cb_(NULL),
@@ -479,8 +479,10 @@ class ConfImpl : public Conf {
       offset_commit_cb_(NULL),
       oauthbearer_token_refresh_cb_(NULL),
       ssl_cert_verify_cb_(NULL),
+      conf_type_(conf_type),
       rk_conf_(NULL),
-      rkt_conf_(NULL){}
+      rkt_conf_(NULL)
+      {}
   ~ConfImpl () {
     if (rk_conf_)
       rd_kafka_conf_destroy(rk_conf_);

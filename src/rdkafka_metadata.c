@@ -882,8 +882,10 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         rd_list_t q_topics;
         int destroy_rkb = 0;
 
-        if (!rk)
+        if (!rk) {
+                rd_assert(rkb);
                 rk = rkb->rkb_rk;
+        }
 
         rd_kafka_wrlock(rk);
 
@@ -1026,8 +1028,10 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
                 rk->rk_conf.allow_auto_create_topics;
         int cache_cnt = 0;
 
-        if (!rk)
+        if (!rk) {
+                rd_assert(rkb);
                 rk = rkb->rkb_rk;
+        }
 
         rkcg = rk->rk_cgrp;
         rd_assert(rkcg != NULL);
@@ -1108,8 +1112,10 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         int destroy_rkb = 0;
         rd_list_t topics;
 
-        if (!rk)
+        if (!rk) {
+                rd_assert(rkb);
                 rk = rkb->rkb_rk;
+        }
 
         if (!rkb) {
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,

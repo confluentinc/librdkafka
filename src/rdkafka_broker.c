@@ -2130,7 +2130,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 		return -1;
 	}
 
-	return 0;
+        return 1;
 }
 
 

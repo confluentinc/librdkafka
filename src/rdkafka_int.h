@@ -730,21 +730,28 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 /**
  * @brief Wait until \p tspec for curr_msgs to reach 0.
  *
- * @returns remaining curr_msgs
+ * @returns rd_true if zero is reached, or rd_false on timeout.
+ *          The remaining messages are returned in \p *curr_msgsp
  */
-static RD_INLINE RD_UNUSED int
-rd_kafka_curr_msgs_wait_zero (rd_kafka_t *rk, const struct timespec *tspec) {
-        int cnt;
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_curr_msgs_wait_zero (rd_kafka_t *rk, int timeout_ms,
+                              unsigned int *curr_msgsp) {
+        unsigned int cnt;
+        struct timespec tspec;
+
+        rd_timeout_init_timespec(&tspec, timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
-                cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
-                                  &rk->rk_curr_msgs.lock,
-                                  tspec);
+                if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
+                                      &rk->rk_curr_msgs.lock,
+                                      &tspec) == thrd_timedout)
+                        break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
 
-        return cnt;
+        *curr_msgsp = cnt;
+        return cnt == 0;
 }
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);

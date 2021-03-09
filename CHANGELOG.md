@@ -1,7 +1,5 @@
 # librdkafka NEXT
 
-## Fixes
-
 ## Enhancements
 
  * Added `connections.max.idle.ms` to automatically close idle broker
@@ -11,6 +9,7 @@
    connection reliability and circumvent limitations with the Azure load
    balancers (see #3109 for more information).
 
+## Fixes
 
 ### General fixes
 
@@ -22,6 +21,13 @@
    One occurrence of this issue was query_watermark_offsets() that could return
    `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
    client instance was created.
+
+### Producer fixes
+
+ * The timeout value of `flush()` was not respected when delivery reports
+   were scheduled as events (such as for confluent-kafka-go) rather than
+   callbacks.
+
 
 
 # librdkafka v1.6.1

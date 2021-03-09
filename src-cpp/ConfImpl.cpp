@@ -76,9 +76,7 @@ std::list<std::string> *RdKafka::ConfImpl::dump () {
 }
 
 RdKafka::Conf *RdKafka::Conf::create (ConfType type) {
-  ConfImpl *conf = new ConfImpl();
-
-  conf->conf_type_ = type;
+  ConfImpl *conf = new ConfImpl(type);
 
   if (type == CONF_GLOBAL)
     conf->rk_conf_ = rd_kafka_conf_new();

@@ -936,8 +936,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
         }
 
 	if (rkb->rkb_rsal &&
-	    rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
-	    < rd_clock()) {
+	    (forceResetAddress ||
+            rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
+	    < rd_clock())) {
 		/* Address list has expired. */
 
                 /* Save the address index to make sure we still round-robin

@@ -3346,7 +3346,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
         }
 
         if (rko)
-                rd_kafka_op_destroy(rko);
+                rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
 
         return ret;
 }
@@ -6066,12 +6066,14 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                 /* Existing broker */
                 if (needs_update) {
                         rd_kafka_op_t *rko;
-
                         rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
                         rd_strlcpy(rko->rko_u.node.nodename, nodename,
                                    sizeof(rko->rko_u.node.nodename));
                         rko->rko_u.node.nodeid   = mdb->id;
-                        rd_kafka_q_enq(rkb->rkb_ops, rko);
+                        /* Perform a blocking op request so that all
+                         * broker-related state, such as the rk broker list,
+                         * is up to date by the time this call returns. */
+                        rd_kafka_op_req(rkb->rkb_ops, rko, -1);
                 }
         }
 

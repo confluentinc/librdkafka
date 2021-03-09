@@ -15,6 +15,13 @@
 ### General fixes
 
  * Fix accesses to freed metadata cache mutexes on client termination (#3279)
+ * There was a race condition on receiving updated metadata where a broker id
+   update (such as bootstrap to proper broker transformation) could finish after
+   the topic metadata cache was updated, leading to existing brokers seemingly
+   being not available.
+   One occurrence of this issue was query_watermark_offsets() that could return
+   `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
+   client instance was created.
 
 
 # librdkafka v1.6.1

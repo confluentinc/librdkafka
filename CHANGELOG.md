@@ -7,7 +7,7 @@
  * Added `connections.max.idle.ms` to automatically close idle broker
    connections.
    This feature is disabled by default unless `bootstrap.servers` contains
-   the string `azure` in which case the default is set to 9 minutes to improve
+   the string `azure` in which case the default is set to <4 minutes to improve
    connection reliability and circumvent limitations with the Azure load
    balancers (see #3109 for more information).
 

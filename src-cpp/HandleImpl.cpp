@@ -140,7 +140,8 @@ RdKafka::oauthbearer_token_refresh_cb_trampoline (rd_kafka_t *rk,
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
   handle->oauthbearer_token_refresh_cb_->
-    oauthbearer_token_refresh_cb(std::string(oauthbearer_config ?
+    oauthbearer_token_refresh_cb(handle,
+                                 std::string(oauthbearer_config ?
                                              oauthbearer_config : ""));
 }
 

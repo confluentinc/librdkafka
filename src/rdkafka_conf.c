@@ -3812,8 +3812,8 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
             conf->brokerlist &&
             rd_strcasestr(conf->brokerlist, "azure")) {
                 /* Issue #3109:
-                 * Default connections.max.idle.ms to 9 minutes on Azure. */
-                conf->connections_max_idle_ms = 9*1000*60; /* 9 minutes */
+                 * Default connections.max.idle.ms to <4 minutes on Azure. */
+                conf->connections_max_idle_ms = (4*60-10) * 1000;
         }
 
         if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {

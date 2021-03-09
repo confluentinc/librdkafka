@@ -9,6 +9,14 @@
    connection reliability and circumvent limitations with the Azure load
    balancers (see #3109 for more information).
 
+## Upgrade considerations
+
+ * The C++ `oauthbearer_token_refresh_cb()` was missing a `Handle *`
+   argument that has now been added. This is a breaking change but the original
+   function signature is considered a bug.
+   This change only affects C++ OAuth developers.
+
+
 ## Fixes
 
 ### General fixes

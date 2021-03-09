@@ -4208,15 +4208,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
                  * Instead we rely on the application to serve the event
                  * queue in another thread, so all we do here is wait
                  * for the current message count to reach zero. */
-                struct timespec tspec;
-
-                rd_timeout_init_timespec(&tspec, timeout_ms);
-
-                while ((msg_cnt =
-                        rd_kafka_curr_msgs_wait_zero(rk, &tspec)) > 0) {
-                        if (unlikely(rd_kafka_yield_thread))
-                                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-                }
+                rd_kafka_curr_msgs_wait_zero(rk, timeout_ms, &msg_cnt);
 
                 return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
                         RD_KAFKA_RESP_ERR_NO_ERROR;

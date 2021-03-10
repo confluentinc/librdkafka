@@ -34,5 +34,5 @@ else
 
     mkdir -p artifacts
 
-    exec docker run -v $PWD:/v alpine:3.8 /v/packaging/alpine/$(basename $0) --in-docker $*
+    exec docker run -v $PWD:/v alpine:3.12 /v/packaging/alpine/$(basename $0) --in-docker $*
 fi

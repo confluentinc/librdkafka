@@ -16,6 +16,11 @@
    function signature is considered a bug.
    This change only affects C++ OAuth developers.
 
+## Enhancements
+
+ * Bumped to OpenSSL 1.1.1j in binary librdkafka artifacts.
+ * The binary librdkafka artifacts for Alpine are now using Alpine 3.12 and
+   OpenSSL 1.1.1j.
 
 ## Fixes
 

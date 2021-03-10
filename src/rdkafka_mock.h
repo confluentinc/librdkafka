@@ -64,7 +64,8 @@ extern "C" {
  *  - Producer
  *  - Idempotent Producer
  *  - Transactional Producer
- *  - Low-level consumer with offset commits (no consumer groups)
+ *  - Low-level consumer
+ *  - High-level balanced consumer groups with offset commits
  *  - Topic Metadata and auto creation
  *
  * @remark High-level consumers making use of the balanced consumer groups
@@ -163,14 +164,25 @@ rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
- * @brief Same as rd_kafka_mock_push_request_errors() but for a specific broker.
+ * @brief Push \p cnt errors and RTT tuples in the \p ... va-arg list onto
+ *        the broker's error stack for the given \p ApiKey.
+ *
+ * \p ApiKey is the Kafka protocol request type, e.g., ProduceRequest (0).
+ *
+ * Each entry is a tuple of:
+ *   rd_kafka_resp_err_t err - error to return (or 0)
+ *   int rtt_ms              - response RTT/delay in milliseconds (or 0)
+ *
+ * The following \p cnt protocol requests matching \p ApiKey will fail with the
+ * provided error code and removed from the stack, starting with
+ * the first error code, then the second, etc.
  *
  * @remark The broker errors take precedence over the cluster errors.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_broker_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
-                                          int32_t broker_id,
-                                          int16_t ApiKey, size_t cnt, ...);
+rd_kafka_mock_broker_push_request_error_rtts (rd_kafka_mock_cluster_t *mcluster,
+                                              int32_t broker_id,
+                                              int16_t ApiKey, size_t cnt, ...);
 
 
 /**

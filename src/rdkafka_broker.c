@@ -923,7 +923,8 @@ rd_kafka_broker_send (rd_kafka_broker_t *rkb, rd_slice_t *slice) {
 
 
 static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
-                                    const char *nodename) {
+                                    const char *nodename,
+                                    rd_bool_t reset_cached_addr) {
 	const char *errstr;
         int save_idx = 0;
 
@@ -935,8 +936,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
         }
 
 	if (rkb->rkb_rsal &&
-	    rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
-	    < rd_clock()) {
+	    (reset_cached_addr ||
+            rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
+	    < rd_clock())) {
 		/* Address list has expired. */
 
                 /* Save the address index to make sure we still round-robin
@@ -2075,6 +2077,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	const rd_sockaddr_inx_t *sinx;
 	char errstr[512];
         char nodename[RD_KAFKA_NODENAME_SIZE];
+        rd_bool_t reset_cached_addr = rd_false;
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		"broker in state %s connecting",
@@ -2084,6 +2087,10 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
         rd_kafka_broker_lock(rkb);
         rd_strlcpy(nodename, rkb->rkb_nodename, sizeof(nodename));
+
+        /* If the nodename was changed since the last connect,
+         * reset the address cache. */
+        reset_cached_addr = (rkb->rkb_connect_epoch != rkb->rkb_nodename_epoch);
         rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
         /* Logical brokers might not have a hostname set, in which case
          * we should not try to connect. */
@@ -2100,7 +2107,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
         rd_kafka_broker_update_reconnect_backoff(rkb, &rkb->rkb_rk->rk_conf,
                                                  rd_clock());
 
-        if (rd_kafka_broker_resolve(rkb, nodename) == -1)
+        if (rd_kafka_broker_resolve(rkb, nodename, reset_cached_addr) == -1)
                 return -1;
 
 	sinx = rd_sockaddr_list_next(rkb->rkb_rsal);

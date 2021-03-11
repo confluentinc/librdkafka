@@ -11,6 +11,7 @@ librdkafka v1.6.2 is a maintenance release with the following backported fixes:
    which would result in some timeout operations not being enforced correctly,
    e.g., the transactional producer API timeouts.
    These timers are now started with a timeout of 1 microsecond.
+ * Force address resolution if the broker epoch changes (#3238)
 
 
 # librdkafka v1.6.1

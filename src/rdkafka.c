@@ -2181,9 +2181,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_kafka_timers_init(&rk->rk_timers, rk, rk->rk_ops);
         rd_kafka_metadata_cache_init(rk);
         rd_kafka_coord_cache_init(&rk->rk_coord_cache,
-                                  rk->rk_conf.metadata_refresh_interval_ms ?
-                                  rk->rk_conf.metadata_refresh_interval_ms :
-                                  (5 * 60 * 1000) /* 5min */);
+                                  rk->rk_conf.metadata_max_age_ms);
         rd_kafka_coord_reqs_init(rk);
 
 	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)

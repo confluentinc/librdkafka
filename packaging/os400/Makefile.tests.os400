@@ -116,7 +116,7 @@ tests_objects = $(testlib)/test.o                                \
                 $(testlib)/test-0118-commit_rebalance.o          \
                 $(testlib)/test-0120-asymmetric_subscription.o   \
                 $(testlib)/test-0121-clusterid.o                 \
- 
+                $(testlib)/test-0123-connections_max_idle.o      \
 
 
 
@@ -374,6 +374,9 @@ $(testlib)/test-0120-asymmetric_subscription.o : 0120-asymmetric_subscription.c 
 
 $(testlib)/test-0121-clusterid.o : 0121-clusterid.c ./../packaging/os400/Makefile.tests.os400
 	icc -o $(testlib)/test-0121-clusterid.o -c 0121-clusterid.c $(iccflags) 
+
+$(testlib)/test-0123-connections_max_idle.o : 0123-connections_max_idle.c ./../packaging/os400/Makefile.tests.os400
+	icc -o $(testlib)/test-0123-connections_max_idle.o -c 0123-connections_max_idle.c $(iccflags) 
 
 $(testlib)/test-1000-unktopic.o : 1000-unktopic.c ./../packaging/os400/Makefile.tests.os400
 	icc -o $(testlib)/test-1000-unktopic.o -c 1000-unktopic.c $(iccflags) 

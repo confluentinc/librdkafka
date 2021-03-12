@@ -151,6 +151,11 @@ int main_0003_msgmaxsize (int argc, char **argv) {
                         else
                                 free(msgidp);
                 }
+
+                if (value)
+                        free(value);
+                if (key)
+                        free(key);
         }
 
         /* Wait for messages to be delivered. */

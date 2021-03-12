@@ -187,7 +187,7 @@ int main_0039_event_log (int argc, char **argv) {
         rd_kafka_conf_set(conf, "bootstrap.servers", "0:65534", NULL, 0);
         rd_kafka_conf_set(conf, "log.queue", "true", NULL, 0);
         rd_kafka_conf_set(conf, "debug", "all", NULL, 0);
-        
+
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
         eventq = rd_kafka_queue_get_main(rk);
@@ -221,8 +221,9 @@ int main_0039_event_log (int argc, char **argv) {
                 }
                 rd_kafka_event_destroy(rkev);
         }
-        
+
         /* Destroy rdkafka instance */
+        rd_kafka_queue_destroy(eventq);
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
 

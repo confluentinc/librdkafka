@@ -6079,8 +6079,10 @@ rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                         rko->rko_u.node.nodeid   = mdb->id;
                         /* Perform a blocking op request so that all
                          * broker-related state, such as the rk broker list,
-                         * is up to date by the time this call returns. */
-                        rd_kafka_op_req(rkb->rkb_ops, rko, -1);
+                         * is up to date by the time this call returns.
+                         * Ignore&destroy the response. */
+                        rd_kafka_op_err_destroy(
+                                rd_kafka_op_req(rkb->rkb_ops, rko, -1));
                 }
         }
 

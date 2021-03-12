@@ -269,6 +269,7 @@ _TEST_DECL(0119_consumer_auth);
 #endif
 _TEST_DECL(0120_asymmetric_subscription);
 _TEST_DECL(0121_clusterid);
+_TEST_DECL(0123_connections_max_idle);
 
 #ifndef __OS400__
 /* Manual tests */
@@ -504,6 +505,7 @@ struct test tests[] = {
 #endif
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
+        _TEST(0123_connections_max_idle, 0),
 
         /* Manual tests */
 #ifndef __OS400__

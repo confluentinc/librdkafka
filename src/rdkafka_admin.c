@@ -1242,7 +1242,6 @@ rd_kafka_admin_fanout_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq,
         rd_kafka_op_t *rko_result;
 
         RD_KAFKA_OP_TYPE_ASSERT(rko, RD_KAFKA_OP_ADMIN_RESULT);
-        rd_assert(rko_fanout);
         RD_KAFKA_OP_TYPE_ASSERT(rko_fanout, RD_KAFKA_OP_ADMIN_FANOUT);
 
         rd_assert(rko_fanout->rko_u.admin_request.fanout.outstanding > 0);
@@ -3849,7 +3848,7 @@ rd_kafka_DeleteConsumerGroupOffsets_new (const char *group,
         size_t tsize = strlen(group) + 1;
         rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets;
 
-        rd_assert(group && partitions);
+        rd_assert(partitions);
 
         /* Single allocation */
         del_grpoffsets = rd_malloc(sizeof(*del_grpoffsets) + tsize);

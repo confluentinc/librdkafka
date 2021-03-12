@@ -133,6 +133,10 @@ int rd_snprintf (char *str, size_t size, const char *format, ...) {
 
 #define rd_strcasecmp(A,B) _stricmp(A,B)
 #define rd_strncasecmp(A,B,N) _strnicmp(A,B,N)
+/* There is a StrStrIA() but it requires extra linking, so use our own
+ * implementation instead. */
+#define rd_strcasestr(HAYSTACK,NEEDLE) _rd_strcasestr(HAYSTACK,NEEDLE)
+
 
 
 /**

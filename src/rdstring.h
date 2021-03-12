@@ -79,6 +79,8 @@ unsigned int rd_string_hash (const char *str, ssize_t len);
 
 int rd_strcmp (const char *a, const char *b);
 
+char *_rd_strcasestr (const char *haystack, const char *needle);
+
 /** @returns "true" if EXPR is true, else "false" */
 #define RD_STR_ToF(EXPR) ((EXPR) ? "true" : "false")
 

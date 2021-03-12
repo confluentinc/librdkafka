@@ -131,7 +131,7 @@ int mtx_lock(mtx_t *mtx)
 
   if (!mtx->mRecursive)
   {
-    while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
+    rd_assert(!mtx->mAlreadyLocked); /* Would deadlock */
     mtx->mAlreadyLocked = TRUE;
   }
   return thrd_success;
@@ -179,7 +179,7 @@ int mtx_timedlock(mtx_t *mtx, const struct timespec *ts)
 
   if (!mtx->mRecursive)
   {
-    while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
+    rd_assert(!mtx->mAlreadyLocked); /* Would deadlock */
     mtx->mAlreadyLocked = TRUE;
   }
 

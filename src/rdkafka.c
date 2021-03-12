@@ -1235,8 +1235,14 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Destroy the coordinator cache */
         rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
 
-        /* Destroy metadata cache */
-        rd_kafka_metadata_cache_destroy(rk);
+        /* Purge metadata cache.
+         * #3279:
+         * We mustn't call cache_destroy() here since there might be outstanding
+         * broker rkos that hold references to the metadata cache lock,
+         * and these brokers are destroyed below. So to avoid a circular
+         * dependency refcnt deadlock we first purge the cache here
+         * and destroy it after the brokers are destroyed. */
+        rd_kafka_metadata_cache_purge(rk, rd_true/*observers too*/);
 
         rd_kafka_wrunlock(rk);
 
@@ -1308,6 +1314,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_assert(!*"All mock clusters must be destroyed prior to "
                           "rd_kafka_t destroy");
         }
+
+        /* Destroy metadata cache */
+        rd_kafka_wrlock(rk);
+        rd_kafka_metadata_cache_destroy(rk);
+        rd_kafka_wrunlock(rk);
 }
 
 /**
@@ -1654,8 +1665,26 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_toppar_t *rktp;
+                rd_ts_t txidle = -1, rxidle = -1;
 
 		rd_kafka_broker_lock(rkb);
+
+                if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
+                        /* Calculate tx and rx idle time in usecs */
+                        txidle = rd_atomic64_get(&rkb->rkb_c.ts_send);
+                        rxidle = rd_atomic64_get(&rkb->rkb_c.ts_recv);
+
+                        if (txidle)
+                                txidle = RD_MAX(now - txidle, 0);
+                        else
+                                txidle = -1;
+
+                        if (rxidle)
+                                rxidle = RD_MAX(now - rxidle, 0);
+                        else
+                                rxidle = -1;
+                }
+
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -1671,12 +1700,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
 			   "\"txretries\":%"PRIu64", "
+                           "\"txidle\":%"PRIu64", "
 			   "\"req_timeouts\":%"PRIu64", "
 			   "\"rx\":%"PRIu64", "
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
+                           "\"rxidle\":%"PRIu64", "
                            "\"zbuf_grow\":%"PRIu64", "
                            "\"buf_grow\":%"PRIu64", "
                            "\"wakeups\":%"PRIu64", "
@@ -1698,12 +1729,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.tx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.tx_err),
 			   rd_atomic64_get(&rkb->rkb_c.tx_retries),
+                           txidle,
 			   rd_atomic64_get(&rkb->rkb_c.req_timeouts),
 			   rd_atomic64_get(&rkb->rkb_c.rx),
 			   rd_atomic64_get(&rkb->rkb_c.rx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.rx_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_corrid_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
+                           rxidle,
                            rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
                            rd_atomic64_get(&rkb->rkb_c.buf_grow),
                            rd_atomic64_get(&rkb->rkb_c.wakeups),
@@ -4206,15 +4239,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
                  * Instead we rely on the application to serve the event
                  * queue in another thread, so all we do here is wait
                  * for the current message count to reach zero. */
-                struct timespec tspec;
-
-                rd_timeout_init_timespec(&tspec, timeout_ms);
-
-                while ((msg_cnt =
-                        rd_kafka_curr_msgs_wait_zero(rk, &tspec)) > 0) {
-                        if (unlikely(rd_kafka_yield_thread))
-                                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-                }
+                rd_kafka_curr_msgs_wait_zero(rk, timeout_ms, &msg_cnt);
 
                 return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
                         RD_KAFKA_RESP_ERR_NO_ERROR;

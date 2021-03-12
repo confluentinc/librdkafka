@@ -1,3 +1,48 @@
+# librdkafka NEXT
+
+## Enhancements
+
+ * Added `connections.max.idle.ms` to automatically close idle broker
+   connections.
+   This feature is disabled by default unless `bootstrap.servers` contains
+   the string `azure` in which case the default is set to <4 minutes to improve
+   connection reliability and circumvent limitations with the Azure load
+   balancers (see #3109 for more information).
+
+## Upgrade considerations
+
+ * The C++ `oauthbearer_token_refresh_cb()` was missing a `Handle *`
+   argument that has now been added. This is a breaking change but the original
+   function signature is considered a bug.
+   This change only affects C++ OAuth developers.
+
+## Enhancements
+
+ * Bumped to OpenSSL 1.1.1j in binary librdkafka artifacts.
+ * The binary librdkafka artifacts for Alpine are now using Alpine 3.12 and
+   OpenSSL 1.1.1j.
+
+## Fixes
+
+### General fixes
+
+ * Fix accesses to freed metadata cache mutexes on client termination (#3279)
+ * There was a race condition on receiving updated metadata where a broker id
+   update (such as bootstrap to proper broker transformation) could finish after
+   the topic metadata cache was updated, leading to existing brokers seemingly
+   being not available.
+   One occurrence of this issue was query_watermark_offsets() that could return
+   `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
+   client instance was created.
+
+### Producer fixes
+
+ * The timeout value of `flush()` was not respected when delivery reports
+   were scheduled as events (such as for confluent-kafka-go) rather than
+   callbacks.
+
+
+
 # librdkafka v1.6.1
 
 librdkafka v1.6.1 is a maintenance release.
@@ -21,6 +66,9 @@ librdkafka v1.6.1 is a maintenance release.
  * Admin API and transactional `send_offsets_to_transaction()` coordinator
    requests, such as TxnOffsetCommitRequest, could in rare cases be sent
    multiple times which could cause a crash.
+ * `ssl.ca.location=probe` is now enabled by default on Mac OSX since the
+   librdkafka-bundled OpenSSL might not have the same default CA search paths
+   as the system or brew installed OpenSSL. Probing scans all known locations.
 
 ### Transactional Producer fixes
 

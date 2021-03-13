@@ -79,8 +79,8 @@ void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
 #define rd_kafka_timer_start_oneshot(rkts,rtmr,restart,interval,callback,arg) \
         rd_kafka_timer_start0(rkts,rtmr,interval,rd_true,restart,callback,arg)
 
-void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
-			     rd_kafka_timer_t *rtmr, int backoff_us);
+void rd_kafka_timer_exp_backoff (rd_kafka_timers_t *rkts,
+                                 rd_kafka_timer_t *rtmr);
 rd_ts_t rd_kafka_timer_next (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
                              int do_lock);
 

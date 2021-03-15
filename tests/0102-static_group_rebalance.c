@@ -56,6 +56,7 @@ static int static_member_wait_rebalance0 (int line,
                                           _consumer_t *c, int64_t start,
                                           int64_t *target, int timeout_ms) {
         int64_t tmout = test_clock() + (timeout_ms * 1000);
+        test_timing_t t_time;
 
         c->curr_line = line;
 
@@ -63,6 +64,7 @@ static int static_member_wait_rebalance0 (int line,
                  line, rd_kafka_name(c->rk),
                  rd_kafka_err2name(c->expected_rb_event));
 
+        TIMING_START(&t_time, "wait_rebalance");
         while (timeout_ms < 0 ? 1 : test_clock() <= tmout) {
                 if (*target > start) {
                         c->curr_line = 0;
@@ -70,6 +72,7 @@ static int static_member_wait_rebalance0 (int line,
                 }
                 test_consumer_poll_once(c->rk, c->mv, 1000);
         }
+        TIMING_STOP(&t_time);
 
         c->curr_line = 0;
 
@@ -150,6 +153,8 @@ static void do_test_static_group_rebalance (void) {
         char *topics = rd_strdup(tsprintf("^%s.*", topic));
         test_timing_t t_close;
 
+        SUB_TEST();
+
         test_conf_init(&conf, NULL, 70);
         test_msgver_init(&mv, testid);
         c[0].mv = &mv;
@@ -162,6 +167,7 @@ static void do_test_static_group_rebalance (void) {
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        test_conf_set(conf, "metadata.max.age.ms", "5000");
         test_conf_set(conf, "enable.partition.eof", "true");
         test_conf_set(conf, "group.instance.id", "consumer1");
 
@@ -174,6 +180,8 @@ static void do_test_static_group_rebalance (void) {
         c[1].rk = test_create_consumer(topic, rebalance_cb,
                                        rd_kafka_conf_dup(conf), NULL);
         rd_kafka_conf_destroy(conf);
+
+        test_wait_topic_exists(c[1].rk, topic, 5000);
 
         test_consumer_subscribe(c[0].rk, topics);
         test_consumer_subscribe(c[1].rk, topics);
@@ -386,6 +394,8 @@ static void do_test_static_group_rebalance (void) {
                            msgcnt);
         test_msgver_clear(&mv);
         free(topics);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -442,7 +452,7 @@ static void do_test_fenced_member (void) {
         char errstr[512];
         rd_kafka_resp_err_t err;
 
-        TEST_SAY(_C_MAG "[ Test fenced member ]\n");
+        SUB_TEST();
 
         test_conf_init(&conf, NULL, 30);
 
@@ -453,6 +463,8 @@ static void do_test_fenced_member (void) {
 
         test_conf_set(conf, "group.instance.id", "consumer2");
         c[2] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+
+        test_wait_topic_exists(c[2], topic, 5000);
 
         test_consumer_subscribe(c[1], topic);
         test_consumer_subscribe(c[2], topic);
@@ -509,6 +521,8 @@ static void do_test_fenced_member (void) {
 
         rd_kafka_destroy(c[0]);
         rd_kafka_destroy(c[1]);
+
+        SUB_TEST_PASS();
 }
 
 

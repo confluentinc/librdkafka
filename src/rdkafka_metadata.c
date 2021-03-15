@@ -1234,7 +1234,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                     rk->rk_conf.metadata_refresh_interval_ms)
                         rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
                 else
-                    rd_kafka_timer_exp_backoff(rkts, rtmr);
+                        rd_kafka_timer_exp_backoff(rkts, rtmr);
         }
 
         rd_list_destroy(&topics);

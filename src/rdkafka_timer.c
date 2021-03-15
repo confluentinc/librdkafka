@@ -171,14 +171,14 @@ void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
  * Delay the next timer invocation by '2 * rtmr->rtmr_interval'
  */
 void rd_kafka_timer_exp_backoff (rd_kafka_timers_t *rkts,
-                 rd_kafka_timer_t *rtmr) {
-    rd_kafka_timers_lock(rkts);
-    if (rd_kafka_timer_scheduled(rtmr)) {
-        rtmr->rtmr_interval *= 2;
-        rd_kafka_timer_unschedule(rkts, rtmr);
-    }
-    rd_kafka_timer_schedule(rkts, rtmr, rtmr->rtmr_interval);
-    rd_kafka_timers_unlock(rkts);
+                                 rd_kafka_timer_t *rtmr) {
+        rd_kafka_timers_lock(rkts);
+        if (rd_kafka_timer_scheduled(rtmr)) {
+                rtmr->rtmr_interval *= 2;
+                rd_kafka_timer_unschedule(rkts, rtmr);
+        }
+        rd_kafka_timer_schedule(rkts, rtmr, rtmr->rtmr_interval);
+        rd_kafka_timers_unlock(rkts);
 }
 
 

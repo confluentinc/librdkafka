@@ -89,7 +89,8 @@ rd_kafka_idemp_broker_any (rd_kafka_t *rk,
 
 rd_bool_t rd_kafka_idemp_check_error (rd_kafka_t *rk,
                                       rd_kafka_resp_err_t err,
-                                      const char *errstr);
+                                      const char *errstr,
+                                      rd_bool_t is_fatal);
 
 
 /**

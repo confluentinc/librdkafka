@@ -274,8 +274,12 @@ struct rd_kafka_mock_cluster_s {
 
         TAILQ_HEAD(, rd_kafka_mock_cgrp_s) cgrps;
 
-        /**< Explicit coordinators (set with mock_set_coordinator()) */
+        /** Explicit coordinators (set with mock_set_coordinator()) */
         TAILQ_HEAD(, rd_kafka_mock_coord_s) coords;
+
+        /** Current transactional producer PIDs.
+         *  Element type is a malloced rd_kafka_pid_t*. */
+        rd_list_t pids;
 
         char *bootstraps; /**< bootstrap.servers */
 

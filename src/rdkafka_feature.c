@@ -46,9 +46,6 @@ static const char *rd_kafka_feature_names[] = {
         "IdempotentProducer",
         "ZSTD",
         "SaslAuthReq",
-#ifdef RD_KAFKA_FEATURE_KIP360
-        "KIP-360",
-#endif
         "UnitTest",
         NULL
 };
@@ -204,17 +201,6 @@ static const struct rd_kafka_feature_map {
                         { -1 },
                 },
         },
-#ifdef RD_KAFKA_FEATURE_KIP360
-        {
-                /* @brief >=2.4.0: KIP-360 */
-                .feature = RD_KAFKA_FEATURE_KIP360,
-                .depends = {
-                        { RD_KAFKAP_InitProducerId, 2, 2 },
-                        { -1 },
-                },
-
-        },
-#endif
         { .feature = 0 }, /* sentinel */
 };
 

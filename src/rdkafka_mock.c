@@ -672,6 +672,11 @@ static void rd_kafka_mock_connection_close (rd_kafka_mock_connection_t *mconn,
 void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
                                              rd_kafka_buf_t *resp) {
 
+        if (resp->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+                /* Empty struct tags */
+                rd_kafka_buf_write_i8(resp, 0);
+        }
+
         resp->rkbuf_ts_sent = rd_clock();
 
         resp->rkbuf_reshdr.Size =
@@ -832,6 +837,9 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                 /* For convenience, shave off the ClientId */
                 rd_kafka_buf_skip_str(rkbuf);
 
+                /* And the flexible versions header tags, if any */
+                rd_kafka_buf_skip_tags(rkbuf);
+
                 /* Return the buffer to the caller */
                 *rkbufp = rkbuf;
                 mconn->rxbuf = NULL;
@@ -856,6 +864,14 @@ rd_kafka_buf_t *rd_kafka_mock_buf_new_response (const rd_kafka_buf_t *request) {
 
         /* CorrId */
         rd_kafka_buf_write_i32(rkbuf, request->rkbuf_reqhdr.CorrId);
+
+        if (request->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+                /* Write empty response header tags, unless this is the
+                 * ApiVersionResponse which needs to be backwards compatible. */
+                if (request->rkbuf_reqhdr.ApiKey != RD_KAFKAP_ApiVersion)
+                        rd_kafka_buf_write_i8(rkbuf, 0);
+        }
 
         return rkbuf;
 }
@@ -2025,6 +2041,8 @@ rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster) {
         while ((mcoord = TAILQ_FIRST(&mcluster->coords)))
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
 
+        rd_list_destroy(&mcluster->pids);
+
         while ((errstack = TAILQ_FIRST(&mcluster->errstacks))) {
                 TAILQ_REMOVE(&mcluster->errstacks, errstack, link);
                 rd_kafka_mock_error_stack_destroy(errstack);
@@ -2124,6 +2142,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->cgrps);
 
         TAILQ_INIT(&mcluster->coords);
+
+        rd_list_init(&mcluster->pids, 16, rd_free);
 
         TAILQ_INIT(&mcluster->errstacks);
 

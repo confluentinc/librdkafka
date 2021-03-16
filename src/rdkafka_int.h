@@ -175,8 +175,14 @@ typedef enum {
         /**< commit_transaction() has been called and all outstanding
          *   messages, partitions, and offsets have been sent. */
         RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION,
+        /**< Transaction successfully committed but application has not made
+         *   a successful commit_transaction() call yet. */
+        RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED,
         /**< abort_transaction() has been called. */
         RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION,
+        /**< Transaction successfully aborted but application has not made
+         *   a successful abort_transaction() call yet. */
+        RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED,
         /**< An abortable error has occurred. */
         RD_KAFKA_TXN_STATE_ABORTABLE_ERROR,
         /* A fatal error has occured. */
@@ -197,7 +203,9 @@ rd_kafka_txn_state2str (rd_kafka_txn_state_t state) {
                 "InTransaction",
                 "BeginCommit",
                 "CommittingTransaction",
+                "CommitNotAcked",
                 "AbortingTransaction",
+                "AbortedNotAcked",
                 "AbortableError",
                 "FatalError"
         };
@@ -389,6 +397,10 @@ struct rd_kafka_s {
                                                           *   take action when
                                                           *   the broker state
                                                           *   changes. */
+                rd_bool_t txn_requires_epoch_bump; /**< Coordinator epoch bump
+                                                    *   required to recover from
+                                                    *   idempotent producer
+                                                    *   fatal error. */
 
                 /**< Blocking transactional API application call
                  *   currently being handled, its state, reply queue and how

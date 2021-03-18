@@ -585,6 +585,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_yield_thread = 0;
 	while (cnt < rkmessages_size) {
                 rd_kafka_op_res_t res;
+
                 mtx_lock(&rkq->rkq_lock);
 
                 while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
@@ -607,6 +608,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
                 }
+
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
@@ -648,6 +650,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 next = TAILQ_NEXT(next, rko_link);
                 rd_kafka_op_destroy(rko);
         }
+
         rd_kafka_app_polled(rk);
 
 	return cnt;

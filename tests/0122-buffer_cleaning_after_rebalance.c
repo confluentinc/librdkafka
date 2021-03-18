@@ -88,7 +88,6 @@ static int test_consumer_batch_queue (void *arguments) {
 static void do_test_consume_batch (const char *strategy) {
         const int partition_cnt = 4;
         rd_kafka_queue_t *rkq1, *rkq2;
-        //int produce_msg_cnt = 400;
         const char *topic;
         rd_kafka_t *c1;
         rd_kafka_t *c2;

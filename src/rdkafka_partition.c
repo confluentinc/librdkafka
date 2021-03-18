@@ -3589,6 +3589,8 @@ rd_kafka_topic_partition_list_query_leaders_async_worker (rd_kafka_op_t *rko) {
         if (!rd_kafka_timer_is_started(&rk->rk_timers,
                                        &rko->rko_u.leaders.query_tmr)) {
 
+                rko->rko_u.leaders.query_cnt++;
+
                 /* Add query interval timer. */
                 rd_kafka_enq_once_add_source(rko->rko_u.leaders.eonce,
                                              "query timer");
@@ -3608,7 +3610,6 @@ rd_kafka_topic_partition_list_query_leaders_async_worker (rd_kafka_op_t *rko) {
                         rd_false/*!cgrp_update*/,
                         "query partition leaders");
 
-                rko->rko_u.leaders.query_cnt++;
         }
 
         rd_list_destroy(leaders);

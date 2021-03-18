@@ -2208,6 +2208,9 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         int16_t ErrorCode = 0;
         int actions = 0;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 

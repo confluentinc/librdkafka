@@ -1405,6 +1405,7 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
                         strlen(rkmessage->payload) : 0;
                 rkmessage->offset  = rko->rko_u.err.offset;
                 break;
+
         default:
                 rd_kafka_assert(NULL, !*"unhandled optype");
                 RD_NOTREACHED();

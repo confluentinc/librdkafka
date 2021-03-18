@@ -186,6 +186,21 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb (rd_kafka_timers_t *rkts,
 	rd_kafka_toppar_consumer_lag_req(rktp);
 }
 
+/**
+ * Enqueue an RD_KAFKA_OP_BARRIER type of operation
+ * when the op_version is updated.
+ *
+ * Locality: toppar handler thread
+ */
+void rd_kafka_toppar_op_version_bump (rd_kafka_q_t *rktp_fetchq,
+		                             int32_t version) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
+	    rko->rko_version = version;
+	    rd_kafka_q_enq(rktp_fetchq, rko);
+}
+
 
 /**
  * Add new partition to topic.
@@ -239,6 +254,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_topic_t *rkt,
         rktp->rktp_ops->rkq_opaque = rktp;
         rd_atomic32_init(&rktp->rktp_version, 1);
 	rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
+        rd_kafka_toppar_op_version_bump(rktp->rktp_fetchq, rktp->rktp_op_version);
 
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
         rd_kafka_pid_reset(&rktp->rktp_eos.pid);
@@ -1586,6 +1602,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
         }
 
 	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp->rktp_fetchq, version);
 
         if (rkcg) {
                 rd_kafka_assert(rktp->rktp_rkt->rkt_rk, !rktp->rktp_cgrp);
@@ -1684,7 +1701,6 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
  */
 void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 				 rd_kafka_op_t *rko_orig) {
-		rd_kafka_op_t *rko;
         int32_t version = rko_orig->rko_version;
 
 	rd_kafka_toppar_lock(rktp);
@@ -1696,9 +1712,7 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[rktp->rktp_fetch_state], version);
 
 	rktp->rktp_op_version = version;
-	rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
-	rko->rko_version = version;
-	rd_kafka_q_enq(rktp->rktp_fetchq, rko);
+        rd_kafka_toppar_op_version_bump(rktp->rktp_fetchq, version);
 
 	/* Abort pending offset lookups. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
@@ -1759,6 +1773,7 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 	}
 
 	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp->rktp_fetchq, version);
 
 	/* Abort pending offset lookups. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
@@ -1814,6 +1829,7 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
 	rd_kafka_toppar_lock(rktp);
 
 	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp->rktp_fetchq, version);
 
         if (!pause && (rktp->rktp_flags & flag) != flag) {
                 rd_kafka_dbg(rk, TOPIC, "RESUME",

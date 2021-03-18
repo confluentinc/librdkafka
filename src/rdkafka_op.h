@@ -136,7 +136,7 @@ typedef enum {
         RD_KAFKA_OP_TXN,             /**< Transaction command */
         RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
         RD_KAFKA_OP_LEADERS,         /**< Partition leader query */
-        RD_KAFKA_OP_BARRIER,
+        RD_KAFKA_OP_BARRIER,         /**< Version barrier bump */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -612,10 +612,6 @@ struct rd_kafka_op_s {
                         void *opaque;
 
                 } leaders;
-
-                struct {
-                        int32_t version;
-                } barrier;
 
         } rko_u;
 };

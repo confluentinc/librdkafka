@@ -31,120 +31,77 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
-static rd_kafka_t *c1;
+static const int produce_msg_cnt = 400;
 
 typedef struct consumer_s {
-        char *what;
+        const char *what;
         rd_kafka_queue_t *rkq;
         int timeout_ms;
-        int consumemsgcnt;
+        int consume_msg_cnt;
         rd_kafka_t *rk;
         uint64_t testid;
 } consumer_t;
 
-static int test_consumer_batch_queue(void *arguments) {
-	    struct consumer_s *args = arguments;
-        int eof_cnt = 0;
+static int test_consumer_batch_queue (void *arguments) {
+        struct consumer_s *args = arguments;
+        int msg_cnt = 0;
         int i;
-        int correct;
         test_timing_t t_cons;
         test_msgver_t mv;
 
         rd_kafka_queue_t *rkq = args->rkq;
         int timeout_ms = args->timeout_ms;
-        int consumemsgcnt = args->consumemsgcnt;
+        const int consume_msg_cnt = args->consume_msg_cnt;
         rd_kafka_t *rk = args->rk;
         uint64_t testid = args->testid;
-        char *what = args->what;
+        const char *what = args->what;
 
-        rd_kafka_message_t **rkmessage = malloc(consumemsgcnt * sizeof(rd_kafka_message_t *));
+        rd_kafka_message_t **rkmessage = malloc(consume_msg_cnt * sizeof(*rkmessage));
+
         test_msgver_init(&mv, testid);
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while (eof_cnt == 0) {
-                eof_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessage, consumemsgcnt);
-                if (eof_cnt == 0)
-                        continue;
+        while ((msg_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessage, consume_msg_cnt)) == 0)
+                continue;
 
-                for (i = 0; i < eof_cnt; i++) {
-                       correct = test_msgver_add_msg(rk, &mv, rkmessage[i]);
-                       if (correct == 0)
-                               TEST_FAIL("The message is not from testid %"PRId64" \n", testid);
-                }
-
-                test_msgver_verify(what, &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP, 0, eof_cnt);
-                test_msgver_clear(&mv);
+        for (i = 0; i < msg_cnt; i++) {
+                if (test_msgver_add_msg(rk, &mv, rkmessage[i]) == 0)
+                        TEST_FAIL("The message is not from testid %"PRId64" \n", testid);
         }
-        for (i = 0; i < eof_cnt; i++)
+
+        test_msgver_verify(what, &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP, 0, produce_msg_cnt/2);
+        test_msgver_clear(&mv);
+
+        for (i = 0; i < consume_msg_cnt; i++)
                 rd_kafka_message_destroy(rkmessage[i]);
 
         TIMING_STOP(&t_cons);
         return 0;
 }
 
-static void rebalance_cb (rd_kafka_t *rk,
-                          rd_kafka_resp_err_t err,
-                          rd_kafka_topic_partition_list_t *partitions,
-                          void *opaque) {
-        rd_kafka_error_t *error = NULL;
-        rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-
-        switch (err) {
-        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-                TEST_SAY("Group rebalanced (%s): "
-                         "%d new partition(s) assigned\n",
-                         rd_kafka_rebalance_protocol(rk), partitions->cnt);
-
-                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
-                        error = rd_kafka_incremental_assign(rk, partitions);
-                else
-                        ret_err = rd_kafka_assign(rk, partitions);
-
-                break;
-        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                TEST_SAY("(%s): %d partition(s) revoked\n",
-                         rd_kafka_rebalance_protocol(rk), partitions->cnt);
-
-                if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
-                        error = rd_kafka_incremental_unassign(rk, partitions);
-                else
-                        ret_err = rd_kafka_assign(rk, NULL);
-                break;
-
-        default:
-                break;
-        }
-
-        if (error) {
-                TEST_FAIL("%% incremental assign failure: %s\n",
-                          rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
-        } else if (ret_err) {
-                TEST_FAIL( "%% assign failure: %s\n",
-                rd_kafka_err2str(ret_err));
-        }
-}
 
 /**
  * Consume with batch + queue interface
  *
  */
-static int do_test_consume_batch (char *strategy) {
-        int partition_cnt = 4;
+static void do_test_consume_batch (const char *strategy) {
+        const int partition_cnt = 4;
         rd_kafka_queue_t *rkq1, *rkq2;
-        int producemsgcnt = 400;
+        //int produce_msg_cnt = 400;
         const char *topic;
+        rd_kafka_t *c1;
         rd_kafka_t *c2;
         int p;
-        int timeout_ms = 30000;
+        const int timeout_ms = 30000;
         uint64_t testid;
-        int consumemsgcnt = 500;
+        const int consume_msg_cnt = 500;
         rd_kafka_conf_t *conf;
-        thrd_t thread_id;
-        thrd_t thread_id2;
         struct consumer_s c1_args;
         struct consumer_s c2_args;
+
+        SUB_TEST("partition.assignment.strategy = %s\n", strategy);
+
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "auto.offset.reset", "earliest");
@@ -158,19 +115,20 @@ static int do_test_consume_batch (char *strategy) {
                 test_produce_msgs_easy(topic,
                                        testid,
                                        p,
-                                       producemsgcnt / partition_cnt);
+                                       produce_msg_cnt / partition_cnt);
         /* Create simple consumer */
-        if(strcmp(strategy, "cooperative-sticky") == 0)
+        if (strcmp(strategy, "cooperative-sticky") == 0)
                 test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
 
-        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
-
-        c1 = test_create_consumer(topic, rebalance_cb,
+        c1 = test_create_consumer(topic, NULL,
                                   rd_kafka_conf_dup(conf), NULL);
         c2 = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(c1, topic);
+        test_consumer_wait_assignment(c1, rd_false);
+
         test_consumer_subscribe(c2, topic);
+        test_consumer_wait_assignment(c2, rd_false);
 
         /* Create generic consume queue */
         rkq1 = rd_kafka_queue_get_consumer(c1);
@@ -179,25 +137,21 @@ static int do_test_consume_batch (char *strategy) {
         c1_args.what = "C1.PRE";
         c1_args.rkq = rkq1;
         c1_args.timeout_ms = timeout_ms;
-        c1_args.consumemsgcnt = consumemsgcnt;
+        c1_args.consume_msg_cnt = consume_msg_cnt;
         c1_args.rk = c1;
         c1_args.testid = testid;
 
-        if (thrd_create(&thread_id, test_consumer_batch_queue, (void *)&c1_args) != thrd_success)
-                TEST_FAIL("Failed to verify batch queue messages for %s", "C1.PRE");
+
+        test_consumer_batch_queue((void *)&c1_args);
 
         c2_args.what = "C2.PRE";
         c2_args.rkq = rkq2;
         c2_args.timeout_ms = timeout_ms;
-        c2_args.consumemsgcnt = consumemsgcnt;
+        c2_args.consume_msg_cnt = consume_msg_cnt;
         c2_args.rk = c2;
         c2_args.testid = testid;
 
-        if (thrd_create(&thread_id2, test_consumer_batch_queue, (void *)&c2_args) != thrd_success)
-                TEST_FAIL("Failed to verify batch queue messages for %s", "C2.PRE");
-
-        thrd_join(thread_id, NULL);
-        thrd_join(thread_id2, NULL);
+        test_consumer_batch_queue((void *)&c2_args);
 
         rd_kafka_queue_destroy(rkq1);
         rd_kafka_queue_destroy(rkq2);
@@ -208,19 +162,12 @@ static int do_test_consume_batch (char *strategy) {
         rd_kafka_destroy(c1);
         rd_kafka_destroy(c2);
 
-        return 0;
+        SUB_TEST_PASS();
 }
 
 
 int main_0122_buffer_cleaning_after_rebalance (int argc, char **argv) {
-        int fails = 0;
-
-        fails += do_test_consume_batch("eager-rebalance");
-
-        fails += do_test_consume_batch("cooperative-sticky");
-
-        if (fails > 0)
-                TEST_FAIL("See %d previous error(s)\n", fails);
-
+        do_test_consume_batch("range");
+        do_test_consume_batch("cooperative-sticky");
         return 0;
 }

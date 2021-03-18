@@ -516,24 +516,34 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	return cnt;
 }
 
-
-static size_t rd_kafka_purge_outdated_messages(int32_t version,
+/**
+ * Filter out and destroy outdated messages
+ *
+ * Returns the number of valid messages.
+ *
+ * Locality: any thread.
+ */
+static size_t rd_kafka_purge_outdated_messages (int32_t version,
                                   rd_kafka_message_t **rkmessages,
-                                  rd_kafka_message_t **rk_valid_messages,
                                   int cnt) {
-    rd_kafka_op_t *rko;
-    size_t valid_count = 0;
-    int i;
+        rd_kafka_op_t *rko;
+        size_t valid_count = 0;
+        int i;
 
-    for(i = 0; i < cnt; i++) {
-        rko = rkmessages[i]->_private;
-        if(rd_kafka_op_version_outdated(rko, version)) {
-            rd_kafka_op_destroy(rko);
-        } else {
-            rk_valid_messages[valid_count++] = rkmessages[i];
+        for (i = 0; i < cnt; i++) {
+                rko = rkmessages[i]->_private;
+                if(rd_kafka_op_version_outdated(rko, version)) {
+                        /* This also destroys the corresponding rkmessage. */
+                        rd_kafka_op_destroy(rko);
+                } else {
+                        rkmessages[valid_count++] = rkmessages[i];
+                }
         }
-    }
-    return valid_count;
+
+        for (i = valid_count; i < cnt; i++)
+                rkmessages[i] = NULL;
+
+        return valid_count;
 }
 
 
@@ -554,7 +564,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
-        rd_kafka_message_t **rk_valid_messages;
 
 	mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -576,7 +585,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_yield_thread = 0;
 	while (cnt < rkmessages_size) {
                 rd_kafka_op_res_t res;
-
                 mtx_lock(&rkq->rkq_lock);
 
                 while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
@@ -599,17 +607,14 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
                 }
-
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
                 if (res == RD_KAFKA_OP_RES_KEEP ||
                     res == RD_KAFKA_OP_RES_HANDLED) {
-                        if (rko->rko_type == RD_KAFKA_OP_BARRIER) {
-                                /* Clean outdated messages if rebalancing happens. */
-                                rk_valid_messages = malloc(rkmessages_size * sizeof(rd_kafka_message_t *));
-                                cnt = rd_kafka_purge_outdated_messages(rko->rko_version, rkmessages, rk_valid_messages, cnt);
-                                memcpy(rkmessages, rk_valid_messages, rkmessages_size);
+                        if (!rko && unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
+                                /* Client outdated messages on version barrier bump */
+                                cnt = rd_kafka_purge_outdated_messages(rko->rko_version, rkmessages, cnt);
                         }
                         /* Callback served, rko is destroyed (if HANDLED). */
                         continue;
@@ -643,7 +648,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 next = TAILQ_NEXT(next, rko_link);
                 rd_kafka_op_destroy(rko);
         }
-
         rd_kafka_app_polled(rk);
 
 	return cnt;

@@ -238,7 +238,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_GET_REBALANCE_PROTOCOL] =
                 sizeof(rko->rko_u.rebalance_protocol),
                 [RD_KAFKA_OP_LEADERS] = sizeof(rko->rko_u.leaders),
-                [RD_KAFKA_OP_BARRIER] = sizeof(rko->rko_u.barrier),
+                [RD_KAFKA_OP_BARRIER] = sizeof(rko->rko_version),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -412,6 +412,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.leaders.partitions,
                            rd_kafka_topic_partition_list_destroy);
                 break;
+
 	default:
 		break;
 	}

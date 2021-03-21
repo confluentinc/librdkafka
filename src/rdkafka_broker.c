@@ -2414,9 +2414,10 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
                 retry_ApiVersion = 0;
         }
 
-        if (err && apis)
+        if (err && apis) {
                 rd_free(apis);
-
+                apis = NULL;
+        }
         if (retry_ApiVersion != -1) {
                 /* Retry request with a lower version */
                 rd_rkb_dbg(rkb,

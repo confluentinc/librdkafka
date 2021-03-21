@@ -555,9 +555,9 @@ static void rd_kafka_cgrp_handle_FindCoordinator (rd_kafka_t *rk,
                                                   void *opaque) {
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
-        int32_t CoordId;
+        int32_t CoordId = 0;
         rd_kafkap_str_t CoordHost = RD_ZERO_INIT;
-        int32_t CoordPort;
+        int32_t CoordPort = 0;
         rd_kafka_cgrp_t *rkcg = opaque;
         struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;
         char *errstr = NULL;

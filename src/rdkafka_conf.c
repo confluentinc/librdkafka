@@ -4090,7 +4090,7 @@ int unittest_conf (void) {
                         char tmp[64];
                         int odd = cnt & 1;
                         int do_set = iteration == 3 || (iteration == 1 && odd);
-                        rd_bool_t is_modified;
+                        rd_bool_t is_modified = rd_false;
                         int exp_is_modified = !prop->unsupported &&
                                 (iteration >= 3 ||
                                  (iteration > 0 && (do_set || odd)));

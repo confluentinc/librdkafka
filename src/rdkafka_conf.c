@@ -3248,6 +3248,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		case _RK_C_STR:
                 case _RK_C_KSTR:
 			typeinfo = "string";
+			break;
                 case _RK_C_PATLIST:
 			if (prop->type == _RK_C_PATLIST)
 				typeinfo = "pattern list";

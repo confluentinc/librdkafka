@@ -352,8 +352,8 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                                 rd_kafka_dbg(rkcg->rkcg_rk,
                                              CGRP|RD_KAFKA_DBG_ASSIGNOR,
                                              "ASSIGN",
-                                             "  %s [%"PRId32"]",
-                                             p->topic, p->partition);
+                                             "  %s",
+                                             p->topic);
                         }
                 }
 

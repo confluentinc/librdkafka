@@ -3035,6 +3035,13 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
 
+        /* Don't commit offsets during a rebalance as this may result
+         * in an invalid group generation id error. This is only
+         * relevant in the cooperative rebalance case, where partitions
+         * may remain assigned over the rebalance. */
+        if (RD_KAFKA_CGRP_REBALANCING(rkcg))
+                return;
+
         rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL,
                                               rd_true/*set offsets*/,
                                               "cgrp auto commit timer");

@@ -35,6 +35,15 @@
    `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
    client instance was created.
 
+### Consumer fixes
+
+ * The consumer group deemed cached metadata up to date by checking
+   `topic.metadata.refresh.interval.ms`: if this property was set too low
+   it would cause cached metadata to be unusable and new metadata to be fetched,
+   which could delay the time it took for a rebalance to settle.
+   It now correctly uses `metadata.max.age.ms` instead.
+
+
 ### Producer fixes
 
  * The timeout value of `flush()` was not respected when delivery reports

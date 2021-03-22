@@ -1955,10 +1955,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
                 *metadata_agep = metadata_age;
 
                 if (metadata_age != -1 &&
-                    metadata_age <=
-                    /* The +1000 is since metadata.refresh.interval.ms
-                     * can be set to 0. */
-                    rk->rk_conf.metadata_refresh_interval_ms + 1000) {
+                    metadata_age <= rk->rk_conf.metadata_max_age_ms) {
                         rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
                                      "CGRPMETADATA",
                                      "%s: metadata for wildcard subscription "

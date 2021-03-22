@@ -735,6 +735,7 @@ static void do_test_txn_endtxn_errors (void) {
                         rd_kafka_topic_partition_list_t *offsets;
                         rd_kafka_consumer_group_metadata_t *cgmetadata;
                         rd_kafka_error_t *error;
+                        test_timing_t t_call;
 
                         TEST_SAY("Testing scenario #%d %s with %"PRIusz
                                  " injected erorrs, expecting %s\n",
@@ -801,12 +802,14 @@ static void do_test_txn_endtxn_errors (void) {
                                 scenario[i].error_cnt,
                                 scenario[i].errors);
 
+                        TIMING_START(&t_call, "%s", commit_str);
                         if (commit)
                                 error = rd_kafka_commit_transaction(
                                         rk, tmout_multip(5000));
                         else
                                 error = rd_kafka_abort_transaction(
                                         rk, tmout_multip(5000));
+                        TIMING_STOP(&t_call);
 
                         if (error)
                                 TEST_SAY("Scenario #%d %s failed: %s: %s "

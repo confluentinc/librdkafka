@@ -3643,6 +3643,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         int max_requests;
         int reqcnt;
         int inflight = 0;
+        uint64_t epoch_base_msgid = 0;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
          * provide a backpressure mechanism to the producer loop
@@ -3834,6 +3835,13 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                     rktp, pid, rkm->rkm_u.producer.msgid))
                                 return 0;
                 }
+
+                rd_kafka_toppar_lock(rktp);
+                /* Idempotent producer epoch base msgid, this is passed to the
+                 * ProduceRequest and msgset writer to adjust the protocol-level
+                 * per-message sequence number. */
+                epoch_base_msgid = rktp->rktp_eos.epoch_base_msgid;
+                rd_kafka_toppar_unlock(rktp);
         }
 
         if (unlikely(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP)) {
@@ -3880,7 +3888,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         /* Send Produce requests for this toppar, honouring the
          * queue backpressure threshold. */
         for (reqcnt = 0 ; reqcnt < max_requests ; reqcnt++) {
-                r = rd_kafka_ProduceRequest(rkb, rktp, pid);
+                r = rd_kafka_ProduceRequest(rkb, rktp, pid, epoch_base_msgid);
                 if (likely(r > 0))
                         cnt += r;
                 else
@@ -6344,8 +6352,9 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
                 TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
                         int r;
 
-                        r = rd_kafka_toppar_handle_purge_queues(rktp, rkb,
-                                                                purge_flags);
+                        r = rd_kafka_toppar_purge_queues(
+                                rktp, purge_flags,
+                                rd_true/*include xmit msgq*/);
                         if (r > 0) {
                                 msg_cnt += r;
                                 part_cnt++;

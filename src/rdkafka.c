@@ -4235,6 +4235,47 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
         }
 }
 
+/**
+ * @brief Purge the partition message queue (according to \p purge_flags) for
+ *        all toppars.
+ *
+ * This is a necessity to avoid the race condition when a purge() is scheduled
+ * shortly in-between an rktp has been created but before it has been
+ * joined to a broker handler thread.
+ *
+ * The rktp_xmit_msgq is handled by the broker-thread purge.
+ *
+ * @returns the number of messages purged.
+ *
+ * @locks_required rd_kafka_*lock()
+ * @locks_acquired rd_kafka_topic_rdlock()
+ */
+static int
+rd_kafka_purge_toppars (rd_kafka_t *rk, int purge_flags) {
+        rd_kafka_topic_t *rkt;
+        int cnt = 0;
+
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                rd_kafka_toppar_t *rktp;
+                int i;
+
+                rd_kafka_topic_rdlock(rkt);
+                for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rkt->rkt_p[i], purge_flags, rd_false/*!xmit*/);
+
+                RD_LIST_FOREACH(rktp, &rkt->rkt_desp, i)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rktp, purge_flags, rd_false/*!xmit*/);
+
+                if (rkt->rkt_ua)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rkt->rkt_ua, purge_flags, rd_false/*!xmit*/);
+                rd_kafka_topic_rdunlock(rkt);
+        }
+
+        return cnt;
+}
 
 
 rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
@@ -4258,21 +4299,19 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
         if (!(purge_flags & RD_KAFKA_PURGE_F_NON_BLOCKING))
                 tmpq = rd_kafka_q_new(rk);
 
-        /* Send purge request to all broker threads */
         rd_kafka_rdlock(rk);
+
+        /* Purge msgq for all toppars. */
+        rd_kafka_purge_toppars(rk, purge_flags);
+
+        /* Send purge request to all broker threads */
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_purge_queues(rkb, purge_flags,
                                              RD_KAFKA_REPLYQ(tmpq, 0));
                 waitcnt++;
         }
-        rd_kafka_rdunlock(rk);
 
-        /* The internal broker handler may hold unassigned partitions */
-        mtx_lock(&rk->rk_internal_rkb_lock);
-        rd_kafka_broker_purge_queues(rk->rk_internal_rkb, purge_flags,
-                                     RD_KAFKA_REPLYQ(tmpq, 0));
-        mtx_unlock(&rk->rk_internal_rkb_lock);
-        waitcnt++;
+        rd_kafka_rdunlock(rk);
 
 
         if (tmpq) {

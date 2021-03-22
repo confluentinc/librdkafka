@@ -3437,7 +3437,8 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
  * @locality broker thread
  */
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
-                             const rd_kafka_pid_t pid) {
+                             const rd_kafka_pid_t pid,
+                             uint64_t epoch_base_msgid) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_topic_t *rkt = rktp->rktp_rkt;
         size_t MessageSetSize = 0;
@@ -3452,7 +3453,8 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
          */
         rkbuf = rd_kafka_msgset_create_ProduceRequest(rkb, rktp,
                                                       &rktp->rktp_xmit_msgq,
-                                                      pid, &MessageSetSize);
+                                                      pid, epoch_base_msgid,
+                                                      &MessageSetSize);
         if (unlikely(!rkbuf))
                 return 0;
 
@@ -4613,7 +4615,8 @@ static int unittest_idempotent_producer (void) {
         for (rcnt = 0 ; rcnt < remaining_batches ; rcnt++) {
                 size_t msize;
                 request[rcnt] = rd_kafka_msgset_create_ProduceRequest(
-                        rkb, rktp, &rkmq, rd_kafka_idemp_get_pid(rk), &msize);
+                        rkb, rktp, &rkmq, rd_kafka_idemp_get_pid(rk), 0,
+                        &msize);
                 RD_UT_ASSERT(request[rcnt], "request #%d failed", rcnt);
         }
 
@@ -4705,7 +4708,8 @@ static int unittest_idempotent_producer (void) {
         for (rcnt = 0 ; rcnt < remaining_batches ; rcnt++) {
                 size_t msize;
                 request[rcnt] = rd_kafka_msgset_create_ProduceRequest(
-                        rkb, rktp, &rkmq, rd_kafka_idemp_get_pid(rk), &msize);
+                        rkb, rktp, &rkmq, rd_kafka_idemp_get_pid(rk), 0,
+                        &msize);
                 RD_UT_ASSERT(request[rcnt],
                              "Failed to create retry #%d (%d msgs in queue)",
                              rcnt, rd_kafka_msgq_len(&rkmq));

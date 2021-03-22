@@ -958,7 +958,7 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
  * Helper method for purging queues when removing a toppar.
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
-void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp) {
+void rd_kafka_toppar_purge_and_disable_queues (rd_kafka_toppar_t *rktp) {
         rd_kafka_q_disable(rktp->rktp_fetchq);
         rd_kafka_q_purge(rktp->rktp_fetchq);
         rd_kafka_q_disable(rktp->rktp_ops);
@@ -4240,28 +4240,44 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid,
  *        Delivery reports will be enqueued for all purged messages, the error
  *        code is set to RD_KAFKA_RESP_ERR__PURGE_QUEUE.
  *
- * @warning Only to be used with the producer
+ * @param include_xmit_msgq If executing from the rktp's current broker handler
+ *                          thread, also include the xmit message queue.
+ *
+ * @warning Only to be used with the producer.
  *
  * @returns the number of messages purged
  *
- * @locality toppar handler thread
- * @locks none
+ * @locality any thread.
+ * @locks_acquired rd_kafka_toppar_lock()
+ * @locks_required none
  */
-int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
-                                         rd_kafka_broker_t *rkb,
-                                         int purge_flags) {
+int rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp,
+                                  int purge_flags,
+                                  rd_bool_t include_xmit_msgq) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
         int cnt;
 
-        rd_assert(rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER);
-        rd_assert(thrd_is_current(rkb->rkb_thread));
+        rd_assert(rk->rk_type == RD_KAFKA_PRODUCER);
+
+        rd_kafka_dbg(rk, TOPIC, "PURGE",
+                     "%s [%"PRId32"]: purging queues "
+                     "(purge_flags 0x%x, %s xmit_msgq)",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     purge_flags,
+                     include_xmit_msgq ? "include" : "exclude");
 
         if (!(purge_flags & RD_KAFKA_PURGE_F_QUEUE))
                 return 0;
 
-        /* xmit_msgq is owned by the toppar handler thread (broker thread)
-         * and requires no locking. */
-        rd_kafka_msgq_concat(&rkmq, &rktp->rktp_xmit_msgq);
+        if (include_xmit_msgq) {
+                /* xmit_msgq is owned by the toppar handler thread
+                 * (broker thread) and requires no locking. */
+                rd_assert(rktp->rktp_broker);
+                rd_assert(thrd_is_current(rktp->rktp_broker->rkb_thread));
+                rd_kafka_msgq_concat(&rkmq, &rktp->rktp_xmit_msgq);
+        }
 
         rd_kafka_toppar_lock(rktp);
         rd_kafka_msgq_concat(&rkmq, &rktp->rktp_msgq);
@@ -4273,7 +4289,7 @@ int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
                  * will not be produced (retried) we need to adjust the
                  * idempotence epoch's base msgid to skip the messages. */
                 rktp->rktp_eos.epoch_base_msgid += cnt;
-                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                rd_kafka_dbg(rk,
                              TOPIC|RD_KAFKA_DBG_EOS, "ADVBASE",
                              "%.*s [%"PRId32"] "
                              "advancing epoch base msgid to %"PRIu64

@@ -52,6 +52,10 @@ librdkafka v1.7.0 is feature release:
  * The timeout value of `flush()` was not respected when delivery reports
    were scheduled as events (such as for confluent-kafka-go) rather than
    callbacks.
+ * There was a race conditition in `purge()` which could cause newly
+   created partition objects, or partitions that were changing leaders, to
+   not have their message queues purged. This could cause
+   `abort_transaction()` to time out. This issue is now fixed.
 
 ### Transactional Producer fixes
 

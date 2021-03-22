@@ -1634,12 +1634,11 @@ void rd_kafka_msgbatch_destroy (rd_kafka_msgbatch_t *rkmb) {
 
 /**
  * @brief Initialize a message batch for the Idempotent Producer.
- *
- * @param rkm is the first message in the batch.
  */
 void rd_kafka_msgbatch_init (rd_kafka_msgbatch_t *rkmb,
                              rd_kafka_toppar_t *rktp,
-                             rd_kafka_pid_t pid) {
+                             rd_kafka_pid_t pid,
+                             uint64_t epoch_base_msgid) {
         memset(rkmb, 0, sizeof(*rkmb));
 
         rkmb->rktp = rd_kafka_toppar_keep(rktp);
@@ -1648,12 +1647,15 @@ void rd_kafka_msgbatch_init (rd_kafka_msgbatch_t *rkmb,
 
         rkmb->pid = pid;
         rkmb->first_seq = -1;
+        rkmb->epoch_base_msgid = epoch_base_msgid;
 }
 
 
 /**
  * @brief Set the first message in the batch. which is used to set
  *        the BaseSequence and keep track of batch reconstruction range.
+ *
+ * @param rkm is the first message in the batch.
  */
 void rd_kafka_msgbatch_set_first_msg (rd_kafka_msgbatch_t *rkmb,
                                       rd_kafka_msg_t *rkm) {
@@ -1667,9 +1669,8 @@ void rd_kafka_msgbatch_set_first_msg (rd_kafka_msgbatch_t *rkmb,
         /* Our msgid counter is 64-bits, but the
          * Kafka protocol's sequence is only 31 (signed), so we'll
          * need to handle wrapping. */
-        rkmb->first_seq =
-                rd_kafka_seq_wrap(rkm->rkm_u.producer.msgid -
-                                  rkmb->rktp->rktp_eos.epoch_base_msgid);
+        rkmb->first_seq = rd_kafka_seq_wrap(rkm->rkm_u.producer.msgid -
+                                            rkmb->epoch_base_msgid);
 
         /* Check if there is a stored last message
          * on the first msg, which means an entire

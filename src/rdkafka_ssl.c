@@ -42,8 +42,11 @@
 
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
+<<<<<<< HEAD
 
 #include <ctype.h>
+=======
+>>>>>>> eb132878f9ca398ef686411dfd3417b499abeb5f
 
 #if !_WIN32
 #include <sys/types.h>
@@ -1298,6 +1301,7 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                                                 NULL, NULL, 
                                                 rk->rk_conf.ssl.engine_callback_data);
 
+                sk_X509_NAME_free(cert_names);
                 if (r == -1 || !x509 || !pkey) {
                         X509_free(x509);
                         EVP_PKEY_free(pkey);

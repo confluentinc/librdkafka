@@ -69,7 +69,11 @@ static int test_consumer_batch_queue (consumer_t *arguments) {
                         TEST_FAIL("The message is not from testid "
                                   "%"PRId64" \n", testid);
         }
-        test_msgver_verify(what, &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP, 0, produce_msg_cnt/2);
+        test_msgver_verify(what,
+                           &mv,
+                           TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
+                           0,
+                           produce_msg_cnt/2);
         test_msgver_clear(&mv);
 
         for (i = 0; i < msg_cnt; i++)

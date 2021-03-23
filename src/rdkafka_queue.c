@@ -610,7 +610,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         cnt = rd_kafka_purge_outdated_messages(
                                 rko->rko_version,
                                 rkmessages,
-								cnt);
+                                cnt);
                 }
 
                 /* Serve non-FETCH callbacks */

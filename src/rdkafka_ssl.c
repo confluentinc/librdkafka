@@ -42,11 +42,8 @@
 
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
-<<<<<<< HEAD
 
 #include <ctype.h>
-=======
->>>>>>> eb132878f9ca398ef686411dfd3417b499abeb5f
 
 #if !_WIN32
 #include <sys/types.h>

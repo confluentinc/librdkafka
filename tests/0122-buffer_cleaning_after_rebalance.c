@@ -120,7 +120,9 @@ static void do_test_consume_batch (const char *strategy) {
                                        produce_msg_cnt / partition_cnt);
         /* Create simple consumer */
         if (!strcmp(strategy, "cooperative-sticky"))
-                test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+                test_conf_set(conf,
+                              "partition.assignment.strategy",
+                              "cooperative-sticky");
 
         c1 = test_create_consumer(topic, NULL,
                                   rd_kafka_conf_dup(conf), NULL);

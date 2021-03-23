@@ -605,12 +605,14 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
                 }
+
                 if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
                         cnt = rd_kafka_purge_outdated_messages(
                                 rko->rko_version,
                                 rkmessages,
 								cnt);
                 }
+
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);

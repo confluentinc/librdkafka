@@ -1361,6 +1361,11 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
  */
 void rd_kafka_ssl_ctx_term (rd_kafka_t *rk) {
         SSL_CTX_free(rk->rk_conf.ssl.ctx);
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        ENGINE_free(rk->rk_conf.ssl.engine);
+#endif
+
         rk->rk_conf.ssl.ctx = NULL;
 }
 

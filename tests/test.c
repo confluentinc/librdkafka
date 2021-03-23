@@ -231,6 +231,7 @@ _TEST_DECL(0119_consumer_auth);
 _TEST_DECL(0120_asymmetric_subscription);
 _TEST_DECL(0121_clusterid);
 _TEST_DECL(0123_connections_max_idle);
+_TEST_DECL(0124_openssl_invalid_engine);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -433,6 +434,7 @@ struct test tests[] = {
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
         _TEST(0123_connections_max_idle, 0),
+        _TEST(0124_openssl_invalid_engine, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

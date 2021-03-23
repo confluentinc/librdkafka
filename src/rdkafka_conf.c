@@ -836,10 +836,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_GLOBAL, "ssl.engine.id", _RK_C_STR,
           _RK(ssl.engine_id),
-          "OpenSSL engine id is the name used for loading engine. "
-          "Default value is \"dynamic\"."
+          "OpenSSL engine id is the name used for loading engine.",
+          .sdef = "dynamic"
         },
-        { _RK_GLOBAL, "ssl.engine.callback_data", _RK_C_PTR,
+        { _RK_GLOBAL, "ssl_engine_callback_data", _RK_C_PTR,
           _RK(ssl.engine_callback_data),
           "OpenSSL engine callback data (set "
           "with rd_kafka_conf_set_engine_callback_data())."
@@ -2847,10 +2847,10 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 }
 
 
-void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf,
+void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf,
                                             void *callback_data) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
-                                      "ssl.engine.callback_data",
+                                      "ssl_engine_callback_data",
                                       callback_data);
 }
 

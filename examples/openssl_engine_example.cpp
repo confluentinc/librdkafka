@@ -40,7 +40,9 @@
 
 #ifdef _WIN32
 #include "../win32/wingetopt.h"
-#elif !_AIX
+#elif _AIX
+#include <unistd.h>
+#else
 #include <getopt.h>
 #endif
 
@@ -149,6 +151,11 @@ int main(int argc, char **argv) {
     std::string engine_callback_data;
     int opt;
 
+    if (conf->set("security.protocol", "ssl", errstr) != RdKafka::Conf::CONF_OK) {
+        std::cerr << errstr << std::endl;
+        exit(1);
+    }
+
     while ((opt = getopt(argc, argv, "b:p:c:t:d:i:e:X:")) != -1) {
         switch (opt) {
         case 'b':
@@ -232,11 +239,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (conf->set("security.protocol", "ssl", errstr) != RdKafka::Conf::CONF_OK) {
-        std::cerr << errstr << std::endl;
-        exit(1);
-    }
-
     if (conf->set("ssl.engine.location", engine_path, errstr) != 
         RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
@@ -256,6 +258,8 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    /* engine_callback_data needs to be persistent 
+     * and outlive the lifetime of the Kafka client handle. */
     if (engine_callback_data.length() > 0 &&
         conf->set_engine_callback_data((void *) engine_callback_data.c_str(),
                                        errstr) != RdKafka::Conf::CONF_OK) {

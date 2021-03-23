@@ -517,11 +517,11 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 }
 
 /**
- * Filter out and destroy outdated messages
+ * @brief Filter out and destroy outdated messages.
  *
- * Returns the number of valid messages.
+ * @returns Returns the number of valid messages.
  *
- * Locality: any thread.
+ * @locality Any thread.
  */
 static size_t rd_kafka_purge_outdated_messages (int32_t version,
                                   rd_kafka_message_t **rkmessages,
@@ -532,16 +532,13 @@ static size_t rd_kafka_purge_outdated_messages (int32_t version,
 
         for (i = 0; i < cnt; i++) {
                 rko = rkmessages[i]->_private;
-                if(rd_kafka_op_version_outdated(rko, version)) {
+                if (rd_kafka_op_version_outdated(rko, version)) {
                         /* This also destroys the corresponding rkmessage. */
                         rd_kafka_op_destroy(rko);
                 } else {
                         rkmessages[valid_count++] = rkmessages[i];
                 }
         }
-
-        for (i = valid_count; i < cnt; i++)
-                rkmessages[i] = NULL;
 
         return valid_count;
 }
@@ -608,16 +605,18 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
                 }
-
+                if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
+                        cnt = rd_kafka_purge_outdated_messages(
+                                rko->rko_version,
+                                rkmessages,
+								cnt);
+                }
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
+
                 if (res == RD_KAFKA_OP_RES_KEEP ||
                     res == RD_KAFKA_OP_RES_HANDLED) {
-                        if (!rko && unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
-                                /* Client outdated messages on version barrier bump */
-                                cnt = rd_kafka_purge_outdated_messages(rko->rko_version, rkmessages, cnt);
-                        }
                         /* Callback served, rko is destroyed (if HANDLED). */
                         continue;
                 } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||

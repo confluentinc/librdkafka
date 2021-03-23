@@ -433,7 +433,7 @@ struct test tests[] = {
         _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
-		_TEST(0122_buffer_cleaning_after_rebalance, TEST_BRKVER(2,4,0,0)),
+        _TEST(0122_buffer_cleaning_after_rebalance, TEST_BRKVER(2,4,0,0)),
         _TEST(0123_connections_max_idle, 0),
 
         /* Manual tests */

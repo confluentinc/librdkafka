@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2021, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,8 +31,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
-static const int produce_msg_cnt = 400;
-
 typedef struct consumer_s {
         const char *what;
         rd_kafka_queue_t *rkq;
@@ -40,21 +38,22 @@ typedef struct consumer_s {
         int consume_msg_cnt;
         rd_kafka_t *rk;
         uint64_t testid;
+        int produce_msg_cnt;
 } consumer_t;
 
-static int test_consumer_batch_queue (void *arguments) {
-        struct consumer_s *args = arguments;
+static int test_consumer_batch_queue (consumer_t *arguments) {
         int msg_cnt = 0;
         int i;
         test_timing_t t_cons;
         test_msgver_t mv;
 
-        rd_kafka_queue_t *rkq = args->rkq;
-        int timeout_ms = args->timeout_ms;
-        const int consume_msg_cnt = args->consume_msg_cnt;
-        rd_kafka_t *rk = args->rk;
-        uint64_t testid = args->testid;
-        const char *what = args->what;
+        rd_kafka_queue_t *rkq = arguments->rkq;
+        int timeout_ms = arguments->timeout_ms;
+        const int consume_msg_cnt = arguments->consume_msg_cnt;
+        rd_kafka_t *rk = arguments->rk;
+        uint64_t testid = arguments->testid;
+        const char *what = arguments->what;
+        const int produce_msg_cnt = arguments->produce_msg_cnt;
 
         rd_kafka_message_t **rkmessage = malloc(consume_msg_cnt * sizeof(*rkmessage));
 
@@ -62,20 +61,19 @@ static int test_consumer_batch_queue (void *arguments) {
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while ((msg_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessage, consume_msg_cnt)) == 0)
+        while ((msg_cnt = rd_kafka_consume_batch_queue(rkq,
+                timeout_ms, rkmessage, consume_msg_cnt)) == 0)
                 continue;
-
         for (i = 0; i < msg_cnt; i++) {
                 if (test_msgver_add_msg(rk, &mv, rkmessage[i]) == 0)
-                        TEST_FAIL("The message is not from testid %"PRId64" \n", testid);
+                        TEST_FAIL("The message is not from testid "
+                                  "%"PRId64" \n", testid);
         }
-
         test_msgver_verify(what, &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP, 0, produce_msg_cnt/2);
         test_msgver_clear(&mv);
 
-        for (i = 0; i < consume_msg_cnt; i++)
+        for (i = 0; i < msg_cnt; i++)
                 rd_kafka_message_destroy(rkmessage[i]);
-
         TIMING_STOP(&t_cons);
         return 0;
 }
@@ -95,11 +93,12 @@ static void do_test_consume_batch (const char *strategy) {
         const int timeout_ms = 30000;
         uint64_t testid;
         const int consume_msg_cnt = 500;
+        const int produce_msg_cnt = 400;
         rd_kafka_conf_t *conf;
         struct consumer_s c1_args;
         struct consumer_s c2_args;
 
-        SUB_TEST("partition.assignment.strategy = %s\n", strategy);
+        SUB_TEST("partition.assignment.strategy = %s", strategy);
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
@@ -108,7 +107,7 @@ static void do_test_consume_batch (const char *strategy) {
         testid = test_id_generate();
 
         /* Produce messages */
-        topic = test_mk_topic_name(__FUNCTION__, 1);
+        topic = test_mk_topic_name("0122-buffer_cleaning", 1);
 
         for (p = 0 ; p < partition_cnt ; p++)
                 test_produce_msgs_easy(topic,
@@ -116,7 +115,7 @@ static void do_test_consume_batch (const char *strategy) {
                                        p,
                                        produce_msg_cnt / partition_cnt);
         /* Create simple consumer */
-        if (strcmp(strategy, "cooperative-sticky") == 0)
+        if (!strcmp(strategy, "cooperative-sticky"))
                 test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
 
         c1 = test_create_consumer(topic, NULL,
@@ -139,9 +138,10 @@ static void do_test_consume_batch (const char *strategy) {
         c1_args.consume_msg_cnt = consume_msg_cnt;
         c1_args.rk = c1;
         c1_args.testid = testid;
+        c1_args.produce_msg_cnt = produce_msg_cnt;
 
 
-        test_consumer_batch_queue((void *)&c1_args);
+        test_consumer_batch_queue(&c1_args);
 
         c2_args.what = "C2.PRE";
         c2_args.rkq = rkq2;
@@ -149,8 +149,9 @@ static void do_test_consume_batch (const char *strategy) {
         c2_args.consume_msg_cnt = consume_msg_cnt;
         c2_args.rk = c2;
         c2_args.testid = testid;
+        c2_args.produce_msg_cnt = produce_msg_cnt;
 
-        test_consumer_batch_queue((void *)&c2_args);
+        test_consumer_batch_queue(&c2_args);
 
         rd_kafka_queue_destroy(rkq1);
         rd_kafka_queue_destroy(rkq2);

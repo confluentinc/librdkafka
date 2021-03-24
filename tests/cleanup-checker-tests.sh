@@ -14,7 +14,7 @@ while true ; do
     done
     echo "################## Cleaning up"
     rm -f *.offset
-    ./delete-test-topics.sh 0 ~/src/kafka/bin/kafka-topics.sh
+    ./delete-test-topics.sh 0
 done
 done
 

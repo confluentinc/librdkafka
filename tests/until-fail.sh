@@ -80,7 +80,7 @@ while true ; do
         # Delete topic-by-topic using kafka-topics for each one,
         # very slow but topics are properly deleted before the script
         # returns.
-        ./delete-test-topics.sh $ZK_ADDRESS ~/src/kafka/bin/kafka-topics.sh || true
+        ./delete-test-topics.sh $ZK_ADDRESS || true
     fi
 done
 

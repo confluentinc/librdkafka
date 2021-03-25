@@ -2311,8 +2311,6 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
                             char *errstr, size_t errstr_size);
 
 
-
-
 /**
  * @brief Set callback_data for OpenSSL engine.
  *
@@ -2322,8 +2320,8 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
  * @remark The /c ssl.engine.location configuration must be set for this to have affect.
  */
 RD_EXPORT
-void rd_kafka_conf_set_engine_callback_data(rd_kafka_conf_t *conf, 
-                                            void *callback_data);
+void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf, 
+                                             void *callback_data);
 
 
 /**

@@ -685,8 +685,8 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult set_engine_callback_data(void *value,
-                                            std::string &errstr) {
+  Conf::ConfResult set_engine_callback_data (void *value,
+                                             std::string &errstr) {
     if (!rk_conf_) {
       errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;

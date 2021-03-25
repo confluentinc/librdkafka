@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2019, Magnus Edenhill
+ * Copyright (c) 2021, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@
  */
 #include "rdkafkacpp.h"
 
-static void metadata_print(const RdKafka::Metadata *metadata) {
+static void metadata_print (const RdKafka::Metadata *metadata) {
     std::cout << "Metadata for all topics"
         << "(from broker " << metadata->orig_broker_id()
         << ":" << metadata->orig_broker_name() << std::endl;
@@ -118,13 +118,13 @@ class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
     /* This SSL cert verification callback simply prints the incoming parameters.
      * It provides no validation, everything is ok. */
 public:
-    bool ssl_cert_verify_cb(const std::string &broker_name,
-                            int32_t broker_id,
-                            int *x509_error,
-                            int depth,
-                            const char *buf, 
-                            size_t size,
-                            std::string &errstr) {
+    bool ssl_cert_verify_cb (const std::string &broker_name,
+                             int32_t broker_id,
+                             int *x509_error,
+                             int depth,
+                             const char *buf, 
+                             size_t size,
+                             std::string &errstr) {
         std::cout << "ssl_cert_verify_cb :" << 
             ": broker_name=" << broker_name <<
             ", broker_id=" << broker_id <<
@@ -137,7 +137,7 @@ public:
 };
 
 
-int main(int argc, char **argv) {
+int main (int argc, char **argv) {
     std::string brokers;
     std::string errstr;
     std::string engine_path;
@@ -300,16 +300,8 @@ int main(int argc, char **argv) {
     metadata_print(metadata);
 
     delete metadata;
+    delete producer;
     delete conf;
-
-    /*
-     * Wait for RdKafka to decommission.
-     * This is not strictly needed (when check outq_len() above), but
-     * allows RdKafka to clean up all its resources before the application
-     * exits so that memory profilers such as valgrind wont complain about
-     * memory leaks.
-     */
-    RdKafka::wait_destroyed(5000);
 
     return 0;
 }

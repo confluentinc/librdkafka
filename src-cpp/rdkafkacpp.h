@@ -1283,13 +1283,6 @@ class RD_EXPORT Conf {
                                          const void *buffer, size_t size,
                                          std::string &errstr) = 0;
 
-  /** @brief Set callback_data for ssl engine
-   *
-   * @returns CONF_OK on success, else CONF_INVALID.
-   */
-  virtual Conf::ConfResult set_engine_callback_data(void *value,
-                                                    std::string &errstr) = 0;
-
   /** @brief Query single configuration value
    *
    * Do not use this method to get callbacks registered by the configuration file.
@@ -1397,6 +1390,13 @@ class RD_EXPORT Conf {
    *          else NULL.
    */
   virtual struct rd_kafka_topic_conf_s *c_ptr_topic () = 0;
+
+  /** @brief Set callback_data for ssl engine.
+   *
+   * @returns CONF_OK on success, else CONF_INVALID.
+   */
+  virtual Conf::ConfResult set_engine_callback_data (void *value,
+                                                     std::string &errstr) = 0;
 };
 
 /**@}*/

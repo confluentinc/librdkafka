@@ -1397,6 +1397,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int64_t end_offset;
         int64_t consumer_lag = -1;
+        int64_t consumer_lag_stored = -1;
         struct offset_stats offs;
         int32_t broker_id = -1;
 
@@ -1416,19 +1417,21 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                 : rktp->rktp_hi_offset;
 
         /* Calculate consumer_lag by using the highest offset
-         * of app_offset (the last message passed to application + 1)
+         * of stored_offset (the last message passed to application + 1, or
+         * if enable.auto.offset.store=false the last message manually stored),
          * or the committed_offset (the last message committed by this or
          * another consumer).
-         * Using app_offset allows consumer_lag to be up to date even if
+         * Using stored_offset allows consumer_lag to be up to date even if
          * offsets are not (yet) committed.
          */
-        if (end_offset != RD_KAFKA_OFFSET_INVALID &&
-            (rktp->rktp_app_offset >= 0 || rktp->rktp_committed_offset >= 0)) {
-                consumer_lag = end_offset -
-                        RD_MAX(rktp->rktp_app_offset,
-                               rktp->rktp_committed_offset);
-                if (unlikely(consumer_lag) < 0)
-                        consumer_lag = 0;
+        if (end_offset != RD_KAFKA_OFFSET_INVALID) {
+                if (rktp->rktp_stored_offset >= 0 &&
+                    rktp->rktp_stored_offset <= end_offset)
+                        consumer_lag_stored =
+                                end_offset - rktp->rktp_stored_offset;
+                if (rktp->rktp_committed_offset >= 0 &&
+                    rktp->rktp_committed_offset <= end_offset)
+                        consumer_lag = end_offset - rktp->rktp_committed_offset;
         }
 
 	_st_printf("%s\"%"PRId32"\": { "
@@ -1455,6 +1458,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   "\"hi_offset\":%"PRId64", "
                    "\"ls_offset\":%"PRId64", "
                    "\"consumer_lag\":%"PRId64", "
+                   "\"consumer_lag_stored\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
 		   "\"txbytes\":%"PRIu64", "
                    "\"rxmsgs\":%"PRIu64", "
@@ -1492,6 +1496,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   rktp->rktp_hi_offset,
                    rktp->rktp_ls_offset,
                    consumer_lag,
+                   consumer_lag_stored,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
                    rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes),
                    rd_atomic64_get(&rktp->rktp_c.rx_msgs),

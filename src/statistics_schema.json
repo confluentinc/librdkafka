@@ -315,6 +315,9 @@
                                       "consumer_lag": {
                                           "type": "integer"
                                       },
+                                      "consumer_lag_stored": {
+                                          "type": "integer"
+                                      },
                                       "txmsgs": {
                                           "type": "integer"
                                       },

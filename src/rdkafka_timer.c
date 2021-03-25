@@ -177,7 +177,7 @@ void rd_kafka_timer_exp_backoff (rd_kafka_timers_t *rkts,
                 rtmr->rtmr_interval *= 2;
                 rd_kafka_timer_unschedule(rkts, rtmr);
         }
-        rd_kafka_timer_schedule(rkts, rtmr, rtmr->rtmr_interval);
+        rd_kafka_timer_schedule(rkts, rtmr, 0);
         rd_kafka_timers_unlock(rkts);
 }
 

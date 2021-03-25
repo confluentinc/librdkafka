@@ -264,6 +264,15 @@ void foo (void) {
 void foo (void) {
   pthread_setname_np("abc");
 }
+' || \
+    mkl_compile_check "pthread_setname_freebsd" "HAVE_PTHREAD_SETNAME_FREEBSD" disable CC "-lpthread" \
+'
+#include <pthread.h>
+#include <pthread_np.h>
+
+void foo (void) {
+  pthread_set_name_np(pthread_self(), "abc");
+}
 '
 
     # Figure out what tool to use for dumping public symbols.

@@ -123,9 +123,9 @@ clean:
 	rm -f *.test $(OBJS) $(BIN)
 	$(MAKE) -C interceptor_test clean
 
+# Remove test reports, temporary test files, crash dumps, etc.
 clean-output:
-	# Clean test output files
-	rm -f stats_*.json *.offset
+	rm -f *.offset stats_*.json core vgcore.* _until_fail_*.log gdbrun??????
 
 realclean: clean clean-output
 	rm -f test_report_*.json
@@ -173,8 +173,6 @@ release-test: | asan tsan pristine-full scenarios compat
 rusage:
 	./run-test.sh -R bare
 
-# Remove test reports, temporary test files, crash dumps, etc.
-clean-reports:
-	rm -f *.offset stats_*.json core vgcore.*
+
 
 -include $(DEPS)

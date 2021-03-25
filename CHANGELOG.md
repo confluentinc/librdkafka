@@ -19,8 +19,9 @@ librdkafka v1.7.0 is feature release:
    argument that has now been added. This is a breaking change but the original
    function signature is considered a bug.
    This change only affects C++ OAuth developers.
- * Statistics: `consumer_lag` is now using the committed_offset, while the
-   new `consumer_lag_stored` is using `stored_offset` (to be committed).
+ * Statistics: `consumer_lag` is now using the `committed_offset`,
+   while the new `consumer_lag_stored` is using `stored_offset`
+   (offset to be committed).
    This is more correct than the previous `consumer_lag` which was either
    `committed_offset` or `app_offset` (last message passed to application).
 

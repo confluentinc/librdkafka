@@ -24,12 +24,18 @@ librdkafka v1.7.0 is feature release:
    (offset to be committed).
    This is more correct than the previous `consumer_lag` which was either
    `committed_offset` or `app_offset` (last message passed to application).
+ * The `librdkafka.redist` NuGet package is now built with MSVC runtime v140
+   (VS 2015). Previous versions were built with MSVC runtime v120 (VS 2013).
+
 
 ## Enhancements
 
  * Bumped to OpenSSL 1.1.1j in binary librdkafka artifacts.
  * The binary librdkafka artifacts for Alpine are now using Alpine 3.12 and
    OpenSSL 1.1.1j.
+ * The `librdkafka.redist` NuGet package now has updated zlib, zstd and 
+   OpenSSL versions (from vcpkg).
+
 
 ## Fixes
 

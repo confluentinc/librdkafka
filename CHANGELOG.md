@@ -71,7 +71,18 @@ librdkafka v1.7.0 is feature release:
  * The binary librdkafka artifacts for Alpine are now using Alpine 3.12.
    OpenSSL 1.1.1k.
  * Improved static librdkafka Windows builds using MinGW (@neptoess, #3130).
+ * The `librdkafka.redist` NuGet package now has updated zlib, zstd and
+   OpenSSL versions (from vcpkg).
 
+
+## Security considerations
+
+ * The zlib version bundled with the `librdkafka.redist` NuGet package has now been upgraded
+   from zlib 1.2.8 to 1.2.11, fixing the following CVEs:
+   * CVE-2016-9840: undefined behaviour (compiler dependent) in inflate (decompression) code: this is used by the librdkafka consumer. Risk of successfully exploitation through consumed messages is eastimated very low.
+   * CVE-2016-9841: undefined behaviour (compiler dependent) in inflate code: this is used by the librdkafka consumer. Risk of successfully exploitation through consumed messages is eastimated very low.
+   * CVE-2016-9842: undefined behaviour in inflateMark(): this API is not used by librdkafka.
+   * CVE-2016-9843: issue in crc32_big() which is called from crc32_z(): this API is not used by librdkafka.
 
 ## Upgrade considerations
 
@@ -88,6 +99,8 @@ librdkafka v1.7.0 is feature release:
    This is more correct than the previous `consumer_lag` which was using
    either `committed_offset` or `app_offset` (last message passed
    to application).
+ * The `librdkafka.redist` NuGet package is now built with MSVC runtime v140
+   (VS 2015). Previous versions were built with MSVC runtime v120 (VS 2013).
 
 
 ## Fixes

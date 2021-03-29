@@ -327,19 +327,19 @@ class NugetPackage (Package):
                                               a.info.get('arch'),
                                               a.info.get('bldtype'))
             if 'toolset' not in a.info:
-                a.info['toolset'] = 'v120'
+                a.info['toolset'] = 'v140'
 
         mappings = [
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka_mock.h', 'build/native/include/librdkafka/rdkafka_mock.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka_mock.h', 'build/native/include/librdkafka/rdkafka_mock.h'],
 
             # Travis OSX build
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
             # Travis Manylinux build
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-manylinux*x86_64.tgz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/centos6-librdkafka.so'],
             # Travis Ubuntu 14.04 build
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
             # Travis CentOS 7 RPM build
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka1*el7.x86_64.rpm'}, './usr/lib64/librdkafka.so.1', 'runtimes/linux-x64/native/centos7-librdkafka.so'],
             # Travis Alpine build
@@ -348,32 +348,37 @@ class NugetPackage (Package):
             [{'arch': 'arm64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-arm64/native/librdkafka.so'],
 
             # Common Win runtime
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x64/native/msvcr120.dll'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcp120.dll', 'runtimes/win-x64/native/msvcp120.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr140.zip'}, 'vcruntime140.dll', 'runtimes/win-x64/native/vcruntime140.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr140.zip'}, 'msvcp140.dll', 'runtimes/win-x64/native/msvcp140.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win-x64/native/librdkafka.dll'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win-x64/native/librdkafkacpp.dll'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win-x64/native/zlib.dll'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/libzstd.dll', 'runtimes/win-x64/native/libzstd.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/librdkafka.dll', 'runtimes/win-x64/native/librdkafka.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/librdkafkacpp.dll', 'runtimes/win-x64/native/librdkafkacpp.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/libcrypto-1_1-x64.dll', 'runtimes/win-x64/native/libcrypto-1_1-x64.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/libssl-1_1-x64.dll', 'runtimes/win-x64/native/libssl-1_1-x64.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/zlib1.dll', 'runtimes/win-x64/native/zlib1.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/x64/Release/zstd.dll', 'runtimes/win-x64/native/zstd.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/x64/Release/librdkafka.lib', 'build/native/lib/win/x64/win-x64-Release/v140/librdkafka.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/x64/Release/librdkafkacpp.lib', 'build/native/lib/win/x64/win-x64-Release/v140/librdkafkacpp.lib'],
 
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x86/native/msvcr120.dll'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcp120.dll', 'runtimes/win-x86/native/msvcp120.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr140.zip'}, 'vcruntime140.dll', 'runtimes/win-x86/native/vcruntime140.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr140.zip'}, 'msvcp140.dll', 'runtimes/win-x86/native/msvcp140.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win-x86/native/librdkafka.dll'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win-x86/native/librdkafkacpp.dll'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win-x86/native/zlib.dll'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/libzstd.dll', 'runtimes/win-x86/native/libzstd.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/librdkafka.dll', 'runtimes/win-x86/native/librdkafka.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/librdkafkacpp.dll', 'runtimes/win-x86/native/librdkafkacpp.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/libcrypto-1_1.dll', 'runtimes/win-x86/native/libcrypto-1_1.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/libssl-1_1.dll', 'runtimes/win-x86/native/libssl-1_1.dll'],
+
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/zlib1.dll', 'runtimes/win-x86/native/zlib1.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v140/Win32/Release/zstd.dll', 'runtimes/win-x86/native/zstd.dll'],
 
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-            'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-            'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib']
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
+            'build/native/lib/v140/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v140/librdkafka.lib'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
+            'build/native/lib/v140/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v140/librdkafkacpp.lib']
         ]
 
         for m in mappings:
@@ -385,36 +390,36 @@ class NugetPackage (Package):
                 fname_excludes = attributes['fname_excludes']
                 del attributes['fname_excludes']
 
-            artifact = None
-            for a in self.arts.artifacts:
-                found = True
+            outf = os.path.join(self.stpath, m[2])
+            member = m[1]
 
+            found = False
+            # Try all matching artifacts until we find the wanted file (member)
+            for a in self.arts.artifacts:
                 for attr in attributes:
-                    if a.info[attr] != attributes[attr]:
-                        found = False
-                        break
+                    if a.info.get(attr, None) != attributes[attr]:
+                        continue
 
                 if not fnmatch(a.fname, fname_glob):
-                    found = False
+                    continue
 
                 for exclude in fname_excludes:
                     if exclude in a.fname:
-                        found = False
-                        break
+                        continue
 
-                if found:
-                    artifact = a
-                    break
+                try:
+                    zfile.ZFile.extract(a.lpath, member, outf)
+                except KeyError as e:
+                    continue
+                except Exception as e:
+                    raise Exception('file not found in archive %s: %s. Files in archive are: %s' % (a.lpath, e, zfile.ZFile(a.lpath).getnames()))
 
-            if artifact is None:
-                raise MissingArtifactError('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
+                found = True
+                break
 
-            outf = os.path.join(self.stpath, m[2])
-            member = m[1]
-            try:
-                zfile.ZFile.extract(artifact.lpath, member, outf)
-            except KeyError as e:
-                raise Exception('file not found in archive %s: %s. Files in archive are: %s' % (artifact.lpath, e, zfile.ZFile(artifact.lpath).getnames()))
+            if not found:
+                raise MissingArtifactError('unable to find artifact with tags %s matching "%s" for file "%s"' % (str(attributes), fname_glob, member))
+
 
         print('Tree extracted to %s' % self.stpath)
 
@@ -437,28 +442,34 @@ class NugetPackage (Package):
             "build/native/include/librdkafka/rdkafka.h",
             "build/native/include/librdkafka/rdkafkacpp.h",
             "build/native/include/librdkafka/rdkafka_mock.h",
-            "build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib",
-            "build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib",
-            "build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib",
-            "build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib",
+            "build/native/lib/win/x64/win-x64-Release/v140/librdkafka.lib",
+            "build/native/lib/win/x64/win-x64-Release/v140/librdkafkacpp.lib",
+            "build/native/lib/win/x86/win-x86-Release/v140/librdkafka.lib",
+            "build/native/lib/win/x86/win-x86-Release/v140/librdkafkacpp.lib",
             "runtimes/linux-x64/native/centos7-librdkafka.so",
             "runtimes/linux-x64/native/centos6-librdkafka.so",
             "runtimes/linux-x64/native/alpine-librdkafka.so",
             "runtimes/linux-x64/native/librdkafka.so",
             "runtimes/linux-arm64/native/librdkafka.so",
             "runtimes/osx-x64/native/librdkafka.dylib",
+            # win x64
             "runtimes/win-x64/native/librdkafka.dll",
             "runtimes/win-x64/native/librdkafkacpp.dll",
-            "runtimes/win-x64/native/msvcr120.dll",
-            "runtimes/win-x64/native/msvcp120.dll",
-            "runtimes/win-x64/native/zlib.dll",
-            "runtimes/win-x64/native/libzstd.dll",
+            "runtimes/win-x64/native/vcruntime140.dll",
+            "runtimes/win-x64/native/msvcp140.dll",
+            "runtimes/win-x64/native/libcrypto-1_1-x64.dll",
+            "runtimes/win-x64/native/libssl-1_1-x64.dll",
+            "runtimes/win-x64/native/zlib1.dll",
+            "runtimes/win-x64/native/zstd.dll",
+            # win x86
             "runtimes/win-x86/native/librdkafka.dll",
             "runtimes/win-x86/native/librdkafkacpp.dll",
-            "runtimes/win-x86/native/msvcr120.dll",
-            "runtimes/win-x86/native/msvcp120.dll",
-            "runtimes/win-x86/native/zlib.dll",
-            "runtimes/win-x86/native/libzstd.dll"]
+            "runtimes/win-x86/native/vcruntime140.dll",
+            "runtimes/win-x86/native/msvcp140.dll",
+            "runtimes/win-x86/native/libcrypto-1_1.dll",
+            "runtimes/win-x86/native/libssl-1_1.dll",
+            "runtimes/win-x86/native/zlib1.dll",
+            "runtimes/win-x86/native/zstd.dll"]
 
         missing = list()
         with zfile.ZFile(path, 'r') as zf:

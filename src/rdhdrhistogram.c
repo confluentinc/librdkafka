@@ -90,7 +90,7 @@ static double log2( double n )  {
 #include "rdfloat.h"
 
 void rd_hdr_histogram_destroy (rd_hdr_histogram_t *hdr) {
-        free(hdr);
+        rd_free(hdr);
 }
 
 rd_hdr_histogram_t *rd_hdr_histogram_new (int64_t minValue, int64_t maxValue,
@@ -139,7 +139,7 @@ rd_hdr_histogram_t *rd_hdr_histogram_new (int64_t minValue, int64_t maxValue,
 
         bucketCount = bucketsNeeded;
         countsLen = (bucketCount + 1) * (subBucketCount / 2);
-        hdr = calloc(1, sizeof(*hdr) + (sizeof(*hdr->counts) * countsLen));
+        hdr = rd_calloc(1, sizeof(*hdr) + (sizeof(*hdr->counts) * countsLen));
         hdr->counts = (int64_t *)(hdr+1);
         hdr->allocatedSize = sizeof(*hdr) + (sizeof(*hdr->counts) * countsLen);
 

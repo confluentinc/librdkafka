@@ -82,6 +82,7 @@ int          test_rusage = 0; /**< Check resource usage */
 double       test_rusage_cpu_calibration = 1.0;
 static const char *tests_to_run = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
+static const char *tests_to_skip = NULL; /* none */
 int          test_write_report = 0; /**< Write test report file */
 
 static int show_summary = 1;
@@ -1338,7 +1339,8 @@ static void run_tests (int argc, char **argv) {
                 } else if (!tests_to_run && (test->flags & TEST_F_MANUAL)) {
                         skip_reason = "manual test";
                         skip_silent = rd_true;
-                }
+                } else if (tests_to_skip && strstr(tests_to_skip, testnum))
+                        skip_reason = "included in TESTS_SKIP list";
 
                 if (!skip_reason) {
                         run_test(test, argc, argv);
@@ -1666,6 +1668,7 @@ int main(int argc, char **argv) {
 #endif
         tests_to_run = test_getenv("TESTS", NULL);
         subtests_to_run = test_getenv("SUBTESTS", NULL);
+        tests_to_skip = test_getenv("TESTS_SKIP", NULL);
         tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
@@ -1832,6 +1835,8 @@ int main(int argc, char **argv) {
 	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
                 TEST_SAY("Sub tests    : %s\n", subtests_to_run);
+        if (tests_to_skip)
+                TEST_SAY("Skip tests   : %s\n", tests_to_skip);
         TEST_SAY("Test mode    : %s%s%s\n",
                  test_quick ? "quick, ":"",
                  test_mode,

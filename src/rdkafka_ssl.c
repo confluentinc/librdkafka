@@ -37,6 +37,7 @@
 #include "rdkafka_cert.h"
 
 #ifdef _WIN32
+#include <wincrypt.h>
 #pragma comment (lib, "crypt32.lib")
 #endif
 

@@ -81,7 +81,7 @@ rd_list_t *rd_list_init_copy (rd_list_t *dst, const rd_list_t *src) {
 }
 
 static RD_INLINE rd_list_t *rd_list_alloc (void) {
-        return malloc(sizeof(rd_list_t));
+        return rd_malloc(sizeof(rd_list_t));
 }
 
 rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {

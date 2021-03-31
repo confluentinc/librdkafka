@@ -171,6 +171,7 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
                   `TESTS=0102 make`. (Yes, the var should have been called TEST)
  * `SUBTESTS=...` - only run sub-tests (tests that are using `SUB_TEST()`)
                       that contains this string.
+ * `TESTS_SKIP=...` - skip these tests.
  * `TEST_DEBUG=...` - this will automatically set the `debug` config property
                       of all instantiated clients to the value.
                       E.g.. `TEST_DEBUG=broker,protocol TESTS=0001 make`

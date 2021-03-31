@@ -1,5 +1,9 @@
 # librdkafka NEXT
 
+librdkafka v1.7.0 is feature release:
+
+ * [KIP-360](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=89068820) - Improve reliability of transactional producer
+
 ## Enhancements
 
  * Added `connections.max.idle.ms` to automatically close idle broker
@@ -15,6 +19,11 @@
    argument that has now been added. This is a breaking change but the original
    function signature is considered a bug.
    This change only affects C++ OAuth developers.
+ * Statistics: `consumer_lag` is now using the `committed_offset`,
+   while the new `consumer_lag_stored` is using `stored_offset`
+   (offset to be committed).
+   This is more correct than the previous `consumer_lag` which was either
+   `committed_offset` or `app_offset` (last message passed to application).
 
 ## Enhancements
 
@@ -43,13 +52,20 @@
    which could delay the time it took for a rebalance to settle.
    It now correctly uses `metadata.max.age.ms` instead.
 
-
 ### Producer fixes
 
  * The timeout value of `flush()` was not respected when delivery reports
    were scheduled as events (such as for confluent-kafka-go) rather than
    callbacks.
+ * There was a race conditition in `purge()` which could cause newly
+   created partition objects, or partitions that were changing leaders, to
+   not have their message queues purged. This could cause
+   `abort_transaction()` to time out. This issue is now fixed.
 
+### Transactional Producer fixes
+
+ * KIP-360: Fatal Idempotent producer errors are now recoverable by the
+   transactional producer and will raise a `txn_requires_abort()` error.
 
 
 # librdkafka v1.6.1

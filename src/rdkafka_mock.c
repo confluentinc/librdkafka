@@ -675,7 +675,13 @@ static void rd_kafka_mock_connection_close (rd_kafka_mock_connection_t *mconn,
 void rd_kafka_mock_connection_send_response (rd_kafka_mock_connection_t *mconn,
                                              rd_kafka_buf_t *resp) {
 
-        resp->rkbuf_ts_sent = rd_clock();
+        if (resp->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+                /* Empty struct tags */
+                rd_kafka_buf_write_i8(resp, 0);
+        }
+
+        /* rkbuf_ts_sent might be initialized with a RTT delay, else 0. */
+        resp->rkbuf_ts_sent += rd_clock();
 
         resp->rkbuf_reshdr.Size =
                 (int32_t)(rd_buf_write_pos(&resp->rkbuf_buf) - 4);
@@ -835,6 +841,9 @@ rd_kafka_mock_connection_read_request (rd_kafka_mock_connection_t *mconn,
                 /* For convenience, shave off the ClientId */
                 rd_kafka_buf_skip_str(rkbuf);
 
+                /* And the flexible versions header tags, if any */
+                rd_kafka_buf_skip_tags(rkbuf);
+
                 /* Return the buffer to the caller */
                 *rkbufp = rkbuf;
                 mconn->rxbuf = NULL;
@@ -859,6 +868,14 @@ rd_kafka_buf_t *rd_kafka_mock_buf_new_response (const rd_kafka_buf_t *request) {
 
         /* CorrId */
         rd_kafka_buf_write_i32(rkbuf, request->rkbuf_reqhdr.CorrId);
+
+        if (request->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+                /* Write empty response header tags, unless this is the
+                 * ApiVersionResponse which needs to be backwards compatible. */
+                if (request->rkbuf_reqhdr.ApiKey != RD_KAFKAP_ApiVersion)
+                        rd_kafka_buf_write_i8(rkbuf, 0);
+        }
 
         return rkbuf;
 }
@@ -1468,20 +1485,20 @@ rd_kafka_mock_coord_set (rd_kafka_mock_cluster_t *mcluster,
  * @brief Remove and return the next error, or RD_KAFKA_RESP_ERR_NO_ERROR
  *        if no error.
  */
-static rd_kafka_resp_err_t
+static rd_kafka_mock_error_rtt_t
 rd_kafka_mock_error_stack_next (rd_kafka_mock_error_stack_t *errstack) {
-        rd_kafka_resp_err_t err;
+        rd_kafka_mock_error_rtt_t err_rtt = { RD_KAFKA_RESP_ERR_NO_ERROR, 0 };
 
         if (likely(errstack->cnt == 0))
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                return err_rtt;
 
-        err = errstack->errs[0];
+        err_rtt = errstack->errs[0];
         errstack->cnt--;
         if (errstack->cnt > 0)
                 memmove(errstack->errs, &errstack->errs[1],
                         sizeof(*errstack->errs) * errstack->cnt);
 
-        return err;
+        return err_rtt;
 }
 
 
@@ -1524,32 +1541,38 @@ rd_kafka_mock_error_stack_get (rd_kafka_mock_error_stack_head_t *shead,
 
 
 /**
- * @brief Removes and returns the next request error for request type \p ApiKey.
+ * @brief Removes and returns the next request error for response's ApiKey.
+ *
+ * If the error stack has a corresponding rtt/delay it is set on the
+ * provided response \p resp buffer.
  */
 rd_kafka_resp_err_t
 rd_kafka_mock_next_request_error (rd_kafka_mock_connection_t *mconn,
-                                  int16_t ApiKey) {
+                                  rd_kafka_buf_t *resp) {
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_mock_error_stack_t *errstack;
-        rd_kafka_resp_err_t err;
+        rd_kafka_mock_error_rtt_t err_rtt;
 
         mtx_lock(&mcluster->lock);
 
         errstack = rd_kafka_mock_error_stack_find(&mconn->broker->errstacks,
-                                                  ApiKey);
+                                                  resp->rkbuf_reqhdr.ApiKey);
         if (likely(!errstack)) {
-                errstack = rd_kafka_mock_error_stack_find(&mcluster->errstacks,
-                                                          ApiKey);
+                errstack = rd_kafka_mock_error_stack_find(
+                        &mcluster->errstacks,
+                        resp->rkbuf_reqhdr.ApiKey);
                 if (likely(!errstack)) {
                         mtx_unlock(&mcluster->lock);
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
         }
 
-        err = rd_kafka_mock_error_stack_next(errstack);
+        err_rtt = rd_kafka_mock_error_stack_next(errstack);
+        resp->rkbuf_ts_sent = err_rtt.rtt;
+
         mtx_unlock(&mcluster->lock);
 
-        return err;
+        return err_rtt.err;
 }
 
 
@@ -1588,8 +1611,10 @@ rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
                                             sizeof(*errstack->errs));
         }
 
-        while (cnt > 0)
-                errstack->errs[errstack->cnt++] = errors[--cnt];
+        while (cnt > 0) {
+                errstack->errs[errstack->cnt].err = errors[--cnt];
+                errstack->errs[errstack->cnt++].rtt = 0;
+        }
 
         mtx_unlock(&mcluster->lock);
 }
@@ -1612,9 +1637,9 @@ void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
 
 
 rd_kafka_resp_err_t
-rd_kafka_mock_broker_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
-                                          int32_t broker_id,
-                                          int16_t ApiKey, size_t cnt, ...) {
+rd_kafka_mock_broker_push_request_error_rtts (rd_kafka_mock_cluster_t *mcluster,
+                                              int32_t broker_id,
+                                              int16_t ApiKey, size_t cnt, ...) {
         rd_kafka_mock_broker_t *mrkb;
         va_list ap;
         rd_kafka_mock_error_stack_t *errstack;
@@ -1639,9 +1664,12 @@ rd_kafka_mock_broker_push_request_errors (rd_kafka_mock_cluster_t *mcluster,
         }
 
         va_start(ap, cnt);
-        while (cnt-- > 0)
-                errstack->errs[errstack->cnt++] =
+        while (cnt-- > 0) {
+                errstack->errs[errstack->cnt].err =
                         va_arg(ap, rd_kafka_resp_err_t);
+                errstack->errs[errstack->cnt++].rtt =
+                        ((rd_ts_t)va_arg(ap, int)) * 1000;
+        }
         va_end(ap);
 
         mtx_unlock(&mcluster->lock);
@@ -2041,6 +2069,8 @@ rd_kafka_mock_cluster_destroy0 (rd_kafka_mock_cluster_t *mcluster) {
         while ((mcoord = TAILQ_FIRST(&mcluster->coords)))
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
 
+        rd_list_destroy(&mcluster->pids);
+
         while ((errstack = TAILQ_FIRST(&mcluster->errstacks))) {
                 TAILQ_REMOVE(&mcluster->errstacks, errstack, link);
                 rd_kafka_mock_error_stack_destroy(errstack);
@@ -2149,6 +2179,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new (rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->cgrps);
 
         TAILQ_INIT(&mcluster->coords);
+
+        rd_list_init(&mcluster->pids, 16, rd_free);
 
         TAILQ_INIT(&mcluster->errstacks);
 

@@ -2211,6 +2211,9 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         int16_t ErrorCode = 0;
         int actions = 0;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 
@@ -5727,10 +5730,10 @@ static int unittest_set_intersect (void) {
                 rd_kafka_topic_partition_destroy_free,
                 PartitionMemberInfo_free);
 
-        gm1 = calloc(1, sizeof(*gm1));
+        gm1 = rd_calloc(1, sizeof(*gm1));
         gm1->rkgm_member_id = &id1;
         gm1->rkgm_group_instance_id = &id1;
-        gm2 = calloc(1, sizeof(*gm2));
+        gm2 = rd_calloc(1, sizeof(*gm2));
         gm2->rkgm_member_id = &id2;
         gm2->rkgm_group_instance_id = &id2;
 

@@ -248,7 +248,8 @@ void rd_kafka_SaslAuthenticateRequest (rd_kafka_broker_t *rkb,
                                        void *opaque);
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
-                             const rd_kafka_pid_t pid);
+                             const rd_kafka_pid_t pid,
+                             uint64_t epoch_base_msgid);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,

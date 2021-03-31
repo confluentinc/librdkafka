@@ -86,8 +86,8 @@ typedef unsigned long long u64;
 #endif
 
 
-#define vmalloc(x) malloc(x)
-#define vfree(x) free(x)
+#define vmalloc(x) rd_malloc(x)
+#define vfree(x) rd_free(x)
 
 #define EXPORT_SYMBOL(x)
 

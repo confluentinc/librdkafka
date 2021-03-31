@@ -2458,6 +2458,94 @@ static void do_test_unstable_offset_commit (void) {
 }
 
 
+/**
+ * @brief If a message times out locally before being attempted to send
+ *        and commit_transaction() is called, the transaction must not succeed.
+ *        https://github.com/confluentinc/confluent-kafka-dotnet/issues/1568
+ */
+static void do_test_commit_after_msg_timeout (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        int32_t coord_id, leader_id;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        const char *topic = "test";
+        const char *transactional_id = "txnid";
+        int remains = 0;
+
+        SUB_TEST_QUICK();
+
+        /* Assign coordinator and leader to two different brokers */
+        coord_id = 1;
+        leader_id = 2;
+
+        rk = create_txn_producer(&mcluster, transactional_id, 3,
+                                 "message.timeout.ms", "5000",
+                                 "transaction.timeout.ms", "10000",
+                                 NULL);
+
+        /* Broker down is not a test-failing error */
+        allowed_error = RD_KAFKA_RESP_ERR__TRANSPORT;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str (err));
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      coord_id);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, leader_id);
+
+        /* Start transactioning */
+        TEST_SAY("Starting transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_SAY("Bringing down %"PRId32"\n", leader_id);
+        rd_kafka_mock_broker_set_down(mcluster, leader_id);
+        rd_kafka_mock_broker_set_down(mcluster, coord_id);
+
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, 1, NULL, 0, &remains);
+
+        error = rd_kafka_commit_transaction(rk, -1);
+        TEST_ASSERT(error != NULL, "expected commit_transaciton() to fail");
+        TEST_SAY("commit_transaction() failed (as expected): %s\n",
+                 rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_txn_requires_abort (error),
+                    "Expected txn_requires_abort error");
+        rd_kafka_error_destroy(error);
+
+        /* Bring the brokers up so the abort can complete */
+        rd_kafka_mock_broker_set_up(mcluster, coord_id);
+        rd_kafka_mock_broker_set_up(mcluster, leader_id);
+
+        TEST_SAY("Aborting transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+
+        TEST_ASSERT(remains == 0,
+                    "%d message(s) were not flushed\n", remains);
+
+        TEST_SAY("Attempting second transaction, which should succeed\n");
+        allowed_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, 1, NULL, 0, &remains);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
+        TEST_ASSERT(remains == 0,
+                    "%d message(s) were not produced\n", remains);
+
+        rd_kafka_destroy(rk);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -2515,6 +2603,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
         do_test_txn_flush_timeout();
 
         do_test_unstable_offset_commit();
+
+        do_test_commit_after_msg_timeout();
 
         if (!test_quick)
                 do_test_txn_switch_coordinator();

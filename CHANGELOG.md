@@ -66,6 +66,10 @@ librdkafka v1.7.0 is feature release:
 
  * KIP-360: Fatal Idempotent producer errors are now recoverable by the
    transactional producer and will raise a `txn_requires_abort()` error.
+ * If the cluster went down between `produce()` and `commit_transaction()`
+   and before any partitions had been registered with the coordinator, the
+   messages would time out but the commit would succeed because nothing
+   had been sent to the coordinator. This is now fixed.
 
 
 # librdkafka v1.6.1

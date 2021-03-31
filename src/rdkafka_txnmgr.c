@@ -2343,6 +2343,17 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
                 goto done;
         }
 
+        /* If any messages failed delivery the transaction must be aborted. */
+        dr_fails = rd_atomic64_get(&rk->rk_eos.txn_dr_fails);
+        if (unlikely(dr_fails > 0)) {
+                error = rd_kafka_error_new_txn_requires_abort(
+                        RD_KAFKA_RESP_ERR__INCONSISTENT,
+                        "%"PRId64" message(s) failed delivery "
+                        "(see individual delivery reports)",
+                        dr_fails);
+                goto done;
+        }
+
         if (!rk->rk_eos.txn_req_cnt) {
                 /* If there were no messages produced, or no send_offsets,
                  * in this transaction, simply complete the transaction
@@ -2363,18 +2374,6 @@ rd_kafka_txn_op_commit_transaction (rd_kafka_t *rk,
                         rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
                 goto done;
         }
-
-        /* If any messages failed delivery the transaction must be aborted. */
-        dr_fails = rd_atomic64_get(&rk->rk_eos.txn_dr_fails);
-        if (unlikely(dr_fails > 0)) {
-                error = rd_kafka_error_new_txn_requires_abort(
-                        RD_KAFKA_RESP_ERR__INCONSISTENT,
-                        "%"PRId64" message(s) failed delivery "
-                        "(see individual delivery reports)",
-                        dr_fails);
-                goto done;
-        }
-
 
         err = rd_kafka_EndTxnRequest(rk->rk_eos.txn_coord,
                                      rk->rk_conf.eos.transactional_id,
@@ -2666,9 +2665,15 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
                 goto done;
         }
 
-        if (rk->rk_eos.txn_requires_epoch_bump) {
-                /* A fatal idempotent producer error has occurred which
-                 * causes the current transaction to enter the abortable state.
+        if (rk->rk_eos.txn_requires_epoch_bump ||
+            rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_ASSIGNED) {
+                /* If the underlying idempotent producer's state indicates it
+                 * is re-acquiring its PID we need to wait for that to finish
+                 * before allowing a new begin_transaction(), and since that is
+                 * not a blocking call we need to perform that wait in this state
+                 * instead.
+                 * This may happen on epoch bump and fatal idempotent producer error
+                 * which causes the current transaction to enter the abortable state.
                  * To recover we need to request an epoch bump from the
                  * transaction coordinator. This is handled automatically
                  * by the idempotent producer, so we just need to wait for
@@ -2686,7 +2691,8 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
                 rd_kafka_dbg(rk, EOS, "TXNABORT",
                              "Waiting for transaction coordinator "
                              "PID bump to complete before aborting "
-                             "transaction");
+                             "transaction (idempotent producer state %s)",
+                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
 
                 /* Replace the current init replyq, if any, which is
                  * from a previous timed out abort_transaction() call. */
@@ -2702,6 +2708,12 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
+        if (!rk->rk_eos.txn_req_cnt) {
+                rd_kafka_dbg(rk, EOS, "TXNABORT",
+                             "No partitions registered: not sending EndTxn");
+                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
+                goto done;
+        }
 
         pid = rd_kafka_idemp_get_pid0(rk, rd_false/*dont-lock*/);
         if (!rd_kafka_pid_valid(pid)) {
@@ -2710,13 +2722,6 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
                         RD_KAFKA_RESP_ERR__STATE,
                         "No PID available (idempotence state %s)",
                         rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
-                goto done;
-        }
-
-        if (!rk->rk_eos.txn_req_cnt) {
-                rd_kafka_dbg(rk, EOS, "TXNABORT",
-                             "No partitions registered: not sending EndTxn");
-                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
                 goto done;
         }
 

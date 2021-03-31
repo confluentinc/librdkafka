@@ -43,6 +43,9 @@ librdkafka v1.7.0 is feature release:
    One occurrence of this issue was query_watermark_offsets() that could return
    `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
    client instance was created.
+ * The OpenSSL context is now initialized with `TLS_client_method()`
+   (on OpenSSL >= 1.1.0) instead of the deprecated and outdated
+   `SSLv23_client_method()`.
 
 ### Consumer fixes
 

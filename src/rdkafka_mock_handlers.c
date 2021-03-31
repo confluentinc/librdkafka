@@ -1466,7 +1466,11 @@ rd_kafka_mock_handle_SyncGroup (rd_kafka_mock_connection_t *mconn,
 /**
  * @brief Generate a unique ProducerID
  */
+#ifndef __OS400__
 static const rd_kafka_pid_t
+#else
+static rd_kafka_pid_t
+#endif
 rd_kafka_mock_pid_new (rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_pid_t *pid = rd_malloc(sizeof(*pid));
         rd_kafka_pid_t ret;

@@ -1326,10 +1326,14 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         if (errstr_size > 0)
                 errstr[0] = '\0';
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        ctx = SSL_CTX_new(TLS_client_method());
+#else
         ctx = SSL_CTX_new(SSLv23_client_method());
+#endif
         if (!ctx) {
                 rd_snprintf(errstr, errstr_size,
-                            "SSLv23_client_method() failed: ");
+                            "SSL_CTX_new() failed: ");
                 goto fail;
         }
 

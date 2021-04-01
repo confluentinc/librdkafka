@@ -51,6 +51,11 @@ librdkafka v1.7.0 is feature release:
    it would cause cached metadata to be unusable and new metadata to be fetched,
    which could delay the time it took for a rebalance to settle.
    It now correctly uses `metadata.max.age.ms` instead.
+ * The consumer group timed auto commit would attempt commits during rebalances,
+   which could result in "Illegal generation" errors. This is now fixed, the
+   timed auto committer is only employed in the steady state when no rebalances
+   are taking places. Offsets are still auto committed when partitions are
+   revoked.
 
 ### Producer fixes
 

@@ -2752,6 +2752,142 @@ extern "C" {
     test_mock_cluster_destroy(mcluster);
   }
 
+
+  /**
+   * @brief Rebalance callback for the v_.. test below.
+   */
+  static void v_rebalance_cb (rd_kafka_t *rk,
+                              rd_kafka_resp_err_t err,
+                              rd_kafka_topic_partition_list_t *parts,
+                              void *opaque) {
+    bool *auto_commitp = (bool *)opaque;
+
+    TEST_SAY("%s: %s: %d partition(s)%s\n",
+             rd_kafka_name(rk), rd_kafka_err2name(err), parts->cnt,
+             rd_kafka_assignment_lost(rk) ? " - assignment lost" : "");
+
+    test_print_partition_list(parts);
+
+    if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+      test_consumer_incremental_assign("assign", rk, parts);
+    } else {
+      test_consumer_incremental_unassign("unassign", rk, parts);
+
+      if (!*auto_commitp) {
+        rd_kafka_resp_err_t commit_err;
+
+        TEST_SAY("Attempting manual commit after unassign, in 2 seconds..\n");
+        /* Sleep enough to have the generation-id bumped by rejoin. */
+        rd_sleep(2);
+        commit_err = rd_kafka_commit(rk, NULL, 0/*sync*/);
+        TEST_ASSERT(!commit_err ||
+                    commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+                    commit_err == RD_KAFKA_RESP_ERR__DESTROY,
+                    "%s: manual commit failed: %s",
+                    rd_kafka_name(rk), rd_kafka_err2str(commit_err));
+      }
+    }
+  }
+
+  /**
+   * @brief Commit callback for the v_.. test.
+   */
+  static void v_commit_cb (rd_kafka_t *rk,
+                           rd_kafka_resp_err_t err,
+                           rd_kafka_topic_partition_list_t *offsets,
+                           void *opaque) {
+    TEST_SAY("%s offset commit for %d offsets: %s\n",
+             rd_kafka_name(rk), offsets ? offsets->cnt : -1,
+             rd_kafka_err2name(err));
+    TEST_ASSERT(!err ||
+                err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+                err == RD_KAFKA_RESP_ERR__DESTROY /* consumer was closed */,
+                "%s offset commit failed: %s",
+                rd_kafka_name(rk),
+                rd_kafka_err2str(err));
+  }
+
+
+  static void v_commit_during_rebalance (bool with_rebalance_cb,
+                                         bool auto_commit) {
+    rd_kafka_t *p, *c1, *c2;
+    rd_kafka_conf_t *conf;
+    const char *topic = test_mk_topic_name("0113_v", 1);
+    const int partition_cnt = 6;
+    const int msgcnt_per_partition = 100;
+    const int msgcnt = partition_cnt * msgcnt_per_partition;
+    uint64_t testid;
+    int i;
+
+
+    SUB_TEST("With%s rebalance callback and %s-commit",
+             with_rebalance_cb ? "" : "out",
+             auto_commit ? "auto" : "manual");
+
+    test_conf_init(&conf, NULL, 30);
+    testid = test_id_generate();
+
+    /*
+     * Produce messages to topic
+     */
+    p = test_create_producer();
+
+    test_create_topic(p, topic, partition_cnt, 1);
+
+    for (i = 0 ; i < partition_cnt ; i++) {
+      test_produce_msgs2(p, topic, testid, i,
+                         i * msgcnt_per_partition,
+                         msgcnt_per_partition, NULL, 0);
+    }
+
+    test_flush(p, -1);
+
+    rd_kafka_destroy(p);
+
+
+    test_conf_set(conf, "auto.offset.reset", "earliest");
+    test_conf_set(conf, "enable.auto.commit", auto_commit ? "true" : "false");
+    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+    rd_kafka_conf_set_offset_commit_cb(conf, v_commit_cb);
+    rd_kafka_conf_set_opaque(conf, (void *)&auto_commit);
+
+    TEST_SAY("Create and subscribe first consumer\n");
+    c1 = test_create_consumer(topic,
+                              with_rebalance_cb ? v_rebalance_cb : NULL,
+                              rd_kafka_conf_dup(conf), NULL);
+    TEST_ASSERT(rd_kafka_opaque(c1) == (void *)&auto_commit,
+                "c1 opaque mismatch");
+    test_consumer_subscribe(c1, topic);
+
+    /* Consume some messages so that we know we have an assignment
+     * and something to commit. */
+    test_consumer_poll("C1.PRECONSUME", c1, testid, -1, 0,
+                       msgcnt/partition_cnt/2, NULL);
+
+    TEST_SAY("Create and subscribe second consumer\n");
+    c2 = test_create_consumer(topic,
+                              with_rebalance_cb ? v_rebalance_cb : NULL,
+                              conf, NULL);
+    TEST_ASSERT(rd_kafka_opaque(c2) == (void *)&auto_commit,
+                "c2 opaque mismatch");
+    test_consumer_subscribe(c2, topic);
+
+    /* Poll both consumers */
+    for (i = 0 ; i < 10 ; i++) {
+      test_consumer_poll_once(c1, NULL, 1000);
+      test_consumer_poll_once(c2, NULL, 1000);
+    }
+
+    TEST_SAY("Closing consumers\n");
+    test_consumer_close(c1);
+    test_consumer_close(c2);
+
+    rd_kafka_destroy(c1);
+    rd_kafka_destroy(c2);
+
+    SUB_TEST_PASS();
+  }
+
   /* Local tests not needing a cluster */
   int main_0113_cooperative_rebalance_local (int argc, char **argv) {
     a_assign_rapid();
@@ -2799,6 +2935,12 @@ extern "C" {
       u_multiple_subscription_changes(true/*with rebalance_cb*/, i);
       u_multiple_subscription_changes(false/*without rebalance_cb*/, i);
     }
+    v_commit_during_rebalance(true/*with rebalance callback*/,
+                              true/*auto commit*/);
+    v_commit_during_rebalance(false/*without rebalance callback*/,
+                              true/*auto commit*/);
+    v_commit_during_rebalance(true/*with rebalance callback*/,
+                              false/*manual commit*/);
 
     return 0;
   }

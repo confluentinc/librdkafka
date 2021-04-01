@@ -2926,7 +2926,8 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 	}
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "COMMIT",
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "COMMIT",
                              "Deferring \"%s\" offset commit "
                              "for %d partition(s) in state %s: "
                              "no coordinator available",
@@ -2941,9 +2942,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         }
 
 
-        rd_rkb_dbg(rkcg->rkcg_coord, CONSUMER, "COMMIT",
-                   "Committing offsets for %d partition(s): %s",
-                   valid_offsets, reason);
+        rd_rkb_dbg(rkcg->rkcg_coord, CONSUMER|RD_KAFKA_DBG_CGRP, "COMMIT",
+                   "Committing offsets for %d partition(s) with "
+                   "generation-id %" PRId32 " in join-state %s: %s",
+                   valid_offsets, rkcg->rkcg_generation_id,
+                   rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                   reason);
 
         /* Send OffsetCommit */
         r = rd_kafka_OffsetCommitRequest(
@@ -2959,7 +2963,8 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
  err:
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET)
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "COMMIT",
                              "OffsetCommit internal error: %s",
                              rd_kafka_err2str(err));
 
@@ -3037,6 +3042,11 @@ rd_kafka_cgrp_assigned_offsets_commit (
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
+
+        /* Don't attempt auto commit when rebalancing or initializing since
+         * the rkcg_generation_id is most likely in flux. */
+        if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                return;
 
         rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL,
                                               rd_true/*set offsets*/,

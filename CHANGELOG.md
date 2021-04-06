@@ -78,6 +78,11 @@ librdkafka v1.7.0 is feature release:
    and before any partitions had been registered with the coordinator, the
    messages would time out but the commit would succeed because nothing
    had been sent to the coordinator. This is now fixed.
+ * If the current transaction failed while `commit_transaction()` was
+   checking the current transaction state an invalid state transaction could
+   occur which in turn would trigger a assertion crash.
+   This issue showed up as "Invalid txn state transition: .." crashes, and is
+   now fixed by properly synchronizing both checking and transition of state.
 
 
 # librdkafka v1.6.1

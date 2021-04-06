@@ -182,14 +182,6 @@ if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
 
-if(WIN32)
-  if(RDKAFKA_BUILD_STATIC)
-    target_link_libraries(rdkafka PUBLIC crypt32)
-  else()
-    target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
-  endif()
-endif()
-
 # We need 'dummy' directory to support `#include "../config.h"` path
 set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")
@@ -251,11 +243,16 @@ if(WITH_LZ4_EXT)
   target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
 endif()
 
-if(MINGW)
-  message(STATUS "Detected MinGW build")
-  # MinGW ignores `#pragma comment(lib, ...)` so we need to specify link libs
-  target_link_libraries(rdkafka PUBLIC crypt32 ws2_32 secur32)
-endif(MINGW)
+if(WIN32)
+  if(WITH_SSL)
+    target_link_libraries(rdkafka PUBLIC crypt32)
+  endif()
+
+  target_link_libraries(rdkafka PUBLIC ws2_32 secur32)
+  if(NOT RDKAFKA_BUILD_STATIC)
+    target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
+  endif()
+endif()
 
 # Generate pkg-config file
 set(PKG_CONFIG_VERSION "${PROJECT_VERSION}")

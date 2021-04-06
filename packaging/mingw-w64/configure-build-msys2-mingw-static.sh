@@ -4,6 +4,7 @@ set -e
 
 cmake \
     -G "MinGW Makefiles" \
+    -D CMAKE_FIND_LIBRARY_SUFFIXES=".a" \
     -D CMAKE_INSTALL_PREFIX="$PWD/dest/" \
     -D RDKAFKA_BUILD_STATIC=ON \
     .

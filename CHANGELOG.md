@@ -46,6 +46,9 @@ librdkafka v1.7.0 is feature release:
  * The OpenSSL context is now initialized with `TLS_client_method()`
    (on OpenSSL >= 1.1.0) instead of the deprecated and outdated
    `SSLv23_client_method()`.
+ * The initial cluster connection on client instance creation could sometimes
+   be delayed up to 1 second if a `group.id` or `transactional.id`
+   was configured (#3305).
 
 ### Consumer fixes
 

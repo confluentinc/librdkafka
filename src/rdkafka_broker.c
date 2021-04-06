@@ -6219,7 +6219,8 @@ void rd_kafka_connect_any (rd_kafka_t *rk, const char *reason) {
          * rd_kafka_broker_random() will not return LOGICAL brokers. */
         if (rd_atomic32_get(&rk->rk_broker_up_cnt) -
             rd_atomic32_get(&rk->rk_logical_broker_up_cnt) > 0 ||
-            rd_atomic32_get(&rk->rk_broker_cnt) == 0)
+            rd_atomic32_get(&rk->rk_broker_cnt) -
+            rd_atomic32_get(&rk->rk_broker_addrless_cnt) == 0)
                 return;
 
         mtx_lock(&rk->rk_suppress.sparse_connect_lock);

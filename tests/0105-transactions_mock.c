@@ -2556,10 +2556,18 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         do_test_txn_fatal_idempo_errors();
 
+        do_test_txn_fenced_reinit();
+
+        do_test_txn_req_cnt();
+
+        do_test_txn_requires_abort_errors();
+
         do_test_txn_slow_reinit(rd_false);
         do_test_txn_slow_reinit(rd_true);
 
-        do_test_txn_fenced_reinit();
+        /* Just do a subset of tests in quick mode */
+        if (test_quick)
+                return 0;
 
         do_test_txn_endtxn_errors();
 
@@ -2569,10 +2577,6 @@ int main_0105_transactions_mock (int argc, char **argv) {
          * until they're properly handled by the producer. */
         if (0)
                 do_test_txn_endtxn_timeout();
-
-        do_test_txn_req_cnt();
-
-        do_test_txn_requires_abort_errors();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);
@@ -2606,8 +2610,7 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         do_test_commit_after_msg_timeout();
 
-        if (!test_quick)
-                do_test_txn_switch_coordinator();
+        do_test_txn_switch_coordinator();
 
         return 0;
 }

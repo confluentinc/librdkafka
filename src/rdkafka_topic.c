@@ -1325,7 +1325,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 	RD_LIST_FOREACH(rktp, partitions, i) {
 		rd_kafka_toppar_lock(rktp);
 		rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
-		rd_kafka_toppar_purge_queues(rktp);
+		rd_kafka_toppar_purge_and_disable_queues(rktp);
 		rd_kafka_toppar_unlock(rktp);
 
 		rd_kafka_toppar_destroy(rktp);

@@ -37,6 +37,7 @@
 #include "rdkafka_cert.h"
 
 #ifdef _WIN32
+#include <wincrypt.h>
 #pragma comment (lib, "crypt32.lib")
 #endif
 
@@ -132,8 +133,10 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         int line, flags;
         int cnt = 0;
 
-        if (!rk)
+        if (!rk) {
+                rd_assert(rkb);
                 rk = rkb->rkb_rk;
+        }
 
         while ((l = ERR_get_error_line_data(&file, &line,
                                             &data, &flags)) != 0) {

@@ -77,6 +77,7 @@ int          test_rusage = 0; /**< Check resource usage */
 double       test_rusage_cpu_calibration = 1.0;
 static const char *tests_to_run = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
+static const char *tests_to_skip = NULL; /* none */
 int          test_write_report = 0; /**< Write test report file */
 
 static int show_summary = 1;
@@ -230,6 +231,7 @@ _TEST_DECL(0118_commit_rebalance);
 _TEST_DECL(0119_consumer_auth);
 _TEST_DECL(0120_asymmetric_subscription);
 _TEST_DECL(0121_clusterid);
+_TEST_DECL(0123_connections_max_idle);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -407,7 +409,8 @@ struct test tests[] = {
         _TEST(0102_static_group_rebalance, 0,
               TEST_BRKVER(2,3,0,0)),
         _TEST(0103_transactions_local, TEST_F_LOCAL),
-        _TEST(0103_transactions, 0, TEST_BRKVER(0, 11, 0, 0)),
+        _TEST(0103_transactions, 0, TEST_BRKVER(0, 11, 0, 0),
+              .scenario = "default,ak23"),
         _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL,
               TEST_BRKVER(2,4,0,0)),
         _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0,11,0,0)),
@@ -430,6 +433,7 @@ struct test tests[] = {
         _TEST(0119_consumer_auth, 0, TEST_BRKVER(2,1,0,0)),
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
+        _TEST(0123_connections_max_idle, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -1235,7 +1239,7 @@ static void run_tests (int argc, char **argv) {
 			skip_reason = tmp;
 		}
 
-                if (strcmp(scenario, test_scenario)) {
+                if (!strstr(scenario, test_scenario)) {
                         rd_snprintf(tmp, sizeof(tmp),
                                     "requires test scenario %s", scenario);
                         skip_silent = rd_true;
@@ -1248,7 +1252,8 @@ static void run_tests (int argc, char **argv) {
                 } else if (!tests_to_run && (test->flags & TEST_F_MANUAL)) {
                         skip_reason = "manual test";
                         skip_silent = rd_true;
-                }
+                } else if (tests_to_skip && strstr(tests_to_skip, testnum))
+                        skip_reason = "included in TESTS_SKIP list";
 
                 if (!skip_reason) {
                         run_test(test, argc, argv);
@@ -1570,6 +1575,7 @@ int main(int argc, char **argv) {
 #endif
         tests_to_run = test_getenv("TESTS", NULL);
         subtests_to_run = test_getenv("SUBTESTS", NULL);
+        tests_to_skip = test_getenv("TESTS_SKIP", NULL);
         tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
@@ -1736,6 +1742,8 @@ int main(int argc, char **argv) {
 	TEST_SAY("Tests to run : %s\n", tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
                 TEST_SAY("Sub tests    : %s\n", subtests_to_run);
+        if (tests_to_skip)
+                TEST_SAY("Skip tests   : %s\n", tests_to_skip);
         TEST_SAY("Test mode    : %s%s%s\n",
                  test_quick ? "quick, ":"",
                  test_mode,
@@ -1846,11 +1854,14 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                 [RD_KAFKA_MSG_STATUS_PERSISTED] = "Persisted"
         };
 
-        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"]\n",
+        TEST_SAYL(4, "Delivery report: %s (%s) to %s [%"PRId32"] "
+                  "at offset %"PRId64" latency %.2fms\n",
                   rd_kafka_err2str(rkmessage->err),
                   status_names[rd_kafka_message_status(rkmessage)],
                   rd_kafka_topic_name(rkmessage->rkt),
-                  rkmessage->partition);
+                  rkmessage->partition,
+                  rkmessage->offset,
+                  (float)rd_kafka_message_latency(rkmessage) / 1000.0);
 
         if (!test_curr->produce_sync) {
                 if (!test_curr->ignore_dr_err &&
@@ -1871,6 +1882,10 @@ void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                                     status_names[test_curr->exp_dr_status],
                                     status_names[status]);
                 }
+
+                /* Add message to msgver */
+                if (!rkmessage->err && test_curr->dr_mv)
+                        test_msgver_add_msg(rk, test_curr->dr_mv, rkmessage);
         }
 
 	if (remainsp) {
@@ -2638,8 +2653,11 @@ test_consume_txn_msgs_easy (const char *group_id, const char *topic,
 /**
  * @brief Waits for up to \p timeout_ms for consumer to receive assignment.
  *        If no assignment received without the timeout the test fails.
+ *
+ * @warning This method will poll the consumer and might thus read messages.
+ *          Set \p do_poll to false to use a sleep rather than poll.
  */
-void test_consumer_wait_assignment (rd_kafka_t *rk) {
+void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll) {
         rd_kafka_topic_partition_list_t *assignment = NULL;
         int i;
 
@@ -2655,7 +2673,10 @@ void test_consumer_wait_assignment (rd_kafka_t *rk) {
 
                 rd_kafka_topic_partition_list_destroy(assignment);
 
-                test_consumer_poll_once(rk, NULL, 1000);
+                if (do_poll)
+                        test_consumer_poll_once(rk, NULL, 1000);
+                else
+                        rd_usleep(1000*1000, NULL);
         }
 
         TEST_SAY("%s: Assignment (%d partition(s)): ",
@@ -2816,6 +2837,10 @@ void test_msgver_init (test_msgver_t *mv, uint64_t testid) {
 	mv->log_max = (test_level + 1) * 100;
 }
 
+void test_msgver_ignore_eof (test_msgver_t *mv) {
+        mv->ignore_eof = rd_true;
+}
+
 #define TEST_MV_WARN(mv,...) do {			\
 		if ((mv)->log_cnt++ > (mv)->log_max)	\
 			(mv)->log_suppr_cnt++;		\
@@ -2973,8 +2998,15 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
         struct test_mv_m *m;
 
         if (testid != mv->testid) {
-                TEST_SAYL(3, "%s:%d: %s: mismatching testid %"PRIu64" != %"PRIu64"\n",
+                TEST_SAYL(3, "%s:%d: %s: mismatching testid %"PRIu64
+                          " != %"PRIu64"\n",
                           func, line, clientname, testid, mv->testid);
+                return 0; /* Ignore message */
+        }
+
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF && mv->ignore_eof) {
+                TEST_SAYL(3, "%s:%d: %s: ignoring EOF for %s [%"PRId32"]\n",
+                          func, line, clientname, topic, partition);
                 return 0; /* Ignore message */
         }
 
@@ -3017,7 +3049,8 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
  * @returns 1 if message is from the expected testid, else 0 (not added).
  */
 int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
-                          test_msgver_t *mv, rd_kafka_message_t *rkmessage,
+                          test_msgver_t *mv,
+                          const rd_kafka_message_t *rkmessage,
                           const char *override_topic) {
 	uint64_t in_testid;
 	int in_part;
@@ -3898,19 +3931,28 @@ int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
 }
 
 
-int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
-                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
-			test_msgver_t *mv) {
+/**
+ * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
+ *              If false: poll until either one is reached.
+ */
+int test_consumer_poll_exact (const char *what, rd_kafka_t *rk, uint64_t testid,
+                              int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+                              rd_bool_t exact, test_msgver_t *mv) {
         int eof_cnt = 0;
         int cnt = 0;
         test_timing_t t_cons;
 
-        TEST_SAY("%s: consume %d messages\n", what, exp_cnt);
+        TEST_SAY("%s: consume %s%d messages\n", what,
+                 exact ? "exactly ": "", exp_cnt);
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while ((exp_eof_cnt <= 0 || eof_cnt < exp_eof_cnt) &&
-               (exp_cnt <= 0 || cnt < exp_cnt)) {
+        while ((!exact &&
+                ((exp_eof_cnt <= 0 || eof_cnt < exp_eof_cnt) &&
+                 (exp_cnt <= 0 || cnt < exp_cnt))) ||
+               (exact &&
+                (eof_cnt < exp_eof_cnt ||
+                 cnt < exp_cnt))) {
                 rd_kafka_message_t *rkmessage;
 
                 rkmessage = rd_kafka_consumer_poll(rk, tmout_multip(10*1000));
@@ -3942,6 +3984,13 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_message_errstr(rkmessage));
 
                 } else {
+                        TEST_SAYL(4, "%s: consumed message on %s [%"PRId32"] "
+                                  "at offset %"PRId64"\n",
+                                  what,
+                                  rd_kafka_topic_name(rkmessage->rkt),
+                                  rkmessage->partition,
+                                  rkmessage->offset);
+
 			if (!mv || test_msgver_add_msg(rk, mv, rkmessage))
 				cnt++;
                 }
@@ -3954,12 +4003,28 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
         TEST_SAY("%s: consumed %d/%d messages (%d/%d EOFs)\n",
                  what, cnt, exp_cnt, eof_cnt, exp_eof_cnt);
 
+        TEST_ASSERT(!exact ||
+                    ((exp_cnt == -1 || exp_cnt == cnt) &&
+                     (exp_eof_cnt == -1 || exp_eof_cnt == eof_cnt)),
+                    "%s: mismatch between exact expected counts and actual: "
+                    "%d/%d EOFs, %d/%d msgs",
+                    what, eof_cnt, exp_eof_cnt, cnt, exp_cnt);
+
         if (exp_cnt == 0)
                 TEST_ASSERT(cnt == 0 && eof_cnt == exp_eof_cnt,
                             "%s: expected no messages and %d EOFs: "
                             "got %d messages and %d EOFs",
                             what, exp_eof_cnt, cnt, eof_cnt);
         return cnt;
+}
+
+
+int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+                        test_msgver_t *mv) {
+        return test_consumer_poll_exact(what, rk, testid,
+                                        exp_eof_cnt, exp_msg_base, exp_cnt,
+                                        rd_false/*not exact */, mv);
 }
 
 void test_consumer_close (rd_kafka_t *rk) {
@@ -5760,7 +5825,7 @@ test_DeleteRecords_simple (rd_kafka_t *rk,
 
         TEST_SAY("Deleting offsets from %d partitions\n", offsets->cnt);
 
-        rd_kafka_DeleteRecords(rk, &del_records, 1, options, useq);
+        rd_kafka_DeleteRecords(rk, &del_records, 1, options, q);
 
         rd_kafka_DeleteRecords_destroy(del_records);
 
@@ -6311,4 +6376,6 @@ void test_sub_pass (void) {
         *test_curr->subtest = '\0';
         test_curr->is_fatal_cb = NULL;
         test_curr->ignore_dr_err = rd_false;
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->dr_mv = NULL;
 }

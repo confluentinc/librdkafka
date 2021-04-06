@@ -499,6 +499,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Group partition assignment lost"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__NOOP,
                   "Local: No operation performed"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET,
+                  "Local: No offset to automatically reset to"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -687,7 +689,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
         _ERR_DESC(RD_KAFKA_RESP_ERR_NO_REASSIGNMENT_IN_PROGRESS,
                   "Broker: No partition reassignment is in progress"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC,
-                  "Broker: Deleting offsets of a topic while the consumer group is subscribed to it"),
+                  "Broker: Deleting offsets of a topic while the consumer "
+                  "group is subscribed to it"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_RECORD,
                   "Broker: Broker failed to validate record"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_UNSTABLE_OFFSET_COMMIT,
@@ -1185,7 +1188,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
          * reaches 1 and then decommissions itself. */
         TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
                 /* Add broker's thread to wait_thrds list for later joining */
-                thrd = malloc(sizeof(*thrd));
+                thrd = rd_malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
                 rd_kafka_wrunlock(rk);
@@ -1220,8 +1223,14 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Destroy the coordinator cache */
         rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
 
-        /* Destroy metadata cache */
-        rd_kafka_metadata_cache_destroy(rk);
+        /* Purge metadata cache.
+         * #3279:
+         * We mustn't call cache_destroy() here since there might be outstanding
+         * broker rkos that hold references to the metadata cache lock,
+         * and these brokers are destroyed below. So to avoid a circular
+         * dependency refcnt deadlock we first purge the cache here
+         * and destroy it after the brokers are destroyed. */
+        rd_kafka_metadata_cache_purge(rk, rd_true/*observers too*/);
 
         rd_kafka_wrunlock(rk);
 
@@ -1253,7 +1262,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                                rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
                 rk->rk_internal_rkb = NULL;
-                thrd = malloc(sizeof(*thrd));
+                thrd = rd_malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
         }
@@ -1270,7 +1279,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 int res;
                 if (thrd_join(*thrd, &res) != thrd_success)
                         ;
-                free(thrd);
+                rd_free(thrd);
         }
 
         rd_list_destroy(&wait_thrds);
@@ -1289,6 +1298,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_assert(!*"All mock clusters must be destroyed prior to "
                           "rd_kafka_t destroy");
         }
+
+        /* Destroy metadata cache */
+        rd_kafka_wrlock(rk);
+        rd_kafka_metadata_cache_destroy(rk);
+        rd_kafka_wrunlock(rk);
 }
 
 /**
@@ -1383,6 +1397,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int64_t end_offset;
         int64_t consumer_lag = -1;
+        int64_t consumer_lag_stored = -1;
         struct offset_stats offs;
         int32_t broker_id = -1;
 
@@ -1402,19 +1417,21 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                 : rktp->rktp_hi_offset;
 
         /* Calculate consumer_lag by using the highest offset
-         * of app_offset (the last message passed to application + 1)
+         * of stored_offset (the last message passed to application + 1, or
+         * if enable.auto.offset.store=false the last message manually stored),
          * or the committed_offset (the last message committed by this or
          * another consumer).
-         * Using app_offset allows consumer_lag to be up to date even if
+         * Using stored_offset allows consumer_lag to be up to date even if
          * offsets are not (yet) committed.
          */
-        if (end_offset != RD_KAFKA_OFFSET_INVALID &&
-            (rktp->rktp_app_offset >= 0 || rktp->rktp_committed_offset >= 0)) {
-                consumer_lag = end_offset -
-                        RD_MAX(rktp->rktp_app_offset,
-                               rktp->rktp_committed_offset);
-                if (unlikely(consumer_lag) < 0)
-                        consumer_lag = 0;
+        if (end_offset != RD_KAFKA_OFFSET_INVALID) {
+                if (rktp->rktp_stored_offset >= 0 &&
+                    rktp->rktp_stored_offset <= end_offset)
+                        consumer_lag_stored =
+                                end_offset - rktp->rktp_stored_offset;
+                if (rktp->rktp_committed_offset >= 0 &&
+                    rktp->rktp_committed_offset <= end_offset)
+                        consumer_lag = end_offset - rktp->rktp_committed_offset;
         }
 
 	_st_printf("%s\"%"PRId32"\": { "
@@ -1441,6 +1458,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   "\"hi_offset\":%"PRId64", "
                    "\"ls_offset\":%"PRId64", "
                    "\"consumer_lag\":%"PRId64", "
+                   "\"consumer_lag_stored\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
 		   "\"txbytes\":%"PRIu64", "
                    "\"rxmsgs\":%"PRIu64", "
@@ -1478,6 +1496,7 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 		   rktp->rktp_hi_offset,
                    rktp->rktp_ls_offset,
                    consumer_lag,
+                   consumer_lag_stored,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
                    rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes),
                    rd_atomic64_get(&rktp->rktp_c.rx_msgs),
@@ -1635,8 +1654,26 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_toppar_t *rktp;
+                rd_ts_t txidle = -1, rxidle = -1;
 
 		rd_kafka_broker_lock(rkb);
+
+                if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
+                        /* Calculate tx and rx idle time in usecs */
+                        txidle = rd_atomic64_get(&rkb->rkb_c.ts_send);
+                        rxidle = rd_atomic64_get(&rkb->rkb_c.ts_recv);
+
+                        if (txidle)
+                                txidle = RD_MAX(now - txidle, 0);
+                        else
+                                txidle = -1;
+
+                        if (rxidle)
+                                rxidle = RD_MAX(now - rxidle, 0);
+                        else
+                                rxidle = -1;
+                }
+
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -1652,12 +1689,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
 			   "\"txretries\":%"PRIu64", "
+                           "\"txidle\":%"PRIu64", "
 			   "\"req_timeouts\":%"PRIu64", "
 			   "\"rx\":%"PRIu64", "
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
+                           "\"rxidle\":%"PRIu64", "
                            "\"zbuf_grow\":%"PRIu64", "
                            "\"buf_grow\":%"PRIu64", "
                            "\"wakeups\":%"PRIu64", "
@@ -1679,12 +1718,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.tx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.tx_err),
 			   rd_atomic64_get(&rkb->rkb_c.tx_retries),
+                           txidle,
 			   rd_atomic64_get(&rkb->rkb_c.req_timeouts),
 			   rd_atomic64_get(&rkb->rkb_c.rx),
 			   rd_atomic64_get(&rkb->rkb_c.rx_bytes),
 			   rd_atomic64_get(&rkb->rkb_c.rx_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_corrid_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
+                           rxidle,
                            rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
                            rd_atomic64_get(&rkb->rkb_c.buf_grow),
                            rd_atomic64_get(&rkb->rkb_c.wakeups),
@@ -2145,9 +2186,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_kafka_timers_init(&rk->rk_timers, rk, rk->rk_ops);
         rd_kafka_metadata_cache_init(rk);
         rd_kafka_coord_cache_init(&rk->rk_coord_cache,
-                                  rk->rk_conf.metadata_refresh_interval_ms ?
-                                  rk->rk_conf.metadata_refresh_interval_ms :
-                                  (5 * 60 * 1000) /* 5min */);
+                                  rk->rk_conf.metadata_max_age_ms);
         rd_kafka_coord_reqs_init(rk);
 
 	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
@@ -4172,15 +4211,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
                  * Instead we rely on the application to serve the event
                  * queue in another thread, so all we do here is wait
                  * for the current message count to reach zero. */
-                struct timespec tspec;
-
-                rd_timeout_init_timespec(&tspec, timeout_ms);
-
-                while ((msg_cnt =
-                        rd_kafka_curr_msgs_wait_zero(rk, &tspec)) > 0) {
-                        if (unlikely(rd_kafka_yield_thread))
-                                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-                }
+                rd_kafka_curr_msgs_wait_zero(rk, timeout_ms, &msg_cnt);
 
                 return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
                         RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -4209,6 +4240,47 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
         }
 }
 
+/**
+ * @brief Purge the partition message queue (according to \p purge_flags) for
+ *        all toppars.
+ *
+ * This is a necessity to avoid the race condition when a purge() is scheduled
+ * shortly in-between an rktp has been created but before it has been
+ * joined to a broker handler thread.
+ *
+ * The rktp_xmit_msgq is handled by the broker-thread purge.
+ *
+ * @returns the number of messages purged.
+ *
+ * @locks_required rd_kafka_*lock()
+ * @locks_acquired rd_kafka_topic_rdlock()
+ */
+static int
+rd_kafka_purge_toppars (rd_kafka_t *rk, int purge_flags) {
+        rd_kafka_topic_t *rkt;
+        int cnt = 0;
+
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                rd_kafka_toppar_t *rktp;
+                int i;
+
+                rd_kafka_topic_rdlock(rkt);
+                for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rkt->rkt_p[i], purge_flags, rd_false/*!xmit*/);
+
+                RD_LIST_FOREACH(rktp, &rkt->rkt_desp, i)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rktp, purge_flags, rd_false/*!xmit*/);
+
+                if (rkt->rkt_ua)
+                        cnt += rd_kafka_toppar_purge_queues(
+                                rkt->rkt_ua, purge_flags, rd_false/*!xmit*/);
+                rd_kafka_topic_rdunlock(rkt);
+        }
+
+        return cnt;
+}
 
 
 rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
@@ -4232,21 +4304,19 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
         if (!(purge_flags & RD_KAFKA_PURGE_F_NON_BLOCKING))
                 tmpq = rd_kafka_q_new(rk);
 
-        /* Send purge request to all broker threads */
         rd_kafka_rdlock(rk);
+
+        /* Purge msgq for all toppars. */
+        rd_kafka_purge_toppars(rk, purge_flags);
+
+        /* Send purge request to all broker threads */
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_purge_queues(rkb, purge_flags,
                                              RD_KAFKA_REPLYQ(tmpq, 0));
                 waitcnt++;
         }
-        rd_kafka_rdunlock(rk);
 
-        /* The internal broker handler may hold unassigned partitions */
-        mtx_lock(&rk->rk_internal_rkb_lock);
-        rd_kafka_broker_purge_queues(rk->rk_internal_rkb, purge_flags,
-                                     RD_KAFKA_REPLYQ(tmpq, 0));
-        mtx_unlock(&rk->rk_internal_rkb_lock);
-        waitcnt++;
+        rd_kafka_rdunlock(rk);
 
 
         if (tmpq) {
@@ -4610,7 +4680,7 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         /* Query each broker for its list of groups */
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_lock(rkb);
-                if (rkb->rkb_nodeid == -1) {
+                if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_kafka_broker_unlock(rkb);
                         continue;
                 }
@@ -4758,8 +4828,16 @@ rd_bool_t rd_kafka_dir_is_empty (const char *path) {
 }
 
 
+void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size) {
+        return rd_malloc(size);
+}
+
+void *rd_kafka_mem_calloc(rd_kafka_t *rk, size_t num, size_t size) {
+        return rd_calloc(num, size);
+}
+
 void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr) {
-        free(ptr);
+        rd_free(ptr);
 }
 
 

@@ -158,7 +158,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x010600ff
+#define RD_KAFKA_VERSION  0x010601ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -390,6 +390,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__ASSIGNMENT_LOST = -142,
         /** No operation performed */
         RD_KAFKA_RESP_ERR__NOOP = -141,
+        /** No offset to automatically reset to */
+        RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -3091,6 +3093,43 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                             int timeout_ms);
 
 
+
+/**
+ * @brief Allocate and zero memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the calloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * \p rk can be set to return memory allocated by a specific \c rk instance
+ * otherwise pass NULL for \p rk.
+ *
+ * @remark Memory allocated by rd_kafka_mem_calloc() must be freed using
+ *         rd_kafka_mem_free()
+ */
+RD_EXPORT
+void *rd_kafka_mem_calloc (rd_kafka_t *rk, size_t num, size_t size);
+
+
+
+/**
+ * @brief Allocate memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the malloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * \p rk can be set to return memory allocated by a specific \c rk instance
+ * otherwise pass NULL for \p rk.
+ *
+ * @remark Memory allocated by rd_kafka_mem_malloc() must be freed using
+ *         rd_kafka_mem_free()
+ */
+RD_EXPORT
+void *rd_kafka_mem_malloc (rd_kafka_t *rk, size_t size);
+
+
+
 /**
  * @brief Free pointer returned by librdkafka
  *
@@ -5287,6 +5326,7 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
  * @param errstr String buffer of size \p errstr_size where plugin must write
  *               a human readable error string in the case the initializer
  *               fails (returns non-zero).
+ * @param errstr_size Maximum space (including \0) in \p errstr.
  *
  * @remark A plugin may add an on_conf_destroy() interceptor to clean up
  *         plugin-specific resources created in the plugin's conf_init() method.
@@ -5590,6 +5630,46 @@ typedef rd_kafka_resp_err_t
 
 
 /**
+ * @brief on_response_received() is called when a protocol response has been
+ *        fully received from a broker TCP connection socket but before the
+ *        response payload is parsed.
+ *
+ * @param rk The client instance.
+ * @param sockfd Socket file descriptor (always -1).
+ * @param brokername Broker response was received from, possibly empty string
+ *                   on error.
+ * @param brokerid Broker response was received from.
+ * @param ApiKey Kafka protocol request type or -1 on error.
+ * @param ApiVersion Kafka protocol request type version or -1 on error.
+ * @param Corrid Kafka protocol request correlation id, possibly -1 on error.
+ * @param size Size of response, possibly 0 on error.
+ * @param rtt Request round-trip-time in microseconds, possibly -1 on error.
+ * @param err Receive error.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @warning The on_response_received() interceptor is called from internal
+ *          librdkafka broker threads. An on_response_received() interceptor
+ *          MUST NOT call any librdkafka API's associated with the \p rk, or
+ *          perform any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_response_received_t) (
+        rd_kafka_t *rk,
+        int sockfd,
+        const char *brokername,
+        int32_t brokerid,
+        int16_t ApiKey,
+        int16_t ApiVersion,
+        int32_t CorrId,
+        size_t  size,
+        int64_t rtt,
+        rd_kafka_resp_err_t err,
+        void *ic_opaque);
+
+
+/**
  * @brief on_thread_start() is called from a newly created librdkafka-managed
  *        thread.
 
@@ -5837,6 +5917,25 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_request_sent (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_response_received() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_response_received() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_response_received (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_response_received_t *on_response_received,
         void *ic_opaque);
 
 

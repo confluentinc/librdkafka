@@ -154,7 +154,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 	char *n = strndup(s, len);
 	rd_assert(n);
 #else
-	char *n = (char *)malloc(len + 1);
+	char *n = (char *)rd_malloc(len + 1);
 	rd_assert(n);
 	memcpy(n, s, len);
 	n[len] = '\0';

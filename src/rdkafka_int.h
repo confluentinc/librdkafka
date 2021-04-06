@@ -175,8 +175,14 @@ typedef enum {
         /**< commit_transaction() has been called and all outstanding
          *   messages, partitions, and offsets have been sent. */
         RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION,
+        /**< Transaction successfully committed but application has not made
+         *   a successful commit_transaction() call yet. */
+        RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED,
         /**< abort_transaction() has been called. */
         RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION,
+        /**< Transaction successfully aborted but application has not made
+         *   a successful abort_transaction() call yet. */
+        RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED,
         /**< An abortable error has occurred. */
         RD_KAFKA_TXN_STATE_ABORTABLE_ERROR,
         /* A fatal error has occured. */
@@ -197,7 +203,9 @@ rd_kafka_txn_state2str (rd_kafka_txn_state_t state) {
                 "InTransaction",
                 "BeginCommit",
                 "CommittingTransaction",
+                "CommitNotAcked",
                 "AbortingTransaction",
+                "AbortedNotAcked",
                 "AbortableError",
                 "FatalError"
         };
@@ -389,6 +397,10 @@ struct rd_kafka_s {
                                                           *   take action when
                                                           *   the broker state
                                                           *   changes. */
+                rd_bool_t txn_requires_epoch_bump; /**< Coordinator epoch bump
+                                                    *   required to recover from
+                                                    *   idempotent producer
+                                                    *   fatal error. */
 
                 /**< Blocking transactional API application call
                  *   currently being handled, its state, reply queue and how
@@ -730,21 +742,28 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 /**
  * @brief Wait until \p tspec for curr_msgs to reach 0.
  *
- * @returns remaining curr_msgs
+ * @returns rd_true if zero is reached, or rd_false on timeout.
+ *          The remaining messages are returned in \p *curr_msgsp
  */
-static RD_INLINE RD_UNUSED int
-rd_kafka_curr_msgs_wait_zero (rd_kafka_t *rk, const struct timespec *tspec) {
-        int cnt;
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_curr_msgs_wait_zero (rd_kafka_t *rk, int timeout_ms,
+                              unsigned int *curr_msgsp) {
+        unsigned int cnt;
+        struct timespec tspec;
+
+        rd_timeout_init_timespec(&tspec, timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
-                cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
-                                  &rk->rk_curr_msgs.lock,
-                                  tspec);
+                if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
+                                      &rk->rk_curr_msgs.lock,
+                                      &tspec) == thrd_timedout)
+                        break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
 
-        return cnt;
+        *curr_msgsp = cnt;
+        return cnt == 0;
 }
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);

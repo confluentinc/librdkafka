@@ -238,6 +238,15 @@ const char *foo (void) {
    return buf;
 }"
 
+    # Check if strcasestr() is available.
+    mkl_compile_check "strcasestr" "HAVE_STRCASESTR" disable CC "" \
+"
+#define _GNU_SOURCE
+#include <string.h>
+char *foo (const char *needle) {
+   return strcasestr(\"the hay\", needle);
+}"
+
 
     # See if GNU's pthread_setname_np() is available, and in what form.
     mkl_compile_check "pthread_setname_gnu" "HAVE_PTHREAD_SETNAME_GNU" disable CC "-D_GNU_SOURCE -lpthread" \
@@ -254,6 +263,15 @@ void foo (void) {
 
 void foo (void) {
   pthread_setname_np("abc");
+}
+' || \
+    mkl_compile_check "pthread_setname_freebsd" "HAVE_PTHREAD_SETNAME_FREEBSD" disable CC "-lpthread" \
+'
+#include <pthread.h>
+#include <pthread_np.h>
+
+void foo (void) {
+  pthread_set_name_np(pthread_self(), "abc");
 }
 '
 

@@ -94,12 +94,14 @@ tx | int | | Total number of requests sent
 txbytes | int | | Total number of bytes sent
 txerrs | int | | Total number of transmission errors
 txretries | int | | Total number of request retries
+txidle | int | | Microseconds since last socket send (or -1 if no sends yet for current connection).
 req_timeouts | int | | Total number of requests timed out
 rx | int | | Total number of responses received
 rxbytes | int | | Total number of bytes received
 rxerrs | int | | Total number of receive errors
 rxcorriderrs | int | | Total number of unmatched correlation ids in response (typically for timed out requests)
 rxpartial | int | | Total number of partial MessageSets received. The broker may return partial responses if the full MessageSet could not fit in the remaining Fetch response size.
+rxidle | int | | Microseconds since last socket receive (or -1 if no receives yet for current connection).
 req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
@@ -181,7 +183,8 @@ eof_offset | int gauge | | Last PARTITION_EOF signaled offset
 lo_offset | int gauge | | Partition's low watermark offset on broker
 hi_offset | int gauge | | Partition's high watermark offset on broker
 ls_offset | int gauge | | Partition's last stable offset on broker, or same as hi_offset is broker version is less than 0.11.0.0.
-consumer_lag | int gauge | | Difference between (hi_offset or ls_offset) - max(app_offset, committed_offset). hi_offset is used when isolation.level=read_uncommitted, otherwise ls_offset.
+consumer_lag | int gauge | | Difference between (hi_offset or ls_offset) and committed_offset). hi_offset is used when isolation.level=read_uncommitted, otherwise ls_offset.
+consumer_lag_stored | int gauge | | Difference between (hi_offset or ls_offset) and stored_offset. See consumer_lag and stored_offset.
 txmsgs | int | | Total number of messages transmitted (produced)
 txbytes | int | | Total number of bytes transmitted for txmsgs
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc).

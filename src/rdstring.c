@@ -29,6 +29,10 @@
 
 #include "rd.h"
 #include "rdstring.h"
+#include "rdunittest.h"
+
+#include <ctype.h>
+
 
 /**
  * @brief Render string \p template using \p callback for key lookups.
@@ -61,7 +65,7 @@ char *rd_string_render (const char *template,
 #define _assure_space(SZ) do {				\
 		if (of + (SZ) + 1 >= size) {		\
 			size = (size + (SZ) + 1) * 2;	\
-			buf = realloc(buf, size);	\
+			buf = rd_realloc(buf, size);	\
 		}					\
 	} while (0)
 	
@@ -279,4 +283,139 @@ int rd_strcmp (const char *a, const char *b) {
                 return 1;
         else
                 return strcmp(a, b);
+}
+
+
+
+/**
+ * @brief Case-insensitive strstr() for platforms where strcasestr()
+ *        is not available.
+ */
+char *_rd_strcasestr (const char *haystack, const char *needle) {
+        const char *h_rem, *n_last;
+        size_t h_len = strlen(haystack);
+        size_t n_len = strlen(needle);
+
+
+        if (n_len == 0 || n_len > h_len)
+                return NULL;
+        else if (n_len == h_len)
+                return !rd_strcasecmp(haystack, needle) ?
+                        (char *)haystack : NULL;
+
+        /*
+         * Scan inspired by Boyer-Moore:
+         *
+         * haystack = "this is a haystack"
+         * needle   = "hays"
+         *
+         * "this is a haystack"
+         *     ^             ^- h_last
+         *     `-h  (haystack + strlen(needle) - 1)
+         *     `-h_rem
+         *
+         * "hays"
+         *     ^-n
+         *     ^-n_last
+         */
+        n_last = needle + n_len - 1;
+        h_rem = haystack + n_len - 1;
+
+        while (*h_rem) {
+                const char *h, *n = n_last;
+
+                /* Find first occurrence of last character in the needle
+                   in the remaining haystack. */
+                for (h = h_rem ;
+                     *h && tolower((int)*h) != tolower((int)*n) ;
+                     h++)
+                        ;
+
+                if (!*h)
+                        return NULL; /* No match */
+
+                /* Backtrack both needle and haystack as long as each character
+                 * matches, if the start of the needle is found we have
+                 * a full match, else start over from the remaining part of the
+                 * haystack. */
+                do {
+                        if (n == needle)
+                                return (char *)h; /* Full match */
+
+                        /* Rewind both n and h */
+                        n--;
+                        h--;
+
+                } while (tolower((int)*n) == tolower((int)*h));
+
+                /* Mismatch, start over at the next haystack position */
+                h_rem++;
+        }
+
+        return NULL;
+}
+
+
+
+/**
+ * @brief Unittests for rd_strcasestr()
+ */
+static int ut_strcasestr (void) {
+        static const struct {
+                const char *haystack;
+                const char *needle;
+                ssize_t exp;
+        } strs[] = {
+                { "this is a haystack", "hays", 10 },
+                { "abc", "a", 0 },
+                { "abc", "b", 1 },
+                { "abc", "c", 2 },
+                { "AbcaBcabC", "ABC", 0 },
+                { "abcabcaBC", "BcA", 1 },
+                { "abcabcABc", "cAB", 2 },
+                { "need to estart stART the tart ReStArT!", "REsTaRt", 30 },
+                { "need to estart stART the tart ReStArT!", "?sTaRt", -1 },
+                { "aaaabaaAb", "ab", 3 },
+                { "0A!", "a", 1 },
+                { "a", "A", 0 },
+                { ".z", "Z", 1 },
+                { "", "", -1 },
+                { "", "a", -1 },
+                { "a", "", -1 },
+                { "peRfeCt", "peRfeCt", 0 },
+                { "perfect", "perfect", 0 },
+                { "PERFECT", "perfect", 0 },
+                { NULL },
+        };
+        int i;
+
+        RD_UT_BEGIN();
+
+        for (i = 0 ; strs[i].haystack ; i++) {
+                const char *ret;
+                ssize_t of = -1;
+
+                ret = _rd_strcasestr(strs[i].haystack, strs[i].needle);
+                if (ret)
+                        of = ret - strs[i].haystack;
+                RD_UT_ASSERT(of == strs[i].exp,
+                             "#%d: '%s' in '%s': expected offset %"PRIdsz
+                             ", not %"PRIdsz" (%s)",
+                             i, strs[i].needle, strs[i].haystack,
+                             strs[i].exp, of, ret ? ret : "(NULL)");
+        }
+
+        return 0;
+}
+
+
+/**
+ * @brief Unittests for strings
+ */
+int unittest_string (void) {
+        int fails = 0;
+
+        fails += ut_strcasestr();
+
+        return fails;
 }

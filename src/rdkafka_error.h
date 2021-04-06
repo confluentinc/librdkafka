@@ -30,6 +30,8 @@
 #ifndef _RDKAFKA_ERROR_H_
 #define _RDKAFKA_ERROR_H_
 
+#include <stdarg.h>
+
 /**
  * @name Public API complex error type implementation.
  *

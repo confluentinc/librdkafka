@@ -100,7 +100,8 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
                              rd_kafka_buf_t *request,
                              rd_kafka_topic_partition_list_t **offsets,
                              rd_bool_t update_toppar,
-                             rd_bool_t add_part);
+                             rd_bool_t add_part,
+                             rd_bool_t allow_retry);
 
 void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 				     rd_kafka_broker_t *rkb,
@@ -247,7 +248,8 @@ void rd_kafka_SaslAuthenticateRequest (rd_kafka_broker_t *rkb,
                                        void *opaque);
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
-                             const rd_kafka_pid_t pid);
+                             const rd_kafka_pid_t pid,
+                             uint64_t epoch_base_msgid);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,

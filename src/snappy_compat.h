@@ -74,69 +74,6 @@ struct iovec {
 };
 #endif
 
-#define get_unaligned_memcpy(x) ({ \
-		typeof(*(x)) _ret; \
-		memcpy(&_ret, (x), sizeof(*(x))); \
-		_ret; })
-#define put_unaligned_memcpy(v,x) ({ \
-		typeof((v)) _v = (v); \
-		memcpy((x), &_v, sizeof(*(x))); })
-
-#define get_unaligned_direct(x) (*(x))
-#define put_unaligned_direct(v,x) (*(x) = (v))
-
-// Potentially unaligned loads and stores.
-// x86, PowerPC, and ARM64 can simply do these loads and stores native.
-#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || \
-	defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || \
-	defined(__aarch64__)
-
-#define get_unaligned get_unaligned_direct
-#define put_unaligned put_unaligned_direct
-#define get_unaligned64 get_unaligned_direct
-#define put_unaligned64 put_unaligned_direct
-
-// ARMv7 and newer support native unaligned accesses, but only of 16-bit
-// and 32-bit values (not 64-bit); older versions either raise a fatal signal,
-// do an unaligned read and rotate the words around a bit, or do the reads very
-// slowly (trip through kernel mode). There's no simple #define that says just
-// “ARMv7 or higher”, so we have to filter away all ARMv5 and ARMv6
-// sub-architectures.
-//
-// This is a mess, but there's not much we can do about it.
-#elif defined(__arm__) && \
-	!defined(__ARM_ARCH_4__) &&		\
-	!defined(__ARM_ARCH_4T__) &&		\
-	!defined(__ARM_ARCH_5__) &&		\
-	!defined(__ARM_ARCH_5T__) &&		\
-	!defined(__ARM_ARCH_5TE__) &&		\
-	!defined(__ARM_ARCH_5TEJ__) &&		\
-	!defined(__ARM_ARCH_6__) &&		\
-	!defined(__ARM_ARCH_6J__) &&		\
-	!defined(__ARM_ARCH_6K__) &&		\
-	!defined(__ARM_ARCH_6Z__) &&		\
-	!defined(__ARM_ARCH_6ZK__) &&		\
-	!defined(__ARM_ARCH_6T2__)
-
-#define get_unaligned get_unaligned_direct
-#define put_unaligned put_unaligned_direct
-#define get_unaligned64 get_unaligned_memcpy
-#define put_unaligned64 put_unaligned_memcpy
-
-// These macroses are provided for architectures that don't support
-// unaligned loads and stores.
-#else
-
-#define get_unaligned get_unaligned_memcpy
-#define put_unaligned put_unaligned_memcpy
-#define get_unaligned64 get_unaligned_memcpy
-#define put_unaligned64 put_unaligned_memcpy
-
-#endif
-
-#define get_unaligned_le32(x) (le32toh(get_unaligned((u32 *)(x))))
-#define put_unaligned_le16(v,x) (put_unaligned(htole16(v), (u16 *)(x)))
-
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned u32;
@@ -149,8 +86,8 @@ typedef unsigned long long u64;
 #endif
 
 
-#define vmalloc(x) malloc(x)
-#define vfree(x) free(x)
+#define vmalloc(x) rd_malloc(x)
+#define vfree(x) rd_free(x)
 
 #define EXPORT_SYMBOL(x)
 

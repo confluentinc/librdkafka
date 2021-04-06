@@ -977,7 +977,7 @@ balance (rd_kafka_t *rk,
         rd_bool_t initializing =
                 ((const rd_kafka_topic_partition_list_t *)
                  ((const rd_map_elem_t *)rd_list_last(
-                         sortedCurrentSubscriptions))->key)->cnt == 0;
+                         sortedCurrentSubscriptions))->value)->cnt == 0;
         rd_bool_t reassignmentPerformed = rd_false;
 
         map_str_toppar_list_t fixedAssignments =

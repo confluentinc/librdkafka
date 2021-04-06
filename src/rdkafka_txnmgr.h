@@ -126,10 +126,18 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
         rd_kafka_toppar_keep(rktp);
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
+        rd_kafka_dbg(rk, EOS, "ADDPARTS",
+                     "Marked %.*s [%"PRId32"] as part of transaction: "
+                     "%sscheduling registration",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition,
+                     schedule ? "" : "not ");
+
+
         /* Schedule registration of partitions by the rdkafka main thread */
         if (unlikely(schedule))
                 rd_kafka_txn_schedule_register_partitions(
-                        rk, rd_true/*immediate*/);
+                        rk, 1/*immediate*/);
 }
 
 
@@ -138,10 +146,16 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
 void rd_kafka_txn_idemp_state_change (rd_kafka_t *rk,
                                       rd_kafka_idemp_state_t state);
 
-void rd_kafka_txn_set_abortable_error (rd_kafka_t *rk,
-                                       rd_kafka_resp_err_t err,
-                                       const char *fmt, ...)
-        RD_FORMAT(printf, 3, 4);
+void rd_kafka_txn_set_abortable_error0 (rd_kafka_t *rk,
+                                        rd_kafka_resp_err_t err,
+                                        rd_bool_t requires_epoch_bump,
+                                        const char *fmt, ...)
+        RD_FORMAT(printf, 4, 5);
+#define rd_kafka_txn_set_abortable_error(rk,err,...)                    \
+        rd_kafka_txn_set_abortable_error0(rk,err,rd_false,__VA_ARGS__)
+
+#define rd_kafka_txn_set_abortable_error_with_bump(rk,err,...)  \
+        rd_kafka_txn_set_abortable_error0(rk,err,rd_true,__VA_ARGS__)
 
 void rd_kafka_txn_set_fatal_error (rd_kafka_t *rk, rd_dolock_t do_lock,
                                    rd_kafka_resp_err_t err,

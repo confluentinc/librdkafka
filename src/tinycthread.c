@@ -128,7 +128,7 @@ int mtx_lock(mtx_t *mtx)
 
   if (!mtx->mRecursive)
   {
-    while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
+    rd_assert(!mtx->mAlreadyLocked); /* Would deadlock */
     mtx->mAlreadyLocked = TRUE;
   }
   return thrd_success;
@@ -176,7 +176,7 @@ int mtx_timedlock(mtx_t *mtx, const struct timespec *ts)
 
   if (!mtx->mRecursive)
   {
-    while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
+    rd_assert(!mtx->mAlreadyLocked); /* Would deadlock */
     mtx->mAlreadyLocked = TRUE;
   }
 
@@ -511,7 +511,7 @@ static void _tinycthread_tss_cleanup (void) {
 
   while (_tinycthread_tss_head != NULL) {
     data = _tinycthread_tss_head->next;
-    free (_tinycthread_tss_head);
+    rd_free (_tinycthread_tss_head);
     _tinycthread_tss_head = data;
   }
   _tinycthread_tss_head = NULL;
@@ -570,7 +570,7 @@ static void * _thrd_wrapper_function(void * aArg)
   arg = ti->mArg;
 
   /* The thread is responsible for freeing the startup information */
-  free((void *)ti);
+  rd_free((void *)ti);
 
   /* Call the actual client thread function */
   res = fun(arg);
@@ -591,7 +591,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
 {
   /* Fill out the thread startup information (passed to the thread wrapper,
      which will eventually free it) */
-  _thread_start_info* ti = (_thread_start_info*)malloc(sizeof(_thread_start_info));
+  _thread_start_info* ti = (_thread_start_info*)rd_malloc(sizeof(_thread_start_info));
   if (ti == NULL)
   {
     return thrd_nomem;
@@ -616,7 +616,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
   /* Did we fail to create the thread? */
   if(!*thr)
   {
-    free(ti);
+    rd_free(ti);
     return thrd_error;
   }
 
@@ -790,7 +790,7 @@ void tss_delete(tss_t key)
       _tinycthread_tss_tail = prev;
     }
 
-    free (data);
+    rd_free (data);
   }
   _tinycthread_tss_dtors[key] = NULL;
   TlsFree(key);
@@ -819,7 +819,7 @@ int tss_set(tss_t key, void *val)
   struct TinyCThreadTSSData* data = (struct TinyCThreadTSSData*)TlsGetValue(key);
   if (data == NULL)
   {
-    data = (struct TinyCThreadTSSData*)malloc(sizeof(struct TinyCThreadTSSData));
+    data = (struct TinyCThreadTSSData*)rd_malloc(sizeof(struct TinyCThreadTSSData));
     if (data == NULL)
     {
       return thrd_error;
@@ -845,7 +845,7 @@ int tss_set(tss_t key, void *val)
 
     if (!TlsSetValue(key, data))
     {
-      free (data);
+      rd_free (data);
 	  return thrd_error;
     }
   }

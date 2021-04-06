@@ -1,6 +1,5 @@
 language: c
 dist: trusty
-sudo: false
 cache: ccache
 
 addons:
@@ -22,6 +21,7 @@ matrix:
    before_script:
     - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
  - name: "RPM packages"
+   if: tag IS present
    os: linux
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
@@ -32,6 +32,7 @@ matrix:
    before_script:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
  - name: "Linux clang: +static +alpine-static -gssapi"
+   if: tag IS present
    os: linux
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
@@ -124,10 +125,10 @@ script:
 - if [[ $SKIP_MAKE != y && $RUN_INTEGRATION_TESTS != y ]]; then make -C tests run_local_quick ; fi
 - if [[ $SKIP_MAKE != y ]]; then make install || travis_terminate 1 ; fi
 - if [[ -z $NO_ARTIFACTS ]]; then (cd dest && tar cvzf ../artifacts/librdkafka-${CC}.tar.gz .) ; fi
-- for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro --enable-strip || travis_terminate 1 ; done
+- if [[ -n $TRAVIS_TAG ]]; then for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro --enable-strip || travis_terminate 1 ; done ; fi
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check || travis_terminate 1; fi
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
-- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.6.0) || travis_terminate 1 ; fi
+- if [[ $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.7.0) || travis_terminate 1 ; fi
 - if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
 
 deploy:
@@ -138,11 +139,11 @@ deploy:
     secure: "GE6O0gk5VRervntCKAmczfBdSOvbr9bouJ15H2rpcOgHi8KTDEjI/NS69eLiRRSHBCARtcRqN4wfgy+/dn7D1VklY8a1rAKu02wGjw+fq7k7GVSSmynR/aF619R4SIABsaAhNCwswXnLHuLlq8HFk5ulG3z8DUvYBczB45bWZfQ="
   bucket: librdkafka-ci-packages
   region: us-west-1
-  skip_cleanup: true
+  cleanup: false
   local-dir: artifacts
   upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${TRAVIS_CPU_ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}__lnk-${LINKAGE}
   on:
     repo: edenhill/librdkafka
     all_branches: true
     tags: true
-    on: $NO_ARTIFACTS != y
+    condition: $NO_ARTIFACTS != y

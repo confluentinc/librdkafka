@@ -156,8 +156,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                           *   requests will have
                                           *   a sequence number series
                                           *   starting at 0.
-                                          *   Only accessed from
-                                          *   toppar handler thread. */
+                                          *   Protected by toppar_lock */
                 int32_t next_ack_seq;    /**< Next expected ack sequence.
                                           *   Protected by toppar lock. */
                 int32_t next_err_seq;    /**< Next expected error sequence.
@@ -440,7 +439,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_topic_t *rkt,
                                          const char *func, int line);
 #define rd_kafka_toppar_new(rkt,partition) \
 	rd_kafka_toppar_new0(rkt, partition, __FUNCTION__, __LINE__)
-void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp);
+void rd_kafka_toppar_purge_and_disable_queues (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                                       int fetch_state);
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
@@ -530,10 +529,9 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 				     int64_t query_offset, int backoff_ms);
 
-
-rd_kafka_assignor_t *
-rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
-
+int rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp,
+                                  int purge_flags,
+                                  rd_bool_t include_xmit_msgq);
 
 rd_kafka_broker_t *rd_kafka_toppar_broker (rd_kafka_toppar_t *rktp,
                                            int proper_broker);

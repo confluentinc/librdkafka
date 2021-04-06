@@ -85,6 +85,10 @@ extern mtx_t test_mtx;
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
 
+/* Forward decl */
+typedef struct test_msgver_s test_msgver_t;
+
+
 /** @struct Resource usage thresholds */
 struct rusage_thres {
         double ucpu;  /**< Max User CPU in percentage */
@@ -132,6 +136,9 @@ struct test {
                                               *   or -1 for not checking. */
         int produce_sync;    /**< test_produce_sync() call in action */
         rd_kafka_resp_err_t produce_sync_err;  /**< DR error */
+        test_msgver_t *dr_mv; /**< MsgVer that delivered messages will be
+                               *   added to (if not NULL).
+                               *   Must be set and freed by test. */
 
         /**
          * Runtime
@@ -272,12 +279,13 @@ static RD_INLINE int jitter (int low, int high) {
  *   - messages received in order
  *   - EOF
  */
-typedef struct test_msgver_s {
+struct test_msgver_s {
 	struct test_mv_p **p;  /* Partitions array */
 	int p_cnt;             /* Partition count */
 	int p_size;            /* p size */
 	int msgcnt;            /* Total message count */
 	uint64_t testid;       /* Only accept messages for this testid */
+        rd_bool_t ignore_eof;  /* Don't end PARTITION_EOF messages */
 
 	struct test_msgver_s *fwd;  /* Also forward add_msg() to this mv */
 
@@ -287,7 +295,7 @@ typedef struct test_msgver_s {
 
         const char *msgid_hdr; /**< msgid string is in header by this name,
                                 * rather than in the payload (default). */
-} test_msgver_t;
+}; /* test_msgver_t; */
 
 /* Message */
 struct test_mv_m {
@@ -336,6 +344,7 @@ struct test_mv_vs {
 
 void test_msgver_init (test_msgver_t *mv, uint64_t testid);
 void test_msgver_clear (test_msgver_t *mv);
+void test_msgver_ignore_eof (test_msgver_t *mv);
 int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
                            test_msgver_t *mv,
                            uint64_t testid,
@@ -343,7 +352,8 @@ int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
                            int64_t offset, int64_t timestamp, int32_t broker_id,
                            rd_kafka_resp_err_t err, int msgnum);
 int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
-                          test_msgver_t *mv, rd_kafka_message_t *rkm,
+                          test_msgver_t *mv,
+                          const rd_kafka_message_t *rkmessage,
                           const char *override_topic);
 #define test_msgver_add_msg(rk,mv,rkm)                          \
         test_msgver_add_msg0(__FUNCTION__,__LINE__,             \
@@ -515,11 +525,14 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 void test_consumer_poll_expect_err (rd_kafka_t *rk, uint64_t testid,
                                     int timeout_ms, rd_kafka_resp_err_t err);
 int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms);
+int test_consumer_poll_exact (const char *what, rd_kafka_t *rk, uint64_t testid,
+                              int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+                              rd_bool_t exact, test_msgver_t *mv);
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv);
 
-void test_consumer_wait_assignment (rd_kafka_t *rk);
+void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll);
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
                            rd_kafka_topic_partition_list_t *parts);
 void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,

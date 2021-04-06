@@ -111,7 +111,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x010600ff
+#define RD_KAFKA_VERSION  0x010601ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -146,6 +146,34 @@ std::string get_debug_contexts();
 RD_EXPORT
 int          wait_destroyed(int timeout_ms);
 
+/**
+ * @brief Allocate memory using the same allocator librdkafka uses.
+ *
+ * This is typically an abstraction for the malloc(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * allocating pointers that are used by librdkafka.
+ *
+ * @remark Memory allocated by mem_malloc() must be freed using
+ *         mem_free().
+ */
+RD_EXPORT
+void *mem_malloc (size_t size);
+
+/**
+ * @brief Free pointer returned by librdkafka
+ *
+ * This is typically an abstraction for the free(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * freeing pointers returned by librdkafka.
+ *
+ * In standard setups it is usually not necessary to use this interface
+ * rather than the free(3) function.
+ *
+ * @remark mem_free() must only be used for pointers returned by APIs
+ *         that explicitly mention using this function for freeing.
+ */
+RD_EXPORT
+void mem_free (void *ptr);
 
 /**@}*/
 
@@ -294,6 +322,8 @@ enum ErrorCode {
         ERR__ASSIGNMENT_LOST = -142,
         /** No operation performed */
         ERR__NOOP = -141,
+        /** No offset to automatically reset to */
+        ERR__AUTO_OFFSET_RESET = -140,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -551,6 +581,7 @@ enum CertificateEncoding {
 
 /**@cond NO_DOC*/
 /* Forward declarations */
+class Handle;
 class Producer;
 class Message;
 class Headers;
@@ -683,18 +714,18 @@ class RD_EXPORT DeliveryReportCb {
  * typically based on the configuration defined in \c sasl.oauthbearer.config.
  *
  * The \c oauthbearer_config argument is the value of the
- * sasl.oauthbearer.config configuration property.
+ * \c sasl.oauthbearer.config configuration property.
  *
- * The callback should invoke RdKafka::oauthbearer_set_token() or
- * RdKafka::oauthbearer_set_token_failure() to indicate success or failure,
- * respectively.
- *
+ * The callback should invoke RdKafka::Handle::oauthbearer_set_token() or
+ * RdKafka::Handle::oauthbearer_set_token_failure() to indicate success or
+ * failure, respectively.
+ * 
  * The refresh operation is eventable and may be received when an event
  * callback handler is set with an event type of
  * \c RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH.
  *
  * Note that before any SASL/OAUTHBEARER broker connection can succeed the
- * application must call RdKafka::oauthbearer_set_token() once -- either
+ * application must call RdKafka::Handle::oauthbearer_set_token() once -- either
  * directly or, more typically, by invoking RdKafka::poll() -- in order to
  * cause retrieval of an initial token to occur.
  *
@@ -706,8 +737,13 @@ class RD_EXPORT OAuthBearerTokenRefreshCb {
  public:
   /**
    * @brief SASL/OAUTHBEARER token refresh callback class.
+   *
+   * @param handle The RdKafka::Handle which requires a refreshed token.
+   * @param oauthbearer_config The value of the
+   * \p sasl.oauthbearer.config configuration property for \p handle.
    */
-  virtual void oauthbearer_token_refresh_cb (const std::string &oauthbearer_config) = 0;
+  virtual void oauthbearer_token_refresh_cb (RdKafka::Handle* handle,
+                                             const std::string &oauthbearer_config) = 0;
 
   virtual ~OAuthBearerTokenRefreshCb() { }
 };
@@ -1728,6 +1764,33 @@ class RD_EXPORT Handle {
      * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
      */
     virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
+
+   /**
+     * @brief Allocate memory using the same allocator librdkafka uses.
+     *
+     * This is typically an abstraction for the malloc(3) call and makes sure
+     * the application can use the same memory allocator as librdkafka for
+     * allocating pointers that are used by librdkafka.
+     *
+     * @remark Memory allocated by mem_malloc() must be freed using
+     *         mem_free().
+     */
+    virtual void *mem_malloc (size_t size) = 0;
+
+   /**
+     * @brief Free pointer returned by librdkafka
+     *
+     * This is typically an abstraction for the free(3) call and makes sure
+     * the application can use the same memory allocator as librdkafka for
+     * freeing pointers returned by librdkafka.
+     *
+     * In standard setups it is usually not necessary to use this interface
+     * rather than the free(3) function.
+     *
+     * @remark mem_free() must only be used for pointers returned by APIs
+     *         that explicitly mention using this function for freeing.
+     */
+    virtual void mem_free (void *ptr) = 0;
 };
 
 
@@ -1995,7 +2058,7 @@ public:
       value_size_ = other.value_size_;
 
       if (value_ != NULL)
-        free(value_);
+        mem_free(value_);
 
       value_ = copy_value(other.value_, value_size_);
 
@@ -2004,7 +2067,7 @@ public:
 
     ~Header() {
       if (value_ != NULL)
-        free(value_);
+        mem_free(value_);
     }
 
     /** @returns the key/name associated with this Header */
@@ -2038,7 +2101,7 @@ public:
       if (!value)
         return NULL;
 
-      char *dest = (char *)malloc(value_size + 1);
+      char *dest = (char *)mem_malloc(value_size + 1);
       memcpy(dest, (const char *)value, value_size);
       dest[value_size] = '\0';
 
@@ -3480,5 +3543,6 @@ class Metadata {
 /**@}*/
 
 }
+
 
 #endif /* _RDKAFKACPP_H_ */

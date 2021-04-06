@@ -235,8 +235,6 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_CALL ||                   \
          (rkcg)->rkcg_join_state ==                                     \
          RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_CALL ||                 \
-         (rkcg)->rkcg_join_state ==                                     \
-         RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE ||          \
          (rkcg)->rkcg_rebalance_incr_assignment != NULL ||              \
          (rkcg)->rkcg_rebalance_rejoin)
 
@@ -1954,10 +1952,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
                 *metadata_agep = metadata_age;
 
                 if (metadata_age != -1 &&
-                    metadata_age <=
-                    /* The +1000 is since metadata.refresh.interval.ms
-                     * can be set to 0. */
-                    rk->rk_conf.metadata_refresh_interval_ms + 1000) {
+                    metadata_age <= rk->rk_conf.metadata_max_age_ms) {
                         rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
                                      "CGRPMETADATA",
                                      "%s: metadata for wildcard subscription "
@@ -2212,6 +2207,9 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int actions = 0;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
@@ -2928,7 +2926,8 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 	}
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "COMMIT",
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "COMMIT",
                              "Deferring \"%s\" offset commit "
                              "for %d partition(s) in state %s: "
                              "no coordinator available",
@@ -2943,9 +2942,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         }
 
 
-        rd_rkb_dbg(rkcg->rkcg_coord, CONSUMER, "COMMIT",
-                   "Committing offsets for %d partition(s): %s",
-                   valid_offsets, reason);
+        rd_rkb_dbg(rkcg->rkcg_coord, CONSUMER|RD_KAFKA_DBG_CGRP, "COMMIT",
+                   "Committing offsets for %d partition(s) with "
+                   "generation-id %" PRId32 " in join-state %s: %s",
+                   valid_offsets, rkcg->rkcg_generation_id,
+                   rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                   reason);
 
         /* Send OffsetCommit */
         r = rd_kafka_OffsetCommitRequest(
@@ -2961,7 +2963,8 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
  err:
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET)
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
+                             "COMMIT",
                              "OffsetCommit internal error: %s",
                              rd_kafka_err2str(err));
 
@@ -3039,6 +3042,11 @@ rd_kafka_cgrp_assigned_offsets_commit (
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
+
+        /* Don't attempt auto commit when rebalancing or initializing since
+         * the rkcg_generation_id is most likely in flux. */
+        if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+                return;
 
         rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL,
                                               rd_true/*set offsets*/,
@@ -5729,10 +5737,10 @@ static int unittest_set_intersect (void) {
                 rd_kafka_topic_partition_destroy_free,
                 PartitionMemberInfo_free);
 
-        gm1 = calloc(1, sizeof(*gm1));
+        gm1 = rd_calloc(1, sizeof(*gm1));
         gm1->rkgm_member_id = &id1;
         gm1->rkgm_group_instance_id = &id1;
-        gm2 = calloc(1, sizeof(*gm2));
+        gm2 = rd_calloc(1, sizeof(*gm2));
         gm2->rkgm_member_id = &id2;
         gm2->rkgm_group_instance_id = &id2;
 

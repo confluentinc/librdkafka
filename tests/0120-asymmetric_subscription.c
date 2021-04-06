@@ -100,7 +100,7 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
 
         /* Await assignments for all consumers */
         for (i = 0 ; i < _C_CNT ; i++)
-                test_consumer_wait_assignment(c[i]);
+                test_consumer_wait_assignment(c[i], rd_true);
 
         /* All have assignments, grab them. */
         for (i = 0 ; i < _C_CNT ; i++) {

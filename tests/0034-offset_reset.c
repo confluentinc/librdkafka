@@ -40,15 +40,16 @@
 
 static void do_test_reset (const char *topic, int partition,
 			   const char *reset, int64_t initial_offset,
-			   int exp_eofcnt, int exp_msgcnt, int exp_errcnt) {
+			   int exp_eofcnt, int exp_msgcnt, int exp_errcnt,
+                           int exp_resetcnt) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
-	int eofcnt = 0, msgcnt = 0, errcnt = 0;
+	int eofcnt = 0, msgcnt = 0, errcnt = 0, resetcnt = 0;
         rd_kafka_conf_t *conf;
 
 	TEST_SAY("Test auto.offset.reset=%s, "
-		 "expect %d msgs, %d EOFs, %d errors\n",
-		 reset, exp_msgcnt, exp_eofcnt, exp_errcnt);
+		 "expect %d msgs, %d EOFs, %d errors, %d resets\n",
+		 reset, exp_msgcnt, exp_eofcnt, exp_errcnt, exp_resetcnt);
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.partition.eof", "true");
@@ -73,6 +74,13 @@ static void do_test_reset (const char *topic, int partition,
 			TEST_SAY("%s: received EOF at offset %"PRId64"\n",
 				 reset, rkm->offset);
 			eofcnt++;
+                } else if (rkm->err == RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET) {
+                        TEST_SAY("%s: auto.offset.reset error at offset %"PRId64
+                                 ": %s: %s\n",
+                                 reset, rkm->offset,
+                                 rd_kafka_err2name(rkm->err),
+                                 rd_kafka_message_errstr(rkm));
+                        resetcnt++;
 		} else if (rkm->err) {
 			TEST_SAY("%s: consume error at offset %"PRId64": %s\n",
 				 reset, rkm->offset,
@@ -86,26 +94,30 @@ static void do_test_reset (const char *topic, int partition,
 
 		if (eofcnt == exp_eofcnt &&
 		    errcnt == exp_errcnt &&
-		    msgcnt == exp_msgcnt)
+		    msgcnt == exp_msgcnt &&
+                    resetcnt == exp_resetcnt)
 			break;
 		else if (eofcnt > exp_eofcnt ||
 			 errcnt > exp_errcnt ||
-			 msgcnt > exp_msgcnt)
+			 msgcnt > exp_msgcnt ||
+                         resetcnt > exp_resetcnt)
 			TEST_FAIL("%s: unexpected: "
-				  "%d/%d messages, %d/%d EOFs, %d/%d errors\n",
+				  "%d/%d messages, %d/%d EOFs, %d/%d errors, "
+                                  "%d/%d resets\n",
 				  reset,
 				  msgcnt, exp_msgcnt,
 				  eofcnt, exp_eofcnt,
-				  errcnt, exp_errcnt);
-			 
+				  errcnt, exp_errcnt,
+                                  resetcnt, exp_resetcnt);
 	}
 
 	TEST_SAY("%s: Done: "
-		 "%d/%d messages, %d/%d EOFs, %d/%d errors\n",
+		 "%d/%d messages, %d/%d EOFs, %d/%d errors, %d/%d resets\n",
 		 reset,
 		 msgcnt, exp_msgcnt,
 		 eofcnt, exp_eofcnt,
-		 errcnt, exp_errcnt);
+		 errcnt, exp_errcnt,
+                 resetcnt, exp_resetcnt);
 
 	test_consumer_stop(reset, rkt, partition);
 
@@ -123,15 +135,15 @@ int main_0034_offset_reset (int argc, char **argv) {
 
 	/* auto.offset.reset=latest: Consume messages from invalid offset:
 	 * Should return EOF. */
-	do_test_reset(topic, partition, "latest", msgcnt+5, 1, 0, 0);
+	do_test_reset(topic, partition, "latest", msgcnt+5, 1, 0, 0, 0);
 	
 	/* auto.offset.reset=earliest: Consume messages from invalid offset:
 	 * Should return messages from beginning. */
-	do_test_reset(topic, partition, "earliest", msgcnt+5, 1, msgcnt, 0);
+	do_test_reset(topic, partition, "earliest", msgcnt+5, 1, msgcnt, 0, 0);
 
 	/* auto.offset.reset=error: Consume messages from invalid offset:
 	 * Should return error. */
-	do_test_reset(topic, partition, "error", msgcnt+5, 0, 0, 1);
+	do_test_reset(topic, partition, "error", msgcnt+5, 0, 0, 0, 1);
 
 	return 0;
 }

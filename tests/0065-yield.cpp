@@ -64,7 +64,7 @@ class DrCb0065 : public RdKafka::DeliveryReportCb {
 
 
 static void do_test_producer (bool do_yield) {
-  int msgcnt = test_quick ? 20 : 100;
+  int msgcnt = 100;
   std::string errstr;
   RdKafka::ErrorCode err;
   std::string topic = Test::mk_topic_name("0065_yield", 1);

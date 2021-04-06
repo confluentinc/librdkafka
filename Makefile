@@ -33,7 +33,7 @@ CONFIGURATION.md: src/rdkafka.h examples
 		sed 's/||/\\|\\|/g' >> \
 		CONFIGURATION.md.tmp; \
 		cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
-		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
+		mv -f CONFIGURATION.md.tmp CONFIGURATION.md; \
 		rm -f CONFIGURATION.md.tmp)
 
 file-check: CONFIGURATION.md LICENSES.txt examples
@@ -80,7 +80,7 @@ rpm: distclean
 
 LICENSES.txt: .PHONY
 	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
-	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
+	@cmp $@ $@.tmp || mv -f $@.tmp $@ ; rm -f $@.tmp
 
 
 TAGS: .PHONY

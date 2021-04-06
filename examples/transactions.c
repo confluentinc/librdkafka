@@ -193,8 +193,8 @@ static void rewind_consumer (rd_kafka_t *consumer) {
          * committed offset is available. */
         for (i = 0 ; i < offsets->cnt ; i++) {
                 /* No committed offset, start from beginning */
-                if (offsets->elems[0].offset < 0)
-                        offsets->elems[0].offset =
+                if (offsets->elems[i].offset < 0)
+                        offsets->elems[i].offset =
                                 RD_KAFKA_OFFSET_BEGINNING;
         }
 
@@ -267,7 +267,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                 else
                         rd_kafka_topic_partition_list_destroy(offsets);
 
-                error = rd_kafka_abort_transaction(consumer, -1);
+                error = rd_kafka_abort_transaction(producer, -1);
                 if (error)
                         fatal_error("Failed to abort transaction", error);
 
@@ -295,7 +295,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                         rd_kafka_error_destroy(error);
 
                         /* Abort transaction */
-                        error = rd_kafka_abort_transaction(consumer, -1);
+                        error = rd_kafka_abort_transaction(producer, -1);
                         if (error)
                                 fatal_error("Failed to abort transaction",
                                             error);
@@ -318,7 +318,7 @@ static int commit_transaction (rd_kafka_t *consumer,
                         rd_kafka_error_destroy(error);
 
                         /* Abort transaction */
-                        error = rd_kafka_abort_transaction(consumer, -1);
+                        error = rd_kafka_abort_transaction(producer, -1);
                         if (error)
                                 fatal_error("Failed to abort transaction",
                                             error);
@@ -378,7 +378,7 @@ consumer_group_rebalance_cb (rd_kafka_t *consumer,
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-                if (!rd_kafka_assignment_lost(consumer)) {
+                if (rd_kafka_assignment_lost(consumer)) {
                         fprintf(stdout,
                                 "Consumer group rebalanced: assignment lost: "
                                 "aborting current transaction\n");

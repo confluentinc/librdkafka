@@ -17,7 +17,7 @@ KAFKA_VERSION?=2.7.0
 COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 2.4.1 $(KAFKA_VERSION)
 
 # Non-default scenarios (FIXME: read from scenarios/*)
-SCENARIOS?=noautocreate
+SCENARIOS?=noautocreate ak23
 
 -include ../Makefile.config
 
@@ -123,9 +123,9 @@ clean:
 	rm -f *.test $(OBJS) $(BIN)
 	$(MAKE) -C interceptor_test clean
 
+# Remove test reports, temporary test files, crash dumps, etc.
 clean-output:
-	# Clean test output files
-	rm -f stats_*.json *.offset
+	rm -f *.offset stats_*.json core vgcore.* _until_fail_*.log gdbrun??????
 
 realclean: clean clean-output
 	rm -f test_report_*.json
@@ -159,6 +159,7 @@ compat:
 
 # Run non-default scenarios
 scenarios: .PHONY
+	@echo "### Running test scenarios: $(SCENARIOS)"
 	@(for _SCENARIO in $(SCENARIOS) ; do \
 		./broker_version_tests.py --scenario "$$_SCENARIO" $(KAFKA_VERSION) ; \
 	done)
@@ -172,8 +173,6 @@ release-test: | asan tsan pristine-full scenarios compat
 rusage:
 	./run-test.sh -R bare
 
-# Remove test reports, temporary test files, crash dumps, etc.
-clean-reports:
-	rm -f *.offset stats_*.json core vgcore.*
+
 
 -include $(DEPS)

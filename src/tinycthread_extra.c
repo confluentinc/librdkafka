@@ -43,6 +43,9 @@ int thrd_setname (const char *name) {
 #elif HAVE_PTHREAD_SETNAME_DARWIN
         pthread_setname_np(name);
         return thrd_success;
+#elif HAVE_PTHREAD_SETNAME_FREEBSD
+        pthread_set_name_np(pthread_self(), name);
+        return thrd_success;
 #endif
         return thrd_error;
 }

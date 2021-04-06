@@ -776,8 +776,9 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 	if (offset == RD_KAFKA_OFFSET_INVALID) {
 		/* Error, auto.offset.reset tells us to error out. */
                 rd_kafka_consumer_err(rktp->rktp_fetchq, RD_KAFKA_NODEID_UA,
-                                      err, 0, NULL, rktp, err_offset,
-                                      "%s", reason);
+                                      RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET,
+                                      0, NULL, rktp, err_offset,
+                                      "%s: %s", reason, rd_kafka_err2str(err));
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
 

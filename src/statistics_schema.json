@@ -135,6 +135,9 @@
                   "txretries": {
                       "type": "integer"
                   },
+                  "txidle": {
+                      "type": "integer"
+                  },
                   "req_timeouts": {
                       "type": "integer"
                   },
@@ -151,6 +154,9 @@
                       "type": "integer"
                   },
                   "rxpartial": {
+                      "type": "integer"
+                  },
+                  "rxidle": {
                       "type": "integer"
                   },
                   "zbuf_grow": {
@@ -307,6 +313,9 @@
                                           "type": "integer"
                                       },
                                       "consumer_lag": {
+                                          "type": "integer"
+                                      },
+                                      "consumer_lag_stored": {
                                           "type": "integer"
                                       },
                                       "txmsgs": {

@@ -1,3 +1,140 @@
+# librdkafka NEXT
+
+librdkafka v1.7.0 is feature release:
+
+ * [KIP-360](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=89068820) - Improve reliability of transactional producer
+
+## Enhancements
+
+ * Added `connections.max.idle.ms` to automatically close idle broker
+   connections.
+   This feature is disabled by default unless `bootstrap.servers` contains
+   the string `azure` in which case the default is set to <4 minutes to improve
+   connection reliability and circumvent limitations with the Azure load
+   balancers (see #3109 for more information).
+
+## Upgrade considerations
+
+ * The C++ `oauthbearer_token_refresh_cb()` was missing a `Handle *`
+   argument that has now been added. This is a breaking change but the original
+   function signature is considered a bug.
+   This change only affects C++ OAuth developers.
+ * Statistics: `consumer_lag` is now using the `committed_offset`,
+   while the new `consumer_lag_stored` is using `stored_offset`
+   (offset to be committed).
+   This is more correct than the previous `consumer_lag` which was either
+   `committed_offset` or `app_offset` (last message passed to application).
+
+## Enhancements
+
+ * Bumped to OpenSSL 1.1.1j in binary librdkafka artifacts.
+ * The binary librdkafka artifacts for Alpine are now using Alpine 3.12 and
+   OpenSSL 1.1.1j.
+
+## Fixes
+
+### General fixes
+
+ * Fix accesses to freed metadata cache mutexes on client termination (#3279)
+ * There was a race condition on receiving updated metadata where a broker id
+   update (such as bootstrap to proper broker transformation) could finish after
+   the topic metadata cache was updated, leading to existing brokers seemingly
+   being not available.
+   One occurrence of this issue was query_watermark_offsets() that could return
+   `ERR__UNKNOWN_PARTITION` for existing partitions shortly after the
+   client instance was created.
+
+### Consumer fixes
+
+ * The consumer group deemed cached metadata up to date by checking
+   `topic.metadata.refresh.interval.ms`: if this property was set too low
+   it would cause cached metadata to be unusable and new metadata to be fetched,
+   which could delay the time it took for a rebalance to settle.
+   It now correctly uses `metadata.max.age.ms` instead.
+ * The consumer group timed auto commit would attempt commits during rebalances,
+   which could result in "Illegal generation" errors. This is now fixed, the
+   timed auto committer is only employed in the steady state when no rebalances
+   are taking places. Offsets are still auto committed when partitions are
+   revoked.
+
+### Producer fixes
+
+ * The timeout value of `flush()` was not respected when delivery reports
+   were scheduled as events (such as for confluent-kafka-go) rather than
+   callbacks.
+ * There was a race conditition in `purge()` which could cause newly
+   created partition objects, or partitions that were changing leaders, to
+   not have their message queues purged. This could cause
+   `abort_transaction()` to time out. This issue is now fixed.
+
+### Transactional Producer fixes
+
+ * KIP-360: Fatal Idempotent producer errors are now recoverable by the
+   transactional producer and will raise a `txn_requires_abort()` error.
+ * If the cluster went down between `produce()` and `commit_transaction()`
+   and before any partitions had been registered with the coordinator, the
+   messages would time out but the commit would succeed because nothing
+   had been sent to the coordinator. This is now fixed.
+
+
+# librdkafka v1.6.1
+
+librdkafka v1.6.1 is a maintenance release.
+
+## Upgrade considerations
+
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer. This is a necessary step to maintain data integrity prior to
+   librdkafka supporting KIP-360. Applications should check any transactional
+   API errors for the is_fatal flag and decommission the transactional producer
+   if the flag is set.
+ * The consumer error raised by `auto.offset.reset=error` now has error-code
+   set to `ERR__AUTO_OFFSET_RESET` to allow an application to differentiate
+   between auto offset resets and other consumer errors.
+
+
+## Fixes
+
+### General fixes
+
+ * Admin API and transactional `send_offsets_to_transaction()` coordinator
+   requests, such as TxnOffsetCommitRequest, could in rare cases be sent
+   multiple times which could cause a crash.
+ * `ssl.ca.location=probe` is now enabled by default on Mac OSX since the
+   librdkafka-bundled OpenSSL might not have the same default CA search paths
+   as the system or brew installed OpenSSL. Probing scans all known locations.
+
+### Transactional Producer fixes
+
+ * Fatal idempotent producer errors are now also fatal to the transactional
+   producer.
+ * The transactional producer could crash if the transaction failed while
+   `send_offsets_to_transaction()` was called.
+ * Group coordinator requests for transactional
+   `send_offsets_to_transaction()` calls would leak memory if the
+   underlying request was attempted to be sent after the transaction had
+   failed.
+ * When gradually producing to multiple partitions (resulting in multiple
+   underlying AddPartitionsToTxnRequests) sub-sequent partitions could get
+   stuck in pending state under certain conditions. These pending partitions
+   would not send queued messages to the broker and eventually trigger
+   message timeouts, failing the current transaction. This is now fixed.
+ * Committing an empty transaction (no messages were produced and no
+   offsets were sent) would previously raise a fatal error due to invalid state
+   on the transaction coordinator. We now allow empty/no-op transactions to
+   be committed.
+
+### Consumer fixes
+
+ * The consumer will now retry indefinitely (or until the assignment is changed)
+   to retrieve committed offsets. This fixes the issue where only two retries
+   were attempted when outstanding transactions were blocking OffsetFetch
+   requests with `ERR_UNSTABLE_OFFSET_COMMIT`. #3265
+
+
+
+
+
 # librdkafka v1.6.0
 
 librdkafka v1.6.0 is feature release:

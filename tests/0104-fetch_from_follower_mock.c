@@ -277,21 +277,21 @@ static void do_test_replica_not_available (void) {
 
         c = test_create_consumer("mygroup", NULL, conf, NULL);
 
-        rd_kafka_mock_broker_push_request_errors(
+        rd_kafka_mock_broker_push_request_error_rtts(
                 mcluster,
                 1/*Broker 1*/,
                 1/*FetchRequest*/,
                 10,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE);
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0);
 
 
         test_consumer_assign_partition("REPLICA_NOT_AVAIALBLE", c, topic, 0,

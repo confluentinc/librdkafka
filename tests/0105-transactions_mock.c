@@ -50,7 +50,11 @@ static int allowed_error;
  */
 static int error_is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                               const char *reason) {
-        if (err == allowed_error) {
+        if (err == allowed_error ||
+            /* If transport errors are allowed then it is likely
+             * that we'll also see ALL_BROKERS_DOWN. */
+            (allowed_error == RD_KAFKA_RESP_ERR__TRANSPORT &&
+             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)) {
                 TEST_SAY("Ignoring allowed error: %s: %s\n",
                          rd_kafka_err2name(err), reason);
                 return 0;

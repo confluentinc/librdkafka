@@ -327,8 +327,8 @@ void test_sub_pass (void);
                         return;                                         \
         } while (0)
 
-#define SUB_TEST(...) SUB_TEST0(rd_false, "" __VA_ARGS__)
-#define SUB_TEST_QUICK(...) SUB_TEST0(rd_true, "" __VA_ARGS__)
+#define SUB_TEST(...) SUB_TEST0(0, "" __VA_ARGS__)
+#define SUB_TEST_QUICK(...) SUB_TEST0(1, "" __VA_ARGS__)
 #define SUB_TEST_PASS() test_sub_pass()
 
 

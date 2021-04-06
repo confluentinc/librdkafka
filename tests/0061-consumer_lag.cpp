@@ -83,7 +83,7 @@ class StatsCb : public RdKafka::EventCb {
                              match_topic.c_str(),
                              "\"partitions\":",
                              "\"0\":",
-                             "\"consumer_lag\":",
+                             "\"consumer_lag_stored\":",
                              NULL };
     const char *remain = json_doc;
 
@@ -175,8 +175,7 @@ static void do_test_consumer_lag (bool with_txns) {
   std::string errstr;
   RdKafka::ErrorCode err;
 
-  Test::Say(tostr() << _C_MAG << "[ Test consumer lag " <<
-            (with_txns ? "with":"without") << " transactions ]\n");
+  SUB_TEST("Test consumer lag %s transactions", with_txns ? "with":"without");
 
   topic = Test::mk_topic_name("0061-consumer_lag", 1);
 
@@ -264,6 +263,8 @@ static void do_test_consumer_lag (bool with_txns) {
 
   c->close();
   delete c;
+
+  SUB_TEST_PASS();
 }
 
 extern "C" {

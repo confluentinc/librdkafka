@@ -269,7 +269,7 @@ else()
     string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
   endif()
 
-  if(WITH_PLUGINS)
+  if(WITH_LIBDL)
     string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
   endif()
 

@@ -43,6 +43,8 @@ save
 end
 EOF
 
+strip -g ./librdkafka-static.a
+strip -g ./librdkafkacpp-static.a
 cp ./librdkafka-static.a ../dest/lib/
 cp ./librdkafkacpp-static.a ../dest/lib/librdkafka++-static.a
 popd

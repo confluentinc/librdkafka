@@ -2428,6 +2428,8 @@ rd_kafka_txn_op_begin_commit (rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
 
 
+        rd_kafka_wrlock(rk);
+
         if ((error = rd_kafka_txn_require_state(
                      rk,
                      RD_KAFKA_TXN_STATE_IN_TRANSACTION,
@@ -2438,12 +2440,11 @@ rd_kafka_txn_op_begin_commit (rd_kafka_t *rk,
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED)
                 goto done;
 
-        rd_kafka_wrlock(rk);
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_BEGIN_COMMIT);
-        rd_kafka_wrunlock(rk);
 
         /* FALLTHRU */
  done:
+        rd_kafka_wrunlock(rk);
         rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
                                           error);
 
@@ -2598,10 +2599,12 @@ rd_kafka_txn_op_begin_abort (rd_kafka_t *rk,
                               rd_kafka_q_t *rkq,
                               rd_kafka_op_t *rko) {
         rd_kafka_error_t *error;
+        rd_bool_t clear_pending = rd_false;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED;
 
+        rd_kafka_wrlock(rk);
         if ((error = rd_kafka_txn_require_state(
                      rk,
                      RD_KAFKA_TXN_STATE_IN_TRANSACTION,
@@ -2613,17 +2616,20 @@ rd_kafka_txn_op_begin_abort (rd_kafka_t *rk,
         if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED)
                 goto done;
 
-        rd_kafka_wrlock(rk);
         rd_kafka_txn_set_state(
                 rk, RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION);
-        rd_kafka_wrunlock(rk);
-
-        mtx_lock(&rk->rk_eos.txn_pending_lock);
-        rd_kafka_txn_clear_pending_partitions(rk);
-        mtx_unlock(&rk->rk_eos.txn_pending_lock);
+        clear_pending = rd_true;
 
         /* FALLTHRU */
  done:
+        rd_kafka_wrunlock(rk);
+
+        if (clear_pending) {
+                mtx_lock(&rk->rk_eos.txn_pending_lock);
+                rd_kafka_txn_clear_pending_partitions(rk);
+                mtx_unlock(&rk->rk_eos.txn_pending_lock);
+        }
+
         rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
                                           error);
 
@@ -2670,10 +2676,11 @@ rd_kafka_txn_op_abort_transaction (rd_kafka_t *rk,
                 /* If the underlying idempotent producer's state indicates it
                  * is re-acquiring its PID we need to wait for that to finish
                  * before allowing a new begin_transaction(), and since that is
-                 * not a blocking call we need to perform that wait in this state
-                 * instead.
-                 * This may happen on epoch bump and fatal idempotent producer error
-                 * which causes the current transaction to enter the abortable state.
+                 * not a blocking call we need to perform that wait in this
+                 * state instead.
+                 * This may happen on epoch bump and fatal idempotent producer
+                 * error which causes the current transaction to enter the
+                 * abortable state.
                  * To recover we need to request an epoch bump from the
                  * transaction coordinator. This is handled automatically
                  * by the idempotent producer, so we just need to wait for

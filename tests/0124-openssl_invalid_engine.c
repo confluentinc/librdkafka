@@ -39,6 +39,7 @@ int main_0124_openssl_invalid_engine (int argc, char **argv) {
                                 errstr, sizeof(errstr));
 
         if (res == RD_KAFKA_CONF_UNKNOWN) {
+                rd_kafka_conf_destroy(conf);
                 TEST_SKIP("%s\n", errstr);
                 return 0;
         }

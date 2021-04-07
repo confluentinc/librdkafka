@@ -1470,44 +1470,52 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
         if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
-                /* OpenSSL loads an engine as dynamic id and stores it in internal
-                 * list, as per LIST_ADD command below. If engine already exists
-                 * in internal list, it is supposed to be fetched using engine id. 
+                /* OpenSSL loads an engine as dynamic id and stores it in 
+                 * internal list, as per LIST_ADD command below. If engine 
+                 * already exists in internal list, it is supposed to be 
+                 * fetched using engine id. 
                  */
-                rk->rk_conf.ssl.engine = ENGINE_by_id(rk->rk_conf.ssl.engine_id);
+                rk->rk_conf.ssl.engine = 
+                        ENGINE_by_id(rk->rk_conf.ssl.engine_id);
                 if (!rk->rk_conf.ssl.engine) {
                         rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
                         if (!rk->rk_conf.ssl.engine) {
                                 rd_snprintf(errstr, errstr_size, 
-                                            "Engine initialization failed in ENGINE_by_id : ");
+                                            "Engine initialization failed in"
+                                            " ENGINE_by_id : ");
                                 goto fail;
                         }
                 }
 
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "SO_PATH",
-                                            rk->rk_conf.ssl.engine_location, 0)) {
+                                            rk->rk_conf.ssl.engine_location, 
+                                            0)) {
                         rd_snprintf(errstr, errstr_size, 
-                                    "Engine initialization failed in ENGINE_ctrl_cmd_string SO_PATH : ");
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string SO_PATH : ");
                         goto fail;
                 }
 
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
                                             "1", 0)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in ENGINE_ctrl_cmd_string LIST_ADD : ");
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string LIST_ADD : ");
                         goto fail;
                 }
 
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
                                             NULL, 0)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in ENGINE_ctrl_cmd_string LOAD : ");
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string LOAD : ");
                         goto fail;
                 }
 
                 if (!ENGINE_init(rk->rk_conf.ssl.engine)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in ENGINE_init : ");
+                                    "Engine initialization failed in"
+                                    " ENGINE_init : ");
                         goto fail;
                 }
         }

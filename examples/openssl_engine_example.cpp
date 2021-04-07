@@ -28,7 +28,7 @@
 
 /**
  * OpenSSL engine integration example. This example fetches metadata
- * over SSL channel with broker, established using OpenSSL engine.
+ * over SSL connection with broker, established using OpenSSL engine.
  */
 
 #include <iostream>
@@ -53,70 +53,22 @@
 #include "rdkafkacpp.h"
 
 static void metadata_print (const RdKafka::Metadata *metadata) {
-    std::cout << "Metadata for all topics"
-        << "(from broker " << metadata->orig_broker_id()
-        << ":" << metadata->orig_broker_name() << std::endl;
+    std::cout << "Number of topics: " << metadata->topics()->size() 
+        << std::endl;
 
-    /* Iterate brokers */
-    std::cout << " " << metadata->brokers()->size() << " brokers:" << std::endl;
-    RdKafka::Metadata::BrokerMetadataIterator ib;
-    for (ib = metadata->brokers()->begin();
-        ib != metadata->brokers()->end();
-        ++ib) {
-        std::cout << "  broker " << (*ib)->id() << " at "
-            << (*ib)->host() << ":" << (*ib)->port() << std::endl;
-    }
     /* Iterate topics */
-    std::cout << metadata->topics()->size() << " topics:" << std::endl;
     RdKafka::Metadata::TopicMetadataIterator it;
     for (it = metadata->topics()->begin();
         it != metadata->topics()->end();
-        ++it) {
-        std::cout << "  topic \"" << (*it)->topic() << "\" with "
-            << (*it)->partitions()->size() << " partitions:";
-
-        if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
-            std::cout << " " << err2str((*it)->err());
-            if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE)
-                std::cout << " (try again)";
-        }
-        std::cout << std::endl;
-
-        /* Iterate topic's partitions */
-        RdKafka::TopicMetadata::PartitionMetadataIterator ip;
-        for (ip = (*it)->partitions()->begin();
-            ip != (*it)->partitions()->end();
-            ++ip) {
-            std::cout << "    partition " << (*ip)->id()
-                << ", leader " << (*ip)->leader()
-                << ", replicas: ";
-
-            /* Iterate partition's replicas */
-            RdKafka::PartitionMetadata::ReplicasIterator ir;
-            for (ir = (*ip)->replicas()->begin();
-                ir != (*ip)->replicas()->end();
-                ++ir) {
-                std::cout << (ir == (*ip)->replicas()->begin() ? "" : ",") << *ir;
-            }
-
-            /* Iterate partition's ISRs */
-            std::cout << ", isrs: ";
-            RdKafka::PartitionMetadata::ISRSIterator iis;
-            for (iis = (*ip)->isrs()->begin(); iis != (*ip)->isrs()->end(); ++iis)
-                std::cout << (iis == (*ip)->isrs()->begin() ? "" : ",") << *iis;
-
-            if ((*ip)->err() != RdKafka::ERR_NO_ERROR)
-                std::cout << ", " << RdKafka::err2str((*ip)->err()) << std::endl;
-            else
-                std::cout << std::endl;
-        }
-    }
+        ++it) 
+        std::cout << "  " << (*it)->topic() << " has " 
+            << (*it)->partitions()->size() << " partitions." << std::endl;
 }
 
 
 class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
-    /* This SSL cert verification callback simply prints the incoming parameters.
-     * It provides no validation, everything is ok. */
+    /* This SSL cert verification callback simply prints the incoming 
+     * parameters. It provides no validation, everything is ok. */
 public:
     bool ssl_cert_verify_cb (const std::string &broker_name,
                              int32_t broker_id,
@@ -151,7 +103,8 @@ int main (int argc, char **argv) {
     std::string engine_callback_data;
     int opt;
 
-    if (conf->set("security.protocol", "ssl", errstr) != RdKafka::Conf::CONF_OK) {
+    if (conf->set("security.protocol", "ssl", errstr) != 
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }
@@ -211,8 +164,9 @@ int main (int argc, char **argv) {
         fprintf(stderr,
             "Usage: %s [options] -b <brokers> -p <engine-path> \n"
             "\n"
-            "OpenSSL engine integration example. This example fetches metadata\n"
-            "over SSL channel with broker, established using OpenSSL engine.\n"
+            "OpenSSL engine integration example. This example fetches\n"
+            "metadata over SSL connection with broker, established using\n"
+            "OpenSSL engine.\n"
             "\n"
             "librdkafka version %s (0x%08x, builtin.features \"%s\")\n"
             "\n"
@@ -253,7 +207,8 @@ int main (int argc, char **argv) {
     }
 
     if (engine_id.length() > 0 &&
-        conf->set("ssl.engine.id", engine_id, errstr) != RdKafka::Conf::CONF_OK) {
+        conf->set("ssl.engine.id", engine_id, errstr) != 
+        RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
     }

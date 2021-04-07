@@ -2315,7 +2315,8 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
  * @brief Set callback_data for OpenSSL engine.
  *
  * @param conf Configuration object.
- * @param callback_data Data being passed to engine ENGINE_load_ssl_client_cert.
+ * @param callback_data passed to engine callbacks, 
+ *                      e.g. \c ENGINE_load_ssl_client_cert.
  *
  * @remark The \c ssl.engine.location configuration must be set for this 
  *         to have affect.

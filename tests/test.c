@@ -434,7 +434,7 @@ struct test tests[] = {
         _TEST(0120_asymmetric_subscription, TEST_F_LOCAL),
         _TEST(0121_clusterid, TEST_F_LOCAL),
         _TEST(0123_connections_max_idle, 0),
-        _TEST(0124_openssl_invalid_engine, 0),
+        _TEST(0124_openssl_invalid_engine, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

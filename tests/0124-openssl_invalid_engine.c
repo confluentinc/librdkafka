@@ -29,18 +29,26 @@
 #include "test.h"
 
 int main_0124_openssl_invalid_engine (int argc, char **argv) {
-#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         char errstr[512];
+        rd_kafka_conf_res_t res;
 
-        conf = rd_kafka_conf_new();
+        test_conf_init(&conf, NULL, 30);
         if (rd_kafka_conf_set(conf, "security.protocol", "ssl", 
                               errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s", errstr);
 
-        if (rd_kafka_conf_set(conf, "ssl.engine.location", "invalid_path", 
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        res = rd_kafka_conf_set(conf, "ssl.engine.location", "invalid_path", 
+                                errstr, sizeof(errstr));
+
+        if (res == RD_KAFKA_CONF_UNKNOWN) {
+                rd_kafka_destroy(conf);
+                TEST_SKIP("%s\n", errstr);
+                return 0;
+        }
+
+        if (res != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s", errstr);
 
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -49,7 +57,6 @@ int main_0124_openssl_invalid_engine (int argc, char **argv) {
 
         TEST_ASSERT(strstr(errstr, "ENGINE_init failed"), "engine initialization"
                 " failure expected because of invalid engine path", errstr);
-#endif
 
         return 0;
 }

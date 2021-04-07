@@ -1479,7 +1479,7 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                         rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
                         if (!rk->rk_conf.ssl.engine) {
                                 rd_snprintf(errstr, errstr_size, 
-                                            "ENGINE_by_id failed: ");
+                                            "Engine initialization failed in ENGINE_by_id : ");
                                 goto fail;
                         }
                 }
@@ -1487,27 +1487,27 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "SO_PATH",
                                             rk->rk_conf.ssl.engine_location, 0)) {
                         rd_snprintf(errstr, errstr_size, 
-                                    "ENGINE_ctrl_cmd_string SO_PATH failed: ");
+                                    "Engine initialization failed in ENGINE_ctrl_cmd_string SO_PATH : ");
                         goto fail;
                 }
 
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
                                             "1", 0)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ENGINE_ctrl_cmd_string LIST_ADD failed: ");
+                                    "Engine initialization failed in ENGINE_ctrl_cmd_string LIST_ADD : ");
                         goto fail;
                 }
 
                 if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
                                             NULL, 0)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ENGINE_ctrl_cmd_string LOAD failed: ");
+                                    "Engine initialization failed in ENGINE_ctrl_cmd_string LOAD : ");
                         goto fail;
                 }
 
                 if (!ENGINE_init(rk->rk_conf.ssl.engine)) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ENGINE_init failed: ");
+                                    "Engine initialization failed in ENGINE_init : ");
                         goto fail;
                 }
         }

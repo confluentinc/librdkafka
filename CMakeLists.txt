@@ -79,7 +79,7 @@ endif()
 # }
 
 # WITH_PLUGINS {
-if(WITH_LIBDL)
+if(WITH_LIBDL OR WIN32)
   set(with_plugins_default ON)
 else()
   set(with_plugins_default OFF)
@@ -260,8 +260,6 @@ install(
     FILES LICENSES.txt
     DESTINATION "share/licenses/librdkafka"
 )
-
-# }
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)

@@ -655,6 +655,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         }
 
         rd_kafka_app_polled(rk);
+
 	return cnt;
 }
 

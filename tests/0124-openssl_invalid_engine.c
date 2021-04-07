@@ -58,5 +58,6 @@ int main_0124_openssl_invalid_engine (int argc, char **argv) {
         TEST_ASSERT(strstr(errstr, "ENGINE_init failed"), "engine initialization"
                 " failure expected because of invalid engine path", errstr);
 
+        rd_kafka_conf_destroy(conf);
         return 0;
 }

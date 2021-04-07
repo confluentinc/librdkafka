@@ -187,9 +187,11 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb (rd_kafka_timers_t *rkts,
 }
 
 /**
- * @brief Enqueue an RD_KAFKA_OP_BARRIER type of operation
+ * @brief Update rktp_op_version.
+ *        Enqueue an RD_KAFKA_OP_BARRIER type of operation
  *        when the op_version is updated.
  *
+ * @locks_required rd_kafka_toppar_lock() must be held.
  * @locality Toppar handler thread
  */
 void rd_kafka_toppar_op_version_bump (rd_kafka_toppar_t *rktp,

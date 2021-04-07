@@ -526,20 +526,21 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 static size_t rd_kafka_purge_outdated_messages (int32_t version,
                                   rd_kafka_message_t **rkmessages,
                                   int cnt) {
-        rd_kafka_op_t *rko;
         size_t valid_count = 0;
         int i;
 
         for (i = 0; i < cnt; i++) {
+                rd_kafka_op_t *rko;
                 rko = rkmessages[i]->_private;
                 if (rd_kafka_op_version_outdated(rko, version)) {
                         /* This also destroys the corresponding rkmessage. */
                         rd_kafka_op_destroy(rko);
-                } else {
+                } else if ((size_t)i > valid_count) {
                         rkmessages[valid_count++] = rkmessages[i];
+                } else {
+                        valid_count++;
                 }
         }
-
         return valid_count;
 }
 
@@ -611,12 +612,13 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                                 rko->rko_version,
                                 rkmessages,
                                 cnt);
+                        rd_kafka_op_destroy(rko);
+                        continue;
                 }
 
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
-
                 if (res == RD_KAFKA_OP_RES_KEEP ||
                     res == RD_KAFKA_OP_RES_HANDLED) {
                         /* Callback served, rko is destroyed (if HANDLED). */
@@ -653,7 +655,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         }
 
         rd_kafka_app_polled(rk);
-
 	return cnt;
 }
 

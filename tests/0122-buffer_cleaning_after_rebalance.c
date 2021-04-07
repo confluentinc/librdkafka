@@ -41,7 +41,8 @@ typedef struct consumer_s {
         int produce_msg_cnt;
 } consumer_t;
 
-static int test_consumer_batch_queue (consumer_t *arguments) {
+static int test_consumer_batch_queue (void *arg) {
+        consumer_t *arguments = arg;
         int msg_cnt = 0;
         int i;
         test_timing_t t_cons;
@@ -63,7 +64,8 @@ static int test_consumer_batch_queue (consumer_t *arguments) {
 
         while ((msg_cnt = rd_kafka_consume_batch_queue(rkq,
                 timeout_ms, rkmessage, consume_msg_cnt)) == 0)
-                continue;
+                ;
+
         for (i = 0; i < msg_cnt; i++) {
                 if (test_msgver_add_msg(rk, &mv, rkmessage[i]) == 0)
                         TEST_FAIL("The message is not from testid "
@@ -99,8 +101,10 @@ static void do_test_consume_batch (const char *strategy) {
         const int consume_msg_cnt = 500;
         const int produce_msg_cnt = 400;
         rd_kafka_conf_t *conf;
-        struct consumer_s c1_args;
-        struct consumer_s c2_args;
+        consumer_t c1_args;
+        consumer_t c2_args;
+
+        thrd_t thread_id;
 
         SUB_TEST("partition.assignment.strategy = %s", strategy);
 
@@ -118,11 +122,9 @@ static void do_test_consume_batch (const char *strategy) {
                                        testid,
                                        p,
                                        produce_msg_cnt / partition_cnt);
-        /* Create simple consumer */
-        if (!strcmp(strategy, "cooperative-sticky"))
-                test_conf_set(conf,
-                              "partition.assignment.strategy",
-                              "cooperative-sticky");
+
+        /* Create consumers */
+        test_conf_set(conf, "partition.assignment.strategy", strategy);
 
         c1 = test_create_consumer(topic, NULL,
                                   rd_kafka_conf_dup(conf), NULL);
@@ -131,12 +133,8 @@ static void do_test_consume_batch (const char *strategy) {
         test_consumer_subscribe(c1, topic);
         test_consumer_wait_assignment(c1, rd_false);
 
-        test_consumer_subscribe(c2, topic);
-        test_consumer_wait_assignment(c2, rd_false);
-
         /* Create generic consume queue */
         rkq1 = rd_kafka_queue_get_consumer(c1);
-        rkq2 = rd_kafka_queue_get_consumer(c2);
 
         c1_args.what = "C1.PRE";
         c1_args.rkq = rkq1;
@@ -146,8 +144,18 @@ static void do_test_consume_batch (const char *strategy) {
         c1_args.testid = testid;
         c1_args.produce_msg_cnt = produce_msg_cnt;
 
+        if (thrd_create(&thread_id, test_consumer_batch_queue, &c1_args)
+            != thrd_success)
+                TEST_FAIL("Failed to verify batch queue messages for %s",
+                          "C1.PRE");
 
-        test_consumer_batch_queue(&c1_args);
+        test_consumer_subscribe(c2, topic);
+        test_consumer_wait_assignment(c2, rd_false);
+
+        thrd_join(thread_id, NULL);
+
+        /* Create generic consume queue */
+        rkq2 = rd_kafka_queue_get_consumer(c2);
 
         c2_args.what = "C2.PRE";
         c2_args.rkq = rkq2;

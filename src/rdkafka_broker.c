@@ -2965,15 +2965,16 @@ static void rd_kafka_broker_prepare_destroy (rd_kafka_broker_t *rkb) {
  * @brief Serve a broker op (an op posted by another thread to be handled by
  *        this broker's thread).
  *
- * @returns 0 if calling op loop should break out, else 1 to continue.
+ * @returns true if calling op loop should break out, else false to continue.
  * @locality broker thread
  * @locks none
  */
-static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
-				      rd_kafka_op_t *rko) {
+static RD_WARN_UNUSED_RESULT
+rd_bool_t rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
+                                    rd_kafka_op_t *rko) {
         rd_kafka_toppar_t *rktp;
         rd_kafka_resp_err_t topic_err;
-        int ret = 1;
+        rd_bool_t wakeup = rd_false;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -3300,10 +3301,11 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                      "Client is terminating");
 
                 rd_kafka_broker_prepare_destroy(rkb);
-                ret = 0;
+                wakeup = rd_true;
                 break;
 
         case RD_KAFKA_OP_WAKEUP:
+                wakeup = rd_true;
                 break;
 
         case RD_KAFKA_OP_PURGE:
@@ -3345,6 +3347,8 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 /* Expedite next reconnect */
                 rkb->rkb_ts_reconnect = 0;
+
+                wakeup = rd_true;
                 break;
 
         default:
@@ -3355,7 +3359,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
         if (rko)
                 rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
 
-        return ret;
+        return wakeup;
 }
 
 
@@ -3364,13 +3368,13 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
  * @brief Serve broker ops.
  * @returns the number of ops served
  */
-static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb,
-                                      rd_ts_t timeout_us) {
+static RD_WARN_UNUSED_RESULT
+int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, rd_ts_t timeout_us) {
         rd_kafka_op_t *rko;
         int cnt = 0;
 
         while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_us, 0)) &&
-               (cnt++, rd_kafka_broker_op_serve(rkb, rko)))
+               (cnt++, !rd_kafka_broker_op_serve(rkb, rko)))
                 timeout_us = RD_POLL_NOWAIT;
 
         return cnt;
@@ -3389,12 +3393,17 @@ static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb,
  *
  * @param abs_timeout Maximum block time (absolute time).
  *
+ * @returns true on wakeup (broker state machine needs to be served),
+ *          else false.
+ *
  * @locality broker thread
  * @locks none
  */
-static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
-                                          rd_ts_t abs_timeout) {
+static RD_WARN_UNUSED_RESULT
+rd_bool_t rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
+                                        rd_ts_t abs_timeout) {
         rd_ts_t now;
+        rd_bool_t wakeup;
 
         if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
                 abs_timeout = rd_clock() + 1000;
@@ -3420,7 +3429,8 @@ static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
 
 
         /* Serve broker ops */
-        rd_kafka_broker_ops_serve(rkb, rd_timeout_remains_us(abs_timeout));
+        wakeup = rd_kafka_broker_ops_serve(rkb,
+                                           rd_timeout_remains_us(abs_timeout));
 
         /* An op might have triggered the need for a connection, if so
          * transition to TRY_CONNECT state. */
@@ -3430,12 +3440,15 @@ static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
                 rd_kafka_broker_set_state(
                         rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
                 rd_kafka_broker_unlock(rkb);
+                wakeup = rd_true;
         }
 
         /* Scan queues for timeouts. */
         now = rd_clock();
         if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0)
                 rd_kafka_broker_timeout_scan(rkb, now);
+
+        return wakeup;
 }
 
 
@@ -3568,16 +3581,18 @@ rd_kafka_broker_toppars_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 static void rd_kafka_broker_internal_serve (rd_kafka_broker_t *rkb,
                                             rd_ts_t abs_timeout) {
         int initial_state = rkb->rkb_state;
+        rd_bool_t wakeup;
 
         if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
                 /* Consumer */
                 do {
                         rd_kafka_broker_consumer_toppars_serve(rkb);
 
-                        rd_kafka_broker_ops_io_serve(rkb, abs_timeout);
+                        wakeup = rd_kafka_broker_ops_io_serve(rkb, abs_timeout);
 
                 } while (!rd_kafka_broker_terminating(rkb) &&
                          (int)rkb->rkb_state == initial_state &&
+                         !wakeup &&
                          !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
         } else {
                 /* Producer */
@@ -3591,11 +3606,12 @@ static void rd_kafka_broker_internal_serve (rd_kafka_broker_t *rkb,
                                         rd_kafka_broker_toppars_timeout_scan(
                                         rkb, now);
 
-                        rd_kafka_broker_ops_io_serve(
+                        wakeup = rd_kafka_broker_ops_io_serve(
                                 rkb, RD_MIN(abs_timeout, next_timeout_scan));
 
                 } while (!rd_kafka_broker_terminating(rkb) &&
                          (int)rkb->rkb_state == initial_state &&
+                         !wakeup &&
                          !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
         }
 }
@@ -4012,7 +4028,8 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb,
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb, &next_wakeup);
 
-                rd_kafka_broker_ops_io_serve(rkb, next_wakeup);
+                if (rd_kafka_broker_ops_io_serve(rkb, next_wakeup))
+                        return; /* Wakeup */
 
 		rd_kafka_broker_lock(rkb);
 	}
@@ -5002,7 +5019,8 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb,
                 if (min_backoff > abs_timeout)
                         min_backoff = abs_timeout;
 
-                rd_kafka_broker_ops_io_serve(rkb, min_backoff);
+                if (rd_kafka_broker_ops_io_serve(rkb, min_backoff))
+                        return; /* Wakeup */
 
 		rd_kafka_broker_lock(rkb);
 	}

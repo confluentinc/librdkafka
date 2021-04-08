@@ -51,6 +51,8 @@ librdkafka v1.7.0 is feature release:
  * The initial cluster connection on client instance creation could sometimes
    be delayed up to 1 second if a `group.id` or `transactional.id`
    was configured (#3305).
+ * Speed up triggering of new broker connections in certain cases by exiting
+   the broker thread io/op poll loop when a wakeup op is received.
 
 ### Consumer fixes
 

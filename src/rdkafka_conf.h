@@ -32,6 +32,9 @@
 #include "rdlist.h"
 #include "rdkafka_cert.h"
 
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
+#include <openssl/engine.h>
+#endif /* WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 */
 
 /**
  * Forward declarations
@@ -239,6 +242,12 @@ struct rd_kafka_conf_s {
                 /** CSV list of Windows certificate stores */
                 char *ca_cert_stores;
                 char *crl_location;
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
+                ENGINE *engine;
+#endif
+                char *engine_location;
+                char *engine_id;
+                void *engine_callback_data;
                 char *keystore_location;
                 char *keystore_password;
                 int   endpoint_identification;

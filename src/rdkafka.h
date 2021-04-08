@@ -2312,6 +2312,25 @@ rd_kafka_conf_set_ssl_cert (rd_kafka_conf_t *conf,
 
 
 /**
+ * @brief Set callback_data for OpenSSL engine.
+ *
+ * @param conf Configuration object.
+ * @param callback_data passed to engine callbacks, 
+ *                      e.g. \c ENGINE_load_ssl_client_cert.
+ *
+ * @remark The \c ssl.engine.location configuration must be set for this 
+ *         to have affect.
+ *
+ * @remark The memory pointed to by \p value must remain valid for the 
+ *         lifetime of the configuration object and any Kafka clients that 
+ *         use it.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf, 
+                                             void *callback_data);
+
+
+/**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
  *
  * @sa rd_kafka_opaque()

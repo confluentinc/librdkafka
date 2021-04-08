@@ -26,3 +26,4 @@ For more complex uses, see:
  * [rdkafka_consume_batch.cpp](rdkafka_consume_batch.cpp) - batching high-level C++ consumer example.
  * [rdkafka_performance.c](rdkafka_performance.c) - performance, benchmark, latency producer and consumer tool.
  * [kafkatest_verifiable_client.cpp](kafkatest_verifiable_client.cpp) - for use with the official Apache Kafka client system tests.
+ * [openssl_engine_example.cpp](openssl_engine_example.cpp) - metadata listing in C++ over SSL channel established using OpenSSL engine.

@@ -42,6 +42,7 @@
 #endif
 
 #include <openssl/x509.h>
+#include <openssl/x509_vfy.h>
 
 #include <ctype.h>
 
@@ -1269,6 +1270,75 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 check_pkey = rd_true;
         }
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        /*
+         * If applicable, use OpenSSL engine to fetch SSL certificate.
+         */
+        if (rk->rk_conf.ssl.engine) {
+                STACK_OF(X509_NAME) *cert_names = sk_X509_NAME_new_null();
+                STACK_OF(X509_OBJECT) *roots = 
+                    X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
+                X509 *x509 = NULL;
+                EVP_PKEY *pkey = NULL;
+                int i = 0;
+                for (i = 0; i < sk_X509_OBJECT_num(roots); i++) {
+                        x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, 
+                                                                          i));
+
+                        if (x509)
+                                sk_X509_NAME_push(cert_names, 
+                                                  X509_get_subject_name(x509));
+                }
+
+                if (cert_names)
+                        sk_X509_NAME_free(cert_names);
+
+                x509 = NULL;
+                r = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.engine, NULL, 
+                                                cert_names, &x509, &pkey, 
+                                                NULL, NULL, 
+                                                rk->rk_conf.ssl.engine_callback_data);
+
+                sk_X509_NAME_free(cert_names);
+                if (r == -1 || !x509 || !pkey) {
+                        X509_free(x509);
+                        EVP_PKEY_free(pkey);
+                        if (r == -1)
+                                rd_snprintf(errstr, errstr_size,
+                                            "ENGINE_load_ssl_client_cert failed: ");
+                        else if (!x509)
+                                rd_snprintf(errstr, errstr_size,
+                                            "Engine failed to load certificate: ");
+                        else
+                                rd_snprintf(errstr, errstr_size,
+                                            "Engine failed to load private key: ");
+
+                        return -1;
+                }
+
+                r = SSL_CTX_use_certificate(ctx, x509);
+                X509_free(x509);
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Failed to use SSL_CTX_use_certificate "
+                                    "with engine: ");
+                        EVP_PKEY_free(pkey);
+                        return -1;
+                }
+
+                r = SSL_CTX_use_PrivateKey(ctx, pkey);
+                EVP_PKEY_free(pkey);
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Failed to use SSL_CTX_use_PrivateKey "
+                                    "with engine: ");
+                        return -1;
+                }
+
+                check_pkey = rd_true;
+        }
+#endif
+
         /* Check that a valid private/public key combo was set. */
         if (check_pkey && SSL_CTX_check_private_key(ctx) != 1) {
                 rd_snprintf(errstr, errstr_size,
@@ -1289,6 +1359,12 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
  */
 void rd_kafka_ssl_ctx_term (rd_kafka_t *rk) {
         SSL_CTX_free(rk->rk_conf.ssl.ctx);
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        if (rk->rk_conf.ssl.engine)
+                ENGINE_free(rk->rk_conf.ssl.engine);
+#endif
+
         rk->rk_conf.ssl.ctx = NULL;
 }
 
@@ -1392,6 +1468,59 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                                                rk->rk_conf.ssl.sigalgs_list)) {
                         rd_snprintf(errstr, errstr_size,
                                     "ssl.sigalgs.list failed: ");
+                        goto fail;
+                }
+        }
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
+                /* OpenSSL loads an engine as dynamic id and stores it in 
+                 * internal list, as per LIST_ADD command below. If engine 
+                 * already exists in internal list, it is supposed to be 
+                 * fetched using engine id. 
+                 */
+                rk->rk_conf.ssl.engine = 
+                        ENGINE_by_id(rk->rk_conf.ssl.engine_id);
+                if (!rk->rk_conf.ssl.engine) {
+                        rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
+                        if (!rk->rk_conf.ssl.engine) {
+                                rd_snprintf(errstr, errstr_size, 
+                                            "Engine initialization failed in"
+                                            " ENGINE_by_id: ");
+                                goto fail;
+                        }
+                }
+
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "SO_PATH",
+                                            rk->rk_conf.ssl.engine_location, 
+                                            0)) {
+                        rd_snprintf(errstr, errstr_size, 
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string SO_PATH: ");
+                        goto fail;
+                }
+
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
+                                            "1", 0)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string LIST_ADD: ");
+                        goto fail;
+                }
+
+                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
+                                            NULL, 0)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Engine initialization failed in"
+                                    " ENGINE_ctrl_cmd_string LOAD: ");
+                        goto fail;
+                }
+
+                if (!ENGINE_init(rk->rk_conf.ssl.engine)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Engine initialization failed in"
+                                    " ENGINE_init: ");
                         goto fail;
                 }
         }

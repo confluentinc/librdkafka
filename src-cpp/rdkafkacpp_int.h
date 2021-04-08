@@ -685,6 +685,18 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  Conf::ConfResult set_engine_callback_data (void *value,
+                                             std::string &errstr) {
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rd_kafka_conf_set_engine_callback_data(rk_conf_, value);
+    return Conf::CONF_OK;
+  }
+
+
   Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,
                                  RdKafka::CertificateEncoding cert_enc,
                                  const void *buffer, size_t size,

@@ -1418,6 +1418,21 @@ class RD_EXPORT Conf {
    *          else NULL.
    */
   virtual struct rd_kafka_topic_conf_s *c_ptr_topic () = 0;
+
+  /** 
+   * @brief Set callback_data for ssl engine.
+   *
+   * @remark The \c ssl.engine.location configuration must be set for this 
+   *         to have affect.
+   *
+   * @remark The memory pointed to by \p value must remain valid for the 
+   *         lifetime of the configuration object and any Kafka clients that 
+   *         use it.
+   *
+   * @returns CONF_OK on success, else CONF_INVALID.
+   */
+  virtual Conf::ConfResult set_engine_callback_data (void *value,
+                                                     std::string &errstr) = 0;
 };
 
 /**@}*/

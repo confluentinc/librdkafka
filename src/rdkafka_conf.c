@@ -133,6 +133,13 @@ struct rd_kafka_property {
                 "OpenSSL >= 1.0.2 not available at build time"
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000 && defined(WITH_SSL) && !defined(LIBRESSL_VERSION_NUMBER)
+#define _UNSUPPORTED_OPENSSL_1_1_0 .unsupported = NULL
+#else
+#define _UNSUPPORTED_OPENSSL_1_1_0 .unsupported = \
+                "OpenSSL >= 1.1.0 not available at build time"
+#endif
+
 
 #if WITH_ZLIB
 #define _UNSUPPORTED_ZLIB .unsupported = NULL
@@ -829,6 +836,25 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Path to client's keystore (PKCS#12) used for authentication.",
           _UNSUPPORTED_SSL
         },
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        { _RK_GLOBAL, "ssl.engine.location", _RK_C_STR,
+          _RK(ssl.engine_location),
+          "Path to OpenSSL engine library. OpenSSL >= 1.1.0 required.",
+          _UNSUPPORTED_OPENSSL_1_1_0
+        },
+        { _RK_GLOBAL, "ssl.engine.id", _RK_C_STR,
+          _RK(ssl.engine_id),
+          "OpenSSL engine id is the name used for loading engine.",
+          .sdef = "dynamic",
+          _UNSUPPORTED_OPENSSL_1_1_0
+        },
+        { _RK_GLOBAL, "ssl_engine_callback_data", _RK_C_PTR,
+          _RK(ssl.engine_callback_data),
+          "OpenSSL engine callback data (set "
+          "with rd_kafka_conf_set_engine_callback_data()).",
+          _UNSUPPORTED_OPENSSL_1_1_0
+        },
+#endif
         { _RK_GLOBAL|_RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
           _RK(ssl.keystore_password),
           "Client's keystore (PKCS#12) password.",
@@ -2828,6 +2854,14 @@ rd_kafka_conf_set_ssl_cert_verify_cb (
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "opaque", opaque);
+}
+
+
+void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf,
+                                             void *callback_data) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "ssl_engine_callback_data",
+                                      callback_data);
 }
 
 

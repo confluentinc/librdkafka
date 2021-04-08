@@ -53,6 +53,10 @@ librdkafka v1.7.0 is feature release:
    was configured (#3305).
  * Speed up triggering of new broker connections in certain cases by exiting
    the broker thread io/op poll loop when a wakeup op is received.
+ * SASL GSSAPI: The Kerberos kinit refresh command was triggered from
+   `rd_kafka_new()` which made this call blocking if the refresh command
+   was taking long. The refresh is now performed by the background rdkafka
+   main thread.
 
 ### Consumer fixes
 

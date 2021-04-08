@@ -84,6 +84,10 @@ void rd_kafka_timer_exp_backoff (rd_kafka_timers_t *rkts,
 rd_ts_t rd_kafka_timer_next (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
                              int do_lock);
 
+void rd_kafka_timer_override_once (rd_kafka_timers_t *rkts,
+                                   rd_kafka_timer_t *rtmr,
+                                   rd_ts_t interval);
+
 /**
  * @returns true if timer is started.
  *

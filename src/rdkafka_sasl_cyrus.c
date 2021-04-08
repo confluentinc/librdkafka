@@ -337,7 +337,9 @@ static int rd_kafka_sasl_cyrus_cb_log (void *context, int level,
                         "make sure the libsasl2-modules-gssapi-mit or "
                         "cyrus-sasl-gssapi packages are installed";
 
-        if (level >= LOG_DEBUG)
+        /* Treat the "client step" log messages as debug. */
+        if (level >= LOG_DEBUG ||
+            !strncmp(message, "GSSAPI client step ", 19))
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
                            "%s", message);
         else

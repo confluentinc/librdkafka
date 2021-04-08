@@ -4526,6 +4526,8 @@ ut_create_msgs (rd_kafka_msgq_t *rkmq, uint64_t msgid, int cnt) {
 
                 rkm = ut_rd_kafka_msg_new(0);
                 rkm->rkm_u.producer.msgid = msgid++;
+                rkm->rkm_ts_enq = rd_clock();
+                rkm->rkm_ts_timeout = rkm->rkm_ts_enq + (900 * 1000 * 1000);
 
                 rd_kafka_msgq_enq(rkmq, rkm);
         }
@@ -4564,6 +4566,7 @@ static int unittest_idempotent_producer (void) {
         int retry_msg_cnt = 0;
         int drcnt = 0;
         rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
+        const char *tmp;
         int i, r;
 
         RD_UT_SAY("Verifying idempotent producer error handling");
@@ -4571,6 +4574,8 @@ static int unittest_idempotent_producer (void) {
         conf = rd_kafka_conf_new();
         rd_kafka_conf_set(conf, "batch.num.messages", "3", NULL, 0);
         rd_kafka_conf_set(conf, "retry.backoff.ms", "1", NULL, 0);
+        if ((tmp = rd_getenv("TEST_DEBUG", NULL)))
+                rd_kafka_conf_set(conf, "debug", tmp, NULL, 0);
         if (rd_kafka_conf_set(conf, "enable.idempotence", "true", NULL, 0) !=
             RD_KAFKA_CONF_OK)
                 RD_UT_FAIL("Failed to enable idempotence");

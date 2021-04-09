@@ -1708,6 +1708,8 @@ static void do_test_DeleteConsumerGroupOffsets (const char *what,
                                   NULL, 0,
                                   15*1000);
 
+        rd_sleep(1); /* Additional wait time for cluster propagation */
+
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
 
         if (sub_consumer) {

@@ -74,6 +74,8 @@ librdkafka v1.7.0 is feature release:
    timed auto committer is only employed in the steady state when no rebalances
    are taking places. Offsets are still auto committed when partitions are
    revoked.
+ * Retriable FindCoordinatorRequest errors are no longer propagated to
+   the application as they are retried automatically.
 
 ### Producer fixes
 

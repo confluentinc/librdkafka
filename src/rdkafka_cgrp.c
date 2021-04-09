@@ -561,6 +561,7 @@ static void rd_kafka_cgrp_handle_FindCoordinator (rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg = opaque;
         struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;
         char *errstr = NULL;
+        int actions;
 
         if (likely(!(ErrorCode = err))) {
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
@@ -583,7 +584,7 @@ static void rd_kafka_cgrp_handle_FindCoordinator (rd_kafka_t *rk,
         }
 
         if (ErrorCode)
-                goto err2;
+                goto err;
 
 
         mdb.id = CoordId;
@@ -604,7 +605,7 @@ err_parse: /* Parse error */
         ErrorCode = rkbuf->rkbuf_err;
         /* FALLTHRU */
 
-err2:
+err:
         if (!errstr)
                 errstr = (char *)rd_kafka_err2str(ErrorCode);
 
@@ -616,12 +617,31 @@ err2:
         if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                 return;
 
-        /* No need for retries since the coord query is intervalled. */
+        actions = rd_kafka_err_action(
+                rkb, ErrorCode, request,
 
-        if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
+                RD_KAFKA_ERR_ACTION_RETRY|RD_KAFKA_ERR_ACTION_REFRESH,
+                RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR__TRANSPORT,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR__TIMED_OUT,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
+
+                RD_KAFKA_ERR_ACTION_END);
+
+
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 rd_kafka_cgrp_coord_update(rkcg, -1);
-        else {
-                if (rkcg->rkcg_last_err != ErrorCode) {
+        } else {
+                if (!(actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+                    rkcg->rkcg_last_err != ErrorCode) {
+                        /* Propagate non-retriable errors to the application */
                         rd_kafka_consumer_err(
                                 rkcg->rkcg_q, rd_kafka_broker_id(rkb),
                                 ErrorCode, 0, NULL, NULL,
@@ -632,8 +652,10 @@ err2:
                         rkcg->rkcg_last_err = ErrorCode;
                 }
 
-		/* Continue querying */
-		rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
+                /* Retries are performed by the timer-intervalled
+                 * coord queries, continue querying */
+                rd_kafka_cgrp_set_state(
+                        rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
         }
 
         rd_kafka_cgrp_serve(rkcg); /* Serve updated state, if possible */

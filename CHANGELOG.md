@@ -76,6 +76,8 @@ librdkafka v1.7.0 is feature release:
    revoked.
  * Retriable FindCoordinatorRequest errors are no longer propagated to
    the application as they are retried automatically.
+ * Fix rare crash (assert `rktp_started`) on consumer termination
+   (introduced in v1.6.0).
 
 ### Producer fixes
 

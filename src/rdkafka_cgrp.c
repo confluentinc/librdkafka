@@ -2844,6 +2844,14 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         rd_kafka_assert(NULL, rk->rk_consumer.wait_commit_cnt > 0);
         rk->rk_consumer.wait_commit_cnt--;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                rd_kafka_op_destroy(rko_orig);
+                return; /* Handle is terminating, this op may be handled
+                         * by the op enq()ing thread rather than the
+                         * rdkafka main thread, it is not safe to
+                         * continue here. */
+        }
+
         /* Update the committed offsets for each partition's rktp. */
         errcnt = rd_kafka_cgrp_update_committed_offsets(rkcg, err, offsets);
 

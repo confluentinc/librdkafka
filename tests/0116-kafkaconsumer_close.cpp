@@ -70,7 +70,8 @@ static void do_test_consumer_close (bool do_subscribe,
   delete p;
 
   /* Create consumer */
-  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+  RdKafka::Conf *conf;
+  Test::conf_init(&conf, NULL, 0);
   Test::conf_set(conf, "bootstrap.servers", bootstraps);
   Test::conf_set(conf, "group.id", "mygroup");
   Test::conf_set(conf, "auto.offset.reset", "beginning");

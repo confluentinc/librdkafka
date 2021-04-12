@@ -59,7 +59,6 @@ static int consumer_batch_queue (void *arg) {
 
         msg_cnt = rd_kafka_consume_batch_queue(rkq,
                 timeout_ms, rkmessage, consume_msg_cnt);
-        TEST_SAY("Jing Liu received %d\n", msg_cnt);
 
         TIMING_STOP(&t_cons);
 
@@ -75,9 +74,9 @@ static int consumer_batch_queue (void *arg) {
 
 
 /**
- * @brief Produce 400 messages and consume 500 messages totally by 2 consumers,
- *        verify if there isn't any missed or duplicate messages received
- *        by the two consumers.
+ * @brief Produce 400 messages and consume 500 messages totally by 2 consumers
+ *        using batch queue method, verify if there isn't any missed or
+ *        duplicate messages received by the two consumers.
  *        The reasons for setting the consume messages number is higher than
  *        or equal to the produce messages number are:
  *        1) Make sure each consumer can at most receive half of the produced

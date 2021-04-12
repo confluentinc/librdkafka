@@ -38,55 +38,71 @@ typedef struct consumer_s {
         int consume_msg_cnt;
         rd_kafka_t *rk;
         uint64_t testid;
-        int produce_msg_cnt;
+        test_msgver_t *mv;
 } consumer_t;
 
-static int test_consumer_batch_queue (void *arg) {
+static int consumer_batch_queue (void *arg) {
         consumer_t *arguments = arg;
         int msg_cnt = 0;
         int i;
         test_timing_t t_cons;
-        test_msgver_t mv;
 
         rd_kafka_queue_t *rkq = arguments->rkq;
         int timeout_ms = arguments->timeout_ms;
         const int consume_msg_cnt = arguments->consume_msg_cnt;
         rd_kafka_t *rk = arguments->rk;
         uint64_t testid = arguments->testid;
-        const char *what = arguments->what;
-        const int produce_msg_cnt = arguments->produce_msg_cnt;
 
         rd_kafka_message_t **rkmessage = malloc(consume_msg_cnt * sizeof(*rkmessage));
 
-        test_msgver_init(&mv, testid);
-
         TIMING_START(&t_cons, "CONSUME");
 
-        while ((msg_cnt = rd_kafka_consume_batch_queue(rkq,
-                timeout_ms, rkmessage, consume_msg_cnt)) == 0)
-                ;
+        msg_cnt = rd_kafka_consume_batch_queue(rkq,
+                timeout_ms, rkmessage, consume_msg_cnt);
+        TEST_SAY("Jing Liu received %d\n", msg_cnt);
+
+        TIMING_STOP(&t_cons);
 
         for (i = 0; i < msg_cnt; i++) {
-                if (test_msgver_add_msg(rk, &mv, rkmessage[i]) == 0)
+                if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
                         TEST_FAIL("The message is not from testid "
                                   "%"PRId64" \n", testid);
-        }
-        test_msgver_verify(what,
-                           &mv,
-                           TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
-                           0,
-                           produce_msg_cnt/2);
-        test_msgver_clear(&mv);
-
-        for (i = 0; i < msg_cnt; i++)
                 rd_kafka_message_destroy(rkmessage[i]);
-        TIMING_STOP(&t_cons);
+        }
+
         return 0;
 }
 
 
 /**
- * Consume with batch + queue interface
+ * @brief Produce 400 messages and consume 500 messages totally by 2 consumers,
+ *        verify if there isn't any missed or duplicate messages received
+ *        by the two consumers.
+ *        The reasons for setting the consume messages number is higher than
+ *        or equal to the produce messages number are:
+ *        1) Make sure each consumer can at most receive half of the produced
+ *           messages even though the consumers expect more.
+ *        2) If the consume messages number is smaller than the produce
+ *           messages number, it's hard to verify that the messages returned
+ *           are added to the batch queue before or after the rebalancing.
+ *           But if the consume messages number is larger than the produce
+ *           messages number, and we still received half of the produced
+ *           messages by each consumer, we can make sure that the buffer
+ *           cleaning is happened during the batch queue process to guarantee
+ *           only received messages added to the batch queue after the
+ *           rebalance.
+ *
+ *        1. Produce 100 messages to each of the 4 partitions
+ *        2. First consumer subscribes to the topic, wait for it's assignment
+ *        3. The first consumer consumes 500 messages using the batch queue
+ *           method
+ *        4. Second consumer subscribes to the topic, wait for it's assignment
+ *        5. Rebalance happenes
+ *        6. The second consumer consumes 500 messages using the batch queue
+ *           method
+ *        7. Each consumer receives 200 messages finally
+ *        8. Combine all the messages received by the 2 consumers and
+ *           verify if there isn't any missed or duplicate messages
  *
  */
 static void do_test_consume_batch (const char *strategy) {
@@ -103,7 +119,7 @@ static void do_test_consume_batch (const char *strategy) {
         rd_kafka_conf_t *conf;
         consumer_t c1_args;
         consumer_t c2_args;
-
+        test_msgver_t mv;
         thrd_t thread_id;
 
         SUB_TEST("partition.assignment.strategy = %s", strategy);
@@ -111,8 +127,10 @@ static void do_test_consume_batch (const char *strategy) {
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "partition.assignment.strategy", strategy);
 
         testid = test_id_generate();
+        test_msgver_init(&mv, testid);
 
         /* Produce messages */
         topic = test_mk_topic_name("0122-buffer_cleaning", 1);
@@ -124,8 +142,6 @@ static void do_test_consume_batch (const char *strategy) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        test_conf_set(conf, "partition.assignment.strategy", strategy);
-
         c1 = test_create_consumer(topic, NULL,
                                   rd_kafka_conf_dup(conf), NULL);
         c2 = test_create_consumer(topic, NULL, conf, NULL);
@@ -142,12 +158,10 @@ static void do_test_consume_batch (const char *strategy) {
         c1_args.consume_msg_cnt = consume_msg_cnt;
         c1_args.rk = c1;
         c1_args.testid = testid;
-        c1_args.produce_msg_cnt = produce_msg_cnt;
-
-        if (thrd_create(&thread_id, test_consumer_batch_queue, &c1_args)
+        c1_args.mv = &mv;
+        if (thrd_create(&thread_id, consumer_batch_queue, &c1_args)
             != thrd_success)
-                TEST_FAIL("Failed to verify batch queue messages for %s",
-                          "C1.PRE");
+                TEST_FAIL("Failed to create thread for %s", "C1.PRE");
 
         test_consumer_subscribe(c2, topic);
         test_consumer_wait_assignment(c2, rd_false);
@@ -163,9 +177,16 @@ static void do_test_consume_batch (const char *strategy) {
         c2_args.consume_msg_cnt = consume_msg_cnt;
         c2_args.rk = c2;
         c2_args.testid = testid;
-        c2_args.produce_msg_cnt = produce_msg_cnt;
+        c2_args.mv = &mv;
 
-        test_consumer_batch_queue(&c2_args);
+        consumer_batch_queue(&c2_args);
+
+        test_msgver_verify("C1.PRE + C2.PRE",
+                           &mv,
+                           TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
+                           0,
+                           produce_msg_cnt);
+        test_msgver_clear(&mv);
 
         rd_kafka_queue_destroy(rkq1);
         rd_kafka_queue_destroy(rkq2);

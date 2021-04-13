@@ -2954,7 +2954,8 @@ rd_kafka_consume_cb (rd_kafka_t *rk,
 	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
 
-        if (unlikely(rd_kafka_op_version_outdated(rko, 0))) {
+        if (unlikely(rd_kafka_op_version_outdated(rko, 0)) ||
+            rko->rko_type == RD_KAFKA_OP_BARRIER) {
                 rd_kafka_op_destroy(rko);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
@@ -3856,6 +3857,9 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 /* Must only be handled by rdkafka main thread */
                 rd_assert(thrd_is_current(rk->rk_thread));
                 res = rd_kafka_op_call(rk, rkq, rko);
+                break;
+
+        case RD_KAFKA_OP_BARRIER:
                 break;
 
         case RD_KAFKA_OP_PURGE:

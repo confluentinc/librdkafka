@@ -186,6 +186,24 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb (rd_kafka_timers_t *rkts,
 	rd_kafka_toppar_consumer_lag_req(rktp);
 }
 
+/**
+ * @brief Update rktp_op_version.
+ *        Enqueue an RD_KAFKA_OP_BARRIER type of operation
+ *        when the op_version is updated.
+ *
+ * @locks_required rd_kafka_toppar_lock() must be held.
+ * @locality Toppar handler thread
+ */
+void rd_kafka_toppar_op_version_bump (rd_kafka_toppar_t *rktp,
+                                      int32_t version) {
+        rd_kafka_op_t *rko;
+
+        rktp->rktp_op_version = version;
+        rko = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
+        rko->rko_version = version;
+        rd_kafka_q_enq(rktp->rktp_fetchq, rko);
+}
+
 
 /**
  * Add new partition to topic.
@@ -1585,7 +1603,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
                 goto err_reply;
         }
 
-	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp, version);
 
         if (rkcg) {
                 rd_kafka_assert(rktp->rktp_rkt->rkt_rk, !rktp->rktp_cgrp);
@@ -1694,7 +1712,7 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
                      rktp->rktp_partition,
                      rd_kafka_fetch_states[rktp->rktp_fetch_state], version);
 
-	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp, version);
 
 	/* Abort pending offset lookups. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
@@ -1754,7 +1772,7 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 		goto err_reply;
 	}
 
-	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp, version);
 
 	/* Abort pending offset lookups. */
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
@@ -1809,7 +1827,7 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
 
 	rd_kafka_toppar_lock(rktp);
 
-	rktp->rktp_op_version = version;
+        rd_kafka_toppar_op_version_bump(rktp, version);
 
         if (!pause && (rktp->rktp_flags & flag) != flag) {
                 rd_kafka_dbg(rk, TOPIC, "RESUME",

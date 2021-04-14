@@ -36,9 +36,11 @@ typedef struct consumer_s {
         rd_kafka_queue_t *rkq;
         int timeout_ms;
         int consume_msg_cnt;
+        int expected_msg_cnt;
         rd_kafka_t *rk;
         uint64_t testid;
         test_msgver_t *mv;
+        struct test *test;
 } consumer_t;
 
 static int consumer_batch_queue (void *arg) {
@@ -52,15 +54,28 @@ static int consumer_batch_queue (void *arg) {
         const int consume_msg_cnt = arguments->consume_msg_cnt;
         rd_kafka_t *rk = arguments->rk;
         uint64_t testid = arguments->testid;
+        rd_kafka_message_t **rkmessage =
+                malloc(consume_msg_cnt * sizeof(*rkmessage));
 
-        rd_kafka_message_t **rkmessage = malloc(consume_msg_cnt * sizeof(*rkmessage));
+        if (arguments->test)
+                test_curr = arguments->test;
+
+        TEST_SAY("%s calling consume_batch_queue(timeout=%d, msgs=%d) "
+                 "and expecting %d messages back\n",
+                 rd_kafka_name(rk), timeout_ms, consume_msg_cnt,
+                 arguments->expected_msg_cnt);
 
         TIMING_START(&t_cons, "CONSUME");
-
         msg_cnt = rd_kafka_consume_batch_queue(rkq,
                 timeout_ms, rkmessage, consume_msg_cnt);
-
         TIMING_STOP(&t_cons);
+
+        TEST_SAY("%s consumed %d/%d/%d message(s)\n",
+                 rd_kafka_name(rk), msg_cnt, arguments->consume_msg_cnt,
+                 arguments->expected_msg_cnt);
+        TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,
+                    "consumed %d messages, expected %d",
+                    msg_cnt, arguments->expected_msg_cnt);
 
         for (i = 0; i < msg_cnt; i++) {
                 if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
@@ -111,13 +126,13 @@ static void do_test_consume_batch (const char *strategy) {
         rd_kafka_t *c1;
         rd_kafka_t *c2;
         int p;
-        const int timeout_ms = 30000;
+        const int timeout_ms = 12000; /* Must be > rebalance time */
         uint64_t testid;
         const int consume_msg_cnt = 500;
         const int produce_msg_cnt = 400;
         rd_kafka_conf_t *conf;
-        consumer_t c1_args;
-        consumer_t c2_args;
+        consumer_t c1_args = RD_ZERO_INIT;
+        consumer_t c2_args = RD_ZERO_INIT;
         test_msgver_t mv;
         thrd_t thread_id;
 
@@ -155,9 +170,11 @@ static void do_test_consume_batch (const char *strategy) {
         c1_args.rkq = rkq1;
         c1_args.timeout_ms = timeout_ms;
         c1_args.consume_msg_cnt = consume_msg_cnt;
+        c1_args.expected_msg_cnt = produce_msg_cnt / 2;
         c1_args.rk = c1;
         c1_args.testid = testid;
         c1_args.mv = &mv;
+        c1_args.test = test_curr;
         if (thrd_create(&thread_id, consumer_batch_queue, &c1_args)
             != thrd_success)
                 TEST_FAIL("Failed to create thread for %s", "C1.PRE");
@@ -172,8 +189,10 @@ static void do_test_consume_batch (const char *strategy) {
 
         c2_args.what = "C2.PRE";
         c2_args.rkq = rkq2;
-        c2_args.timeout_ms = timeout_ms;
+        /* Second consumer should be able to consume all messages right away */
+        c2_args.timeout_ms = 5000;
         c2_args.consume_msg_cnt = consume_msg_cnt;
+        c2_args.expected_msg_cnt = produce_msg_cnt / 2;
         c2_args.rk = c2;
         c2_args.testid = testid;
         c2_args.mv = &mv;

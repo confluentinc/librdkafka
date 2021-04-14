@@ -1276,17 +1276,17 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
          */
         if (rk->rk_conf.ssl.engine) {
                 STACK_OF(X509_NAME) *cert_names = sk_X509_NAME_new_null();
-                STACK_OF(X509_OBJECT) *roots = 
+                STACK_OF(X509_OBJECT) *roots =
                     X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
                 X509 *x509 = NULL;
                 EVP_PKEY *pkey = NULL;
                 int i = 0;
                 for (i = 0; i < sk_X509_OBJECT_num(roots); i++) {
-                        x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots, 
+                        x509 = X509_OBJECT_get0_X509(sk_X509_OBJECT_value(roots,
                                                                           i));
 
                         if (x509)
-                                sk_X509_NAME_push(cert_names, 
+                                sk_X509_NAME_push(cert_names,
                                                   X509_get_subject_name(x509));
                 }
 
@@ -1294,10 +1294,11 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                         sk_X509_NAME_free(cert_names);
 
                 x509 = NULL;
-                r = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.engine, NULL, 
-                                                cert_names, &x509, &pkey, 
-                                                NULL, NULL, 
-                                                rk->rk_conf.ssl.engine_callback_data);
+                r = ENGINE_load_ssl_client_cert(
+                        rk->rk_conf.ssl.engine, NULL,
+                        cert_names, &x509, &pkey,
+                        NULL, NULL,
+                        rk->rk_conf.ssl.engine_callback_data);
 
                 sk_X509_NAME_free(cert_names);
                 if (r == -1 || !x509 || !pkey) {
@@ -1305,13 +1306,17 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                         EVP_PKEY_free(pkey);
                         if (r == -1)
                                 rd_snprintf(errstr, errstr_size,
-                                            "ENGINE_load_ssl_client_cert failed: ");
+                                            "OpenSSL "
+                                            "ENGINE_load_ssl_client_cert "
+                                            "failed: ");
                         else if (!x509)
                                 rd_snprintf(errstr, errstr_size,
-                                            "Engine failed to load certificate: ");
+                                            "OpenSSL engine failed to "
+                                            "load certificate: ");
                         else
                                 rd_snprintf(errstr, errstr_size,
-                                            "Engine failed to load private key: ");
+                                            "OpenSSL engine failed to "
+                                            "load private key: ");
 
                         return -1;
                 }
@@ -1359,14 +1364,82 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
  */
 void rd_kafka_ssl_ctx_term (rd_kafka_t *rk) {
         SSL_CTX_free(rk->rk_conf.ssl.ctx);
+        rk->rk_conf.ssl.ctx = NULL;
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
-        if (rk->rk_conf.ssl.engine)
-                ENGINE_free(rk->rk_conf.ssl.engine);
+        RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
+#endif
+}
+
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+/**
+ * @brief Initialize and load OpenSSL engine, if configured.
+ *
+ * @returns true on success, false on error.
+ */
+static rd_bool_t rd_kafka_ssl_ctx_init_engine (rd_kafka_t *rk,
+                                               char *errstr,
+                                               size_t errstr_size) {
+        ENGINE *engine;
+
+        /* OpenSSL loads an engine as dynamic id and stores it in
+         * internal list, as per LIST_ADD command below. If engine
+         * already exists in internal list, it is supposed to be
+         * fetched using engine id.
+         */
+        engine = ENGINE_by_id(rk->rk_conf.ssl.engine_id);
+        if (!engine) {
+                engine = ENGINE_by_id("dynamic");
+                if (!engine) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "OpenSSL engine initialization failed in"
+                                    " ENGINE_by_id: ");
+                        return rd_false;
+                }
+        }
+
+        if (!ENGINE_ctrl_cmd_string(engine, "SO_PATH",
+                                    rk->rk_conf.ssl.engine_location,
+                                    0)) {
+                ENGINE_free(engine);
+                rd_snprintf(errstr, errstr_size,
+                            "OpenSSL engine initialization failed in"
+                            " ENGINE_ctrl_cmd_string SO_PATH: ");
+                return rd_false;
+        }
+
+        if (!ENGINE_ctrl_cmd_string(engine, "LIST_ADD",
+                                    "1", 0)) {
+                ENGINE_free(engine);
+                rd_snprintf(errstr, errstr_size,
+                            "OpenSSL engine initialization failed in"
+                            " ENGINE_ctrl_cmd_string LIST_ADD: ");
+                return rd_false;
+        }
+
+        if (!ENGINE_ctrl_cmd_string(engine, "LOAD", NULL, 0)) {
+                ENGINE_free(engine);
+                rd_snprintf(errstr, errstr_size,
+                            "OpenSSL engine initialization failed in"
+                            " ENGINE_ctrl_cmd_string LOAD: ");
+                return rd_false;
+        }
+
+        if (!ENGINE_init(engine)) {
+                ENGINE_free(engine);
+                rd_snprintf(errstr, errstr_size,
+                            "OpenSSL engine initialization failed in"
+                            " ENGINE_init: ");
+                return rd_false;
+        }
+
+        rk->rk_conf.ssl.engine = engine;
+
+        return rd_true;
+}
 #endif
 
-        rk->rk_conf.ssl.ctx = NULL;
-}
 
 /**
  * @brief Once per rd_kafka_t handle initialization of OpenSSL
@@ -1377,7 +1450,7 @@ void rd_kafka_ssl_ctx_term (rd_kafka_t *rk) {
  */
 int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         int r;
-        SSL_CTX *ctx;
+        SSL_CTX *ctx = NULL;
         const char *linking =
 #if WITH_STATIC_LIB_libcrypto
                 "statically linked "
@@ -1401,6 +1474,16 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         if (errstr_size > 0)
                 errstr[0] = '\0';
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loading OpenSSL engine from \"%s\"",
+                             rk->rk_conf.ssl.engine_location);
+                if (!rd_kafka_ssl_ctx_init_engine(rk, errstr, errstr_size))
+                        goto fail;
+        }
+#endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
         ctx = SSL_CTX_new(TLS_client_method());
@@ -1473,59 +1556,6 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         }
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
-        if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
-                /* OpenSSL loads an engine as dynamic id and stores it in 
-                 * internal list, as per LIST_ADD command below. If engine 
-                 * already exists in internal list, it is supposed to be 
-                 * fetched using engine id. 
-                 */
-                rk->rk_conf.ssl.engine = 
-                        ENGINE_by_id(rk->rk_conf.ssl.engine_id);
-                if (!rk->rk_conf.ssl.engine) {
-                        rk->rk_conf.ssl.engine = ENGINE_by_id("dynamic");
-                        if (!rk->rk_conf.ssl.engine) {
-                                rd_snprintf(errstr, errstr_size, 
-                                            "Engine initialization failed in"
-                                            " ENGINE_by_id: ");
-                                goto fail;
-                        }
-                }
-
-                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "SO_PATH",
-                                            rk->rk_conf.ssl.engine_location, 
-                                            0)) {
-                        rd_snprintf(errstr, errstr_size, 
-                                    "Engine initialization failed in"
-                                    " ENGINE_ctrl_cmd_string SO_PATH: ");
-                        goto fail;
-                }
-
-                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LIST_ADD",
-                                            "1", 0)) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in"
-                                    " ENGINE_ctrl_cmd_string LIST_ADD: ");
-                        goto fail;
-                }
-
-                if (!ENGINE_ctrl_cmd_string(rk->rk_conf.ssl.engine, "LOAD",
-                                            NULL, 0)) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in"
-                                    " ENGINE_ctrl_cmd_string LOAD: ");
-                        goto fail;
-                }
-
-                if (!ENGINE_init(rk->rk_conf.ssl.engine)) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Engine initialization failed in"
-                                    " ENGINE_init: ");
-                        goto fail;
-                }
-        }
-#endif
-
         /* Register certificates, keys, etc. */
         if (rd_kafka_ssl_set_certs(rk, ctx, errstr, errstr_size) == -1)
                 goto fail;
@@ -1541,7 +1571,10 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         r = (int)strlen(errstr);
         rd_kafka_ssl_error(rk, NULL, errstr+r,
                            (int)errstr_size > r ? (int)errstr_size - r : 0);
-        SSL_CTX_free(ctx);
+        RD_IF_FREE(ctx, SSL_CTX_free);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
+#endif
 
         return -1;
 }

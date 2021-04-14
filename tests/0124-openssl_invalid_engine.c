@@ -38,7 +38,7 @@ int main_0124_openssl_invalid_engine (int argc, char **argv) {
         res = rd_kafka_conf_set(conf, "ssl.engine.location", "invalid_path", 
                                 errstr, sizeof(errstr));
 
-        if (res == RD_KAFKA_CONF_UNKNOWN) {
+        if (res == RD_KAFKA_CONF_INVALID) {
                 rd_kafka_conf_destroy(conf);
                 TEST_SKIP("%s\n", errstr);
                 return 0;

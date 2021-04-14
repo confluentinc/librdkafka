@@ -385,11 +385,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 1000000, 1000000 },
         { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
           .sdef = "max.in.flight.requests.per.connection" },
-	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
-	  _RK(metadata_request_timeout_ms),
-	  "Non-topic request timeout in milliseconds. "
-	  "This is for metadata requests, etc.",
-	  10, 900*1000, 60*1000},
+        { _RK_GLOBAL|_RK_DEPRECATED|_RK_HIDDEN,
+          "metadata.request.timeout.ms", _RK_C_INT,
+          _RK(metadata_request_timeout_ms),
+          "Not used.",
+          10, 900*1000, 10 },
         { _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
           _RK(metadata_refresh_interval_ms),
           "Period of time in milliseconds at which topic and broker "

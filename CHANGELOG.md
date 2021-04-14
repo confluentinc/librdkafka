@@ -2,7 +2,8 @@
 
 librdkafka v1.7.0 is feature release:
 
- * [KIP-360](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=89068820) - Improve reliability of transactional producer
+ * [KIP-360](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=89068820) - Improve reliability of transactional producer.
+ * OpenSSL Engine support (`ssl.engine.location`) by @adinigam and @ajbarb.
 
 ## Enhancements
 
@@ -22,8 +23,9 @@ librdkafka v1.7.0 is feature release:
  * Statistics: `consumer_lag` is now using the `committed_offset`,
    while the new `consumer_lag_stored` is using `stored_offset`
    (offset to be committed).
-   This is more correct than the previous `consumer_lag` which was either
-   `committed_offset` or `app_offset` (last message passed to application).
+   This is more correct than the previous `consumer_lag` which was using
+   either `committed_offset` or `app_offset` (last message passed
+   to application).
 
 ## Enhancements
 
@@ -73,7 +75,7 @@ librdkafka v1.7.0 is feature release:
    created partition objects, or partitions that were changing leaders, to
    not have their message queues purged. This could cause
    `abort_transaction()` to time out. This issue is now fixed.
- * In certain high-thruput produce rate patterns the producing could stall for
+ * In certain high-thruput produce rate patterns producing could stall for
    1 second, regardless of `linger.ms`, due to rate-limiting of internal
    queue wakeups. This is now fixed by not rate-limiting queue wakeups but
    instead limiting them to one wakeup per queue reader poll. #2912.
@@ -131,7 +133,7 @@ librdkafka v1.6.1 is a maintenance release.
    underlying request was attempted to be sent after the transaction had
    failed.
  * When gradually producing to multiple partitions (resulting in multiple
-   underlying AddPartitionsToTxnRequests) sub-sequent partitions could get
+   underlying AddPartitionsToTxnRequests) subsequent partitions could get
    stuck in pending state under certain conditions. These pending partitions
    would not send queued messages to the broker and eventually trigger
    message timeouts, failing the current transaction. This is now fixed.

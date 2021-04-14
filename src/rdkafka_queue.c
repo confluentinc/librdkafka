@@ -175,6 +175,8 @@ int rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock) {
 	 * by locks taken from rd_kafka_op_destroy(). */
 	TAILQ_MOVE(&tmpq, &rkq->rkq_q, rko_link);
 
+        rd_kafka_q_mark_served(rkq);
+
 	/* Zero out queue */
         rd_kafka_q_reset(rkq);
 
@@ -226,6 +228,7 @@ void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
                 size += rko->rko_len;
         }
 
+        rd_kafka_q_mark_served(rkq);
 
         rkq->rkq_qlen -= cnt;
         rkq->rkq_qsize -= size;
@@ -256,7 +259,7 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 
 	if (!dstq->rkq_fwdq && !srcq->rkq_fwdq) {
 		if (cnt > 0 && dstq->rkq_qlen == 0)
-			rd_kafka_q_io_event(dstq, rd_false/*no rate-limiting*/);
+			rd_kafka_q_io_event(dstq);
 
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
@@ -284,6 +287,9 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 				mcnt++;
 			}
 		}
+
+                rd_kafka_q_mark_served(srcq);
+
 	} else
 		mcnt = rd_kafka_q_move_cnt(dstq->rkq_fwdq ? dstq->rkq_fwdq:dstq,
 					   srcq->rkq_fwdq ? srcq->rkq_fwdq:srcq,
@@ -362,6 +368,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, rd_ts_t timeout_us,
                         while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                                !(rko = rd_kafka_op_filter(rkq, rko, version)))
                                 ;
+
+                        rd_kafka_q_mark_served(rkq);
 
                         if (rko) {
                                 /* Proper versioned op */
@@ -474,6 +482,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                  &timeout_tspec) == thrd_success)
                 ;
+
+        rd_kafka_q_mark_served(rkq);
 
 	if (!rko) {
 		mtx_unlock(&rkq->rkq_lock);
@@ -590,6 +600,8 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                        cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                          &timeout_tspec) == thrd_success)
                         ;
+
+                rd_kafka_q_mark_served(rkq);
 
 		if (!rko) {
                         mtx_unlock(&rkq->rkq_lock);
@@ -771,8 +783,7 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, rd_socket_t fd,
                 qio->fd = fd;
                 qio->size = size;
                 qio->payload = (void *)(qio+1);
-                qio->ts_rate = rkq->rkq_rk->rk_conf.buffering_max_us;
-                qio->ts_last = 0;
+                qio->sent = rd_false;
                 qio->event_cb = NULL;
                 qio->event_cb_opaque = NULL;
                 memcpy(qio->payload, payload, size);
@@ -799,7 +810,7 @@ void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 
 
 void rd_kafka_queue_yield (rd_kafka_queue_t *rkqu) {
-        rd_kafka_q_yield(rkqu->rkqu_q, rd_true);
+        rd_kafka_q_yield(rkqu->rkqu_q);
 }
 
 
@@ -894,6 +905,9 @@ int rd_kafka_q_apply (rd_kafka_q_t *rkq,
 		next = TAILQ_NEXT(next, rko_link);
                 cnt += callback(rkq, rko, opaque);
 	}
+
+        rd_kafka_q_mark_served(rkq);
+
         mtx_unlock(&rkq->rkq_lock);
 
         return cnt;

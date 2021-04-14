@@ -49,6 +49,10 @@ librdkafka v1.7.0 is feature release:
 
 ### Consumer fixes
 
+ * If a rebalance happened during a `consume_batch..()` call the already
+   accumulated messages for revoked partitions were not purged, which would
+   pass messages to the application for partitions that were no longer owned
+   by the consumer. Fixed by @jliunyu. #3340.
  * The consumer group deemed cached metadata up to date by checking
    `topic.metadata.refresh.interval.ms`: if this property was set too low
    it would cause cached metadata to be unusable and new metadata to be fetched,
@@ -69,6 +73,10 @@ librdkafka v1.7.0 is feature release:
    created partition objects, or partitions that were changing leaders, to
    not have their message queues purged. This could cause
    `abort_transaction()` to time out. This issue is now fixed.
+ * In certain high-thruput produce rate patterns the producing could stall for
+   1 second, regardless of `linger.ms`, due to rate-limiting of internal
+   queue wakeups. This is now fixed by not rate-limiting queue wakeups but
+   instead limiting them to one wakeup per queue reader poll. #2912.
 
 ### Transactional Producer fixes
 

@@ -82,7 +82,7 @@ static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts,
 		TAILQ_INSERT_HEAD(&rkts->rkts_timers, rtmr, rtmr_link);
                 cnd_signal(&rkts->rkts_cond);
                 if (rkts->rkts_wakeq)
-                        rd_kafka_q_yield(rkts->rkts_wakeq, rd_true);
+                        rd_kafka_q_yield(rkts->rkts_wakeq);
 	} else
 		TAILQ_INSERT_SORTED(&rkts->rkts_timers, rtmr,
                                     rd_kafka_timer_t *, rtmr_link,

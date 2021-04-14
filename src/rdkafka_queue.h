@@ -42,6 +42,13 @@
 
 TAILQ_HEAD(rd_kafka_op_tailq, rd_kafka_op_s);
 
+/**
+ * @struct Queue for rd_kafka_op_t*.
+ *
+ * @remark All readers of the queue must call rd_kafka_q_mark_served()
+ *         after reading the queue (while still holding the queue lock) to
+ *         clear the wakeup-sent flag.
+ */
 struct rd_kafka_q_s {
 	mtx_t  rkq_lock;
 	cnd_t  rkq_cond;
@@ -90,8 +97,10 @@ struct rd_kafka_q_io {
 	rd_socket_t fd;
 	void  *payload;
 	size_t size;
-        rd_ts_t ts_rate;  /**< How often the IO wakeup may be performed (us) */
-        rd_ts_t ts_last;  /**< Last IO wakeup */
+        rd_bool_t sent; /**< Wake-up has been sent.
+                         *   This field is reset to false by the queue
+                         *   reader, allowing a new wake-up to be sent by a
+                         *   subsequent writer. */
         /* For callback-based signalling */
         void (*event_cb) (rd_kafka_t *rk, void *opaque);
         void *event_cb_opaque;
@@ -286,31 +295,32 @@ static RD_INLINE RD_UNUSED int rd_kafka_q_is_fwded (rd_kafka_q_t *rkq) {
 /**
  * @brief Trigger an IO event for this queue.
  *
- * @param rate_limit if true, rate limit IO-based wakeups.
- *
  * @remark Queue MUST be locked
  */
 static RD_INLINE RD_UNUSED
-void rd_kafka_q_io_event (rd_kafka_q_t *rkq, rd_bool_t rate_limit) {
+void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 
 	if (likely(!rkq->rkq_qio))
 		return;
 
         if (rkq->rkq_qio->event_cb) {
-                rkq->rkq_qio->event_cb(rkq->rkq_rk, rkq->rkq_qio->event_cb_opaque);
+                rkq->rkq_qio->event_cb(rkq->rkq_rk,
+                                       rkq->rkq_qio->event_cb_opaque);
                 return;
         }
 
 
-        if (rate_limit) {
-                rd_ts_t now = rd_clock();
-                if (likely(rkq->rkq_qio->ts_last + rkq->rkq_qio->ts_rate > now))
-                        return;
+        /* Only one wake-up event should be sent per non-polling period.
+         * As the queue reader calls poll/reads the channel it calls to
+         * rd_kafka_q_mark_served() to reset the wakeup sent flag, allowing
+         * further wakeups in the next non-polling period. */
+        if (rkq->rkq_qio->sent)
+                return; /* Wake-up event already written */
 
-                rkq->rkq_qio->ts_last = now;
-        }
+        rkq->rkq_qio->sent = rd_true;
 
-        /* Ignore errors, not much to do anyway. */
+        /* Write wake-up event to socket.
+         * Ignore errors, not much to do anyway. */
         if (rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload,
                      (int)rkq->rkq_qio->size) == -1)
                 ;
@@ -333,7 +343,7 @@ int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
  * @brief Wake up waiters without enqueuing an op.
  */
 static RD_INLINE RD_UNUSED void
-rd_kafka_q_yield (rd_kafka_q_t *rkq, rd_bool_t rate_limit) {
+rd_kafka_q_yield (rd_kafka_q_t *rkq) {
         rd_kafka_q_t *fwdq;
 
         mtx_lock(&rkq->rkq_lock);
@@ -350,12 +360,12 @@ rd_kafka_q_yield (rd_kafka_q_t *rkq, rd_bool_t rate_limit) {
                 rkq->rkq_flags |= RD_KAFKA_Q_F_YIELD;
                 cnd_broadcast(&rkq->rkq_cond);
                 if (rkq->rkq_qlen == 0)
-                        rd_kafka_q_io_event(rkq, rate_limit);
+                        rd_kafka_q_io_event(rkq);
 
                 mtx_unlock(&rkq->rkq_lock);
         } else {
                 mtx_unlock(&rkq->rkq_lock);
-                rd_kafka_q_yield(fwdq, rate_limit);
+                rd_kafka_q_yield(fwdq);
                 rd_kafka_q_destroy(fwdq);
         }
 
@@ -426,7 +436,7 @@ int rd_kafka_q_enq1 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 rd_kafka_q_enq0(rkq, rko, at_head);
                 cnd_signal(&rkq->rkq_cond);
                 if (rkq->rkq_qlen == 1)
-                        rd_kafka_q_io_event(rkq, rd_false/*no rate-limiting*/);
+                        rd_kafka_q_io_event(rkq);
 
                 if (do_lock)
                         mtx_unlock(&rkq->rkq_lock);
@@ -490,6 +500,23 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rkq->rkq_qsize -= rko->rko_len;
 }
 
+
+/**
+ * @brief Mark queue as served / read.
+ *
+ * This is currently used by the queue reader side to reset the io-event
+ * wakeup flag.
+ *
+ * Should be called by all queue readers.
+ *
+ * @locks_required rkq must be locked.
+*/
+static RD_INLINE RD_UNUSED void rd_kafka_q_mark_served (rd_kafka_q_t *rkq) {
+        if (rkq->rkq_qio)
+                rkq->rkq_qio->sent = rd_false;
+}
+
+
 /**
  * Concat all elements of 'srcq' onto tail of 'rkq'.
  * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
@@ -531,11 +558,12 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
 		if (rkq->rkq_qlen == 0)
-			rd_kafka_q_io_event(rkq, rd_false/*no rate-limiting*/);
+			rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
 		cnd_signal(&rkq->rkq_cond);
 
+                rd_kafka_q_mark_served(srcq);
                 rd_kafka_q_reset(srcq);
 	} else
 		r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
@@ -572,10 +600,11 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
                 /* Move srcq to rkq */
                 TAILQ_MOVE(&rkq->rkq_q, &srcq->rkq_q, rko_link);
 		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
-			rd_kafka_q_io_event(rkq, rd_false/*no rate-limiting*/);
+                        rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
 
+                rd_kafka_q_mark_served(srcq);
                 rd_kafka_q_reset(srcq);
 	} else
 		rd_kafka_q_prepend0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,

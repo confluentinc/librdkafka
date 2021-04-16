@@ -125,7 +125,10 @@ static void do_test_basic_producer_txn (rd_bool_t enable_compression) {
         rd_kafka_conf_t *conf, *p_conf, *c_conf;
         int i;
 
-        SUB_TEST_QUICK("with%s compression", enable_compression ? "" : "out");
+        /* Mark one of run modes as quick so we don't run both when
+         * in a hurry.*/
+        SUB_TEST0(enable_compression /* quick */,
+                  "with%s compression", enable_compression ? "" : "out");
 
         test_conf_init(&conf, NULL, 30);
 

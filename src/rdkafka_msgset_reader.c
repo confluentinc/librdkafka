@@ -1385,7 +1385,7 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                    msetr->msetr_msg_bytes,
                    rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
-                   rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
+                   rktp->rktp_partition, rd_kafka_q_len(msetr->msetr_par_rkq),
                    msetr->msetr_tver->version, last_offset,
                    msetr->msetr_ctrl_cnt,
                    msetr->msetr_compression ?

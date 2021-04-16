@@ -139,7 +139,7 @@ deploy:
     secure: "GE6O0gk5VRervntCKAmczfBdSOvbr9bouJ15H2rpcOgHi8KTDEjI/NS69eLiRRSHBCARtcRqN4wfgy+/dn7D1VklY8a1rAKu02wGjw+fq7k7GVSSmynR/aF619R4SIABsaAhNCwswXnLHuLlq8HFk5ulG3z8DUvYBczB45bWZfQ="
   bucket: librdkafka-ci-packages
   region: us-west-1
-  cleanup: false
+  skip_cleanup: true
   local-dir: artifacts
   upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${TRAVIS_CPU_ARCH}__tag-${TRAVIS_TAG}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_JOB_NUMBER}__lnk-${LINKAGE}
   on:

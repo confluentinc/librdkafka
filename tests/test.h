@@ -152,6 +152,7 @@ struct test {
         int     failcnt;     /**< Number of failures, useful with FAIL_LATER */
         char    failstr[512+1];/**< First test failure reason */
         char    subtest[400];/**< Current subtest, if any */
+        test_timing_t subtest_duration; /**< Subtest duration timing */
 
 #if WITH_SOCKEM
         rd_list_t sockets;
@@ -746,6 +747,32 @@ int test_error_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                 break;                                                  \
         TEST_FAIL("%s failed: %s\n",                                    \
                   _desc, rd_kafka_err2str(_err));                       \
+        } while (0)
+
+
+/**
+ * @brief Print a rich error_t object in all its glory. NULL is ok.
+ *
+ * @param ... Is a prefix format-string+args that is printed with TEST_SAY()
+ *            prior to the error details. E.g., "commit() returned: ".
+ *            A newline is automatically appended.
+ */
+#define TEST_SAY_ERROR(ERROR,...) do {                   \
+        rd_kafka_error_t *_e = (ERROR);                  \
+        TEST_SAY(__VA_ARGS__);                           \
+        if (!_e) {                                       \
+                TEST_SAY0("No error" _C_CLR "\n");       \
+                break;                                   \
+        }                                                \
+        if (rd_kafka_error_is_fatal(_e))                 \
+                TEST_SAY0(_C_RED "FATAL ");              \
+        if (rd_kafka_error_is_retriable(_e))             \
+                TEST_SAY0("Retriable ");                 \
+        if (rd_kafka_error_txn_requires_abort(_e))       \
+                TEST_SAY0("TxnRequiresAbort ");          \
+        TEST_SAY0("Error: %s: %s" _C_CLR "\n",           \
+                  rd_kafka_error_name(_e),               \
+                  rd_kafka_error_string(_e));            \
         } while (0)
 
 /**

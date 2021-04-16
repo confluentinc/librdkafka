@@ -4276,7 +4276,7 @@ rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
         /* transaction_timeout_ms */
         rd_kafka_buf_write_i32(rkbuf, transaction_timeout_ms);
 
-        if (ApiVersion >= 2) {
+        if (ApiVersion >= 3) {
                 /* Current PID */
                 rd_kafka_buf_write_i64(rkbuf,
                                        current_pid ? current_pid->id : -1);

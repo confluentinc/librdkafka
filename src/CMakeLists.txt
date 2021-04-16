@@ -315,6 +315,8 @@ else()
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
   set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
+  string(APPEND PKG_CONFIG_LIBS " ${PKG_CONFIG_LIBS_PRIVATE}")
+  set(PKG_CONFIG_LIBS_PRIVATE "")
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka-static.pc"

@@ -792,14 +792,21 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
         const int msgcnt[3] = { 6, 4, 1 };
         rd_kafka_topic_partition_list_t *records;
         test_msgver_t expect_mv, actual_mv;
-        /* KIP-360's broker-side changes no longer triggers this error
-         * following DeleteRecords on AK 2.4.0 or later. */
-        rd_bool_t expect_fail = test_broker_version < TEST_BRKVER(2,4,0,0);
+        /* This test triggers UNKNOWN_PRODUCER_ID on AK <2.4 and >2.4, but
+         * not on AK 2.4.
+         * On AK <2.5 (pre KIP-360) these errors are unrecoverable,
+         * on AK >2.5 (with KIP-360) we can recover.
+         * Since 2.4 is not behaving as the other releases we skip it here. */
+        rd_bool_t expect_fail = test_broker_version < TEST_BRKVER(2,5,0,0);
 
         SUB_TEST_QUICK("%s",
                        expect_fail ?
-                       "expecting failure since broker is < 2.4" :
-                       "not expecting failure since broker is >= 2.4");
+                       "expecting failure since broker is < 2.5" :
+                       "not expecting failure since broker is >= 2.5");
+
+        if (test_broker_version >= TEST_BRKVER(2,4,0,0) &&
+            test_broker_version < TEST_BRKVER(2,5,0,0))
+                SUB_TEST_SKIP("can't trigger UNKNOWN_PRODUCER_ID on AK 2.4");
 
         if (expect_fail)
                 test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
@@ -874,13 +881,22 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
 
         error = rd_kafka_commit_transaction(p, -1);
 
-        TEST_SAY("commit_transaction() returned: %s\n",
-                 error ? rd_kafka_error_string(error) : "success");
+        TEST_SAY_ERROR(error, "commit_transaction() returned: ");
 
         if (expect_fail) {
                 TEST_ASSERT(error != NULL,
                             "Expected transaction to fail");
+                TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
+                            "Expected abortable error");
+                rd_kafka_error_destroy(error);
 
+                /* Now abort transaction, which should raise the fatal error
+                 * since it is the abort that performs the PID reinitialization.
+                 */
+                error = rd_kafka_abort_transaction(p, -1);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+                TEST_ASSERT(error != NULL,
+                            "Expected abort to fail");
                 TEST_ASSERT(rd_kafka_error_is_fatal(error),
                             "Expecting fatal error");
                 TEST_ASSERT(!rd_kafka_error_is_retriable(error),
@@ -889,6 +905,7 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
                             "Did not expect abortable error");
 
                 rd_kafka_error_destroy(error);
+
         } else {
                 TEST_ASSERT(!error, "Did not expect commit to fail: %s",
                             rd_kafka_error_string(error));
@@ -910,9 +927,9 @@ static void do_test_fatal_idempo_error_without_kip360 (void) {
         rd_kafka_destroy(p);
 
         /* Consume messages.
-         * On AK<2.4 (expect_fail=true) we do not expect to see any messages
+         * On AK<2.5 (expect_fail=true) we do not expect to see any messages
          * since the producer will have failed with a fatal error.
-         * On AK>=2.4 (expect_fail=false) we should only see messages from
+         * On AK>=2.5 (expect_fail=false) we should only see messages from
          * txn 3 which are sent after the producer has recovered.
          */
 

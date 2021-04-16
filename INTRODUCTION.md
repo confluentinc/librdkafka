@@ -1867,7 +1867,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-345 - Consumer: Static membership                                    | 2.4.0                       | Supported                                                                                     |
 | KIP-357 - AdminAPI: list ACLs per principal                              | 2.1.0                       | Not supported                                                                                 |
 | KIP-359 - Producer: use EpochLeaderId                                    | 2.4.0                       | Not supported                                                                                 |
-| KIP-360 - Improve handling of unknown Idempotent Producer                | 2.4.0                       | Supported                                                                                     |
+| KIP-360 - Improve handling of unknown Idempotent Producer                | 2.5.0                       | Supported                                                                                     |
 | KIP-361 - Consumer: add config to disable auto topic creation            | 2.3.0                       | Supported                                                                                     |
 | KIP-368 - SASL period reauth                                             | 2.2.0                       | Not supported                                                                                 |
 | KIP-369 - Always roundRobin partitioner                                  | 2.4.0                       | Not supported                                                                                 |

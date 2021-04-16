@@ -1194,8 +1194,6 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
         if (!strncmp(name, "rd_kafka_", strlen("rd_kafka_")))
                 name += strlen("rd_kafka_");
 
-        rd_kafka_dbg(rk, EOS, "TXNAPI", "Transactional API called: %s", name);
-
         if (flags & RD_KAFKA_TXN_CURR_API_F_REUSE) {
                 /* Reuse the current API call state. */
                 flags &= ~RD_KAFKA_TXN_CURR_API_F_REUSE;
@@ -1203,6 +1201,11 @@ rd_kafka_txn_curr_api_req (rd_kafka_t *rk, const char *name,
         }
 
         rd_kafka_wrlock(rk);
+
+        rd_kafka_dbg(rk, EOS, "TXNAPI", "Transactional API called: %s "
+                     "(in txn state %s, idemp state %s)", name,
+                     rd_kafka_txn_state2str(rk->rk_eos.txn_state),
+                     rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
 
         /* First set for_reuse to the current flags to match with
          * the passed flags. */

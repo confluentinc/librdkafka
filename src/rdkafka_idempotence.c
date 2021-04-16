@@ -278,17 +278,25 @@ void rd_kafka_idemp_pid_fsm (rd_kafka_t *rk) {
                 }
 
                 if (rd_kafka_is_transactional(rk)) {
+                        int err_of = 0;
+
                         /* If this is a transactional producer and the
                          * PID-epoch needs to be bumped we'll require KIP-360
                          * support on the broker, else raise a fatal error. */
 
-                        if (rd_kafka_pid_valid(rk->rk_eos.pid))
+                        if (rd_kafka_pid_valid(rk->rk_eos.pid)) {
                                 rd_rkb_dbg(rkb, EOS, "GETPID",
                                            "Requesting ProducerId bump for %s",
                                            rd_kafka_pid2str(rk->rk_eos.pid));
-                        else
+                                err_of = rd_snprintf(errstr, sizeof(errstr),
+                                                     "Failed to request "
+                                                     "ProducerId bump: ");
+                                rd_assert(err_of < 0 ||
+                                          err_of < (int)sizeof(errstr));
+                        } else {
                                 rd_rkb_dbg(rkb, EOS, "GETPID",
                                            "Acquiring ProducerId");
+                        }
 
                         err = rd_kafka_InitProducerIdRequest(
                                 rkb,
@@ -296,7 +304,7 @@ void rd_kafka_idemp_pid_fsm (rd_kafka_t *rk) {
                                 rk->rk_conf.eos.transaction_timeout_ms,
                                 rd_kafka_pid_valid(rk->rk_eos.pid) ?
                                 &rk->rk_eos.pid : NULL,
-                                errstr, sizeof(errstr),
+                                errstr+err_of, sizeof(errstr)-err_of,
                                 RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                                 rd_kafka_handle_InitProducerId, NULL);
 

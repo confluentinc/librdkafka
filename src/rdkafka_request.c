@@ -2740,7 +2740,7 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                  * the producer.
                  *
                  * In case of the transactional producer and a transaction
-                 * coordinator that supports KIP-360 (>= AK 2.4, checked from
+                 * coordinator that supports KIP-360 (>= AK 2.5, checked from
                  * the txnmgr, not here) we'll raise an abortable error and
                  * flag that the epoch needs to be bumped on the coordinator. */
                 if (rd_kafka_is_transactional(rk)) {
@@ -4244,7 +4244,7 @@ rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
                 if (ApiVersion == -1) {
                         rd_snprintf(errstr, errstr_size,
                                     "InitProducerId (KIP-360) not supported by "
-                                    "broker, requires broker version >= 2.4.0: "
+                                    "broker, requires broker version >= 2.5.0: "
                                     "unable to recover from previous "
                                     "transactional error");
                         rd_kafka_replyq_destroy(&replyq);

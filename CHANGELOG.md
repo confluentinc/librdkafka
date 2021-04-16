@@ -3,6 +3,7 @@
 librdkafka v1.7.0 is feature release:
 
  * [KIP-360](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=89068820) - Improve reliability of transactional producer.
+   Requires Apache Kafka 2.5 or later.
  * OpenSSL Engine support (`ssl.engine.location`) by @adinigam and @ajbarb.
 
 ## Enhancements

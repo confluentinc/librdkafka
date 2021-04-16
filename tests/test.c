@@ -6369,6 +6369,8 @@ int test_sub_start (const char *func, int line, int is_quick,
                             "%s:%d", func, line);
         }
 
+        TIMING_START(&test_curr->subtest_duration, "SUBTEST");
+
         TEST_SAY(_C_MAG "[ %s ]\n", test_curr->subtest);
 
         return 1;
@@ -6376,15 +6378,45 @@ int test_sub_start (const char *func, int line, int is_quick,
 
 
 /**
- * @brief Sub-test has passed.
+ * @brief Reset the current subtest state.
  */
-void test_sub_pass (void) {
-        TEST_ASSERT(*test_curr->subtest);
-
-        TEST_SAY(_C_GRN "[ %s: PASS ]\n", test_curr->subtest);
+static void test_sub_reset (void) {
         *test_curr->subtest = '\0';
         test_curr->is_fatal_cb = NULL;
         test_curr->ignore_dr_err = rd_false;
         test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->dr_mv = NULL;
+}
+
+/**
+ * @brief Sub-test has passed.
+ */
+void test_sub_pass (void) {
+
+        TEST_ASSERT(*test_curr->subtest);
+
+        TEST_SAYL(1, _C_GRN "[ %s: PASS (%.02fs) ]\n", test_curr->subtest,
+                  (float)(TIMING_DURATION(&test_curr->subtest_duration) /
+                          1000000.0f));
+
+        test_sub_reset();
+}
+
+
+/**
+ * @brief Skip sub-test (must have been started with SUB_TEST*()).
+ */
+void test_sub_skip (const char *fmt, ...) {
+        va_list ap;
+        char buf[256];
+
+        TEST_ASSERT(*test_curr->subtest);
+
+        va_start(ap, fmt);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+        TEST_SAYL(1, _C_YEL "[ %s: SKIP: %s ]\n", test_curr->subtest, buf);
+
+        test_sub_reset();
 }

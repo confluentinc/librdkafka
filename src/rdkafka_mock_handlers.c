@@ -1210,7 +1210,7 @@ rd_kafka_mock_handle_Heartbeat (rd_kafka_mock_connection_t *mconn,
         rd_kafkap_str_t GroupInstanceId = RD_KAFKAP_STR_INITIALIZER;
         int32_t GenerationId;
         rd_kafka_resp_err_t err;
-        rd_kafka_mock_cgrp_t *mcgrp;
+        rd_kafka_mock_cgrp_t *mcgrp = NULL;
         rd_kafka_mock_cgrp_member_t *member = NULL;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
@@ -1283,7 +1283,7 @@ rd_kafka_mock_handle_LeaveGroup (rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafkap_str_t GroupId, MemberId;
         rd_kafka_resp_err_t err;
-        rd_kafka_mock_cgrp_t *mcgrp;
+        rd_kafka_mock_cgrp_t *mcgrp = NULL;
         rd_kafka_mock_cgrp_member_t *member = NULL;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);

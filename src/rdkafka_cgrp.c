@@ -1154,7 +1154,7 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
  * @param member_cnt Number of elements in members.
  * @param par_cnt The total number of partitions expected to be collected.
  * @param collect_owned If rd_true, rkgm_owned partitions will be collected,
- *        else rdgm_assignment partitions will be collected.
+ *        else rkgm_assignment partitions will be collected.
  */
 static map_toppar_member_info_t *
 rd_kafka_collect_partitions (const rd_kafka_group_member_t *members,

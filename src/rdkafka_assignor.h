@@ -49,14 +49,27 @@ typedef enum rd_kafka_rebalance_protocol_t {
 
 
 typedef struct rd_kafka_group_member_s {
+        /** Subscribed topics (partition field is ignored). */
         rd_kafka_topic_partition_list_t *rkgm_subscription;
+        /** Partitions assigned to this member after running the assignor.
+         *  E.g., the current assignment coming out of the rebalance. */
         rd_kafka_topic_partition_list_t *rkgm_assignment;
+        /** Partitions reported as currently owned by the member, read
+         *  from consumer metadata. E.g., the current assignment going into
+         *  the rebalance. */
         rd_kafka_topic_partition_list_t *rkgm_owned;
+        /** List of eligible topics in subscription. E.g., subscribed topics
+         *  that exist. */
         rd_list_t                        rkgm_eligible;
+        /** Member id (e.g., client.id-some-uuid). */
         rd_kafkap_str_t                 *rkgm_member_id;
+        /** Group instance id. */
         rd_kafkap_str_t                 *rkgm_group_instance_id;
+        /** Member-specific opaque userdata. */
         rd_kafkap_bytes_t               *rkgm_userdata;
+        /** Member metadata, e.g., the currently owned partitions. */
         rd_kafkap_bytes_t               *rkgm_member_metadata;
+        /** Group generation id. */
         int                              rkgm_generation;
 } rd_kafka_group_member_t;
 

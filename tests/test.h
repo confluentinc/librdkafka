@@ -534,6 +534,13 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 			test_msgver_t *mv);
 
 void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll);
+void test_consumer_verify_assignment0 (const char *func, int line,
+                                       rd_kafka_t *rk,
+                                       rd_bool_t fail_immediately, ...);
+#define test_consumer_verify_assignment(rk,fail_immediately,...)        \
+        test_consumer_verify_assignment0(__FUNCTION__,__LINE__,rk,      \
+                                         fail_immediately,__VA_ARGS__)
+
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
                            rd_kafka_topic_partition_list_t *parts);
 void test_consumer_incremental_assign (const char *what, rd_kafka_t *rk,

@@ -1895,16 +1895,21 @@ static void o_java_interop() {
 
     if (Test::assignment_partition_count(c, NULL) == 4 &&
         java_pid != 0 &&
-        !changed_subscription &&
-        rebalance_cb.assign_call_cnt == 3) {
+        !changed_subscription) {
+      if (rebalance_cb.assign_call_cnt != 2)
+        Test::Fail(tostr() << "Expecting consumer's assign_call_cnt to be 2, "
+                   "not " << rebalance_cb.assign_call_cnt);
       Test::Say(_C_GRN "Java consumer is now part of the group\n");
       Test::subscribe(c, topic_name_1);
       changed_subscription = true;
     }
 
-    if (Test::assignment_partition_count(c, NULL) == 1 &&
-        changed_subscription && rebalance_cb.assign_call_cnt == 4 &&
-        changed_subscription && !changed_subscription_done) {
+    /* Depending on the timing of resubscribe rebalancing and the
+     * Java consumer terminating we might have one or two rebalances,
+     * hence the fuzzy <=5 and >=5 checks. */
+    if (Test::assignment_partition_count(c, NULL) == 2 &&
+        changed_subscription && rebalance_cb.assign_call_cnt <= 5 &&
+        !changed_subscription_done) {
       /* All topic 1 partitions will be allocated to this consumer whether or not the Java
        * consumer has unsubscribed yet because the sticky algorithm attempts to ensure
        * partition counts are even. */
@@ -1913,7 +1918,7 @@ static void o_java_interop() {
     }
 
     if (Test::assignment_partition_count(c, NULL) == 2 &&
-        changed_subscription && rebalance_cb.assign_call_cnt == 5 &&
+        changed_subscription && rebalance_cb.assign_call_cnt >= 5 &&
         changed_subscription_done) {
       /* When the java consumer closes, this will cause an empty assign rebalance_cb event,
        * allowing detection of when this has happened. */
@@ -2888,6 +2893,91 @@ extern "C" {
     SUB_TEST_PASS();
   }
 
+
+  /**
+   * @brief Verify that incremental rebalances retain stickyness.
+   */
+  static void x_incremental_rebalances (void) {
+#define _NUM_CONS 3
+    rd_kafka_t *c[_NUM_CONS];
+    rd_kafka_conf_t *conf;
+    const char *topic = test_mk_topic_name("0113_x", 1);
+    int i;
+
+    SUB_TEST();
+    test_conf_init(&conf, NULL, 60);
+
+    test_create_topic(NULL, topic, 6, 1);
+
+    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+    for (i = 0 ; i < _NUM_CONS ; i++) {
+      char clientid[32];
+      rd_snprintf(clientid, sizeof(clientid), "consumer%d", i);
+      test_conf_set(conf, "client.id", clientid);
+
+      c[i] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+    }
+    rd_kafka_conf_destroy(conf);
+
+    /* First consumer joins group */
+    TEST_SAY("%s: joining\n", rd_kafka_name(c[0]));
+    test_consumer_subscribe(c[0], topic);
+    test_consumer_wait_assignment(c[0], rd_true/*poll*/);
+    test_consumer_verify_assignment(c[0], rd_true/*fail immediately*/,
+                                    topic, 0,
+                                    topic, 1,
+                                    topic, 2,
+                                    topic, 3,
+                                    topic, 4,
+                                    topic, 5,
+                                    NULL);
+
+
+    /* Second consumer joins group */
+    TEST_SAY("%s: joining\n", rd_kafka_name(c[1]));
+    test_consumer_subscribe(c[1], topic);
+    test_consumer_wait_assignment(c[1], rd_true/*poll*/);
+    rd_sleep(3);
+    test_consumer_verify_assignment(c[0], rd_false/*fail later*/,
+                                    topic, 3,
+                                    topic, 4,
+                                    topic, 5,
+                                    NULL);
+    test_consumer_verify_assignment(c[1], rd_false/*fail later*/,
+                                    topic, 0,
+                                    topic, 1,
+                                    topic, 2,
+                                    NULL);
+
+    /* Third consumer joins group */
+    TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
+    test_consumer_subscribe(c[2], topic);
+    test_consumer_wait_assignment(c[2], rd_true/*poll*/);
+    rd_sleep(3);
+    test_consumer_verify_assignment(c[0], rd_false/*fail later*/,
+                                    topic, 4,
+                                    topic, 5,
+                                    NULL);
+    test_consumer_verify_assignment(c[1], rd_false/*fail later*/,
+                                    topic, 1,
+                                    topic, 2,
+                                    NULL);
+    test_consumer_verify_assignment(c[2], rd_false/*fail later*/,
+                                    topic, 3,
+                                    topic, 0,
+                                    NULL);
+
+    /* Raise any previously failed verify_assignment calls and fail the test */
+    TEST_LATER_CHECK();
+
+    for (i = 0 ; i < _NUM_CONS ; i++)
+      rd_kafka_destroy(c[i]);
+
+    SUB_TEST_PASS();
+
+    #undef _NUM_CONS
+  }
+
   /* Local tests not needing a cluster */
   int main_0113_cooperative_rebalance_local (int argc, char **argv) {
     a_assign_rapid();
@@ -2907,7 +2997,7 @@ extern "C" {
     c_subscribe_no_cb_test(true/*close consumer*/);
 
     if (test_quick) {
-      Test::Say("Skipping tests c -> s due to quick mode\n");
+      Test::Say("Skipping tests >= c_ .. due to quick mode\n");
       return 0;
     }
 
@@ -2941,6 +3031,7 @@ extern "C" {
                               true/*auto commit*/);
     v_commit_during_rebalance(true/*with rebalance callback*/,
                               false/*manual commit*/);
+    x_incremental_rebalances();
 
     return 0;
   }

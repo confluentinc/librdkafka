@@ -1237,11 +1237,11 @@ prepopulateCurrentAssignments (
                            rd_kafka_topic_partition_list_new(
                                    (int)estimated_partition_cnt));
 
-                if (!consumer->rkgm_assignment)
+                if (!consumer->rkgm_owned)
                         continue;
 
-                for (j = 0 ; j < (int)consumer->rkgm_assignment->cnt ; j++) {
-                        partition = &consumer->rkgm_assignment->elems[j];
+                for (j = 0 ; j < (int)consumer->rkgm_owned->cnt ; j++) {
+                        partition = &consumer->rkgm_owned->elems[j];
 
                         consumers = RD_MAP_GET_OR_SET(
                                 &sortedPartitionConsumersByGeneration,

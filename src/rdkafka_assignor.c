@@ -338,13 +338,14 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_ASSIGNOR,
                                      "ASSIGN",
                                      " Member \"%.*s\"%s with "
-                                     "%d assigned partition(s) and "
+                                     "%d owned partition(s) and "
                                      "%d subscribed topic(s):",
                                      RD_KAFKAP_STR_PR(member->rkgm_member_id),
                                      !rd_kafkap_str_cmp(member->rkgm_member_id,
                                                         rkcg->rkcg_member_id) ?
                                      " (me)":"",
-                                     member->rkgm_assignment->cnt,
+                                     member->rkgm_owned ?
+                                     member->rkgm_owned->cnt : 0,
                                      member->rkgm_subscription->cnt);
                         for (j = 0 ; j < member->rkgm_subscription->cnt ; j++) {
                                 const rd_kafka_topic_partition_t *p =

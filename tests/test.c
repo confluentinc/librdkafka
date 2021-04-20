@@ -2697,6 +2697,67 @@ void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll) {
 
 
 /**
+ * @brief Verify that the consumer's assignment matches the expected assignment.
+ *
+ * The va-list is a NULL-terminated list of (const char *topic, int partition)
+ * tuples.
+ *
+ * Fails the test on mismatch, unless \p fail_immediately is false.
+ */
+void test_consumer_verify_assignment0 (const char *func, int line,
+                                       rd_kafka_t *rk,
+                                       rd_bool_t fail_immediately, ...) {
+        va_list ap;
+        int cnt = 0;
+        const char *topic;
+        rd_kafka_topic_partition_list_t *assignment;
+        rd_kafka_resp_err_t err;
+        int i;
+
+        if ((err = rd_kafka_assignment(rk, &assignment)))
+                TEST_FAIL("%s:%d: Failed to get assignment for %s: %s",
+                          func, line, rd_kafka_name(rk), rd_kafka_err2str(err));
+
+        TEST_SAY("%s assignment (%d partition(s)):\n", rd_kafka_name(rk),
+                 assignment->cnt);
+        for (i = 0 ; i < assignment->cnt ; i++)
+                TEST_SAY(" %s [%"PRId32"]\n",
+                         assignment->elems[i].topic,
+                         assignment->elems[i].partition);
+
+        va_start(ap, fail_immediately);
+        while ((topic = va_arg(ap, const char *))) {
+                int partition = va_arg(ap, int);
+                cnt++;
+
+                if (!rd_kafka_topic_partition_list_find(assignment,
+                                                        topic, partition))
+                        TEST_FAIL_LATER(
+                                "%s:%d: Expected %s [%d] not found in %s's "
+                                "assignment (%d partition(s))",
+                                func, line,
+                                topic, partition, rd_kafka_name(rk),
+                                assignment->cnt);
+        }
+        va_end(ap);
+
+        if (cnt != assignment->cnt)
+                TEST_FAIL_LATER(
+                        "%s:%d: "
+                        "Expected %d assigned partition(s) for %s, not %d",
+                        func, line, cnt, rd_kafka_name(rk), assignment->cnt);
+
+        if (fail_immediately)
+                TEST_LATER_CHECK();
+
+        rd_kafka_topic_partition_list_destroy(assignment);
+}
+
+
+
+
+
+/**
  * @brief Start subscribing for 'topic'
  */
 void test_consumer_subscribe (rd_kafka_t *rk, const char *topic) {

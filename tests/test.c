@@ -2706,7 +2706,7 @@ void test_consumer_wait_assignment (rd_kafka_t *rk, rd_bool_t do_poll) {
  */
 void test_consumer_verify_assignment0 (const char *func, int line,
                                        rd_kafka_t *rk,
-                                       rd_bool_t fail_immediately, ...) {
+                                       int fail_immediately, ...) {
         va_list ap;
         int cnt = 0;
         const char *topic;

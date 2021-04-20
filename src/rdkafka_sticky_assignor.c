@@ -941,7 +941,7 @@ static int getBalanceScore (map_str_toppar_list_t *assignment) {
 
         for (next = 0 ; next < cnt ; next++)
                 for (i = next+1 ; i < cnt ; i++)
-                        score = abs(sizes[next] - sizes[i]);
+                        score += abs(sizes[next] - sizes[i]);
 
         rd_free(sizes);
 
@@ -2025,8 +2025,31 @@ static void rd_kafka_sticky_assignor_state_destroy (void *assignor_state) {
  */
 
 
+
+/**
+ * @brief Set a member's owned partitions based on its assignment.
+ *
+ * For use between assignor_run(). This is mimicing a consumer receiving
+ * its new assignment and including it in the next rebalance as its
+ * owned-partitions.
+ */
+static void ut_set_owned (rd_kafka_group_member_t *rkgm) {
+        if (rkgm->rkgm_owned)
+                rd_kafka_topic_partition_list_destroy(rkgm->rkgm_owned);
+
+        rkgm->rkgm_owned =
+                rd_kafka_topic_partition_list_copy(rkgm->rkgm_assignment);
+}
+
+
+/**
+ * @brief Verify assignment validity and balance.
+ *
+ * @remark Also updates the members owned partitions to the assignment.
+ */
+
 static int verifyValidityAndBalance0 (const char *func, int line,
-                                      const rd_kafka_group_member_t *members,
+                                      rd_kafka_group_member_t *members,
                                       size_t member_cnt,
                                       const rd_kafka_metadata_t *metadata) {
         int fails = 0;
@@ -2073,6 +2096,10 @@ static int verifyValidityAndBalance0 (const char *func, int line,
                                 fails++;
                         }
                 }
+
+                /* Update the member's owned partitions to match
+                 * the assignment. */
+                ut_set_owned(&members[i]);
 
                 if (i == (int)member_cnt - 1)
                         continue;
@@ -2174,6 +2201,19 @@ static int isFullyBalanced0 (const char *function, int line,
         } while (0)
 
 
+static void
+ut_print_toppar_list (const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+
+        for (i = 0 ; i < partitions->cnt ; i++)
+                RD_UT_SAY(" %s [%"PRId32"]",
+                          partitions->elems[i].topic,
+                          partitions->elems[i].partition);
+}
+
+
+
+
 /**
  * @brief Verify that member's assignment matches the expected partitions.
  *
@@ -2214,6 +2254,9 @@ static int verifyAssignment0 (const char *function, int line,
                            rkgm->rkgm_assignment->cnt);
                 fails++;
         }
+
+        if (fails)
+                ut_print_toppar_list(rkgm->rkgm_assignment);
 
         RD_UT_ASSERT(!fails, "%s:%d: See previous errors", function, line);
 
@@ -2771,8 +2814,8 @@ static int ut_testAddRemoveTopicTwoConsumers (rd_kafka_t *rk,
                          NULL);
         verifyAssignment(&members[1],
                          "topic1", 1,
-                         "topic2", 0,
                          "topic2", 2,
+                         "topic2", 0,
                          NULL);
 
         verifyValidityAndBalance(members, RD_ARRAYSIZE(members), metadata);
@@ -3208,7 +3251,7 @@ static int ut_testMoveExistingAssignments (rd_kafka_t *rk,
                                    members[i].rkgm_assignment->
                                    elems[0].partition)) {
                         RD_UT_WARN("Stickiness was not honored for %s, "
-                                   "%s [%"PRId32"] not in previouis assignment",
+                                   "%s [%"PRId32"] not in previous assignment",
                                    members[i].rkgm_member_id->str,
                                    members[i].rkgm_assignment->elems[0].topic,
                                    members[i].rkgm_assignment->

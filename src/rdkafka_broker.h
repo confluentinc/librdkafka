@@ -44,6 +44,7 @@ typedef	enum {
         RD_KAFKA_BROKER_STATE_DOWN,
         RD_KAFKA_BROKER_STATE_TRY_CONNECT,
         RD_KAFKA_BROKER_STATE_CONNECT,
+        RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_LEGACY,
 
         /* Any state >= STATE_UP means the Kafka protocol layer

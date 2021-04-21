@@ -82,6 +82,7 @@ const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
         "TRY_CONNECT",
 	"CONNECT",
+        "SSL_HANDSHAKE",
 	"AUTH_LEGACY",
 	"UP",
         "UPDATE",
@@ -5303,6 +5304,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
+                case RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE:
 		case RD_KAFKA_BROKER_STATE_AUTH_LEGACY:
                 case RD_KAFKA_BROKER_STATE_AUTH_REQ:
 		case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:

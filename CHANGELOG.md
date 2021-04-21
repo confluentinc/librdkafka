@@ -58,6 +58,8 @@ librdkafka v1.7.0 is feature release:
    `rd_kafka_new()` which made this call blocking if the refresh command
    was taking long. The refresh is now performed by the background rdkafka
    main thread.
+ * Fix busy-loop (100% CPU on the broker threads) during the handshake phase
+   of an SSL connection.
 
 ### Consumer fixes
 

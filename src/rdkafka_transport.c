@@ -611,6 +611,11 @@ static void rd_kafka_transport_connected (rd_kafka_transport_t *rktrans) {
 	    rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL) {
 		char errstr[512];
 
+                rd_kafka_broker_lock(rkb);
+                rd_kafka_broker_set_state(rkb,
+                                          RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE);
+                rd_kafka_broker_unlock(rkb);
+
 		/* Set up SSL connection.
 		 * This is also an asynchronous operation so dont
 		 * propagate to broker_connect_done() just yet. */
@@ -665,15 +670,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 	switch (rkb->rkb_state)
 	{
 	case RD_KAFKA_BROKER_STATE_CONNECT:
-#if WITH_SSL
-		if (rktrans->rktrans_ssl) {
-			/* Currently setting up SSL connection:
-			 * perform handshake. */
-			rd_kafka_transport_ssl_handshake(rktrans);
-			return;
-		}
-#endif
-
 		/* Asynchronous connect finished, read status. */
 		if (!(events & (POLLOUT|POLLERR|POLLHUP)))
 			return;
@@ -704,6 +700,27 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 			rd_kafka_transport_connected(rktrans);
 		}
 		break;
+
+        case RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE:
+#if WITH_SSL
+                rd_assert(rktrans->rktrans_ssl);
+
+                /* Currently setting up SSL connection:
+                 * perform handshake. */
+                r = rd_kafka_transport_ssl_handshake(rktrans);
+
+                if (r == 0 /* handshake still in progress */ &&
+                    (events & POLLHUP)) {
+                        rd_kafka_broker_conn_closed(
+                                rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                "Disconnected");
+                        return;
+                }
+
+#else
+                RD_NOTREACHED();
+#endif
+                break;
 
         case RD_KAFKA_BROKER_STATE_AUTH_LEGACY:
                 /* SASL authentication.
@@ -784,7 +801,7 @@ int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
         rd_kafka_curr_transport = rktrans;
 
         if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_CONNECT ||
-            (rkb->rkb_state > RD_KAFKA_BROKER_STATE_CONNECT &&
+            (rkb->rkb_state > RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE &&
              rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
              rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
                 rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);

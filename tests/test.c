@@ -3128,7 +3128,8 @@ int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
                 test_msgver_add_msg0(func, line, clientname,
                                      mv->fwd, rkmessage, override_topic);
 
-	if (rkmessage->err) {
+        if (rd_kafka_message_status(rkmessage) ==
+            RD_KAFKA_MSG_STATUS_NOT_PERSISTED && rkmessage->err) {
 		if (rkmessage->err != RD_KAFKA_RESP_ERR__PARTITION_EOF)
 			return 0; /* Ignore error */
 

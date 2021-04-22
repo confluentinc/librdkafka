@@ -1,4 +1,4 @@
-$OpenSSLVersion = "1_1_1j"
+$OpenSSLVersion = "1_1_1k"
 $OpenSSLExe = "OpenSSL-$OpenSSLVersion.exe"
 
 if (!(Test-Path("C:\OpenSSL-Win32"))) {

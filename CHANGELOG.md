@@ -6,6 +6,7 @@ librdkafka v1.7.0 is feature release:
    Requires Apache Kafka 2.5 or later.
  * OpenSSL Engine support (`ssl.engine.location`) by @adinigam and @ajbarb.
 
+
 ## Enhancements
 
  * Added `connections.max.idle.ms` to automatically close idle broker
@@ -14,6 +15,11 @@ librdkafka v1.7.0 is feature release:
    the string `azure` in which case the default is set to <4 minutes to improve
    connection reliability and circumvent limitations with the Azure load
    balancers (see #3109 for more information).
+ * Bumped to OpenSSL 1.1.1k in binary librdkafka artifacts.
+ * The binary librdkafka artifacts for Alpine are now using Alpine 3.12.
+   OpenSSL 1.1.1k.
+ * Improved static librdkafka Windows builds using MinGW (@neptoess, #3130).
+
 
 ## Upgrade considerations
 
@@ -28,11 +34,6 @@ librdkafka v1.7.0 is feature release:
    either `committed_offset` or `app_offset` (last message passed
    to application).
 
-## Enhancements
-
- * Bumped to OpenSSL 1.1.1j in binary librdkafka artifacts.
- * The binary librdkafka artifacts for Alpine are now using Alpine 3.12 and
-   OpenSSL 1.1.1j.
 
 ## Fixes
 
@@ -60,6 +61,7 @@ librdkafka v1.7.0 is feature release:
    main thread.
  * Fix busy-loop (100% CPU on the broker threads) during the handshake phase
    of an SSL connection.
+ * Increment metadata fast refresh interval backoff exponentially (@ajbarb, #3237).
 
 ### Consumer fixes
 
@@ -69,6 +71,7 @@ librdkafka v1.7.0 is feature release:
    by the consumer. Fixed by @jliunyu. #3340.
  * Fix balancing and reassignment issues with the cooperative-sticky assignor.
    #3306.
+ * Fix incorrect detection of first rebalance in sticky assignor (@hallfox).
  * The consumer group deemed cached metadata up to date by checking
    `topic.metadata.refresh.interval.ms`: if this property was set too low
    it would cause cached metadata to be unusable and new metadata to be fetched,
@@ -83,6 +86,8 @@ librdkafka v1.7.0 is feature release:
    the application as they are retried automatically.
  * Fix rare crash (assert `rktp_started`) on consumer termination
    (introduced in v1.6.0).
+ * Fix unaligned access and possibly corrupted snappy decompression when
+   building with MSVC (@azat)
 
 ### Producer fixes
 
@@ -111,6 +116,7 @@ librdkafka v1.7.0 is feature release:
    occur which in turn would trigger a assertion crash.
    This issue showed up as "Invalid txn state transition: .." crashes, and is
    now fixed by properly synchronizing both checking and transition of state.
+
 
 
 # librdkafka v1.6.1

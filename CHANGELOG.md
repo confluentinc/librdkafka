@@ -72,6 +72,14 @@ librdkafka v1.7.0 is feature release:
  * Fix balancing and reassignment issues with the cooperative-sticky assignor.
    #3306.
  * Fix incorrect detection of first rebalance in sticky assignor (@hallfox).
+ * Aborted transactions with no messages produced to a partition could
+   cause further successfully committed messages in the same Fetch response to
+   be ignored, resulting in consumer-side message loss.
+   A log message along the lines `Abort txn ctrl msg bad order at offset
+   7501: expected before or at 7702: messages in aborted transactions may be delivered to the application`
+   would be seen.
+   This is a rare occurrence where a transactional producer would register with
+   the partition but not produce any messages before aborting the transaction.
  * The consumer group deemed cached metadata up to date by checking
    `topic.metadata.refresh.interval.ms`: if this property was set too low
    it would cause cached metadata to be unusable and new metadata to be fetched,

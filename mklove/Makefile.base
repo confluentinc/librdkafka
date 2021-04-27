@@ -64,9 +64,11 @@ sharedstatedir?=$(prefix)/com
 localestatedir?=$(prefix)/var
 runstatedir?=	$(localestatedir)/run
 includedir?=	$(prefix)/include
+includedir_install?=	$(prefix)/include
 docdir?=	$(datarootdir)/doc/$(PKGNAME)
 infodir?=	$(datarootdir)/info
 libdir?=	$(prefix)/lib
+libdir_install?=	$(prefix)/lib
 localedir?=	$(datarootdir)/locale
 pkgconfigdir?=	$(libdir)/pkgconfig
 mandir?=	$(datarootdir)/man
@@ -256,12 +258,12 @@ copyright-check:
 
 lib-install:
 	@printf "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
-	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME)
-	$(INSTALL) -d $$DESTDIR$(libdir)
-	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME)
-	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir)
-	[ ! -f $(LIBNAME)-static.a ] || $(INSTALL) $(LIBNAME)-static.a $$DESTDIR$(libdir)
-	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir)
+	$(INSTALL) -d $$DESTDIR$(includedir_install)/$(PKGNAME)
+	$(INSTALL) -d $$DESTDIR$(libdir_install)
+	$(INSTALL) $(HDRS) $$DESTDIR$(includedir_install)/$(PKGNAME)
+	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir_install)
+	[ ! -f $(LIBNAME)-static.a ] || $(INSTALL) $(LIBNAME)-static.a $$DESTDIR$(libdir_install)
+	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir_install)
 	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
@@ -270,17 +272,17 @@ lib-install:
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0)-static.pc $$DESTDIR$(pkgconfigdir) \
 	)
-	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
+	(cd $$DESTDIR$(libdir_install) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:
 	@printf "$(MKL_YELLOW)Uninstall $(LIBNAME) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
 	for hdr in $(HDRS) ; do \
-		rm -f $$DESTDIR$(includedir)/$(PKGNAME)/$$hdr ; done
-	rm -f $$DESTDIR$(libdir)/$(LIBNAME).a
-	rm -f $$DESTDIR$(libdir)/$(LIBNAME)-static.a
-	rm -f $$DESTDIR$(libdir)/$(LIBFILENAME)
-	rm -f $$DESTDIR$(libdir)/$(LIBFILENAMELINK)
-	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true
+		rm -f $$DESTDIR$(includedir_install)/$(PKGNAME)/$$hdr ; done
+	rm -f $$DESTDIR$(libdir_install)/$(LIBNAME).a
+	rm -f $$DESTDIR$(libdir_install)/$(LIBNAME)-static.a
+	rm -f $$DESTDIR$(libdir_install)/$(LIBFILENAME)
+	rm -f $$DESTDIR$(libdir_install)/$(LIBFILENAMELINK)
+	rmdir $$DESTDIR$(includedir_install)/$(PKGNAME) || true
 	rm -f $$DESTDIR$(pkgconfigdir)/$(LIBNAME0).pc
 	rm -f $$DESTDIR$(pkgconfigdir)/$(LIBNAME0)-static.pc
 	rmdir $$DESTDIR$(pkgconfigdir) || true

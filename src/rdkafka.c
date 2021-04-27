@@ -4733,6 +4733,10 @@ rd_bool_t rd_kafka_dir_is_empty (const char *path) {
 #else
         DIR *dir;
         struct dirent *d;
+#if defined(__sun)
+        struct stat st;
+        int ret = 0;
+#endif
 
         dir = opendir(path);
         if (!dir)
@@ -4744,8 +4748,17 @@ rd_bool_t rd_kafka_dir_is_empty (const char *path) {
                     !strcmp(d->d_name, ".."))
                         continue;
 
+#if defined(__sun)
+                ret = stat(d->d_name, &st);
+                if (ret != 0) {
+                    return rd_true; // Can't be accessed
+                }
+                if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode) ||
+                    S_ISLNK(st.st_mode)) {
+#else
                 if (d->d_type == DT_REG || d->d_type == DT_LNK ||
                     d->d_type == DT_DIR) {
+#endif
                         closedir(dir);
                         return rd_false;
                 }

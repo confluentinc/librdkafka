@@ -56,6 +56,7 @@ matrix:
  - name: "Windows MinGW-w64 Dynamic"
    os: windows
    env:
+    - LINKAGE=std
     - SKIP_MAKE=y
    before_install:
     - source ./packaging/mingw-w64/travis-before-install.sh
@@ -64,6 +65,7 @@ matrix:
  - name: "Windows MinGW-w64 Static"
    os: windows
    env:
+    - LINKAGE=static
     - SKIP_MAKE=y
    before_install:
     - source ./packaging/mingw-w64/travis-before-install.sh

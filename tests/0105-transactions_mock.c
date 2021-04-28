@@ -446,7 +446,7 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
                 txn_coord,
                 RD_KAFKAP_InitProducerId,
                 1,
-                RD_KAFKA_RESP_ERR_NO_ERROR, 2000/*2s*/);
+                RD_KAFKA_RESP_ERR_NO_ERROR, 5000/*5s*/);
 
         /* Produce a message, let it fail with a fatal idempo error. */
         rd_kafka_mock_push_request_errors(
@@ -476,7 +476,7 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
         rd_kafka_error_destroy(error);
 
         /* Abort the transaction, should fail with retriable (timeout) error */
-        error = rd_kafka_abort_transaction(rk, 500);
+        error = rd_kafka_abort_transaction(rk, 100);
         TEST_ASSERT(error != NULL, "Expected abort_transaction() to fail");
 
         TEST_SAY("First abort_transaction() failed: %s\n",
@@ -488,7 +488,7 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
         rd_kafka_error_destroy(error);
 
         if (with_sleep)
-                rd_sleep(5);
+                rd_sleep(7);
 
         /* Retry abort, should now finish. */
         TEST_SAY("Retrying abort\n");

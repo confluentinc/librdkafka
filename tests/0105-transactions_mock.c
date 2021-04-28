@@ -408,8 +408,9 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
         rd_kafka_error_t *error;
         int32_t txn_coord = 2;
         const char *txnid = "myTxnId";
+        test_timing_t timing;
 
-        SUB_TEST_QUICK("%s sleep", with_sleep ? "with": "without");
+        SUB_TEST("%s sleep", with_sleep ? "with": "without");
 
         rk = create_txn_producer(&mcluster, txnid, 3,
                                  "batch.num.messages", "1",
@@ -446,7 +447,7 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
                 txn_coord,
                 RD_KAFKAP_InitProducerId,
                 1,
-                RD_KAFKA_RESP_ERR_NO_ERROR, 2000/*2s*/);
+                RD_KAFKA_RESP_ERR_NO_ERROR, 10000/*10s*/);
 
         /* Produce a message, let it fail with a fatal idempo error. */
         rd_kafka_mock_push_request_errors(
@@ -463,7 +464,9 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
 
 
         /* Commit the transaction, should fail */
+        TIMING_START(&timing, "commit_transaction(-1)");
         error = rd_kafka_commit_transaction(rk, -1);
+        TIMING_STOP(&timing);
         TEST_ASSERT(error != NULL, "Expected commit_transaction() to fail");
 
         TEST_SAY("commit_transaction() failed (expectedly): %s\n",
@@ -476,7 +479,9 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
         rd_kafka_error_destroy(error);
 
         /* Abort the transaction, should fail with retriable (timeout) error */
-        error = rd_kafka_abort_transaction(rk, 500);
+        TIMING_START(&timing, "abort_transaction(100)");
+        error = rd_kafka_abort_transaction(rk, 100);
+        TIMING_STOP(&timing);
         TEST_ASSERT(error != NULL, "Expected abort_transaction() to fail");
 
         TEST_SAY("First abort_transaction() failed: %s\n",
@@ -488,11 +493,13 @@ static void do_test_txn_slow_reinit (rd_bool_t with_sleep) {
         rd_kafka_error_destroy(error);
 
         if (with_sleep)
-                rd_sleep(5);
+                rd_sleep(12);
 
         /* Retry abort, should now finish. */
         TEST_SAY("Retrying abort\n");
+        TIMING_START(&timing, "abort_transaction(-1)");
         TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+        TIMING_STOP(&timing);
 
         /* Run a new transaction without errors to verify that the
          * producer can recover. */

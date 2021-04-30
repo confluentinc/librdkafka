@@ -995,6 +995,7 @@ static void do_test_empty_txn (rd_bool_t send_offsets, rd_bool_t do_commit) {
 
         /* Create consumer and subscribe to the topic */
         test_conf_set(c_conf, "auto.offset.reset", "earliest");
+        test_conf_set(c_conf, "enable.auto.commit", "false");
         c = test_create_consumer(topic, NULL, c_conf, NULL);
         test_consumer_subscribe(c, topic);
         test_consumer_wait_assignment(c, rd_false);

@@ -1080,7 +1080,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "properties `group.min.session.timeout.ms` and "
           "`group.max.session.timeout.ms`. "
           "Also see `max.poll.interval.ms`.",
-          1, 3600*1000, 10*1000 },
+          1, 3600*1000, 45*1000 },
         { _RK_GLOBAL|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
           _RK(group_heartbeat_intvl_ms),
           "Group session keepalive heartbeat interval.",

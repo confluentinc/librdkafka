@@ -27,6 +27,9 @@ librdkafka v1.7.0 is feature release:
    argument that has now been added. This is a breaking change but the original
    function signature is considered a bug.
    This change only affects C++ OAuth developers.
+ * [KIP-735](https://cwiki.apache.org/confluence/display/KAFKA/KIP-735%3A+Increase+default+consumer+session+timeout) The consumer `session.timeout.ms`
+   default was changed from 10 to 45 seconds to make consumer groups more
+   robust and less sensitive to temporary network and cluster issues.
  * Statistics: `consumer_lag` is now using the `committed_offset`,
    while the new `consumer_lag_stored` is using `stored_offset`
    (offset to be committed).

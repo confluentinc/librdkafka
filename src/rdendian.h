@@ -111,14 +111,24 @@
 #endif
 
 #elif defined(_WIN32)
-#include <intrin.h>
-
-#define be64toh(x) _byteswap_uint64(x)
-#define be32toh(x) _byteswap_ulong(x)
-#define be16toh(x) _byteswap_ushort(x)
 #define le16toh(x) (x)
 #define le32toh(x) (x)
 #define le64toh(x) (x)
+
+#if defined(__clang__)
+/* Clang on windows masquerades as MSVC
+ * but has strange behaviours with handling simd intrinsics
+ * fortunately it understands bswap builtins which is what we want
+ */
+#define be64toh(x) __builtin_bswap64(x)
+#define be32toh(x) __builtin_bswap32(x)
+#define be16toh(x) __builtin_bswap16(x)
+#else
+#include <intrin.h>
+#define be64toh(x) _byteswap_uint64(x)
+#define be32toh(x) _byteswap_ulong(x)
+#define be16toh(x) _byteswap_ushort(x)
+#endif
 
 #elif defined _AIX      /* AIX is always big endian */
 #define be64toh(x) (x)

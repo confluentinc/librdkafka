@@ -107,6 +107,7 @@ static void produce_msgs (vector<pair<Toppar,int> > partitions) {
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
     Test::Fail("Failed to create producer: " + errstr);
+  delete conf;
 
   for (vector<pair<Toppar,int> >::iterator it = partitions.begin() ;
        it != partitions.end() ; it++) {

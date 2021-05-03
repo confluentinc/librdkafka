@@ -102,6 +102,7 @@ librdkafka v1.7.0 is feature release:
  * A consumer configured with the `cooperative-sticky` assignor did
    not actively Leave the group on unsubscribe(). This delayed the
    rebalance for the remaining group members by up to `session.timeout.ms`.
+ * The current subscription list was sometimes leaked when unsubscribing.
 
 ### Producer fixes
 

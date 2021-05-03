@@ -851,6 +851,35 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg) {
 
 
 /**
+ * @brief Leave group, if desired.
+ *
+ * @returns true if a LeaveGroup was issued, else false.
+ */
+static rd_bool_t rd_kafka_cgrp_leave_maybe (rd_kafka_cgrp_t *rkcg) {
+
+        /* We were not instructed to leave in the first place. */
+        if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE))
+                return rd_false;
+
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
+
+        /* Don't send Leave when termating with NO_CONSUMER_CLOSE flag */
+        if (rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                return rd_false;
+
+        /* KIP-345: Static group members must not send a LeaveGroupRequest
+         * on termination. */
+        if (RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg) &&
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+                return rd_false;
+
+        rd_kafka_cgrp_leave(rkcg);
+
+        return rd_true;
+}
+
+
+/**
  * @brief Enqueues a rebalance op, delegating responsibility of calling
  *        incremental_assign / incremental_unassign to the application.
  *        If there is no rebalance handler configured, or the action
@@ -1121,7 +1150,7 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         else
                 rd_snprintf(astr, sizeof(astr), " without an assignment");
 
-        if (rkcg->rkcg_subscription || rkcg->rkcg_next_subscription)
+        if (rkcg->rkcg_subscription || rkcg->rkcg_next_subscription) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP,
                              "REJOIN",
                              "Group \"%s\": %s group%s: %s",
@@ -1130,7 +1159,7 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
                              RD_KAFKA_CGRP_JOIN_STATE_INIT ?
                              "Joining" : "Rejoining",
                              astr, reason);
-        else
+        } else {
                 rd_kafka_dbg(rkcg->rkcg_rk,CONSUMER|RD_KAFKA_DBG_CGRP,
                              "NOREJOIN",
                              "Group \"%s\": Not %s group%s: %s: "
@@ -1140,6 +1169,9 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
                              RD_KAFKA_CGRP_JOIN_STATE_INIT ?
                              "joining" : "rejoining",
                              astr, reason);
+
+                rd_kafka_cgrp_leave_maybe(rkcg);
+        }
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }
@@ -3267,22 +3299,8 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
 
-        /* Don't send Leave when termating with NO_CONSUMER_CLOSE flag */
-        if (rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
-                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
-
-        /*
-         * KIP-345: Static group members must not send a LeaveGroupRequest
-         * on termination.
-         */
-        if (RD_KAFKA_CGRP_IS_STATIC_MEMBER(rkcg) &&
-            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
-                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
-
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE) {
-                rd_kafka_cgrp_leave(rkcg);
-                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
-        }
+        /* Leave group, if desired. */
+        rd_kafka_cgrp_leave_maybe(rkcg);
 
         if (rkcg->rkcg_join_state !=
             RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE)

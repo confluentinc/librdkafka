@@ -452,10 +452,10 @@ rd_kafka_transport_ssl_set_endpoint_id (rd_kafka_transport_t *rktrans,
             ssl.endpoint_identification == RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if 0 && OPENSSL_VERSION_NUMBER >= 0x10100000
         if (!SSL_set1_host(rktrans->rktrans_ssl, name))
                 goto fail;
-#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+#elif 1 || OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
                 X509_VERIFY_PARAM *param;
 

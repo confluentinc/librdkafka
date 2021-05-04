@@ -64,6 +64,10 @@ librdkafka v1.7.0 is feature release:
    main thread.
  * Fix busy-loop (100% CPU on the broker threads) during the handshake phase
    of an SSL connection.
+ * Disconnects during SSL handshake are now propagated as transport errors
+   rather than SSL errors, since these disconnects are at the transport level
+   (e.g., incorrect listener, flaky load balancer, etc) and not due to SSL
+   issues.
  * Increment metadata fast refresh interval backoff exponentially (@ajbarb, #3237).
 
 ### Consumer fixes

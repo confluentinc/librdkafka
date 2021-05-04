@@ -615,6 +615,7 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
                                                     errstr,
                                                     sizeof(errstr)) == -1) {
                 const char *extra = "";
+                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__SSL;
 
                 if (strstr(errstr, "unexpected message"))
                         extra = ": client SSL authentication might be "
@@ -638,10 +639,14 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
                                 " (install ca-certificates package)"
 #endif
                                 ;
-                else if (!strcmp(errstr, "Disconnected"))
+                else if (!strcmp(errstr, "Disconnected")) {
                         extra = ": connecting to a PLAINTEXT broker listener?";
+                        /* Disconnects during handshake are most likely
+                         * not due to SSL, but rather at the transport level */
+                        err = RD_KAFKA_RESP_ERR__TRANSPORT;
+                }
 
-                rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__SSL,
+                rd_kafka_broker_fail(rkb, LOG_ERR, err,
                                      "SSL handshake failed: %s%s", errstr,
                                      extra);
                 return -1;

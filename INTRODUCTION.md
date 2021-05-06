@@ -1421,8 +1421,6 @@ The legacy `auto.commit.enable` topic configuration property is only to be used
 with the legacy low-level consumer.
 Use `enable.auto.commit` with the modern KafkaConsumer.
 
-There is no support for offset management with ZooKeeper.
-
 
 ##### Auto offset commit
 

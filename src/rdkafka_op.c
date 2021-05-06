@@ -779,7 +779,8 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
 				int throttle_time) {
 	rd_kafka_op_t *rko;
 
-	rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
+        if (unlikely(throttle_time > 0))
+                rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
 
 	/* We send throttle events when:
 	 *  - throttle_time > 0

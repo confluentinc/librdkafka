@@ -69,6 +69,8 @@ librdkafka v1.7.0 is feature release:
    (e.g., incorrect listener, flaky load balancer, etc) and not due to SSL
    issues.
  * Increment metadata fast refresh interval backoff exponentially (@ajbarb, #3237).
+ * Unthrottled requests are no longer counted in the `brokers[].throttle`
+   statistics object.
 
 ### Consumer fixes
 

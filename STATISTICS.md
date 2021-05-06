@@ -52,8 +52,9 @@ Field | Type | Example | Description
 name | string | `"rdkafka#producer-1"` | Handle instance name
 client_id | string | `"rdkafka"` | The configured (or default) `client.id`
 type | string | `"producer"` | Instance type (producer or consumer)
-ts | int | 12345678912345 | librdkafka's internal monotonic clock (micro seconds)
+ts | int | 12345678912345 | librdkafka's internal monotonic clock (microseconds)
 time | int | | Wall clock time in seconds since the epoch
+age | int | | Time since this client instance was created (microseconds)
 replyq | int gauge | | Number of ops (callbacks, events, etc) waiting in queue for application to serve with rd_kafka_poll()
 msg_cnt | int gauge | | Current number of messages in producer queues
 msg_size | int gauge | | Current total size of messages in producer queues

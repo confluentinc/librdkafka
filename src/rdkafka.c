@@ -1644,6 +1644,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                    "\"type\": \"%s\", "
 		   "\"ts\":%"PRId64", "
 		   "\"time\":%lli, "
+                   "\"age\":%"PRId64", "
 		   "\"replyq\":%i, "
                    "\"msg_cnt\":%u, "
 		   "\"msg_size\":%"PRIusz", "
@@ -1657,6 +1658,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                    rd_kafka_type2str(rk->rk_type),
 		   now,
 		   (signed long long)time(NULL),
+                   now - rk->rk_ts_created,
 		   rd_kafka_q_len(rk->rk_rep),
 		   tot_cnt, tot_size,
 		   rk->rk_curr_msgs.max_cnt, rk->rk_curr_msgs.max_size,
@@ -2147,6 +2149,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	rk = rd_calloc(1, sizeof(*rk));
 
 	rk->rk_type = type;
+        rk->rk_ts_created = rd_clock();
 
         /* Struct-copy the config object. */
 	rk->rk_conf = *conf;
@@ -2180,7 +2183,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
-        rd_atomic64_init(&rk->rk_ts_last_poll, rd_clock());
+        rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);

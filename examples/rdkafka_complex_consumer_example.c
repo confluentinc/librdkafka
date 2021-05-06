@@ -302,7 +302,6 @@ int main (int argc, char **argv) {
 	char *brokers = "localhost:9092";
 	int opt;
 	rd_kafka_conf_t *conf;
-	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	const char *debug = NULL;
 	int do_conf_dump = 0;
@@ -324,9 +323,6 @@ int main (int argc, char **argv) {
 	/* Quick termination */
 	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
 	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
-
-	/* Topic configuration */
-	topic_conf = rd_kafka_topic_conf_new();
 
 	while ((opt = getopt(argc, argv, "g:b:qd:eX:ADO")) != -1) {
 		switch (opt) {
@@ -374,21 +370,8 @@ int main (int argc, char **argv) {
 			*val = '\0';
 			val++;
 
-			res = RD_KAFKA_CONF_UNKNOWN;
-			/* Try "topic." prefixed properties on topic
-			 * conf first, and then fall through to global if
-			 * it didnt match a topic configuration property. */
-			if (!strncmp(name, "topic.", strlen("topic.")))
-				res = rd_kafka_topic_conf_set(topic_conf,
-							      name+
-							      strlen("topic."),
-							      val,
-							      errstr,
-							      sizeof(errstr));
-
-			if (res == RD_KAFKA_CONF_UNKNOWN)
-				res = rd_kafka_conf_set(conf, name, val,
-							errstr, sizeof(errstr));
+                        res = rd_kafka_conf_set(conf, name, val,
+                                                errstr, sizeof(errstr));
 
 			if (res != RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
@@ -418,17 +401,26 @@ int main (int argc, char **argv) {
 				arr = rd_kafka_conf_dump(conf, &cnt);
 				printf("# Global config\n");
 			} else {
-				printf("# Topic config\n");
-				arr = rd_kafka_topic_conf_dump(topic_conf,
-							       &cnt);
+                                rd_kafka_topic_conf_t *topic_conf =
+                                        rd_kafka_conf_get_default_topic_conf(
+                                                conf);
+                                if (topic_conf) {
+                                        printf("# Topic config\n");
+                                        arr = rd_kafka_topic_conf_dump(
+                                                topic_conf, &cnt);
+                                } else {
+                                        arr = NULL;
+                                }
 			}
+
+                        if (!arr)
+                                continue;
 
 			for (i = 0 ; i < (int)cnt ; i += 2)
 				printf("%s = %s\n",
 				       arr[i], arr[i+1]);
 
-			printf("\n");
-
+                        printf("\n");
 			rd_kafka_conf_dump_free(arr, cnt);
 		}
 
@@ -456,8 +448,6 @@ int main (int argc, char **argv) {
 			"  -A              Raw payload output (consumer)\n"
 			"  -X <prop=name> Set arbitrary librdkafka "
 			"configuration property\n"
-			"               Properties prefixed with \"topic.\" "
-			"will be set on topic object.\n"
 			"               Use '-X list' to see the full list\n"
 			"               of supported properties.\n"
 			"\n"
@@ -499,9 +489,6 @@ int main (int argc, char **argv) {
                         fprintf(stderr, "%% %s\n", errstr);
                         exit(1);
                 }
-
-                /* Set default topic config for pattern-matched topics. */
-                rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
 
                 /* Callback called on partition assignment changes */
                 rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);

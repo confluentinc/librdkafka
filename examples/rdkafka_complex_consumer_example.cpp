@@ -249,7 +249,6 @@ int main (int argc, char **argv) {
    * Create configuration objects
    */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-  RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
   ExampleRebalanceCb ex_rebalance_cb;
   conf->set("rebalance_cb", &ex_rebalance_cb, errstr);
@@ -306,16 +305,8 @@ int main (int argc, char **argv) {
 	*val = '\0';
 	val++;
 
-	/* Try "topic." prefixed properties on topic
-	 * conf first, and then fall through to global if
-	 * it didnt match a topic configuration property. */
-        RdKafka::Conf::ConfResult res = RdKafka::Conf::CONF_UNKNOWN;
-	if (!strncmp(name, "topic.", strlen("topic.")))
-          res = tconf->set(name+strlen("topic."), val, errstr);
-        if (res == RdKafka::Conf::CONF_UNKNOWN)
-	  res = conf->set(name, val, errstr);
-
-	if (res != RdKafka::Conf::CONF_OK) {
+        RdKafka::Conf::ConfResult res = conf->set(name, val, errstr);
+        if (res != RdKafka::Conf::CONF_OK) {
           std::cerr << errstr << std::endl;
 	  exit(1);
 	}
@@ -357,8 +348,6 @@ int main (int argc, char **argv) {
             "  -M <intervalms> Enable statistics\n"
             "  -X <prop=name>  Set arbitrary librdkafka "
             "configuration property\n"
-            "                  Properties prefixed with \"topic.\" "
-            "will be set on topic object.\n"
             "                  Use '-X list' to see the full list\n"
             "                  of supported properties.\n"
             "  -q              Quiet / Decrease verbosity\n"
@@ -398,32 +387,21 @@ int main (int argc, char **argv) {
   conf->set("event_cb", &ex_event_cb, errstr);
 
   if (do_conf_dump) {
-    int pass;
+    std::list<std::string> *dump;
+    dump = conf->dump();
+    std::cout << "# Global config" << std::endl;
 
-    for (pass = 0 ; pass < 2 ; pass++) {
-      std::list<std::string> *dump;
-      if (pass == 0) {
-        dump = conf->dump();
-        std::cout << "# Global config" << std::endl;
-      } else {
-        dump = tconf->dump();
-        std::cout << "# Topic config" << std::endl;
-      }
-
-      for (std::list<std::string>::iterator it = dump->begin();
-           it != dump->end(); ) {
-        std::cout << *it << " = ";
-        it++;
-        std::cout << *it << std::endl;
-        it++;
-      }
-      std::cout << std::endl;
+    for (std::list<std::string>::iterator it = dump->begin();
+         it != dump->end(); ) {
+      std::cout << *it << " = ";
+      it++;
+      std::cout << *it << std::endl;
+      it++;
     }
+    std::cout << std::endl;
+
     exit(0);
   }
-
-  conf->set("default_topic_conf", tconf, errstr);
-  delete tconf;
 
   signal(SIGINT, sigterm);
   signal(SIGTERM, sigterm);

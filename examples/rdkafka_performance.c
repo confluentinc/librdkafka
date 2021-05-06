@@ -700,8 +700,7 @@ static void sig_usr1 (int sig) {
  * @brief Read config from file
  * @returns -1 on error, else 0.
  */
-static int read_conf_file (rd_kafka_conf_t *conf,
-                           rd_kafka_topic_conf_t *tconf, const char *path) {
+static int read_conf_file (rd_kafka_conf_t *conf, const char *path) {
         FILE *fp;
         char buf[512];
         int line = 0;
@@ -739,15 +738,8 @@ static int read_conf_file (rd_kafka_conf_t *conf,
 
                 *(t++) = '\0';
 
-                /* Try property on topic config first */
-                if (tconf)
-                        r = rd_kafka_topic_conf_set(tconf, s, t,
-                                                    errstr, sizeof(errstr));
-
                 /* Try global config */
-                if (r == RD_KAFKA_CONF_UNKNOWN)
-                        r = rd_kafka_conf_set(conf, s, t,
-                                              errstr, sizeof(errstr));
+                r = rd_kafka_conf_set(conf, s, t, errstr, sizeof(errstr));
 
                 if (r == RD_KAFKA_CONF_OK)
                         continue;
@@ -839,7 +831,6 @@ int main (int argc, char **argv) {
         rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
-	rd_kafka_topic_conf_t *topic_conf;
 	rd_kafka_queue_t *rkqu = NULL;
 	const char *compression = "no";
 	int64_t start_offset = 0;
@@ -869,11 +860,10 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
 #endif
 
-	/* Producer config */
-	rd_kafka_conf_set(conf, "queue.buffering.max.messages", "500000",
-			  NULL, 0);
-	rd_kafka_conf_set(conf, "message.send.max.retries", "3", NULL, 0);
-	rd_kafka_conf_set(conf, "retry.backoff.ms", "500", NULL, 0);
+        /* Producer config */
+        rd_kafka_conf_set(conf, "linger.ms", "1000", NULL, 0);
+        rd_kafka_conf_set(conf, "message.send.max.retries", "3", NULL, 0);
+        rd_kafka_conf_set(conf, "retry.backoff.ms", "500", NULL, 0);
 
 	/* Consumer config */
 	/* Tell rdkafka to (try to) maintain 1M messages
@@ -885,11 +875,7 @@ int main (int argc, char **argv) {
 	 */
 	rd_kafka_conf_set(conf, "queued.min.messages", "1000000", NULL, 0);
 	rd_kafka_conf_set(conf, "session.timeout.ms", "6000", NULL, 0);
-
-	/* Kafka topic configuration */
-	topic_conf = rd_kafka_topic_conf_new();
-	rd_kafka_topic_conf_set(topic_conf, "auto.offset.reset", "earliest",
-				NULL, 0);
+        rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", NULL, 0);
 
 	topics = rd_kafka_topic_partition_list_new(1);
 
@@ -952,10 +938,10 @@ int main (int argc, char **argv) {
 			seed = atoi(optarg);
 			break;
 		case 'a':
-			if (rd_kafka_topic_conf_set(topic_conf,
-						    "request.required.acks",
-						    optarg,
-						    errstr, sizeof(errstr)) !=
+			if (rd_kafka_conf_set(conf,
+                                              "acks",
+                                              optarg,
+                                              errstr, sizeof(errstr)) !=
 			    RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
 				exit(1);
@@ -1048,26 +1034,13 @@ int main (int argc, char **argv) {
 			val++;
 
                         if (!strcmp(name, "file")) {
-                                if (read_conf_file(conf, topic_conf, val) == -1)
+                                if (read_conf_file(conf, val) == -1)
                                         exit(1);
                                 break;
                         }
 
-			res = RD_KAFKA_CONF_UNKNOWN;
-			/* Try "topic." prefixed properties on topic
-			 * conf first, and then fall through to global if
-			 * it didnt match a topic configuration property. */
-			if (!strncmp(name, "topic.", strlen("topic.")))
-				res = rd_kafka_topic_conf_set(topic_conf,
-							      name+
-							      strlen("topic."),
-							      val,
-							      errstr,
-							      sizeof(errstr));
-
-			if (res == RD_KAFKA_CONF_UNKNOWN)
-				res = rd_kafka_conf_set(conf, name, val,
-							errstr, sizeof(errstr));
+                        res = rd_kafka_conf_set(conf, name, val,
+                                                errstr, sizeof(errstr));
 
 			if (res != RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
@@ -1180,8 +1153,6 @@ int main (int argc, char **argv) {
 			"               %s\n"
 			"  -X <prop=name> Set arbitrary librdkafka "
 			"configuration property\n"
-			"               Properties prefixed with \"topic.\" "
-			"will be set on topic object.\n"
                         "  -X file=<path> Read config from file.\n"
                         "  -X list      Show full list of supported properties.\n"
                         "  -X dump      Show configuration\n"
@@ -1268,10 +1239,21 @@ int main (int argc, char **argv) {
                                 arr = rd_kafka_conf_dump(conf, &cnt);
                                 printf("# Global config\n");
                         } else {
-                                printf("# Topic config\n");
-                                arr = rd_kafka_topic_conf_dump(topic_conf,
-                                                               &cnt);
+                                rd_kafka_topic_conf_t *topic_conf =
+                                        rd_kafka_conf_get_default_topic_conf(
+                                                conf);
+
+                                if (topic_conf) {
+                                        printf("# Topic config\n");
+                                        arr = rd_kafka_topic_conf_dump(
+                                                topic_conf, &cnt);
+                                } else {
+                                        arr = NULL;
+                                }
                         }
+
+                        if (!arr)
+                                continue;
 
                         for (i = 0 ; i < (int)cnt ; i += 2)
                                 printf("%s = %s\n",
@@ -1398,7 +1380,7 @@ int main (int argc, char **argv) {
                 global_rk = rk;
 
 		/* Explicitly create topic to avoid per-msg lookups. */
-		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+		rkt = rd_kafka_topic_new(rk, topic, NULL);
 
 
                 if (rate_sleep && verbosity >= 2)
@@ -1553,7 +1535,7 @@ int main (int argc, char **argv) {
                 global_rk = rk;
 
 		/* Create topic to consume from */
-		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+		rkt = rd_kafka_topic_new(rk, topic, NULL);
 
 		/* Batch consumer */
 		if (batch_size)
@@ -1652,7 +1634,6 @@ int main (int argc, char **argv) {
 		 */
 
 		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
-		rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,

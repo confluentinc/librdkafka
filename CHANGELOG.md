@@ -71,6 +71,8 @@ librdkafka v1.7.0 is feature release:
  * Increment metadata fast refresh interval backoff exponentially (@ajbarb, #3237).
  * Unthrottled requests are no longer counted in the `brokers[].throttle`
    statistics object.
+ * Log CONFWARN warning when global topic configuration properties
+   are overwritten by explicitly setting a `default_topic_conf`.
 
 ### Consumer fixes
 

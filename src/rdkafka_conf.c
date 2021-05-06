@@ -247,6 +247,21 @@ rd_kafka_anyconf_is_modified (const void *conf,
         return !!(confhdr->modified[bkt] & bit);
 }
 
+/**
+ * @returns true if any property in \p conf has been set/modified.
+ */
+static rd_bool_t
+rd_kafka_anyconf_is_any_modified (const void *conf) {
+        const struct rd_kafka_anyconf_hdr *confhdr = conf;
+        int i;
+
+        for (i = 0 ; i < (int)RD_ARRAYSIZE(confhdr->modified) ; i++)
+                if (confhdr->modified[i])
+                        return rd_true;
+
+        return rd_false;
+}
+
 
 
 /**
@@ -2865,8 +2880,11 @@ void rd_kafka_conf_set_engine_callback_data (rd_kafka_conf_t *conf,
 
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf) {
-        if (conf->topic_conf)
+        if (conf->topic_conf) {
+                if (rd_kafka_anyconf_is_any_modified(conf->topic_conf))
+                        conf->warn.default_topic_conf_overwritten = rd_true;
                 rd_kafka_topic_conf_destroy(conf->topic_conf);
+        }
 
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "default_topic_conf",
                                       tconf);
@@ -4019,6 +4037,14 @@ int rd_kafka_conf_warn (rd_kafka_t *rk) {
         if (rk->rk_conf.topic_conf)
                 cnt += rd_kafka_anyconf_warn_deprecated(
                         rk, _RK_TOPIC, rk->rk_conf.topic_conf);
+
+        if (rk->rk_conf.warn.default_topic_conf_overwritten)
+                rd_kafka_log(rk, LOG_WARNING,
+                             "CONFWARN",
+                             "Topic configuration properties set in the "
+                             "global configuration were overwritten by "
+                             "explicitly setting a default_topic_conf: "
+                             "recommend not using set_default_topic_conf");
 
         /* Additional warnings */
         if (rk->rk_type == RD_KAFKA_CONSUMER) {

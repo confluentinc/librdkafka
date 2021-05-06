@@ -556,6 +556,9 @@ struct rd_kafka_s {
                                    *   before rd_kafka_new() returns. */
         mtx_t rk_init_lock;       /**< Lock for rk_init_wait and _cmd */
 
+        rd_ts_t rk_ts_created;    /**< Timestamp (monotonic clock) of
+                                   *   rd_kafka_t creation. */
+
         /**
          * Background thread and queue,
          * enabled by setting `background_event_cb()`.

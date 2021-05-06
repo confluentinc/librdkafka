@@ -512,6 +512,12 @@ struct rd_kafka_conf_s {
 
         char *sw_name;    /**< Software/client name */
         char *sw_version; /**< Software/client version */
+
+        struct {
+                /** Properties on (implicit pass-thru) default_topic_conf were
+                 *  overwritten by passing an explicit default_topic_conf. */
+                rd_bool_t default_topic_conf_overwritten;
+        } warn;
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);

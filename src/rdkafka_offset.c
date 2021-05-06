@@ -29,8 +29,7 @@
 // FIXME: Revise this documentation:
 /**
  * This file implements the consumer offset storage.
- * It currently supports local file storage and broker OffsetCommit storage,
- * not zookeeper.
+ * It currently supports local file storage and broker OffsetCommit storage.
  *
  * Regardless of commit method (file, broker, ..) this is how it works:
  *  - When rdkafka, or the application, depending on if auto.offset.commit

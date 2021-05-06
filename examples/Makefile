@@ -103,21 +103,6 @@ rdkafka_consume_batch: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_con
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_consume_batch.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
-rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -I/usr/include/zookeeper rdkafka_zookeeper_example.c -o $@ $(LDFLAGS) \
-		../src/librdkafka.a $(LIBS) -lzookeeper_mt -ljansson
-	@echo "# $@ is ready"
-	@echo "#"
-	@echo "# Run producer (write messages on stdin)"
-	@echo "./$@ -P -t <topic> -p <partition>"
-	@echo ""
-	@echo "# or consumer"
-	@echo "./$@ -C -t <topic> -p <partition>"
-	@echo ""
-	@echo "#"
-	@echo "# More usage options:"
-	@echo "./$@ -h"
-
 openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openssl_engine_example.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) openssl_engine_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)

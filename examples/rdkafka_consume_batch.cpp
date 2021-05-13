@@ -147,7 +147,7 @@ int main (int argc, char **argv) {
 
   /* Read command line arguments */
   int opt;
-  while ((opt = getopt(argc, argv, "g:B:T::b:X:")) != -1) {
+  while ((opt = getopt(argc, argv, "g:B:T:b:X:")) != -1) {
     switch (opt) {
     case 'g':
       if (conf->set("group.id",  optarg, errstr) != RdKafka::Conf::CONF_OK) {

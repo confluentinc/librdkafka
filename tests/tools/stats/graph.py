@@ -5,19 +5,18 @@
 
 import os
 import pandas as pd
+import numpy
 from bokeh.io import curdoc
 from bokeh.models import ColumnDataSource, HoverTool
 from bokeh.plotting import figure
 from bokeh.palettes import Dark2_5 as palette
-from bokeh.models.formatters import DatetimeTickFormatter
+from bokeh.models.formatters import DatetimeTickFormatter, PrintfTickFormatter
 
 import pandas_bokeh
 import argparse
+from datetime import datetime
 import itertools
 from fnmatch import fnmatch
-
-datecolumn = '0time'
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Graph CSV files')
@@ -35,22 +34,32 @@ if __name__ == '__main__':
                         help='Per-plot width')
     parser.add_argument('--plot-height', type=int, default=300,
                         help='Per-plot height')
+    parser.add_argument('--date-col', type=str, default='0time',
+                        help='Column name for the series datetime (x axis)')
     parser.add_argument('--out', type=str, default='out.html',
                         help='Output file (HTML)')
+    parser.add_argument('--title', type=str, default=None,
+                        help='Title to add to graphs')
     args = parser.parse_args()
 
+    datecolumn = args.date_col
     outpath = args.out
+    if args.title is not None:
+        add_title = f"{args.title}: "
+    else:
+        add_title = ""
+
     if args.cols is None:
         cols = None
     else:
         cols = args.cols.split(',')
         cols.append(datecolumn)
 
-    if args.skip is None:
+    if args.skip is not None:
         assert cols is None, "--cols and --skip are mutually exclusive"
-        skip = None
-    else:
         skip = args.skip.split(',')
+    else:
+        skip = None
 
     group_by = args.group_by
 
@@ -65,18 +74,37 @@ if __name__ == '__main__':
 
         cols_to_use = cols
 
-        if skip is not None:
-            # First read available fields
-            avail_cols = list(pd.read_csv(infile, nrows=1))
+        # Sample two rows of the CSV file to get the header
+        # and a single data entry line.
+        sdf = pd.read_csv(infile, nrows=2, skipinitialspace=True)
 
+        if len(sdf) < 2:
+            raise Exception(f"input file {infile} seems to be empty")
+
+        # Check the format of the date column
+        sdate = sdf[datecolumn].iloc[1]
+        if isinstance(sdate, numpy.int64):
+            date_parser = lambda col: datetime.fromtimestamp(int(col)/1000)
+        else:
+            date_parser = None
+
+        if skip is not None:
+            avail_cols = list(sdf)
             cols_to_use = [c for c in avail_cols
-                           if len([x for x in skip if fnmatch(c, x)]) == 0]
+                           if len([x for x in skip
+                                   if fnmatch(c.strip().lower(),
+                                              x.strip().lower())]) == 0]
+
+        if group_by is not None and group_by not in cols_to_use:
+            cols_to_use.append(group_by)
 
         df = pd.read_csv(infile,
                          parse_dates=[datecolumn],
+                         date_parser=date_parser,
                          index_col=datecolumn,
-                         usecols=cols_to_use)
-        title = os.path.basename(infile)
+                         usecols=cols_to_use,
+                         skipinitialspace=True)
+        title = add_title + os.path.basename(infile)
         print(f"{infile}:")
 
         if group_by is not None:
@@ -107,12 +135,12 @@ if __name__ == '__main__':
                         p.add_tools(HoverTool(
                             tooltips=[
                                 ("index", "$index"),
-                                ("time", "@0time{%F}"),
+                                ("time", f"@{datecolumn}{{%F}}"),
                                 ("y", "$y"),
                                 ("desc", "$name"),
                             ],
                             formatters={
-                                "@0time": "datetime",
+                                f"@{datecolumn}": 'datetime',
                             },
                             mode='vline'))
 

@@ -113,7 +113,8 @@ char *rd_string_render (const char *template,
 			r = callback(tmpkey, NULL, 0, opaque);
 			if (r == -1) {
 				rd_snprintf(errstr, errstr_size,
-					    "Property not available: \"%s\"",
+					    "Configuration property not set: "
+					    "\"%s\"",
 					    tmpkey);
 				rd_free(buf);
 				return NULL;
@@ -125,7 +126,7 @@ char *rd_string_render (const char *template,
 			r = callback(tmpkey, buf+of, _remain(), opaque);
 			if (r == -1) {
 				rd_snprintf(errstr, errstr_size,
-					    "Property not available: "
+					    "Configruation property not set: "
 					    "\"%s\"", tmpkey);
 				rd_free(buf);
 				return NULL;

@@ -189,6 +189,9 @@ Use 8 spaces indent, same as the Linux kernel.
 In emacs, use `c-set-style "linux`.
 For C++, use Google's C++ style.
 
+Fix formatting issues by running `make style-fix` prior to committing.
+
+
 ## Comments
 
 Use `/* .. */` comments, not `// ..`
@@ -228,7 +231,7 @@ Braces go on the same line as their enveloping statement:
           ..
         }
       }
- 
+
       /* Single line scopes should not have braces */
       if (1)
         hi();
@@ -258,12 +261,12 @@ All expression parentheses should be prefixed and suffixed with a single space:
 Use space around operators:
 
     int a = 2;
-  
+
     if (b >= 3)
        c += 2;
 
 Except for these:
-  
+
     d++;
     --e;
 

@@ -40,7 +40,10 @@ if __name__ == '__main__':
     last_line = ''
 
     for line in sys.stdin:
-        m = re.match(r'^(\S+.*\s+\**)?(rd_kafka_\S+)\s*\([^)]', line)
+        if line.startswith('typedef'):
+            last_line = line
+            continue
+        m = re.match(r'^(\S+.*\s+\**)?(rd_kafka_[\w_]+)\s*\([^)]', line)
         if m:
             sym = m.group(2)
             # Ignore static (unused) functions

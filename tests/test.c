@@ -6447,7 +6447,8 @@ static void test_sub_reset(void) {
         test_curr->is_fatal_cb   = NULL;
         test_curr->ignore_dr_err = rd_false;
         test_curr->exp_dr_err    = RD_KAFKA_RESP_ERR_NO_ERROR;
-        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_PERSISTED;
+        /* Don't check msg status by default */
+        test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
         test_curr->dr_mv         = NULL;
 }
 

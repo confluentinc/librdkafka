@@ -1,3 +1,19 @@
+# librdkafka v1.7.1
+
+librdkafka v1.7.1 is a maintenance release.
+
+## Fixes
+
+### General fixes
+
+ * `ERR__ALL_BROKERS_DOWN` is no longer emitted when the coordinator
+   connection goes down, only when all standard named brokers have been tried.
+   This fixes the issue with `ERR__ALL_BROKERS_DOWN` being triggered on
+   `consumer_close()`.
+
+
+
+
 # librdkafka v1.7.0
 
 librdkafka v1.7.0 is feature release:

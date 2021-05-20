@@ -100,6 +100,12 @@ const char *rd_kafka_secproto_names[] = {
 };
 
 
+/**
+ * @returns true for logical brokers (e.g., coordinators) without an address set
+ *
+ * @locks_required rkb_lock
+ */
+#define rd_kafka_broker_is_addrless(rkb) (*(rkb)->rkb_nodename == '\0')
 
 /**
  * @returns true if the broker needs a persistent connection
@@ -307,12 +313,15 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		/* no-op */
 	} else if (state == RD_KAFKA_BROKER_STATE_DOWN &&
 		   !rkb->rkb_down_reported) {
-		/* Propagate ALL_BROKERS_DOWN event if all brokers are
-		 * now down, unless we're terminating. */
-		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
-		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
+                /* Propagate ALL_BROKERS_DOWN event if all brokers are
+                 * now down, unless we're terminating.
+                 * Only trigger for brokers that has an address set,
+                 * e.g., not logical brokers that lost their address. */
+                if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+                    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                     rd_atomic32_get(&rkb->rkb_rk->rk_broker_addrless_cnt) &&
-		    !rd_kafka_terminating(rkb->rkb_rk))
+                    !rd_kafka_broker_is_addrless(rkb) &&
+                    !rd_kafka_terminating(rkb->rkb_rk))
 			rd_kafka_op_err(rkb->rkb_rk,
 					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"%i/%i brokers are down",
@@ -388,7 +397,8 @@ static void rd_kafka_broker_set_error (rd_kafka_broker_t *rkb, int level,
         /* If this is a logical broker we include its current nodename/address
          * in the log message. */
         rd_kafka_broker_lock(rkb);
-        if (rkb->rkb_source == RD_KAFKA_LOGICAL && *rkb->rkb_nodename) {
+        if (rkb->rkb_source == RD_KAFKA_LOGICAL &&
+            !rd_kafka_broker_is_addrless(rkb)) {
                 of = (size_t)rd_snprintf(errstr, sizeof(errstr), "%s: ",
                                          rkb->rkb_nodename);
                 if (of > sizeof(errstr))
@@ -5783,7 +5793,7 @@ void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
         if (!changed)
                 return;
 
-        if (*rkb->rkb_nodename)
+        if (!rd_kafka_broker_is_addrless(rkb))
                 rd_atomic32_sub(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);
         else
                 rd_atomic32_add(&rkb->rkb_rk->rk_broker_addrless_cnt, 1);

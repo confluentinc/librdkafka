@@ -6442,12 +6442,13 @@ int test_sub_start (const char *func, int line, int is_quick,
 /**
  * @brief Reset the current subtest state.
  */
-static void test_sub_reset (void) {
-        *test_curr->subtest = '\0';
-        test_curr->is_fatal_cb = NULL;
+static void test_sub_reset(void) {
+        *test_curr->subtest      = '\0';
+        test_curr->is_fatal_cb   = NULL;
         test_curr->ignore_dr_err = rd_false;
-        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        test_curr->dr_mv = NULL;
+        test_curr->exp_dr_err    = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_PERSISTED;
+        test_curr->dr_mv         = NULL;
 }
 
 /**

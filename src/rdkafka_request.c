@@ -1009,14 +1009,19 @@ static int rd_kafka_handle_OffsetCommit_error (
                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
 
-                /* .._SPECIAL: mark coordinator dead */
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                /* .._SPECIAL: mark coordinator dead, refresh and retry */
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_SPECIAL,
                 RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
 
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_SPECIAL,
                 RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
 
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                /* Replicas possibly unavailable:
+                 * Refresh coordinator (but don't mark as dead (!.._SPECIAL)),
+                 * and retry */
+                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
                 RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
 
 
@@ -1129,7 +1134,8 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                 actions = rd_kafka_err_action(
                         rkb, err, request,
 
-                        RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
+                        RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL|
+                        RD_KAFKA_ERR_ACTION_RETRY,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
 
                         RD_KAFKA_ERR_ACTION_IGNORE,

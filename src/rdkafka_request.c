@@ -1035,10 +1035,10 @@ static int rd_kafka_handle_OffsetCommit_error (
                 RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
 
 
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
 
-                RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
 
                 RD_KAFKA_ERR_ACTION_END);
@@ -1137,12 +1137,6 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL|
                         RD_KAFKA_ERR_ACTION_RETRY,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
-
-                        RD_KAFKA_ERR_ACTION_IGNORE,
-                        RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-
-                        RD_KAFKA_ERR_ACTION_IGNORE,
-                        RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
 
                         RD_KAFKA_ERR_ACTION_END);
 

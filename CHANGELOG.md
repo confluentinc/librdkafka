@@ -12,6 +12,12 @@ librdkafka v1.7.1 is a maintenance release.
    `consumer_close()`.
 
 
+### Consumer fixes
+
+ * Automatically retry offset commits on `ERR_REQUEST_TIMED_OUT`,
+   `ERR_COORDINATOR_NOT_AVAILABLE`, and `ERR_NOT_COORDINATOR` (#3398).
+   Offset commits will be retried twice.
+
 
 
 # librdkafka v1.7.0

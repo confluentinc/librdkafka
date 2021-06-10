@@ -34,6 +34,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_header.h"
 #include "rdkafka_lz4.h"
+#include "rdkafka_compression.h"
 
 #if WITH_ZSTD
 #include "rdkafka_zstd.h"
@@ -90,6 +91,7 @@ typedef struct rd_kafka_msgset_writer_s {
         rd_kafka_toppar_t *msetw_rktp; /* @warning Not a refcounted
                                         *          reference! */
         rd_kafka_msgq_t *msetw_msgq;   /**< Input message queue */
+        rd_ts_t msetw_ts_start;        /**< Start time of writer. */
 } rd_kafka_msgset_writer_t;
 
 
@@ -492,6 +494,7 @@ static int rd_kafka_msgset_writer_init(rd_kafka_msgset_writer_t *msetw,
 
         memset(msetw, 0, sizeof(*msetw));
 
+        msetw->msetw_ts_start = rd_clock();
         msetw->msetw_rktp = rktp;
         msetw->msetw_rkb  = rkb;
         msetw->msetw_msgq = rkmq;
@@ -524,6 +527,39 @@ static int rd_kafka_msgset_writer_init(rd_kafka_msgset_writer_t *msetw,
         rd_kafka_msgbatch_init(&msetw->msetw_rkbuf->rkbuf_u.Produce.batch, rktp,
                                pid, epoch_base_msgid);
         msetw->msetw_batch = &msetw->msetw_rkbuf->rkbuf_u.Produce.batch;
+
+        /* Enable streaming compression, if desired, supported and
+         * not suppressed.
+         * Due to more complex framing in older MsgVersions we only do
+         * this for modern MsgsVersions (>=2). Older MsgVersions will
+         * use batched compression instead. */
+        if (msetw->msetw_MsgVersion >= 2 &&
+            rkb->rkb_rk->rk_conf.streaming_compression &&
+            rktp->rktp_suppress.compression < msetw->msetw_ts_start &&
+            rd_kafka_compressor_can_stream(msetw->msetw_compression)) {
+                rd_kafka_error_t *error;
+                rd_kafka_compressor_t *compr = rd_kafka_compressor_alloc();
+
+                error = rd_kafka_compressor_init(
+                        compr,
+                        &msetw->msetw_rkbuf->rkbuf_buf,
+                        msetw->msetw_compression,
+                        msetw->msetw_rktp->rktp_rkt->
+                        rkt_conf.compression_level,
+                        rkb->rkb_rk->rk_conf.batch_size);
+
+                if (unlikely(error != NULL)) {
+                        rd_rkb_log(rkb, LOG_WARNING, "COMPRESS",
+                                   "%s [%"PRId32"]: %s: "
+                                   "using batched compression instead",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition,
+                                   rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                }
+
+                rd_kafka_buf_compressor_start(msetw->msetw_rkbuf, compr);
+        }
 
         return msetw->msetw_msgcntmax;
 }
@@ -789,10 +825,13 @@ static size_t rd_kafka_msgset_writer_write_msg(rd_kafka_msgset_writer_t *msetw,
             rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) - pre_pos;
         rd_assert(outlen <=
                   rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
-        rd_assert(outlen == actual_written);
+        rd_dassert(outlen == actual_written ||
+                   rd_kafka_buf_has_compressor(msetw->msetw_rkbuf));
 
-        return outlen;
+        return actual_written;
+
 }
+
 
 /**
  * @brief Write as many messages from the given message queue to
@@ -807,14 +846,24 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         rd_kafka_broker_t *rkb  = msetw->msetw_rkb;
         size_t len              = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf);
-        size_t max_msg_size =
-            RD_MIN((size_t)msetw->msetw_rkb->rkb_rk->rk_conf.max_msg_size,
-                   (size_t)msetw->msetw_rkb->rkb_rk->rk_conf.batch_size);
+        /* This is the hard batch size limit */
+        size_t max_msg_size = (size_t)rk->rk_conf.max_msg_size;
+        /* The soft batch size limit may be overshot by at most one message
+         * if compression is enabled.
+         * This is necessary since the compressed size of a message can't
+         * be known prior to compression and if we limit the batch size
+         * purely on the size of the next uncompressed message size we may
+         * accumulate too small batches, in particular for messages that
+         * compress well. */
+        size_t soft_max_msg_size = (size_t)rk->rk_conf.batch_size;
+        /* Per message size overhead when compression is enabled. */
         rd_ts_t int_latency_base;
+        rd_bool_t has_compressor =
+                rd_kafka_buf_has_compressor(msetw->msetw_rkbuf);
         rd_ts_t MaxTimestamp = 0;
         rd_kafka_msg_t *rkm;
         int msgcnt        = 0;
-        const rd_ts_t now = rd_clock();
+        const rd_ts_t now = msetw->msetw_ts_start;
 
         /* Internal latency calculation base.
          * Uses rkm_ts_timeout which is enqueue time + timeout */
@@ -833,6 +882,14 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
          * or limit reached.
          */
         do {
+                /* Message wire (serialized) size. */
+                size_t wire_size =
+                        rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion);
+                /* Worst case per-message overhead (64b + 5% of message size).
+                 * We use this to keep sure the max message size isn't
+                 * exceeded when using streaming compression. */
+                size_t overhead = has_compressor ? (64 + wire_size / 20) : 0;
+
                 if (unlikely(msetw->msetw_batch->last_msgid &&
                              msetw->msetw_batch->last_msgid <
                                  rkm->rkm_u.producer.msgid)) {
@@ -858,11 +915,9 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
                  * overshoot the message.max.bytes limit by one message to
                  * avoid getting stuck here.
                  * The actual messageset size is enforced by the broker. */
-                if (unlikely(
-                        msgcnt == msetw->msetw_msgcntmax ||
-                        (msgcnt > 0 && len + rd_kafka_msg_wire_size(
-                                                 rkm, msetw->msetw_MsgVersion) >
-                                           max_msg_size))) {
+                if (unlikely(msgcnt == msetw->msetw_msgcntmax ||
+                             (msgcnt > 0 &&
+                              len + overhead + wire_size > max_msg_size))) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
                                    "%.*s [%" PRId32
                                    "]: "
@@ -898,6 +953,28 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
                                                         NULL);
 
                 msgcnt++;
+
+                /* If compression failed error out, the error itself
+                 * will be handled in finalize(). */
+                if (unlikely(has_compressor &&
+                             rd_kafka_buf_compressor_failed(
+                                     msetw->msetw_rkbuf)))
+                        return 0;
+
+
+                /* We're done if the soft max message size
+                 * now has been exceeded. */
+                if (unlikely(len >= soft_max_msg_size)) {
+                        rd_rkb_dbg(rkb, MSG, "PRODUCE",
+                                   "%.*s [%"PRId32"]: "
+                                   "No more space in current MessageSet "
+                                   "(%i message(s), %"PRIusz" bytes): "
+                                   "batch.size %"PRIusz" now exceeded",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   msgcnt, len, soft_max_msg_size);
+                        break;
+                }
 
         } while ((rkm = TAILQ_FIRST(&rkmq->rkmq_msgs)));
 
@@ -1061,8 +1138,8 @@ rd_kafka_msgset_writer_compress_snappy(rd_kafka_msgset_writer_t *msetw,
         ciov->iov_len  = rd_kafka_snappy_max_compressed_length(len);
         ciov->iov_base = rd_malloc(ciov->iov_len);
 
-        iov_max = slice->buf->rbuf_segment_cnt;
-        iov     = rd_alloca(sizeof(*iov) * iov_max);
+        iov_max = rd_buf_segment_cnt(slice->buf);
+        iov = rd_alloca(sizeof(*iov) * iov_max);
 
         rd_slice_get_iov(slice, iov, &iov_cnt, iov_max, len);
 
@@ -1126,18 +1203,22 @@ static int rd_kafka_msgset_writer_compress_zstd(rd_kafka_msgset_writer_t *msetw,
  * @brief Compress the message set.
  * @param outlenp in: total uncompressed messages size,
  *                out (on success): returns the compressed buffer size.
+ * @param ratiop out: compression ratio (on success).
  * @returns 0 on success or if -1 if compression failed.
  * @remark Compression failures are not critical, we'll just send the
  *         the messageset uncompressed.
  */
-static int rd_kafka_msgset_writer_compress(rd_kafka_msgset_writer_t *msetw,
-                                           size_t *outlenp) {
+static int
+rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
+                                 size_t *outlenp, double *ratiop) {
         rd_buf_t *rbuf = &msetw->msetw_rkbuf->rkbuf_buf;
         rd_slice_t slice;
         size_t len        = *outlenp;
         struct iovec ciov = RD_ZERO_INIT; /* Compressed output buffer */
         int r             = -1;
         size_t outlen;
+
+        *ratiop = 0.0;
 
         rd_assert(rd_buf_len(rbuf) >= msetw->msetw_firstmsg.of + len);
 
@@ -1215,6 +1296,8 @@ static int rd_kafka_msgset_writer_compress(rd_kafka_msgset_writer_t *msetw,
                     msetw, &rkm, 0, msetw->msetw_compression,
                     rd_free /*free for ciov.iov_base*/);
         }
+
+        *ratiop = (double)len / (double)outlen;
 
         *outlenp = outlen;
 
@@ -1340,8 +1423,111 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
                                 size_t *MessageSetSizep) {
         rd_kafka_buf_t *rkbuf   = msetw->msetw_rkbuf;
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         size_t len;
         int cnt;
+        rd_kafka_compressor_t *compr;
+        char comprstr[128];
+
+        rd_snprintf(comprstr, sizeof(comprstr), "uncompressed");
+
+        /* Finalize streaming compressor, if available. */
+        if ((compr = rd_kafka_buf_compressor(rkbuf))) {
+                rd_kafka_error_t *error;
+                double ratio = 0.0;
+
+                error = rd_kafka_buf_compressor_end(rkbuf, &ratio);
+
+                rd_kafka_compressor_free(compr);
+
+                if (unlikely(!error &&
+                             rd_buf_len(&rkbuf->rkbuf_buf) >
+                             (size_t)rk->rk_conf.max_msg_size)) {
+                        /* Compressed buffer exceeded the hard message.max.bytes
+                         * limit.
+                         * As the compressor can only guarantee a
+                         * less useful maximum compression size (at a
+                         * (<1.0x ratio), and we're writing message key,
+                         * headers and value separately, it is possible
+                         * that the outbuffer is overflowed. This is
+                         * more likely for data that does not compress
+                         * well, or where the soft batch.size
+                         * is too close to message.max.bytes.
+                         *
+                         * Try to give the user some hints what to do.
+                         */
+                        const char *descr = "";
+                        if (ratio < 1.0)
+                                descr = ": message contents may not be "
+                                        "suitable for compression, try "
+                                        "disabling compression.type";
+                        else if (rk->rk_conf.batch_size <
+                                 rk->rk_conf.max_msg_size)
+                                descr = ": try increasing batch.size "
+                                        "or disabling compression.type";
+                        else
+                                descr = ": try decreasing batch.size "
+                                        "to a value at least 2 typical "
+                                        "message sizes below "
+                                        "message.max.bytes";
+
+                        error = rd_kafka_error_new(
+                                RD_KAFKA_RESP_ERR__OVERFLOW,
+                                "Compressed buffer (%"PRIusz" bytes) "
+                                "is greater than message.max.bytes %d%s",
+                                rd_buf_len(&rkbuf->rkbuf_buf),
+                                rk->rk_conf.max_msg_size, descr);
+                }
+
+
+                if (unlikely(error != NULL)) {
+                        /* As the messages are moved back to the rktp_xmitq
+                         * they will be written to a new MessageSet in a
+                         * short while, but this time without streaming
+                         * compression. */
+                        rd_rkb_log(msetw->msetw_rkb, LOG_NOTICE, "COMPRESS",
+                                   "%s [%"PRId32"]: "
+                                   "MessageSet compression failed: %s: "
+                                   "disabling compression for 10 seconds",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition,
+                                   rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+
+                        rktp->rktp_suppress.compression =
+                                msetw->msetw_ts_start + (10 * 1000000);
+
+                        /* Move all messages back on the xmit queue. */
+                        rd_kafka_msgq_insert_msgq(
+                                msetw->msetw_msgq, &msetw->msetw_batch->msgq,
+                                rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+
+                        rd_kafka_buf_destroy(rkbuf);
+                        return NULL;
+
+                } else {
+                        rd_assert(ratio > 1);
+
+                        /* Disable compression suppression since it now
+                         * seems to work again. */
+                        rktp->rktp_suppress.compression = 0;
+
+                        /* Compression ratio represented as int percentage */
+                        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcompratio,
+                                   (int64_t)(ratio * 100.0));
+
+                        /* Set compression codec in MessageSet.Attributes */
+                        msetw->msetw_Attributes |= msetw->msetw_compression;
+
+                        if (unlikely(rk->rk_conf.debug & RD_KAFKA_DBG_MSG))
+                                rd_snprintf(comprstr, sizeof(comprstr),
+                                            "%.1fx %s streaming "
+                                            "compression ratio",
+                                            ratio,
+                                            rd_kafka_compression2str(
+                                                    msetw->msetw_compression));
+                }
+        }
 
         /* No messages added, bail out early. */
         if (unlikely((cnt = rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq)) ==
@@ -1354,7 +1540,7 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
         len = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) -
               msetw->msetw_firstmsg.of;
         rd_assert(len > 0);
-        rd_assert(len <= (size_t)rktp->rktp_rkt->rkt_rk->rk_conf.max_msg_size);
+        rd_assert(len <= (size_t)rk->rk_conf.max_msg_size);
 
         rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
         rd_atomic64_add(&rktp->rktp_c.tx_msg_bytes,
@@ -1366,10 +1552,29 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
          * the request obsolete. */
         msetw->msetw_rkbuf->rkbuf_u.Produce.batch.pid = msetw->msetw_pid;
 
-        /* Compress the message set */
-        if (msetw->msetw_compression) {
-                if (rd_kafka_msgset_writer_compress(msetw, &len) == -1)
+        /* Batch-Compress the message set
+         * (unless streaming compression was used) */
+        if (msetw->msetw_compression && !compr) {
+                double ratio;
+
+                if (rd_kafka_msgset_writer_compress(msetw, &len,
+                                                    &ratio) != -1) {
+
+                        /* Compression ratio represented as int percentage */
+                        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcompratio,
+                                   (int64_t)(ratio * 100.0));
+
+                        if (unlikely(rk->rk_conf.debug & RD_KAFKA_DBG_MSG))
+                                rd_snprintf(comprstr, sizeof(comprstr),
+                                            "%.1fx %s compression ratio",
+                                            ratio,
+                                            rd_kafka_compression2str(
+                                                    msetw->msetw_compression));
+
+                } else {
+                        /* Compression failed, send uncompressed. */
                         msetw->msetw_compression = 0;
+                }
         }
 
         msetw->msetw_messages_len = len;
@@ -1393,9 +1598,7 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
                    msetw->msetw_MsgVersion, msetw->msetw_batch->first_msgid,
                    msetw->msetw_batch->first_seq,
                    rd_kafka_pid2str(msetw->msetw_pid),
-                   msetw->msetw_compression
-                       ? rd_kafka_compression2str(msetw->msetw_compression)
-                       : "uncompressed");
+                   comprstr);
 
         rd_kafka_msgq_verify_order(rktp, &msetw->msetw_batch->msgq,
                                    msetw->msetw_batch->first_msgid, rd_false);

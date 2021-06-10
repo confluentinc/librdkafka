@@ -1402,6 +1402,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This limit is applied after the first message has been added "
      "to the batch, regardless of the first message's size, this is to "
      "ensure that messages that exceed batch.size are produced. "
+     "When compression.type is enabled the batch.size may be exceeded "
+     "by at most one (compressed) message. "
+     "If batch.size is not configured it will be automatically set to "
+     "message.max.bytes if compression.type is unset, or 90% of "
+     "message.max.bytes if compression.type is set. "
      "The total MessageSet size is also limited by batch.num.messages and "
      "message.max.bytes.",
      1, INT_MAX, 1000000},
@@ -1520,6 +1525,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0}}},
     {_RK_TOPIC | _RK_PRODUCER | _RK_HIGH, "compression.type", _RK_C_ALIAS,
      .sdef = "compression.codec"},
+    /* Provide this temporary config property to allow people to opt
+     * out of the streaming compression if it proves inefficient or
+     * buggy. This property should be removed when things have stabilized.
+     */
+    { _RK_GLOBAL|_RK_PRODUCER|_RK_HIDDEN|_RK_EXPERIMENTAL,
+      "enable.streaming.compression",
+      _RK_C_BOOL,
+      _RK(streaming_compression),
+      "Enable streaming compression which allows for larger effective "
+      "batch sizes and higher throughput. This property is used to "
+      "disable streaming compression.",
+      0, 1, 1 },
     {_RK_TOPIC | _RK_PRODUCER | _RK_MED, "compression.level", _RK_C_INT,
      _RKT(compression_level),
      "Compression level parameter for algorithm selected by configuration "
@@ -3873,6 +3890,20 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                                "sticky.partitioning.linger.ms"))
                         conf->sticky_partition_linger_ms = (int)RD_MIN(
                             900000, (rd_ts_t)(2 * conf->buffering_max_ms_dbl));
+
+                if (rd_kafka_conf_is_modified(conf, "batch.size")) {
+                        if (conf->batch_size > conf->max_msg_size)
+                                return "`batch.size` must be "
+                                        "<= `message.max.bytes`";
+                } else {
+                        /* Let batch.size be 90% of message.max.bytes if
+                         * compression is enabled, else equal. */
+                        if (conf->compression_codec)
+                                conf->batch_size =
+                                        (int)((double)conf->max_msg_size * 0.9);
+                        else
+                                conf->batch_size = conf->max_msg_size;
+                }
         }
 
 
@@ -4126,6 +4157,42 @@ int rd_kafka_conf_warn(rd_kafka_t *rk) {
                              "Configuration property `client.software.verison` "
                              "may only contain 'a-zA-Z0-9.-', other characters "
                              "will be replaced with '-'");
+
+        /* Compression-related warnings */
+        if (rk->rk_type == RD_KAFKA_PRODUCER &&
+            rk->rk_conf.compression_codec != RD_KAFKA_COMPRESSION_NONE) {
+                /* Warn if compression is enabled but message.max.bytes is below
+                 * the (common) compression block / frame size since this will
+                 * limit the number of messages that will be included in a
+                 * compressed MessageSet. */
+
+                if (rd_kafka_conf_is_modified(&rk->rk_conf, "message.max.bytes")
+                    && rk->rk_conf.max_msg_size <= 0xffff)
+                        rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                                     "Configuration property "
+                                     "`message.max.bytes=%d` is too small to "
+                                     "allow for efficient compression: "
+                                     "recommend increasing `message.max.bytes` "
+                                     "or disabling `compression.type`",
+                                     rk->rk_conf.max_msg_size);
+
+                /* batch.size needs to be smaller than message.max.bytes to
+                 * give the streaming compressor some headroom for compressing
+                 * the next message. */
+                if ((rd_kafka_conf_is_modified(&rk->rk_conf,
+                                               "message.max.bytes") ||
+                     rd_kafka_conf_is_modified(&rk->rk_conf, "batch.size")) &&
+                    (double)rk->rk_conf.batch_size /
+                    (double)rk->rk_conf.max_msg_size > 0.9)
+                        rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                                     "For efficient compression it is "
+                                     "recommended to keep `batch.size` <= "
+                                     "90%% of `message.max.bytes`: "
+                                     "recommended value for `batch.size` is %d "
+                                     "based on the current configuration",
+                                     (int)
+                                     ((double)rk->rk_conf.max_msg_size * 0.9));
+        }
 
         if (rd_atomic32_get(&rk->rk_broker_cnt) == 0)
                 rd_kafka_log(rk, LOG_NOTICE, "CONFWARN",

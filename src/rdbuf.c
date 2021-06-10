@@ -422,11 +422,27 @@ rd_buf_get_writable0(rd_buf_t *rbuf, rd_segment_t **segp, void **p) {
         return 0;
 }
 
+/**
+ * @sa rd_buf_get_writable0()
+ */
 size_t rd_buf_get_writable(rd_buf_t *rbuf, void **p) {
         rd_segment_t *seg;
         return rd_buf_get_writable0(rbuf, &seg, p);
 }
 
+
+/**
+ * @brief Make room for at least \p min_size more bytes (if necessary)
+ *        and return a writable pointer in \p p and the writable length
+ *        as return value.
+ *
+ * The writable length may be less than \p size but guaranteed to be larger
+ * than 0.
+ */
+size_t rd_buf_ensure_writable (rd_buf_t *rbuf, size_t size, void **p) {
+        rd_buf_write_ensure(rbuf, size, 0);
+        return rd_buf_get_writable(rbuf, p);
+}
 
 
 /**
@@ -1211,6 +1227,23 @@ uint32_t rd_slice_crc32c(rd_slice_t *slice) {
  *
  */
 
+/**
+ * @returns the buffer's allocation utilization: the ratio of written to
+ *          allocated bytes. A value of 1.0 is full utilization, 0 is none.
+ */
+double rd_buf_utilization(const rd_buf_t *rbuf) {
+        const rd_segment_t *seg;
+        size_t w = 0, a = 0;
+
+        TAILQ_FOREACH(seg, &rbuf->rbuf_segments, seg_link) {
+                a += seg->seg_size;
+                w += seg->seg_of;
+        }
+
+        return (double)w / (double)(a);
+}
+
+
 static void rd_segment_dump(const rd_segment_t *seg,
                             const char *ind,
                             size_t relof,
@@ -1276,6 +1309,53 @@ void rd_slice_dump(const rd_slice_t *slice, int do_hexdump) {
                 rd_segment_dump(seg, "  ", relof, do_hexdump);
                 relof = 0;
         }
+}
+
+
+
+/**
+ * @brief Write slice to open file description \p fd.
+ *
+ * @returns the number of written bytes, or -1 on failure (check errno).
+ */
+static ssize_t rd_slice_dump_fd (const rd_slice_t *slice, int fd) {
+        const rd_segment_t *seg;
+        size_t relof = slice->rof;
+        size_t sum = 0;
+
+        for (seg = slice->seg ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
+                ssize_t r;
+
+                r = write(fd, seg->seg_p+relof, seg->seg_of-relof);
+                if (r == -1)
+                        return -1;
+
+                sum += seg->seg_of-relof;
+                relof = 0;
+        }
+
+        return sum;
+}
+
+
+/**
+ * @brief Write slice contents to file.
+ *
+ * @returns 0 on success or -1 on failure.
+ */
+int rd_slice_dump_file (const rd_slice_t *slice, const char *path) {
+        int fd;
+        int ret;
+
+        fd = open(path, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+        if (fd == -1)
+                return -1;
+
+        ret = rd_slice_dump_fd(slice, fd);
+
+        close(fd);
+
+        return ret == -1 ? -1 : 0;
 }
 
 

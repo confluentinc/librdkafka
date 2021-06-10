@@ -154,6 +154,8 @@ struct rd_kafka_topic_s {
 
         rd_avg_t rkt_avg_batchsize; /**< Average batch size */
         rd_avg_t rkt_avg_batchcnt;  /**< Average batch message count */
+        rd_avg_t rkt_avg_batchcompratio; /**< Average batch compression
+                                          *   ratio in percent. */
 
         rd_kafka_topic_conf_t rkt_conf;
 

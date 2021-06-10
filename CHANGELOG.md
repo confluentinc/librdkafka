@@ -39,6 +39,25 @@ configuration property.
 
 ## Enhancements
 
+ * The Producer now uses streaming compression (rather than batched compression)
+   to compress batches of messages (MessageSets). Prior to this enhancement
+   the number of messages included in a batch were limited by the
+   **uncompressed** `batch.size`, with streaming compressing the limit
+   is enforced **after** compression. This drastically improves
+   the number of messages that can be included in a single compressed batch,
+   yielding higher throughput and lower latency.
+   Streaming compression is supported by all compression types except snappy,
+   which will use the previous batched compression method instead.
+   [FIXME](link-to-blog)
+ * `batch.size` is now automatically set to 90% of `message.max.bytes`,
+   unless explicitly configured. We recommend not explicitly configuring
+   the `batch.size` property.
+ * Streaming compression requires libzstd 1.4.0 or later. For older versions
+   batched compression will be used.
+ * Streaming compression is only enabled when connected to Apache Kafka broker
+   version v0.11.0 or later.
+ * `compratio` metric added to the topic statistics output, representing
+   the producer batch compression ratio in percentages.
  * Bundled zlib upgraded to version 1.2.13.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.

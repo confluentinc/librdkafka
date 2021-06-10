@@ -426,6 +426,7 @@ extern int unittest_http(void);
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
+extern int unittest_compression (void);
 
 int rd_unittest(void) {
         int fails = 0;
@@ -442,6 +443,7 @@ int rd_unittest(void) {
                 {"msg", unittest_msg},
                 {"murmurhash", unittest_murmur2},
                 {"fnv1a", unittest_fnv1a},
+                { "compression", unittest_compression },
 #if WITH_HDRHISTOGRAM
                 {"rdhdrhistogram", unittest_rdhdrhistogram},
 #endif

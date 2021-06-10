@@ -511,7 +511,8 @@ int rd_kafka_transport_framed_recv(rd_kafka_transport_t *rktrans,
 
                 /* Allocate memory to hold entire frame payload in contigious
                  * memory. */
-                rd_buf_write_ensure_contig(&rkbuf->rkbuf_buf, frame_len);
+                rd_buf_write_ensure_contig(&rkbuf->rkbuf_buf, frame_len,
+                                           frame_len);
 
                 /* Try reading directly, there is probably more data available*/
                 return rd_kafka_transport_framed_recv(rktrans, rkbufp, errstr,

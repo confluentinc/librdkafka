@@ -222,7 +222,11 @@ size_t rd_buf_erase(rd_buf_t *rbuf, size_t absof, size_t size);
 
 size_t rd_buf_get_writable(rd_buf_t *rbuf, void **p);
 
-void rd_buf_write_ensure_contig(rd_buf_t *rbuf, size_t size);
+size_t rd_buf_ensure_writable(rd_buf_t *rbuf, size_t size, void **p);
+
+void rd_buf_write_ensure_contig(rd_buf_t *rbuf,
+                                size_t min_size,
+                                size_t max_size);
 
 void rd_buf_write_ensure(rd_buf_t *rbuf, size_t min_size, size_t max_size);
 

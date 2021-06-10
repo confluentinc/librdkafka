@@ -155,9 +155,13 @@ rd_buf_alloc_segment(rd_buf_t *rbuf, size_t min_size, size_t max_size) {
         rd_segment_t *seg;
 
         /* Over-allocate if allowed. */
-        if (min_size != max_size || max_size == 0)
-                max_size = RD_MAX(sizeof(*seg) * 4,
-                                  RD_MAX(min_size * 2, rbuf->rbuf_size / 2));
+        if (max_size == 0)
+                max_size =
+                    RD_MAX(sizeof(*seg) * 4, RD_MAX((size_t)(min_size * 1.75),
+                                                    rbuf->rbuf_size / 2));
+
+        if (max_size < min_size)
+                max_size = min_size;
 
         seg = rd_buf_alloc_segment0(rbuf, max_size);
 
@@ -172,14 +176,16 @@ rd_buf_alloc_segment(rd_buf_t *rbuf, size_t min_size, size_t max_size) {
  *        for writing and the position will be updated to point to the
  *        start of this contiguous block.
  */
-void rd_buf_write_ensure_contig(rd_buf_t *rbuf, size_t size) {
+void rd_buf_write_ensure_contig(rd_buf_t *rbuf,
+                                size_t min_size,
+                                size_t max_size) {
         rd_segment_t *seg = rbuf->rbuf_wpos;
 
         if (seg) {
                 void *p;
                 size_t remains = rd_segment_write_remains(seg, &p);
 
-                if (remains >= size)
+                if (remains >= min_size)
                         return; /* Existing segment has enough space. */
 
                 /* Future optimization:
@@ -188,7 +194,7 @@ void rd_buf_write_ensure_contig(rd_buf_t *rbuf, size_t size) {
         }
 
         /* Allocate new segment */
-        rbuf->rbuf_wpos = rd_buf_alloc_segment(rbuf, size, size);
+        rbuf->rbuf_wpos = rd_buf_alloc_segment(rbuf, min_size, max_size);
 }
 
 /**
@@ -440,6 +446,8 @@ size_t rd_buf_get_writable(rd_buf_t *rbuf, void **p) {
  * than 0.
  */
 size_t rd_buf_ensure_writable(rd_buf_t *rbuf, size_t size, void **p) {
+        if (size)
+                rd_buf_write_ensure(rbuf, size, 0);
         rd_buf_write_ensure(rbuf, size, 0);
         return rd_buf_get_writable(rbuf, p);
 }
@@ -1326,7 +1334,7 @@ static ssize_t rd_slice_dump_fd(const rd_slice_t *slice, int fd) {
         for (seg = slice->seg; seg; seg = TAILQ_NEXT(seg, seg_link)) {
                 ssize_t r;
 
-                r = write(fd, seg->seg_p + relof, seg->seg_of - relof);
+                r = rd_write(fd, seg->seg_p + relof, seg->seg_of - relof);
                 if (r == -1)
                         return -1;
 
@@ -1347,13 +1355,13 @@ int rd_slice_dump_file(const rd_slice_t *slice, const char *path) {
         int fd;
         int ret;
 
-        fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+        fd = rd_open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
         if (fd == -1)
                 return -1;
 
         ret = rd_slice_dump_fd(slice, fd);
 
-        close(fd);
+        rd_close(fd);
 
         return ret == -1 ? -1 : 0;
 }

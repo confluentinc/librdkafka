@@ -102,6 +102,7 @@ void rd_kafka_topic_destroy_final(rd_kafka_topic_t *rkt) {
 
         rd_avg_destroy(&rkt->rkt_avg_batchsize);
         rd_avg_destroy(&rkt->rkt_avg_batchcnt);
+        rd_avg_destroy(&rkt->rkt_avg_batchcompratio);
 
         if (rkt->rkt_topic)
                 rd_kafkap_str_destroy(rkt->rkt_topic);
@@ -398,45 +399,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
 
         /* Translate compression level to library-specific level and check
          * upper bound */
-        switch (rkt->rkt_conf.compression_codec) {
-#if WITH_ZLIB
-        case RD_KAFKA_COMPRESSION_GZIP:
-                if (rkt->rkt_conf.compression_level ==
-                    RD_KAFKA_COMPLEVEL_DEFAULT)
-                        rkt->rkt_conf.compression_level = Z_DEFAULT_COMPRESSION;
-                else if (rkt->rkt_conf.compression_level >
-                         RD_KAFKA_COMPLEVEL_GZIP_MAX)
-                        rkt->rkt_conf.compression_level =
-                            RD_KAFKA_COMPLEVEL_GZIP_MAX;
-                break;
-#endif
-        case RD_KAFKA_COMPRESSION_LZ4:
-                if (rkt->rkt_conf.compression_level ==
-                    RD_KAFKA_COMPLEVEL_DEFAULT)
-                        /* LZ4 has no notion of system-wide default compression
-                         * level, use zero in this case */
-                        rkt->rkt_conf.compression_level = 0;
-                else if (rkt->rkt_conf.compression_level >
-                         RD_KAFKA_COMPLEVEL_LZ4_MAX)
-                        rkt->rkt_conf.compression_level =
-                            RD_KAFKA_COMPLEVEL_LZ4_MAX;
-                break;
-#if WITH_ZSTD
-        case RD_KAFKA_COMPRESSION_ZSTD:
-                if (rkt->rkt_conf.compression_level ==
-                    RD_KAFKA_COMPLEVEL_DEFAULT)
-                        rkt->rkt_conf.compression_level = 3;
-                else if (rkt->rkt_conf.compression_level >
-                         RD_KAFKA_COMPLEVEL_ZSTD_MAX)
-                        rkt->rkt_conf.compression_level =
-                            RD_KAFKA_COMPLEVEL_ZSTD_MAX;
-                break;
-#endif
-        case RD_KAFKA_COMPRESSION_SNAPPY:
-        default:
-                /* Compression level has no effect in this case */
-                rkt->rkt_conf.compression_level = RD_KAFKA_COMPLEVEL_DEFAULT;
-        }
+        rkt->rkt_conf.compression_level = rd_kafka_compression_level_translate(
+            rkt->rkt_conf.compression_codec, rkt->rkt_conf.compression_level);
 
         rd_avg_init(&rkt->rkt_avg_batchsize, RD_AVG_GAUGE, 0,
                     rk->rk_conf.max_msg_size, 2,
@@ -444,6 +408,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
         rd_avg_init(&rkt->rkt_avg_batchcnt, RD_AVG_GAUGE, 0,
                     rk->rk_conf.batch_num_messages, 2,
                     rk->rk_conf.stats_interval_ms ? 1 : 0);
+        rd_avg_init(&rkt->rkt_avg_batchcompratio, RD_AVG_GAUGE, 0,
+                    5000 /* 5000% */, 2, rk->rk_conf.stats_interval_ms ? 1 : 0);
 
         rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
                      RD_KAFKAP_STR_PR(rkt->rkt_topic));

@@ -184,6 +184,21 @@ static RD_INLINE RD_UNUSED size_t rd_buf_len(const rd_buf_t *rbuf) {
 }
 
 
+/**
+ * @returns the total allocated buffer space
+ */
+static RD_INLINE RD_UNUSED size_t rd_buf_size(const rd_buf_t *rbuf) {
+        return rbuf->rbuf_size;
+}
+
+
+/**
+ * @returns the number of buffer segments.
+ */
+static RD_INLINE RD_UNUSED size_t rd_buf_segment_cnt(const rd_buf_t *rbuf) {
+        return rbuf->rbuf_segment_cnt;
+}
+
 int rd_buf_write_seek(rd_buf_t *rbuf, size_t absof);
 
 
@@ -225,6 +240,8 @@ void rd_buf_destroy_free(rd_buf_t *rbuf);
 
 void rd_buf_dump(const rd_buf_t *rbuf, int do_hexdump);
 
+double rd_buf_utilization(const rd_buf_t *rbuf);
+
 int unittest_rdbuf(void);
 
 
@@ -233,7 +250,7 @@ int unittest_rdbuf(void);
 
 
 /**
- * @name Buffer reads operate on slices of an rd_buf_t and does not
+ * @name Buffer read operates on slices of an rd_buf_t and does not
  *       modify the underlying rd_buf_t itself.
  *
  * @warning A slice will not be valid/safe after the buffer or
@@ -364,6 +381,8 @@ int rd_slice_narrow_copy_relative(const rd_slice_t *orig,
                                   size_t relsize) RD_WARN_UNUSED_RESULT;
 
 void rd_slice_dump(const rd_slice_t *slice, int do_hexdump);
+
+int rd_slice_dump_file(const rd_slice_t *slice, const char *path);
 
 
 /**@}*/

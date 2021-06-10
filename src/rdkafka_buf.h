@@ -33,6 +33,7 @@
 #include "rdlist.h"
 #include "rdbuf.h"
 #include "rdkafka_msgbatch.h"
+#include "rdkafka_compression.h"
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
@@ -249,6 +250,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
         rd_crc32_t rkbuf_crc; /* Current CRC calculation */
 
+        rd_kafka_compressor_t *rkbuf_compr; /**< Compressor, when
+                                             * RD_KAFKA_OP_F_COMPRESS is set. */
+
         struct rd_kafkap_reqhdr rkbuf_reqhdr; /* Request header.
                                                * These fields are encoded
                                                * and written to output buffer
@@ -392,6 +396,59 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                                              *   might have occurred, which
                                              *   depends on request type. */
 };
+
+
+
+/**
+ * @returns true if the buffer currently has a streaming compressor.
+ */
+#define rd_kafka_buf_has_compressor(rkbuf) ((rkbuf)->rkbuf_compr != NULL)
+
+/**
+ * @returns the buffer's streaming compressor, if any.
+ */
+#define rd_kafka_buf_compressor(rkbuf) ((rkbuf)->rkbuf_compr)
+
+
+/**
+ * @brief Start compressor: all sub-sequent writes to the buffer will be
+ *        compressed using \p compr until rd_kafka_buf_compressor_end()
+ *        is called.
+ */
+static RD_UNUSED void
+rd_kafka_buf_compressor_start(rd_kafka_buf_t *rkbuf,
+                              rd_kafka_compressor_t *compr) {
+        rd_assert(!rd_kafka_buf_has_compressor(rkbuf));
+        rkbuf->rkbuf_compr = compr;
+}
+
+
+/**
+ * @brief End and finalize compressor. Sub-sequent writes are now uncompressed.
+ *
+ * @returns an error object if the compressor failed.
+ */
+static RD_UNUSED rd_kafka_error_t *
+rd_kafka_buf_compressor_end(rd_kafka_buf_t *rkbuf, double *ratiop) {
+        rd_kafka_error_t *error;
+
+        rd_assert(rd_kafka_buf_has_compressor(rkbuf));
+
+        error = rd_kafka_compressor_close(rkbuf->rkbuf_compr, &rkbuf->rkbuf_buf,
+                                          ratiop);
+        rkbuf->rkbuf_compr = NULL;
+
+        return error;
+}
+
+/**
+ * @returns true if the compressor (if any) failed, else false.
+ */
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_buf_compressor_failed(const rd_kafka_buf_t *rkbuf) {
+        return rd_kafka_buf_has_compressor(rkbuf) &&
+               rd_kafka_compressor_failed(rkbuf->rkbuf_compr);
+}
 
 
 
@@ -957,14 +1014,24 @@ rd_kafka_buf_ApiVersion_set(rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) data to buffer at current write-buffer position.
  * There must be enough space allocated in the rkbuf.
- * Returns offset to written destination buffer.
+ * @returns offset to written destination buffer, or SIZE_MAX if the buffer
+ *          has compression enabled.
  */
 static RD_INLINE size_t rd_kafka_buf_write(rd_kafka_buf_t *rkbuf,
                                            const void *data,
                                            size_t len) {
         size_t r;
 
-        r = rd_buf_write(&rkbuf->rkbuf_buf, data, len);
+        if (rkbuf->rkbuf_compr) {
+                /* Ignore compressor errors for now, there is no way to
+                 * propagate them through the current rd_kafka_buf_t API anyway.
+                 * The error is cached on the compressor and raised in
+                 * compressor_close(). */
+                rd_kafka_compressor_write(rkbuf->rkbuf_compr, &rkbuf->rkbuf_buf,
+                                          data, len);
+                r = SIZE_MAX;
+        } else
+                r = rd_buf_write(&rkbuf->rkbuf_buf, data, len);
 
         if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC)
                 rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, data, len);
@@ -987,6 +1054,7 @@ static RD_INLINE void rd_kafka_buf_update(rd_kafka_buf_t *rkbuf,
                                           const void *data,
                                           size_t len) {
         rd_kafka_assert(NULL, !(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC));
+        rd_assert(!rd_kafka_buf_has_compressor(rkbuf));
         rd_buf_write_update(&rkbuf->rkbuf_buf, of, data, len);
 }
 
@@ -1080,6 +1148,8 @@ static RD_INLINE void
 rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, int cnt) {
         char buf[sizeof(int32_t)];
         size_t sz, r;
+
+        rd_assert(!rd_kafka_buf_has_compressor(rkbuf));
 
         rd_assert(cnt >= 0);
 

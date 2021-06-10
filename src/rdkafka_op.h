@@ -60,7 +60,6 @@ typedef struct rd_kafka_replyq_s {
  *   - rd_kafka_op_t.rko_flags
  *   - rd_kafka_buf_t.rkbuf_flags
  */
-#define RD_KAFKA_OP_F_FREE        0x1  /* rd_free payload when done with it */
 #define RD_KAFKA_OP_F_NO_RESPONSE 0x2  /* rkbuf: Not expecting a response */
 #define RD_KAFKA_OP_F_CRC         0x4  /* rkbuf: Perform CRC calculation */
 #define RD_KAFKA_OP_F_BLOCKING    0x8  /* rkbuf: blocking protocol request */

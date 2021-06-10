@@ -46,7 +46,11 @@
 class myAvgStatsCb : public RdKafka::EventCb {
  public:
   myAvgStatsCb(std::string topic) :
-      avg_batchsize(0), min_batchsize(0), max_batchsize(0), topic_(topic) {
+      avg_batchsize(0),
+      min_batchsize(0),
+      max_batchsize(0),
+      max_batchcnt(0),
+      topic_(topic) {
   }
 
   void event_cb(RdKafka::Event &event) {
@@ -65,6 +69,7 @@ class myAvgStatsCb : public RdKafka::EventCb {
   int avg_batchsize;
   int min_batchsize;
   int max_batchsize;
+  int max_batchcnt;
 
  private:
   void read_val(rapidjson::Document &d, const std::string &path, int &val) {
@@ -95,6 +100,7 @@ class myAvgStatsCb : public RdKafka::EventCb {
     read_val(d, "/topics/" + topic_ + "/batchsize/avg", avg_batchsize);
     read_val(d, "/topics/" + topic_ + "/batchsize/min", min_batchsize);
     read_val(d, "/topics/" + topic_ + "/batchsize/max", max_batchsize);
+    read_val(d, "/topics/" + topic_ + "/batchcnt/max", max_batchcnt);
   }
 
   std::string topic_;
@@ -105,7 +111,9 @@ class myAvgStatsCb : public RdKafka::EventCb {
  * @brief Specify batch.size and parse stats to verify it takes effect.
  *
  */
-static void do_test_batch_size() {
+static void do_test_batch_size(const std::string &compression_type) {
+  SUB_TEST_QUICK("compression_type %s", compression_type.c_str());
+
   std::string topic = Test::mk_topic_name(__FILE__, 0);
 
   myAvgStatsCb event_cb(topic);
@@ -113,16 +121,37 @@ static void do_test_batch_size() {
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);
 
-  const int msgcnt      = 1000;
-  const int msgsize     = 1000;
-  int batchsize         = 5000;
-  int exp_min_batchsize = batchsize - msgsize - 100 /*~framing overhead*/;
+  bool with_compression = compression_type != "none";
+  bool with_streaming_compression =
+      with_compression && compression_type != "snappy";
+  const int msgcnt  = 2000;
+  const int msgsize = 1000;
+  int batchsize     = 5000;
+  /* Compressed batches should allow for at least 10 times the number of
+   * messages per batch (batchcnt == average number of messages per batch),
+   * with no upper bound (1000x). */
+  int exp_batchcnt =
+      (batchsize / msgsize) * (with_streaming_compression ? 10 : 1);
+  int exp_min_batchcnt = (int)((float)exp_batchcnt * 0.8);
+  int exp_max_batchcnt =
+      (int)((float)exp_batchcnt * (with_streaming_compression ? 1000.0 : 1.2));
+  /* With compression the last batch may be much smaller than the previous
+   * filled ones and thus mess up the average batchsize metric.
+   * So give it some extra lower leeway in case of compression. */
+  int exp_min_batchsize =
+      exp_batchcnt * msgsize * (with_compression ? 0.01 : 1.0);
+  int exp_max_batchsize =
+      exp_batchcnt * msgsize * (with_compression ? 0.2 : 1.1);
 
-  Test::conf_set(conf, "batch.size", "5000");
+  if (compression_type != "none")
+    exp_batchcnt /= 10;
+
+  Test::conf_set(conf, "batch.size", tostr() << batchsize);
 
   /* Make sure batch.size takes precedence by setting the following high */
   Test::conf_set(conf, "batch.num.messages", "100000");
   Test::conf_set(conf, "linger.ms", "2000");
+  Test::conf_set(conf, "compression.type", compression_type);
 
   Test::conf_set(conf, "statistics.interval.ms", "7000");
   std::string errstr;
@@ -158,21 +187,47 @@ static void do_test_batch_size() {
                     << event_cb.max_batchsize << ", avg "
                     << event_cb.avg_batchsize << "\n");
 
+  Test::Say(tostr() << "Batchcnt: max " << event_cb.max_batchcnt << "\n");
+
+
   /* The average batchsize should within a message size from batch.size. */
   if (event_cb.avg_batchsize < exp_min_batchsize ||
-      event_cb.avg_batchsize > batchsize)
+      event_cb.avg_batchsize > exp_max_batchsize)
     Test::Fail(tostr() << "Expected avg batchsize to be within "
-                       << exp_min_batchsize << ".." << batchsize << " but got "
-                       << event_cb.avg_batchsize);
+                       << exp_min_batchsize << ".." << exp_max_batchsize
+                       << " but got " << event_cb.avg_batchsize);
 
+  /* All messages should fit one single batch with compression */
+  if (event_cb.max_batchcnt < exp_min_batchcnt ||
+      event_cb.max_batchcnt > exp_max_batchcnt)
+    Test::Fail(tostr() << "Expected batch count to be within "
+                       << exp_min_batchcnt << ".." << exp_max_batchcnt
+                       << " but got " << event_cb.max_batchcnt);
   delete p;
+
+  SUB_TEST_PASS();
 }
+
+
 #endif
 
 extern "C" {
 int main_0110_batch_size(int argc, char **argv) {
 #if WITH_RAPIDJSON
-  do_test_batch_size();
+  do_test_batch_size("none");
+  do_test_batch_size("lz4");
+  if (test_quick)
+    return 0;
+
+#if WITH_ZLIB
+  do_test_batch_size("gzip");
+#endif
+#if WITH_SNAPPY
+  do_test_batch_size("snappy");
+#endif
+#if WITH_ZSTD
+  do_test_batch_size("zstd");
+#endif
 #else
   Test::Skip("RapidJSON >=1.1.0 not available\n");
 #endif

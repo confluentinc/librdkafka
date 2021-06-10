@@ -154,8 +154,9 @@ Field | Type | Example | Description
 topic | string | `"myatopic"` | Topic name
 age   | int gauge | | Age of client's topic object (milliseconds)
 metadata_age | int gauge | | Age of metadata from broker for this topic (milliseconds)
-batchsize | object | | Batch sizes in bytes. See *Window stats*·
+batchsize | object | | Batch sizes in bytes (after compression). See *Window stats*·
 batchcnt | object | | Batch message counts. See *Window stats*·
+batchcompratio | object | | Batch compression ratio in percentages. E.g., 250(%) is 2.5x compression ratio. See *Window stats*.
 partitions | object | | Partitions dict, key is partition id. See **partitions** below.
 
 

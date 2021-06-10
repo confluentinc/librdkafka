@@ -371,6 +371,14 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int rktp_wait_consumer_lag_resp; /* Waiting for consumer lag
                                           * response. */
 
+        /** Temporary suppressions */
+        struct {
+                rd_ts_t compression; /**< Producer: Don't compress
+                                      * messagesets until this time has
+                                      * exired. */
+        } rktp_suppress;
+
+
         struct rd_kafka_toppar_err rktp_last_err; /**< Last produce error */
 
 

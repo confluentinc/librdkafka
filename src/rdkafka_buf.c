@@ -91,7 +91,16 @@ void rd_kafka_buf_push0(rd_kafka_buf_t *rkbuf,
                         size_t len,
                         int allow_crc_calc,
                         void (*free_cb)(void *)) {
-        rd_buf_push(&rkbuf->rkbuf_buf, buf, len, free_cb);
+
+        if (rkbuf->rkbuf_compr) {
+                /* Ignore compressor errors, they're checked later.
+                 * See comment in rd_kafka_buf_write() */
+                rd_kafka_compressor_write(rkbuf->rkbuf_compr, &rkbuf->rkbuf_buf,
+                                          buf, len);
+                if (free_cb)
+                        free_cb((void *)buf);
+        } else
+                rd_buf_push(&rkbuf->rkbuf_buf, buf, len, free_cb);
 
         if (allow_crc_calc && (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC))
                 rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, buf, len);

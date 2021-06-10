@@ -22,7 +22,8 @@ function manual_checks {
     mkl_meta_set "libzstd" "brew" "zstd"
     mkl_meta_set "libzstd" "apk" "zstd-dev zstd-static"
     mkl_meta_set "libzstd" "static" "libzstd.a"
-    mkl_lib_check "libzstd" "WITH_ZSTD" $action CC "-lzstd" \
+
+    if mkl_lib_check "libzstd" "WITH_ZSTD" $action CC "-lzstd" \
                   "
 #include <zstd.h>
 #include <zstd_errors.h>
@@ -30,7 +31,18 @@ function manual_checks {
 void foo (void) {
      ZSTD_getFrameContentSize(NULL, 0);
 }
+"; then
+
+        mkl_compile_check "libzstd_streaming" "WITH_STREAMING_ZSTD" disable CC "$LIBS" \
+                  "
+#include <zstd.h>
+#include <zstd_errors.h>
+
+void foo (void) {
+     ZSTD_compressStream2(NULL, NULL, NULL, ZSTD_e_end);
+}
 "
+    fi
 }
 
 

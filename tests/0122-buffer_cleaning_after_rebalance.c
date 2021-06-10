@@ -66,8 +66,8 @@ static int consumer_batch_queue (void *arg) {
                  arguments->expected_msg_cnt);
 
         TIMING_START(&t_cons, "CONSUME");
-        msg_cnt = rd_kafka_consume_batch_queue(rkq,
-                timeout_ms, rkmessage, consume_msg_cnt);
+        msg_cnt = (int)rd_kafka_consume_batch_queue(
+                rkq, timeout_ms, rkmessage, consume_msg_cnt);
         TIMING_STOP(&t_cons);
 
         TEST_SAY("%s consumed %d/%d/%d message(s)\n",

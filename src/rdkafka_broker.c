@@ -1920,6 +1920,7 @@ int rd_kafka_recv(rd_kafka_broker_t *rkb) {
                          * data to be in contigious memory. */
 
                         rd_buf_write_ensure_contig(&rkbuf->rkbuf_buf,
+                                                   rkbuf->rkbuf_totlen,
                                                    rkbuf->rkbuf_totlen);
                 }
         }

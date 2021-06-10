@@ -490,28 +490,29 @@ int rd_kafka_transport_framed_recv(rd_kafka_transport_t *rktrans,
                 /* Initialize reader */
                 rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf, 0, 4);
 
-                /* Reader header: payload length */
-                rd_kafka_buf_read_i32(rkbuf, &frame_len);
+		/* Reader header: payload length */
+		rd_kafka_buf_read_i32(rkbuf, &frame_len);
 
-                if (frame_len < 0 ||
-                    frame_len > rktrans->rktrans_rkb->rkb_rk->rk_conf
-                                    .recv_max_msg_size) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Invalid frame size %" PRId32, frame_len);
-                        return -1;
-                }
+		if (frame_len < 0 ||
+		    frame_len > rktrans->rktrans_rkb->
+		    rkb_rk->rk_conf.recv_max_msg_size) {
+			rd_snprintf(errstr, errstr_size,
+				    "Invalid frame size %"PRId32, frame_len);
+			return -1;
+		}
 
-                rkbuf->rkbuf_totlen = 4 + frame_len;
-                if (frame_len == 0) {
-                        /* Payload is empty, we're done. */
-                        rktrans->rktrans_recv_buf = NULL;
-                        *rkbufp                   = rkbuf;
-                        return 1;
-                }
+		rkbuf->rkbuf_totlen = 4 + frame_len;
+		if (frame_len == 0) {
+			/* Payload is empty, we're done. */
+			rktrans->rktrans_recv_buf = NULL;
+			*rkbufp = rkbuf;
+			return 1;
+		}
 
-                /* Allocate memory to hold entire frame payload in contigious
-                 * memory. */
-                rd_buf_write_ensure_contig(&rkbuf->rkbuf_buf, frame_len);
+		/* Allocate memory to hold entire frame payload in contigious
+		 * memory. */
+                rd_buf_write_ensure_contig(&rkbuf->rkbuf_buf,
+                                           frame_len, frame_len);
 
                 /* Try reading directly, there is probably more data available*/
                 return rd_kafka_transport_framed_recv(rktrans, rkbufp, errstr,

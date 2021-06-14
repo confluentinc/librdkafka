@@ -238,9 +238,13 @@ static RD_UNUSED int rd_pipe_nonblocking(rd_socket_t *fds) {
 #endif
         return 0;
 }
-#define rd_pipe(fds)          pipe(fds)
-#define rd_read(fd, buf, sz)  read(fd, buf, sz)
-#define rd_write(fd, buf, sz) write(fd, buf, sz)
-#define rd_close(fd)          close(fd)
+#define rd_socket_read(fd, buf, sz)  read(fd, buf, sz)
+#define rd_socket_write(fd, buf, sz) write(fd, buf, sz)
+#define rd_socket_close(fd)          close(fd)
+
+/* File IO */
+#define rd_write(fd, buf, sz)      write(fd, buf, sz)
+#define rd_open(path, flags, mode) open(path, flags, mode)
+#define rd_close(fd)               close(fd)
 
 #endif /* _RDPOSIX_H_ */

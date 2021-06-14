@@ -1131,7 +1131,7 @@ static void rd_kafka_mock_cluster_op_io(rd_kafka_mock_cluster_t *mcluster,
                                         void *opaque) {
         /* Read wake-up fd data and throw away, just used for wake-ups*/
         char buf[1024];
-        while (rd_read(fd, buf, sizeof(buf)) > 0)
+        while (rd_socket_read(fd, buf, sizeof(buf)) > 0)
                 ; /* Read all buffered signalling bytes */
 }
 

@@ -72,7 +72,7 @@ static void rd_kafka_transport_close0(rd_kafka_t *rk, rd_socket_t s) {
         if (rk->rk_conf.closesocket_cb)
                 rk->rk_conf.closesocket_cb((int)s, rk->rk_conf.opaque);
         else
-                rd_close(s);
+                rd_socket_close(s);
 }
 
 /**
@@ -1246,8 +1246,8 @@ static int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
                 char buf[1024];
-                while (rd_read((int)rktrans->rktrans_pfd[1].fd, buf,
-                               sizeof(buf)) > 0)
+                while (rd_socket_read((int)rktrans->rktrans_pfd[1].fd, buf,
+                                      sizeof(buf)) > 0)
                         ; /* Read all buffered signalling bytes */
         }
 

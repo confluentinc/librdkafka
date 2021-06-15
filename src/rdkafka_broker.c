@@ -1068,6 +1068,8 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
         size_t totsize;
 
+        rd_assert(!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NEED_MAKE));
+
         if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {
                 /* Empty struct tags */
                 rd_kafka_buf_write_i8(rkbuf, 0);
@@ -1149,8 +1151,9 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 		rd_dassert(!replyq.q);
 	}
 
-        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
-
+        /* Unmaked buffers will be finalized after the make callback. */
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NEED_MAKE))
+                rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
 
 	if (thrd_is_current(rkb->rkb_thread)) {
 		rd_kafka_broker_buf_enq2(rkb, rkbuf);
@@ -2588,6 +2591,41 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		ssize_t r;
                 size_t pre_of = rd_slice_offset(&rkbuf->rkbuf_reader);
                 rd_ts_t now;
+
+                if (unlikely(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NEED_MAKE)) {
+                        /* Request has not been created/baked yet,
+                         * call its make callback. */
+                        rd_kafka_resp_err_t err;
+
+                        err = rkbuf->rkbuf_make_req_cb(
+                                rkb, rkbuf, rkbuf->rkbuf_make_opaque);
+
+                        rkbuf->rkbuf_flags &= ~RD_KAFKA_OP_F_NEED_MAKE;
+
+                        /* Free the make_opaque */
+                        if (rkbuf->rkbuf_free_make_opaque_cb &&
+                            rkbuf->rkbuf_make_opaque) {
+                                rkbuf->rkbuf_free_make_opaque_cb(
+                                        rkbuf->rkbuf_make_opaque);
+                                rkbuf->rkbuf_make_opaque = NULL;
+                        }
+
+                        if (unlikely(err)) {
+                                rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+                                rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL,
+                                           "MAKEREQ",
+                                           "Failed to make %sRequest: %s",
+                                           rd_kafka_ApiKey2str(rkbuf->
+                                                               rkbuf_reqhdr.
+                                                               ApiKey),
+                                           rd_kafka_err2str(err));
+                                rd_kafka_buf_callback(rkb->rkb_rk, rkb, err,
+                                                      NULL, rkbuf);
+                                continue;
+                        }
+
+                        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
+                }
 
                 /* Check for broker support */
                 if (unlikely(!rd_kafka_broker_request_supported(rkb, rkbuf))) {

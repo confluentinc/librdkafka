@@ -181,6 +181,48 @@ typedef rd_kafka_resp_err_t (rd_kafka_send_req_cb_t) (
 
 
 /**
+ * @brief Request maker. A callback that constructs the actual contents
+ *        of a request.
+ *
+ * When constructing a request the ApiVersion typically needs to be selected
+ * which requires the broker's supported ApiVersions to be known, which in
+ * turn requires the broker connection to be UP.
+ *
+ * As a buffer constructor you have two choices:
+ *   a. acquire the broker handle, wait for it to come up, and then construct
+ *      the request buffer, or
+ *   b. acquire the broker handle, enqueue an uncrafted/unmaked
+ *      request on the broker request queue, and when the broker is up
+ *      the make_req_cb will be called for you to construct the request.
+ *
+ * From a code complexity standpoint, the latter option is usually the least
+ * complex and voids the caller to care about any of the broker state.
+ * Any information that is required to construct the request is passed through
+ * the make_opaque, which can be automatically freed by the buffer code
+ * when it has been used, or handled by the caller (in which case it must
+ * outlive the lifetime of the buffer).
+ *
+ * Usage:
+ *
+ *  1. Construct an rkbuf with the appropriate ApiKey.
+ *  2. Make a copy or reference of any data that is needed to construct the
+ *     request, e.g., through rd_kafka_topic_partition_list_copy(). This
+ *     data is passed by the make_opaque.
+ *  3. Set the make callback by calling rd_kafka_buf_set_maker() and pass
+ *     the make_opaque data and a free function, if needed.
+ *  4. The callback will eventually be called from the broker thread.
+ *  5. In the make callback construct the request on the passed rkbuf.
+ *  6. The request is sent to the broker and the make_opaque is freed.
+ *
+ * See rd_kafka_ListOffsetsRequest() in rdkafka_request.c for an example.
+ *
+ */
+typedef rd_kafka_resp_err_t (rd_kafka_make_req_cb_t) (
+        rd_kafka_broker_t *rkb,
+        rd_kafka_buf_t *rkbuf,
+        void *make_opaque);
+
+/**
  * @struct Request and response buffer
  *
  */
@@ -234,6 +276,17 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                                                  * have been reset. */
         rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
         struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
+
+        rd_kafka_make_req_cb_t *rkbuf_make_req_cb; /**< Callback to construct
+                                                    *   the request itself.
+                                                    *   Will be used if
+                                                    *   RD_KAFKA_OP_F_NEED_MAKE
+                                                    *   is set. */
+        void *rkbuf_make_opaque;  /**< Opaque passed to rkbuf_make_req_cb.
+                                   *   Will be freed automatically after use
+                                   *   by the rkbuf code. */
+        void (*rkbuf_free_make_opaque_cb) (void *); /**< Free function for
+                                                     *   rkbuf_make_opaque. */
 
         struct rd_kafka_broker_s *rkbuf_rkb;
 
@@ -1268,5 +1321,11 @@ rd_kafka_buf_version_outdated (const rd_kafka_buf_t *rkbuf, int version) {
         return rkbuf && rkbuf->rkbuf_replyq.version &&
                 rkbuf->rkbuf_replyq.version < version;
 }
+
+
+void rd_kafka_buf_set_maker (rd_kafka_buf_t *rkbuf,
+                             rd_kafka_make_req_cb_t *make_cb,
+                             void *make_opaque,
+                             void (*free_make_opaque_cb) (void *make_opaque));
 
 #endif /* _RDKAFKA_BUF_H_ */

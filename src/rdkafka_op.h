@@ -69,6 +69,11 @@ typedef struct rd_kafka_replyq_s {
 #define RD_KAFKA_OP_F_SENT        0x20 /* rkbuf: request sent on wire */
 #define RD_KAFKA_OP_F_FLEXVER     0x40 /* rkbuf: flexible protocol version
                                         *        (KIP-482) */
+#define RD_KAFKA_OP_F_NEED_MAKE   0x80 /* rkbuf: request content has not
+                                        *        been made yet, the make
+                                        *        callback will be triggered
+                                        *        to construct the request
+                                        *        right before it is sent. */
 
 typedef enum {
         RD_KAFKA_OP_NONE,     /* No specific type, use OP_CB */

@@ -1,6 +1,4 @@
-# librdkafka v1.7.1
-
-librdkafka v1.7.1 is a maintenance release.
+# librdkafka v1.8.0
 
 ## Fixes
 
@@ -10,6 +8,11 @@ librdkafka v1.7.1 is a maintenance release.
    connection goes down, only when all standard named brokers have been tried.
    This fixes the issue with `ERR__ALL_BROKERS_DOWN` being triggered on
    `consumer_close()`.
+ * `rd_kafka_query_watermark_offsets()`, `rd_kafka_offsets_for_times()`,
+   `consumer_lag` metric, and `auto.offset.reset` now honour
+   `isolation.level` and will return the Last Stable Offset (LSO)
+   when `isolation.level` is set to `read_committed` (default), rather than
+   the uncommitted high-watermark when it is set to `read_uncommitted`. (#3423)
 
 
 ### Consumer fixes

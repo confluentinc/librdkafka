@@ -98,7 +98,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
         static const char *names[] = {
                 [RD_KAFKAP_Produce] = "Produce",
                 [RD_KAFKAP_Fetch] = "Fetch",
-                [RD_KAFKAP_Offset] = "Offset",
+                [RD_KAFKAP_ListOffsets] = "ListOffsets",
                 [RD_KAFKAP_Metadata] = "Metadata",
                 [RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
                 [RD_KAFKAP_StopReplica] = "StopReplica",

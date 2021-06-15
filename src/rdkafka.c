@@ -3384,7 +3384,8 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
         state = opaque;
 
         offsets = rd_kafka_topic_partition_list_new(1);
-        err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request, offsets);
+        err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
+                                          offsets);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 rd_kafka_topic_partition_list_destroy(offsets);
                 return; /* Retrying */
@@ -3471,16 +3472,16 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
 
         rktpar->offset =  RD_KAFKA_OFFSET_BEGINNING;
-        rd_kafka_OffsetRequest(leader->rkb, partitions, 0,
-                               RD_KAFKA_REPLYQ(rkq, 0),
-                               rd_kafka_query_wmark_offsets_resp_cb,
-                               &state);
+        rd_kafka_ListOffsetsRequest(leader->rkb, partitions,
+                                    RD_KAFKA_REPLYQ(rkq, 0),
+                                    rd_kafka_query_wmark_offsets_resp_cb,
+                                    &state);
 
         rktpar->offset =  RD_KAFKA_OFFSET_END;
-        rd_kafka_OffsetRequest(leader->rkb, partitions, 0,
-                               RD_KAFKA_REPLYQ(rkq, 0),
-                               rd_kafka_query_wmark_offsets_resp_cb,
-                               &state);
+        rd_kafka_ListOffsetsRequest(leader->rkb, partitions,
+                                    RD_KAFKA_REPLYQ(rkq, 0),
+                                    rd_kafka_query_wmark_offsets_resp_cb,
+                                    &state);
 
         rd_kafka_topic_partition_list_destroy(partitions);
         rd_list_destroy(&leaders);
@@ -3567,8 +3568,8 @@ static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
 
         state = opaque;
 
-        err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
-                                     state->results);
+        err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
+                                          state->results);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
 
@@ -3629,10 +3630,11 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         /* For each leader send a request for its partitions */
         RD_LIST_FOREACH(leader, &leaders, i) {
                 state.wait_reply++;
-                rd_kafka_OffsetRequest(leader->rkb, leader->partitions, 1,
-                                       RD_KAFKA_REPLYQ(rkq, 0),
-                                       rd_kafka_get_offsets_for_times_resp_cb,
-                                       &state);
+                rd_kafka_ListOffsetsRequest(
+                        leader->rkb, leader->partitions,
+                        RD_KAFKA_REPLYQ(rkq, 0),
+                        rd_kafka_get_offsets_for_times_resp_cb,
+                        &state);
         }
 
         rd_list_destroy(&leaders);

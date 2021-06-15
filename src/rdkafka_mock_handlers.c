@@ -394,10 +394,10 @@ static int rd_kafka_mock_handle_Fetch (rd_kafka_mock_connection_t *mconn,
 
 
 /**
- * @brief Handle ListOffset
+ * @brief Handle ListOffsets
  */
-static int rd_kafka_mock_handle_ListOffset (rd_kafka_mock_connection_t *mconn,
-                                            rd_kafka_buf_t *rkbuf) {
+static int rd_kafka_mock_handle_ListOffsets (rd_kafka_mock_connection_t *mconn,
+                                             rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
@@ -451,7 +451,9 @@ static int rd_kafka_mock_handle_ListOffset (rd_kafka_mock_connection_t *mconn,
                                                       &CurrentLeaderEpoch);
 
                         rd_kafka_buf_read_i64(rkbuf, &Timestamp);
-                        rd_kafka_buf_read_i32(rkbuf, &MaxNumOffsets);
+
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion == 0)
+                                rd_kafka_buf_read_i32(rkbuf, &MaxNumOffsets);
 
                         if (mtopic)
                                 mpart = rd_kafka_mock_partition_find(mtopic,
@@ -489,14 +491,11 @@ static int rd_kafka_mock_handle_ListOffset (rd_kafka_mock_connection_t *mconn,
                                 if (Offset != -1)
                                         rd_kafka_buf_write_i64(resp, Offset);
                         } else {
-                                /* Response: Offset */
-                                rd_kafka_buf_write_i64(resp, Offset);
-                        }
-
-
-                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                                 /* Response: Timestamp (FIXME) */
                                 rd_kafka_buf_write_i64(resp, -1);
+
+                                /* Response: Offset */
+                                rd_kafka_buf_write_i64(resp, Offset);
                         }
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4) {
@@ -1913,7 +1912,7 @@ rd_kafka_mock_api_handlers[RD_KAFKAP__NUM] = {
         /* [request-type] = { MinVersion, MaxVersion, FlexVersion, callback } */
         [RD_KAFKAP_Produce] = { 0, 7, -1, rd_kafka_mock_handle_Produce },
         [RD_KAFKAP_Fetch] = { 0, 11, -1, rd_kafka_mock_handle_Fetch },
-        [RD_KAFKAP_Offset] = { 0, 5, -1, rd_kafka_mock_handle_ListOffset },
+        [RD_KAFKAP_ListOffsets] = { 0, 5, -1, rd_kafka_mock_handle_ListOffsets },
         [RD_KAFKAP_OffsetFetch] = { 0, 5, 6, rd_kafka_mock_handle_OffsetFetch },
         [RD_KAFKAP_OffsetCommit] = { 0, 7, 8,
                                      rd_kafka_mock_handle_OffsetCommit },

@@ -48,7 +48,7 @@
 #define RD_KAFKAP_None         -1
 #define RD_KAFKAP_Produce       0
 #define RD_KAFKAP_Fetch         1
-#define RD_KAFKAP_Offset        2
+#define RD_KAFKAP_ListOffsets   2
 #define RD_KAFKAP_Metadata      3
 #define RD_KAFKAP_LeaderAndIsr  4
 #define RD_KAFKAP_StopReplica   5

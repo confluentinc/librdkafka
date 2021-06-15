@@ -88,8 +88,8 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
         offsets = rd_kafka_topic_partition_list_new(1);
 
         /* Parse and return Offset */
-        err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-                                     rkbuf, request, offsets);
+        err = rd_kafka_handle_ListOffsets(rkb->rkb_rk, rkb, err,
+                                          rkbuf, request, offsets);
 
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 rd_kafka_topic_partition_list_destroy(offsets);
@@ -163,10 +163,10 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_OffsetRequest(rktp->rktp_broker, partitions, 0,
-                               RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
-                               rd_kafka_toppar_lag_handle_Offset,
-                               rd_kafka_toppar_keep(rktp));
+        rd_kafka_ListOffsetsRequest(rktp->rktp_broker, partitions,
+                                    RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+                                    rd_kafka_toppar_lag_handle_Offset,
+                                    rd_kafka_toppar_keep(rktp));
 
         rd_kafka_toppar_unlock(rktp);
 
@@ -1352,8 +1352,8 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
         if (err != RD_KAFKA_RESP_ERR__OUTDATED) {
                 /* Parse and return Offset */
-                err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-                                             rkbuf, request, offsets);
+                err = rd_kafka_handle_ListOffsets(rkb->rkb_rk, rkb, err,
+                                                  rkbuf, request, offsets);
         }
 
         if (!err) {
@@ -1560,11 +1560,12 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                         rktp->rktp_rkt->rkt_topic->str,
                         rktp->rktp_partition)->offset = query_offset;
 
-                rd_kafka_OffsetRequest(rkb, offsets, 0,
-                                       RD_KAFKA_REPLYQ(rktp->rktp_ops,
-                                                       rktp->rktp_op_version),
-                                       rd_kafka_toppar_handle_Offset,
-                                       rktp);
+                rd_kafka_ListOffsetsRequest(
+                        rkb, offsets,
+                        RD_KAFKA_REPLYQ(rktp->rktp_ops,
+                                        rktp->rktp_op_version),
+                        rd_kafka_toppar_handle_Offset,
+                        rktp);
 
                 rd_kafka_topic_partition_list_destroy(offsets);
         }

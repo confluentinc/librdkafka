@@ -1060,6 +1060,106 @@ static void do_test_empty_txn (rd_bool_t send_offsets, rd_bool_t do_commit) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @returns the high watermark for the given partition.
+ */
+int64_t query_hi_wmark0 (int line,
+                         rd_kafka_t *c, const char *topic, int32_t partition) {
+        rd_kafka_resp_err_t err;
+        int64_t lo = -1, hi = -1;
+
+        err = rd_kafka_query_watermark_offsets(c, topic, partition, &lo, &hi,
+                                               tmout_multip(5*1000));
+        TEST_ASSERT(!err,
+                    "%d: query_watermark_offsets(%s) failed: %s",
+                    line, topic, rd_kafka_err2str(err));
+
+        return hi;
+}
+#define query_hi_wmark(c,topic,part) query_hi_wmark0(__LINE__,c,topic,part)
+
+/**
+ * @brief Check that isolation.level works as expected for query_watermark..().
+ */
+static void do_test_wmark_isolation_level (void) {
+        const char *topic = test_mk_topic_name("0103_wmark_isol", 1);
+        rd_kafka_conf_t *conf, *c_conf;
+        rd_kafka_t *p, *c1, *c2;
+        uint64_t testid;
+        int64_t hw_uncommitted, hw_committed;
+
+        SUB_TEST_QUICK();
+
+        testid = test_id_generate();
+
+        test_conf_init(&conf, NULL, 30);
+        c_conf = rd_kafka_conf_dup(conf);
+
+        test_conf_set(conf, "transactional.id", topic);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
+
+        test_create_topic(p, topic, 1, 3);
+
+        /* Produce some non-txn messages to avoid 0 as the committed hwmark */
+        test_produce_msgs_easy(topic, testid, 0, 100);
+
+        /* Create consumer and subscribe to the topic */
+        test_conf_set(c_conf, "isolation.level", "read_committed");
+        c1 = test_create_consumer(topic, NULL, rd_kafka_conf_dup(c_conf), NULL);
+        test_conf_set(c_conf, "isolation.level", "read_uncommitted");
+        c2 = test_create_consumer(topic, NULL, c_conf, NULL);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, -1));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(p));
+
+        /* Produce some txn messages */
+        test_produce_msgs2(p, topic, testid, 0, 0, 100, NULL, 0);
+
+        test_flush(p, 10*1000);
+
+        hw_committed = query_hi_wmark(c1, topic, 0);
+        hw_uncommitted = query_hi_wmark(c2, topic, 0);
+
+        TEST_SAY("Pre-commit hwmarks: committed %"PRId64
+                 ", uncommitted %"PRId64"\n",
+                 hw_committed, hw_uncommitted);
+
+        TEST_ASSERT(hw_committed > 0 && hw_committed < hw_uncommitted,
+                    "Committed hwmark %"PRId64" should be lower than "
+                    "uncommitted hwmark %"PRId64" for %s [0]",
+                    hw_committed, hw_uncommitted, topic);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(p, -1));
+
+        /* Re-create the producer and re-init transactions to make
+         * sure the transaction is fully committed in the cluster. */
+        rd_kafka_destroy(p);
+        p = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(p, -1));
+        rd_kafka_destroy(p);
+
+
+        /* Now query wmarks again */
+        hw_committed = query_hi_wmark(c1, topic, 0);
+        hw_uncommitted = query_hi_wmark(c2, topic, 0);
+
+        TEST_SAY("Post-commit hwmarks: committed %"PRId64
+                 ", uncommitted %"PRId64"\n",
+                 hw_committed, hw_uncommitted);
+
+        TEST_ASSERT(hw_committed == hw_uncommitted,
+                    "Committed hwmark %"PRId64" should be equal to "
+                    "uncommitted hwmark %"PRId64" for %s [0]",
+                    hw_committed, hw_uncommitted, topic);
+
+        rd_kafka_destroy(c1);
+        rd_kafka_destroy(c2);
+
+        SUB_TEST_PASS();
+}
+
 
 
 int main_0103_transactions (int argc, char **argv) {
@@ -1075,6 +1175,7 @@ int main_0103_transactions (int argc, char **argv) {
         do_test_empty_txn(rd_false/*don't send offsets*/, rd_false/*abort*/);
         do_test_empty_txn(rd_true/*send offsets*/, rd_true/*commit*/);
         do_test_empty_txn(rd_true/*send offsets*/, rd_false/*abort*/);
+        do_test_wmark_isolation_level();
         return 0;
 }
 

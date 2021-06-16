@@ -573,7 +573,8 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
  */
 static rd_bool_t rd_kafka_sasl_cyrus_ready (rd_kafka_t *rk) {
         rd_kafka_sasl_cyrus_handle_t *handle = rk->rk_sasl.handle;
-
+        if (!rk->rk_conf.sasl.relogin_min_time)
+                return rd_true;
         if (!handle)
                 return rd_false;
 

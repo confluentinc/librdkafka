@@ -3107,7 +3107,7 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
 
         /* Don't attempt auto commit when rebalancing or initializing since
          * the rkcg_generation_id is most likely in flux. */
-        if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
+        if (rkcg->rkcg_subscription && rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
                 return;
 
         rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL,

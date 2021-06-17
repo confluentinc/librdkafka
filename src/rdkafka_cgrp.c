@@ -2589,6 +2589,8 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
+                rd_kafka_cgrp_update_session_timeout(
+                        rkcg, rd_false/*don't update if session has expired*/);
                 /* No further action if already rebalancing */
                 if (RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg))
                         return;

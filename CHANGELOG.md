@@ -48,6 +48,9 @@
    the `flush()` call, effectively triggering immediate transmission
    of queued messages. (#3489)
 
+ * If a rebalance takes longer than a consumer's `session.timeout.ms`, the
+   consumer will remain in the group as long as it receives heartbeat responses
+   from the broker.
 
 
 # librdkafka v1.7.0

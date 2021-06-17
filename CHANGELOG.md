@@ -18,6 +18,9 @@ librdkafka v1.7.1 is a maintenance release.
    `ERR_COORDINATOR_NOT_AVAILABLE`, and `ERR_NOT_COORDINATOR` (#3398).
    Offset commits will be retried twice.
 
+ * If a rebalance takes longer than a consumer's `session.timeout.ms`, the
+   consumer will remain in the group as long as it receives heartbeat responses
+   from the broker.
 
 
 # librdkafka v1.7.0

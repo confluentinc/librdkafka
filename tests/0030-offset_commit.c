@@ -98,7 +98,7 @@ static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 
 static void do_offset_test (const char *what, int auto_commit, int auto_store,
-			    int async) {
+			    int async, int subscribe) {
 	test_timing_t t_all;
 	char groupid[64];
 	rd_kafka_t *rk;
@@ -113,7 +113,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 
         SUB_TEST_QUICK("%s", what);
 
-	test_conf_init(&conf, &tconf, 30);
+	test_conf_init(&conf, &tconf, subscribe ? 30 : 10);
         test_conf_set(conf, "session.timeout.ms", "6000");
 	test_conf_set(conf, "enable.auto.commit", auto_commit ? "true":"false");
 	test_conf_set(conf, "enable.auto.offset.store", auto_store ?"true":"false");
@@ -123,9 +123,6 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	test_str_id_generate(groupid, sizeof(groupid));
 	test_conf_set(conf, "group.id", groupid);
 	rd_kafka_conf_set_default_topic_conf(conf, tconf);
-
-	TEST_SAY(_C_MAG "[ do_offset_test: %s with group.id %s ]\n",
-		 what, groupid);
 
 	TIMING_START(&t_all, "%s", what);
 
@@ -149,7 +146,14 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 
 	rd_kafka_poll_set_consumer(rk);
 
-	test_consumer_subscribe(rk, topic);
+        if (subscribe) {
+                test_consumer_subscribe(rk, topic);
+        } else {
+                parts = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(parts, topic, partition);
+                test_consumer_assign("ASSIGN", rk, parts);
+                rd_kafka_topic_partition_list_destroy(parts);
+        }
 
 	while (cnt - extra_cnt < msgcnt / 2) {
 		rd_kafka_message_t *rkm;
@@ -299,7 +303,14 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 	rd_kafka_poll_set_consumer(rk);
 
-	test_consumer_subscribe(rk, topic);
+        if (subscribe) {
+                test_consumer_subscribe(rk, topic);
+        } else {
+                parts = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(parts, topic, partition);
+                test_consumer_assign("ASSIGN", rk, parts);
+                rd_kafka_topic_partition_list_destroy(parts);
+        }
 
 	while (cnt < msgcnt) {
 		rd_kafka_message_t *rkm;
@@ -525,12 +536,20 @@ int main_0030_offset_commit (int argc, char **argv) {
 	do_offset_test("AUTO.COMMIT & AUTO.STORE",
 		       1 /* enable.auto.commit */,
 		       1 /* enable.auto.offset.store */,
-		       0 /* not used. */);
+		       0 /* not used. */,
+                       1 /* use subscribe */);
 
 	do_offset_test("MANUAL.COMMIT.ASYNC & AUTO.STORE",
 		       0 /* enable.auto.commit */,
 		       1 /* enable.auto.offset.store */,
-		       1 /* async */);
+		       1 /* async */,
+                       1 /* use subscribe */);
+
+        do_offset_test("AUTO.COMMIT.ASYNC & AUTO.STORE & ASSIGN",
+                       1 /* enable.auto.commit */,
+                       1 /* enable.auto.offset.store */,
+                       0 /* not used. */,
+                       0 /* use assign */);
 
         if (test_quick) {
                 rd_free(topic);
@@ -540,22 +559,26 @@ int main_0030_offset_commit (int argc, char **argv) {
 	do_offset_test("AUTO.COMMIT & MANUAL.STORE",
 		       1 /* enable.auto.commit */,
 		       0 /* enable.auto.offset.store */,
-		       0 /* not used */);
+		       0 /* not used */,
+                       1 /* use subscribe */);
 
 	do_offset_test("MANUAL.COMMIT.SYNC & AUTO.STORE",
 		       0 /* enable.auto.commit */,
 		       1 /* enable.auto.offset.store */,
-		       0 /* async */);
+		       0 /* async */,
+                       1 /* use subscribe */);
 
 	do_offset_test("MANUAL.COMMIT.ASYNC & MANUAL.STORE",
 		       0 /* enable.auto.commit */,
 		       0 /* enable.auto.offset.store */,
-		       1 /* sync */);
+		       1 /* sync */,
+                       1 /* use subscribe */);
 
 	do_offset_test("MANUAL.COMMIT.SYNC & MANUAL.STORE",
 		       0 /* enable.auto.commit */,
 		       0 /* enable.auto.offset.store */,
-		       0 /* sync */);
+		       0 /* sync */,
+                       1 /* use subscribe */);
 
         rd_free(topic);
 

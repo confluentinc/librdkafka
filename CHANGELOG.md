@@ -20,6 +20,8 @@
  * Automatically retry offset commits on `ERR_REQUEST_TIMED_OUT`,
    `ERR_COORDINATOR_NOT_AVAILABLE`, and `ERR_NOT_COORDINATOR` (#3398).
    Offset commits will be retried twice.
+ * Timed auto commits did not work when only using assign() and not subscribe().
+   This regression was introduced in v1.7.0.
 
 
 

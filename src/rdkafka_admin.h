@@ -257,7 +257,6 @@ struct rd_kafka_DescribeConfigs_result_s {
 
 /**@}*/
 
-
 /**
  * @name DeleteGroups
  * @{
@@ -302,6 +301,45 @@ struct rd_kafka_DeleteConsumerGroupOffsets_s {
         rd_kafka_topic_partition_list_t *partitions;
         char data[1]; /**< The group name is allocated along with
                        *   the struct here. */
+};
+
+/**@}*/
+
+/**
+ * @name CreateAcls
+ * @{
+ */
+
+/**
+ * @brief AclBinding type, used with CreateAcls.
+ */
+struct rd_kafka_AclBinding_s {
+        rd_kafka_ResourceType_t restype; /**< Resource type */
+        char *name;                      /**< Resource name, points to .data*/
+        rd_kafka_ResourcePatternType_t
+            resource_pattern_type; /**< Resource pattern type */
+        char *principal;           /**< Access Control Entry principal */
+        char *host;                /**< Access Control Entry host */
+        rd_kafka_AclOperation_t operation; /**< AclOperation enumeration */
+        rd_kafka_AclPermissionType_t
+            permission_type;     /**< AclPermissionType enumeration */
+        rd_kafka_resp_err_t err; /**< Response error code */
+        char *errstr;            /**< Response error string */
+};
+/**@}*/
+
+/**
+ * @name DeleteAcls
+ * @{
+ */
+
+/**
+ * @brief DeleteAcls_result type, used with DeleteAcls.
+ */
+struct rd_kafka_DeleteAcls_result_response_s {
+        rd_kafka_resp_err_t err; /**< Response error code */
+        char *errstr;            /**< Response error string */
+        rd_list_t matching_acls; /**< Type (rd_kafka_AclBinding_t *) */
 };
 
 /**@}*/

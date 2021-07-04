@@ -259,6 +259,7 @@ typedef struct rd_kafka_consumer_group_metadata_s
 typedef struct rd_kafka_error_s rd_kafka_error_t;
 typedef struct rd_kafka_headers_s rd_kafka_headers_t;
 typedef struct rd_kafka_group_result_s rd_kafka_group_result_t;
+typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
 /* @endcond */
 
 
@@ -5073,12 +5074,12 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DELETEGROUPS_RESULT  106 /**< DeleteGroups_result_t */
 /** DeleteConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT 107
-#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH                               \
-        0x100                           /**< SASL/OAUTHBEARER                  \
-                                              token needs to be                \
-                                              refreshed */
-#define RD_KAFKA_EVENT_BACKGROUND 0x200 /**< Enable background thread. */
-
+/** SASL/OAUTHBEARER token needs to be refreshed */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100
+#define RD_KAFKA_EVENT_BACKGROUND                0x200 /**< Enable background thread. */
+#define RD_KAFKA_EVENT_CREATEACLS_RESULT         0x400 /**< CreateAcls_result_t */
+#define RD_KAFKA_EVENT_DESCRIBEACLS_RESULT       0x800 /**< DescribeAcls_result_t */
+#define RD_KAFKA_EVENT_DELETEACLS_RESULT         0x1000 /**< DeleteAcls_result_t */
 
 /**
  * @returns the event type for the given event.
@@ -5221,6 +5222,9 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_CREATETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DELETETOPICS_RESULT
  *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ *  - RD_KAFKA_EVENT_CREATEACLS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ *  - RD_KAFKA_EVENT_DELETEACLS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
@@ -5311,6 +5315,12 @@ rd_kafka_event_topic_partition(rd_kafka_event_t *rkev);
 typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
 /*! DeleteTopics result type */
 typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
+/*! CreateAcls result type */
+typedef rd_kafka_event_t rd_kafka_CreateAcls_result_t;
+/*! DescribeAcls result type */
+typedef rd_kafka_event_t rd_kafka_DescribeAcls_result_t;
+/*! DeleteAcls result type */
+typedef rd_kafka_event_t rd_kafka_DeleteAcls_result_t;
 /*! CreatePartitions result type */
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 /*! AlterConfigs result type */
@@ -5417,6 +5427,36 @@ rd_kafka_event_DeleteGroups_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_DeleteConsumerGroupOffsets_result_t *
 rd_kafka_event_DeleteConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a CreateAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CREATEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_CreateAcls_result_t *
+rd_kafka_event_CreateAcls_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DescribeAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeAcls_result_t *
+rd_kafka_event_DescribeAcls_result(rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DeleteAcls request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETEACLS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteAcls_result_t *
+rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -6261,7 +6301,10 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
-        RD_KAFKA_ADMIN_OP__CNT /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_CREATEACLS,   /**< CreateAcls */
+        RD_KAFKA_ADMIN_OP_DESCRIBEACLS, /**< DescribeAcls */
+        RD_KAFKA_ADMIN_OP_DELETEACLS,   /**< DeleteAcls */
+        RD_KAFKA_ADMIN_OP__CNT          /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -6885,7 +6928,10 @@ rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
 
 
 
-/*! Apache Kafka resource types */
+/**
+ * @enum rd_kafka_ResourceType_t
+ * @brief Apache Kafka resource types
+ */
 typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_UNKNOWN = 0, /**< Unknown */
         RD_KAFKA_RESOURCE_ANY     = 1, /**< Any (used for lookups) */
@@ -6894,6 +6940,30 @@ typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_BROKER  = 4, /**< Broker */
         RD_KAFKA_RESOURCE__CNT,        /**< Number of resource types defined */
 } rd_kafka_ResourceType_t;
+
+/**
+ * @enum rd_kafka_ResourcePatternType_t
+ * @brief Apache Kafka pattern types
+ */
+typedef enum rd_kafka_ResourcePatternType_t {
+        /** Unknown */
+        RD_KAFKA_RESOURCE_PATTERN_UNKNOWN = 0,
+        /** Any (used for lookups) */
+        RD_KAFKA_RESOURCE_PATTERN_ANY = 1,
+        /** Match: will perform pattern matching */
+        RD_KAFKA_RESOURCE_PATTERN_MATCH = 2,
+        /** Literal: A literal resource name */
+        RD_KAFKA_RESOURCE_PATTERN_LITERAL = 3,
+        /** Prefixed: A prefixed resource name */
+        RD_KAFKA_RESOURCE_PATTERN_PREFIXED = 4,
+        RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT,
+} rd_kafka_ResourcePatternType_t;
+
+/**
+ * @returns a string representation of the \p resource_pattern_type
+ */
+RD_EXPORT const char *rd_kafka_ResourcePatternType_name(
+    rd_kafka_ResourcePatternType_t resource_pattern_type);
 
 /**
  * @returns a string representation of the \p restype
@@ -7361,9 +7431,364 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
     const rd_kafka_DeleteConsumerGroupOffsets_result_t *result,
     size_t *cntp);
 
+/**
+ * @brief used to create access control lists.
+ *
+ *
+ */
+typedef struct rd_kafka_AclBinding_s rd_kafka_AclBinding_t;
+
+/**
+ * @brief  used to filter access control lists.
+ *
+ */
+typedef rd_kafka_AclBinding_t rd_kafka_AclBindingFilter_t;
+
+/**
+ * @returns the error code for the given acl result.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_acl_result_error_code(const rd_kafka_acl_result_t *aclres);
+
+/**
+ * @returns the human readable error message for the given acl result,
+ *          or NULL if there was no error.
+ *
+ * @remark lifetime of the returned string is the same as the \p aclres.
+ */
+RD_EXPORT const char *
+rd_kafka_acl_result_error_message(const rd_kafka_acl_result_t *aclres);
+
+/**
+ * @name AclOperation
+ * @{
+ */
+
+/**
+ * @enum rd_kafka_AclOperation_t
+ * @brief Apache Kafka ACL operation types.
+ */
+typedef enum rd_kafka_AclOperation_t {
+        RD_KAFKA_ACL_OPERATION_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_ACL_OPERATION_ANY =
+            1, /**< In a filter, matches any AclOperation */
+        RD_KAFKA_ACL_OPERATION_ALL      = 2, /**< ALL operation */
+        RD_KAFKA_ACL_OPERATION_READ     = 3, /**< READ operation */
+        RD_KAFKA_ACL_OPERATION_WRITE    = 4, /**< WRITE operation */
+        RD_KAFKA_ACL_OPERATION_CREATE   = 5, /**< CREATE operation */
+        RD_KAFKA_ACL_OPERATION_DELETE   = 6, /**< DELETE operation */
+        RD_KAFKA_ACL_OPERATION_ALTER    = 7, /**< ALTER operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE = 8, /**< DESCRIBE operation */
+        RD_KAFKA_ACL_OPERATION_CLUSTER_ACTION =
+            9, /**< CLUSTER_ACTION operation */
+        RD_KAFKA_ACL_OPERATION_DESCRIBE_CONFIGS =
+            10, /**< DESCRIBE_CONFIGS operation */
+        RD_KAFKA_ACL_OPERATION_ALTER_CONFIGS =
+            11, /**< ALTER_CONFIGS  operation */
+        RD_KAFKA_ACL_OPERATION_IDEMPOTENT_WRITE =
+            12, /**< IDEMPOTENT_WRITE operation */
+        RD_KAFKA_ACL_OPERATION__CNT
+} rd_kafka_AclOperation_t;
+
+/**
+ * @returns a string representation of the \p acl_operation
+ */
+RD_EXPORT const char *
+rd_kafka_AclOperation_name(rd_kafka_AclOperation_t acl_operation);
 
 /**@}*/
 
+/**
+ * @name AclPermissionType
+ * @{
+ */
+
+/**
+ * @enum rd_kafka_AclPermissionType_t
+ * @brief Apache Kafka ACL permission types.
+ */
+typedef enum rd_kafka_AclPermissionType_t {
+        RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_ACL_PERMISSION_TYPE_ANY =
+            1, /**< In a filter, matches any AclPermissionType */
+        RD_KAFKA_ACL_PERMISSION_TYPE_DENY  = 2, /**< Disallows access */
+        RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW = 3, /**< Grants access. */
+        RD_KAFKA_ACL_PERMISSION_TYPE__CNT
+} rd_kafka_AclPermissionType_t;
+
+/**
+ * @returns a string representation of the \p acl_permission_type
+ */
+RD_EXPORT const char *rd_kafka_AclPermissionType_name(
+    rd_kafka_AclPermissionType_t acl_permission_type);
+
+/**@}*/
+
+/**
+ * @brief Create a new AclBinding object. This object is later passed to
+ *        rd_kafka_CreateAcls().
+ *
+ * @param restype The ResourceType.
+ * @param name The resource name.
+ * @param resource_pattern_type The pattern type.
+ * @param principal A principal, following the kafka specification.
+ * @param host An hostname or ip.
+ * @param operation A Kafka operation.
+ * @param permission_type A Kafka permission type.
+ * @param errstr An error string for returning errors or NULL to not use it.
+ * @param errstr_size The \p errstr size or 0 to not use it.
+ *
+ * @returns a new allocated AclBinding object, or NULL if the input parameters
+ *          are invalid.
+ *          Use rd_kafka_AclBinding_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_AclBinding_t *
+rd_kafka_AclBinding_new(rd_kafka_ResourceType_t restype,
+                        const char *name,
+                        rd_kafka_ResourcePatternType_t resource_pattern_type,
+                        const char *principal,
+                        const char *host,
+                        rd_kafka_AclOperation_t operation,
+                        rd_kafka_AclPermissionType_t permission_type,
+                        char *errstr,
+                        size_t errstr_size);
+
+/**
+ * @brief Create a new AclBindingFilter object. This object is later passed to
+ *        rd_kafka_DescribeAcls() or
+ *        rd_kafka_DeletesAcls() in order to filter
+ *        the acls to retrieve or to delete.
+ *        Use the same rd_kafka_AclBinding functions to query or destroy it.
+ *
+ * @param restype The ResourceType or \c RD_KAFKA_RESOURCE_ANY if
+ *                not filtering by this field.
+ * @param name The resource name or NULL if not filtering by this field.
+ * @param resource_pattern_type The pattern type or \c
+ * RD_KAFKA_RESOURCE_PATTERN_ANY if not filtering by this field.
+ * @param principal A principal or NULL if not filtering by this field.
+ * @param host An hostname or ip or NULL if not filtering by this field.
+ * @param operation A Kafka operation or \c RD_KAFKA_ACL_OPERATION_ANY if not
+ * filtering by this field.
+ * @param permission_type A Kafka permission type or \c
+ * RD_KAFKA_ACL_PERMISSION_TYPE_ANY if not filtering by this field.
+ * @param errstr An error string for returning errors or NULL to not use it.
+ * @param errstr_size The \p errstr size or 0 to not use it.
+ *
+ * @returns a new allocated AclBindingFilter object, or NULL if the input
+ * parameters are invalid. Use rd_kafka_AclBinding_destroy() to free object when
+ * done.
+ */
+RD_EXPORT rd_kafka_AclBindingFilter_t *rd_kafka_AclBindingFilter_new(
+    rd_kafka_ResourceType_t restype,
+    const char *name,
+    rd_kafka_ResourcePatternType_t resource_pattern_type,
+    const char *principal,
+    const char *host,
+    rd_kafka_AclOperation_t operation,
+    rd_kafka_AclPermissionType_t permission_type,
+    char *errstr,
+    size_t errstr_size);
+
+/**
+ * @returns the resource type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_ResourceType_t
+rd_kafka_AclBinding_restype(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the resource name for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *rd_kafka_AclBinding_name(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the principal for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *rd_kafka_AclBinding_principal(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the host for the given acl binding.
+ *
+ * @remark lifetime of the returned string is the same as the \p acl.
+ */
+RD_EXPORT const char *rd_kafka_AclBinding_host(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the acl operation for the given acl binding.
+ */
+RD_EXPORT rd_kafka_AclOperation_t
+rd_kafka_AclBinding_operation(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the permission type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_AclPermissionType_t
+rd_kafka_AclBinding_permission_type(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the resource pattern type for the given acl binding.
+ */
+RD_EXPORT rd_kafka_ResourcePatternType_t
+rd_kafka_AclBinding_resource_pattern_type(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns the error code for the given acl binding.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AclBinding_error_code(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @returns error message for the given acl binding.
+ */
+RD_EXPORT char *rd_kafka_AclBinding_error_message(rd_kafka_AclBinding_t *acl);
+
+/**
+ * @brief Destroy and free an AclBinding object previously created with
+ *        rd_kafka_AclBinding_new()
+ */
+RD_EXPORT void rd_kafka_AclBinding_destroy(rd_kafka_AclBinding_t *acl_binding);
+
+/**
+ * @brief Get an array of acl results from a CreateAcls result.
+ *
+ * The returned \p acl result life-time is the same as the \p result object.
+ * @param result CreateAcls result to get acl results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_acl_result_t **
+rd_kafka_CreateAcls_result_acls(const rd_kafka_CreateAcls_result_t *result,
+                                size_t *cntp);
+
+/**
+ * @brief Create acls as specified by the \p new_acls
+ *        array of size \p new_topic_cnt elements.
+ *
+ * @param rk Client instance.
+ * @param new_acls Array of new acls to create.
+ * @param new_acls_cnt Number of elements in \p new_acls array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_CREATEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_CreateAcls(rd_kafka_t *rk,
+                                   rd_kafka_AclBinding_t **new_acls,
+                                   size_t new_acls_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu);
+
+/**
+ * @section DescribeAcls - describe access control lists.
+ *
+ *
+ */
+
+/**
+ * @brief Get an array of resource results from a DescribeAcls result.
+ *
+ * The returned \p resources life-time is the same as the \p result object.
+ * @param result DescribeAcls result to get acls from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_AclBinding_t **
+rd_kafka_DescribeAcls_result_acls(const rd_kafka_DescribeAcls_result_t *result,
+                                  size_t *cntp);
+
+/**
+ * @brief Describe acls matching the filter provided in \p acl_filter
+ *
+ * @param rk Client instance.
+ * @param acl_filter Filter for the returned acls.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_DescribeAcls(rd_kafka_t *rk,
+                                     rd_kafka_AclBindingFilter_t *acl_filter,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu);
+
+/**
+ * @section DeleteAcls - delete access control lists.
+ *
+ *
+ */
+
+typedef struct rd_kafka_DeleteAcls_result_response_s
+    rd_kafka_DeleteAcls_result_response_t;
+
+/**
+ * @brief Get an array of DeleteAcls result responses from a DeleteAcls result.
+ *
+ * The returned \p responses life-time is the same as the \p result object.
+ * @param result DeleteAcls result to get responses from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_DeleteAcls_result_response_t **
+rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
+                                     size_t *cntp);
+
+/**
+ * @returns the error code for the given DeleteAcls result response.
+ */
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_DeleteAcls_result_response_error_code(
+    const rd_kafka_DeleteAcls_result_response_t *result_response);
+
+/**
+ * @returns the error message for the given DeleteAcls result response.
+ *
+ * @remark lifetime of the returned string is the same as the \p
+ * result_response.
+ */
+RD_EXPORT char *rd_kafka_DeleteAcls_result_response_error_message(
+    const rd_kafka_DeleteAcls_result_response_t *result_response);
+
+/**
+ * @returns the matching acls array for the given DeleteAcls result response.
+ *
+ * @remark lifetime of the returned acl bindings is the same as the \p
+ * result_response.
+ */
+RD_EXPORT rd_kafka_AclBinding_t **
+rd_kafka_DeleteAcls_result_response_matching_acls(
+    const rd_kafka_DeleteAcls_result_response_t *result_response,
+    size_t *matching_acls_cntp);
+
+/**
+ * @brief Delete acls matching the filteres provided in \p del_acls
+ * array of size \p del_acls_cnt.
+ *
+ * @param rk Client instance.
+ * @param del_acls Filters for the acls to delete.
+ * @param del_acls_cnt Number of elements in \p del_acls array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETEACLS_RESULT
+ */
+RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
+                                   rd_kafka_AclBindingFilter_t **del_acls,
+                                   size_t del_acls_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu);
+
+/**@}*/
 
 /**
  * @name Security APIs

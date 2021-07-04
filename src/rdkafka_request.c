@@ -4008,7 +4008,6 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-
 /**
  * @brief Construct and send DeleteGroupsRequest to \p rkb
  *        with the groups (DeleteGroup_t *) in \p del_groups, using
@@ -4063,6 +4062,364 @@ rd_kafka_DeleteGroupsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Returns the request size needed to send a specific AclBinding
+ *        specified in \p acl, using the ApiVersion provided in
+ *        \p ApiVersion.
+ *
+ * @returns and int16_t with the request size in bytes.
+ */
+int16_t rd_kafka_AclBinding_request_size(const rd_kafka_AclBinding_t *acl,
+                                         int ApiVersion) {
+        int16_t len = 0;
+        len += 1 + (acl->name == NULL ? 2 : strlen(acl->name) + 2) +
+               (acl->principal == NULL ? 2 : strlen(acl->principal) + 2) +
+               (acl->host == NULL ? 2 : strlen(acl->host) + 2) + 1 + 1;
+        if (ApiVersion > 0)
+                len += 1;
+
+        return len;
+}
+
+/**
+ * @brief Construct and send CreateAclsRequest to \p rkb
+ *        with the acls (AclBinding_t*) in \p new_acls, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
+                           const rd_list_t *new_acls /*(AclBinding_t*)*/,
+                           rd_kafka_AdminOptions_t *options,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i              = 0;
+        int len            = 0;
+        int op_timeout;
+        rd_kafka_AclBinding_t *new_acl;
+
+        if (rd_list_cnt(new_acls) == 0) {
+                rd_snprintf(errstr, errstr_size, "No acls to create");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_CreateAcls, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ACLs Admin API (KIP-140) not supported "
+                            "by broker, requires broker version >= 0.11.0.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (ApiVersion == 0) {
+                RD_LIST_FOREACH(new_acl, new_acls, i) {
+                        if (new_acl->resource_pattern_type !=
+                            RD_KAFKA_RESOURCE_PATTERN_LITERAL) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Version 0 only supports LITERAL "
+                                            "resource pattern types");
+                                rd_kafka_replyq_destroy(&replyq);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                }
+        } else {
+                RD_LIST_FOREACH(new_acl, new_acls, i) {
+                        if (new_acl->resource_pattern_type !=
+                                RD_KAFKA_RESOURCE_PATTERN_LITERAL &&
+                            new_acl->resource_pattern_type !=
+                                RD_KAFKA_RESOURCE_PATTERN_PREFIXED) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Only LITERAL and PREFIXED "
+                                            "resource patterns are supported "
+                                            "when creating ACLs");
+                                rd_kafka_replyq_destroy(&replyq);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                }
+        }
+
+        len = 4;
+        RD_LIST_FOREACH(new_acl, new_acls, i) {
+                len += rd_kafka_AclBinding_request_size(new_acl, ApiVersion);
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateAcls, 1, len);
+
+        /* #acls */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_acls));
+
+        RD_LIST_FOREACH(new_acl, new_acls, i) {
+                rd_kafka_buf_write_i8(rkbuf, new_acl->restype);
+
+                rd_kafka_buf_write_str(rkbuf, new_acl->name, -1);
+
+                if (ApiVersion >= 1) {
+                        rd_kafka_buf_write_i8(rkbuf,
+                                              new_acl->resource_pattern_type);
+                }
+
+                rd_kafka_buf_write_str(rkbuf, new_acl->principal, -1);
+
+                rd_kafka_buf_write_str(rkbuf, new_acl->host, -1);
+
+                rd_kafka_buf_write_i8(rkbuf, new_acl->operation);
+
+                rd_kafka_buf_write_i8(rkbuf, new_acl->permission_type);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Construct and send DescribeAclsRequest to \p rkb
+ *        with the acls (AclBinding_t*) in \p acls, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *acls /*(rd_kafka_AclBindingFilter_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        const rd_kafka_AclBindingFilter_t *acl;
+        int op_timeout;
+
+        if (rd_list_cnt(acls) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No acl binding filters specified");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        if (rd_list_cnt(acls) > 1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Too many acl binding filters specified");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        acl = rd_list_elem(acls, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeAcls, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ACLs Admin API (KIP-140) not supported "
+                            "by broker, requires broker version >= 0.11.0.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (ApiVersion == 0) {
+                if (acl->resource_pattern_type !=
+                        RD_KAFKA_RESOURCE_PATTERN_LITERAL &&
+                    acl->resource_pattern_type !=
+                        RD_KAFKA_RESOURCE_PATTERN_ANY) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Version 0 only supports LITERAL and ANY "
+                                    "resource pattern types");
+                        rd_kafka_replyq_destroy(&replyq);
+                        return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                }
+        } else {
+                if (acl->resource_pattern_type ==
+                    RD_KAFKA_RESOURCE_PATTERN_UNKNOWN) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Filter contains UNKNOWN elements");
+                        rd_kafka_replyq_destroy(&replyq);
+                        return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                }
+        }
+
+        rkbuf = rd_kafka_buf_new_request(
+            rkb, RD_KAFKAP_DescribeAcls, 1,
+            rd_kafka_AclBinding_request_size(acl, ApiVersion));
+
+        /* resource_type */
+        rd_kafka_buf_write_i8(rkbuf, acl->restype);
+
+        /* resource_name filter */
+        rd_kafka_buf_write_str(rkbuf, acl->name, -1);
+
+        if (ApiVersion > 0) {
+                /* resource_pattern_type (rd_kafka_ResourcePatternType_t) */
+                rd_kafka_buf_write_i8(rkbuf, acl->resource_pattern_type);
+        }
+
+        /* principal filter */
+        rd_kafka_buf_write_str(rkbuf, acl->principal, -1);
+
+        /* host filter */
+        rd_kafka_buf_write_str(rkbuf, acl->host, -1);
+
+        /* operation (rd_kafka_AclOperation_t) */
+        rd_kafka_buf_write_i8(rkbuf, acl->operation);
+
+        /* permission type (rd_kafka_AclPermissionType_t) */
+        rd_kafka_buf_write_i8(rkbuf, acl->permission_type);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Construct and send DeleteAclsRequest to \p rkb
+ *        with the acl filters (AclBindingFilter_t*) in \p del_acls, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
+                           const rd_list_t *del_acls /*(AclBindingFilter_t*)*/,
+                           rd_kafka_AdminOptions_t *options,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        const rd_kafka_AclBindingFilter_t *acl;
+        int op_timeout;
+        int i;
+        int len;
+
+        if (rd_list_cnt(del_acls) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No acl binding filters specified");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DeleteAcls, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ACLs Admin API (KIP-140) not supported "
+                            "by broker, requires broker version >= 0.11.0.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        RD_LIST_FOREACH(acl, del_acls, i) {
+                if (ApiVersion == 0) {
+                        if (acl->resource_pattern_type !=
+                                RD_KAFKA_RESOURCE_PATTERN_LITERAL &&
+                            acl->resource_pattern_type !=
+                                RD_KAFKA_RESOURCE_PATTERN_ANY) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Version 0 only supports LITERAL "
+                                            "and ANY resource pattern types");
+                                rd_kafka_replyq_destroy(&replyq);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                } else {
+                        if (acl->resource_pattern_type ==
+                            RD_KAFKA_RESOURCE_PATTERN_UNKNOWN) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Filter contains UNKNOWN elements");
+                                rd_kafka_replyq_destroy(&replyq);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                }
+        }
+
+        len = 4;
+        RD_LIST_FOREACH(acl, del_acls, i) {
+                len += rd_kafka_AclBinding_request_size(acl, ApiVersion);
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteAcls, 1, len);
+
+        /* #acls */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_acls));
+
+        RD_LIST_FOREACH(acl, del_acls, i) {
+                /* resource_type */
+                rd_kafka_buf_write_i8(rkbuf, acl->restype);
+
+                /* resource_name filter */
+                rd_kafka_buf_write_str(rkbuf, acl->name, -1);
+
+                if (ApiVersion > 0) {
+                        /* resource_pattern_type
+                         * (rd_kafka_ResourcePatternType_t) */
+                        rd_kafka_buf_write_i8(rkbuf,
+                                              acl->resource_pattern_type);
+                }
+
+                /* principal filter */
+                rd_kafka_buf_write_str(rkbuf, acl->principal, -1);
+
+                /* host filter */
+                rd_kafka_buf_write_str(rkbuf, acl->host, -1);
+
+                /* operation (rd_kafka_AclOperation_t) */
+                rd_kafka_buf_write_i8(rkbuf, acl->operation);
+
+                /* permission type (rd_kafka_AclPermissionType_t) */
+                rd_kafka_buf_write_i8(rkbuf, acl->permission_type);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * @brief Parses and handles an InitProducerId reply.

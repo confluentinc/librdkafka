@@ -790,8 +790,13 @@ rd_kafka_resp_err_t test_DeleteConsumerGroupOffsets_simple(
     const rd_kafka_topic_partition_list_t *offsets,
     void *opaque);
 
-rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
+rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
+                                           rd_kafka_queue_t *useq,
+                                           rd_kafka_AclBinding_t **acls,
+                                           size_t acl_cnt,
+                                           void *opaque);
 
+rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,

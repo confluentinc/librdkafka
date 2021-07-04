@@ -522,6 +522,35 @@ rd_kafka_admin_result_ret_resources(const rd_kafka_op_t *rko, size_t *cntp) {
             rko->rko_u.admin_result.results.rl_elems;
 }
 
+/**
+ * @brief Return the acl result list from a acl-related result object.
+ */
+static const rd_kafka_acl_result_t **
+rd_kafka_admin_result_ret_acl_results(const rd_kafka_op_t *rko, size_t *cntp) {
+        rd_assert(rko != NULL && cntp != NULL);
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_CREATEACLS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_acl_result_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+/**
+ * @brief Return the acl binding list from a acl-related result object.
+ */
+static const rd_kafka_AclBinding_t **
+rd_kafka_admin_result_ret_acl_bindings(const rd_kafka_op_t *rko, size_t *cntp) {
+        rd_assert(rko != NULL && cntp != NULL);
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBEACLS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_AclBinding_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
 
 /**
  * @brief Return the groups list from a group-related result object.
@@ -535,6 +564,22 @@ rd_kafka_admin_result_ret_groups(const rd_kafka_op_t *rko, size_t *cntp) {
 
         *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
         return (const rd_kafka_group_result_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+/**
+ * @brief Return the DeleteAcls response list from a acl-related result object.
+ */
+static const rd_kafka_DeleteAcls_result_response_t **
+rd_kafka_admin_result_ret_delete_acl_result_responses(const rd_kafka_op_t *rko,
+                                                      size_t *cntp) {
+        rd_assert(rko != NULL && cntp != NULL);
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DELETEACLS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_DeleteAcls_result_response_t **)
             rko->rko_u.admin_result.results.rl_elems;
 }
 
@@ -2412,6 +2457,18 @@ const char *rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource) {
  *
  */
 
+const char *rd_kafka_ResourcePatternType_name(
+    rd_kafka_ResourcePatternType_t resource_pattern_type) {
+        static const char *names[] = {"UNKNOWN", "ANY", "MATCH", "LITERAL",
+                                      "PREFIXED"};
+
+        if ((unsigned int)resource_pattern_type >=
+            (unsigned int)RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT)
+                return "UNSUPPORTED";
+
+        return names[resource_pattern_type];
+}
+
 const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
         static const char *names[] = {
             "UNKNOWN", "ANY", "TOPIC", "GROUP", "BROKER",
@@ -3924,5 +3981,695 @@ void rd_kafka_DeleteConsumerGroupOffsets(
     size_t del_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
+
+/**@}*/
+/**
+ * @name CreateAcls
+ * @{
+ *
+ *
+ *
+ */
+
+const char *rd_kafka_AclOperation_name(rd_kafka_AclOperation_t operation) {
+        static const char *names[] = {"UNKNOWN",
+                                      "ANY",
+                                      "ALL",
+                                      "READ",
+                                      "WRITE",
+                                      "CREATE",
+                                      "DELETE",
+                                      "ALTER",
+                                      "DESCRIBE",
+                                      "CLUSTER_ACTION",
+                                      "DESCRIBE_CONFIGS",
+                                      "ALTER_CONFIGS",
+                                      "IDEMPOTENT_WRITE"};
+
+        if ((unsigned int)operation >=
+            (unsigned int)RD_KAFKA_ACL_OPERATION__CNT)
+                return "UNSUPPORTED";
+
+        return names[operation];
+}
+
+const char *
+rd_kafka_AclPermissionType_name(rd_kafka_AclPermissionType_t permission_type) {
+        static const char *names[] = {"UNKNOWN", "ANY", "DENY", "ALLOW"};
+
+        if ((unsigned int)permission_type >=
+            (unsigned int)RD_KAFKA_ACL_PERMISSION_TYPE__CNT)
+                return "UNSUPPORTED";
+
+        return names[permission_type];
+}
+
+rd_kafka_AclBinding_t *
+rd_kafka_AclBinding_t_new(rd_kafka_ResourceType_t restype,
+                          const char *name,
+                          rd_kafka_ResourcePatternType_t resource_pattern_type,
+                          const char *principal,
+                          const char *host,
+                          rd_kafka_AclOperation_t operation,
+                          rd_kafka_AclPermissionType_t permission_type,
+                          rd_kafka_resp_err_t err,
+                          const char *errstr) {
+        rd_kafka_AclBinding_t *acl_binding;
+
+        acl_binding       = rd_calloc(1, sizeof(*acl_binding));
+        acl_binding->name = name != NULL ? rd_strdup(name) : NULL;
+        acl_binding->principal =
+            principal != NULL ? rd_strdup(principal) : NULL;
+        acl_binding->host    = host != NULL ? rd_strdup(host) : NULL;
+        acl_binding->restype = restype;
+        acl_binding->resource_pattern_type = resource_pattern_type;
+        acl_binding->operation             = operation;
+        acl_binding->permission_type       = permission_type;
+        acl_binding->err                   = err;
+        acl_binding->errstr = errstr != NULL ? rd_strdup(errstr) : NULL;
+
+        return acl_binding;
+}
+
+rd_kafka_AclBinding_t *
+rd_kafka_AclBinding_new(rd_kafka_ResourceType_t restype,
+                        const char *name,
+                        rd_kafka_ResourcePatternType_t resource_pattern_type,
+                        const char *principal,
+                        const char *host,
+                        rd_kafka_AclOperation_t operation,
+                        rd_kafka_AclPermissionType_t permission_type,
+                        char *errstr,
+                        size_t errstr_size) {
+        if (!name) {
+                rd_snprintf(errstr, errstr_size, "Invalid resource name");
+                return NULL;
+        }
+        if (!principal) {
+                rd_snprintf(errstr, errstr_size, "Invalid principal");
+                return NULL;
+        }
+        if (!host) {
+                rd_snprintf(errstr, errstr_size, "Invalid host");
+                return NULL;
+        }
+
+        return rd_kafka_AclBinding_t_new(
+            restype, name, resource_pattern_type, principal, host, operation,
+            permission_type, RD_KAFKA_RESP_ERR_UNKNOWN, NULL);
+}
+
+rd_kafka_AclBindingFilter_t *rd_kafka_AclBindingFilter_new(
+    rd_kafka_ResourceType_t restype,
+    const char *name,
+    rd_kafka_ResourcePatternType_t resource_pattern_type,
+    const char *principal,
+    const char *host,
+    rd_kafka_AclOperation_t operation,
+    rd_kafka_AclPermissionType_t permission_type,
+    char *errstr,
+    size_t errstr_size) {
+        return rd_kafka_AclBinding_t_new(
+            restype, name, resource_pattern_type, principal, host, operation,
+            permission_type, RD_KAFKA_RESP_ERR_UNKNOWN, NULL);
+}
+
+rd_kafka_ResourceType_t
+rd_kafka_AclBinding_restype(rd_kafka_AclBinding_t *acl) {
+        return acl->restype;
+}
+
+const char *rd_kafka_AclBinding_name(rd_kafka_AclBinding_t *acl) {
+        return acl->name;
+}
+
+const char *rd_kafka_AclBinding_principal(rd_kafka_AclBinding_t *acl) {
+        return acl->principal;
+}
+
+const char *rd_kafka_AclBinding_host(rd_kafka_AclBinding_t *acl) {
+        return acl->host;
+}
+
+rd_kafka_AclOperation_t
+rd_kafka_AclBinding_operation(rd_kafka_AclBinding_t *acl) {
+        return acl->operation;
+}
+
+rd_kafka_AclPermissionType_t
+rd_kafka_AclBinding_permission_type(rd_kafka_AclBinding_t *acl) {
+        return acl->permission_type;
+}
+
+rd_kafka_ResourcePatternType_t
+rd_kafka_AclBinding_resource_pattern_type(rd_kafka_AclBinding_t *acl) {
+        return acl->resource_pattern_type;
+}
+
+rd_kafka_resp_err_t rd_kafka_AclBinding_error_code(rd_kafka_AclBinding_t *acl) {
+        return acl->err;
+}
+
+char *rd_kafka_AclBinding_error_message(rd_kafka_AclBinding_t *acl) {
+        return acl->errstr;
+}
+
+/**
+ * @brief Allocate a new AclBinding and make a copy of \p src
+ */
+static rd_kafka_AclBinding_t *
+rd_kafka_AclBinding_copy(const rd_kafka_AclBinding_t *src) {
+        rd_kafka_AclBinding_t *dst;
+
+        dst = rd_kafka_AclBinding_new(
+            src->restype, src->name, src->resource_pattern_type, src->principal,
+            src->host, src->operation, src->permission_type, NULL, 0);
+        rd_assert(dst);
+        return dst;
+}
+
+/**
+ * @brief Allocate a new AclBindingFilter and make a copy of \p src
+ */
+static rd_kafka_AclBindingFilter_t *
+rd_kafka_AclBindingFilter_copy(const rd_kafka_AclBindingFilter_t *src) {
+        rd_kafka_AclBindingFilter_t *dst;
+
+        dst = rd_kafka_AclBindingFilter_new(
+            src->restype, src->name, src->resource_pattern_type, src->principal,
+            src->host, src->operation, src->permission_type, NULL, 0);
+        rd_assert(dst);
+        return dst;
+}
+
+void rd_kafka_AclBinding_destroy(rd_kafka_AclBinding_t *acl_binding) {
+        if (acl_binding->name)
+                rd_free(acl_binding->name);
+        if (acl_binding->principal)
+                rd_free(acl_binding->principal);
+        if (acl_binding->host)
+                rd_free(acl_binding->host);
+        if (acl_binding->errstr)
+                rd_free(acl_binding->errstr);
+        rd_free(acl_binding);
+}
+
+static void rd_kafka_AclBinding_free(void *ptr) {
+        rd_kafka_AclBinding_destroy(ptr);
+}
+
+/**
+ * @brief Parse CreateAclsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
+                                  rd_kafka_op_t **rko_resultp,
+                                  rd_kafka_buf_t *reply,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err     = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
+        rd_kafka_t *rk              = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t acl_cnt;
+        int i;
+
+        int32_t Throttle_Time;
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        rd_kafka_buf_read_i32(reply, &acl_cnt);
+
+        if (acl_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
+                rd_kafka_buf_parse_fail(
+                    reply,
+                    "Received %" PRId32
+                    " acls in response "
+                    "when only %d were requested",
+                    acl_cnt, rd_list_cnt(&rko_req->rko_u.admin_request.args));
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, acl_cnt,
+                     rd_kafka_topic_result_free);
+
+        for (i = 0; i < (int)acl_cnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+                rd_kafka_acl_result_t *acl_res;
+                char *errstr = NULL;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+
+                rd_kafka_buf_read_str(reply, &error_msg);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                errstr = (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                }
+
+                acl_res = rd_kafka_acl_result_new(error_code, errstr);
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, i,
+                            acl_res);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "CreateAcls response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+void rd_kafka_CreateAcls(rd_kafka_t *rk,
+                         rd_kafka_AclBinding_t **new_acls,
+                         size_t new_acls_cnt,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_CreateAclsRequest, rd_kafka_CreateAclsResponse_parse};
+
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_CREATEACLS,
+                                            RD_KAFKA_EVENT_CREATEACLS_RESULT,
+                                            &cbs, options, rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, (int)new_acls_cnt,
+                     rd_kafka_AclBinding_free);
+
+        for (i = 0; i < new_acls_cnt; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_AclBinding_copy(new_acls[i]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+/**
+ * @brief Get an array of rd_kafka_acl_result_t from a CreateAcls result.
+ *
+ * The returned \p rd_kafka_acl_result_t life-time is the same as the \p result
+ * object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_acl_result_t **
+rd_kafka_CreateAcls_result_acls(const rd_kafka_CreateAcls_result_t *result,
+                                size_t *cntp) {
+        return rd_kafka_admin_result_ret_acl_results(
+            (const rd_kafka_op_t *)result, cntp);
+}
+
+/**@}*/
+
+/**
+ * @name DescribeAcls
+ * @{
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Parse DescribeAclsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
+                                    rd_kafka_op_t **rko_resultp,
+                                    rd_kafka_buf_t *reply,
+                                    char *errstr,
+                                    size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err     = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
+        rd_kafka_t *rk              = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t res_cnt;
+        int i;
+        int j;
+        int32_t Throttle_Time;
+        rd_kafka_AclBinding_t *acl = NULL;
+        int16_t error_code;
+        rd_kafkap_str_t error_msg;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_buf_read_i16(reply, &error_code);
+        rd_kafka_buf_read_str(reply, &error_msg);
+
+        if (error_code) {
+                if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                    RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                        errstr = (char *)rd_kafka_err2str(error_code);
+                else
+                        RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+        }
+
+        /* #resources */
+        rd_kafka_buf_read_i32(reply, &res_cnt);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, res_cnt,
+                     rd_kafka_AclBinding_free);
+
+        for (i = 0; i < (int)res_cnt; i++) {
+                int8_t res_type;
+                rd_kafkap_str_t kres_name;
+                char *res_name;
+                rd_kafka_ResourcePatternType_t resource_pattern_type =
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL;
+                int32_t acl_cnt;
+
+                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_str(reply, &kres_name);
+                RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 1) {
+                        rd_kafka_buf_read_i8(reply, &resource_pattern_type);
+                }
+
+                /* #resources */
+                rd_kafka_buf_read_i32(reply, &acl_cnt);
+
+                for (j = 0; j < (int)acl_cnt; j++) {
+                        rd_kafkap_str_t kprincipal;
+                        rd_kafkap_str_t khost;
+                        rd_kafka_AclOperation_t operation =
+                            RD_KAFKA_ACL_OPERATION_UNKNOWN;
+                        rd_kafka_AclPermissionType_t permission_type =
+                            RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
+                        char *principal;
+                        char *host;
+
+                        rd_kafka_buf_read_str(reply, &kprincipal);
+                        rd_kafka_buf_read_str(reply, &khost);
+                        rd_kafka_buf_read_i8(reply, &operation);
+                        rd_kafka_buf_read_i8(reply, &permission_type);
+                        RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
+                        RD_KAFKAP_STR_DUPA(&host, &khost);
+
+                        acl = rd_kafka_AclBinding_new(
+                            res_type, res_name, resource_pattern_type,
+                            principal, host, operation, permission_type, NULL,
+                            0);
+
+                        rd_list_add(&rko_result->rko_u.admin_result.results,
+                                    acl);
+                }
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeAcls response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+void rd_kafka_DescribeAcls(rd_kafka_t *rk,
+                           rd_kafka_AclBindingFilter_t *acl_filter,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DescribeAclsRequest,
+            rd_kafka_DescribeAclsResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_DESCRIBEACLS,
+                                            RD_KAFKA_EVENT_DESCRIBEACLS_RESULT,
+                                            &cbs, options, rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_AclBinding_free);
+
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_kafka_AclBindingFilter_copy(acl_filter));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+/**
+ * @brief Get an array of rd_kafka_AclBinding_t from a DescribeAcls result.
+ *
+ * The returned \p rd_kafka_AclBinding_t life-time is the same as the \p result
+ * object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_AclBinding_t **
+rd_kafka_DescribeAcls_result_acls(const rd_kafka_DescribeAcls_result_t *result,
+                                  size_t *cntp) {
+        return rd_kafka_admin_result_ret_acl_bindings(
+            (const rd_kafka_op_t *)result, cntp);
+}
+
+/**@}*/
+
+/**
+ * @name DeleteAcls
+ * @{
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Allocate a new DeleteAcls result response with the given
+ * \p err error code and \p errstr error message.
+ */
+const rd_kafka_DeleteAcls_result_response_t *
+rd_kafka_DeleteAcls_result_response_new(rd_kafka_resp_err_t err, char *errstr) {
+        rd_kafka_DeleteAcls_result_response_t *result_response;
+
+        result_response         = rd_calloc(1, sizeof(*result_response));
+        result_response->err    = err;
+        result_response->errstr = NULL;
+        if (errstr)
+                result_response->errstr = rd_strdup(errstr);
+
+        /* List of int32 lists */
+        rd_list_init(&result_response->matching_acls, 0,
+                     rd_kafka_AclBinding_free);
+
+        return result_response;
+}
+
+static void rd_kafka_DeleteAcls_result_response_destroy(
+    rd_kafka_DeleteAcls_result_response_t *resp) {
+        rd_free(resp->errstr);
+        rd_list_destroy(&resp->matching_acls);
+        rd_free(resp);
+}
+
+static void rd_kafka_DeleteAcls_result_response_free(void *ptr) {
+        rd_kafka_DeleteAcls_result_response_destroy(
+            (rd_kafka_DeleteAcls_result_response_t *)ptr);
+}
+
+/**
+ * @brief Get an array of rd_kafka_AclBinding_t from a DescribeAcls result.
+ *
+ * The returned \p rd_kafka_AclBinding_t life-time is the same as the \p result
+ * object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_DeleteAcls_result_response_t **
+rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
+                                     size_t *cntp) {
+        return rd_kafka_admin_result_ret_delete_acl_result_responses(
+            (const rd_kafka_op_t *)result, cntp);
+}
+
+rd_kafka_resp_err_t rd_kafka_DeleteAcls_result_response_error_code(
+    const rd_kafka_DeleteAcls_result_response_t *result_response) {
+        return result_response->err;
+}
+
+char *rd_kafka_DeleteAcls_result_response_error_message(
+    const rd_kafka_DeleteAcls_result_response_t *result_response) {
+        return result_response->errstr;
+}
+
+rd_kafka_AclBinding_t **rd_kafka_DeleteAcls_result_response_matching_acls(
+    const rd_kafka_DeleteAcls_result_response_t *result_response,
+    size_t *matching_acls_cntp) {
+        *matching_acls_cntp = result_response->matching_acls.rl_cnt;
+        return (rd_kafka_AclBinding_t **)
+            result_response->matching_acls.rl_elems;
+}
+
+/**
+ * @brief Parse DeleteAclsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
+                                  rd_kafka_op_t **rko_resultp,
+                                  rd_kafka_buf_t *reply,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        rd_kafka_resp_err_t err     = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
+        rd_kafka_t *rk              = rkb->rkb_rk;
+        int32_t Throttle_Time;
+        int32_t res_cnt;
+        int i;
+        int j;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        /* #responses */
+        rd_kafka_buf_read_i32(reply, &res_cnt);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, res_cnt,
+                     rd_kafka_DeleteAcls_result_response_free);
+
+        for (i = 0; i < (int)res_cnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+                char *errstr              = NULL;
+                const rd_kafka_DeleteAcls_result_response_t *result_response;
+                int32_t matching_acls_cnt;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                errstr = (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                }
+
+                result_response =
+                    rd_kafka_DeleteAcls_result_response_new(error_code, errstr);
+
+                /* #maching_acls */
+                rd_kafka_buf_read_i32(reply, &matching_acls_cnt);
+                for (j = 0; j < (int)matching_acls_cnt; j++) {
+                        int16_t acl_error_code;
+                        int8_t res_type;
+                        rd_kafkap_str_t acl_error_msg =
+                            RD_KAFKAP_STR_INITIALIZER;
+                        rd_kafkap_str_t kres_name;
+                        rd_kafkap_str_t khost;
+                        rd_kafkap_str_t kprincipal;
+                        rd_kafka_AclOperation_t operation =
+                            RD_KAFKA_ACL_OPERATION_UNKNOWN;
+                        rd_kafka_AclPermissionType_t permission_type =
+                            RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
+                        rd_kafka_ResourcePatternType_t resource_pattern_type =
+                            RD_KAFKA_RESOURCE_PATTERN_LITERAL;
+                        rd_kafka_AclBinding_t *matching_acl;
+                        char *acl_errstr = NULL;
+                        char *res_name;
+                        char *principal;
+                        char *host;
+
+                        rd_kafka_buf_read_i16(reply, &acl_error_code);
+                        rd_kafka_buf_read_str(reply, &acl_error_msg);
+                        if (acl_error_code) {
+                                if (RD_KAFKAP_STR_IS_NULL(&acl_error_msg) ||
+                                    RD_KAFKAP_STR_LEN(&acl_error_msg) == 0)
+                                        acl_errstr = (char *)rd_kafka_err2str(
+                                            acl_error_code);
+                                else
+                                        RD_KAFKAP_STR_DUPA(&acl_errstr,
+                                                           &acl_error_msg);
+                        }
+
+                        rd_kafka_buf_read_i8(reply, &res_type);
+                        rd_kafka_buf_read_str(reply, &kres_name);
+
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
+                                rd_kafka_buf_read_i8(reply,
+                                                     &resource_pattern_type);
+                        }
+
+                        rd_kafka_buf_read_str(reply, &kprincipal);
+                        rd_kafka_buf_read_str(reply, &khost);
+                        rd_kafka_buf_read_i8(reply, &operation);
+                        rd_kafka_buf_read_i8(reply, &permission_type);
+                        RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                        RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
+                        RD_KAFKAP_STR_DUPA(&host, &khost);
+
+                        matching_acl = rd_kafka_AclBinding_t_new(
+                            res_type, res_name, resource_pattern_type,
+                            principal, host, operation, permission_type,
+                            acl_error_code, acl_errstr);
+
+                        rd_list_add(
+                            (rd_list_t *)&result_response->matching_acls,
+                            (void *)matching_acl);
+                }
+
+                rd_list_add(&rko_result->rko_u.admin_result.results,
+                            (void *)result_response);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DeleteAcls response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+void rd_kafka_DeleteAcls(rd_kafka_t *rk,
+                         rd_kafka_AclBindingFilter_t **del_acls,
+                         size_t del_acls_cnt,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DeleteAclsRequest, rd_kafka_DeleteAclsResponse_parse};
+
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_DELETEACLS,
+                                            RD_KAFKA_EVENT_DELETEACLS_RESULT,
+                                            &cbs, options, rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, (int)del_acls_cnt,
+                     rd_kafka_AclBinding_free);
+
+        for (i = 0; i < del_acls_cnt; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_AclBindingFilter_copy(del_acls[i]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
 
 /**@}*/

@@ -920,9 +920,11 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
                                    "%.*s [%" PRId32
                                    "]: "
                                    "No more space in current MessageSet "
-                                   "(%i message(s), %" PRIusz " bytes)",
+                                   "(%i message(s), %" PRIusz
+                                   " bytes or %zu > %zu)",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition, msgcnt, len);
+                                   rktp->rktp_partition, msgcnt, len,
+                                   len + overhead + wire_size, max_msg_size);
                         break;
                 }
 
@@ -949,7 +951,6 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
                 /* Write message to buffer */
                 len += rd_kafka_msgset_writer_write_msg(msetw, rkm, msgcnt, 0,
                                                         NULL);
-
                 msgcnt++;
 
                 /* If compression failed error out, the error itself
@@ -967,10 +968,11 @@ static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
                                    "]: "
                                    "No more space in current MessageSet "
                                    "(%i message(s), %" PRIusz
-                                   " bytes): "
+                                   " bytes %zu): "
                                    "batch.size %" PRIusz " now exceeded",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                                    rktp->rktp_partition, msgcnt, len,
+                                   rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf),
                                    soft_max_msg_size);
                         break;
                 }
@@ -1591,15 +1593,16 @@ rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
                    "%s [%" PRId32
                    "]: "
                    "Produce MessageSet with %i message(s) (%" PRIusz
-                   " bytes, "
+                   " vs %zu bytes, "
                    "ApiVersion %d, MsgVersion %d, MsgId %" PRIu64
                    ", "
-                   "BaseSeq %" PRId32 ", %s, %s)",
+                   "BaseSeq %" PRId32 ", %s, %s): %d msgs still in queue",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition, cnt,
-                   msetw->msetw_MessageSetSize, msetw->msetw_ApiVersion,
+                   msetw->msetw_MessageSetSize, len, msetw->msetw_ApiVersion,
                    msetw->msetw_MsgVersion, msetw->msetw_batch->first_msgid,
                    msetw->msetw_batch->first_seq,
-                   rd_kafka_pid2str(msetw->msetw_pid), comprstr);
+                   rd_kafka_pid2str(msetw->msetw_pid), comprstr,
+                   rd_kafka_msgq_len(msetw->msetw_msgq));
 
         rd_kafka_msgq_verify_order(rktp, &msetw->msetw_batch->msgq,
                                    msetw->msetw_batch->first_msgid, rd_false);

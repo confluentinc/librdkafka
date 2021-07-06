@@ -44,6 +44,8 @@
 #endif
 
 
+static size_t overalloc;
+
 
 /**
  * @struct Compression context that abstracts the underlying compression type.
@@ -73,7 +75,8 @@ struct rd_kafka_compressor_s {
          * Finish and close the current compression frame,
          * freeing the underlying compressor context.
          *
-         * If \p outbuf_rbuf is NULL the compressor context is just freed.
+         * If \p outbuf_rbuf is NULL the compressor context is just freed
+         * and NULL (no error) is returned.
          */
         rd_kafka_error_t *(*rkcompr_close)(struct rd_kafka_compressor_s *compr,
                                            rd_buf_t *output_rbuf);
@@ -310,38 +313,59 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
                                                 rd_buf_t *output_rbuf,
                                                 const void *buf,
                                                 size_t size) {
-        size_t r;
-        void *out;
-        size_t out_size;
-        size_t maxsz = LZ4F_compressBound(size, &compr->rkcompr_lz4.prefs);
-        /* Base flushing on the uncompressed length since compressBound()
-         * for small sizes may be much larger (a compression block of 64K)
-         * than the actual final size.
-         * FIXME: But then we're missing out on the unflushed bytes.. */
-        rd_bool_t do_flush =
-            rd_buf_len(output_rbuf) + size >= compr->rkcompr_soft_size_limit;
+        size_t of               = 0;
+        const size_t block_size = (64 * (1 << 10)) - LZ4F_HEADER_SIZE_MAX;
 
-        rd_buf_write_ensure_contig(output_rbuf, maxsz, maxsz * 2.1);
+        for (of = 0; of < size; of += block_size) {
+                const char *chunk = (const char *)buf + of;
+                size_t chunk_size = RD_MIN(block_size, size - of);
+                size_t r;
+                void *out;
+                size_t out_size;
+                size_t maxsz = (64 * (1 << 10));
+                // LZ4F_compressBound(chunk_size, &compr->rkcompr_lz4.prefs);
+                if (0)
+                        printf("maxsz %zu for chunk_size %zu, tot %zu\n", maxsz,
+                               chunk_size, size);
 
-        /* Get pointer (and size) of contiguous output buffer */
-        out_size = rd_buf_get_writable(output_rbuf, &out);
+                        /* Base flushing on the uncompressed length since
+                         * compressBound() for small sizes may be much larger (a
+                         * compression block of 64K) than the actual final size.
+                         * FIXME: But then we're missing out on the unflushed
+                         * bytes.. */
+#if 0
+                rd_bool_t do_flush = rd_buf_len(output_rbuf) + size >=
+                        compr->rkcompr_soft_size_limit;
+#endif
 
-        r = LZ4F_compressUpdate(compr->rkcompr_lz4.cctx, out, out_size, buf,
-                                size, NULL);
+                out_size = rd_buf_ensure_writable_contig(
+                    output_rbuf, maxsz,
+                    RD_MIN(153600 /*overalloc*/,
+                           compr->rkcompr_soft_size_limit / 2),
+                    &out);
 
-        if (unlikely(LZ4F_isError(r)))
-                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
-                                          "LZ4 compression for %" PRIusz
-                                          " bytes failed "
-                                          "(%" PRIusz
-                                          " output buffer bytes available, "
-                                          "maxsz %" PRIusz "): %s",
-                                          size, out_size, maxsz,
-                                          LZ4F_getErrorName(r));
+                /* Get pointer (and size) of contiguous output buffer */
+                // out_size = rd_buf_get_writable(output_rbuf, &out);
 
-        /* Update written length */
-        rd_buf_write(output_rbuf, NULL, r);
+                r = LZ4F_compressUpdate(compr->rkcompr_lz4.cctx, out, out_size,
+                                        chunk, chunk_size, NULL);
+                printf("wrote %zu for %zu\n", r, chunk_size);
 
+                if (unlikely(LZ4F_isError(r)))
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                            "LZ4 compression for %" PRIusz
+                            " bytes failed "
+                            "(%" PRIusz
+                            " output buffer bytes available, "
+                            "maxsz %" PRIusz "): %s",
+                            chunk_size, out_size, maxsz, LZ4F_getErrorName(r));
+
+                /* Update written length */
+                rd_buf_write(output_rbuf, NULL, r);
+        }
+
+#if 0
         /* If we're nearing the maximum compressor size we need to flush
          * LZ4's internal block buffers for each call to avoid overflowing
          * the output buffer (which is not really overflowed, just written
@@ -366,6 +390,7 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
                 /* Update written length */
                 rd_buf_write(output_rbuf, NULL, r);
         }
+#endif
 
         return NULL;
 }
@@ -379,6 +404,7 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_init(rd_kafka_compressor_t *compr,
 
         compr->rkcompr_lz4.prefs.frameInfo.blockMode = LZ4F_blockIndependent;
         compr->rkcompr_lz4.prefs.compressionLevel    = compression_level;
+        compr->rkcompr_soft_size_limit -= 64 * (1 << 10);
 
         r = LZ4F_createCompressionContext(&compr->rkcompr_lz4.cctx,
                                           LZ4F_VERSION);
@@ -409,6 +435,12 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_init(rd_kafka_compressor_t *compr,
         return NULL;
 }
 
+/**
+ * TODO:
+ * - Pass 64KB / compressUpdate() to keep buffers down.
+ * - flush() will never need more than one block size - preallocate it.
+ * - see if LinkedBlocks can be used.
+ */
 
 
 #if WITH_STREAMING_ZSTD
@@ -420,8 +452,9 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_init(rd_kafka_compressor_t *compr,
 
 rd_kafka_error_t *rd_kafka_compressor_zstd_close(rd_kafka_compressor_t *compr,
                                                  rd_buf_t *output_rbuf) {
-        ZSTD_inBuffer in = {pos: 0, size: 0};
-        size_t needed    = 0;
+        rd_kafka_error_t *error = NULL;
+        ZSTD_inBuffer in        = {pos: 0, size: 0};
+        size_t needed           = 0;
 
 
         if (unlikely(!output_rbuf))
@@ -442,11 +475,13 @@ rd_kafka_error_t *rd_kafka_compressor_zstd_close(rd_kafka_compressor_t *compr,
 
                 if (likely(r == 0))
                         break;
-                else if (unlikely(ZSTD_isError(r)))
-                        return rd_kafka_error_new(
+                else if (unlikely(ZSTD_isError(r))) {
+                        error = rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
                             "ZSTD compression end frame failed: %s",
                             ZSTD_getErrorName(r));
+                        break;
+                }
 
                 /* Need more space */
                 needed = r;
@@ -455,7 +490,7 @@ rd_kafka_error_t *rd_kafka_compressor_zstd_close(rd_kafka_compressor_t *compr,
 done:
         ZSTD_freeCCtx(compr->rkcompr_zstd.cctx);
 
-        return NULL;
+        return error;
 }
 
 
@@ -591,10 +626,11 @@ rd_kafka_error_t *rd_kafka_compressor_close(rd_kafka_compressor_t *compr,
                     (double)compr->rkcompr_insize /
                     (double)(rd_buf_len(output_rbuf) - compr->rkcompr_origsize);
 #if 0
-                printf("%s: Buffer utilization: %.1f%%. Compr ratio %.2f, outlen %zu, inlen %zu\n",
+                printf("%s: Buffer utilization: %.1f%%. Compr ratio %.2f, outlen %zu, inlen %zu, ova %zu\n",
                        rd_kafka_compression2str(compr->rkcompr_type),
                        rd_buf_utilization(output_rbuf) * 100.0, *ratiop,
-                       rd_buf_len(output_rbuf), compr->rkcompr_insize);
+                       rd_buf_len(output_rbuf), compr->rkcompr_insize,
+                       overalloc);
                 rd_buf_dump(output_rbuf, 0);
 #endif
         }
@@ -602,12 +638,14 @@ rd_kafka_error_t *rd_kafka_compressor_close(rd_kafka_compressor_t *compr,
         return NULL;
 
 err_close:
-        RD_IF_FREE(compr->rkcompr_fillbuf, rd_free);
 
         /* Compressor has failed, just free it
          * and propagate the original error. */
-        return compr->rkcompr_close(compr, NULL);
+        compr->rkcompr_close(compr, NULL);
+
+        return compr->rkcompr_error;
 }
+
 
 /**
  * @returns true if the compressor has failed, else true.
@@ -702,6 +740,7 @@ rd_kafka_compressor_init(rd_kafka_compressor_t *compr,
                         .rkcompr_init  = rd_kafka_compressor_lz4_init,
                         .rkcompr_write = rd_kafka_compressor_lz4_write,
                         .rkcompr_close = rd_kafka_compressor_lz4_close,
+                        //.rkcompr_fillbuf_size = 64*(1<<10),
                     },
 #if WITH_STREAMING_ZSTD
                 [RD_KAFKA_COMPRESSION_ZSTD] =
@@ -724,6 +763,8 @@ rd_kafka_compressor_init(rd_kafka_compressor_t *compr,
         compr->rkcompr_type            = compression_type;
         compr->rkcompr_origsize        = rd_buf_len(output_rbuf);
         compr->rkcompr_soft_size_limit = soft_size_limit;
+
+        overalloc = atoi(rd_getenv("OVA", "262144"));
 
         if (compr->rkcompr_fillbuf_size > 0)
                 compr->rkcompr_fillbuf = rd_malloc(compr->rkcompr_fillbuf_size);

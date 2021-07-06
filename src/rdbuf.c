@@ -438,7 +438,7 @@ size_t rd_buf_get_writable(rd_buf_t *rbuf, void **p) {
 
 
 /**
- * @brief Make room for at least \p min_size more bytes (if necessary)
+ * @brief Make room for at least \p size more bytes (if necessary)
  *        and return a writable pointer in \p p and the writable length
  *        as return value.
  *
@@ -451,6 +451,26 @@ size_t rd_buf_ensure_writable(rd_buf_t *rbuf, size_t size, void **p) {
         rd_buf_write_ensure(rbuf, size, 0);
         return rd_buf_get_writable(rbuf, p);
 }
+
+
+/**
+ * @brief Make room for at least \p min_size more bytes (if necessary)
+ *        and return a writable pointer in \p p to at least \p min_size
+ *        bytes of contiguous memory.
+ *
+ * May over-allocate up to \p max_size (unless 0).
+ *
+ * The writable length may be less than \p size but guaranteed to be larger
+ * than 0.
+ */
+size_t rd_buf_ensure_writable_contig(rd_buf_t *rbuf,
+                                     size_t min_size,
+                                     size_t max_size,
+                                     void **p) {
+        rd_buf_write_ensure_contig(rbuf, min_size, max_size);
+        return rd_buf_get_writable(rbuf, p);
+}
+
 
 
 /**

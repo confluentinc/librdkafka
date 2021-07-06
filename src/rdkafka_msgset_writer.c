@@ -797,7 +797,7 @@ rd_kafka_msgset_writer_write_msg_v2(rd_kafka_msgset_writer_t *msetw,
 
 /**
  * @brief Write message to messageset buffer.
- * @returns the number of bytes written.
+ * @returns the number of bytes written (after compression).
  */
 static size_t rd_kafka_msgset_writer_write_msg(rd_kafka_msgset_writer_t *msetw,
                                                rd_kafka_msg_t *rkm,
@@ -811,20 +811,19 @@ static size_t rd_kafka_msgset_writer_write_msg(rd_kafka_msgset_writer_t *msetw,
             [1] = rd_kafka_msgset_writer_write_msg_v0_1,
             [2] = rd_kafka_msgset_writer_write_msg_v2};
         size_t actual_written;
-        size_t pre_pos;
+        size_t pre_len;
 
         if (likely(rkm->rkm_timestamp))
                 MsgAttributes |= RD_KAFKA_MSG_ATTR_CREATE_TIME;
 
-        pre_pos = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf);
+        pre_len = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf);
 
         outlen = writer[msetw->msetw_MsgVersion](msetw, rkm, Offset,
                                                  MsgAttributes, free_cb);
 
-        actual_written =
-            rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) - pre_pos;
-        rd_assert(outlen <=
-                  rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
+        actual_written = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf) - pre_len;
+        rd_dassert(outlen <=
+                   rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
         rd_dassert(outlen == actual_written ||
                    rd_kafka_buf_has_compressor(msetw->msetw_rkbuf));
 

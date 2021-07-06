@@ -1491,7 +1491,7 @@ int main(int argc, char **argv) {
                                             (int)RD_MAX(0, (next - rd_clock()) /
                                                                1000));
                                 } while (next > rd_clock());
-                        } else {
+                        } else if (cnt.msgs % 1000 == 0) {
                                 rd_kafka_poll(rk, 0);
                         }
 

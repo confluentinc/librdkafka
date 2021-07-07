@@ -1,5 +1,11 @@
 # librdkafka v1.8.0
 
+
+## Enhancements
+
+  * Added `AWS_MSK_IAM` to supported `sasl.mechanisms`. This feature
+  provides support for using IAM authentication on AWS MSK clusters. (@garrett528, #3402)
+
 ## Fixes
 
 ### General fixes

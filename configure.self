@@ -144,6 +144,11 @@ void foo (void) {
         # SASL OAUTHBEARER's default unsecured JWS implementation
         # requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
+        # SASL AWS MSK IAM requires base64 encoding from OpenSSL
+        if mkl_lib_check "curl" "" disable CC "-lcurl" \
+                            "#include <curl/curl.h>"; then
+            mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
+        fi
     fi
 
     # CRC32C: check for crc32 instruction support.

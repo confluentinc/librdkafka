@@ -12,6 +12,7 @@ endif
 SRCS_$(WITH_SASL_CYRUS) += rdkafka_sasl_cyrus.c
 SRCS_$(WITH_SASL_SCRAM) += rdkafka_sasl_scram.c
 SRCS_$(WITH_SASL_OAUTHBEARER) += rdkafka_sasl_oauthbearer.c
+SRCS_$(WITH_SASL_AWS_MSK_IAM) += rdkafka_sasl_aws_msk_iam.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
@@ -53,7 +54,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_txnmgr.c rdkafka_coord.c \
 		rdvarint.c rdbuf.c rdmap.c rdunittest.c \
 		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c \
-		rdkafka_error.c \
+		rdkafka_error.c rdstringbuilder.c\
 		$(SRCS_y)
 
 HDRS=		rdkafka.h rdkafka_mock.h

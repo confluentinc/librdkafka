@@ -81,23 +81,32 @@ static void dr_msg_cb (rd_kafka_t *rk,
 
 
 int main (int argc, char **argv) {
-        rd_kafka_t *rk;         /* Producer instance handle */
-        rd_kafka_conf_t *conf;  /* Temporary configuration object */
-        char errstr[512];       /* librdkafka API error reporting buffer */
-        char buf[512];          /* Message value temporary buffer */
-        const char *brokers;    /* Argument: broker list */
-        const char *topic;      /* Argument: topic to produce to */
+        rd_kafka_t *rk;                         /* Producer instance handle */
+        rd_kafka_conf_t *conf;                  /* Temporary configuration object */
+        char errstr[512];                       /* librdkafka API error reporting buffer */
+        char buf[512];                          /* Message value temporary buffer */
+        const char *brokers;                    /* Argument: broker list */
+        const char *topic;                      /* Argument: topic to produce to */
+        const char *aws_access_key_id;          /* Argument: aws access key id for IAM auth */
+        const char *aws_secret_access_key;      /* Argument: aws secret access key for IAM auth */
+        const char *aws_region;                 /* Argument: aws region for IAM auth */
 
         /*
          * Argument validation
          */
-        if (argc != 3) {
-                fprintf(stderr, "%% Usage: %s <broker> <topic>\n", argv[0]);
+        if (argc == 3) {
+            brokers = argv[1];
+            topic   = argv[2];
+        } else if (argc == 6) {
+            brokers = argv[1];
+            topic   = argv[2];
+            aws_access_key_id = argv[3];
+            aws_secret_access_key = argv[4];
+            aws_region = argv[5];
+        } else {
+            fprintf(stderr, "%% Usage: %s <broker> <topic> (optional) <aws_access_key_id> <aws_secret_access_key> <aws_region>\n", argv[0]);
                 return 1;
         }
-
-        brokers = argv[1];
-        topic   = argv[2];
 
 
         /*
@@ -113,6 +122,44 @@ int main (int argc, char **argv) {
                               errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 return 1;
+        }
+        
+        if (argc == 6) {
+            if (rd_kafka_conf_set(conf, "security.protocol", "SASL_SSL",
+                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                return 1;
+            }
+
+            if (rd_kafka_conf_set(conf, "sasl.mechanisms", "AWS_MSK_IAM",
+                                  errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                    fprintf(stderr, "%s\n", errstr);
+                    return 1;
+            }
+
+            if (rd_kafka_conf_set(conf, "sasl.aws.access.key.id", aws_access_key_id,
+                                  errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                    fprintf(stderr, "%s\n", errstr);
+                    return 1;
+            }
+
+            if (rd_kafka_conf_set(conf, "sasl.aws.secret.access.key", aws_secret_access_key,
+                                  errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                    fprintf(stderr, "%s\n", errstr);
+                    return 1;
+            }
+
+            if (rd_kafka_conf_set(conf, "sasl.aws.region", aws_region,
+                                  errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                    fprintf(stderr, "%s\n", errstr);
+                    return 1;
+            }
+            
+            //        if (rd_kafka_conf_set(conf, "debug", "all",
+            //                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+            //                fprintf(stderr, "%s\n", errstr);
+            //                return 1;
+            //        }
         }
 
         /* Set the delivery report callback.

@@ -30,3 +30,5 @@ test_report*.json
 cov-int
 gdbrun*.gdb
 TAGS
+nbproject
+.vscode

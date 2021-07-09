@@ -196,6 +196,13 @@ typedef struct rd_kafka_cgrp_s {
                                                 *   Will be updated when the
                                                 *   coordinator changes. */
 
+        int16_t            rkcg_wait_resp;     /**< Awaiting response for this
+                                                *   ApiKey.
+                                                *   Makes sure only one
+                                                *   JoinGroup or SyncGroup
+                                                *   request is outstanding.
+                                                *   Unset value is -1. */
+
         /** Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
         /** The actual topics subscribed (after metadata+wildcard matching).
@@ -321,10 +328,6 @@ int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic);
 
 void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id);
 
-void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
-				     rd_kafka_broker_t *rkb,
-                                     rd_kafka_resp_err_t err,
-                                     const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
 
 rd_kafka_broker_t *rd_kafka_cgrp_get_coord (rd_kafka_cgrp_t *rkcg);

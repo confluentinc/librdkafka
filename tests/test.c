@@ -154,6 +154,7 @@ _TEST_DECL(0044_partition_cnt);
 _TEST_DECL(0045_subscribe_update);
 _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
+_TEST_DECL(0045_subscribe_update_mock);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -332,6 +333,7 @@ struct test tests[] = {
         _TEST(0045_subscribe_update_non_exist_and_partchange, 0,
               TEST_BRKVER(0,9,0,0),
               .scenario = "noautocreate"),
+        _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0,
@@ -2323,6 +2325,33 @@ void test_produce_msgs_easy_multi (uint64_t testid, ...) {
 }
 
 
+
+/**
+ * @brief A standard incremental rebalance callback.
+ */
+void test_incremental_rebalance_cb (rd_kafka_t *rk,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_topic_partition_list_t *parts,
+                                    void *opaque) {
+        TEST_SAY("%s: incremental rebalance: %s: %d partition(s)%s\n",
+                 rd_kafka_name(rk), rd_kafka_err2name(err), parts->cnt,
+                 rd_kafka_assignment_lost(rk) ? ", assignment lost": "");
+
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                test_consumer_incremental_assign("rebalance_cb", rk, parts);
+                break;
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                test_consumer_incremental_unassign("rebalance_cb", rk, parts);
+                break;
+        default:
+                TEST_FAIL("Unknown rebalance event: %s",
+                          rd_kafka_err2name(err));
+                break;
+        }
+}
+
 /**
  * @brief A standard rebalance callback.
  */
@@ -2330,6 +2359,11 @@ void test_rebalance_cb (rd_kafka_t *rk,
                         rd_kafka_resp_err_t err,
                         rd_kafka_topic_partition_list_t *parts,
                         void *opaque) {
+
+        if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE")) {
+                test_incremental_rebalance_cb(rk, err, parts, opaque);
+                return;
+        }
 
         TEST_SAY("%s: Rebalance: %s: %d partition(s)\n",
                  rd_kafka_name(rk), rd_kafka_err2name(err), parts->cnt);
@@ -3855,8 +3889,9 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 
 	test_msgver_init(&mv, testid);
 
-        TEST_SAY("%s: not expecting any messages for %dms\n",
-		 what, timeout_ms);
+        if (what)
+                TEST_SAY("%s: not expecting any messages for %dms\n",
+                         what, timeout_ms);
 
         TIMING_START(&t_cons, "CONSUME");
 
@@ -3901,7 +3936,8 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
                 rd_kafka_message_destroy(rkmessage);
         } while (test_clock() <= tmout);
 
-        TIMING_STOP(&t_cons);
+        if (what)
+                TIMING_STOP(&t_cons);
 
 	test_msgver_verify(what, &mv, TEST_MSGVER_ALL, 0, 0);
 	test_msgver_clear(&mv);

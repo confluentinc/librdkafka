@@ -151,7 +151,9 @@ static void do_test_non_exist_and_partchange (void) {
 	 * - Create topic
 	 * - Verify new assignment containing topic
 	 */
-	TEST_SAY("#1 & #2 testing\n");
+
+        SUB_TEST();
+
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
@@ -192,6 +194,8 @@ static void do_test_non_exist_and_partchange (void) {
 	rd_kafka_destroy(rk);
 
 	rd_free(topic_a);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -216,7 +220,9 @@ static void do_test_regex (void) {
 	 * - Create topic d
 	 * - Verify b & d assignment
 	 */
-	TEST_SAY("Regex testing\n");
+
+        SUB_TEST();
+
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
@@ -262,8 +268,9 @@ static void do_test_regex (void) {
 	rd_free(topic_c);
 	rd_free(topic_d);
 	rd_free(topic_e);
-}
 
+        SUB_TEST_PASS();
+}
 
 /**
  * @remark Requires scenario=noautocreate.
@@ -289,7 +296,9 @@ static void do_test_topic_remove (void) {
 	 * - Remove topic g
 	 * - Verify empty assignment
 	 */
-	TEST_SAY("Topic removal testing\n");
+
+        SUB_TEST("Topic removal testing");
+
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
@@ -344,7 +353,77 @@ static void do_test_topic_remove (void) {
 
 	rd_free(topic_f);
 	rd_free(topic_g);
+
+        SUB_TEST_PASS();
 }
+
+
+
+/**
+ * @brief Subscribe to a regex and continually create a lot of matching topics,
+ *        triggering many rebalances.
+ *
+ * This is using the mock cluster.
+ *
+ */
+static void do_test_regex_many_mock (const char *assignment_strategy,
+                                     rd_bool_t lots_of_topics) {
+        const char *base_topic = "topic";
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        int topic_cnt = lots_of_topics ? 300 : 50;
+        int await_assignment_every = lots_of_topics ? 150 : 15;
+        int i;
+
+        SUB_TEST("%s with %d topics", assignment_strategy, topic_cnt);
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        test_conf_init(&conf, NULL, 60*5);
+
+        test_conf_set(conf, "security.protocol", "plaintext");
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "partition.assignment.strategy",
+                      assignment_strategy);
+        /* Decrease metadata interval to speed up topic change discovery. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "3000");
+
+        rk = test_create_consumer("mygroup", test_rebalance_cb, conf, NULL);
+
+        test_consumer_subscribe(rk, tsprintf("^%s_.*", base_topic));
+
+        for (i = 0 ; i < topic_cnt ; i++) {
+                char topic[256];
+
+                rd_snprintf(topic, sizeof(topic), "%s_%d", base_topic, i);
+
+
+                TEST_SAY("Creating topic %s\n", topic);
+                TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster,
+                                                           topic, 1 + (i % 8),
+                                                           1));
+
+                test_consumer_poll_no_msgs("POLL", rk, 0,
+                                           lots_of_topics ? 100 : 300);
+
+                /* Wait for an assignment to let the consumer catch up on
+                 * all rebalancing. */
+                if (i % await_assignment_every == await_assignment_every - 1)
+                        test_consumer_wait_assignment(rk, rd_true/*poll*/);
+                else if (!lots_of_topics)
+                        rd_usleep(100 * 1000, NULL);
+        }
+
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 
 
 int main_0045_subscribe_update (int argc, char **argv) {
@@ -370,6 +449,15 @@ int main_0045_subscribe_update_topic_remove (int argc, char **argv) {
                 return 0;
 
         do_test_topic_remove();
+
+        return 0;
+}
+
+
+int main_0045_subscribe_update_mock (int argc, char **argv) {
+        do_test_regex_many_mock("range", rd_false);
+        do_test_regex_many_mock("cooperative-sticky", rd_false);
+        do_test_regex_many_mock("cooperative-sticky", rd_true);
 
         return 0;
 }

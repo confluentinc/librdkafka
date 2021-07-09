@@ -24,6 +24,13 @@
    Offset commits will be retried twice.
  * Timed auto commits did not work when only using assign() and not subscribe().
    This regression was introduced in v1.7.0.
+ * If the topics matching the current subscription changed (or the application
+   updated the subscription) while there was an outstanding JoinGroup or
+   SyncGroup request, an additional request would sometimes be sent before
+   handling the response of the first. This in turn lead to internal state
+   issues that could cause a crash or malbehaviour.
+   The consumer will now wait for any outstanding JoinGroup or SyncGroup
+   responses before re-joining the group. (
 
 
 

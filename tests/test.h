@@ -457,6 +457,10 @@ void test_produce_msgs_easy_v (const char *topic, uint64_t testid,
                                int msg_base, int cnt, size_t size, ...);
 void test_produce_msgs_easy_multi (uint64_t testid, ...);
 
+void test_incremental_rebalance_cb (rd_kafka_t *rk,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_topic_partition_list_t *parts,
+                                    void *opaque);
 void test_rebalance_cb (rd_kafka_t *rk,
                         rd_kafka_resp_err_t err,
                         rd_kafka_topic_partition_list_t *parts,

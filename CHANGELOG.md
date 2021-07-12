@@ -7,7 +7,8 @@
  * `ERR__ALL_BROKERS_DOWN` is no longer emitted when the coordinator
    connection goes down, only when all standard named brokers have been tried.
    This fixes the issue with `ERR__ALL_BROKERS_DOWN` being triggered on
-   `consumer_close()`.
+   `consumer_close()`. It is also now only emitted if the connection was fully
+   up (past handshake), and not just connected.
  * `rd_kafka_query_watermark_offsets()`, `rd_kafka_offsets_for_times()`,
    `consumer_lag` metric, and `auto.offset.reset` now honour
    `isolation.level` and will return the Last Stable Offset (LSO)

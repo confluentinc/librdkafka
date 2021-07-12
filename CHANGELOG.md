@@ -13,6 +13,8 @@
    `isolation.level` and will return the Last Stable Offset (LSO)
    when `isolation.level` is set to `read_committed` (default), rather than
    the uncommitted high-watermark when it is set to `read_uncommitted`. (#3423)
+ * SASL GSSAPI is now usable when `sasl.kerberos.min.time.before.relogin`
+   is set to 0 - which disables ticket refreshes (by @mpekalski, #3431).
 
 
 ### Consumer fixes

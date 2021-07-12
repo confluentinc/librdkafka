@@ -146,6 +146,10 @@ void rd_kafka_mock_clear_request_errors (rd_kafka_mock_cluster_t *mcluster,
  * The following \p cnt protocol requests matching \p ApiKey will fail with the
  * provided error code and removed from the stack, starting with
  * the first error code, then the second, etc.
+ *
+ * Passing \c RD_KAFKA_RESP_ERR__TRANSPORT will make the mock broker
+ * disconnect the client which can be useful to trigger a disconnect on certain
+ * requests.
  */
 RD_EXPORT
 void rd_kafka_mock_push_request_errors (rd_kafka_mock_cluster_t *mcluster,

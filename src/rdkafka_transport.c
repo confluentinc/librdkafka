@@ -95,6 +95,22 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 	rd_free(rktrans);
 }
 
+/**
+ * @brief shutdown(2) a transport's underlying socket.
+ *
+ * This will prohibit further sends and receives.
+ * rd_kafka_transport_close() must still be called to close the socket.
+ */
+void rd_kafka_transport_shutdown (rd_kafka_transport_t *rktrans) {
+        shutdown(rktrans->rktrans_s,
+#ifdef _WIN32
+                 SD_BOTH
+#else
+                 SHUT_RDWR
+#endif
+                );
+}
+
 
 #ifndef _WIN32
 /**

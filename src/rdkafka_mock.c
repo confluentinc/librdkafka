@@ -1563,6 +1563,26 @@ rd_kafka_mock_next_request_error (rd_kafka_mock_connection_t *mconn,
 
         mtx_unlock(&mcluster->lock);
 
+        /* If the error is ERR__TRANSPORT (a librdkafka-specific error code
+         * that will never be returned by a broker), we close the connection.
+         * This allows closing the connection as soon as a certain
+         * request is seen.
+         * The handler code in rdkafka_mock_handlers.c does not need to
+         * handle this case specifically and will generate a response and
+         * enqueue it, but the connection will be down by the time it will
+         * be sent.
+         * Note: Delayed disconnects (rtt-based) are not supported. */
+        if (err_rtt.err == RD_KAFKA_RESP_ERR__TRANSPORT) {
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Broker %"PRId32": Forcing close of connection "
+                             "from %s",
+                             mconn->broker->id,
+                             rd_sockaddr2str(&mconn->peer,
+                                             RD_SOCKADDR2STR_F_PORT));
+                rd_kafka_transport_shutdown(mconn->transport);
+        }
+
+
         return err_rtt.err;
 }
 

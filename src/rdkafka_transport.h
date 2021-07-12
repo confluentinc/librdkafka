@@ -68,6 +68,7 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 void rd_kafka_transport_post_connect_setup (rd_kafka_transport_t *rktrans);
 
 void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);
+void rd_kafka_transport_shutdown (rd_kafka_transport_t *rktrans);
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event);
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);

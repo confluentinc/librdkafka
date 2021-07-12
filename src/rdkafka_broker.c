@@ -333,7 +333,7 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
                                                         rk_broker_addrless_cnt));
 		rkb->rkb_down_reported = 1;
 
-        } else if (state >= RD_KAFKA_BROKER_STATE_UP &&
+        } else if (rd_kafka_broker_state_is_up(state) &&
 		   rkb->rkb_down_reported) {
 		rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 		rkb->rkb_down_reported = 0;

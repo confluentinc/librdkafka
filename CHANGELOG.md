@@ -32,6 +32,8 @@
    issues that could cause a crash or malbehaviour.
    The consumer will now wait for any outstanding JoinGroup or SyncGroup
    responses before re-joining the group. (
+ * The error that triggers `auto.offset.reset` is now logged to help the
+   application owner identify the reason of the reset.
 
 
 

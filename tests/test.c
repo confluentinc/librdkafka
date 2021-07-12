@@ -139,6 +139,7 @@ _TEST_DECL(0031_get_offsets);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0033_regex_subscribe_local);
 _TEST_DECL(0034_offset_reset);
+_TEST_DECL(0034_offset_reset_mock);
 _TEST_DECL(0035_api_version);
 _TEST_DECL(0036_partial_fetch);
 _TEST_DECL(0037_destroy_hang_local);
@@ -308,6 +309,7 @@ struct test tests[] = {
 	_TEST(0033_regex_subscribe, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0033_regex_subscribe_local, TEST_F_LOCAL),
 	_TEST(0034_offset_reset, 0),
+        _TEST(0034_offset_reset_mock, TEST_F_LOCAL),
 	_TEST(0035_api_version, 0),
 	_TEST(0036_partial_fetch, 0),
 	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),

@@ -53,5 +53,10 @@ void rd_kafka_conf_cert_dtor (int scope, void *pconf);
 void rd_kafka_conf_cert_copy (int scope, void *pdst, const void *psrc,
                               void *dstptr, const void *srcptr,
                               size_t filter_cnt, const char **filter);
-
+rd_kafka_cert_t *rd_kafka_cert_new (const rd_kafka_conf_t *conf,
+                                    rd_kafka_cert_type_t type,
+                                    rd_kafka_cert_enc_t encoding,
+                                    const void *buffer, size_t size,
+                                    char *errstr, size_t errstr_size);
+void rd_kafka_cert_destroy (rd_kafka_cert_t *cert);
 #endif /* _RDKAFKA_CERT_H_ */

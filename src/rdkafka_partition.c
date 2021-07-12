@@ -1398,17 +1398,16 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
 
                 rd_kafka_toppar_lock(rktp);
-                rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
-                                      err,
-                                      "failed to query logical offset");
 
-                /* Signal error back to application,
-                 * unless this is an intermittent problem
-                 * (e.g.,connection lost) */
-                if (!(err == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION ||
-                      err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE ||
-                      err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-                      err == RD_KAFKA_RESP_ERR__TIMED_OUT)) {
+                if (!(actions & (RD_KAFKA_ERR_ACTION_RETRY|
+                                 RD_KAFKA_ERR_ACTION_REFRESH))) {
+                        /* Permanent error. Trigger auto.offset.reset policy
+                         * and signal error back to application. */
+
+                        rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
+                                              err,
+                                              "failed to query logical offset");
+
                         rd_kafka_consumer_err(
                                 rktp->rktp_fetchq, rkb->rkb_nodeid,
                                 err, 0, NULL, rktp,
@@ -1420,7 +1419,20 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                                 "Failed to query logical offset %s: %s",
                                 rd_kafka_offset2str(rktp->rktp_query_offset),
                                 rd_kafka_err2str(err));
+
+                } else {
+                        /* Temporary error. Schedule retry. */
+                        char tmp[256];
+
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "failed to query logical offset %s: %s",
+                                    rd_kafka_offset2str(
+                                            rktp->rktp_query_offset),
+                                    rd_kafka_err2str(err));
+
+                        rd_kafka_toppar_offset_retry(rktp, 500, tmp);
                 }
+
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_toppar_destroy(rktp); /* from request.opaque */

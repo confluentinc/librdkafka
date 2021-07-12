@@ -31,7 +31,11 @@
    handling the response of the first. This in turn lead to internal state
    issues that could cause a crash or malbehaviour.
    The consumer will now wait for any outstanding JoinGroup or SyncGroup
-   responses before re-joining the group. (
+   responses before re-joining the group.
+ * `auto.offset.reset` could previously be triggered by temporary errors,
+   such as disconnects and timeouts (after the two retries are exhausted).
+   This is now fixed so that the auto offset reset policy is only triggered
+   for permanent errors.
  * The error that triggers `auto.offset.reset` is now logged to help the
    application owner identify the reason of the reset.
 

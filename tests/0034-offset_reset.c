@@ -32,6 +32,8 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
+#include "../src/rdkafka_protocol.h"
+
 
 /**
  * Issue #559: make sure auto.offset.reset works with invalid offsets.
@@ -146,4 +148,249 @@ int main_0034_offset_reset (int argc, char **argv) {
 	do_test_reset(topic, partition, "error", msgcnt+5, 0, 0, 0, 1);
 
 	return 0;
+}
+
+
+/**
+ * @brief Verify auto.offset.reset=error behaviour for a range of different
+ *        error cases.
+ */
+static void offset_reset_errors (void) {
+        rd_kafka_t *c;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic = "topic";
+        const int32_t partition = 0;
+        const int msgcnt = 10;
+        const int broker_id = 1;
+        rd_kafka_queue_t *queue;
+        int i;
+        struct {
+                rd_kafka_resp_err_t inject;
+                rd_kafka_resp_err_t expect;
+                /** Note: don't use OFFSET_BEGINNING since it might
+                 *        use the cached low wmark, and thus not be subject to
+                 *        the injected mock error. Use TAIL(msgcnt) instead.*/
+                int64_t start_offset;
+                int64_t expect_offset;
+                rd_bool_t broker_down; /**< Bring the broker down */
+        } test[] = {
+                { RD_KAFKA_RESP_ERR__TRANSPORT,
+                  RD_KAFKA_RESP_ERR_NO_ERROR,
+                  RD_KAFKA_OFFSET_TAIL(msgcnt),
+                  0,
+                  .broker_down = rd_true,
+                },
+                { RD_KAFKA_RESP_ERR__TRANSPORT,
+                  RD_KAFKA_RESP_ERR_NO_ERROR,
+                  RD_KAFKA_OFFSET_TAIL(msgcnt),
+                  0,
+                  /* only disconnect on the ListOffsets request */
+                  .broker_down = rd_false,
+                },
+                { RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+                  RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+                  RD_KAFKA_OFFSET_TAIL(msgcnt),
+                  -1
+                },
+                { RD_KAFKA_RESP_ERR_NO_ERROR,
+                  RD_KAFKA_RESP_ERR__NO_OFFSET,
+                  RD_KAFKA_OFFSET_STORED, /* There's no committed offset */
+                  -1
+                },
+
+        };
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        /* Seed partition 0 with some messages so we can differ
+         * between beginning and end. */
+        test_produce_msgs_easy_v(topic, 0, partition, 0, msgcnt, 10,
+                                 "security.protocol", "plaintext",
+                                 "bootstrap.servers", bootstraps,
+                                 NULL);
+
+        test_conf_init(&conf, NULL, 60*5);
+
+        test_conf_set(conf, "security.protocol", "plaintext");
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "enable.partition.eof", "true");
+        test_conf_set(conf, "enable.auto.commit", "false");
+        /* Speed up reconnects */
+        test_conf_set(conf, "reconnect.backoff.max.ms", "1000");
+
+        /* Raise an error (ERR__AUTO_OFFSET_RESET) so we can verify
+         * if auto.offset.reset is triggered or not. */
+        test_conf_set(conf, "auto.offset.reset", "error");
+
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_ERROR);
+
+        c = test_create_consumer("mygroup", NULL, conf, NULL);
+
+        queue = rd_kafka_queue_get_consumer(c);
+
+        for (i = 0 ; i < (int)RD_ARRAYSIZE(test) ; i++) {
+                rd_kafka_event_t *ev;
+                rd_bool_t broker_down = rd_false;
+
+                /* Make sure consumer is connected */
+                test_wait_topic_exists(c, topic, 5000);
+
+                TEST_SAY(_C_YEL "#%d: injecting %s, expecting %s\n",
+                         i,
+                         rd_kafka_err2name(test[i].inject),
+                         rd_kafka_err2name(test[i].expect));
+
+                if (test[i].broker_down) {
+                        TEST_SAY("Bringing down the broker\n");
+                        rd_kafka_mock_broker_set_down(mcluster, broker_id);
+                        broker_down = rd_true;
+
+                } else if (test[i].inject) {
+
+                        rd_kafka_mock_push_request_errors(
+                                mcluster,
+                                RD_KAFKAP_ListOffsets, 5,
+                                test[i].inject,
+                                test[i].inject,
+                                test[i].inject,
+                                test[i].inject,
+                                test[i].inject);
+
+                        /* mock handler will close the connection on this
+                         * request */
+                        if (test[i].inject == RD_KAFKA_RESP_ERR__TRANSPORT)
+                                broker_down = rd_true;
+
+                }
+
+                test_consumer_assign_partition("ASSIGN", c, topic, partition,
+                                               test[i].start_offset);
+
+                while (1) {
+                        /* Poll until we see an AUTO_OFFSET_RESET error,
+                         * timeout, or a message, depending on what we're
+                         * looking for. */
+                        ev = rd_kafka_queue_poll(queue, 5000);
+
+                        if (!ev) {
+                                TEST_ASSERT(broker_down,
+                                            "#%d: poll timeout, but broker "
+                                            "was not down",
+                                            i);
+
+                                /* Bring the broker back up and continue */
+                                TEST_SAY("Bringing up the broker\n");
+                                if (test[i].broker_down)
+                                        rd_kafka_mock_broker_set_up(mcluster,
+                                                                    broker_id);
+
+                                broker_down = rd_false;
+
+                        } else if (rd_kafka_event_type(ev) ==
+                                   RD_KAFKA_EVENT_ERROR) {
+
+                                if (rd_kafka_event_error(ev) !=
+                                    RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET) {
+                                        TEST_SAY("#%d: Ignoring %s event: %s\n",
+                                                 i,
+                                                 rd_kafka_event_name(ev),
+                                                 rd_kafka_event_error_string(
+                                                         ev));
+                                        rd_kafka_event_destroy(ev);
+                                        continue;
+                                }
+
+                                TEST_SAY("#%d: injected %s, got error %s: %s\n",
+                                         i,
+                                         rd_kafka_err2name(test[i].inject),
+                                         rd_kafka_err2name(
+                                                 rd_kafka_event_error(ev)),
+                                         rd_kafka_event_error_string(ev));
+
+                                /* The auto reset error code is always
+                                 * ERR__AUTO_OFFSET_RESET, and the original
+                                 * error is provided in the error string.
+                                 * So use err2str() to compare the error
+                                 * string to the expected error. */
+                                TEST_ASSERT(
+                                        strstr(rd_kafka_event_error_string(ev),
+                                               rd_kafka_err2str(
+                                                       test[i].expect)),
+                                        "#%d: expected %s, got %s",
+                                        i,
+                                        rd_kafka_err2name(test[i].expect),
+                                        rd_kafka_err2name(
+                                                rd_kafka_event_error(ev)));
+
+                                rd_kafka_event_destroy(ev);
+                                break;
+
+                        } else if (rd_kafka_event_type(ev) ==
+                                   RD_KAFKA_EVENT_FETCH) {
+                                const rd_kafka_message_t *rkm =
+                                        rd_kafka_event_message_next(ev);
+
+                                TEST_ASSERT(rkm, "#%d: got null message", i);
+
+                                TEST_SAY("#%d: message at offset %"PRId64
+                                         " (%s)\n",
+                                         i,
+                                         rkm->offset,
+                                         rd_kafka_err2name(rkm->err));
+
+                                TEST_ASSERT(!test[i].expect,
+                                            "#%d: got message when expecting "
+                                            "error", i);
+
+                                TEST_ASSERT(test[i].expect_offset ==
+                                            rkm->offset,
+                                            "#%d: expected message offset "
+                                            "%"PRId64", got %"PRId64
+                                            " (%s)",
+                                            i,
+                                            test[i].expect_offset,
+                                            rkm->offset,
+                                            rd_kafka_err2name(rkm->err));
+
+                                TEST_SAY("#%d: got expected message at "
+                                         "offset %"PRId64" (%s)\n",
+                                         i,
+                                         rkm->offset,
+                                         rd_kafka_err2name(rkm->err));
+
+                                rd_kafka_event_destroy(ev);
+                                break;
+
+                        } else {
+                                TEST_SAY("#%d: Ignoring %s event: %s\n",
+                                         i,
+                                         rd_kafka_event_name(ev),
+                                         rd_kafka_event_error_string(ev));
+                                rd_kafka_event_destroy(ev);
+                        }
+                }
+
+
+
+                rd_kafka_mock_clear_request_errors(mcluster,
+                                                   RD_KAFKAP_ListOffsets);
+        }
+
+        rd_kafka_queue_destroy(queue);
+
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+int main_0034_offset_reset_mock (int argc, char **argv) {
+        offset_reset_errors();
+
+        return 0;
 }

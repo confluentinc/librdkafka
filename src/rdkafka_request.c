@@ -423,32 +423,24 @@ rd_kafka_FindCoordinatorRequest (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Parses and handles ListOffsets replies.
+ * @brief Parses a ListOffsets reply.
  *
- * Returns the parsed offsets (and errors) in \p offsets
+ * Returns the parsed offsets (and errors) in \p offsets which must have been
+ * initialized by caller.
  *
- * @returns 0 on success, else an error.
+ * @returns 0 on success, else an error (\p offsets may be completely or
+ *          partially updated, depending on the nature of the error, and per
+ *          partition error codes should be checked by the caller).
  */
-rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
-                                                 rd_kafka_broker_t *rkb,
-                                                 rd_kafka_resp_err_t err,
-                                                 rd_kafka_buf_t *rkbuf,
-                                                 rd_kafka_buf_t *request,
-                                                 rd_kafka_topic_partition_list_t
-                                                 *offsets) {
-
+static rd_kafka_resp_err_t
+rd_kafka_parse_ListOffsets (rd_kafka_buf_t *rkbuf,
+                            rd_kafka_topic_partition_list_t *offsets) {
         const int log_decode_errors = LOG_ERR;
-        int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
-        int actions;
         int16_t api_version;
+        rd_kafka_resp_err_t all_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        if (err) {
-                ErrorCode = err;
-                goto err;
-        }
-
-        api_version = request->rkbuf_reqhdr.ApiVersion;
+        api_version = rkbuf->rkbuf_reqhdr.ApiVersion;
 
         if (api_version >= 2)
                 rd_kafka_buf_read_throttle_time(rkbuf);
@@ -470,6 +462,7 @@ rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
 
                 while (PartArrayCnt-- > 0) {
                         int32_t kpartition;
+                        int16_t ErrorCode;
                         int32_t OffsetArrayCnt;
                         int64_t Offset = -1;
                         rd_kafka_topic_partition_t *rktpar;
@@ -495,16 +488,49 @@ rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
                                 offsets, topic_name, kpartition);
                         rktpar->err = ErrorCode;
                         rktpar->offset = Offset;
+
+                        if  (ErrorCode && !all_err)
+                                all_err = ErrorCode;
                 }
         }
 
-        goto done;
+        return all_err;
 
  err_parse:
-        ErrorCode = rkbuf->rkbuf_err;
- err:
+        return rkbuf->rkbuf_err;
+}
+
+
+
+/**
+ * @brief Parses and handles ListOffsets replies.
+ *
+ * Returns the parsed offsets (and errors) in \p offsets.
+ * \p offsets must be initialized by the caller.
+ *
+ * @returns 0 on success, else an error. \p offsets may be populated on error,
+ *          depending on the nature of the error.
+ *          On error \p actionsp (unless NULL) is updated with the recommended
+ *          error actions.
+ */
+rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
+                                                 rd_kafka_broker_t *rkb,
+                                                 rd_kafka_resp_err_t err,
+                                                 rd_kafka_buf_t *rkbuf,
+                                                 rd_kafka_buf_t *request,
+                                                 rd_kafka_topic_partition_list_t
+                                                 *offsets,
+                                                 int *actionsp) {
+
+        int actions;
+
+        if (!err)
+                err = rd_kafka_parse_ListOffsets(rkbuf, offsets);
+        if (!err)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
         actions = rd_kafka_err_action(
-                rkb, ErrorCode, request,
+                rkb, err, request,
                 RD_KAFKA_ERR_ACTION_PERMANENT,
                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
@@ -526,26 +552,38 @@ rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
                 RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
                 RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH,
 
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR__TRANSPORT,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+
                 RD_KAFKA_ERR_ACTION_END);
+
+        if (actionsp)
+                *actionsp = actions;
+
+        if (rkb)
+                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                           "OffsetRequest failed: %s (%s)",
+                           rd_kafka_err2str(err),
+                           rd_kafka_actions2str(actions));
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 char tmp[256];
                 /* Re-query for leader */
                 rd_snprintf(tmp, sizeof(tmp),
                             "ListOffsetsRequest failed: %s",
-                            rd_kafka_err2str(ErrorCode));
+                            rd_kafka_err2str(err));
                 rd_kafka_metadata_refresh_known_topics(rk, NULL,
                                                        rd_true/*force*/, tmp);
         }
 
-        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
-                        return RD_KAFKA_RESP_ERR__IN_PROGRESS;
-                /* FALLTHRU */
-        }
+        if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+            rd_kafka_buf_retry(rkb, request))
+                return RD_KAFKA_RESP_ERR__IN_PROGRESS;
 
-done:
-        return ErrorCode;
+        return err;
 }
 
 

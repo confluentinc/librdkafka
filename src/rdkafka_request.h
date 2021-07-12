@@ -85,7 +85,8 @@ rd_kafka_resp_err_t rd_kafka_handle_ListOffsets (rd_kafka_t *rk,
                                                  rd_kafka_buf_t *rkbuf,
                                                  rd_kafka_buf_t *request,
                                                  rd_kafka_topic_partition_list_t
-                                                 *offsets);
+                                                 *offsets,
+                                                 int *actionsp);
 
 void rd_kafka_ListOffsetsRequest (rd_kafka_broker_t *rkb,
                                   rd_kafka_topic_partition_list_t *offsets,

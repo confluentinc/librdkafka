@@ -88,8 +88,8 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
         offsets = rd_kafka_topic_partition_list_new(1);
 
         /* Parse and return Offset */
-        err = rd_kafka_handle_ListOffsets(rkb->rkb_rk, rkb, err,
-                                          rkbuf, request, offsets);
+        err = rd_kafka_handle_ListOffsets(rk, rkb, err,
+                                          rkbuf, request, offsets, NULL);
 
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 rd_kafka_topic_partition_list_destroy(offsets);
@@ -1327,6 +1327,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
         int64_t Offset;
+        int actions = 0;
 
 	rd_kafka_toppar_lock(rktp);
 	/* Drop reply from previous partition leader */
@@ -1350,29 +1351,30 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 		    err = RD_KAFKA_RESP_ERR__OUTDATED;
 	}
 
-        if (err != RD_KAFKA_RESP_ERR__OUTDATED) {
-                /* Parse and return Offset */
-                err = rd_kafka_handle_ListOffsets(rkb->rkb_rk, rkb, err,
-                                                  rkbuf, request, offsets);
-        }
+        /* Parse and return Offset */
+        if (err != RD_KAFKA_RESP_ERR__OUTDATED)
+                err = rd_kafka_handle_ListOffsets(rk, rkb, err,
+                                                  rkbuf, request, offsets,
+                                                  &actions);
 
-        if (!err) {
-                if (!(rktpar = rd_kafka_topic_partition_list_find(
-                              offsets,
-                              rktp->rktp_rkt->rkt_topic->str,
-                              rktp->rktp_partition)))
-                        err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-                else if (rktpar->err)
-                        err = rktpar->err;
+        if (!err &&
+            !(rktpar = rd_kafka_topic_partition_list_find(
+                      offsets,
+                      rktp->rktp_rkt->rkt_topic->str,
+                      rktp->rktp_partition))) {
+                /* Request partition not found in response */
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
         }
 
         if (err) {
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                            "Offset reply error for "
-                           "topic %.*s [%"PRId32"] (v%d): %s",
+                           "topic %.*s [%"PRId32"] (v%d, %s): %s",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                            rktp->rktp_partition, request->rkbuf_replyq.version,
-			   rd_kafka_err2str(err));
+			   rd_kafka_err2str(err),
+                           rd_kafka_actions2str(actions));
 
                 rd_kafka_topic_partition_list_destroy(offsets);
 

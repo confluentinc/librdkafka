@@ -3385,15 +3385,14 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 
         offsets = rd_kafka_topic_partition_list_new(1);
         err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
-                                          offsets);
+                                          offsets, NULL);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 rd_kafka_topic_partition_list_destroy(offsets);
                 return; /* Retrying */
         }
 
 	/* Retry if no broker connection is available yet. */
-	if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
-	     err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+	if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
 	    rkb &&
 	    rd_kafka_brokers_wait_state_change(
 		    rkb->rkb_rk, state->state_version,
@@ -3569,13 +3568,12 @@ static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
         state = opaque;
 
         err = rd_kafka_handle_ListOffsets(rk, rkb, err, rkbuf, request,
-                                          state->results);
+                                          state->results, NULL);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                 return; /* Retrying */
 
         /* Retry if no broker connection is available yet. */
-        if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
-             err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
             rkb &&
             rd_kafka_brokers_wait_state_change(
                     rkb->rkb_rk, state->state_version,

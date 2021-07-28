@@ -3257,6 +3257,12 @@ rd_kafka_DeleteRecords_response_merge (rd_kafka_op_t *rko_fanout,
         rd_assert(rko_partial->rko_evtype ==
                   RD_KAFKA_EVENT_DELETERECORDS_RESULT);
 
+        if (rko_partial->rko_err) {
+                rd_kafka_log(rk, LOG_WARNING, "DELETERECORDS",
+                             "DeleteRecords partial response has an error");
+                return;
+        }
+
         /* Partitions from the DeleteRecordsResponse */
         partitions = rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
 

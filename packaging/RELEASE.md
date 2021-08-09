@@ -98,9 +98,10 @@ Release candidates start at 200, thus 0xAABBCCc9 is RC1, 0xAABBCCca is RC2, etc.
 Change the `RD_KAFKA_VERSION` defines in both `src/rdkafka.h` and
 `src-cpp/rdkafkacpp.h` to the version to build, such as 0x000b01c9
 for v0.11.1-RC1, or 0x000b01ff for the final v0.11.1 release.
+Update the librdkafka version in `vcpkg.json`.
 
    # Update defines
-   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h
+   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h vcpkg.json
 
    # Reconfigure and build
    $ ./configure

@@ -15,7 +15,7 @@ install:
   # Update vcpkg (is outdated on the VS 2015 image)
 - cmd: |
     cd "C:\Tools\vcpkg"
-    git pull
+    git pull -q
     .\bootstrap-vcpkg.bat
     cd %appveyor_build_folder%
 cache:
@@ -27,7 +27,7 @@ nuget:
   project_feed: true
   disable_publish_on_pr: true
 before_build:
- - cmd: vcpkg install zstd zlib openssl --triplet %arch%-windows
+ - cmd: vcpkg --feature-flags=versions install --triplet %arch%-windows
 build:
   project: win32/librdkafka.sln
   publish_nuget: true

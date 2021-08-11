@@ -456,7 +456,7 @@ int rd_unittest (void) {
                 { "map",        unittest_map },
                 { "rdbuf",      unittest_rdbuf },
                 { "rdvarint",   unittest_rdvarint },
-                { "crc32c",     unittest_crc32c },
+                { "crc32c",     unittest_rd_crc32c },
                 { "msg",        unittest_msg },
                 { "murmurhash", unittest_murmur2 },
                 { "fnv1a",      unittest_fnv1a },

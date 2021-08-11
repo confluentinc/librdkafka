@@ -1188,7 +1188,7 @@ uint32_t rd_slice_crc32c (rd_slice_t *slice) {
         uint32_t crc = 0;
 
         while ((rlen = rd_slice_reader(slice, &p)))
-                crc = crc32c(crc, (const char *)p, rlen);
+                crc = rd_crc32c(crc, (const char *)p, rlen);
 
         return crc;
 }

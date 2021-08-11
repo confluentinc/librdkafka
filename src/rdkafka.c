@@ -133,7 +133,7 @@ static void rd_kafka_global_init0 (void) {
 #if ENABLE_DEVEL
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
-        crc32c_global_init();
+        rd_crc32c_global_init();
 #if WITH_SSL
         /* The configuration interface might need to use
          * OpenSSL to parse keys, prior to any rd_kafka_t

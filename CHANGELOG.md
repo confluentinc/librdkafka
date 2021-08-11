@@ -42,6 +42,13 @@
    application owner identify the reason of the reset.
 
 
+### Producer fixes
+
+ * `flush()` now overrides the `linger.ms` setting for the duration of
+   the `flush()` call, effectively triggering immediate transmission
+   of queued messages. (#3489)
+
+
 
 # librdkafka v1.7.0
 

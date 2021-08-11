@@ -505,6 +505,7 @@ struct rd_kafka_s {
                 rd_kafka_timer_t    txn_coord_tmr;
         } rk_eos;
 
+        rd_atomic32_t  rk_flushing; /**< Application is calling flush(). */
 
         /**
          * Consumer state

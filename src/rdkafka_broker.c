@@ -3688,6 +3688,7 @@ rd_kafka_broker_outbufs_space (rd_kafka_broker_t *rkb) {
  * @param may_send if set to false there is something on the global level
  *                 that prohibits sending messages, such as a transactional
  *                 state.
+ * @param flushing App is calling flush(): override linger.ms as immediate.
  *
  * @returns the number of messages produced.
  *
@@ -3700,7 +3701,8 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_ts_t now,
                                            rd_ts_t *next_wakeup,
                                            rd_bool_t do_timeout_scan,
-                                           rd_bool_t may_send) {
+                                           rd_bool_t may_send,
+                                           rd_bool_t flushing) {
         int cnt = 0;
         int r;
         rd_kafka_msg_t *rkm;
@@ -3923,7 +3925,8 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
         /* Attempt to fill the batch size, but limit our waiting
          * to queue.buffering.max.ms, batch.num.messages, and batch.size. */
-        if (r < rkb->rkb_rk->rk_conf.batch_num_messages &&
+        if (!flushing &&
+            r < rkb->rkb_rk->rk_conf.batch_num_messages &&
             rktp->rktp_xmit_msgq.rkmq_msg_bytes <
             (int64_t)rkb->rkb_rk->rk_conf.batch_size) {
                 rd_ts_t wait_max;
@@ -3987,6 +3990,7 @@ static int rd_kafka_broker_produce_toppars (rd_kafka_broker_t *rkb,
         rd_ts_t ret_next_wakeup = *next_wakeup;
         rd_kafka_pid_t pid = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send = rd_true;
+        rd_bool_t flushing = rd_false;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
@@ -4012,13 +4016,15 @@ static int rd_kafka_broker_produce_toppars (rd_kafka_broker_t *rkb,
                         return 0;
         }
 
+        flushing = may_send && rd_atomic32_get(&rkb->rkb_rk->rk_flushing) > 0;
+
         do {
                 rd_ts_t this_next_wakeup = ret_next_wakeup;
 
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                         rkb, rktp, pid, now, &this_next_wakeup,
-                        do_timeout_scan, may_send);
+                        do_timeout_scan, may_send, flushing);
 
                 if (this_next_wakeup < ret_next_wakeup)
                         ret_next_wakeup = this_next_wakeup;

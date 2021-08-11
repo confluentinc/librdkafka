@@ -2184,6 +2184,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
+        rd_atomic32_init(&rk->rk_flushing, 0);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
@@ -4221,6 +4222,16 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 
         rd_kafka_yield_thread = 0;
 
+        /* Set flushing flag on the producer for the duration of the
+         * flush() call. This tells producer_serve() that the linger.ms
+         * time should be considered immediate. */
+        rd_atomic32_add(&rk->rk_flushing, 1);
+
+         /* Wake up all broker threads to trigger the produce_serve() call.
+          * If this flush() call finishes before the broker wakes up
+          * then no flushing will be performed by that broker thread. */
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP);
+
         if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                 /* Application wants delivery reports as events rather
                  * than callbacks, we must thus not serve this queue
@@ -4231,9 +4242,6 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
                  * queue in another thread, so all we do here is wait
                  * for the current message count to reach zero. */
                 rd_kafka_curr_msgs_wait_zero(rk, timeout_ms, &msg_cnt);
-
-                return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
-                        RD_KAFKA_RESP_ERR_NO_ERROR;
 
         } else {
                 /* Standard poll interface.
@@ -4254,9 +4262,13 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
                          (tmout = rd_timeout_remains_limit(ts_end, 10)) !=
                          RD_POLL_NOWAIT);
 
-                return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
-                        RD_KAFKA_RESP_ERR_NO_ERROR;
+                msg_cnt += qlen;
         }
+
+        rd_atomic32_sub(&rk->rk_flushing, 1);
+
+        return msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
+                RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 /**

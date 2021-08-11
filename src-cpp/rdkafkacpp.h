@@ -3212,6 +3212,9 @@ class RD_EXPORT Producer : public virtual Handle {
    *        to make sure all queued and in-flight produce requests are completed
    *        before terminating.
    *
+   * @remark The \c linger.ms time will be ignored for the duration of the call,
+   *         queued messages will be sent to the broker as soon as possible.
+   *
    * @remark This function will call Producer::poll() and thus
    *         trigger callbacks.
    *

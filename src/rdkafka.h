@@ -4444,6 +4444,9 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * @remark This function will call rd_kafka_poll() and thus trigger callbacks.
  *
+ * @remark The \c linger.ms time will be ignored for the duration of the call,
+ *         queued messages will be sent to the broker as soon as possible.
+ *
  * @remark If RD_KAFKA_EVENT_DR has been enabled
  *         (through rd_kafka_conf_set_events()) this function will not call
  *         rd_kafka_poll() but instead wait for the librdkafka-handled

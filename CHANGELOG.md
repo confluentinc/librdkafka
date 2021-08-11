@@ -16,6 +16,8 @@
    the uncommitted high-watermark when it is set to `read_uncommitted`. (#3423)
  * SASL GSSAPI is now usable when `sasl.kerberos.min.time.before.relogin`
    is set to 0 - which disables ticket refreshes (by @mpekalski, #3431).
+ * Rename internal crc32c() symbol to rd_crc32c() to avoid conflict with
+   other static libraries (#3421).
 
 
 ### Consumer fixes

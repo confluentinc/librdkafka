@@ -351,7 +351,7 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 
 /* Compute a CRC-32C.  If the crc32 instruction is available, use the hardware
    version.  Otherwise, use the software version. */
-uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
+uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 {
 #if WITH_CRC32C_HW
         if (sse42)
@@ -369,7 +369,7 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
 /**
  * @brief Populate shift tables once
  */
-void crc32c_global_init (void) {
+void rd_crc32c_global_init (void) {
 #if WITH_CRC32C_HW
         SSE42(sse42);
         if (sse42)
@@ -379,7 +379,7 @@ void crc32c_global_init (void) {
                 crc32c_init_sw();
 }
 
-int unittest_crc32c (void) {
+int unittest_rd_crc32c (void) {
         const char *buf =
 "  This software is provided 'as-is', without any express or implied\n"
 "  warranty.  In no event will the author be held liable for any damages\n"
@@ -410,7 +410,7 @@ int unittest_crc32c (void) {
 #endif
         RD_UT_SAY("Calculate CRC32C using %s", how);
 
-        crc = crc32c(0, buf, strlen(buf));
+        crc = rd_crc32c(0, buf, strlen(buf));
         RD_UT_ASSERT(crc == expected_crc,
                      "Calculated CRC (%s) 0x%"PRIx32
                      " not matching expected CRC 0x%"PRIx32,

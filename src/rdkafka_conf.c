@@ -815,9 +815,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "found will be used as the default CA certificate location path. "
           "If OpenSSL is dynamically linked the OpenSSL library's default "
           "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
-#ifdef __APPLE__
-          .sdef = "probe",
-#endif
           _UNSUPPORTED_SSL
         },
         { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
@@ -3709,6 +3706,10 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (conf->ssl.ca && conf->ssl.ca_location)
                 return "`ssl.ca.location`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
+#ifdef __APPLE__
+        else /* Default ssl.ca.location to 'probe' on OSX */
+                rd_kafka_conf_set(conf, "ssl.ca.location", "probe", NULL, 0);
+#endif
 #endif
 
 #if WITH_SASL_OAUTHBEARER

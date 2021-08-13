@@ -9,7 +9,8 @@
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
-        "libzstd-dev"
+        "libzstd-dev",
+        "curl"
       ],
       "buildcmd": [
         "./configure",
@@ -31,7 +32,8 @@
         "libssl-dev",
         "libsasl2-dev",
         "liblz4-dev",
-        "libzstd-dev"
+        "libzstd-dev",
+        "curl"
       ],
       "buildcmd": [
         "./configure",
@@ -52,7 +54,8 @@
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
-        "libzstd-dev"
+        "libzstd-dev",
+        "curl"
       ],
       "buildcmd": [
         "./configure",
@@ -75,7 +78,8 @@
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
-        "libzstd-dev"
+        "libzstd-dev",
+        "curl"
       ],
       "buildcmd": [
         "./configure",

@@ -148,6 +148,9 @@ class LibrdkafkaTestApp(App):
         self.env_add('ZK_ADDRESS', self.cluster.get_all('address', '', ZookeeperApp)[0], False)
         self.env_add('BROKERS', self.cluster.bootstrap_servers(), False)
 
+        # Provide a HTTPS REST endpoint for the HTTP client tests.
+        self.env_add('RD_UT_HTTP_URL', 'https://jsonplaceholder.typicode.com/users')
+
         # Per broker env vars
         for b in [x for x in self.cluster.apps if isinstance(x, KafkaBrokerApp)]:
             self.env_add('BROKER_ADDRESS_%d' % b.appid,

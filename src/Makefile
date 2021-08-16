@@ -17,6 +17,7 @@ SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
+SRCS_$(WITH_CURL) += rdhttp.c
 
 SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
@@ -41,7 +42,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_sticky_assignor.c \
 		rdkafka_feature.c \
-		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c \
+		rdcrc32.c crc32c.c rdmurmur2.c rdfnv1a.c cJSON.c \
 		rdaddr.c rdrand.c rdlist.c \
 		tinycthread.c tinycthread_extra.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \

@@ -157,6 +157,9 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cmd_env['TRIVUP_ROOT'] = cluster.instance_path()
     cmd_env['TEST_SCENARIO'] = scenario
 
+    # Provide a HTTPS REST endpoint for the HTTP client tests.
+    cmd_env['RD_UT_HTTP_URL'] = 'https://jsonplaceholder.typicode.com/users'
+
     # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
         cmd_env['BROKER_ADDRESS_%d' % b.appid] = \

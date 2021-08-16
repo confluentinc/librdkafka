@@ -65,10 +65,15 @@ set(
     tinycthread.c
     tinycthread_extra.c
     rdxxhash.c
+    cJSON.c
 )
 
 if(WITH_SSL)
   list(APPEND sources rdkafka_ssl.c)
+endif()
+
+if(WITH_CURL)
+ list(APPEND sources rdhttp.c)
 endif()
 
 if(WITH_HDRHISTOGRAM)

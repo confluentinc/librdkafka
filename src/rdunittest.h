@@ -71,6 +71,18 @@ extern rd_bool_t rd_unittest_slow;
                 return 0;                                               \
         } while (0)
 
+ /**
+  * @brief Skip the current unit-test function
+  */
+#define RD_UT_SKIP(...) do {                                            \
+                fprintf(stderr, "\033[33mRDUT: SKIP: %s:%d: %s: ",      \
+                        __FILE__, __LINE__, __FUNCTION__);              \
+                fprintf(stderr, __VA_ARGS__);                           \
+                fprintf(stderr, "\033[0m\n");                           \
+                return 0;                                               \
+        } while (0)
+
+
 /**
  * @brief Fail unit-test if \p expr is false
  */

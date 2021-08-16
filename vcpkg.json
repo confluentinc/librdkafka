@@ -13,6 +13,10 @@
         {
             "name": "openssl",
             "version>=": "1.1.1k"
+        },
+        {
+            "name": "curl",
+            "version>=": "7.74.0#8"
         }
     ],
     "builtin-baseline": "cf03dac5c25dd5a8d207d0b7d546f24424898418"

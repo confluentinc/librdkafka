@@ -93,6 +93,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\cJSON.h" />
     <ClInclude Include="..\src\crc32c.h" />
     <ClInclude Include="..\src\queue.h" />
     <ClInclude Include="..\src\rdatomic.h" />
@@ -110,6 +111,7 @@
     <ClInclude Include="..\src\rdkafka_confval.h" />
     <ClInclude Include="..\src\rdkafka_event.h" />
     <ClInclude Include="..\src\rdkafka_feature.h" />
+    <ClInclude Include="..\src\rdhttp.h" />
     <ClInclude Include="..\src\rdkafka_lz4.h" />
     <ClInclude Include="..\src\rdkafka_mock.h" />
     <ClInclude Include="..\src\rdkafka_mock_int.h" />
@@ -164,6 +166,7 @@
     <ClInclude Include="..\src\rddl.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\cJSON.c" />
     <ClCompile Include="..\src\crc32c.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
@@ -177,6 +180,7 @@
     <ClCompile Include="..\src\rdkafka_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_conf.c" />
     <ClCompile Include="..\src\rdkafka_event.c" />
+    <ClCompile Include="..\src\rdhttp.c" />
     <ClCompile Include="..\src\rdkafka_lz4.c" />
     <ClCompile Include="..\src\rdkafka_msg.c" />
     <ClCompile Include="..\src\rdkafka_msgset_reader.c" />

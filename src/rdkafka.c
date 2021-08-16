@@ -67,6 +67,12 @@
 #include <sys/timeb.h>
 #endif
 
+#define CJSON_HIDE_SYMBOLS
+#include "cJSON.h"
+
+#if WITH_CURL
+#include "rdhttp.h"
+#endif
 
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
@@ -129,7 +135,12 @@ void rd_kafka_set_thread_sysname (const char *fmt, ...) {
 }
 
 static void rd_kafka_global_init0 (void) {
-	mtx_init(&rd_kafka_global_lock, mtx_plain);
+        cJSON_Hooks json_hooks = {
+                .malloc_fn = rd_malloc,
+                .free_fn = rd_free
+        };
+
+        mtx_init(&rd_kafka_global_lock, mtx_plain);
 #if ENABLE_DEVEL
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
@@ -139,6 +150,12 @@ static void rd_kafka_global_init0 (void) {
          * OpenSSL to parse keys, prior to any rd_kafka_t
          * object has been created. */
         rd_kafka_ssl_init();
+#endif
+
+        cJSON_InitHooks(&json_hooks);
+
+#if WITH_CURL
+        rd_http_global_init();
 #endif
 }
 

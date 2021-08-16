@@ -242,9 +242,6 @@ rd_kafka_sasl_scram_HMAC (rd_kafka_transport_t *rktrans,
                 rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.scram_evp;
         unsigned int outsize;
 
-        //printf("HMAC KEY: %s\n", rd_base64_encode(key));
-        //printf("HMAC STR: %s\n", rd_base64_encode(str));
-
         if (!HMAC(evp,
                   (const unsigned char *)key->ptr, (int)key->size,
                   (const unsigned char *)str->ptr, (int)str->size,
@@ -255,7 +252,6 @@ rd_kafka_sasl_scram_HMAC (rd_kafka_transport_t *rktrans,
         }
 
         out->size = outsize;
-        //printf("HMAC OUT: %s\n", rd_base64_encode(out));
 
         return 0;
 }

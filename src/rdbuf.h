@@ -212,8 +212,10 @@ size_t rd_buf_get_write_iov (const rd_buf_t *rbuf,
                              size_t iov_max, size_t size_max);
 
 void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size);
+rd_buf_t *rd_buf_new (size_t fixed_seg_cnt, size_t buf_size);
 
 void rd_buf_destroy (rd_buf_t *rbuf);
+void rd_buf_destroy_free (rd_buf_t *rbuf);
 
 void rd_buf_dump (const rd_buf_t *rbuf, int do_hexdump);
 
@@ -226,8 +228,8 @@ int unittest_rdbuf (void);
 
 
 /**
- * @name Buffer read operates on slices of an rd_buf_t and does not
- *       modify the underlying itself.
+ * @name Buffer reads operate on slices of an rd_buf_t and does not
+ *       modify the underlying rd_buf_t itself.
  *
  * @warning A slice will not be valid/safe after the buffer or
  *          segments have been modified by a buf write operation

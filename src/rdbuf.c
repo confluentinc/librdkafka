@@ -341,6 +341,14 @@ void rd_buf_destroy (rd_buf_t *rbuf) {
 
 
 /**
+ * @brief Same as rd_buf_destroy() but also frees the \p rbuf itself.
+ */
+void rd_buf_destroy_free (rd_buf_t *rbuf) {
+        rd_buf_destroy(rbuf);
+        rd_free(rbuf);
+}
+
+/**
  * @brief Initialize buffer, pre-allocating \p fixed_seg_cnt segments
  *        where the first segment will have a \p buf_size of backing memory.
  *
@@ -370,6 +378,15 @@ void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
 }
 
 
+/**
+ * @brief Allocates a buffer object and initializes it.
+ * @sa rd_buf_init()
+ */
+rd_buf_t *rd_buf_new (size_t fixed_seg_cnt, size_t buf_size) {
+        rd_buf_t *rbuf = rd_malloc(sizeof(*rbuf));
+        rd_buf_init(rbuf, fixed_seg_cnt, buf_size);
+        return rbuf;
+}
 
 
 /**

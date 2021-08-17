@@ -246,10 +246,7 @@
     <ClCompile Include="..\src\rddl.c" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\LICENSE..txt" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="..\README.win32" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-</Project>
+</Project>

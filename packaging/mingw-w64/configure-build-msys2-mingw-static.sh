@@ -52,4 +52,4 @@ rm -rf ./mergescratch
 
 export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
 cd tests
-./test-runner.exe -l -Q -p1
+./test-runner.exe -l -Q -p1 0000

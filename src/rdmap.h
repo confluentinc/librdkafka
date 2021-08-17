@@ -450,7 +450,8 @@ unsigned int rd_map_str_hash (const void *a);
  * @remark The \p RMAP may not be const.
  */
 #define RD_MAP_FOREACH(K,V,RMAP)                                        \
-        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem),           \
+             (K) = NULL, (V) = NULL ;                                   \
              rd_map_iter(&(RMAP)->elem) &&                              \
                      ((RMAP)->key = (void *)(RMAP)->elem->key,          \
                       (K) = (RMAP)->key,                                \
@@ -475,7 +476,8 @@ unsigned int rd_map_str_hash (const void *a);
  * @remark The \p RMAP may not be const.
  */
 #define RD_MAP_FOREACH_KEY(K,RMAP)                                      \
-        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem),           \
+             (K) = NULL ;                                               \
              rd_map_iter(&(RMAP)->elem) &&                              \
                      ((RMAP)->key = (void *)(RMAP)->elem->key,          \
                       (K) = (RMAP)->key,                                \

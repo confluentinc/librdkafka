@@ -480,6 +480,12 @@ struct rd_kafka_op_s {
                         rd_kafka_op_type_t reqtype; /**< Request op type,
                                                      *   used for logging. */
 
+                        rd_list_t args; /**< Args moved from the request op
+                                         *   when the result op is created.
+                                         *
+                                         *   Type depends on request.
+                                         */
+
                         char *errstr;      /**< Error string, if rko_err
                                             *   is set, else NULL. */
 

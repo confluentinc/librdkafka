@@ -492,6 +492,22 @@ void *rd_list_copy_preallocated (const void *elem, void *opaque) {
 }
 
 
+
+void rd_list_move (rd_list_t *dst, rd_list_t *src) {
+        rd_list_init_copy(dst, src);
+
+        if (src->rl_flags & RD_LIST_F_FIXED_SIZE) {
+                rd_list_copy_preallocated0(dst, src);
+        } else {
+                memcpy(dst->rl_elems, src->rl_elems,
+                       src->rl_cnt * sizeof(*src->rl_elems));
+                dst->rl_cnt = src->rl_cnt;
+        }
+
+        src->rl_cnt = 0;
+}
+
+
 /**
  * @name Misc helpers for common list types
  * @{

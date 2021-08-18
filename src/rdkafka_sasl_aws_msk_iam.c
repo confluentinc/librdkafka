@@ -223,9 +223,6 @@ static char *rd_kafka_sasl_aws_msk_iam_build_canonical_query_string (struct rd_k
 static char *rd_kafka_sasl_aws_msk_iam_build_canonical_request (struct rd_kafka_sasl_aws_msk_iam_state *state) {
         char *canonical_query_string = rd_kafka_sasl_aws_msk_iam_build_canonical_query_string(state);
         const char *hostname = state->hostname.ptr;
-        int canonical_header_size = strlen(hostname) + strlen("host:\n") + 1;
-        char canonical_header_buf[256];
-        rd_snprintf(canonical_header_buf, canonical_header_size, "host:%s\n", hostname);
         
         const char *signed_headers = "host";
         
@@ -239,18 +236,19 @@ static char *rd_kafka_sasl_aws_msk_iam_build_canonical_request (struct rd_kafka_
         EVP_DigestFinal_ex(mdctx, md_value, &md_len);
         EVP_MD_CTX_free(mdctx);
         
-        char res_hexstring[64];
+        char res_hexstring[65];
         for (i = 0; i < md_len; i++)
                sprintf(&(res_hexstring[i * 2]), "%02x", md_value[i]);  // save string in hex base 16
+        res_hexstring[65] = '\0';
         
         str_builder_t *sb;
         sb = str_builder_create();
         str_builder_add_str(sb, "GET\n");
         str_builder_add_str(sb, "/\n");
         str_builder_add_str(sb, canonical_query_string);
-        str_builder_add_str(sb, "\n");
-        str_builder_add_str(sb, canonical_header_buf);
-        str_builder_add_str(sb, "\n");
+        str_builder_add_str(sb, "\nhost:");
+        str_builder_add_str(sb, hostname);
+        str_builder_add_str(sb, "\n\n");
         str_builder_add_str(sb, signed_headers);
         str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, res_hexstring);
@@ -283,7 +281,8 @@ static char *rd_kafka_sasl_aws_msk_iam_calculate_signature (struct rd_kafka_sasl
         
         char hex_sha_canonical_request[65];
         for (i = 0; i < md_len; i++)
-               sprintf(hex_sha_canonical_request + (i * 2), "%02x", md_value[i]);  // save string in hex base 16
+               sprintf(&(hex_sha_canonical_request[i * 2]), "%02x", md_value[i]);  // save string in hex base 16
+        hex_sha_canonical_request[65] = '\0';
         
         rd_chariov_t amz_date = rd_construct_amz_date((const char *)state->ymd, (const char *)state->hms);
         rd_chariov_t credential_wo_prefix = rd_construct_amz_credential(state->aws_region, (const char *)state->ymd);
@@ -325,9 +324,10 @@ static char *rd_kafka_sasl_aws_msk_iam_calculate_signature (struct rd_kafka_sasl
         unsigned int hmac_signature_len = 32;
         hmac_signature = rd_hmac_sha256(hmac_signing_key, hmac_signing_key_len, (unsigned char *)string_to_sign, strlen(string_to_sign), NULL, NULL);
         
-        char res_hexstring[64];
+        char res_hexstring[65];
         for (i = 0; i < hmac_signature_len; i++)
                sprintf(&(res_hexstring[i * 2]), "%02x", hmac_signature[i]);  // save string in hex base 16
+        res_hexstring[65] = '\0';
         
         char *signature = rd_strdup(res_hexstring);
         

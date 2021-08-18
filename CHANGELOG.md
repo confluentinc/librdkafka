@@ -49,6 +49,13 @@
    of queued messages. (#3489)
 
 
+### Admin fixes
+
+ * `DeleteRecords()` could crash if one of the underlying requests
+   (for a given partition leader) failed at the transport level (e.g., timeout).
+   (#3476).
+
+
 
 # librdkafka v1.7.0
 

@@ -359,6 +359,15 @@ void *rd_list_string_copy (const void *elem, void *opaque) {
 
 
 /**
+ * @brief Move elements from \p src to \p dst.
+ *
+ * @remark \p dst will be initialized first.
+ * @remark \p src will be emptied.
+ */
+void rd_list_move (rd_list_t *dst, rd_list_t *src);
+
+
+/**
  * @name Misc helpers for common list types
  * @{
  *

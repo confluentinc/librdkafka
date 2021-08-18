@@ -178,7 +178,7 @@ static int test_producer_latency (const char *topic,
                                   latconf->name, i, rd_kafka_err2str(err));
 
                 /* Await delivery */
-                rd_kafka_flush(rk, 5000);
+                rd_kafka_poll(rk, 5000);
         }
 
         rd_kafka_destroy(rk);

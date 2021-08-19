@@ -49,7 +49,32 @@ function install_source {
             tar xzf - --strip-components 1
     fi
 
-    ./configure --with-openssl
-    time make -j DESTDIR="${destdir}" prefix=/usr all install
+    # Clear out LIBS to not interfer with lib detection process.
+    LIBS="" ./configure \
+	--with-openssl \
+	--enable-static \
+	--disable-shared \
+	--disable-ntlm{,-wb} \
+	--disable-dict \
+	--disable-ftp \
+	--disable-file \
+	--disable-gopher \
+	--disable-imap \
+	--disable-imaps \
+	--disable-mqtt \
+	--disable-pop3 \
+	--disable-rtsp \
+	--disable-smb \
+	--disable-smtp \
+	--disable-telnet \
+	--disable-tftp \
+	--disable-ssh \
+	--disable-manual \
+	--disable-ldap{,s} \
+	--disable-libcurl-option \
+        --without-{librtmp,libidn2,winidn,nghttp2,nghttp3,ngtcp2,quiche,brotli} &&
+	time make -j &&
+	make DESTDIR="${destdir}" prefix=/usr install
+
     return $?
 }

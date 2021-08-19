@@ -835,7 +835,7 @@ function mkl_generate {
     # Generate a built-in options define based on WITH_..=y
     local with_y=
     for n in $MKL_MKVARS ; do
-        if [[ $n == WITH_* ]] && [[ ${!n} == y ]]; then
+        if [[ $n == WITH_* ]] && [[ $n != WITH_STATIC_LIB_* ]] && [[ ${!n} == y ]]; then
             with_y="$with_y ${n#WITH_}"
         fi
     done

@@ -103,7 +103,7 @@ matrix:
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "Linux GCC s390x: +devel"
    os: linux

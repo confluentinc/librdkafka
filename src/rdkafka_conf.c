@@ -159,6 +159,12 @@ struct rd_kafka_property {
 #define _UNSUPPORTED_ZSTD .unsupported = "libzstd not available at build time"
 #endif
 
+#if WITH_CURL
+#define _UNSUPPORTED_HTTP .unsupported = NULL
+#else
+#define _UNSUPPORTED_HTTP .unsupported = "libcurl not available at build time"
+#endif
+
 #ifdef _WIN32
 #define _UNSUPPORTED_WIN32_GSSAPI .unsupported =                        \
                 "Kerberos keytabs are not supported on Windows, "       \
@@ -328,6 +334,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         },
                         { 0x400, "zstd", _UNSUPPORTED_ZSTD },
                         { 0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL },
+                        { 0x1000, "http", _UNSUPPORTED_HTTP },
                         { 0, NULL }
                 }
 	},

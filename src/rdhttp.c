@@ -341,6 +341,9 @@ int unittest_http (void) {
         }
         RD_UT_ASSERT(!empty, "Expected non-empty JSON response from %s",
                      base_url);
+        RD_UT_SAY("URL %s returned no error and a non-empty "
+                  "JSON object/array as expected",
+                  base_url);
         cJSON_Delete(json);
 
 
@@ -351,7 +354,7 @@ int unittest_http (void) {
         RD_UT_ASSERT(herr->code >= 400, "Expected get_json(%s) error code >= "
                      "400, got %d", error_url, herr->code);
         RD_UT_SAY("Error URL %s returned code %d, errstr \"%s\" "
-                  "and %s JSON object",
+                  "and %s JSON object as expected",
                   error_url, herr->code, herr->errstr,
                   json ? "a" : "no");
         /* Check if there's a JSON document returned */

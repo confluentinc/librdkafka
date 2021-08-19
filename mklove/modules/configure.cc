@@ -112,12 +112,12 @@ function checks {
 	if [[ $MKL_DISTRO == "sunos" ]]; then
 	    mkl_meta_set ginstall name "GNU install"
 	    if mkl_command_check ginstall "" ignore "ginstall --version"; then
-		INSTALL=ginstall
+		INSTALL=$(which ginstall)
 	    else
-		INSTALL=install
+		INSTALL=$(which install)
 	    fi
         else
-            INSTALL=install
+            INSTALL=$(which install)
 	fi
     fi
 

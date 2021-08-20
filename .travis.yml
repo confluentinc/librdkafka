@@ -20,7 +20,7 @@ matrix:
    compiler: gcc
    env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
+    - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "RPM packages"
    if: tag IS present
@@ -82,7 +82,7 @@ matrix:
    before_script:
     - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
 
- - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov"
+ - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov +c99 +c++98"
    os: linux
    dist: xenial
    compiler: gcc
@@ -93,7 +93,7 @@ matrix:
     - sudo pip3 install -r tests/requirements.txt
     - sudo apt update
     - sudo apt install -y doxygen graphviz gdb
-    - ./configure --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
     - ./packaging/tools/rdutcoverage.sh
 
  - name: "Linux GCC arm64: +static -gssapi"
@@ -103,7 +103,7 @@ matrix:
    compiler: gcc
    env: LINKAGE=std
    before_script:
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+    - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "Linux GCC s390x: +devel"
    os: linux

@@ -1,5 +1,22 @@
 # librdkafka v1.8.0
 
+librdkafka v1.8.0 is a security release:
+
+ * Upgrade bundled zlib version from 1.2.8 to 1.2.11 in the `librdkafka.redist`
+   NuGet package. The updated zlib version fixes CVEs:
+   CVE-2016-9840, CVE-2016-9841, CVE-2016-9842, CVE-2016-9843
+   See https://github.com/edenhill/librdkafka/issues/2934 for more information.
+ * librdkafka now uses [vcpkg](https://vcpkg.io/) for up-to-date Windows
+   dependencies in the `librdkafka.redist` NuGet package:
+   OpenSSL 1.1.1k, zlib 1.2.11, zstd 1.4.9.
+
+
+## Enhancements
+
+ * Producer `flush()` now overrides the `linger.ms` setting for the duration
+   of the `flush()` call, effectively triggering immediate transmission of
+   queued messages. (#3489)
+
 ## Fixes
 
 ### General fixes
@@ -40,17 +57,10 @@
    for permanent errors.
  * The error that triggers `auto.offset.reset` is now logged to help the
    application owner identify the reason of the reset.
-
-
-### Producer fixes
-
- * `flush()` now overrides the `linger.ms` setting for the duration of
-   the `flush()` call, effectively triggering immediate transmission
-   of queued messages. (#3489)
-
  * If a rebalance takes longer than a consumer's `session.timeout.ms`, the
    consumer will remain in the group as long as it receives heartbeat responses
    from the broker.
+
 
 
 # librdkafka v1.7.0

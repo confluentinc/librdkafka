@@ -161,8 +161,12 @@ struct rd_kafka_property {
 
 #if WITH_CURL
 #define _UNSUPPORTED_HTTP .unsupported = NULL
+#define _UNSUPPORTED_OIDC .unsupported = NULL
 #else
 #define _UNSUPPORTED_HTTP .unsupported = "libcurl not available at build time"
+#define _UNSUPPORTED_OIDC .unsupported =                                \
+                "OAuth/OIDC depends on libcurl which was not available " \
+                "at build time"
 #endif
 
 #ifdef _WIN32
@@ -335,6 +339,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { 0x400, "zstd", _UNSUPPORTED_ZSTD },
                         { 0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL },
                         { 0x1000, "http", _UNSUPPORTED_HTTP },
+                        { 0x2000, "oidc", _UNSUPPORTED_OIDC },
                         { 0, NULL }
                 }
 	},
@@ -1005,13 +1010,69 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _UNSUPPORTED_OAUTHBEARER
         },
         { _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
-          _RK(sasl.oauthbearer_token_refresh_cb),
+          _RK(sasl.oauthbearer.token_refresh_cb),
           "SASL/OAUTHBEARER token refresh callback (set with "
           "rd_kafka_conf_set_oauthbearer_token_refresh_cb(), triggered by "
           "rd_kafka_poll(), et.al. "
           "This callback will be triggered when it is time to refresh "
           "the client's OAUTHBEARER token.",
           _UNSUPPORTED_OAUTHBEARER
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.method", _RK_C_S2I,
+          _RK(sasl.oauthbearer.method),
+          "Set to \"default\" or \"oidc\" to control which login method "
+          "is used. If set it to \"oidc\", OAuth/OIDC login method will "
+          "be used. "
+          "sasl.oauthbearer.client.id, sasl.oauthbearer.client.secret, "
+          "sasl.oauthbearer.scope, sasl.oauthbearer.extensions, "
+          "and sasl.oauthbearer.token.endpoint.url are needed if "
+          "sasl.oauthbearer.method is set to \"oidc\".",
+          .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
+          .s2i = {
+                        { RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default" },
+                        { RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc" }
+                },
+          _UNSUPPORTED_OIDC
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
+          _RK(sasl.oauthbearer.client_id),
+          "It's a public identifier for the application. "
+          "It must be unique across all clients that the "
+          "authorization server handles. "
+          "This is only used when sasl.oauthbearer.method is set to oidc.",
+          _UNSUPPORTED_OIDC
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.client.secret", _RK_C_STR,
+          _RK(sasl.oauthbearer.client_secret),
+          "A client secret only known to the application and the "
+          "authorization server. This should be a sufficiently random string "
+          "that are not guessable. "
+          "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+          _UNSUPPORTED_OIDC
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.scope", _RK_C_STR,
+          _RK(sasl.oauthbearer.scope),
+          "Client use this to specify the scope of the access request to the "
+          "broker. "
+          "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+          _UNSUPPORTED_OIDC
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.extensions", _RK_C_STR,
+          _RK(sasl.oauthbearer.extensions_str),
+          "Allow additional information to be provided to the broker. "
+          "It's comma-separated list of key=value pairs. "
+          "The example of the input is "
+          "\"supportFeatureX=true,organizationId=sales-emea\"."
+          " This is only used when sasl.oauthbearer.method is set "
+          "to \"oidc\".",
+          _UNSUPPORTED_OIDC
+        },
+        { _RK_GLOBAL, "sasl.oauthbearer.token.endpoint.url", _RK_C_STR,
+          _RK(sasl.oauthbearer.token_endpoint_url),
+          "OAUTH issuer token endpoint HTTP(S) URI used to retrieve the "
+          "token. "
+          "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+          _UNSUPPORTED_OIDC
         },
 
         /* Plugins */
@@ -3721,7 +3782,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 
 #if WITH_SASL_OAUTHBEARER
         if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
-            conf->sasl.oauthbearer_token_refresh_cb)
+            conf->sasl.oauthbearer.token_refresh_cb)
                 return "`enable.sasl.oauthbearer.unsecure.jwt` and "
                         "`oauthbearer_token_refresh_cb` are mutually exclusive";
 #endif
@@ -4310,7 +4371,7 @@ int unittest_conf (void) {
         readlen = sizeof(readval);
         res2 = rd_kafka_conf_get(conf, "client.software.name",
                                  readval, &readlen);
-        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res2);
+        RD_UT_ASSERT(res2 == RD_KAFKA_CONF_OK, "%d", res2);
         RD_UT_ASSERT(!strcmp(readval, "aba.-va"),
                      "client.software.* safification failed: \"%s\"", readval);
         RD_UT_SAY("Safified client.software.name=\"%s\"", readval);
@@ -4318,7 +4379,7 @@ int unittest_conf (void) {
         readlen = sizeof(readval);
         res2 = rd_kafka_conf_get(conf, "client.software.version",
                                  readval, &readlen);
-        RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res2);
+        RD_UT_ASSERT(res2 == RD_KAFKA_CONF_OK, "%d", res2);
         RD_UT_ASSERT(!strcmp(readval, "1.2.3.4.5----a"),
                      "client.software.* safification failed: \"%s\"", readval);
         RD_UT_SAY("Safified client.software.version=\"%s\"", readval);

@@ -237,6 +237,7 @@ _TEST_DECL(0122_buffer_cleaning_after_rebalance);
 _TEST_DECL(0123_connections_max_idle);
 _TEST_DECL(0124_openssl_invalid_engine);
 _TEST_DECL(0125_immediate_flush);
+_TEST_DECL(0126_oauthbearer_oidc);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -444,6 +445,7 @@ struct test tests[] = {
         _TEST(0123_connections_max_idle, 0),
         _TEST(0124_openssl_invalid_engine, TEST_F_LOCAL),
         _TEST(0125_immediate_flush, 0),
+        _TEST(0126_oauthbearer_oidc, TEST_BRKVER(3,0,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

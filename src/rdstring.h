@@ -81,6 +81,9 @@ int rd_strcmp (const char *a, const char *b);
 
 char *_rd_strcasestr (const char *haystack, const char *needle);
 
+char **rd_string_split (const char *input, char sep, rd_bool_t skip_empty,
+                        size_t *cntp);
+
 /** @returns "true" if EXPR is true, else "false" */
 #define RD_STR_ToF(EXPR) ((EXPR) ? "true" : "false")
 

@@ -405,9 +405,218 @@ static int ut_strcasestr (void) {
                              strs[i].exp, of, ret ? ret : "(NULL)");
         }
 
-        return 0;
+        RD_UT_PASS();
 }
 
+
+
+
+/**
+ * @brief Split a character-separated string into an array.
+ *
+ * @remark This is not CSV compliant as CSV uses " for escapes, but this here
+ *         uses \.
+ *
+ * @param input Input string to parse.
+ * @param sep The separator character (typically ',')
+ * @param skip_empty Do not include empty fields in output array.
+ * @param cntp Will be set to number of elements in array.
+ *
+ * Supports "\" escapes.
+ * The array and the array elements will be allocated together and must be freed
+ * with a single rd_free(array) call.
+ * The array elements are copied and any "\" escapes are removed.
+ *
+ * @returns the parsed fields in an array. The number of elements in the
+ *          array is returned in \p cntp
+ */
+char **rd_string_split (const char *input, char sep, rd_bool_t skip_empty,
+                        size_t *cntp) {
+        size_t fieldcnt = 1;
+        rd_bool_t next_esc = rd_false;
+        const char *s;
+        char *p;
+        char **arr;
+        size_t inputlen;
+        size_t i = 0;
+        size_t elen = 0;
+
+        *cntp = '\0';
+
+        /* First count the maximum number of fields so we know how large of
+         * an array we need to allocate. Escapes are ignored. */
+        for (s = input ; *s ; s++) {
+                if (*s == sep)
+                        fieldcnt++;
+        }
+
+        inputlen = (size_t)(s - input);
+
+        /* Allocate array and memory for the copied elements in one go. */
+        arr = rd_malloc((sizeof(*arr) * fieldcnt) + inputlen + 1);
+        p = (char *)(&arr[fieldcnt]);
+
+        for (s = input ; ; s++) {
+                rd_bool_t at_end = *s == '\0';
+                rd_bool_t is_esc = next_esc;
+
+                /* If we've reached the end, jump to done to finish
+                 * the current field. */
+                if (at_end)
+                        goto done;
+
+                if (unlikely(!is_esc && *s == '\\')) {
+                        next_esc = rd_true;
+                        continue;
+                }
+
+                next_esc = rd_false;
+
+                /* Strip leading whitespaces for each element */
+                if (!is_esc && elen == 0 && isspace((int)*s))
+                        continue;
+
+                if (likely(is_esc || *s != sep)) {
+                        char c = *s;
+                        if (is_esc) {
+                                /* Perform some common escape substitions.
+                                 * If not known we'll just keep the escaped
+                                 * character as is (probably the separator). */
+                                switch (c)
+                                {
+                                case 't':
+                                        c = '\t';
+                                        break;
+                                case 'n':
+                                        c = '\n';
+                                        break;
+                                case 'r':
+                                        c = '\r';
+                                        break;
+                                case '0':
+                                        c = '\0';
+                                        break;
+                                }
+                        }
+                        p[elen++] = c;
+                        continue;
+                }
+
+        done:
+                /* Strip trailing whitespaces */
+                while (elen > 0 && isspace((int)p[elen-1]))
+                        elen--;
+
+                /* End of field */
+                if (elen == 0 && skip_empty) {
+                        if (at_end)
+                                break;
+                        continue;
+                }
+
+                rd_assert(i < fieldcnt);
+
+                /* Nul-terminate the element */
+                p[elen++] = '\0';
+                /* Assign element to array */
+                arr[i] = p;
+                /* Update next element pointer past the written bytes */
+                p += elen;
+                /* Reset element length */
+                elen = 0;
+                /* Advance array element index */
+                i++;
+
+                if (at_end)
+                        break;
+        }
+
+        *cntp = i;
+
+        return arr;
+}
+
+/**
+ * @brief Unittest for rd_string_split()
+ */
+static int ut_string_split (void) {
+        static const struct {
+                const char *input;
+                const char sep;
+                rd_bool_t skip_empty;
+                size_t exp_cnt;
+                const char *exp[16];
+        } strs[] = {
+                { "just one field", ',', rd_true, 1,
+                  { "just one field" }
+                },
+                /* Empty with skip_empty */
+                { "", ',', rd_true, 0 },
+                /* Empty without skip_empty */
+                { "", ',', rd_false, 1,
+                  { "" }
+                },
+                { ", a,b ,,c,   d,    e,f,ghijk,  lmn,opq  ,  r  s t u, v",
+                  ',', rd_true, 11,
+                  {
+                          "a", "b", "c", "d", "e", "f", "ghijk", "lmn", "opq",
+                          "r  s t u", "v"
+                  },
+                },
+                { ", a,b ,,c,   d,    e,f,ghijk,  lmn,opq  ,  r  s t u, v",
+                  ',', rd_false, 13,
+                  {
+                          "", "a", "b", "", "c", "d", "e", "f", "ghijk",
+                          "lmn", "opq", "r  s t u", "v"
+                  },
+                },
+                { "  this is an \\,escaped comma,\\,,\\\\, "
+                  "and this is an unbalanced escape: \\\\\\\\\\\\\\",
+                  ',', rd_true, 4,
+                  {
+                          "this is an ,escaped comma",
+                          ",",
+                          "\\",
+                          "and this is an unbalanced escape: \\\\\\"
+                  }
+                },
+                { "using|another ||\\|d|elimiter", '|', rd_false, 5,
+                  {
+                          "using", "another", "", "|d", "elimiter"
+                  },
+                },
+                { NULL },
+        };
+        size_t i;
+
+        RD_UT_BEGIN();
+
+        for (i = 0 ; strs[i].input ; i++) {
+                char **ret;
+                size_t cnt = 12345;
+                size_t j;
+
+                ret = rd_string_split(strs[i].input, strs[i].sep,
+                                      strs[i].skip_empty,
+                                      &cnt);
+                RD_UT_ASSERT(ret != NULL,
+                             "#%"PRIusz": Did not expect NULL", i);
+                RD_UT_ASSERT(cnt == strs[i].exp_cnt,
+                             "#%"PRIusz": "
+                             "Expected %"PRIusz" elements, got %"PRIusz,
+                             i, strs[i].exp_cnt, cnt);
+
+                for (j = 0 ; j < cnt ; j++)
+                        RD_UT_ASSERT(!strcmp(strs[i].exp[j], ret[j]),
+                                     "#%"PRIusz": Expected string %"PRIusz
+                                     " to be \"%s\", not \"%s\"",
+                                     i, j, strs[i].exp[j], ret[j]);
+
+                rd_free(ret);
+        }
+
+        RD_UT_PASS();
+}
 
 /**
  * @brief Unittests for strings
@@ -416,6 +625,7 @@ int unittest_string (void) {
         int fails = 0;
 
         fails += ut_strcasestr();
+        fails += ut_string_split();
 
         return fails;
 }

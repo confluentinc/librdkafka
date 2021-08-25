@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Check or apply/fix the project coding style to all files passed as arguments.
+# Uses clang-format for C/C++ and flake8 for Python.
 #
 
 set -e
@@ -20,10 +21,18 @@ else
     fix=0
 fi
 
-function ignore {
-    local file=${1//q./\.}
+# Get list of files from .formatignore to ignore formatting for.
+ignore_files=( $(grep '^[^#]..' .formatignore) )
 
-    grep -q "^$file$" .formatignore
+function ignore {
+    local file=$1
+
+    local f
+    for f in "${ignore_files[@]}" ; do
+        [[ $file == $f ]] && return 0
+    done
+
+    return 1
 }
 
 # Read the C++ style from src-cpp/.clang-format and store it
@@ -45,6 +54,7 @@ for f in $*; do
         continue
     fi
 
+    lang="c"
     if [[ $f == *.cpp ]]; then
         style="$cpp_style"
         stylename="C++"
@@ -60,20 +70,9 @@ for f in $*; do
         stylename="C"
     fi
 
-    if [[ $fix == 0 ]]; then
-        # Check for tabs
-        if grep -q $'\t' "$f" ; then
-            echo "$f: contains tabs: convert to 8 spaces instead"
-            ret=1
-        fi
+    check=0
 
-        # Check style
-        if ! clang-format --style=$style --dry-run "$f" ; then
-            echo "$f: had style errors ($style): see clang-format output above"
-            ret=1
-        fi
-
-    else
+    if [[ $fix == 1 ]]; then
         # Convert tabs to spaces first.
         sed -i -e 's/\t/        /g' "$f"
 
@@ -126,8 +125,10 @@ done
 rm -f _styletmp
 
 if [[ $ret != 0 ]]; then
+    echo ""
     echo "You can run the following command to automatically fix the style:"
-    echo "  $ $0 --fix $*"
+    echo "  $ make style-fix"
+    [[ -n $extra_info ]] && echo "$extra_info"
 fi
 
 exit $ret

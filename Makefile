@@ -108,9 +108,9 @@ coverity: Makefile.config
 
 style-check:
 	@(packaging/tools/style-format.sh \
-		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$') )
+		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h|py)$$') )
 
 style-fix:
 	@(packaging/tools/style-format.sh --fix \
-		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h)$$'))
+		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h|py)$$'))
 

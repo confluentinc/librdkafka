@@ -3678,6 +3678,67 @@ static void rd_kafka_sw_str_sanitize_inplace (char *str) {
 
 
 /**
+ * @brief Create a staggered array of key-value pairs from
+ *        an array of "key=value" strings (typically from rd_string_split()).
+ *
+ * The output array will have element 0 being key0 and element 1 being
+ * value0. Element 2 being key1 and element 3 being value1, and so on.
+ * E.g.:
+ *  input   { "key0=value0", "key1=value1" } incnt=2
+ *  returns { "key0", "value0", "key1", "value1" } cntp=4
+ *
+ * @returns NULL on error (no '=' separator), or a newly allocated array
+ *          on success. The array count is returned in \p cntp.
+ *          The returned pointer must be freed with rd_free().
+ */
+static char **rd_kafka_conf_kv_split (const char **input, size_t incnt,
+                                      size_t *cntp) {
+        size_t i;
+        char **out, *p;
+        size_t lens = 0;
+        size_t outcnt = 0;
+
+        /* First calculate total length needed for key-value strings. */
+        for (i = 0 ; i < incnt ; i++) {
+                const char *t = strchr(input[i], '=');
+
+                /* No "=", or "=" at beginning of string. */
+                if (!t || t == input[i])
+                        return NULL;
+
+                /* Length of key, '=' (will be \0), value, and \0 */
+                lens += strlen(input[i]) + 1;
+        }
+
+        /* Allocate array along with elements in one go */
+        out = rd_malloc((sizeof(*out) * incnt * 2) + lens);
+        p = (char *)(&out[incnt * 2]);
+
+        for (i = 0 ; i < incnt ; i++) {
+                const char *t = strchr(input[i], '=');
+                size_t namelen = (size_t)(t - input[i]);
+                size_t valuelen = strlen(t+1);
+
+                /* Copy name */
+                out[outcnt++] = p;
+                memcpy(p, input[i], namelen);
+                p += namelen;
+                *(p++) = '\0';
+
+                /* Copy value */
+                out[outcnt++] = p;
+                memcpy(p, t+1, valuelen + 1);
+                p += valuelen;
+                *(p++) = '\0';
+        }
+
+
+        *cntp = outcnt;
+        return out;
+}
+
+
+/**
  * @brief Verify configuration \p conf is
  *        correct/non-conflicting and finalize the configuration
  *        settings for use.

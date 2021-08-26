@@ -82,7 +82,8 @@ if [[ $MKL_DISTRO != osx ]]; then
     function libcrypto_install_source {
         local name=$1
         local destdir=$2
-        local ver=1.1.1k
+        local ver=1.1.1l
+        local checksum="0b7a3e5e59c34827fe0c3a74b7ec8baef302b98fa80088d7f9153aa16fa76bd1"
         local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
         local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
@@ -93,7 +94,7 @@ if [[ $MKL_DISTRO != osx ]]; then
         echo "### Installing $name $ver from source ($url) to $destdir"
         if [[ ! -f config ]]; then
             echo "### Downloading"
-            curl -fL $url | tar xzf - --strip-components 1
+            mkl_download_archive "$url" "sha256" "$checksum" || return 1
         fi
 
         echo "### Configuring"

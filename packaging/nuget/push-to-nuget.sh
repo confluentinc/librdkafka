@@ -15,7 +15,7 @@ fi
 
 set -u
 
-docker run -t -v $PWD/$pkg:/$pkg microsoft/dotnet:sdk \
+docker run -t -v $PWD/$pkg:/$pkg mcr.microsoft.com/dotnet/sdk:3.1 \
        dotnet nuget push /$pkg -n -s https://api.nuget.org/v3/index.json \
        -k $key --source https://api.nuget.org/v3/index.json
 

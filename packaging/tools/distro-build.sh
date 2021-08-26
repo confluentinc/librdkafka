@@ -23,7 +23,7 @@ case $distro in
         packaging/rpm/tests/test-on-docker.sh
         ;;
     debian)
-        docker run -it -v "$PWD:/v" microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz $config_args
+        docker run -it -v "$PWD:/v" mcr.microsoft.com/dotnet/sdk:3.1 /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz $config_args
         ;;
     alpine)
         packaging/alpine/build-alpine.sh $config_args

@@ -1,14 +1,14 @@
 #!/bin/bash
 #
-# Build librdkafka on a bare-bone Debian host, such as the microsoft/dotnet:2-sdk
-# Docker image.
+# Build librdkafka on a bare-bone Debian host, such as the
+# mcr.microsoft.com/dotnet/sdk Docker image.
 #
 # Statically linked
 # WITH openssl 1.0, zlib
 # WITHOUT libsasl2, lz4(ext, using builtin instead)
 #
 # Usage (from top-level librdkafka dir):
-#   docker run -it -v $PWD:/v microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/librdkafka-debian9.tgz
+#   docker run -it -v $PWD:/v mcr.microsoft.com/dotnet/sdk /v/packaging/tools/build-debian.sh /v /v/librdkafka-debian9.tgz
 #
 
 

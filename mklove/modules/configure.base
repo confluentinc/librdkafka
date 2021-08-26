@@ -1977,7 +1977,7 @@ function mkl_module_download {
 
     tmpfile=$(mktemp _mkltmpXXXXXX)
     local out=
-    out=$(wget -nv -O "$tmpfile" "$url" 2>&1)
+    out=$(curl -fLs -o "$tmpfile" "$url" 2>&1)
 
     if [[ $? -ne 0 ]]; then
         rm -f "$tmpfile"

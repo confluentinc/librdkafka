@@ -320,7 +320,10 @@ rd_kafka_admin_fanout_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq,
  */
 
 /**
- * @brief Create a new admin_result op based on the request op \p rko_req
+ * @brief Create a new admin_result op based on the request op \p rko_req.
+ *
+ * @remark This moves the rko_req's admin_request.args list from \p rko_req
+ *         to the returned rko. The \p rko_req args will be emptied.
  */
 static rd_kafka_op_t *rd_kafka_admin_result_new (rd_kafka_op_t *rko_req) {
         rd_kafka_op_t *rko_result;
@@ -360,6 +363,12 @@ static rd_kafka_op_t *rd_kafka_admin_result_new (rd_kafka_op_t *rko_req) {
         rko_result->rko_u.admin_result.opaque =
                 rd_kafka_confval_get_ptr(&rko_req->rko_u.admin_request.
                                          options.opaque);
+
+        /* Move request arguments (list) from request to result.
+         * This is mainly so that partial_response() knows what arguments
+         * were provided to the response's request it is merging. */
+        rd_list_move(&rko_result->rko_u.admin_result.args,
+                     &rko_req->rko_u.admin_request.args);
 
         rko_result->rko_evtype = rko_req->rko_u.admin_request.reply_event_type;
 
@@ -1712,7 +1721,7 @@ rd_kafka_CreateTopicsResponse_parse (rd_kafka_op_t *rko_req,
                  * in the same order as they were requested. The broker
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
-                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
                                          &skel, rd_kafka_NewTopic_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
@@ -1930,7 +1939,7 @@ rd_kafka_DeleteTopicsResponse_parse (rd_kafka_op_t *rko_req,
                  * in the same order as they were requested. The broker
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
-                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
                                          &skel, rd_kafka_DeleteTopic_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
@@ -2224,7 +2233,7 @@ rd_kafka_CreatePartitionsResponse_parse (rd_kafka_op_t *rko_req,
                  * in the same order as they were requested. The broker
                  * does not maintain ordering unfortunately. */
                 skel.topic = terr->topic;
-                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
                                          &skel, rd_kafka_NewPartitions_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_topic_result_destroy(terr);
@@ -2796,7 +2805,7 @@ rd_kafka_AlterConfigsResponse_parse (rd_kafka_op_t *rko_req,
                  * does not maintain ordering unfortunately. */
                 skel.restype = config->restype;
                 skel.name = config->name;
-                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
                                          &skel, rd_kafka_ConfigResource_cmp);
                 if (orig_pos == -1) {
                         rd_kafka_ConfigResource_destroy(config);
@@ -3101,7 +3110,7 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                  * does not maintain ordering unfortunately. */
                 skel.restype = config->restype;
                 skel.name = config->name;
-                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
                                          &skel, rd_kafka_ConfigResource_cmp);
                 if (orig_pos == -1)
                         rd_kafka_buf_parse_fail(
@@ -3257,12 +3266,39 @@ rd_kafka_DeleteRecords_response_merge (rd_kafka_op_t *rko_fanout,
         rd_assert(rko_partial->rko_evtype ==
                   RD_KAFKA_EVENT_DELETERECORDS_RESULT);
 
-        /* Partitions from the DeleteRecordsResponse */
-        partitions = rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
-
-        /* Partitions (offsets) from the DeleteRecords() call */
+        /* All partitions (offsets) from the DeleteRecords() call */
         respartitions = rd_list_elem(&rko_fanout->rko_u.admin_request.
                                      fanout.results, 0);
+
+        if (rko_partial->rko_err) {
+                /* If there was a request-level error, set the error on
+                 * all requested partitions for this request. */
+                const rd_kafka_topic_partition_list_t *reqpartitions;
+                rd_kafka_topic_partition_t *reqpartition;
+
+                /* Partitions (offsets) from this DeleteRecordsRequest */
+                reqpartitions = rd_list_elem(&rko_partial->rko_u.
+                                             admin_result.args, 0);
+
+                RD_KAFKA_TPLIST_FOREACH(reqpartition, reqpartitions) {
+                        rd_kafka_topic_partition_t *respart;
+
+                        /* Find result partition */
+                        respart = rd_kafka_topic_partition_list_find(
+                                respartitions,
+                                reqpartition->topic,
+                                reqpartition->partition);
+
+                        rd_assert(respart || !*"respart not found");
+
+                        respart->err = rko_partial->rko_err;
+                }
+
+                return;
+        }
+
+        /* Partitions from the DeleteRecordsResponse */
+        partitions = rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
 
         RD_KAFKA_TPLIST_FOREACH(partition, partitions) {
                 rd_kafka_topic_partition_t *respart;
@@ -3898,8 +3934,7 @@ rd_kafka_OffsetDeleteResponse_parse (rd_kafka_op_t *rko_req,
         rd_kafka_op_t *rko_result;
         int16_t ErrorCode;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-        const rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets =
-                rd_list_elem(&rko_req->rko_u.admin_request.args, 0);
+        const rd_kafka_DeleteConsumerGroupOffsets_t *del_grpoffsets;
 
         rd_kafka_buf_read_i16(reply, &ErrorCode);
         if (ErrorCode) {
@@ -3924,6 +3959,8 @@ rd_kafka_OffsetDeleteResponse_parse (rd_kafka_op_t *rko_req,
 
         /* Create result op and group_result_t */
         rko_result = rd_kafka_admin_result_new(rko_req);
+        del_grpoffsets = rd_list_elem(&rko_result->rko_u.admin_result.args, 0);
+
         rd_list_init(&rko_result->rko_u.admin_result.results, 1,
                      rd_kafka_group_result_free);
         rd_list_add(&rko_result->rko_u.admin_result.results,

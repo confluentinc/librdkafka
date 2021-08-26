@@ -60,3 +60,14 @@ To create a bundle (tarball) of librdkafka self-contained static library
 builds, use the following command:
 
     $ ./release.py --class StaticPackage v1.1.0
+
+
+### Clean up S3 bucket
+
+To clean up old non-release/non-RC builds from the S3 bucket, first check with:
+
+    $ AWS_PROFILE=.. ./cleanup-s3.py --age 360
+
+Verify that the listed objects should really be deleted, then delete:
+
+    $ AWS_PROFILE=.. ./cleanup-s3.py --age 360 --delete

@@ -35,6 +35,7 @@ librdkafka v1.8.0 is a security release:
    is set to 0 - which disables ticket refreshes (by @mpekalski, #3431).
  * Rename internal crc32c() symbol to rd_crc32c() to avoid conflict with
    other static libraries (#3421).
+ * `txidle` and `rxidle` in the statistics object was emitted as 18446744073709551615 when no idle was known. -1 is now emitted instead. (#3519)
 
 
 ### Consumer fixes

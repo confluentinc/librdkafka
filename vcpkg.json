@@ -4,7 +4,7 @@
     "dependencies": [
         {
             "name": "zstd",
-            "version>=": "1.4.9"
+            "version>=": "1.5.0"
         },
         {
             "name": "zlib",
@@ -12,8 +12,8 @@
         },
         {
             "name": "openssl",
-            "version>=": "1.1.1k"
+            "version>=": "1.1.1l"
         }
     ],
-    "builtin-baseline": "cf03dac5c25dd5a8d207d0b7d546f24424898418"
+    "builtin-baseline": "dd3d6df5001d49f954bc39b73a4c49ae3c9e8d15"
 }

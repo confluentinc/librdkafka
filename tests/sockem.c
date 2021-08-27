@@ -428,6 +428,7 @@ static void *sockem_run (void *arg) {
                 }
                 fprintf(stderr, "%% sockem: accept(%d) failed: %s\n",
                         ls, strerror(socket_errno()));
+                mtx_unlock(&skm->lock);
                 assert(cs != -1);
         }
 

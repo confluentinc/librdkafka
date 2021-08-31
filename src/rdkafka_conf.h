@@ -151,6 +151,10 @@ typedef enum {
         RD_KAFKA_OFFSET_METHOD_BROKER
 } rd_kafka_offset_method_t;
 
+typedef enum {
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
+        RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC
+} rd_kafka_oauthbearer_method_t;
 
 typedef enum {
         RD_KAFKA_SSL_ENDPOINT_ID_NONE,
@@ -285,11 +289,19 @@ struct rd_kafka_conf_s {
 #endif
                 char *oauthbearer_config;
                 int   enable_oauthbearer_unsecure_jwt;
-                /* SASL/OAUTHBEARER token refresh event callback */
-                void (*oauthbearer_token_refresh_cb) (
-                        rd_kafka_t *rk,
-                        const char *oauthbearer_config,
-                        void *opaque);
+                struct {
+                        char *method;
+                        char *token_endpoint_url;
+                        char *client_id;
+                        char *client_secret;
+                        char *scope;
+                        char *extensions_str;
+                        /* SASL/OAUTHBEARER token refresh event callback */
+                        void (*token_refresh_cb) (
+                                rd_kafka_t *rk,
+                                const char *oauthbearer_config,
+                                void *opaque);
+                } oauthbearer;
         } sasl;
 
         char *plugin_paths;

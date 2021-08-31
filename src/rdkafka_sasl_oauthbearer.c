@@ -167,8 +167,8 @@ rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
          * the op has already been handled by this point.
          */
         if (rko->rko_err != RD_KAFKA_RESP_ERR__DESTROY &&
-            rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
-                rk->rk_conf.sasl.oauthbearer_token_refresh_cb(
+            rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
+                rk->rk_conf.sasl.oauthbearer.token_refresh_cb(
                         rk, rk->rk_conf.sasl.oauthbearer_config,
                         rk->rk_conf.opaque);
         return RD_KAFKA_OP_RES_HANDLED;
@@ -1310,9 +1310,9 @@ static int rd_kafka_sasl_oauthbearer_init (rd_kafka_t *rk,
          * unsecure JWS token refresher, to avoid an initial connection
          * stall as we wait for the application to call poll().
          * Otherwise enqueue a refresh callback for the application. */
-        if (rk->rk_conf.sasl.oauthbearer_token_refresh_cb ==
+        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
             rd_kafka_oauthbearer_unsecured_token)
-                rk->rk_conf.sasl.oauthbearer_token_refresh_cb(
+                rk->rk_conf.sasl.oauthbearer.token_refresh_cb(
                         rk, rk->rk_conf.sasl.oauthbearer_config,
                         rk->rk_conf.opaque);
         else

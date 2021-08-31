@@ -2239,12 +2239,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
 #if WITH_SASL_OAUTHBEARER
         if (rk->rk_conf.sasl.enable_oauthbearer_unsecure_jwt &&
-            !rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
+            !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                         &rk->rk_conf,
                         rd_kafka_oauthbearer_unsecured_token);
 
-        if (rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
+        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
                 rk->rk_conf.enabled_events |=
                         RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif

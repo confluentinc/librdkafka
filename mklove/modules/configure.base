@@ -1977,7 +1977,7 @@ function mkl_module_download {
 
     tmpfile=$(mktemp _mkltmpXXXXXX)
     local out=
-    out=$(wget -nv -O "$tmpfile" "$url" 2>&1)
+    out=$(curl -fLs -o "$tmpfile" "$url" 2>&1)
 
     if [[ $? -ne 0 ]]; then
         rm -f "$tmpfile"
@@ -2349,4 +2349,58 @@ function mkl_toggle_option_lib {
     # Create checks
     eval "function _tmp_func { mkl_lib_check \"$2\" \"$3\" \"$4\" CC \"$7\"; }"
     mkl_func_push MKL_CHECKS "$MKL_MODULE" _tmp_func
+}
+
+
+
+# Downloads, verifies checksum, and extracts an archive to
+# the current directory.
+#
+# Arguments:
+#  url       Archive URL
+#  checksum_type  The ${checksum_type}sum tool will be used to verify the checksum. E.g., "sha256".
+#  checksum  Expected checksum of archive (use "" to not perform check)
+function mkl_download_archive {
+    local url="$1"
+    local checksum_tool="${2}sum"
+    local exp_checksum="$3"
+
+    local tmpfile=$(mktemp _mkltmpXXXXXX)
+
+    if ! curl -fLs -o "$tmpfile" "$url" ; then
+        rm -f "$tmpfile"
+        echo -e "ERROR: Download of $url failed" 1>&2
+        return 1
+    fi
+
+    if [[ -n $exp_checksum ]]; then
+        # Verify checksum
+        local checksum=$($checksum_tool "$tmpfile" | cut -d' ' -f1)
+        if [[ $? -ne 0 ]]; then
+            rm -f "$tmpfile"
+            echo "ERROR: Failed to verify checksum of $url with $checksum_tool" 1>&2
+            return 1
+        fi
+
+        if [[ $checksum != $exp_checksum ]]; then
+            rm -f "$tmpfile"
+            echo "ERROR: $url: $checksum_tool: Checksum mismatch: expected $exp_checksum, calculated $checksum" 1>&2
+            return 1
+        fi
+
+        echo "### Checksum of $url verified ($checksum_tool):"
+        echo "###  Expected:   $exp_checksum"
+        echo "###  Calculated: $checksum"
+    fi
+
+    tar xzf "$tmpfile" --strip-components 1
+    if [[ $? -ne 0 ]]; then
+        rm -f "$tmpfile"
+        echo "ERROR: $url: failed to extract archive" 1>&2
+        return 1
+    fi
+
+
+    rm -f "$tmpfile"
+    return 0
 }

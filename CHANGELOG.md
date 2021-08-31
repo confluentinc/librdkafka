@@ -8,7 +8,11 @@ librdkafka v1.8.0 is a security release:
    See https://github.com/edenhill/librdkafka/issues/2934 for more information.
  * librdkafka now uses [vcpkg](https://vcpkg.io/) for up-to-date Windows
    dependencies in the `librdkafka.redist` NuGet package:
-   OpenSSL 1.1.1k, zlib 1.2.11, zstd 1.4.9.
+   OpenSSL 1.1.1l, zlib 1.2.11, zstd 1.5.0.
+ * The upstream dependency (OpenSSL, zstd, zlib) source archive checksums are
+   now verified when building with `./configure --install-deps`.
+   These builds are used by the librdkafka builds bundled with
+   confluent-kafka-go, confluent-kafka-python and confluent-kafka-dotnet.
 
 
 ## Enhancements
@@ -37,6 +41,7 @@ librdkafka v1.8.0 is a security release:
    is set to 0 - which disables ticket refreshes (by @mpekalski, #3431).
  * Rename internal crc32c() symbol to rd_crc32c() to avoid conflict with
    other static libraries (#3421).
+ * `txidle` and `rxidle` in the statistics object was emitted as 18446744073709551615 when no idle was known. -1 is now emitted instead. (#3519)
 
 
 ### Consumer fixes

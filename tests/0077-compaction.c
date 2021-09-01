@@ -170,10 +170,11 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         int msgcounter = 0;
         const int fillcnt = 20;
 
-        testid = test_id_generate();
-
-        TEST_SAY(_C_MAG "Test compaction on topic %s with %s compression (%d messages)\n",
+        SUB_TEST("Test compaction on topic %s with %s "
+                 "compression (%d messages)",
                  topic, compression ? compression : "no", msgcnt);
+
+        testid = test_id_generate();
 
         test_kafka_topics("--create --topic \"%s\" "
                           "--partitions %d "
@@ -296,7 +297,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
          * is not updated on compaction if the first segment is not deleted.
          * But it serves as a pause to let compaction kick in
          * which is triggered by the dummy produce above. */
-        wait_compaction(rk, topic, partition, 0, 20*1000);
+        wait_compaction(rk, topic, partition, 0, 30*1000);
 
         TEST_SAY(_C_YEL "Verify messages after compaction\n");
         /* After compaction we expect the following messages:
@@ -313,8 +314,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "Compaction test with %s compression: PASS\n",
-                 compression ? compression : "no");
+        SUB_TEST_PASS();
 }
 
 int main_0077_compaction (int argc, char **argv) {

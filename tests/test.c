@@ -1687,6 +1687,7 @@ int main(int argc, char **argv) {
 			       "  RDKAFKA_TEST_CONF - test config file (test.conf)\n"
 			       "  KAFKA_PATH - Path to kafka source dir\n"
 			       "  ZK_ADDRESS - Zookeeper address\n"
+                               "  BROKERS - Kafka bootstrap servers\n"
                                "\n",
                                argv[i], argv[0]);
                         exit(1);
@@ -4364,17 +4365,27 @@ void test_kafka_topics (const char *fmt, ...) {
 	int r;
 	va_list ap;
 	test_timing_t t_cmd;
-	const char *kpath, *zk;
+	const char *kpath, *conn;
 
 	kpath = test_getenv("KAFKA_PATH", NULL);
-	zk = test_getenv("ZK_ADDRESS", NULL);
-
-	if (!kpath || !zk)
-		TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
+	if (!kpath)
+		TEST_FAIL("%s: KAFKA_PATH must be set",
 			  __FUNCTION__);
 
-	r = rd_snprintf(cmd, sizeof(cmd),
-			"%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
+        if (test_broker_version < TEST_BRKVER(0, 10, 0, 0)) {
+                conn = test_getenv("ZK_ADDRESS", NULL);
+                TEST_ASSERT(conn != NULL, "ZK_ADDRESS must be set");
+                r = rd_snprintf(cmd, sizeof(cmd),
+                                "%s/bin/kafka-topics.sh --zookeeper %s ",
+                                kpath, conn);
+        } else {
+                conn = test_getenv("BROKERS", NULL);
+                TEST_ASSERT(conn != NULL, "BROKERS must be set");
+                r = rd_snprintf(cmd, sizeof(cmd),
+                                "%s/bin/kafka-topics.sh --bootstrap-server %s ",
+                                kpath, conn);
+        }
+
 	TEST_ASSERT(r < (int)sizeof(cmd));
 
 	va_start(ap, fmt);
@@ -5026,10 +5037,11 @@ int test_can_create_topics (int skip) {
 #else
 
 	if (!test_getenv("KAFKA_PATH", NULL) ||
-	    !test_getenv("ZK_ADDRESS", NULL)) {
+	    !(test_getenv("BROKERS", NULL) ||
+              test_getenv("ZK_ADDRESS", NULL))) {
 		if (skip)
-			TEST_SKIP("Cannot create topics "
-				  "(set KAFKA_PATH and ZK_ADDRESS)\n");
+			TEST_SKIP("Cannot create topics (set "
+                                  "KAFKA_PATH and BROKERS or ZK_ADDRESS)\n");
 		return 0;
 	}
 

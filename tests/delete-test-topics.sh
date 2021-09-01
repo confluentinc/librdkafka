@@ -37,6 +37,14 @@ if [[ -z "$KATOPS" ]]; then
     exit 1
 fi
 
+CONNARGS=""
+if [[ $TEST_KAFKA_VERSION == [012].* ]]; then
+    # AK < 3.0 takes --zookeeper arg
+    CONNARGS="--zookeeper $ZK"
+else
+    CONNARGS="--bootstrap-server $BROKERS"
+fi
+
 set -u
 echo -n "Collecting list of matching topics... "
 TOPICS=$($KATOPS --zookeeper $ZK --list 2>/dev/null | grep "$RE") || true

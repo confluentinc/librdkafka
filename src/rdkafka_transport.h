@@ -39,6 +39,7 @@
 typedef struct rd_kafka_transport_s rd_kafka_transport_t;
 
 int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+                                 rd_kafka_q_t *rkq,
                                  int timeout_ms);
 
 ssize_t rd_kafka_transport_send (rd_kafka_transport_t *rktrans,
@@ -71,7 +72,15 @@ void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);
 void rd_kafka_transport_shutdown (rd_kafka_transport_t *rktrans);
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event);
-int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);
+
+#ifdef _WIN32
+void rd_kafka_transport_set_blocked (rd_kafka_transport_t *rktrans,
+        rd_bool_t blocked);
+#else
+/* no-op on other platforms */
+#define rd_kafka_transport_set_blocked(rktrans,blocked) do {} while (0)
+#endif
+
 
 void rd_kafka_transport_init (void);
 

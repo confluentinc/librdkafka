@@ -241,9 +241,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         rd_socket_t         rkb_wakeup_fd[2];     /* Wake-up fds (r/w) to wake
                                                    * up from IO-wait when
                                                    * queues have content. */
-        rd_socket_t         rkb_toppar_wakeup_fd; /* Toppar msgq wakeup fd,
-                                                   * this is rkb_wakeup_fd[1]
-                                                   * if enabled. */
 
         /**< Current, exponentially increased, reconnect backoff. */
         int                 rkb_reconnect_backoff_ms;

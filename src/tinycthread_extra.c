@@ -59,6 +59,23 @@ int thrd_is_current(thrd_t thr) {
 }
 
 
+#ifdef _WIN32
+void cnd_wait_enter (cnd_t *cond) {
+        /* Increment number of waiters */
+        EnterCriticalSection(&cond->mWaitersCountLock);
+        ++cond->mWaitersCount;
+        LeaveCriticalSection(&cond->mWaitersCountLock);
+}
+
+void cnd_wait_exit (cnd_t *cond) {
+        /* Increment number of waiters */
+        EnterCriticalSection(&cond->mWaitersCountLock);
+        --cond->mWaitersCount;
+        LeaveCriticalSection(&cond->mWaitersCountLock);
+}
+#endif
+
+
 
 
 int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {

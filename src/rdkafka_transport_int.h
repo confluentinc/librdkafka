@@ -52,6 +52,16 @@ struct rd_kafka_transport_s {
 	SSL *rktrans_ssl;
 #endif
 
+#ifdef _WIN32
+        WSAEVENT *rktrans_wsaevent;
+        rd_bool_t rktrans_blocked;  /* Latest send() returned ..WOULDBLOCK.
+                                     * We need to poll for FD_WRITE which
+                                     * is edge-triggered rather than
+                                     * level-triggered.
+                                     * This behaviour differs from BSD
+                                     * sockets. */
+#endif
+
 	struct {
                 void *state;               /* SASL implementation
                                             * state handle */
@@ -75,7 +85,7 @@ struct rd_kafka_transport_s {
 
         /* Two pollable fds:
          * - TCP socket
-         * - wake-up fd
+         * - wake-up fd  (not used on Win32)
          */
         rd_pollfd_t rktrans_pfd[2];
         int rktrans_pfd_cnt;

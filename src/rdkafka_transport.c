@@ -62,6 +62,8 @@
 RD_TLS rd_kafka_transport_t *rd_kafka_curr_transport;
 
 
+static int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);
+
 
 /**
  * Low-level socket close
@@ -87,6 +89,10 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 
 	if (rktrans->rktrans_recv_buf)
 		rd_kafka_buf_destroy(rktrans->rktrans_recv_buf);
+
+#ifdef _WIN32
+        WSACloseEvent(rktrans->rktrans_wsaevent);
+#endif
 
 	if (rktrans->rktrans_s != -1)
                 rd_kafka_transport_close0(rktrans->rktrans_rkb->rkb_rk,
@@ -185,14 +191,17 @@ rd_kafka_transport_socket_send0 (rd_kafka_transport_t *rktrans,
 
 #ifdef _WIN32
                 if (unlikely(r == RD_SOCKET_ERROR)) {
-                        if (sum > 0 || rd_socket_errno == WSAEWOULDBLOCK)
+                        if (sum > 0 || rd_socket_errno == WSAEWOULDBLOCK) {
+                                rktrans->rktrans_blocked = rd_true;
                                 return sum;
-                        else {
+                        }  else {
                                 rd_snprintf(errstr, errstr_size, "%s",
                                             rd_socket_strerror(rd_socket_errno));
                                 return -1;
                         }
                 }
+
+                 rktrans->rktrans_blocked = rd_false;
 #else
                 if (unlikely(r <= 0)) {
                         if (r == 0 || rd_socket_errno == EAGAIN)
@@ -675,22 +684,34 @@ static int rd_kafka_transport_get_socket_error (rd_kafka_transport_t *rktrans,
 /**
  * IO event handler.
  *
+ * @param socket_errstr Is an optional (else NULL) error string from the
+ *                      socket layer.
+ *
  * Locality: broker thread
  */
 static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
-					 int events) {
+					 int events,
+                                         const char *socket_errstr) {
 	char errstr[512];
 	int r;
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
-	switch (rkb->rkb_state)
+        switch (rkb->rkb_state)
 	{
 	case RD_KAFKA_BROKER_STATE_CONNECT:
 		/* Asynchronous connect finished, read status. */
 		if (!(events & (POLLOUT|POLLERR|POLLHUP)))
 			return;
 
-		if (rd_kafka_transport_get_socket_error(rktrans, &r) == -1) {
+                if (socket_errstr)
+                        rd_kafka_broker_fail(
+                                rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                "Connect to %s failed: %s",
+                                rd_sockaddr2str(rkb->rkb_addr_last,
+                                        RD_SOCKADDR2STR_F_PORT |
+                                        RD_SOCKADDR2STR_F_FAMILY),
+                                socket_errstr);
+                else if (rd_kafka_transport_get_socket_error(rktrans, &r) == -1) {
 			rd_kafka_broker_fail(
                                 rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
                                 "Connect to %s failed: "
@@ -801,37 +822,233 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 }
 
 
+
+#ifdef _WIN32
+/**
+ * @brief Convert WSA FD_.. events to POLL.. events.
+ */
+static RD_INLINE int rd_kafka_transport_wsa2events (long wevents) {
+        int events = 0;
+
+        if (unlikely(wevents == 0))
+                return 0;
+
+        if (wevents & FD_READ)
+                events |= POLLIN;
+        if (wevents & (FD_WRITE | FD_CONNECT))
+                events |= POLLOUT;
+        if (wevents & FD_CLOSE)
+                events |= POLLHUP;
+
+        rd_dassert(events != 0);
+
+        return events;
+}
+
+/**
+ * @brief Convert POLL.. events to WSA FD_.. events.
+ */
+static RD_INLINE int rd_kafka_transport_events2wsa (int events,
+        rd_bool_t is_connecting) {
+        long wevents = FD_CLOSE;
+
+        if (unlikely(is_connecting))
+                return wevents | FD_CONNECT;
+
+        if (events & POLLIN)
+                wevents |= FD_READ;
+        if (events & POLLOUT)
+                wevents |= FD_WRITE;
+
+        return wevents;
+}
+
+
+/**
+ * @returns the WinSocket events (as POLL.. events) for the broker socket.
+ */
+static int rd_kafka_transport_get_wsa_events (rd_kafka_transport_t *rktrans) {
+        const int try_bits[4 * 2] = {
+                FD_READ_BIT, POLLIN,
+                FD_WRITE_BIT, POLLOUT,
+                FD_CONNECT_BIT, POLLOUT,
+                FD_CLOSE_BIT, POLLHUP
+        };
+        int r, i;
+        WSANETWORKEVENTS netevents;
+        int events = 0;
+        const char *socket_errstr = NULL;
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+
+        /* Get Socket event */
+        r = WSAEnumNetworkEvents(rktrans->rktrans_s,
+                rktrans->rktrans_wsaevent,
+                &netevents);
+        if (unlikely(r == SOCKET_ERROR)) {
+                rd_rkb_log(rkb, LOG_ERR, "WSAWAIT",
+                        "WSAEnumNetworkEvents() failed: %s",
+                        rd_socket_strerror(rd_socket_errno));
+                socket_errstr = rd_socket_strerror(rd_socket_errno);
+                return POLLHUP | POLLERR;
+        }
+
+        /* Get fired events and errors for each event type */
+        for (i = 0; i < RD_ARRAYSIZE(try_bits); i += 2) {
+                const int bit = try_bits[i];
+                const int event = try_bits[i + 1];
+
+                if (!(netevents.lNetworkEvents & (1 << bit)))
+                        continue;
+
+                if (unlikely(netevents.iErrorCode[bit])) {
+                        socket_errstr = rd_socket_strerror(
+                                netevents.iErrorCode[bit]);
+                        events |= POLLHUP;
+                } else {
+                        events |= event;
+
+                        if (bit == FD_WRITE_BIT) {
+                                /* Writing no longer blocked */
+                                rktrans->rktrans_blocked = rd_false;
+                        }
+                }
+        }
+
+        return events;
+}
+
+
+/**
+ * @brief Win32: Poll transport and \p rkq cond events.
+ *
+ * @returns the transport socket POLL.. event bits.
+ */
+static int rd_kafka_transport_io_serve_win32 (rd_kafka_transport_t *rktrans,
+        rd_kafka_q_t *rkq, int timeout_ms) {
+        const DWORD wsaevent_cnt = 3;
+        WSAEVENT wsaevents[3] = {
+                rkq->rkq_cond.mEvents[0],  /* rkq: cnd_signal */
+                rkq->rkq_cond.mEvents[1],  /* rkq: cnd_broadcast */
+                rktrans->rktrans_wsaevent, /* socket */
+        };
+        DWORD r;
+        int events = 0;
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+        rd_bool_t set_pollout = rd_false;
+        rd_bool_t cnd_is_waiting = rd_false;
+
+        /* WSA only sets FD_WRITE (e.g., POLLOUT) when the socket was
+         * previously blocked, unlike BSD sockets that set POLLOUT as long as
+         * the socket isn't blocked. So we need to imitate the BSD behaviour
+         * here and cut the timeout short if a write is wanted and the socket
+         * is not currently blocked. */
+        if (rktrans->rktrans_rkb->rkb_state != RD_KAFKA_BROKER_STATE_CONNECT &&
+                !rktrans->rktrans_blocked &&
+                (rktrans->rktrans_pfd[0].events & POLLOUT)) {
+                timeout_ms = 0;
+                set_pollout = rd_true;
+        } else {
+                /* Check if the queue already has ops enqueued in which case we
+                 * cut the timeout short. Else add this thread as waiting on the
+                 * queue's condvar so that cnd_signal() (et.al.) will perform
+                 * SetEvent() and thus wake up this thread in case a new op is
+                 * added to the queue. */
+                mtx_lock(&rkq->rkq_lock);
+                if (rkq->rkq_qlen > 0) {
+                        timeout_ms = 0;
+                } else {
+                        cnd_is_waiting = rd_true;
+                        cnd_wait_enter(&rkq->rkq_cond);
+                }
+                mtx_unlock(&rkq->rkq_lock);
+        }
+
+        /* Wait for IO and queue events */
+        r = WSAWaitForMultipleEvents(wsaevent_cnt, wsaevents, FALSE,
+                timeout_ms, FALSE);
+
+        if (cnd_is_waiting) {
+                mtx_lock(&rkq->rkq_lock);
+                cnd_wait_exit(&rkq->rkq_cond);
+                mtx_unlock(&rkq->rkq_lock);
+        }
+
+       if (unlikely(r == WSA_WAIT_FAILED)) {
+                rd_rkb_log(rkb, LOG_CRIT, "WSAWAIT",
+                        "WSAWaitForMultipleEvents failed: %s",
+                        rd_socket_strerror(rd_socket_errno));
+                return POLLERR;
+        } else if (r != WSA_WAIT_TIMEOUT) {
+                r -= WSA_WAIT_EVENT_0;
+
+                /* Get the socket events. */
+                events = rd_kafka_transport_get_wsa_events(rktrans);
+        }
+
+        /* As explained above we need to set the POLLOUT flag
+         * in case it is wanted but not triggered by Winsocket so that
+         * io_event() knows it can attempt to send more data. */
+        if (likely(set_pollout && !(events & (POLLHUP | POLLERR | POLLOUT))))
+                events |= POLLOUT;
+
+        return events;
+}
+#endif
+
+
 /**
  * @brief Poll and serve IOs
  *
- * @returns 1 if at least one IO event was triggered, else 0, or -1 on error.
+ * @returns 0 if \p rkq may need additional blocking/timeout polling, else 1.
  *
  * @locality broker thread
  */
 int rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
-                                  int timeout_ms) {
-	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+        rd_kafka_q_t *rkq, int timeout_ms) {
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         int events;
-        int r;
 
         rd_kafka_curr_transport = rktrans;
 
-        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_CONNECT ||
-            (rkb->rkb_state > RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE &&
-             rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-             rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
+        if (
+#ifndef _WIN32
+                /* BSD sockets use POLLOUT to indicate success to connect.
+                 * Windows has its own flag for this (FD_CONNECT). */
+                rkb->rkb_state == RD_KAFKA_BROKER_STATE_CONNECT ||
+#endif
+                (rkb->rkb_state > RD_KAFKA_BROKER_STATE_SSL_HANDSHAKE &&
+                        rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+                        rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0))
                 rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
-        if ((r = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
-                return r;
+#ifdef _WIN32
+        /* BSD sockets use POLLIN and a following recv() returning 0 to
+         * to indicate connection close.
+         * Windows has its own flag for this (FD_CLOSE). */
+        if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) > 0)
+#endif
+                rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
 
-        /* Only handle events on the broker socket, the wakeup
-         * socket is just for waking up the blocking boll. */
+        /* On Windows we can wait for both IO and condvars (rkq)
+         * simultaneously.
+         *
+         * On *nix/BSD sockets we use a local pipe (pfd[1]) to wake
+         * up the rkq. */
+#ifdef _WIN32
+        events = rd_kafka_transport_io_serve_win32(rktrans, rkq, timeout_ms);
+
+#else
+        if (rd_kafka_transport_poll(rktrans, timeout_ms) < 1)
+                return 0; /* No events, caller can block on \p rkq poll */
+
+        /* Broker socket events */
         events = rktrans->rktrans_pfd[0].revents;
-        if (events) {
-                rd_kafka_transport_poll_clear(rktrans, POLLOUT);
+#endif
 
-                rd_kafka_transport_io_event(rktrans, events);
+        if (events) {
+                rd_kafka_transport_poll_clear(rktrans, POLLOUT|POLLIN);
+
+                rd_kafka_transport_io_event(rktrans, events, NULL);
         }
 
         return 1;
@@ -880,6 +1097,11 @@ rd_kafka_transport_t *rd_kafka_transport_new (rd_kafka_broker_t *rkb,
         rktrans = rd_calloc(1, sizeof(*rktrans));
         rktrans->rktrans_rkb = rkb;
         rktrans->rktrans_s = s;
+
+#ifdef _WIN32
+        rktrans->rktrans_wsaevent = WSACreateEvent();
+        rd_assert(rktrans->rktrans_wsaevent != NULL);
+#endif
 
         return rktrans;
 }
@@ -972,55 +1194,64 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 }
 
 
+#ifdef _WIN32
+/**
+ * @brief Set the WinSocket event poll bit to \p events.
+ */
+static void rd_kafka_transport_poll_set_wsa (rd_kafka_transport_t *rktrans,
+        int events) {
+        int r;
+        r = WSAEventSelect(rktrans->rktrans_s,
+                rktrans->rktrans_wsaevent,
+                rd_kafka_transport_events2wsa(
+                        rktrans->rktrans_pfd[0].events,
+                        rktrans->rktrans_rkb->rkb_state ==
+                        RD_KAFKA_BROKER_STATE_CONNECT));
+        if (unlikely(r != 0)) {
+                rd_rkb_log(rktrans->rktrans_rkb, LOG_CRIT, "WSAEVENT",
+                        "WSAEventSelect() failed: %s",
+                        rd_socket_strerror(rd_socket_errno));
+        }
+}
+#endif
 
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event) {
-	rktrans->rktrans_pfd[0].events |= event;
+        if ((rktrans->rktrans_pfd[0].events & event) == event)
+                return;
+
+        rktrans->rktrans_pfd[0].events |= event;
+
+#ifdef _WIN32
+        rd_kafka_transport_poll_set_wsa(rktrans,
+                rktrans->rktrans_pfd[0].events);
+#endif
 }
 
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
-	rktrans->rktrans_pfd[0].events &= ~event;
+        if (!(rktrans->rktrans_pfd[0].events & event))
+                return;
+
+        rktrans->rktrans_pfd[0].events &= ~event;
+
+#ifdef _WIN32
+        rd_kafka_transport_poll_set_wsa(rktrans,
+                rktrans->rktrans_pfd[0].events);
+#endif
 }
 
+#ifndef _WIN32
 /**
  * @brief Poll transport fds.
  *
  * @returns 1 if an event was raised, else 0, or -1 on error.
  */
-int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
+static int rd_kafka_transport_poll (rd_kafka_transport_t *rktrans, int tmout) {
         int r;
 
-#ifndef _WIN32
 	r = poll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
 	if (r <= 0)
 		return r;
-#else
-	r = WSAPoll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
-	if (r == 0) {
-		/* Workaround for broken WSAPoll() while connecting:
-		 * failed connection attempts are not indicated at all by WSAPoll()
-		 * so we need to check the socket error when Poll returns 0.
-		 * Issue #525 */
-		r = ECONNRESET;
-		if (unlikely(rktrans->rktrans_rkb->rkb_state ==
-			     RD_KAFKA_BROKER_STATE_CONNECT &&
-			     (rd_kafka_transport_get_socket_error(rktrans,
-								  &r) == -1 ||
-			      r != 0))) {
-			char errstr[512];
-			rd_snprintf(errstr, sizeof(errstr),
-				    "Connect to %s failed: %s",
-				    rd_sockaddr2str(rktrans->rktrans_rkb->
-						    rkb_addr_last,
-						    RD_SOCKADDR2STR_F_PORT |
-                                                    RD_SOCKADDR2STR_F_FAMILY),
-                                    rd_socket_strerror(r));
-			rd_kafka_transport_connect_done(rktrans, errstr);
-			return -1;
-		} else
-			return 0;
-	} else if (r == RD_SOCKET_ERROR)
-		return -1;
-#endif
+
         rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
 
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
@@ -1033,9 +1264,21 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 
         return 1;
 }
+#endif
 
-
-
+#ifdef _WIN32
+/**
+ * @brief A socket write operation would block, flag the socket
+ *        as blocked so that POLLOUT events are handled correctly.
+ *
+ * This is really only used on Windows where POLLOUT (FD_WRITE) is
+ * edge-triggered rather than level-triggered.
+ */
+void rd_kafka_transport_set_blocked (rd_kafka_transport_t *rktrans,
+        rd_bool_t blocked) {
+        rktrans->rktrans_blocked = blocked;
+}
+#endif
 
 
 #if 0

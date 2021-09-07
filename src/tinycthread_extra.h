@@ -54,6 +54,22 @@ int thrd_setname (const char *name);
 int thrd_is_current(thrd_t thr);
 
 
+#ifdef _WIN32
+/**
+ * @brief Mark the current thread as waiting on cnd.
+ *
+ * @remark This is to be used when the thread uses its own
+ * WaitForMultipleEvents() call rather than cnd_timedwait().
+ *
+ * @sa cnd_wait_exit()
+ */
+void cnd_wait_enter (cnd_t *cond);
+
+/**
+ * @brief Mark the current thread as no longer waiting on cnd.
+ */
+void cnd_wait_exit (cnd_t *cond);
+#endif
 
 
 /**

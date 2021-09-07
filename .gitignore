@@ -30,3 +30,4 @@ test_report*.json
 cov-int
 gdbrun*.gdb
 TAGS
+vcpkg_installed

@@ -1971,6 +1971,12 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	switch (prop->type)
 	{
 	case _RK_C_STR:
+                /* Left-trim string(likes) */
+                if (value)
+                        while (isspace((int)*value))
+                                value++;
+
+                /* FALLTHRU */
         case _RK_C_KSTR:
 		if (prop->s2i[0].str) {
 			int match;

@@ -3462,16 +3462,15 @@ rd_bool_t rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
                 abs_timeout = rd_clock() +
                         ((rd_ts_t)rd_kafka_max_block_ms * 1000);
 
+
         if (likely(rkb->rkb_transport != NULL)) {
-                /* Serve IO events.
+                /* Poll and serve IO events and also poll the ops queue.
                  *
-                 * If there are IO events, cut out the queue ops_serve
-                 * timeout (below) since we'll probably have to perform more
-                 * duties based on the IO.
-                 * IO polling granularity is milliseconds while
-                 * queue granularity is microseconds. */
+                 * The return value indicates if ops_serve() below should
+                 * use a timeout or not.
+                 */
                 if (rd_kafka_transport_io_serve(
-                            rkb->rkb_transport,
+                            rkb->rkb_transport, rkb->rkb_ops,
                             rd_timeout_remains(abs_timeout)))
                         abs_timeout = RD_POLL_NOWAIT;
         }
@@ -5544,8 +5543,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-        int r;
 #ifndef _WIN32
+        int r;
         sigset_t newset, oldset;
 #endif
 
@@ -5635,8 +5634,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
          */
         rkb->rkb_wakeup_fd[0]     = -1;
         rkb->rkb_wakeup_fd[1]     = -1;
-        rkb->rkb_toppar_wakeup_fd = -1;
 
+#ifndef _WIN32
         if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
                 rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
                            "Failed to setup broker queue wake-up fds: "
@@ -5654,6 +5653,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
                 rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
                                            &onebyte, sizeof(onebyte));
         }
+#endif
 
         /* Lock broker's lock here to synchronise state, i.e., hold off
 	 * the broker thread until we've finalized the rkb. */

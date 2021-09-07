@@ -200,7 +200,7 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
                 break;
 
         case SSL_ERROR_WANT_WRITE:
-        case SSL_ERROR_WANT_CONNECT:
+                rd_kafka_transport_set_blocked(rktrans, rd_true);
                 rd_kafka_transport_poll_set(rktrans, POLLOUT);
                 break;
 

@@ -23,6 +23,7 @@ function manual_checks {
     mkl_meta_set "zlib" "static" "libz.a"
     mkl_lib_check "zlib" "WITH_ZLIB" $action CC "-lz" \
                   "
+#include <stddef.h>
 #include <zlib.h>
 
 void foo (void) {

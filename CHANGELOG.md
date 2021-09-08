@@ -27,6 +27,7 @@ librdkafka v1.8.0 is a security release:
 
 ### General fixes
 
+ * Correctly detect presence of zlib via compilation check. (Chris Novakovic)
  * `ERR__ALL_BROKERS_DOWN` is no longer emitted when the coordinator
    connection goes down, only when all standard named brokers have been tried.
    This fixes the issue with `ERR__ALL_BROKERS_DOWN` being triggered on

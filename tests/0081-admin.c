@@ -256,7 +256,7 @@ static void do_test_CreateTopics (const char *what,
                 if (op_timeout > 0)
                         metadata_tmout = op_timeout + 1000;
                 else
-                        metadata_tmout = 10 * 1000;
+                        metadata_tmout = 20 * 1000;
         }
 
         test_wait_metadata_update(rk,
@@ -1906,7 +1906,7 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_unclean_destroy(cltype, 1/*mainq*/);
 
         test_conf_init(&conf, NULL, 180);
-        test_conf_set(conf, "socket.timeout.ms", "10000");
+        test_conf_set(conf, "socket.timeout.ms", "15000");
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);
@@ -1930,7 +1930,7 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         if (test_broker_version >= TEST_BRKVER(1,0,0,0)) {
                 /* Create Partitions */
                 do_test_CreatePartitions("temp queue, op timeout 6500",
-                                         rk, NULL, 6500);
+                                         rk, NULL, 16500);
                 do_test_CreatePartitions("main queue, op timeout 0",
                                          rk, mainq, 0);
         }

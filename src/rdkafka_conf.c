@@ -3758,7 +3758,8 @@ static void rd_kafka_sw_str_sanitize_inplace (char *str) {
  *          on success. The array count is returned in \p cntp.
  *          The returned pointer must be freed with rd_free().
  */
-static char **rd_kafka_conf_kv_split (const char **input, size_t incnt,
+static RD_UNUSED
+char **rd_kafka_conf_kv_split (const char **input, size_t incnt,
                                       size_t *cntp) {
         size_t i;
         char **out, *p;

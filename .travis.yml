@@ -24,7 +24,7 @@ matrix:
    compiler: gcc
    env: ADDITIONAL_BUILDS="debian" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
+    - echo "test " $DOCKER_USERNAME
 
  - name: "RPM packages"
    if: tag IS present

@@ -54,6 +54,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_sasl_aws_msk_iam.h"
 #if WITH_SSL
 #include "rdkafka_ssl.h"
 #endif
@@ -2230,6 +2231,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         if (rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
                 rk->rk_conf.enabled_events |=
                         RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
+#endif
+#if WITH_SASL_AWS_MSK_IAM
+        rk->rk_conf.enabled_events |=
+                RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH;
 #endif
 
         rk->rk_controllerid = -1;

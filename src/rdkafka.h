@@ -2098,6 +2098,7 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
                                               const char *oauthbearer_config,
                                               void *opaque));
 
+
 /**
  * @brief Set socket callback.
  *
@@ -4949,6 +4950,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT 107
 #define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
                                                              token needs to be
+                                                             refreshed */
+#define RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH 0x200 /**< SASL/AWS_MSK_IAM
+                                                             credentials need to be
                                                              refreshed */
 
 

@@ -53,24 +53,26 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
 		return "OffsetCommit";
 	case RD_KAFKA_EVENT_STATS:
 		return "Stats";
-        case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
-                return "CreateTopicsResult";
-        case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
-                return "DeleteTopicsResult";
-        case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
-                return "CreatePartitionsResult";
-        case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
-                return "AlterConfigsResult";
-        case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
-                return "DescribeConfigsResult";
-        case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
-                return "DeleteRecordsResult";
-        case RD_KAFKA_EVENT_DELETEGROUPS_RESULT:
-                return "DeleteGroupsResult";
-        case RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT:
-                return "DeleteConsumerGroupOffsetsResult";
-        case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
-                return "SaslOAuthBearerTokenRefresh";
+	case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
+		return "CreateTopicsResult";
+	case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
+		return "DeleteTopicsResult";
+	case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
+		return "CreatePartitionsResult";
+	case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
+		return "AlterConfigsResult";
+	case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
+		return "DescribeConfigsResult";
+	case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
+		return "DeleteRecordsResult";
+	case RD_KAFKA_EVENT_DELETEGROUPS_RESULT:
+		return "DeleteGroupsResult";
+	case RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT:
+		return "DeleteConsumerGroupOffsetsResult";
+	case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
+		return "SaslOAuthBearerTokenRefresh";
+	case RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH:
+		return "SaslAwsMskIamCredentialRefresh";
 	default:
 		return "?unknown?";
 	}

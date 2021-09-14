@@ -142,6 +142,7 @@ typedef enum {
         RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
         RD_KAFKA_OP_LEADERS,         /**< Partition leader query */
         RD_KAFKA_OP_BARRIER,         /**< Version barrier bump */
+        RD_KAFKA_OP_AWS_MSK_IAM_REFRESH, /**< Refresh AWS MSK IAM credentials */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

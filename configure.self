@@ -147,7 +147,10 @@ void foo (void) {
         # SASL AWS MSK IAM requires base64 encoding from OpenSSL
         if mkl_lib_check "curl" "" disable CC "-lcurl" \
                             "#include <curl/curl.h>"; then
-            mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
+            if mkl_lib_check "libxml2" "" disable CC "-lxml2" \
+                            "#include <libxml/parser.h>"; then
+                mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
+            fi
         fi
     fi
 

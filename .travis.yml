@@ -37,7 +37,7 @@ matrix:
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+    - echo "test " $DOCKER_USERNAME
 
  - name: "Linux clang: +static +alpine-static -gssapi"
    if: tag IS present

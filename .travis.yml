@@ -13,8 +13,8 @@ addons:
 
 env:
   global:
-   - secure: "N6iA5+uNcMVvl6KWIiNMdm8MbTX1sviOG2cKBehL+t36ebQOmsi6amRhNseVHdgboALHeWqKf7N8OdMZGbkE8MkgC4mZk+oBunCAZCyBFqwFmVTYuCvsk5Zr1RFw/GbeiGHTmHQYKOol5ct18L6zQnsxV136uxDOOgVk2TizRO8="
-   - secure: "XcfZ5u15+saEPVmqM6hBfrdNcZdAZgZhRwTSpTMtFagByb7kE/XtIL/n3qNoDrmgAG2cu8chWI6Tj8Jd1gQU6TjbePfoDK3hRH7gtRumw4vGwFf3bCalOCED6ekYy9qTE+Eymfax8QsH4Qs1e7duFK4d6AeIljG3M01bjnutCIY="
+  - secure: "q7DQ6KCiQyMEpBf8mxPFl6hY9JEoaOUdIaLh1IuYn5TctiNIA+J6O/bL/dyDSy2Yjor61WAiiMOh77eMykm1wPl72kqjR97ui0uCq7BQQn4MWtKrXXi0eWLF3bYt2FbUGJZvrM0xeoWzSYT6np7CKu8ssgL8Fvr4bmf152IpdQ8="
+  - secure: "XpFExynXwbSr6vTuGsZVyqF4sti+UmRxX2sztjpTdaIH0yo60d6KYT0SRW7BLdZNA6/XI1l1GPTAwcDwTM1XasnnFrD7i88uZsAneA/xEgZTGXtnVVWPJAcVoX/75Rxeibc8CfSc5MO9QmBMiGGuI3S6HHCj4RzCJacBhOjIhfA="
 
 matrix:
  include:
@@ -147,9 +147,9 @@ script:
 deploy:
   provider: s3
   access_key_id:
-    secure: "m8FQrFesK0xSS1wHo2S7cuWkpO7VB91dBmj1XIYLRXZSkbMpKBJATcFcHNbrAp3slEp7wLAnT7CHrQ4ccQi4H68Z7mjEwdq4VKRE+7zqJ/feK8MOFNeSHWLQzgwLUYlRlc9+tzLNwxMuL2ilWgdjKOArsUVHo9LEKNfQ3T6zCJU="
+    secure: "sRsKY1YoPDb3b+9hHnBv4tDSdyB/FraYEKI1/+aKmqWxvOI6xYYFFP0Tvn6f4Rgk0wzYmxO/5V+cR+fmKxVhb1pItFXOdVqML0ilOTP5gtlOPUeHu9fytqw3q7GgMV8JR75g60BNVko9vZegtd2LIq6FWzAIvPSUJOAw7qekjGU="
   secret_access_key:
-    secure: "GE6O0gk5VRervntCKAmczfBdSOvbr9bouJ15H2rpcOgHi8KTDEjI/NS69eLiRRSHBCARtcRqN4wfgy+/dn7D1VklY8a1rAKu02wGjw+fq7k7GVSSmynR/aF619R4SIABsaAhNCwswXnLHuLlq8HFk5ulG3z8DUvYBczB45bWZfQ="
+    secure: "ZDjH6Z9CJr2yo7Splm+0xpo30QbO+cpeqxFUn1d9XOyLZQ0dapr6iboxdPlJaCOIhqVUWXS0IJgFwCW+5vWb9Za6tFumP1MtJGiwE6bqr820G8E02umwSvbNijr44h+EyxQcxP71Ljjk22Pfu7SLKWqMJ/iIzcYe6Z6Sz8obSWA="
   bucket: librdkafka-ci-packages
   region: us-west-1
   skip_cleanup: true

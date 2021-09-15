@@ -143,6 +143,7 @@ script:
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
 - if [[ -z $TRAVIS_TAG && $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.7.0) || travis_terminate 1 ; fi
 - if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
+- sha256sum artifacts/* || true
 
 deploy:
   provider: s3

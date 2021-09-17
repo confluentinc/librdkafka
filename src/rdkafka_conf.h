@@ -159,7 +159,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*28)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*29)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -238,6 +238,7 @@ struct rd_kafka_conf_s {
                 char *cert_pem;
                 rd_kafka_cert_t *cert;
                 char *ca_location;
+                char *ca_pem;
                 rd_kafka_cert_t *ca;
                 /** CSV list of Windows certificate stores */
                 char *ca_cert_stores;

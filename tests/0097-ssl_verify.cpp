@@ -132,7 +132,7 @@ static void conf_location_to_pem (RdKafka::Conf *conf,
 
   std::string errstr;
   if (conf->set(loc_prop, "", errstr) != RdKafka::Conf::CONF_OK)
-    Test::Fail("Failed to reset " + loc_prop);
+    Test::Fail("Failed to reset " + loc_prop + ": " + errstr);
 
   /* Read file */
   std::ifstream ifs(loc.c_str());
@@ -143,7 +143,7 @@ static void conf_location_to_pem (RdKafka::Conf *conf,
             " from disk and changed to in-memory " + pem_prop + "\n");
 
   if (conf->set(pem_prop, pem, errstr) != RdKafka::Conf::CONF_OK)
-    Test::Fail("Failed to set " + pem_prop);
+    Test::Fail("Failed to set " + pem_prop + ": " + errstr);
 }
 
 /**
@@ -257,7 +257,9 @@ static void do_test_verify (const int line, bool verify_ok,
     conf_location_to_setter(conf, "ssl.certificate.location",
                             RdKafka::CERT_PUBLIC_KEY, pub_enc);
 
-  if (load_ca == USE_SETTER)
+  if (load_ca == USE_CONF)
+    conf_location_to_pem(conf, "ssl.ca.location", "ssl.ca.pem");
+  else if (load_ca == USE_SETTER)
     conf_location_to_setter(conf, "ssl.ca.location",
                             RdKafka::CERT_CA, ca_enc);
 
@@ -376,8 +378,8 @@ extern "C" {
       return 0;
     }
 
-    do_test_bad_calls();
 
+    do_test_bad_calls();
 
     do_test_verify(__LINE__, true,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM,
@@ -394,6 +396,10 @@ extern "C" {
                    USE_CONF, RdKafka::CERT_ENC_PEM,
                    USE_LOCATION, RdKafka::CERT_ENC_PEM);
     do_test_verify(__LINE__, true,
+                   USE_CONF, RdKafka::CERT_ENC_PEM,
+                   USE_CONF, RdKafka::CERT_ENC_PEM,
+                   USE_CONF, RdKafka::CERT_ENC_PEM);
+    do_test_verify(__LINE__, true,
                    USE_SETTER, RdKafka::CERT_ENC_PEM,
                    USE_SETTER, RdKafka::CERT_ENC_PEM,
                    USE_SETTER, RdKafka::CERT_ENC_PKCS12);
@@ -408,4 +414,42 @@ extern "C" {
 
     return 0;
   }
+
+
+  int main_0097_ssl_verify_local (int argc, char **argv) {
+    if (!test_check_builtin("ssl")) {
+      Test::Skip("Test requires SSL support\n");
+      return 0;
+    }
+
+
+    /* Check that creating a client with an invalid PEM string fails. */
+    const std::string props[] = { "ssl.ca.pem", "ssl.key.pem",
+                                  "ssl.certificate.pem", "" };
+
+    for (int i = 0 ; props[i] != "" ; i++) {
+      RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+      std::string errstr;
+
+      if (conf->set("security.protocol", "SSL", errstr))
+        Test::Fail(errstr);
+            conf->set("debug", "security", errstr);
+      if (conf->set(props[i], "this is \n not a \t PEM!", errstr))
+        Test::Fail("Setting " + props[i] + " to junk should work, "
+                   "expecting failure on client creation");
+
+      RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+      delete conf;
+      if (producer)
+        Test::Fail("Expected producer creation to fail with " + props[i] +
+                   " set to junk");
+      else
+        Test::Say("Failed to create producer with junk " + props[i] +
+                  " (as expected): " + errstr + "\n");
+    }
+
+    return 0;
+  }
+
 }

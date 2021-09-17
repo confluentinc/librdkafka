@@ -208,6 +208,7 @@ _TEST_DECL(0093_holb_consumer);
 _TEST_DECL(0094_idempotence_msg_timeout);
 _TEST_DECL(0095_all_brokers_down);
 _TEST_DECL(0097_ssl_verify);
+_TEST_DECL(0097_ssl_verify_local);
 _TEST_DECL(0098_consumer_txn);
 _TEST_DECL(0099_commit_metadata);
 _TEST_DECL(0100_thread_interceptors);
@@ -409,6 +410,7 @@ struct test tests[] = {
 #endif
         _TEST(0095_all_brokers_down, TEST_F_LOCAL),
         _TEST(0097_ssl_verify, 0),
+        _TEST(0097_ssl_verify_local, TEST_F_LOCAL),
         _TEST(0098_consumer_txn, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0099_commit_metadata, 0),
         _TEST(0100_thread_interceptors, TEST_F_LOCAL),

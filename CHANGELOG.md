@@ -1,3 +1,10 @@
+# librdkafka v1.9.0
+
+## Enhancements
+
+ * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+
+
 # librdkafka v1.8.0
 
 librdkafka v1.8.0 is a security release:

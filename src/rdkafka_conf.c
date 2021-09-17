@@ -817,6 +817,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "path will be used (see `OPENSSLDIR` in `openssl version -a`).",
           _UNSUPPORTED_SSL
         },
+        { _RK_GLOBAL|_RK_SENSITIVE, "ssl.ca.pem", _RK_C_STR,
+          _RK(ssl.ca_pem),
+          "CA certificate string (PEM format) for verifying the broker's key.",
+          _UNSUPPORTED_SSL
+        },
         { _RK_GLOBAL, "ssl_ca", _RK_C_INTERNAL,
           _RK(ssl.ca),
           "CA certificate as set by rd_kafka_conf_set_ssl_cert()",
@@ -3703,8 +3708,8 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (conf->ssl.keystore_location && !conf->ssl.keystore_password)
                 return "`ssl.keystore.password` is mandatory when "
                         "`ssl.keystore.location` is set";
-        if (conf->ssl.ca && conf->ssl.ca_location)
-                return "`ssl.ca.location`, and memory-based "
+        if (conf->ssl.ca && (conf->ssl.ca_location || conf->ssl.ca_pem))
+                return "`ssl.ca.location` or `ssl.ca.pem`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
 #ifdef __APPLE__
         else /* Default ssl.ca.location to 'probe' on OSX */

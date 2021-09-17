@@ -955,6 +955,7 @@ static int rd_kafka_ssl_probe_and_set_default_ca_location (rd_kafka_t *rk,
  */
 static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                                    char *errstr, size_t errstr_size) {
+        rd_bool_t ca_probe = rd_true;
         rd_bool_t check_pkey = rd_false;
         int r;
 
@@ -972,31 +973,74 @@ static int rd_kafka_ssl_set_certs (rd_kafka_t *rk, SSL_CTX *ctx,
                 /* OpenSSL takes ownership of the store */
                 rk->rk_conf.ssl.ca->store = NULL;
 
-        } else if (rk->rk_conf.ssl.ca_location &&
-                   strcmp(rk->rk_conf.ssl.ca_location, "probe")) {
-                /* CA certificate location, either file or directory. */
-                int is_dir = rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
-
-                rd_kafka_dbg(rk, SECURITY, "SSL",
-                             "Loading CA certificate(s) from %s %s",
-                             is_dir ? "directory" : "file",
-                             rk->rk_conf.ssl.ca_location);
-
-                r = SSL_CTX_load_verify_locations(ctx,
-                                                  !is_dir ?
-                                                  rk->rk_conf.ssl.
-                                                  ca_location : NULL,
-                                                  is_dir ?
-                                                  rk->rk_conf.ssl.
-                                                  ca_location : NULL);
-
-                if (r != 1) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "ssl.ca.location failed: ");
-                        return -1;
-                }
+                ca_probe = rd_false;
 
         } else {
+
+                if (rk->rk_conf.ssl.ca_location &&
+                    strcmp(rk->rk_conf.ssl.ca_location, "probe")) {
+                        /* CA certificate location, either file or directory. */
+                        int is_dir = rd_kafka_path_is_dir(
+                                rk->rk_conf.ssl.ca_location);
+
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                                     "Loading CA certificate(s) from %s %s",
+                                     is_dir ? "directory" : "file",
+                                     rk->rk_conf.ssl.ca_location);
+
+                        r = SSL_CTX_load_verify_locations(ctx,
+                                                          !is_dir ?
+                                                          rk->rk_conf.ssl.
+                                                          ca_location : NULL,
+                                                          is_dir ?
+                                                          rk->rk_conf.ssl.
+                                                          ca_location : NULL);
+
+                        if (r != 1) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "ssl.ca.location failed: ");
+                                return -1;
+                        }
+
+                        ca_probe = rd_false;
+                }
+
+                if (rk->rk_conf.ssl.ca_pem) {
+                        /* CA as PEM string */
+                        X509 *x509;
+                        X509_STORE *store;
+
+                        /* Get the OpenSSL trust store */
+                        store = SSL_CTX_get_cert_store(ctx);
+                        rd_assert(store != NULL);
+
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                                     "Loading CA certificate from string");
+
+                        x509 = rd_kafka_ssl_X509_from_string(
+                                rk, rk->rk_conf.ssl.ca_pem);
+                        if (!x509) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "ssl.ca.pem failed: "
+                                            "not in PEM format?: ");
+                                return -1;
+                        }
+
+                        if (!X509_STORE_add_cert(store, x509)) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "failed to add ssl.ca.pem to "
+                                            "CA cert store: ");
+                                X509_free(x509);
+                                return -1;
+                        }
+
+                        X509_free(x509);
+
+                        ca_probe = rd_false;
+                }
+        }
+
+        if (ca_probe) {
 #ifdef _WIN32
                 /* Attempt to load CA root certificates from the
                  * configured Windows certificate stores. */

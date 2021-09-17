@@ -1305,6 +1305,9 @@ class RD_EXPORT Conf {
    *
    * @remark Private and public keys in PEM format may also be set with the
    *         `ssl.key.pem` and `ssl.certificate.pem` configuration properties.
+   *
+   * @remark CA certificate in PEM format may also be set with the
+   *         `ssl.ca.pem` configuration property.
    */
   virtual Conf::ConfResult set_ssl_cert (RdKafka::CertificateType cert_type,
                                          RdKafka::CertificateEncoding cert_enc,
@@ -1419,14 +1422,14 @@ class RD_EXPORT Conf {
    */
   virtual struct rd_kafka_topic_conf_s *c_ptr_topic () = 0;
 
-  /** 
+  /**
    * @brief Set callback_data for ssl engine.
    *
-   * @remark The \c ssl.engine.location configuration must be set for this 
+   * @remark The \c ssl.engine.location configuration must be set for this
    *         to have affect.
    *
-   * @remark The memory pointed to by \p value must remain valid for the 
-   *         lifetime of the configuration object and any Kafka clients that 
+   * @remark The memory pointed to by \p value must remain valid for the
+   *         lifetime of the configuration object and any Kafka clients that
    *         use it.
    *
    * @returns CONF_OK on success, else CONF_INVALID.

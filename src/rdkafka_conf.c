@@ -1209,6 +1209,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "If fetch.wait.max.ms expires the accumulated data will "
 	  "be sent to the client regardless of this setting.",
 	  1, 100000000, 1 },
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.queue.backoff.ms", _RK_C_INT,
+          _RK(fetch_queue_backoff_ms),
+          "How long to postpone the next fetch request for a "
+          "topic+partition in case the current fetch queue thresholds "
+          "(queued.min.messages or queued.max.messages.kbytes) have "
+          "been exceded. "
+          "This property may need to be decreased if the queue thresholds are "
+          "set low and the application is experiencing long (~1s) delays "
+          "between messages. Low values may increase CPU utilization.",
+          0, 300*1000, 1000 },
         { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
 	  _RK(fetch_error_backoff_ms),
 	  "How long to postpone the next fetch request for a "

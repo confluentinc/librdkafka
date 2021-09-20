@@ -4110,33 +4110,6 @@ static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb,
                    backoff_ms, rd_kafka_err2str(err));
 }
 
-/**
- * @brief Backoff the next Fetch for specific partition
- */
-static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
-                                           rd_kafka_toppar_t *rktp,
-                                           rd_kafka_resp_err_t err) {
-        int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
-
-        /* Don't back off on reaching end of partition */
-        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
-                return;
-
-        /* Certain errors that may require manual intervention should have
-         * a longer backoff time. */
-        if (err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
-                backoff_ms = RD_MAX(1000, backoff_ms * 10);
-
-        rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
-
-        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
-                   "%s [%"PRId32"]: Fetch backoff for %dms%s%s",
-                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                   backoff_ms,
-                   err ? ": " : "",
-                   err ? rd_kafka_err2str(err) : "");
-}
-
 
 /**
  * @brief Handle preferred replica in fetch response.

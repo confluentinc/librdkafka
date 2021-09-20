@@ -117,6 +117,7 @@ set(
     0123-connections_max_idle.c
     0124-openssl_invalid_engine.c
     0125-immediate_flush.c
+    0127-fetch_queue_backoff.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

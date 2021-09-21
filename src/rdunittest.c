@@ -47,6 +47,7 @@
 
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_sasl_oauthbearer_oidc.h"
 #include "rdkafka_msgset.h"
 #include "rdkafka_txnmgr.h"
 
@@ -472,6 +473,10 @@ int rd_unittest (void) {
                 { "conf", unittest_conf },
                 { "broker", unittest_broker },
                 { "request", unittest_request },
+#if WITH_CURL
+                { "sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc },
+#endif
+
 #if WITH_SASL_OAUTHBEARER
                 { "sasl_oauthbearer", unittest_sasl_oauthbearer },
 #endif

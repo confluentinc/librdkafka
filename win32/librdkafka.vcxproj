@@ -202,6 +202,7 @@
     <ClCompile Include="..\src\rdkafka_sasl_plain.c" />
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
+    <ClInclude Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
@@ -252,4 +253,4 @@
     <None Include="..\README.win32" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-</Project>
+</Project>

@@ -17,6 +17,7 @@ from string import Template
 from collections import defaultdict
 import boto3
 from zfile import zfile
+import magic
 
 if sys.version_info[0] < 3:
     from urllib import unquote
@@ -30,6 +31,38 @@ rename_vals = {'plat': {'windows': 'win'},
                         'amd64': 'x64',
                         'i386': 'x86',
                         'win32': 'x86'}}
+
+# Filemagic arch mapping.
+# key is (plat, arch, file_extension), value is a compiled filemagic regex.
+# This is used to verify that an artifact has the expected file type.
+magic_patterns = {
+    ('win', 'x64', '.dll'): re.compile('PE32.*DLL.* x86-64, for MS Windows'),
+    ('win', 'x86', '.dll'): re.compile('PE32.*DLL.* Intel 80386, for MS Windows'),
+    ('win', 'x64', '.lib'): re.compile('current ar archive'),
+    ('win', 'x86', '.lib'): re.compile('current ar archive'),
+    ('linux', 'x64', '.so'): re.compile('ELF 64.* x86-64'),
+    ('linux', 'arm64', '.so'): re.compile('ELF 64.* ARM aarch64'),
+    ('osx', 'x64', '.dylib'): re.compile('Mach-O 64.* x86_64') }
+
+magic = magic.Magic()
+
+def magic_mismatch(path, a):
+    """ Verify that the filemagic for \p path matches for artifact \p a.
+        Returns True if the magic file info does NOT match.
+        Returns False if no matching is needed or the magic matches. """
+    k = (a.info.get('plat', None), a.info.get('arch', None),
+         os.path.splitext(path)[1])
+    pattern = magic_patterns.get(k, None)
+    if pattern is None:
+        return False
+
+    minfo = magic.id_filename(path)
+    if not pattern.match(minfo):
+        print(f"Warning: {path} magic \"{minfo}\" does not match expected {pattern} for key {k}")
+        return True
+
+    return False
+
 
 # Collects CI artifacts from S3 storage, downloading them
 # to a local directory, or collecting already downloaded artifacts from
@@ -315,8 +348,6 @@ class NugetPackage (Package):
                            destpath=os.path.join('build', 'native'))
         self.copy_template('librdkafka.redist.props',
                            destpath='build')
-        for f in ['../../README.md', '../../CONFIGURATION.md', '../../LICENSES.txt']:
-            shutil.copy(f, self.stpath)
 
         # Generate template tokens for artifacts
         for a in self.arts.artifacts:
@@ -333,6 +364,12 @@ class NugetPackage (Package):
             [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
             [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
             [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './include/librdkafka/rdkafka_mock.h', 'build/native/include/librdkafka/rdkafka_mock.h'],
+
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './share/doc/librdkafka/README.md', 'README.md'],
+            [{'arch': 'x64', 'plat': 'linux', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './share/doc/librdkafka/CONFIGURATION.md', 'CONFIGURATION.md'],
+            # The above x64-linux gcc job generates a bad LICENSES.txt file,
+            # so we use the one from the osx job instead.
+            [{'arch': 'x64', 'plat': 'osx', 'lnk': 'std', 'fname_glob': 'librdkafka-gcc.tar.gz'}, './share/doc/librdkafka/LICENSES.txt', 'LICENSES.txt'],
 
             # Travis OSX build
             [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
@@ -396,9 +433,14 @@ class NugetPackage (Package):
             found = False
             # Try all matching artifacts until we find the wanted file (member)
             for a in self.arts.artifacts:
+                attr_match = True
                 for attr in attributes:
                     if a.info.get(attr, None) != attributes[attr]:
-                        continue
+                        attr_match = False
+                        break
+
+                if not attr_match:
+                    continue
 
                 if not fnmatch(a.fname, fname_glob):
                     continue
@@ -413,6 +455,11 @@ class NugetPackage (Package):
                     continue
                 except Exception as e:
                     raise Exception('file not found in archive %s: %s. Files in archive are: %s' % (a.lpath, e, zfile.ZFile(a.lpath).getnames()))
+
+                # Check that the file type matches.
+                if magic_mismatch(outf, a):
+                    os.unlink(outf)
+                    continue
 
                 found = True
                 break
@@ -436,6 +483,8 @@ class NugetPackage (Package):
         """ Verify package """
         expect = [
             "librdkafka.redist.nuspec",
+            "README.md",
+            "CONFIGURATION.md",
             "LICENSES.txt",
             "build/librdkafka.redist.props",
             "build/native/librdkafka.redist.targets",
@@ -482,9 +531,9 @@ class NugetPackage (Package):
         if len(missing) > 0:
             print('Missing files in package %s:\n%s' % (path, '\n'.join(missing)))
             return False
-        else:
-            print('OK - %d expected files found' % len(expect))
-            return True
+
+        print('OK - %d expected files found' % len(expect))
+        return True
 
 
 class StaticPackage (Package):

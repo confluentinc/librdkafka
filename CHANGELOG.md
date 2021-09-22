@@ -1,8 +1,20 @@
-# librdkafka v1.9.0
+# librdkafka v1.8.2
+
+librdkafka v1.8.2 is a maintenance release.
+
+## Fixes
+
+ * The `librdkafka.redist` 1.8.0 package had two flaws:
+   - the linux-arm64 .so build was a linux-x64 build.
+   - the included MSVC 140 runtimes for x64 were infact x86.
+   The release script has been updated to verify the architectures of
+   provided artifacts to avoid this happening in the future.
 
 ## Enhancements
 
  * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+
+*Note: there was no v1.8.1 librdkafka release*
 
 
 # librdkafka v1.8.0

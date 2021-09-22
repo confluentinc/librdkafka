@@ -69,43 +69,19 @@ static char *rd_base64_encode (const rd_chariov_t *in) {
         return ret;
 }
 
-rd_http_error_t
-*rk_kafka_retrieve_from_token_end_point_url(rd_kafka_conf_t *conf,
-                                            cJSON json) {
-#if WITH_CURL        
-        const char *token_url;
-        const char *client_id;
-        const char *client_secret;
-        char *data_to_token;
-        int data_to_token_size;
-        const char *scope;
-        int len;
-
-        rd_chariov_t *client_authorization;
-        char *authorization;
-        const char *authorization_base64;
-        char *authorization_base64_header;
-        int authorization_base64_header_size;
-
-        rd_http_req_t hreq;
-        rd_http_error_t *herr;
-
-        struct curl_slist *headers = NULL;
-
-        static const char *data = "grant_type=client_credentials,scope=%s";
-        static const char *accept_header = "Accept:application/json";
+static char *build_authorization_base64_header(const char *client_id,
+                                       const char *client_secret) {
+        
         static const char *authorization_header = "Authorization:Basic %s";
 
-        token_url = conf->sasl.oauthbearer.token_endpoint_url;
-              
-        herr = rd_http_req_init(&hreq, token_url);
-        if (unlikely(herr != NULL))
-                return herr;
-        
-        client_id = conf->sasl.oauthbearer.client_id;
-        client_secret = conf->sasl.oauthbearer.client_secret;
-        
-        len = strlen(client_id)+strlen(client_secret)+2;
+        size_t len;
+        size_t authorization_base64_header_size;
+        rd_chariov_t *client_authorization;
+        char *authorization;
+        char *authorization_base64 = NULL;
+        char *authorization_base64_header = NULL;
+
+        len = strlen(client_id) + strlen(client_secret) + 2;
         authorization = rd_malloc(len);
         authorization[0] = '\0';
         strcat(authorization,client_id);
@@ -120,43 +96,106 @@ rd_http_error_t
         client_authorization->size = len;
 
         authorization_base64 = rd_base64_encode(client_authorization);
-
-        authorization_base64_header_size = strlen(authorization_header) - 1 + 
+        authorization_base64_header_size = strlen(authorization_header) - 1 +
                                            strlen(authorization_base64);
-        authorization_base64_header = 
+        authorization_base64_header =
                 rd_malloc(authorization_base64_header_size);
+
         rd_snprintf(authorization_base64_header,
                     authorization_base64_header_size,
                     authorization_header,
                     authorization_base64);
 
+        rd_free(authorization_base64);
+        rd_free(authorization);
+        rd_free(client_authorization);
+
+        return authorization_base64_header;
+}
+
+rd_http_error_t
+*rk_kafka_retrieve_from_token_end_point_url(rd_kafka_conf_t *conf,
+                                            rd_http_req_t *hreq) {
+#if WITH_CURL  
+        
+        static const char *data = "grant_type=client_credentials,scope=%s";
+        static const char *accept_header = "Accept:application/json";
+      
+        const char *token_url;
+        const char *client_id;
+        const char *client_secret;
+        char *data_to_token;
+        int data_to_token_size;
+        const char *scope;
+        char *authorization_base64_header = NULL;
+
+        rd_http_error_t *herr;
+
+        struct curl_slist *headers = NULL;
+
+        token_url = conf->sasl.oauthbearer.token_endpoint_url;
+              
+        herr = rd_http_req_init(hreq, token_url);
+        if (unlikely(herr != NULL))
+                return herr;
+        
+        client_id = conf->sasl.oauthbearer.client_id;
+        client_secret = conf->sasl.oauthbearer.client_secret;
+        authorization_base64_header =
+                build_authorization_base64_header(client_id, client_secret);
+        
         headers = curl_slist_append(headers, accept_header);
         headers = curl_slist_append(headers, authorization_base64_header);
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_HTTPHEADER, headers);
 
         scope = conf->sasl.oauthbearer.scope;
         data_to_token_size = strlen(data) + strlen(scope) + 1;
         data_to_token = rd_alloca(data_to_token_size);
         rd_snprintf(data_to_token, data_to_token_size, data, scope);
-        curl_easy_setopt(hreq.hreq_curl,
+        curl_easy_setopt(hreq->hreq_curl,
                          CURLOPT_POSTFIELDSIZE,
                          data_to_token_size);
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, data_to_token);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_POSTFIELDS, data_to_token);
 
-        herr = rd_http_req_perform_sync(&hreq);
+        herr = rd_http_req_perform_sync(hreq);
         if (unlikely(herr != NULL))
                 return herr;
 
-        rd_free(client_authorization);
-        rd_free(authorization);
+        rd_free(authorization_base64_header);
         return herr;
 #endif
 }
 
+
 void rd_kafka_conf_set_oauthbearer_oidc_token_refresh_cb (rd_kafka_t *rk,
         const char *oauthbearer_config, void *opaque) {
-        cJSON *json = cJSON_CreateObject();
-        rk_kafka_retrieve_from_token_end_point_url(&rk->rk_conf, *json);
+
+        static const char *token_key = "access_token";
+
+        cJSON *json = NULL;
+        cJSON *jval = NULL;
+        cJSON *parsed_token = NULL;
+        rd_bool_t empty;
+        rd_http_req_t hreq;
+        rd_http_error_t *herr;
+        char *jwt_token = NULL;
+
+        herr = rk_kafka_retrieve_from_token_end_point_url(&rk->rk_conf, &hreq);
+        rd_assert(!herr);
+
+        herr = rd_http_extract_jwt(&hreq, &json);
+        rd_assert(!herr);
+   
+        empty = rd_true;
+        cJSON_ArrayForEach(jval, json) {
+                empty = rd_false;
+                break;
+        }
+
+        rd_assert(!empty);
+
+        parsed_token = cJSON_GetObjectItem(json, token_key);
+        jwt_token = cJSON_Print(parsed_token);
 }
 
 int unittest_sasl_oauthbearer_oidc (void) {
@@ -176,7 +215,7 @@ int unittest_sasl_oauthbearer_oidc (void) {
 
         conf = rd_kafka_conf_new();
         res = rd_kafka_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                                base_url, NULL, 0);
+                                "http://localhost:8080/retrieve", NULL, 0);
         res = rd_kafka_conf_set(conf, "sasl.oauthbearer.client.id",
                                 "123", NULL, 0);
         res = rd_kafka_conf_set(conf, "sasl.oauthbearer.client.secret",

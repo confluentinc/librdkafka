@@ -224,6 +224,35 @@ rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
 }
 
 
+rd_http_error_t *rd_http_extract_jwt(rd_http_req_t *hreq, cJSON **jsonp) {
+        size_t len = 0;
+        char *raw_json;
+        const char *end;
+        rd_slice_t slice;
+        rd_http_error_t *herr = NULL;
+        *jsonp = NULL;
+
+        /* cJSON requires the entire input to parse in contiguous memory. */
+        rd_slice_init_full(&slice, hreq->hreq_buf);
+        len = rd_buf_len(hreq->hreq_buf);
+        raw_json = rd_malloc(len + 1);
+        rd_slice_read(&slice, raw_json, len);
+        raw_json[len] = '\0';
+
+        /* Parse JSON */
+        end = NULL;
+        *jsonp = cJSON_ParseWithOpts(raw_json, &end, 0);
+        if (!*jsonp && !herr)
+                herr = rd_http_error_new(hreq->hreq_code,
+                                         "Failed to parse JSON response "
+                                         "at %"PRIusz"/%"PRIusz,
+                                         (size_t)(end - raw_json), len);
+        rd_free(raw_json);
+        rd_http_req_destroy(hreq);
+        return herr;
+}
+
+
 /**
  * @brief Same as rd_http_get() but requires a JSON response.
  *        The response is parsed and a JSON object is returned in \p *jsonp.

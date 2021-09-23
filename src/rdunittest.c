@@ -447,6 +447,7 @@ extern int unittest_assignors (void);
 extern int unittest_map (void);
 #if WITH_CURL
 extern int unittest_http (void);
+extern int unittest_sasl_oauthbearer_oidc (void);
 #endif
 
 int rd_unittest (void) {
@@ -473,9 +474,6 @@ int rd_unittest (void) {
                 { "conf", unittest_conf },
                 { "broker", unittest_broker },
                 { "request", unittest_request },
-#if WITH_CURL
-                { "sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc },
-#endif
 
 #if WITH_SASL_OAUTHBEARER
                 { "sasl_oauthbearer", unittest_sasl_oauthbearer },
@@ -488,6 +486,7 @@ int rd_unittest (void) {
                 { "assignors", unittest_assignors },
 #if WITH_CURL
                 { "http", unittest_http },
+                { "sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc },
 #endif
                 { NULL }
         };

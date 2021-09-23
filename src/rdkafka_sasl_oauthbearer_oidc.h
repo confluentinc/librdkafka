@@ -26,9 +26,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
+#ifndef _RDKAFKA_SASL_OAUTHBEARER_OIDC_H_
+#define _RDKAFKA_SASL_OAUTHBEARER_OIDC_H_
 void rd_kafka_conf_set_oauthbearer_oidc_token_refresh_cb (rd_kafka_t *rk,
                                                           const char *oauthbearer_config,
                                                           void *opaque);
 
-int unittest_sasl_oauthbearer_oidc();
+int unittest_sasl_oauthbearer_oidc(void);
+
+#endif /* _RDKAFKA_SASL_OAUTHBEARER_OIDC_H_ */

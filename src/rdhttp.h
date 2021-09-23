@@ -63,7 +63,6 @@ typedef struct rd_http_req_s {
                                                  *   write to. */
 } rd_http_req_t;
 
-static void rd_http_req_destroy (rd_http_req_t *hreq);
 rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url);
 rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq);
 rd_http_error_t *rd_http_extract_jwt(rd_http_req_t *hreq, cJSON **jsonp);

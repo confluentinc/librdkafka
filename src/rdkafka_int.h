@@ -542,6 +542,7 @@ struct rd_kafka_s {
 		size_t size;      /* Current message size sum */
 	        unsigned int max_cnt; /* Max limit */
 		size_t max_size; /* Max limit */
+        char blocked;    /* Produce thread has blocked */
 	} rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
@@ -666,6 +667,7 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
                 if (rdlock)
                         rwlock_rdunlock(rdlock);
 
+        rk->rk_curr_msgs.blocked = 1;
 		cnd_wait(&rk->rk_curr_msgs.cnd, &rk->rk_curr_msgs.lock);
 
                 if (rdlock)
@@ -700,12 +702,12 @@ rd_kafka_curr_msgs_sub (rd_kafka_t *rk, unsigned int cnt, size_t size) {
 
         /* If the subtraction would pass one of the thresholds
          * broadcast a wake-up to any waiting listeners. */
-        if ((rk->rk_curr_msgs.cnt - cnt == 0) ||
-            (rk->rk_curr_msgs.cnt >= rk->rk_curr_msgs.max_cnt &&
-             rk->rk_curr_msgs.cnt - cnt < rk->rk_curr_msgs.max_cnt) ||
-            (rk->rk_curr_msgs.size >= rk->rk_curr_msgs.max_size &&
-             rk->rk_curr_msgs.size - size < rk->rk_curr_msgs.max_size))
-                broadcast = 1;
+        if (rk->rk_curr_msgs.blocked)
+            if ((rk->rk_curr_msgs.cnt - cnt < rk->rk_curr_msgs.max_cnt) ||
+                (rk->rk_curr_msgs.size - size < rk->rk_curr_msgs.max_size)) {
+                    broadcast = 1;
+                    rk->rk_curr_msgs.blocked = 0;
+            }
 
 	rk->rk_curr_msgs.cnt  -= cnt;
 	rk->rk_curr_msgs.size -= size;

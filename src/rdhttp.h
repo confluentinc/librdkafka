@@ -65,7 +65,10 @@ typedef struct rd_http_req_s {
 
 rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url);
 rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq);
-rd_http_error_t *rd_http_extract_jwt(rd_http_req_t *hreq, cJSON **jsonp);
+rd_http_error_t *rd_http_parse_token_to_json(rd_http_req_t *hreq,
+                                             cJSON **jsonp);
+rd_http_error_t *rd_http_extract_jwt_from_json(cJSON **cjson,
+                                               char **jwt_token);
 
 #endif
 

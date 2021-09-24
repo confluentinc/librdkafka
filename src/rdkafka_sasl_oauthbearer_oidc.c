@@ -69,7 +69,17 @@ static char *rd_base64_encode (const rd_chariov_t *in) {
         return ret;
 }
 
-static char *build_authorization_base64_header(const char *client_id,
+
+/**
+ * @brief Generate Authorization field in HTTP header.
+ *        The field contains base64-encoded string which
+ *        is generated from client_id and client_secret.
+ *
+ * @returns a newly allocated string with partially base64-encoded string.
+ *
+ * @locality Any thread.
+ */
+static char *build_authorization_base64_header (const char *client_id,
                                        const char *client_secret) {
         
         static const char *authorization_header = "Authorization:Basic %s";
@@ -109,12 +119,23 @@ static char *build_authorization_base64_header(const char *client_id,
         rd_free(authorization_base64);
         rd_free(authorization);
         rd_free(client_authorization);
-
         return authorization_base64_header;
 }
 
+/**
+ * @brief Perform a blocking HTTP(S) request to \p url with HTTP(S)
+ *        headers and data.
+ *
+ * @returns Returns the response (even if there's a HTTP error code returned)
+ *          in \p hreq.
+ *          Returns NULL on success (HTTP response code < 400), or an error
+ *          object on transport or HTTP error - this error object must be
+ *          destroyed by calling rd_http_error_destroy().
+ *
+ * @locality Any thread.
+ */
 rd_http_error_t
-*rk_kafka_retrieve_from_token_end_point_url(rd_kafka_conf_t *conf,
+*rk_kafka_retrieve_from_token_end_point_url (rd_kafka_conf_t *conf,
                                             rd_http_req_t *hreq) {
 #if WITH_CURL  
         
@@ -125,7 +146,7 @@ rd_http_error_t
         const char *client_id;
         const char *client_secret;
         char *data_to_token;
-        int data_to_token_size;
+        size_t data_to_token_size;
         const char *scope;
         char *authorization_base64_header = NULL;
 
@@ -167,15 +188,16 @@ rd_http_error_t
 }
 
 
+/**
+ * @brief Implementation of Oauth/OIDC token refresh call back function,
+ *        will receive the json response after HTTP call to token provider,
+ *        then extract the jwt from the json response, then forward it to
+ *        the broker.
+ */
 void rd_kafka_conf_set_oauthbearer_oidc_token_refresh_cb (rd_kafka_t *rk,
         const char *oauthbearer_config, void *opaque) {
 
-        static const char *token_key = "access_token";
-
         cJSON *json = NULL;
-        cJSON *jval = NULL;
-        cJSON *parsed_token = NULL;
-        rd_bool_t empty;
         rd_http_req_t hreq;
         rd_http_error_t *herr;
         char *jwt_token = NULL;
@@ -183,53 +205,66 @@ void rd_kafka_conf_set_oauthbearer_oidc_token_refresh_cb (rd_kafka_t *rk,
         herr = rk_kafka_retrieve_from_token_end_point_url(&rk->rk_conf, &hreq);
         rd_assert(!herr);
 
-        herr = rd_http_extract_jwt(&hreq, &json);
+        herr = rd_http_parse_token_to_json(&hreq, &json);
         rd_assert(!herr);
-   
-        empty = rd_true;
-        cJSON_ArrayForEach(jval, json) {
-                empty = rd_false;
-                break;
-        }
-
-        rd_assert(!empty);
-
-        parsed_token = cJSON_GetObjectItem(json, token_key);
-        jwt_token = cJSON_Print(parsed_token);
+        rd_http_extract_jwt_from_json(&json, &jwt_token);
 }
 
+
+/**
+ * @brief make sure the jwt is able to be extracted from HTTP(S) requests.
+ */
 int unittest_sasl_oauthbearer_oidc (void) {
-        const char *base_url = rd_getenv("OAUTH_OIDC_URL", NULL);
-
-        rd_kafka_conf_res_t res;
-
-        rd_kafka_t *rk = NULL;
-        rd_kafka_conf_t *conf;
-
-        if (!base_url || !*base_url)
-                RD_UT_SKIP("OAUTH_OIDC_URL environment variable not set");
-
         RD_UT_BEGIN();
 
-        rk = rd_calloc(1, sizeof(*rk));
+        static const char *token_key = "access_token";
+        static const char *expected_jwt_token =
+                "\"eyJhbGciOiJIUzI1NiIsInR5"
+                "cCI6IkpXVCIsImtpZCI6ImFiY2VkZmcifQ"
+                "."
+                "eyJpYXQiOjE2MzIzNzUzMjAsInN1YiI6InN"
+                "1YiIsImV4cCI6MTYzMjM3NTYyMH0"
+                "."
+                "bT5oY8K-rS2gQ7Awc40844bK3zhzBhZb7sputErqQHY\"";
+        const char *token_format = "{\"%s\":%s}";
+        char *expected_token_value;
+        size_t token_len;
+        rd_http_req_t hreq;
+        rd_http_error_t *herr;
+        rd_buf_t buf;
+        cJSON *json = NULL;
+        char *token;
 
-        conf = rd_kafka_conf_new();
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                                "http://localhost:8080/retrieve", NULL, 0);
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.client.id",
-                                "123", NULL, 0);
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.client.secret",
-                                "abc", NULL, 0);
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.scope",
-                                "test-scope", NULL, 0);
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.extensions",
-                                "grant_type=client_credentials,"
-                                "scope=test-scope",
-                                NULL, 0);
-        rk->rk_conf = *conf;
+        token_len = strlen(token_key) + strlen(expected_jwt_token) + 8;
+        expected_token_value = rd_malloc(token_len);
+        rd_snprintf(expected_token_value,
+                    token_len,
+                    token_format,
+                    token_key,
+                    expected_jwt_token);      
 
-        rd_kafka_conf_set_oauthbearer_oidc_token_refresh_cb(rk, NULL, NULL);
-        rd_free(rk);
+        rd_buf_init(&buf, 1, token_len);
+        rd_buf_write(&buf, expected_token_value, token_len);
+        hreq.hreq_buf = &buf;
+        
+        herr = rd_http_parse_token_to_json(&hreq, &json);
+        RD_UT_ASSERT(!herr, 
+                     "Expected parse token to json to succeed, "
+                     "but failed with error code: %d, error string: %s",
+                     herr->code, herr->errstr);
+
+        herr = rd_http_extract_jwt_from_json(&json, &token);
+        RD_UT_ASSERT(!herr, 
+                     "Expected extract jwt from json to succeed, "
+                     "but failed with error code: %d, error string %s",
+                     herr->code, herr->errstr);
+
+        RD_UT_ASSERT(!strcmp(expected_jwt_token, token),
+                     "Incorrect token received: "
+                     "expected=%s; received=%s",
+                     expected_jwt_token, token);
+        
+        rd_free(token);
         RD_UT_PASS();
         return 0;
 }

@@ -223,8 +223,46 @@ rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
         return NULL;
 }
 
+/**
+ * @brief Extract the jwt from \p *cjson.
+ *
+ * @returns Returns the response in \p *jwt_token.
+ */
+rd_http_error_t *rd_http_extract_jwt_from_json(cJSON **cjson, char **jwt_token) {
+        static const char *token_key = "access_token";
+        char *token = NULL;
+        cJSON *jval = NULL;
+        cJSON *parsed_token = NULL;
+        rd_bool_t empty;
+        rd_http_error_t *herr = NULL;
 
-rd_http_error_t *rd_http_extract_jwt(rd_http_req_t *hreq, cJSON **jsonp) {
+        empty = rd_true;
+        cJSON_ArrayForEach(jval, *cjson) {
+                empty = rd_false;
+                break;
+        }
+
+        if (empty) {
+                herr = rd_http_error_new(-1, 
+                        "Expected non-empty JSON response from");
+                return herr;
+        }
+
+        parsed_token = cJSON_GetObjectItem(*cjson, token_key);
+        token = cJSON_Print(parsed_token);
+        *jwt_token = malloc(strlen(token) + 1);
+        strcpy(*jwt_token, token);
+        return herr;
+}
+
+
+/**
+ * @brief Extract the json string that includes jwt from \p hreq.
+ *
+ * @returns Returns the response (even if there's a HTTP error code returned)
+ * in \p *json.
+ */
+rd_http_error_t *rd_http_parse_token_to_json(rd_http_req_t *hreq, cJSON **jsonp) {
         size_t len = 0;
         char *raw_json;
         const char *end;
@@ -235,6 +273,13 @@ rd_http_error_t *rd_http_extract_jwt(rd_http_req_t *hreq, cJSON **jsonp) {
         /* cJSON requires the entire input to parse in contiguous memory. */
         rd_slice_init_full(&slice, hreq->hreq_buf);
         len = rd_buf_len(hreq->hreq_buf);
+
+        if (len == 0) {
+                /* Empty response: create empty JSON object */
+                *jsonp = cJSON_CreateObject();
+                rd_http_req_destroy(hreq);
+                return NULL;
+        }
         raw_json = rd_malloc(len + 1);
         rd_slice_read(&slice, raw_json, len);
         raw_json[len] = '\0';

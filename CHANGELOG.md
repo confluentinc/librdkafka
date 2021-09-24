@@ -13,6 +13,12 @@ librdkafka v1.8.2 is a maintenance release.
 ## Enhancements
 
  * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+ * Added `fetch.queue.backoff.ms` to the consumer to control how long
+   the consumer backs off the next fetch attempt when the pre-fetch queue
+   has exceeded its queuing thresholds.
+   This allows latency sensitive applications to tune message
+   consumption latency. (#2879)
+
 
 *Note: there was no v1.8.1 librdkafka release*
 

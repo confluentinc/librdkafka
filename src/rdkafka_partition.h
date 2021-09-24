@@ -522,6 +522,10 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 rd_ts_t rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
                                                rd_kafka_toppar_t *rktp);
 
+rd_ts_t rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
+                                       rd_kafka_toppar_t *rktp,
+                                       rd_kafka_resp_err_t err);
+
 
 void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
                                    rd_kafka_replyq_t replyq);

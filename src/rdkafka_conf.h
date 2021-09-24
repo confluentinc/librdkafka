@@ -336,6 +336,7 @@ struct rd_kafka_conf_s {
         int    fetch_msg_max_bytes;
         int    fetch_max_bytes;
 	int    fetch_min_bytes;
+        int    fetch_queue_backoff_ms;
 	int    fetch_error_backoff_ms;
         char  *group_id_str;
         char  *group_instance_id;

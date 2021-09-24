@@ -227,13 +227,13 @@ int unittest_sasl_oauthbearer_oidc (void) {
                 "."
                 "bT5oY8K-rS2gQ7Awc40844bK3zhzBhZb7sputErqQHY\"";
         const char *token_format = "{\"%s\":%s}";
-        char *expected_token_value;
-        size_t token_len;
+        char *expected_token_value = NULL;
+        size_t token_len = 0;
         rd_http_req_t hreq;
-        rd_http_error_t *herr;
+        rd_http_error_t *herr = NULL;
         rd_buf_t buf;
         cJSON *json = NULL;
-        char *token;
+        char *token = NULL;
 
         token_len = strlen(token_key) + strlen(expected_jwt_token) + 8;
         expected_token_value = rd_malloc(token_len);
@@ -246,15 +246,18 @@ int unittest_sasl_oauthbearer_oidc (void) {
         rd_buf_init(&buf, 1, token_len);
         rd_buf_write(&buf, expected_token_value, token_len);
         hreq.hreq_buf = &buf;
-        
+
         herr = rd_http_parse_token_to_json(&hreq, &json);
-        RD_UT_ASSERT(!herr, 
+        RD_UT_ASSERT(!herr,
                      "Expected parse token to json to succeed, "
                      "but failed with error code: %d, error string: %s",
                      herr->code, herr->errstr);
-
         herr = rd_http_extract_jwt_from_json(&json, &token);
-        RD_UT_ASSERT(!herr, 
+        if(herr) {
+            printf("Jing Liu herr is null token %s\n", token);
+            printf("Jing Liu expected_jwt_token %s\n", expected_jwt_token);
+        }
+        RD_UT_ASSERT(!herr,
                      "Expected extract jwt from json to succeed, "
                      "but failed with error code: %d, error string %s",
                      herr->code, herr->errstr);
@@ -263,8 +266,9 @@ int unittest_sasl_oauthbearer_oidc (void) {
                      "Incorrect token received: "
                      "expected=%s; received=%s",
                      expected_jwt_token, token);
-        
+       
         rd_free(token);
+        //rd_free(expected_token_value);
         RD_UT_PASS();
         return 0;
 }

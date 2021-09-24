@@ -229,6 +229,7 @@ rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
  * @returns Returns the response in \p *jwt_token.
  */
 rd_http_error_t *rd_http_extract_jwt_from_json(cJSON **cjson, char **jwt_token) {
+        printf("Jing Liu enter rd_http_extract_jwt_from_json\n");
         static const char *token_key = "access_token";
         char *token = NULL;
         cJSON *jval = NULL;
@@ -241,7 +242,6 @@ rd_http_error_t *rd_http_extract_jwt_from_json(cJSON **cjson, char **jwt_token) 
                 empty = rd_false;
                 break;
         }
-
         if (empty) {
                 herr = rd_http_error_new(-1, 
                         "Expected non-empty JSON response from");
@@ -250,7 +250,7 @@ rd_http_error_t *rd_http_extract_jwt_from_json(cJSON **cjson, char **jwt_token) 
 
         parsed_token = cJSON_GetObjectItem(*cjson, token_key);
         token = cJSON_Print(parsed_token);
-        *jwt_token = malloc(strlen(token) + 1);
+        *jwt_token = rd_malloc(strlen(token) + 1);
         strcpy(*jwt_token, token);
         return herr;
 }
@@ -280,6 +280,7 @@ rd_http_error_t *rd_http_parse_token_to_json(rd_http_req_t *hreq, cJSON **jsonp)
                 rd_http_req_destroy(hreq);
                 return NULL;
         }
+        
         raw_json = rd_malloc(len + 1);
         rd_slice_read(&slice, raw_json, len);
         raw_json[len] = '\0';

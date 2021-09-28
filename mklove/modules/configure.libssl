@@ -83,9 +83,9 @@ function libcrypto_install_source {
     local checksum="0b7a3e5e59c34827fe0c3a74b7ec8baef302b98fa80088d7f9153aa16fa76bd1"
     local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
-    local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
+    local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
     if [[ $ver == 1.0.* ]]; then
-        extra_conf_args="${extra_conf_args} no-krb5"
+        conf_args="${conf_args} no-krb5"
     fi
 
     echo "### Installing $name $ver from source ($url) to $destdir"
@@ -94,8 +94,13 @@ function libcrypto_install_source {
         mkl_download_archive "$url" "256" "$checksum" || return 1
     fi
 
-    echo "### Configuring"
-    ./config --prefix="/usr" $conf_args || return $?
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        # Silence a load of warnings on OSX
+        conf_args="${conf_args} -Wno-nullability-completeness"
+    fi
+
+    echo "### Configuring with args $conf_args"
+    ./config $conf_args || return $?
 
     echo "### Building"
     make

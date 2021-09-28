@@ -123,6 +123,7 @@ install:
  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt update || true; fi
  - if [[ $TRAVIS_DIST == "trusty" || $TRAVIS_DIST == "xenial" ]]; then sudo apt-get install -y libssl1.0.0 libssl-dev ; fi
  - if [[ $TRAVIS_DIST == "bionic" || $TRAVIS_DIST == "focal" ]]; then sudo apt-get install -y libssl1.1 libssl-dev ; fi
+ - if [[ $TRAVIS_OS_NAME == "osx" ]]; then travis_wait 20 brew install 'openssl@1.1' ; fi
  - if [[ -n $DOCKER_PASSWORD && $TRAVIS_OS_NAME == "linux" ]]; then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin ; fi
 
 before_cache:

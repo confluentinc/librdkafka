@@ -100,7 +100,7 @@ matrix:
     - sudo pip3 install -r tests/requirements.txt
     - sudo apt update
     - sudo apt install -y doxygen graphviz gdb
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
+    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest" --enable-werror
     - ./packaging/tools/rdutcoverage.sh
 
  - name: "Linux GCC arm64: +static -gssapi"

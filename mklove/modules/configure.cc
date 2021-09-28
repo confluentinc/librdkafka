@@ -157,6 +157,11 @@ function checks {
             # libtool -static supported
             mkl_mkvar_set staticlinking HAS_LIBTOOL_STATIC y
         fi
+
+        # Check for GNU ar (which has the -M option)
+        if ar -V 2>/dev/null | grep -q GNU ; then
+            mkl_mkvar_set staticlinking HAS_GNU_AR y
+        fi
     fi
 }
 

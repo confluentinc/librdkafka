@@ -32,7 +32,7 @@ matrix:
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
 
- - name: "Linux clang: +alpine +manylinux"
+ - name: "Linux clang: +alpine +manylinux +werror"
    os: linux
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
@@ -47,21 +47,21 @@ matrix:
    before_script:
     - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
- - name: "OSX GCC"
+ - name: "OSX GCC: +werror"
    if: tag IS PRESENT
    os: osx
    compiler: gcc
-   env: LINKAGE=std
+   env: LINKAGE=std HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
 
  - name: "OSX clang: +static"
    if: tag IS PRESENT
    os: osx
    compiler: clang
-   env: LINKAGE=static
+   env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
 
  - name: "Windows MinGW-w64 Dynamic"
    if: tag IS PRESENT

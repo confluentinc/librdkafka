@@ -11,6 +11,9 @@ librdkafka v1.8.2 is a maintenance release.
    provided artifacts to avoid this happening in the future.
  * Prebuilt binaries for Mac OSX Sierra (10.12) and older are no longer provided.
    This affects [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go).
+ * Prebuilt binaries for Mac OSX now contain statically linked OpenSSL v1.1.1l.
+   Previously the OpenSSL version was either v1.1.1 or v1.0.2 depending on
+   build type.
 
 ## Enhancements
 

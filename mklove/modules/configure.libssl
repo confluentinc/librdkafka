@@ -26,7 +26,7 @@ function manual_checks {
         *) mkl_err "mklove internal error: invalid value for ENABLE_SSL: $ENABLE_SSL"; exit 1 ;;
     esac
 
-    if [[ $MKL_DISTRO == "osx" ]]; then
+    if [[ $MKL_SOURCE_DEPS_ONLY != y && $MKL_DISTRO == "osx" ]]; then
         # Add brew's OpenSSL pkg-config path on OSX
         # to avoid picking up the outdated system-provided openssl/libcrypto.
         mkl_env_append PKG_CONFIG_PATH "/usr/local/opt/openssl/lib/pkgconfig" ":"
@@ -71,45 +71,41 @@ function manual_checks {
 }
 
 
-# No source installer on osx: rely on openssl from homebrew
-if [[ $MKL_DISTRO != osx ]]; then
-
     # Install libcrypto/libssl from source tarball on linux.
     #
     # Param 1: name (libcrypto)
     # Param 2: install-dir-prefix (e.g., DESTDIR)
     # Param 2: version (optional)
-    function libcrypto_install_source {
-        local name=$1
-        local destdir=$2
-        local ver=1.1.1l
-        local checksum="0b7a3e5e59c34827fe0c3a74b7ec8baef302b98fa80088d7f9153aa16fa76bd1"
-        local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
+function libcrypto_install_source {
+    local name=$1
+    local destdir=$2
+    local ver=1.1.1l
+    local checksum="0b7a3e5e59c34827fe0c3a74b7ec8baef302b98fa80088d7f9153aa16fa76bd1"
+    local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
-        local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
-        if [[ $ver == 1.0.* ]]; then
-            extra_conf_args="${extra_conf_args} no-krb5"
-        fi
+    local conf_args="--openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
+    if [[ $ver == 1.0.* ]]; then
+        extra_conf_args="${extra_conf_args} no-krb5"
+    fi
 
-        echo "### Installing $name $ver from source ($url) to $destdir"
-        if [[ ! -f config ]]; then
-            echo "### Downloading"
-            mkl_download_archive "$url" "sha256" "$checksum" || return 1
-        fi
+    echo "### Installing $name $ver from source ($url) to $destdir"
+    if [[ ! -f config ]]; then
+        echo "### Downloading"
+        mkl_download_archive "$url" "256" "$checksum" || return 1
+    fi
 
-        echo "### Configuring"
-        ./config --prefix="/usr" $conf_args || return $?
+    echo "### Configuring"
+    ./config --prefix="/usr" $conf_args || return $?
 
-        echo "### Building"
-        make
+    echo "### Building"
+    make
 
-        echo "### Installing to $destdir"
-        if [[ $ver == 1.0.* ]]; then
-            make INSTALL_PREFIX="$destdir" install_sw
-        else
-            make DESTDIR="$destdir" install
-        fi
+    echo "### Installing to $destdir"
+    if [[ $ver == 1.0.* ]]; then
+        make INSTALL_PREFIX="$destdir" install_sw
+    else
+        make DESTDIR="$destdir" install
+    fi
 
-        return $?
-    }
-fi
+    return $?
+}

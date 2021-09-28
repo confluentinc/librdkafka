@@ -158,6 +158,11 @@ function checks {
             mkl_mkvar_set staticlinking HAS_LIBTOOL_STATIC y
         fi
     fi
+
+    # Check for GNU ar (which has the -M option)
+    mkl_meta_set "gnuar" "name" "GNU ar"
+    mkl_command_check "gnuar" "HAS_GNU_AR" disable \
+                          "ar -V 2>/dev/null | grep -q GNU"
 }
 
 

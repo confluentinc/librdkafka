@@ -134,7 +134,7 @@ $(LIBNAME)-static.a: $(LIBNAME).a
 	@printf "$(MKL_YELLOW)Creating self-contained static library $@$(MKL_CLR_RESET)\n"
 ifeq ($(HAS_LIBTOOL_STATIC),y)
 	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(MKL_STATIC_LIBS)
-else # HAS_LIBTOOL_STATIC
+else ifeq ($(HAS_GNU_AR),y)
 	(_tmp=$$(mktemp arstaticXXXXXX) ; \
 	echo "CREATE $@" > $$_tmp ; \
 	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
@@ -145,7 +145,11 @@ else # HAS_LIBTOOL_STATIC
 	cat $$_tmp ; \
 	ar -M < $$_tmp || exit 1 ; \
 	rm $$_tmp)
-endif # HAS_LIBTOOL_STATIC
+else
+	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
+		ar -r $@ $$_f ; \
+	done
+endif
 	cp $@ $(LIBNAME)-static-dbg.a
 # The self-contained static library is always stripped, regardless
 # of --enable-strip, since otherwise it would become too big.

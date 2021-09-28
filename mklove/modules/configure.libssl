@@ -94,8 +94,13 @@ function libcrypto_install_source {
         mkl_download_archive "$url" "256" "$checksum" || return 1
     fi
 
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        # Workaround issue in 1.1.1l on OSX
+        extra_conf_args="${extra_conf_args} -I/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include"
+    fi
+
     echo "### Configuring"
-    ./config --prefix="/usr" $conf_args || return $?
+    ./config --prefix="/usr" $conf_args $extra_conf_args || return $?
 
     echo "### Building"
     make

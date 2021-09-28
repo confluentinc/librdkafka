@@ -57,13 +57,10 @@ matrix:
 
  - name: "OSX clang: +static"
    os: osx
-   # Use an older image to disable syslog and for broader compatibility
-   # with old and new osx versions.
-   osx_image: xcode9.2
    compiler: clang
-   env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
+   env: LINKAGE=static
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog --enable-strip
+    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
 
  - name: "Windows MinGW-w64 Dynamic"
    if: tag IS PRESENT

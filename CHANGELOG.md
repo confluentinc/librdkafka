@@ -6,9 +6,11 @@ librdkafka v1.8.2 is a maintenance release.
 
  * The `librdkafka.redist` 1.8.0 package had two flaws:
    - the linux-arm64 .so build was a linux-x64 build.
-   - the included MSVC 140 runtimes for x64 were infact x86.
+   - the included Windows MSVC 140 runtimes for x64 were infact x86.
    The release script has been updated to verify the architectures of
    provided artifacts to avoid this happening in the future.
+ * Prebuilt binaries for Mac OSX Sierra (10.12) and older are no longer provided.
+   This affects [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go).
 
 ## Enhancements
 

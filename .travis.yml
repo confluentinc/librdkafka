@@ -56,6 +56,7 @@ matrix:
     - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
 
  - name: "OSX clang: +static"
+   if: tag IS PRESENT
    os: osx
    compiler: clang
    env: LINKAGE=static
@@ -107,6 +108,7 @@ matrix:
     - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "Linux GCC s390x: +devel"
+   if: tag IS PRESENT
    os: linux
    arch: s390x
    dist: bionic

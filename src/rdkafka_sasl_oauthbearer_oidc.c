@@ -82,7 +82,7 @@ static rd_bool_t rd_base64_encode (const rd_chariov_t *in, rd_chariov_t *out) {
 static char *build_authorization_base64_header (const char *client_id,
         const char *client_secret, char **error) {
 
-        static const char *authorization_header = "Authorization:Basic %s";
+        static const char *authorization_header = "Authorization:Basic ";
         static const char *error_message = "Failed to generate base64-encoded "
                                            "string\n";
         size_t len;
@@ -117,15 +117,16 @@ static char *build_authorization_base64_header (const char *client_id,
                 return NULL;
         }
 
-        authorization_base64_header_size = strlen(authorization_header) - 1 +
-                                           client_authorization_out.size;
+        authorization_base64_header_size = strlen(authorization_header) +
+                                           client_authorization_out.size + 1;
         authorization_base64_header =
                 rd_malloc(authorization_base64_header_size);
-
-        rd_snprintf(authorization_base64_header,
-                    authorization_base64_header_size,
-                    authorization_header,
-                    client_authorization_out.ptr);
+        memcpy(authorization_base64_header,
+               authorization_header,
+               strlen(authorization_header));
+        memcpy(authorization_base64_header + strlen(authorization_header),
+               client_authorization_out.ptr,
+               client_authorization_out.size + 1);
 
         rd_free(client_authorization_in.ptr);
         rd_free(client_authorization_out.ptr);

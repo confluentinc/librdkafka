@@ -49,7 +49,7 @@ function install_source {
     if [[ ! -f Makefile ]]; then
         mkl_download_archive \
             "https://github.com/facebook/zstd/releases/download/v${ver}/zstd-${ver}.tar.gz" \
-            "sha256" \
+            "256" \
             $checksum || return 1
     fi
 

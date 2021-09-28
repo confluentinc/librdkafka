@@ -2358,11 +2358,11 @@ function mkl_toggle_option_lib {
 #
 # Arguments:
 #  url       Archive URL
-#  checksum_type  The ${checksum_type}sum tool will be used to verify the checksum. E.g., "sha256".
+#  shabits  The SHA algorithm bit count used to verify the checksum. E.g., "256".
 #  checksum  Expected checksum of archive (use "" to not perform check)
 function mkl_download_archive {
     local url="$1"
-    local checksum_tool="${2}sum"
+    local shabits="$2"
     local exp_checksum="$3"
 
     local tmpfile=$(mktemp _mkltmpXXXXXX)
@@ -2375,6 +2375,18 @@ function mkl_download_archive {
 
     if [[ -n $exp_checksum ]]; then
         # Verify checksum
+
+        local checksum_tool=""
+
+        # OSX has shasum by default, on Linux it is typically in
+        # some Perl package that may or may not be installed.
+        if $(which shasum >/dev/null 2>&1); then
+            checksum_tool="shasum -b -a ${shabits}"
+        else
+            # shaXsum is available in Linux coreutils
+            checksum_tool="sha${shabits}sum"
+        fi
+
         local checksum=$($checksum_tool "$tmpfile" | cut -d' ' -f1)
         if [[ $? -ne 0 ]]; then
             rm -f "$tmpfile"

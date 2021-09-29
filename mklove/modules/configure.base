@@ -607,6 +607,41 @@ function mkl_dep_install {
 }
 
 
+# Apply patch to a source dependency.
+#
+# Param 1: config name (e.g. libssl)
+# Param 2: patch number (optional, else all)
+#
+# Returns 0 on success or 1 on error.
+function mkl_patch {
+    local name=$1
+    local patchnr="$2"
+
+    if [[ -z $patchnr ]]; then
+        patchnr="????"
+    fi
+
+    local patchfile=
+    local cnt=0
+    for patchfile in $(echo ${MKLOVE_DIR}/modules/patches/${name}.${patchnr}-*.patch | sort); do
+        mkl_dbg "$1: applying patch $patchfile"
+        patch -p1 < $patchfile
+        local retcode=$?
+        if [[ $retcode != 0 ]]; then
+            mkl_err "mkl_patch: $1: failed to apply patch $patchfile: see source dep build log for details"
+            return 1
+        fi
+        cnt=$(($cnt + 1))
+    done
+
+    if [[ $cnt -lt 1 ]]; then
+        mkl_err "mkl_patch: $1: no patches matchign $patchnr found"
+        return 1
+    fi
+
+    return 0
+}
+
 
 ###########################################################################
 #

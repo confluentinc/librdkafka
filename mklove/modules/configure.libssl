@@ -95,6 +95,13 @@ function libcrypto_install_source {
     fi
 
     if [[ $MKL_DISTRO == "osx" ]]; then
+        # Workaround build issue in 1.1.1l on OSX with older toolchains.
+        if [[ $ver == 1.1.1l ]]; then
+            if ! mkl_patch libssl 0000 ; then
+                return 1
+            fi
+        fi
+
         # Silence a load of warnings on OSX
         conf_args="${conf_args} -Wno-nullability-completeness"
     fi

@@ -47,13 +47,13 @@ matrix:
    before_script:
     - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
- - name: "OSX GCC: +werror"
+ - name: "OSX GCC"
    if: tag IS PRESENT
    os: osx
    compiler: gcc
    env: LINKAGE=std HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "OSX clang: +static"
    if: tag IS PRESENT

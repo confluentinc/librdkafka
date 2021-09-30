@@ -2404,7 +2404,7 @@ function mkl_download_archive {
 
     local tmpfile=$(mktemp _mkltmpXXXXXX)
 
-    if ! curl -fLs -o "$tmpfile" "$url" ; then
+    if ! curl -fL --no-progress-meter -o "$tmpfile" "$url" ; then
         rm -f "$tmpfile"
         echo -e "ERROR: Download of $url failed" 1>&2
         return 1

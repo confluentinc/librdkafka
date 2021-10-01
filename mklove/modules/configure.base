@@ -2404,10 +2404,13 @@ function mkl_download_archive {
 
     local tmpfile=$(mktemp _mkltmpXXXXXX)
 
-    if ! curl -fLs -o "$tmpfile" "$url" ; then
-        rm -f "$tmpfile"
-        echo -e "ERROR: Download of $url failed" 1>&2
-        return 1
+    # Try both wget and curl
+    if ! wget -nv -O "$tmpfile" "$url" ; then
+        if ! curl -fLsS -o "$tmpfile" "$url" ; then
+            rm -f "$tmpfile"
+            echo -e "ERROR: Download of $url failed" 1>&2
+            return 1
+        fi
     fi
 
     if [[ -n $exp_checksum ]]; then

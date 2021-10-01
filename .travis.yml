@@ -23,105 +23,113 @@ env:
 
 matrix:
  include:
- - name: "Linux GCC: +Debian packages +BuiltinRegex +Strict"
-   if: tag IS present
-   os: linux
-   compiler: gcc
-   env: ADDITIONAL_BUILDS="debian" LINKAGE=std
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
-
- - name: "RPM packages"
-   if: tag IS present
-   os: linux
-   compiler: gcc
-   env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
-
- - name: "Linux clang: +alpine +manylinux +werror"
-   os: linux
-   compiler: clang
-   env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
-   before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
-
- - name: "Linux clang: +static +alpine-static -gssapi"
-   if: tag IS present
-   os: linux
-   compiler: clang
-   env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
-   before_script:
-    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
-
- - name: "OSX GCC"
-   if: tag IS PRESENT
-   os: osx
-   compiler: gcc
-   env: LINKAGE=std HOMEBREW_NO_AUTO_UPDATE=1
-   before_script:
-    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
-
- - name: "OSX clang: +static"
-   if: tag IS PRESENT
-   os: osx
-   compiler: clang
-   env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
-   before_script:
-    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
-
- - name: "Windows MinGW-w64 Dynamic"
-   if: tag IS PRESENT
-   os: windows
-   env:
-    - LINKAGE=std
-    - SKIP_MAKE=y
-   before_install:
-    - source ./packaging/mingw-w64/travis-before-install.sh
-   before_script:
-    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
-
- - name: "Windows MinGW-w64 Static"
-   os: windows
-   env:
-    - LINKAGE=static
-    - SKIP_MAKE=y
-   before_install:
-    - source ./packaging/mingw-w64/travis-before-install.sh
-   before_script:
-    - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
-
- - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov +c99 +c++98"
-   os: linux
-   dist: xenial
-   compiler: gcc
-   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y DOC_CHECK=y
-   before_script:
-    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-    - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip3 install -r tests/requirements.txt
-    - sudo apt update
-    - sudo apt install -y doxygen graphviz gdb
-    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
-    - ./packaging/tools/rdutcoverage.sh
-
- - name: "Linux GCC arm64: +static -gssapi"
-   os: linux
-   arch: arm64
-   dist: bionic
-   compiler: gcc
-   env: LINKAGE=std
-   before_script:
-    - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
-
- - name: "Linux GCC s390x: +devel"
-   if: tag IS PRESENT
-   os: linux
-   arch: s390x
-   dist: bionic
-   compiler: gcc
-   env: NO_ARTIFACTS=y
-   before_script:
-    - sudo apt install -y gdb
-    - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
+   - name: "test"
+     os: osx
+     before_script:
+       - wget -o somefile.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope
+       - curl -fL -o somefile.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope2
+       - echo hi | openssl s_client -host www.openssl.org -port 443 || echo nope3
+       - travis_fail
+       - exit 1
+# - name: "Linux GCC: +Debian packages +BuiltinRegex +Strict"
+#   if: tag IS present
+#   os: linux
+#   compiler: gcc
+#   env: ADDITIONAL_BUILDS="debian" LINKAGE=std
+#   before_script:
+#    - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
+#
+# - name: "RPM packages"
+#   if: tag IS present
+#   os: linux
+#   compiler: gcc
+#   env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
+#
+# - name: "Linux clang: +alpine +manylinux +werror"
+#   os: linux
+#   compiler: clang
+#   env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
+#   before_script:
+#    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+#
+# - name: "Linux clang: +static +alpine-static -gssapi"
+#   if: tag IS present
+#   os: linux
+#   compiler: clang
+#   env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
+#   before_script:
+#    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+#
+# - name: "OSX GCC"
+#   if: tag IS PRESENT
+#   os: osx
+#   compiler: gcc
+#   env: LINKAGE=std HOMEBREW_NO_AUTO_UPDATE=1
+#   before_script:
+#    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+#
+# - name: "OSX clang: +static"
+#   if: tag IS PRESENT
+#   os: osx
+#   compiler: clang
+#   env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
+#   before_script:
+#    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
+#
+# - name: "Windows MinGW-w64 Dynamic"
+#   if: tag IS PRESENT
+#   os: windows
+#   env:
+#    - LINKAGE=std
+#    - SKIP_MAKE=y
+#   before_install:
+#    - source ./packaging/mingw-w64/travis-before-install.sh
+#   before_script:
+#    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
+#
+# - name: "Windows MinGW-w64 Static"
+#   os: windows
+#   env:
+#    - LINKAGE=static
+#    - SKIP_MAKE=y
+#   before_install:
+#    - source ./packaging/mingw-w64/travis-before-install.sh
+#   before_script:
+#    - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
+#
+# - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov +c99 +c++98"
+#   os: linux
+#   dist: xenial
+#   compiler: gcc
+#   env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y DOC_CHECK=y
+#   before_script:
+#    - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+#    - sudo dpkg -i rapidjson-dev.deb
+#    - sudo pip3 install -r tests/requirements.txt
+#    - sudo apt update
+#    - sudo apt install -y doxygen graphviz gdb
+#    - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
+#    - ./packaging/tools/rdutcoverage.sh
+#
+# - name: "Linux GCC arm64: +static -gssapi"
+#   os: linux
+#   arch: arm64
+#   dist: bionic
+#   compiler: gcc
+#   env: LINKAGE=std
+#   before_script:
+#    - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+#
+# - name: "Linux GCC s390x: +devel"
+#   if: tag IS PRESENT
+#   os: linux
+#   arch: s390x
+#   dist: bionic
+#   compiler: gcc
+#   env: NO_ARTIFACTS=y
+#   before_script:
+#    - sudo apt install -y gdb
+#    - ./configure --enable-devel --disable-lz4-ext --prefix="$PWD/dest"
 
 install:
  - ccache -s || echo "CCache is not available."

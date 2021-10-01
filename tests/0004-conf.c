@@ -607,6 +607,26 @@ int main_0004_conf (int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
         }
 
+#if WITH_SSL
+        {
+                TEST_SAY("Verifying that ssl.ca.location is not "
+                         "overwritten (#3566)\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "security.protocol", "SSL");
+                test_conf_set(conf, "ssl.ca.location", "/?/does/!/not/exist!");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
+                                  errstr, sizeof(errstr));
+                TEST_ASSERT(!rk,
+                            "Expected rd_kafka_new() to fail with "
+                            "invalid ssl.ca.location");
+                TEST_SAY("rd_kafka_new() failed as expected: %s\n",
+                         errstr);
+        }
+#endif
+
 	/* Canonical int values, aliases, s2i-verified strings, doubles */
 	{
 		static const struct {

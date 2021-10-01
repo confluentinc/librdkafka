@@ -26,8 +26,10 @@ matrix:
    - name: "test"
      os: osx
      before_script:
-       - wget -o somefile.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope
-       - curl -fL -o somefile.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope2
+       - wget -o w.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope
+       - ls w.tgz
+       - tar tvzf w.tgz
+       - curl -fL -o c.tgz https://www.openssl.org/source/openssl-1.1.1l.tar.gz || echo nope2
        - echo hi | openssl s_client -host www.openssl.org -port 443 || echo nope3
        - travis_fail
        - exit 1

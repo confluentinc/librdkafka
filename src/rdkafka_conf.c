@@ -3712,7 +3712,8 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                 return "`ssl.ca.location` or `ssl.ca.pem`, and memory-based "
                        "set_ssl_cert(CERT_CA) are mutually exclusive.";
 #ifdef __APPLE__
-        else /* Default ssl.ca.location to 'probe' on OSX */
+        else if (!conf->ssl.ca && !conf->ssl.ca_location && !conf->ssl.ca_pem)
+                /* Default ssl.ca.location to 'probe' on OSX */
                 rd_kafka_conf_set(conf, "ssl.ca.location", "probe", NULL, 0);
 #endif
 #endif

@@ -2110,7 +2110,7 @@ static int rd_kafka_thread_main (void *arg) {
 }
 
 
-static void rd_kafka_term_sig_handler (int sig) {
+void rd_kafka_term_sig_handler (int sig) {
 	/* nop */
 }
 
@@ -2403,46 +2403,23 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-        mtx_lock(&rk->rk_init_lock);
-
         /* Create background thread and queue if background_event_cb()
-         * has been configured.
+         * RD_KAFKA_EVENT_BACKGROUND has been enabled.
          * Do this before creating the main thread since after
          * the main thread is created it is no longer trivial to error
          * out from rd_kafka_new(). */
-        if (rk->rk_conf.background_event_cb) {
-                /* Hold off background thread until thrd_create() is done. */
+        if (rk->rk_conf.background_event_cb ||
+            (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
+                rd_kafka_resp_err_t err;
                 rd_kafka_wrlock(rk);
-
-                rk->rk_background.q = rd_kafka_q_new(rk);
-
-                rk->rk_init_wait_cnt++;
-
-                if ((thrd_create(&rk->rk_background.thread,
-                                 rd_kafka_background_thread_main, rk)) !=
-                    thrd_success) {
-                        rk->rk_init_wait_cnt--;
-                        ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
-                        ret_errno = errno;
-                        if (errstr)
-                                rd_snprintf(errstr, errstr_size,
-                                            "Failed to create background "
-                                            "thread: %s (%i)",
-                                            rd_strerror(errno), errno);
-                        rd_kafka_wrunlock(rk);
-                        mtx_unlock(&rk->rk_init_lock);
-
-#ifndef _WIN32
-                        /* Restore sigmask of caller */
-                        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
-#endif
-                        goto fail;
-                }
-
+                err = rd_kafka_background_thread_create(rk,
+                                                        errstr, errstr_size);
                 rd_kafka_wrunlock(rk);
+                if (err)
+                        goto fail;
         }
 
-
+        mtx_lock(&rk->rk_init_lock);
 
 	/* Lock handle here to synchronise state, i.e., hold off
 	 * the thread until we've finalized the handle. */

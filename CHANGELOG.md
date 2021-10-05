@@ -1,3 +1,14 @@
+# librdkafka v1.9.0
+
+librdkafka v1.9.0 is a feature release:
+
+
+## Enhancements
+ * `rd_kafka_queue_get_background()` now creates the background thread
+   if not already created.
+   To be used in conjunction with `enable.sasl.callback.queue`.
+
+
 # librdkafka v1.8.2
 
 librdkafka v1.8.2 is a maintenance release.

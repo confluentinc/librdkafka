@@ -3246,18 +3246,18 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
  * @returns a reference to the background thread queue, or NULL if the
  *          background queue is not enabled.
  *
- * To enable the background thread queue set a generic event handler callback
- * with rd_kafka_conf_set_background_event_cb() on the client instance
- * configuration object (rd_kafka_conf_t).
+ * The background thread queue provides the application with an automatically
+ * polled queue that triggers the event callback in a background thread,
+ * this background thread is completely managed by librdkafka.
+ *
+ * The background thread queue is automatically created if a generic event
+ * handler callback is configured with rd_kafka_conf_set_background_event_cb()
+ * or if rd_kafka_queue_get_background() is called.
  *
  * The background queue is polled and served by librdkafka and MUST NOT be
  * polled, forwarded, or otherwise managed by the application, it may only
  * be used as the destination queue passed to queue-enabled APIs, such as
  * the Admin API.
- *
- * The background thread queue provides the application with an automatically
- * polled queue that triggers the event callback in a background thread,
- * this background thread is completely managed by librdkafka.
  *
  * Use rd_kafka_queue_destroy() to loose the reference.
  *
@@ -4953,6 +4953,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x100 /**< SASL/OAUTHBEARER
                                                              token needs to be
                                                              refreshed */
+#define RD_KAFKA_EVENT_BACKGROUND     0x200 /**< Enable background thread. */
 
 
 /**

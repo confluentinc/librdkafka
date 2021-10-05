@@ -37,6 +37,8 @@
 #include "rdkafka_event.h"
 #include "rdkafka_interceptor.h"
 
+#include <signal.h>
+
 /**
  * @brief Call the registered background_event_cb.
  * @locality rdkafka background queue thread
@@ -151,3 +153,73 @@ int rd_kafka_background_thread_main (void *arg) {
         return 0;
 }
 
+
+/**
+ * @brief Create the background thread.
+ *
+ * @locks_acquired rk_init_lock
+ * @locks_required rd_kafka_wrlock()
+ */
+rd_kafka_resp_err_t rd_kafka_background_thread_create (rd_kafka_t *rk,
+                                                       char *errstr,
+                                                       size_t errstr_size) {
+#ifndef _WIN32
+        sigset_t newset, oldset;
+#endif
+
+        if (rk->rk_background.q) {
+                rd_snprintf(errstr, errstr_size,
+                            "Background thread already created");
+                return RD_KAFKA_RESP_ERR__CONFLICT;
+        }
+
+        rk->rk_background.q = rd_kafka_q_new(rk);
+
+        mtx_lock(&rk->rk_init_lock);
+        rk->rk_init_wait_cnt++;
+
+#ifndef _WIN32
+        /* Block all signals in newly created threads.
+         * To avoid race condition we block all signals in the calling
+         * thread, which the new thread will inherit its sigmask from,
+         * and then restore the original sigmask of the calling thread when
+         * we're done creating the thread. */
+        sigemptyset(&oldset);
+        sigfillset(&newset);
+        if (rk->rk_conf.term_sig) {
+                struct sigaction sa_term = {
+                        .sa_handler = rd_kafka_term_sig_handler
+                };
+                sigaction(rk->rk_conf.term_sig, &sa_term, NULL);
+        }
+        pthread_sigmask(SIG_SETMASK, &newset, &oldset);
+#endif
+
+
+        if ((thrd_create(&rk->rk_background.thread,
+                         rd_kafka_background_thread_main, rk)) !=
+            thrd_success) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to create background thread: %s",
+                            rd_strerror(errno));
+                rd_kafka_q_destroy_owner(rk->rk_background.q);
+                rk->rk_background.q = NULL;
+                rk->rk_init_wait_cnt--;
+                mtx_unlock(&rk->rk_init_lock);
+
+#ifndef _WIN32
+                /* Restore sigmask of caller */
+                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+                return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+        }
+
+        mtx_unlock(&rk->rk_init_lock);
+
+#ifndef _WIN32
+        /* Restore sigmask of caller */
+        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}

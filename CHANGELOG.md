@@ -3,6 +3,10 @@
 ## Enhancements
 
  * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+ * `rd_kafka_queue_get_background()` now creates the background thread
+   if not already created.
+   To be used in conjunction with `enable.sasl.callback.queue`.
+
 
 
 # librdkafka v1.8.0

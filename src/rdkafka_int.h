@@ -1037,9 +1037,16 @@ rd_kafka_app_polled (rd_kafka_t *rk) {
 }
 
 
+
+void rd_kafka_term_sig_handler (int sig);
+
 /**
  * rdkafka_background.c
  */
 int rd_kafka_background_thread_main (void *arg);
+rd_kafka_resp_err_t rd_kafka_background_thread_create (rd_kafka_t *rk,
+                                                       char *errstr,
+                                                       size_t errstr_size);
+
 
 #endif /* _RDKAFKA_INT_H_ */

@@ -33,24 +33,6 @@
 #include "testcpp.h"
 
 
-namespace {
-class DrCb : public RdKafka::DeliveryReportCb {
- public:
-  DrCb (RdKafka::ErrorCode exp_err): cnt(0), exp_err(exp_err) {}
-
-  void dr_cb (RdKafka::Message &msg) {
-    Test::Say("Delivery report: " + RdKafka::err2str(msg.err()) + "\n");
-    if (msg.err() != exp_err)
-      Test::Fail("Delivery report: Expected " + RdKafka::err2str(exp_err) +
-                 " but got " + RdKafka::err2str(msg.err()));
-    cnt++;
-  }
-
-  int cnt;
-  RdKafka::ErrorCode exp_err;
-};
-};
-
 /**
  * @brief Let FetchRequests fail with authorization failure.
  *

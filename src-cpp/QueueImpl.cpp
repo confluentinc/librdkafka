@@ -35,9 +35,7 @@ RdKafka::Queue::~Queue () {
 }
 
 RdKafka::Queue *RdKafka::Queue::create (Handle *base) {
-  RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
-  queueimpl->queue_ = rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_);
-  return queueimpl;
+  return new RdKafka::QueueImpl(rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_));
 }
 
 RdKafka::ErrorCode

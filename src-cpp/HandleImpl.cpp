@@ -369,10 +369,7 @@ RdKafka::HandleImpl::get_partition_queue (const TopicPartition *part) {
   if (rkqu == NULL)
     return NULL;
 
-  RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
-  queueimpl->queue_ = rkqu;
-
-  return queueimpl;
+  return new QueueImpl(rkqu);
 }
 
 RdKafka::ErrorCode

@@ -74,6 +74,8 @@ typedef struct rd_kafka_replyq_s {
                                         *        callback will be triggered
                                         *        to construct the request
                                         *        right before it is sent. */
+#define RD_KAFKA_OP_F_FORCE_CB    0x100 /* rko: force callback even if
+                                         *      op type is eventable. */
 
 typedef enum {
         RD_KAFKA_OP_NONE,     /* No specific type, use OP_CB */

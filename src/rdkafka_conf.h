@@ -163,7 +163,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*29)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*30)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -289,8 +289,9 @@ struct rd_kafka_conf_s {
 #endif
                 char *oauthbearer_config;
                 int   enable_oauthbearer_unsecure_jwt;
+                int   enable_callback_queue;
                 struct {
-                        char *method;
+                        rd_kafka_oauthbearer_method_t method;
                         char *token_endpoint_url;
                         char *client_id;
                         char *client_secret;

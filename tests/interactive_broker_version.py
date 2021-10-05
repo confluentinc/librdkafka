@@ -89,7 +89,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
                 break
         elif mech == 'OAUTHBEARER':
             security_protocol='SASL_PLAINTEXT'
-            os.write(fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'))
+            os.write(fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode('ascii')))
             os.write(fd, ('sasl.oauthbearer.config=%s\n' % \
                           'scope=requiredScope principal=admin').encode('ascii'))
         else:

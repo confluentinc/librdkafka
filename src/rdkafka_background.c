@@ -74,7 +74,8 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
         /*
          * Dispatch Event:able ops to background_event_cb()
          */
-        if (likely(rd_kafka_event_setup(rk, rko))) {
+        if (likely(rk->rk_conf.background_event_cb &&
+                   rd_kafka_event_setup(rk, rko))) {
                 rd_kafka_call_background_event_cb(rk, rko);
                 /* Event must be destroyed by application. */
                 return RD_KAFKA_OP_RES_HANDLED;

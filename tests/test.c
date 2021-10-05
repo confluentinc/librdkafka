@@ -239,6 +239,7 @@ _TEST_DECL(0123_connections_max_idle);
 _TEST_DECL(0124_openssl_invalid_engine);
 _TEST_DECL(0125_immediate_flush);
 _TEST_DECL(0126_oauthbearer_oidc);
+_TEST_DECL(0128_sasl_callback_queue);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -448,6 +449,7 @@ struct test tests[] = {
         _TEST(0124_openssl_invalid_engine, TEST_F_LOCAL),
         _TEST(0125_immediate_flush, 0),
         _TEST(0126_oauthbearer_oidc, TEST_BRKVER(3,0,0,0)),
+        _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2,0,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -4177,13 +4179,29 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
                           name, val, errstr);
 }
 
+/**
+ * @brief Get configuration value for property \p name.
+ *
+ * @param conf Configuration to get value from. If NULL the test.conf (if any)
+ *             configuration will be used.
+ */
 char *test_conf_get (const rd_kafka_conf_t *conf, const char *name) {
-	static RD_TLS char ret[256];
-	size_t ret_sz = sizeof(ret);
-	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("Failed to get config \"%s\": %s\n", name,
-			  "unknown property");
-	return ret;
+        static RD_TLS char ret[256];
+        size_t ret_sz = sizeof(ret);
+        rd_kafka_conf_t *def_conf = NULL;
+
+        if (!conf) /* Use the current test.conf */
+                test_conf_init(&def_conf, NULL, 0);
+
+        if (rd_kafka_conf_get(conf ? conf : def_conf,
+                              name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to get config \"%s\": %s\n", name,
+                          "unknown property");
+
+        if (def_conf)
+                rd_kafka_conf_destroy(def_conf);
+
+        return ret;
 }
 
 

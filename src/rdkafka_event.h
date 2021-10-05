@@ -55,8 +55,13 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
  */
 static RD_UNUSED RD_INLINE
 int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+
+        if (unlikely(rko->rko_flags & RD_KAFKA_OP_F_FORCE_CB))
+                return 0;
+
         if (!rko->rko_evtype)
                 rko->rko_evtype = rd_kafka_op2event(rko->rko_type);
+
 	switch (rko->rko_evtype)
 	{
 	case RD_KAFKA_EVENT_NONE:

@@ -33,7 +33,7 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
 #include "rdkafka_request.h"
-
+#include "rdkafka_queue.h"
 
 /**
  * @brief Send SASL auth data using legacy directly on socket framing.
@@ -273,6 +273,12 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 
 
 
+rd_kafka_queue_t *rd_kafka_queue_get_sasl (rd_kafka_t *rk) {
+        if (!rk->rk_sasl.callback_q)
+                return NULL;
+
+        return rd_kafka_queue_new0(rk, rk->rk_sasl.callback_q);
+}
 
 
 /**
@@ -329,6 +335,8 @@ void rd_kafka_sasl_term (rd_kafka_t *rk) {
 
         if (provider && provider->term)
                 provider->term(rk);
+
+        RD_IF_FREE(rk->rk_sasl.callback_q, rd_kafka_q_destroy_owner);
 }
 
 
@@ -431,6 +439,29 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
         return 0;
 }
 
+
+rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable (rd_kafka_t *rk) {
+        rd_kafka_queue_t *saslq, *bgq;
+
+        if (!(saslq = rd_kafka_queue_get_sasl(rk)))
+                return rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__NOT_CONFIGURED,
+                        "No SASL mechanism using callbacks is configured");
+
+        if (!(bgq = rd_kafka_queue_get_background(rk))) {
+                rd_kafka_queue_destroy(saslq);
+                return rd_kafka_error_new(
+                        RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+                        "The background thread is not available");
+        }
+
+        rd_kafka_queue_forward(saslq, bgq);
+
+        rd_kafka_queue_destroy(saslq);
+        rd_kafka_queue_destroy(bgq);
+
+        return NULL;
+}
 
 
 /**

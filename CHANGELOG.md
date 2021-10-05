@@ -3,10 +3,16 @@
 ## Enhancements
 
  * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+ * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
+   on librdkafka's background thread. This solves the problem where an
+   application has a custom SASL OAUTHBEARER refresh callback and thus needs to
+   call `rd_kafka_poll()` (et.al.) at least once to trigger the
+   refresh callback before being able to connect to brokers.
+   With the new `rd_kafka_conf_enable_sasl_queue()` configuration API and
+   `rd_kafka_sasl_background_callbacks_enable()` the refresh callbacks
+   can now be triggered automatically on the librdkafka background thread.
  * `rd_kafka_queue_get_background()` now creates the background thread
    if not already created.
-   To be used in conjunction with `enable.sasl.callback.queue`.
-
 
 
 # librdkafka v1.8.0

@@ -84,6 +84,12 @@ typedef struct rd_kafka_sasl_oauthbearer_handle_s {
         /**< Token refresh timer */
         rd_kafka_timer_t token_refresh_tmr;
 
+        /** Queue to enqueue token_refresh_cb ops on. */
+        rd_kafka_q_t *callback_q;
+
+        /** Using internal refresh callback (sasl.oauthbearer.method=oidc) */
+        rd_bool_t internal_refresh;
+
 } rd_kafka_sasl_oauthbearer_handle_t;
 
 
@@ -185,8 +191,16 @@ static void rd_kafka_oauthbearer_enqueue_token_refresh (
         rko = rd_kafka_op_new_cb(handle->rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
                                  rd_kafka_oauthbearer_refresh_op);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
+
+        /* For internal OIDC refresh callback:
+         * Force op to be handled by internal callback on the
+         * receiving queue, rather than being passed as an event to
+         * the application. */
+        if (handle->internal_refresh)
+                rko->rko_flags |= RD_KAFKA_OP_F_FORCE_CB;
+
         handle->wts_enqueued_refresh = rd_uclock();
-        rd_kafka_q_enq(handle->rk->rk_rep, rko);
+        rd_kafka_q_enq(handle->callback_q, rko);
 }
 
 /**
@@ -1308,15 +1322,39 @@ static int rd_kafka_sasl_oauthbearer_init (rd_kafka_t *rk,
 
         /* Automatically refresh the token if using the builtin
          * unsecure JWS token refresher, to avoid an initial connection
-         * stall as we wait for the application to call poll().
-         * Otherwise enqueue a refresh callback for the application. */
+         * stall as we wait for the application to call poll(). */
         if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
-            rd_kafka_oauthbearer_unsecured_token)
+            rd_kafka_oauthbearer_unsecured_token) {
                 rk->rk_conf.sasl.oauthbearer.token_refresh_cb(
                         rk, rk->rk_conf.sasl.oauthbearer_config,
                         rk->rk_conf.opaque);
-        else
-                rd_kafka_oauthbearer_enqueue_token_refresh(handle);
+
+                return 0;
+        }
+
+        if (rk->rk_conf.sasl.enable_callback_queue) {
+                /* SASL specific callback queue enabled */
+                rk->rk_sasl.callback_q = rd_kafka_q_new(rk);
+                handle->callback_q = rd_kafka_q_keep(rk->rk_sasl.callback_q);
+        } else {
+                /* Use main queue */
+                handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
+        }
+
+        if (rk->rk_conf.sasl.oauthbearer.method ==
+            RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+#if FIXME /************************ FIXME  when .._oidc.c is added ****/
+            rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
+            rd_kafka_sasl_oauthbearer_oidc_token_refresh_cb
+#else
+            1
+#endif
+                ) /* move this paren up on the .._refresh_cb
+                   * line when FIXME is fixed. */
+                handle->internal_refresh = rd_true;
+
+        /* Otherwise enqueue a refresh callback for the application. */
+        rd_kafka_oauthbearer_enqueue_token_refresh(handle);
 
         return 0;
 }
@@ -1339,6 +1377,7 @@ static void rd_kafka_sasl_oauthbearer_term (rd_kafka_t *rk) {
         RD_IF_FREE(handle->token_value, rd_free);
         rd_list_destroy(&handle->extensions);
         RD_IF_FREE(handle->errstr, rd_free);
+        RD_IF_FREE(handle->callback_q, rd_kafka_q_destroy);
 
         rwlock_destroy(&handle->lock);
 

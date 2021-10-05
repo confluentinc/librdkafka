@@ -719,7 +719,7 @@ class RD_EXPORT DeliveryReportCb {
  * The callback should invoke RdKafka::Handle::oauthbearer_set_token() or
  * RdKafka::Handle::oauthbearer_set_token_failure() to indicate success or
  * failure, respectively.
- * 
+ *
  * The refresh operation is eventable and may be received when an event
  * callback handler is set with an event type of
  * \c RdKafka::Event::EVENT_OAUTHBEARER_TOKEN_REFRESH.
@@ -1436,6 +1436,33 @@ class RD_EXPORT Conf {
    */
   virtual Conf::ConfResult set_engine_callback_data (void *value,
                                                      std::string &errstr) = 0;
+
+
+  /** @brief Enable/disable creation of a queue specific to SASL events
+   *        and callbacks.
+   *
+   * For SASL mechanisms that trigger callbacks (currently OAUTHBEARER) this
+   * configuration API allows an application to get a dedicated
+   * queue for the SASL events/callbacks. After enabling the queue with this API
+   * the application can retrieve the queue by calling
+   * RdKafka::Handle::get_sasl_queue() on the client instance.
+   * This queue may then be served directly by the application
+   * (RdKafka::Queue::poll()) or forwarded to another queue, such as
+   * the background queue.
+   *
+   * A convenience function is available to automatically forward the SASL queue
+   * to librdkafka's background thread, see
+   * RdKafka::Handle::sasl_background_callbacks_enable().
+   *
+   * By default (\p enable = false) the main queue (as served by
+   * RdKafka::Handle::poll(), et.al.) is used for SASL callbacks.
+   *
+   * @remark The SASL queue is currently only used by the SASL OAUTHBEARER "
+   *         mechanism's token refresh callback.
+   */
+ virtual Conf::ConfResult enable_sasl_queue (bool enable,
+                                             std::string &errstr) = 0;
+
 };
 
 /**@}*/
@@ -1782,6 +1809,31 @@ class RD_EXPORT Handle {
      * @sa RdKafka::Conf::set() \c "oauthbearer_token_refresh_cb"
      */
     virtual ErrorCode oauthbearer_set_token_failure (const std::string &errstr) = 0;
+
+   /**
+    * @brief Enable SASL OAUTHBEARER refresh callbacks on the librdkafka
+    *        background thread.
+    *
+    * This serves as an alternative for applications that do not
+    * call RdKafka::Handle::poll() (et.al.) at regular intervals.
+    */
+   virtual Error *sasl_background_callbacks_enable () = 0;
+
+
+   /**
+   * @returns the SASL callback queue, if enabled, else NULL.
+   *
+   * @sa RdKafka::Conf::enable_sasl_queue()
+   */
+   virtual Queue *get_sasl_queue () = 0;
+
+   /**
+   * @returns the librdkafka background thread queue.
+   */
+   virtual Queue *get_background_queue () = 0;
+
+
+
 
    /**
      * @brief Allocate memory using the same allocator librdkafka uses.

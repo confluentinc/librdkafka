@@ -609,6 +609,7 @@ struct rd_kafka_s {
         struct {
                 void *handle; /**< Provider-specific handle struct pointer.
                                *   Typically assigned in provider's .init() */
+                rd_kafka_q_t *callback_q; /**< SASL callback queue, if any. */
         } rk_sasl;
 
         /* Test mocks */

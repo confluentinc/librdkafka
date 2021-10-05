@@ -34,6 +34,7 @@
 
 #ifndef _RDKAFKA_H_
 typedef struct rd_kafka_s rd_kafka_t;
+typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 #endif
 
 /* ANSI color codes */
@@ -161,6 +162,7 @@ void test_SKIP (const char *file, int line, const char *str);
 
 void test_timeout_set (int timeout);
 int test_set_special_conf (const char *name, const char *val, int *timeoutp);
+char *test_conf_get (const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path (void);
 const char *test_getenv (const char *env, const char *def);
 

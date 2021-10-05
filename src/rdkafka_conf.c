@@ -1020,8 +1020,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "rd_kafka_conf_set_oauthbearer_token_refresh_cb(), triggered by "
           "rd_kafka_poll(), et.al. "
           "This callback will be triggered when it is time to refresh "
-          "the client's OAUTHBEARER token.",
+          "the client's OAUTHBEARER token. "
+          "Also see `rd_kafka_conf_enable_sasl_queue()`.",
           _UNSUPPORTED_OAUTHBEARER
+        },
+        { _RK_GLOBAL|_RK_HIDDEN, "enable_sasl_queue", _RK_C_BOOL,
+          _RK(sasl.enable_callback_queue),
+          "Enable the SASL callback queue "
+          "(set with rd_kafka_conf_enable_sasl_queue()).",
+          0, 1, 0,
         },
         { _RK_GLOBAL, "sasl.oauthbearer.method", _RK_C_S2I,
           _RK(sasl.oauthbearer.method),
@@ -2879,6 +2886,13 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
 #endif
 }
 
+void rd_kafka_conf_enable_sasl_queue (rd_kafka_conf_t *conf, int enable) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "enable_sasl_queue",
+                                      (enable ? "true" : "false"));
+
+}
+
 void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                   int (*socket_cb) (int domain, int type,
                                                     int protocol,
@@ -3854,10 +3868,28 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
 #endif
 
 #if WITH_SASL_OAUTHBEARER
-        if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
-            conf->sasl.oauthbearer.token_refresh_cb)
-                return "`enable.sasl.oauthbearer.unsecure.jwt` and "
-                        "`oauthbearer_token_refresh_cb` are mutually exclusive";
+        if (!rd_strcasecmp(conf->sasl.mechanisms, "OAUTHBEARER")) {
+                if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
+                    conf->sasl.oauthbearer.token_refresh_cb)
+                        return "`enable.sasl.oauthbearer.unsecure.jwt` and "
+                                "`oauthbearer_token_refresh_cb` are "
+                                "mutually exclusive";
+
+                if (conf->sasl.enable_oauthbearer_unsecure_jwt &&
+                    conf->sasl.oauthbearer.method ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC)
+                        return "`enable.sasl.oauthbearer.unsecure.jwt` and "
+                                "`sasl.oauthbearer.method=oidc` are "
+                                "mutually exclusive";
+
+                /* Enable background thread for the builtin OIDC handler,
+                 * unless a refresh callback has been set. */
+                if (conf->sasl.oauthbearer.method ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+                    !conf->sasl.oauthbearer.token_refresh_cb)
+                        conf->enabled_events |= RD_KAFKA_EVENT_BACKGROUND;
+        }
+
 #endif
 
         if (cltype == RD_KAFKA_CONSUMER) {

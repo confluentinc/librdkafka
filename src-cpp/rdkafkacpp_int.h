@@ -187,6 +187,24 @@ class EventImpl : public Event {
   bool        fatal_;
 };
 
+class QueueImpl : virtual public Queue {
+ public:
+  QueueImpl(rd_kafka_queue_t *c_rkqu): queue_(c_rkqu) {}
+  ~QueueImpl () {
+    rd_kafka_queue_destroy(queue_);
+  }
+  static Queue *create (Handle *base);
+  ErrorCode forward (Queue *queue);
+  Message *consume (int timeout_ms);
+  int poll (int timeout_ms);
+  void io_event_enable(int fd, const void *payload, size_t size);
+
+  rd_kafka_queue_t *queue_;
+};
+
+
+
+
 
 class HeadersImpl : public Headers {
  public:
@@ -721,6 +739,17 @@ class ConfImpl : public Conf {
     return static_cast<Conf::ConfResult>(res);
   }
 
+  Conf::ConfResult enable_sasl_queue (bool enable, std::string &errstr) {
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rd_kafka_conf_enable_sasl_queue(rk_conf_, enable ? 1 : 0);
+
+    return Conf::CONF_OK;
+  }
+
 
   Conf::ConfResult get(const std::string &name, std::string &value) const {
     if (name.compare("dr_cb") == 0 ||
@@ -732,7 +761,9 @@ class ConfImpl : public Conf {
         name.compare("rebalance_cb") == 0 ||
         name.compare("offset_commit_cb") == 0 ||
         name.compare("oauthbearer_token_refresh_cb") == 0 ||
-        name.compare("ssl_cert_verify_cb") == 0) {
+        name.compare("ssl_cert_verify_cb") == 0 ||
+        name.compare("set_engine_callback_data") == 0 ||
+        name.compare("enable_sasl_queue") == 0) {
       return Conf::CONF_INVALID;
     }
     rd_kafka_conf_res_t res = RD_KAFKA_CONF_INVALID;
@@ -929,6 +960,27 @@ class HandleImpl : virtual public Handle {
 
   Queue *get_partition_queue (const TopicPartition *partition);
 
+  Queue *get_sasl_queue () {
+    rd_kafka_queue_t *rkqu;
+    rkqu = rd_kafka_queue_get_sasl(rk_);
+
+    if (rkqu == NULL)
+      return NULL;
+
+    return new QueueImpl(rkqu);
+  }
+
+  Queue *get_background_queue () {
+    rd_kafka_queue_t *rkqu;
+    rkqu = rd_kafka_queue_get_background(rk_);
+
+    if (rkqu == NULL)
+      return NULL;
+
+    return new QueueImpl(rkqu);
+  }
+
+
   ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
                              int timeout_ms) {
     rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
@@ -1003,6 +1055,16 @@ class HandleImpl : virtual public Handle {
           return static_cast<ErrorCode>(rd_kafka_oauthbearer_set_token_failure(
                                                 rk_, errstr.c_str()));
   };
+
+  Error *sasl_background_callbacks_enable () {
+    rd_kafka_error_t *c_error =
+      rd_kafka_sasl_background_callbacks_enable(rk_);
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+
+    return NULL;
+  }
 
   void *mem_malloc (size_t size) {
     return rd_kafka_mem_malloc(rk_, size);
@@ -1264,22 +1326,6 @@ private:
   std::vector<const TopicMetadata *> topics_;
   std::string orig_broker_name_;
 };
-
-
-class QueueImpl : virtual public Queue {
- public:
-  ~QueueImpl () {
-    rd_kafka_queue_destroy(queue_);
-  }
-  static Queue *create (Handle *base);
-  ErrorCode forward (Queue *queue);
-  Message *consume (int timeout_ms);
-  int poll (int timeout_ms);
-  void io_event_enable(int fd, const void *payload, size_t size);
-
-  rd_kafka_queue_t *queue_;
-};
-
 
 
 

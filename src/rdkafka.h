@@ -2082,14 +2082,28 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *
  * Note that before any SASL/OAUTHBEARER broker connection can succeed the
  * application must call rd_kafka_oauthbearer_set_token() once -- either
- * directly or, more typically, by invoking either rd_kafka_poll() or
- * rd_kafka_queue_poll() -- in order to cause retrieval of an initial token to
- * occur.
+ * directly or, more typically, by invoking either rd_kafka_poll(),
+ * rd_kafka_consumer_poll(), rd_kafka_queue_poll(), etc, in order to cause
+ * retrieval of an initial token to occur.
+ *
+ * Alternatively, the application can enable the SASL queue by calling
+ * rd_kafka_conf_enable_sasl_queue() on the configuration object prior to
+ * creating the client instance, get the SASL queue with
+ * rd_kafka_queue_get_sasl(), and either serve the queue manually by calling
+ * rd_kafka_queue_poll(), or redirecting the queue to the background thread to
+ * have the queue served automatically. For the latter case the SASL queue
+ * must be forwarded to the background queue with rd_kafka_queue_forward().
+ * A convenience function is available to automatically forward the SASL queue
+ * to librdkafka's background thread, see
+ * rd_kafka_sasl_background_callbacks_enable().
  *
  * An unsecured JWT refresh handler is provided by librdkafka for development
  * and testing purposes, it is enabled by setting
  * the \c enable.sasl.oauthbearer.unsecure.jwt property to true and is
  * mutually exclusive to using a refresh callback.
+ *
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ * @sa rd_kafka_queue_get_sasl()
  */
 RD_EXPORT
 void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
@@ -2097,6 +2111,37 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb (
         void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
                                               const char *oauthbearer_config,
                                               void *opaque));
+
+/**
+ * @brief Enable/disable creation of a queue specific to SASL events
+ *        and callbacks.
+ *
+ * For SASL mechanisms that trigger callbacks (currently OAUTHBEARER) this
+ * configuration API allows an application to get a dedicated
+ * queue for the SASL events/callbacks. After enabling the queue with this API
+ * the application can retrieve the queue by calling
+ * rd_kafka_queue_get_sasl() on the client instance.
+ * This queue may then be served directly by the application
+ * (with rd_kafka_queue_poll(), et.al)  or forwarded to another queue, such as
+ * the background queue.
+ *
+ * A convenience function is available to automatically forward the SASL queue
+ * to librdkafka's background thread, see
+ * rd_kafka_sasl_background_callbacks_enable().
+ *
+ * By default (\p enable = 0) the main queue (as served by rd_kafka_poll(),
+ * et.al.) is used for SASL callbacks.
+ *
+ * @remark The SASL queue is currently only used by the SASL OAUTHBEARER
+ *         mechanism's token_refresh_cb().
+ *
+ * @sa rd_kafka_queue_get_sasl()
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ */
+
+RD_EXPORT
+void rd_kafka_conf_enable_sasl_queue (rd_kafka_conf_t *conf, int enable);
+
 
 /**
  * @brief Set socket callback.
@@ -3213,6 +3258,39 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
  */
 RD_EXPORT
 rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
+
+
+
+/**
+ * @returns a reference to the SASL callback queue, if a SASL mechanism
+ *          with callbacks is configured (currently only OAUTHBEARER), else
+ *          returns NULL.
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ *
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_sasl (rd_kafka_t *rk);
+
+
+/**
+ * @brief Enable SASL OAUTHBEARER refresh callbacks on the librdkafka
+ *        background thread.
+ *
+ * This serves as an alternative for applications that do not call
+ * rd_kafka_poll() (et.al.) at regular intervals (or not at all), as a means
+ * of automatically trigger the refresh callbacks, which are needed to
+ * initiate connections to the brokers in the case a custom OAUTHBEARER
+ * refresh callback is configured.
+ *
+ * @returns NULL on success or an error object on error.
+ *
+ * @sa rd_kafka_queue_get_sasl()
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable (rd_kafka_t *rk);
 
 
 /**

@@ -14,8 +14,11 @@ librdkafka v1.8.2 is a maintenance release.
  * Prebuilt binaries for Mac OSX now contain statically linked OpenSSL v1.1.1l.
    Previously the OpenSSL version was either v1.1.1 or v1.0.2 depending on
    build type.
+ * Some of the prebuilt binaries for Linux were built on Ubuntu 14.04,
+   these builds are now performed on Ubuntu 16.04 instead.
+   This may affect users on ancient Linux distributions.
  * It was not possible to configure `ssl.ca.location` on OSX, the property
-   automatically would revert back to `probe` (default value).
+   would automatically revert back to `probe` (default value).
    This regression was introduced in v1.8.0. (#3566)
 
 ## Enhancements

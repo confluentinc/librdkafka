@@ -2,6 +2,13 @@
 
 librdkafka v1.8.2 is a maintenance release.
 
+## Enhancements
+
+ * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+ * Prebuilt binaries for Mac OSX now contain statically linked OpenSSL v1.1.1l.
+   Previously the OpenSSL version was either v1.1.1 or v1.0.2 depending on
+   build type.
+
 ## Fixes
 
  * The `librdkafka.redist` 1.8.0 package had two flaws:
@@ -11,19 +18,18 @@ librdkafka v1.8.2 is a maintenance release.
    provided artifacts to avoid this happening in the future.
  * Prebuilt binaries for Mac OSX Sierra (10.12) and older are no longer provided.
    This affects [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go).
- * Prebuilt binaries for Mac OSX now contain statically linked OpenSSL v1.1.1l.
-   Previously the OpenSSL version was either v1.1.1 or v1.0.2 depending on
-   build type.
  * Some of the prebuilt binaries for Linux were built on Ubuntu 14.04,
    these builds are now performed on Ubuntu 16.04 instead.
    This may affect users on ancient Linux distributions.
  * It was not possible to configure `ssl.ca.location` on OSX, the property
    would automatically revert back to `probe` (default value).
    This regression was introduced in v1.8.0. (#3566)
+ * The transactional producer could stall during a transaction if the transaction
+   coordinator changed while adding offsets to the transaction (send_offsets_to_transaction()).
+   This stall lasted until the coordinator connection went down, the
+   transaction timed out, transaction was aborted, or messages were produced
+   to a new partition, whichever came first. #3571.
 
-## Enhancements
-
- * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
 
 *Note: there was no v1.8.1 librdkafka release*
 

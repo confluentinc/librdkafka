@@ -45,7 +45,7 @@
 
 static void
 rd_kafka_txn_curr_api_reply_error (rd_kafka_q_t *rkq, rd_kafka_error_t *error);
-static void rd_kafka_txn_coord_timer_restart (rd_kafka_t *rk, int timeout_ms);
+static void rd_kafka_txn_coord_timer_start (rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -1883,9 +1883,10 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
         err = rd_kafka_txn_normalize_err(err);
 
         rd_kafka_dbg(rk, EOS, "ADDOFFSETS",
-                     "AddOffsetsToTxn response from %s: %s (actions 0x%x)",
+                     "AddOffsetsToTxn response from %s: %s (%s)",
                      rkb ? rd_kafka_broker_name(rkb) : "(none)",
-                     rd_kafka_err2name(err), actions);
+                     rd_kafka_err2name(err),
+                     rd_kafka_actions2str(actions));
 
         /* All unhandled errors are considered permanent */
         if (err && !actions)
@@ -1896,22 +1897,28 @@ static void rd_kafka_txn_handle_AddOffsetsToTxn (rd_kafka_t *rk,
                                              "Failed to add offsets to "
                                              "transaction: %s",
                                              rd_kafka_err2str(err));
+        } else {
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+                        rd_kafka_txn_coord_timer_start(rk, 50);
 
-        } else if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                rd_rkb_dbg(rkb, EOS, "ADDOFFSETS",
-                           "Failed to add offsets to transaction on broker %s: "
-                           "%s (after %dms): error is retriable",
-                           rd_kafka_broker_name(rkb),
-                           rd_kafka_err2str(err),
-                           (int)(request->rkbuf_ts_sent/1000));
+                if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                        rd_rkb_dbg(rkb, EOS, "ADDOFFSETS",
+                                   "Failed to add offsets to transaction on "
+                                   "broker %s: %s (after %dms): "
+                                   "error is retriable",
+                                   rd_kafka_broker_name(rkb),
+                                   rd_kafka_err2str(err),
+                                   (int)(request->rkbuf_ts_sent/1000));
 
-                if (!rd_timeout_expired(remains_ms) &&
-                    rd_kafka_buf_retry(rk->rk_eos.txn_coord, request)) {
-                        rk->rk_eos.txn_req_cnt++;
-                        return;
+                        if (!rd_timeout_expired(remains_ms) &&
+                            rd_kafka_buf_retry(rk->rk_eos.txn_coord, request)) {
+                                rk->rk_eos.txn_req_cnt++;
+                                return;
+                        }
+
+                        /* Propagate as retriable error through
+                         * api_reply() below */
                 }
-                /* Propagate as retriable error through api_reply() below */
-
         }
 
         if (err)
@@ -2287,7 +2294,7 @@ static void rd_kafka_txn_handle_EndTxn (rd_kafka_t *rk,
                                              rd_kafka_err2str(err));
         } else {
                 if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
-                        rd_kafka_txn_coord_timer_restart(rk, 500);
+                        rd_kafka_txn_coord_timer_start(rk, 50);
 
                 if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
                         rd_kafka_txn_set_abortable_error(rk, err,
@@ -2915,15 +2922,17 @@ static void rd_kafka_txn_coord_timer_cb (rd_kafka_timers_t *rkts, void *arg) {
 }
 
 /**
- * @brief (Re-)Start coord query timer
+ * @brief Start coord query timer if not already started.
  *
  * @locality rdkafka main thread
  * @locks none
  */
-static void rd_kafka_txn_coord_timer_restart (rd_kafka_t *rk, int timeout_ms) {
+static void rd_kafka_txn_coord_timer_start (rd_kafka_t *rk, int timeout_ms) {
         rd_assert(rd_kafka_is_transactional(rk));
         rd_kafka_timer_start_oneshot(&rk->rk_timers,
-                                     &rk->rk_eos.txn_coord_tmr, rd_true,
+                                     &rk->rk_eos.txn_coord_tmr,
+                                     /* don't restart if already started */
+                                     rd_false,
                                      1000 * timeout_ms,
                                      rd_kafka_txn_coord_timer_cb, rk);
 }
@@ -3079,7 +3088,7 @@ rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason) {
                 if (rd_kafka_idemp_check_error(rk, err, errstr, rd_false))
                         return rd_true;
 
-                rd_kafka_txn_coord_timer_restart(rk, 500);
+                rd_kafka_txn_coord_timer_start(rk, 500);
 
                 return rd_false;
         }
@@ -3106,7 +3115,7 @@ rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason) {
                 if (rd_kafka_idemp_check_error(rk, err, errstr, rd_false))
                         return rd_true; /* Fatal error */
 
-                rd_kafka_txn_coord_timer_restart(rk, 500);
+                rd_kafka_txn_coord_timer_start(rk, 500);
 
                 return rd_false;
         }
@@ -3140,7 +3149,7 @@ rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 if (!rkb) {
                         rd_kafka_dbg(rk, EOS, "TXNCOORD", "%s", buf);
                         /* Keep querying for the coordinator */
-                        rd_kafka_txn_coord_timer_restart(rk, 500);
+                        rd_kafka_txn_coord_timer_start(rk, 500);
                 }
                 return rd_false;
         }
@@ -3165,7 +3174,7 @@ rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         if (!rkb) {
                 /* Lost the current coordinator, query for new coordinator */
-                rd_kafka_txn_coord_timer_restart(rk, 500);
+                rd_kafka_txn_coord_timer_start(rk, 500);
         } else {
                 /* Trigger PID state machine */
                 rd_kafka_idemp_pid_fsm(rk);
@@ -3197,7 +3206,7 @@ void rd_kafka_txn_coord_monitor_cb (rd_kafka_broker_t *rkb) {
                 /* Coordinator is down, the connection will be re-established
                  * automatically, but we also trigger a coordinator query
                  * to pick up on coordinator change. */
-                rd_kafka_txn_coord_timer_restart(rk, 500);
+                rd_kafka_txn_coord_timer_start(rk, 500);
 
         } else {
                 /* Coordinator is up. */

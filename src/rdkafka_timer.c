@@ -180,7 +180,10 @@ void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
 
 	rd_kafka_timer_stop(rkts, rtmr, 0/*!lock*/);
 
-	rtmr->rtmr_interval = interval;
+        /* Make sure the timer interval is non-zero or the timer
+         * won't be scheduled, which is not what the caller of .._start*()
+         * would expect. */
+        rtmr->rtmr_interval = interval == 0 ? 1 : interval;
 	rtmr->rtmr_callback = callback;
 	rtmr->rtmr_arg      = arg;
         rtmr->rtmr_oneshot  = oneshot;

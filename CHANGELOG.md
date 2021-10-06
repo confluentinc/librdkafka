@@ -29,6 +29,10 @@ librdkafka v1.8.2 is a maintenance release.
    This stall lasted until the coordinator connection went down, the
    transaction timed out, transaction was aborted, or messages were produced
    to a new partition, whichever came first. #3571.
+ * librdkafka's internal timers would not start if the timeout was set to 0,
+   which would result in some timeout operations not being enforced correctly,
+   e.g., the transactional producer API timeouts.
+   These timers are now started with a timeout of 1 microsecond.
 
 
 *Note: there was no v1.8.1 librdkafka release*

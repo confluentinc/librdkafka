@@ -67,7 +67,7 @@ static const char *rd_kafka_actions_descs[] = {
         NULL,
 };
 
-static const char *rd_kafka_actions2str (int actions) {
+const char *rd_kafka_actions2str (int actions) {
         static RD_TLS char actstr[128];
         return rd_flags2str(actstr, sizeof(actstr),
                             rd_kafka_actions_descs,

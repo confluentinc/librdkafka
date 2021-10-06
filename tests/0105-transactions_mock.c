@@ -1181,7 +1181,6 @@ static void set_next_coord (rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief Switch coordinator during a transaction.
  *
- * @remark Currently fails due to insufficient coord switch handling.
  */
 static void do_test_txn_switch_coordinator (void) {
         rd_kafka_t *rk;
@@ -1243,6 +1242,68 @@ static void do_test_txn_switch_coordinator (void) {
                 }
         }
 
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Switch coordinator during a transaction when AddOffsetsToTxn
+ *        are sent. #3571.
+ */
+static void do_test_txn_switch_coordinator_refresh (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = "test";
+        const char *transactional_id = "txnid";
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        SUB_TEST("Test switching coordinators (refresh)");
+
+        rk = create_txn_producer(&mcluster, transactional_id, 3, NULL);
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      1);
+
+        /* Start transactioning */
+        TEST_SAY("Starting transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        /* Switch the coordinator so that AddOffsetsToTxnRequest
+         * will respond with NOT_COORDINATOR. */
+        TEST_SAY("Switching to coordinator 2\n");
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      2);
+
+        /*
+         * Send some arbitrary offsets.
+         */
+        offsets = rd_kafka_topic_partition_list_new(4);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic",
+                                          3)->offset = 12;
+        rd_kafka_topic_partition_list_add(offsets, "srctop2",
+                                          99)->offset = 99999;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        TEST_CALL_ERROR__(rd_kafka_send_offsets_to_transaction(
+                                  rk, offsets,
+                                  cgmetadata, 20*1000));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+
+        /* Produce some messages */
+        test_produce_msgs2(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0, 10, NULL, 0);
+
+        /* And commit the transaction */
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
 
         rd_kafka_destroy(rk);
 
@@ -2299,6 +2360,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
 
         if (!test_quick)
                 do_test_txn_switch_coordinator();
+
+        do_test_txn_switch_coordinator_refresh();
 
         return 0;
 }

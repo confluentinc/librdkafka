@@ -1,3 +1,14 @@
+# librdkafka v1.6.2
+
+librdkafka v1.6.2 is a maintenance release with the following backported fixes:
+
+ * The transactional producer could stall during a transaction if the transaction
+   coordinator changed while adding offsets to the transaction (send_offsets_to_transaction()).
+   This stall lasted until the coordinator connection went down, the
+   transaction timed out, transaction was aborted, or messages were produced
+   to a new partition, whichever came first. #3571.
+
+
 # librdkafka v1.6.1
 
 librdkafka v1.6.1 is a maintenance release.

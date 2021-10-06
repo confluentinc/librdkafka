@@ -54,6 +54,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 rd_kafka_resp_err_t err,
 			 const rd_kafka_buf_t *request, ...);
 
+const char *rd_kafka_actions2str (int actions);
 
 rd_kafka_topic_partition_list_t *
 rd_kafka_buf_read_topic_partitions (rd_kafka_buf_t *rkbuf,

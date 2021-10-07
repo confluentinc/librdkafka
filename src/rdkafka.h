@@ -401,6 +401,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOOP = -141,
         /** No offset to automatically reset to */
         RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
+        /** OAUTH/OIDC failure*/
+	RD_KAFKA_RESP_ERR__AUTH = -139,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,

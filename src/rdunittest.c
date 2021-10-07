@@ -47,7 +47,9 @@
 
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#if WITH_CURL
 #include "rdkafka_sasl_oauthbearer_oidc.h"
+#endif
 #include "rdkafka_msgset.h"
 #include "rdkafka_txnmgr.h"
 

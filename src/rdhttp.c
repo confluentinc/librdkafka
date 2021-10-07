@@ -222,54 +222,19 @@ rd_http_error_t *rd_http_get(const char *url, rd_buf_t **rbufp) {
         return NULL;
 }
 
-/**
- * @brief Extract the jwt from \p *cjson.
- *
- * @returns The token will be responsed in \p *res.
- *          Returns NULL on success or an error
- *          object on error - this error object must be destroyed
- *          by calling rd_http_error_destroy().
- */
-rd_http_error_t *rd_http_extract_jwt_from_json (cJSON **cjson,
-                                               char **res,
-                                               const char *key) {
-        char *token;
-        cJSON *jval;
-        cJSON *parsed_token = NULL;
-        rd_http_error_t *herr;
-
-        cJSON_ArrayForEach(jval, *cjson) {
-                parsed_token = cJSON_GetObjectItem(*cjson, key);
-                break;
-        }
-        if (parsed_token == NULL) {
-                herr = rd_http_error_new(-1,
-                        "Expected non-empty JSON response");
-                return herr;
-        }
-
-        token = cJSON_Print(parsed_token);
-        *res = rd_malloc(strlen(token) + 1);
-        strcpy(*res, token);
-        rd_free(token);
-        return NULL;
-}
-
 
 /**
- * @brief Extract the json string that includes jwt from \p hreq.
+ * @brief Extract the json string from \p hreq and returned it from \p *jsonp.
  *
- * @returns Returns the response (even if there's a HTTP error code returned)
- *          in \p *json.
+ * @returns Returns NULL on success, or an JSON parsing error - this
+ *          error object must be destroyed by calling rd_http_error_destroy().
  */
-rd_http_error_t *rd_http_parse_token_to_json (rd_http_req_t *hreq,
-                                              cJSON **jsonp) {
+rd_http_error_t *rd_http_parse_json (rd_http_req_t *hreq, cJSON **jsonp) {
         size_t len = 0;
         char *raw_json = NULL;
         const char *end = NULL;
         rd_slice_t slice;
         rd_http_error_t *herr = NULL;
-        *jsonp = NULL;
 
         /* cJSON requires the entire input to parse in contiguous memory. */
         rd_slice_init_full(&slice, hreq->hreq_buf);
@@ -280,73 +245,123 @@ rd_http_error_t *rd_http_parse_token_to_json (rd_http_req_t *hreq,
         raw_json[len] = '\0';
 
         /* Parse JSON */
-        end = NULL;
         *jsonp = cJSON_ParseWithOpts(raw_json, &end, 0);
 
-        if (!*jsonp && !herr)
+        if (!*jsonp)
                 herr = rd_http_error_new(hreq->hreq_code,
                                          "Failed to parse JSON response "
                                          "at %"PRIusz"/%"PRIusz,
                                          (size_t)(end - raw_json), len);
         rd_free(raw_json);
-        rd_http_req_destroy(hreq);
         return herr;
 }
 
 
 /**
- * @brief Perform a blocking HTTP(S) request to \p url with HTTP(S)
- *        headers and data with 20s timeout.
- *        If the HTTP(S) request fails, will retry another \p retry times.
+ * @brief Check if the error returned from HTTP(S) is tempoorary or not.
  *
- * @returns The result will be responsed in \p *jsonp.
+ * @returns If the \p error_code is temporary, return rd_true,
+ *          otherwise return rd_false.
+ *
+ * @locality Any thread.
+ */
+static rd_bool_t rd_http_is_failure_temporary (int error_code) {
+        switch (error_code)
+        {
+                case REQUEST_TIMEOUT:
+                case TOO_EARLY:
+                case INTERNAL_SERVER_ERROR:
+                case BAD_GATEWAY:
+                case SERVICE_UNAVAILABLE:
+                case GATEWAY_TIMEOUT:
+                     return rd_true;
+        }
+        return rd_false;
+}
+
+
+/**
+ * @brief Perform a blocking HTTP(S) request to token url from \p rk with
+ *        HTTP(S) headers and data with \p timeout.
+ *        If the HTTP(S) request fails, will retry another \p retries times
+ *        with multiplying backoff \p interval.
+ *
+ * @returns The result will be returned in \p *jsonp.
  *          Returns NULL on success (HTTP response code < 400), or an error
- *          object on transport or HTTP error - this error object must be
- *          destroyed by calling rd_http_error_destroy().
+ *          object on transport, HTTP error or a JSON parsing error - this
+ *          error object must be destroyed by calling rd_http_error_destroy().
  *
  * @locality Any thread.
  */
 rd_http_error_t
-*rd_http_post_json (const char *url,
-                    struct curl_slist **headers,
-                    const char *data_to_token,
-                    const size_t data_to_token_size,
-                    const long timeout,
-                    const size_t retry,
-                    cJSON **jsonp) {
+*rd_http_post_expect_json (rd_kafka_t *rk,
+                           const struct curl_slist *headers,
+                           const char *post_fields,
+                           size_t post_fields_size,
+                           long timeout,
+                           int retries,
+                           int interval,
+                           cJSON **jsonp) {
         rd_http_error_t *herr;
         rd_http_req_t hreq;
-        size_t i;
+        int i;
         size_t len;
         const char *content_type;
 
-        herr = rd_http_req_init(&hreq, url);
+        herr = rd_http_req_init(
+                &hreq,
+                rk->rk_conf.sasl.oauthbearer.token_endpoint_url);
         if (unlikely(herr != NULL))
                 return herr;
 
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, *headers);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout);
 
         curl_easy_setopt(hreq.hreq_curl,
                          CURLOPT_POSTFIELDSIZE,
-                         data_to_token_size);
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, data_to_token);
+                         post_fields_size);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
 
-        for (i = 0; i <= retry; i++) {
+        for (i = 0; i <= retries && !rd_kafka_terminating(rk); i++) {
                 herr = rd_http_req_perform_sync(&hreq);
                 len = rd_buf_len(hreq.hreq_buf);
-                if (!herr && len > 0) {
+
+                /* Break the for loop directly if HTTP(S) request is succeed,
+                   return with permanent error code or last retry. */
+                if ((!herr && len > 0) ||
+                    (herr && !rd_http_is_failure_temporary(herr->code))
+                    || i == retries)
                         break;
+                /* Empty response: should be retry */
+                else if (!herr && len == 0)
+                        rd_kafka_log(rk, LOG_WARNING, "HTTP",
+                                     "HTTP connection returns an empty "
+                                     "JSON string");
+                /* Retry if HTTP(S) request returns temporary error. */
+                else if (herr && rd_http_is_failure_temporary(herr->code)) {
+                        rd_kafka_log(rk, LOG_ERR, "HTTP",
+                                     "Failed to connect to HTTP server with "
+                                     "error code: %d, error string: %s",
+                                    herr->code, herr->errstr);
+                        rd_http_error_destroy(herr);
                 }
+
+                rd_usleep(interval * (i + 1), &rk->rk_terminate);
         }
 
-        if (herr && len == 0) {
+        if (herr) {
+                rd_kafka_log(rk, LOG_ERR, "HTTP",
+                             "Failed to connect to HTTP server with "
+                             "error code: %d, error string: %s",
+                             herr->code, herr->errstr);
                 rd_http_req_destroy(&hreq);
                 return herr;
         }
 
         if (len == 0) {
                 /* Empty response: create empty JSON object */
+                rd_kafka_log(rk, LOG_WARNING, "HTTP",
+                             "HTTP connection returns an empty JSON string");
                 *jsonp = cJSON_CreateObject();
                 rd_http_req_destroy(&hreq);
                 return NULL;
@@ -366,7 +381,8 @@ rd_http_error_t
                 return herr;
         }
 
-        herr = rd_http_parse_token_to_json(&hreq, &*jsonp);
+        herr = rd_http_parse_json(&hreq, jsonp);
+        rd_http_req_destroy(&hreq);
 
         return herr;
 }

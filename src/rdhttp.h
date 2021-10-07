@@ -47,7 +47,14 @@ rd_http_error_t *rd_http_get_json(const char *url, cJSON **jsonp);
 
 void rd_http_global_init(void);
 
-
+typedef enum {
+  REQUEST_TIMEOUT = 408,
+  TOO_EARLY = 425,
+  INTERNAL_SERVER_ERROR = 500,
+  BAD_GATEWAY = 502,
+  SERVICE_UNAVAILABLE = 503,
+  GATEWAY_TIMEOUT = 504
+} rd_http_temporary_error;
 
 #ifdef LIBCURL_VERSION
 /* Advanced API that exposes the underlying CURL handle.
@@ -64,19 +71,17 @@ typedef struct rd_http_req_s {
 
 rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url);
 rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq);
-rd_http_error_t *rd_http_parse_token_to_json (rd_http_req_t *hreq,
-                                             cJSON **jsonp);
-rd_http_error_t *rd_http_extract_jwt_from_json (cJSON **cjson,
-                                               char **jwt_token,
-                                               const char *key);
+rd_http_error_t *rd_http_parse_json (rd_http_req_t *hreq, cJSON **jsonp);
 rd_http_error_t
-*rd_http_post_json (const char *url,
-                    struct curl_slist **headers,
-                    const char *data_to_token,
-                    const size_t data_to_token_size,
-                    const long timeout,
-                    const size_t retry,
-                    cJSON **jsonp);
+*rd_http_post_expect_json (rd_kafka_t *rk,
+                           const struct curl_slist *headers,
+                           const char *data_to_token,
+                           size_t data_to_token_size,
+                           long timeout,
+                           int retry,
+                           int interval,
+                           cJSON **jsonp);
+void rd_http_req_destroy (rd_http_req_t *hreq);
 
 #endif
 

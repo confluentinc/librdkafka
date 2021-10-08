@@ -2660,7 +2660,7 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                         perr->update_next_err = rd_true;
 
                         rd_kafka_idemp_drain_epoch_bump(
-                                rk, "skipped sequence numbers");
+                                rk, perr->err, "skipped sequence numbers");
 
                 } else {
                         /* Request's sequence is less than next ack,
@@ -2763,7 +2763,7 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                    firstmsg->rkm_u.producer.retries);
 
                         /* Drain outstanding requests and bump epoch. */
-                        rd_kafka_idemp_drain_epoch_bump(rk,
+                        rd_kafka_idemp_drain_epoch_bump(rk, perr->err,
                                                         "unknown producer id");
 
                         rd_kafka_txn_set_abortable_error_with_bump(
@@ -2800,7 +2800,7 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                    firstmsg->rkm_u.producer.retries);
 
                         /* Drain outstanding requests and bump epoch. */
-                        rd_kafka_idemp_drain_epoch_bump(rk,
+                        rd_kafka_idemp_drain_epoch_bump(rk, perr->err,
                                                         "unknown producer id");
 
                         perr->incr_retry = 0;
@@ -3169,7 +3169,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
 
                         /* Drain outstanding requests and bump the epoch .*/
                         rd_kafka_idemp_drain_epoch_bump(
-                                rk, "message sequence gap");
+                                rk, perr->err, "message sequence gap");
                 }
 
                 perr->update_next_ack = rd_false;

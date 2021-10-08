@@ -1565,6 +1565,7 @@ rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
                                          const rd_kafka_resp_err_t *errors) {
         rd_kafka_mock_error_stack_t *errstack;
         size_t totcnt;
+        size_t i;
 
         mtx_lock(&mcluster->lock);
 
@@ -1579,8 +1580,8 @@ rd_kafka_mock_push_request_errors_array (rd_kafka_mock_cluster_t *mcluster,
                                             sizeof(*errstack->errs));
         }
 
-        while (cnt > 0)
-                errstack->errs[errstack->cnt++] = errors[--cnt];
+        for (i = 0 ; i < cnt ; i++)
+                errstack->errs[errstack->cnt++] = errors[i];
 
         mtx_unlock(&mcluster->lock);
 }

@@ -613,7 +613,8 @@ void rd_kafka_idemp_drain_reset (rd_kafka_t *rk, const char *reason) {
  * @locality any
  * @locks none
  */
-void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...) {
+void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                                      const char *fmt, ...) {
         va_list ap;
         char buf[256];
 
@@ -629,6 +630,11 @@ void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...) {
                      rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt), buf);
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
         rd_kafka_wrunlock(rk);
+
+        /* Transactions: bumping the epoch requires the current transaction
+         *               to be aborted. */
+        if (rd_kafka_is_transactional(rk))
+                rd_kafka_txn_set_abortable_error_with_bump(rk, err, "%s", buf);
 
         /* Check right away if the drain could be done. */
         rd_kafka_idemp_check_drain_done(rk);

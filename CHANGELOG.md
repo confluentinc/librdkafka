@@ -24,15 +24,30 @@ librdkafka v1.8.2 is a maintenance release.
  * It was not possible to configure `ssl.ca.location` on OSX, the property
    would automatically revert back to `probe` (default value).
    This regression was introduced in v1.8.0. (#3566)
+ * librdkafka's internal timers would not start if the timeout was set to 0,
+   which would result in some timeout operations not being enforced correctly,
+   e.g., the transactional producer API timeouts.
+   These timers are now started with a timeout of 1 microsecond.
+
+### Transactional producer fixes
+
+ * Upon quick repeated leader changes the transactional producer could receive
+   an `OUT_OF_ORDER_SEQUENCE` error from the broker, which triggered an
+   Epoch bump on the producer resulting in an InitProducerIdRequest being sent
+   to the transaction coordinator in the middle of a transaction.
+   This request would start a new transaction on the coordinator, but the
+   producer would still think (erroneously) it was in current transaction.
+   Any messages produced in the current transaction prior to this event would
+   be silently lost when the application committed the transaction, leading
+   to message loss.
+   This has been fixed by setting the Abortable transaction error state
+   in the producer. #3575.
  * The transactional producer could stall during a transaction if the transaction
    coordinator changed while adding offsets to the transaction (send_offsets_to_transaction()).
    This stall lasted until the coordinator connection went down, the
    transaction timed out, transaction was aborted, or messages were produced
    to a new partition, whichever came first. #3571.
- * librdkafka's internal timers would not start if the timeout was set to 0,
-   which would result in some timeout operations not being enforced correctly,
-   e.g., the transactional producer API timeouts.
-   These timers are now started with a timeout of 1 microsecond.
+
 
 
 *Note: there was no v1.8.1 librdkafka release*

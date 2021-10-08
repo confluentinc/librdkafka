@@ -3759,6 +3759,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
                                 rd_kafka_idemp_drain_epoch_bump(
                                         rkb->rkb_rk,
+                                        RD_KAFKA_RESP_ERR__TIMED_OUT,
                                         "%d message(s) timed out "
                                         "on %s [%"PRId32"]",
                                         timeoutcnt,

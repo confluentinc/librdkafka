@@ -174,7 +174,7 @@ void rd_kafka_oidc_token_refresh_cb (rd_kafka_t *rk,
                 &headers);
         if (errstr != NULL) {
                 rd_kafka_op_err(rk,
-				RD_KAFKA_RESP_ERR__AUTH,
+				RD_KAFKA_RESP_ERR__AUTHENTICATION,
 				"Failed to build OAUTHBEARER OIDC headers: %s",
                                 errstr);
                 return;
@@ -199,7 +199,7 @@ void rd_kafka_oidc_token_refresh_cb (rd_kafka_t *rk,
                                         &json);
         if (unlikely(herr != NULL)) {
 		rd_kafka_op_err(rk,
-				RD_KAFKA_RESP_ERR__AUTH,
+				RD_KAFKA_RESP_ERR__AUTHENTICATION,
 				"Failed to receive json result from HTTP(S), "
                                 "returned error code: %d, returned error "
                                 "string: %s", herr->code, herr->errstr);
@@ -209,7 +209,7 @@ void rd_kafka_oidc_token_refresh_cb (rd_kafka_t *rk,
         parsed_token = cJSON_GetObjectItem(json, "access_token");
         if (unlikely(parsed_token == NULL)) {
                 rd_kafka_op_err(rk,
-				RD_KAFKA_RESP_ERR__AUTH,
+				RD_KAFKA_RESP_ERR__AUTHENTICATION,
 				"Expected non-empty JSON response");
                 rd_http_error_destroy(herr);
                 goto done;

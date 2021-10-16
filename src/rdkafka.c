@@ -396,7 +396,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
 		  "Local: Message timed out"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__PARTITION_EOF,
-		  "Broker: No more messages"),
+		  "Local: No more messages"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
 		  "Local: Unknown partition"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__FS,

@@ -349,7 +349,7 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
 
         credential->aws_region = rd_strdup(handle_aws_region);
         credential->md_lifetime_ms = now_wallclock_ms + conf->sasl.duration_sec * 1000;
-        int check = rd_kafka_aws_send_request(credential,
+        rd_kafka_aws_send_request(credential,
                                         ymd,
                                         hms,
                                         host,
@@ -396,9 +396,11 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         char errstr[512];
         rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
         
-        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Refreshing AWS credentials");
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Checking to refreshing AWS credentials");
 
         if (rk->rk_conf.sasl.enable_use_sts) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Use STS enabled, will refresh credentials");
+
                 if (rd_kafka_aws_msk_iam_credential_refresh0(
                         rk, &credential, 
                         rd_uclock() / 1000, errstr, sizeof(errstr)) == -1 ||

@@ -401,8 +401,6 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                         const char *signed_headers,
                         const char *request_parameters,
                         const EVP_MD *md) {
-        int r = 1;
-
         char *canonical_request = rd_kafka_aws_build_canonical_request(
                 host,
                 method,
@@ -439,6 +437,8 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 signed_headers,
                 signature
         );
+
+        printf("AWS send request components built");
 
         CURL *curl;
         CURLcode res;
@@ -513,12 +513,16 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 str_builder_destroy(sb);
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
+                printf("Performing STS CURL request");
+
                 res = curl_easy_perform(curl);
                 if (res != CURLE_OK) {
                         /* add errstr handling */
                         fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
                         return -1;
                 }
+
+                printf("Parsing STS response XML");
 
                 xmlDoc *document;
                 xmlNode *cur;
@@ -571,6 +575,8 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 xmlFreeDoc(document);
                 xmlCleanupParser();
 
+                printf("STS response XML parsed");
+
                 rd_free(req.buffer);
                 rd_free(curl_host);
                 rd_free(curl_host_header);
@@ -581,7 +587,7 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
         }
         curl_easy_cleanup(curl);
 
-        return r;
+        return 1;
 }
 
 /**

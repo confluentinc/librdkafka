@@ -277,7 +277,6 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         str_builder_t *sb;
         sb = str_builder_create();
         
-        int r = 1;
         char *handle_aws_access_key_id;
         char *handle_aws_secret_access_key;
         char *handle_aws_region;
@@ -347,9 +346,11 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
 
         str_builder_destroy(sb);
 
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Canonical headers built");
+
         credential->aws_region = rd_strdup(handle_aws_region);
         credential->md_lifetime_ms = now_wallclock_ms + conf->sasl.duration_sec * 1000;
-        rd_kafka_aws_send_request(credential,
+        if (rd_kafka_aws_send_request(credential,
                                         ymd,
                                         hms,
                                         host,
@@ -363,11 +364,11 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
                                         canonical_headers,
                                         signed_headers,
                                         request_parameters,
-                                        md);
-
-        if (r == -1) {
+                                        md) == -1) {
                 rd_kafka_sasl_aws_msk_iam_credential_free(credential);
         }
+
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "New AWS credentials retrieved from STS");
 
         RD_IF_FREE(handle_aws_access_key_id, rd_free);
         RD_IF_FREE(handle_aws_secret_access_key, rd_free);
@@ -380,7 +381,7 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         RD_IF_FREE(canonical_headers, rd_free);
         RD_IF_FREE(request_parameters, rd_free);
 
-        return r;
+        return 1;
 }
 
 /**

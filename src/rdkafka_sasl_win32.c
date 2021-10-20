@@ -62,7 +62,7 @@
 typedef struct rd_kafka_sasl_win32_state_s {
         CredHandle *cred;
         CtxtHandle *ctx;
-        wchar_t principal[512];  /* Broker service principal and hostname */
+        CHAR principal[1024];  /* Broker service principal and hostname */
 } rd_kafka_sasl_win32_state_t;
 
 

@@ -277,7 +277,6 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         str_builder_t *sb;
         sb = str_builder_create();
         
-        int r = 1;
         char *handle_aws_access_key_id;
         char *handle_aws_secret_access_key;
         char *handle_aws_region;
@@ -349,7 +348,8 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
 
         credential->aws_region = rd_strdup(handle_aws_region);
         credential->md_lifetime_ms = now_wallclock_ms + conf->sasl.duration_sec * 1000;
-        rd_kafka_aws_send_request(credential,
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Sending refresh request to STS");
+        if (rd_kafka_aws_send_request(credential,
                                         ymd,
                                         hms,
                                         host,
@@ -363,11 +363,14 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
                                         canonical_headers,
                                         signed_headers,
                                         request_parameters,
-                                        md);
-
-        if (r == -1) {
+                                        md) == -1) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "AWS credential retrieval and parsing failed");
                 rd_kafka_sasl_aws_msk_iam_credential_free(credential);
+
+                return -1;
         }
+
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "New AWS credentials retrieved from STS");
 
         RD_IF_FREE(handle_aws_access_key_id, rd_free);
         RD_IF_FREE(handle_aws_secret_access_key, rd_free);
@@ -380,7 +383,7 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         RD_IF_FREE(canonical_headers, rd_free);
         RD_IF_FREE(request_parameters, rd_free);
 
-        return r;
+        return 1;
 }
 
 /**
@@ -396,7 +399,7 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         char errstr[512];
         rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
         
-        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Checking to refreshing AWS credentials");
+        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Checking whether to refresh AWS credentials");
 
         if (rk->rk_conf.sasl.enable_use_sts) {
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Use STS enabled, will refresh credentials");

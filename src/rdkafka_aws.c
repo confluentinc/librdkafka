@@ -76,7 +76,7 @@ static size_t rd_kafka_aws_curl_write_callback(char *ptr, size_t size, size_t nm
     size_t realsize = size * nmemb; 
     curl_in_mem_buf *req = (curl_in_mem_buf *) userdata;
 
-    printf("receive chunk of %zu bytes\n", realsize);
+    printf("received chunk of %zu bytes\n", realsize);
 
     while (req->buflen < req->len + realsize + 1)
     {
@@ -401,8 +401,6 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                         const char *signed_headers,
                         const char *request_parameters,
                         const EVP_MD *md) {
-        int r = 1;
-
         char *canonical_request = rd_kafka_aws_build_canonical_request(
                 host,
                 method,
@@ -515,23 +513,25 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
 
                 res = curl_easy_perform(curl);
                 if (res != CURLE_OK) {
-                        /* add errstr handling */
                         fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
                         return -1;
                 }
 
                 xmlDoc *document;
                 xmlNode *cur;
-                document = xmlReadMemory(req.buffer, req.len, "assume_role_response.xml", NULL, 0);
+                document = xmlReadMemory((char *)req.buffer, req.len, "assume_role_response.xml", NULL, 0);
                 if (document == NULL) {
-                        /* add errstr handling */
                         fprintf(stderr, "Failed to parse document\n");
-                        // return -1;
+                        return -1;
                 }
                 cur = xmlDocGetRootElement(document);
+                if (xmlStrcmp(cur->name, (const xmlChar *)"ErrorResponse") == 0) {
+                        fprintf(stderr, "Error occurred in AssumeRole call: %s\n", req.buffer);
+                        return -1;
+                }
                 cur = cur->children;
                 while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"AssumeRoleResult"))) {
+                        if (!xmlStrcmp(cur->name, (const xmlChar *)"AssumeRoleResult")) {
                                 break;
                         }
                         cur = cur->next;
@@ -539,27 +539,26 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
 
                 cur = cur->children;
                 while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"Credentials"))) {
+                        if (!xmlStrcmp(cur->name, (const xmlChar *)"Credentials")) {
                                 break;
                         }
                         cur = cur->next;
                 }
-
                 cur = cur->children;
                 while (cur != NULL) {
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"AccessKeyId"))) {
+                        if (!xmlStrcmp(cur->name, (const xmlChar *)"AccessKeyId")) {
                                 xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
                                 credential->aws_access_key_id = rd_strdup((const char *)content);
                                 xmlFree(content);
                         }
 
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"SecretAccessKey"))) {
+                        if (!xmlStrcmp(cur->name, (const xmlChar *)"SecretAccessKey")) {
                                 xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
                                 credential->aws_secret_access_key = rd_strdup((const char *)content);
                                 xmlFree(content);
                         }
 
-                        if ((!xmlStrcmp(cur->name, (const xmlChar *)"SessionToken"))) {
+                        if (!xmlStrcmp(cur->name, (const xmlChar *)"SessionToken")) {
                                 xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
                                 credential->aws_security_token = rd_strdup((const char *)content);
                                 xmlFree(content);
@@ -581,7 +580,7 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
         }
         curl_easy_cleanup(curl);
 
-        return r;
+        return 1;
 }
 
 /**

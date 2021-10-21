@@ -923,7 +923,7 @@ performReassignments (
  * FIXME: should be called imbalance score then?
  */
 static int getBalanceScore (map_str_toppar_list_t *assignment) {
-        const char *consumer;
+        const char *consumer = NULL;
         const rd_kafka_topic_partition_list_t *partitions;
         int *sizes;
         int cnt = 0;
@@ -1004,7 +1004,7 @@ balance (rd_kafka_t *rk,
         int newScore, oldScore;
         /* Iterator variables */
         const rd_kafka_topic_partition_t *partition;
-        const void *ignore;
+        const void *ignore = NULL;
         const rd_map_elem_t *elem;
         int i;
 
@@ -1381,7 +1381,7 @@ static void populatePotentialMaps (
 static rd_bool_t areSubscriptionsIdentical (
         map_toppar_list_t *partition2AllPotentialConsumers,
         map_str_toppar_list_t *consumer2AllPotentialPartitions) {
-        const void *ignore;
+        const void *ignore = NULL;
         const rd_list_t *lcurr, *lprev = NULL;
         const rd_kafka_topic_partition_list_t *pcurr, *pprev = NULL;
 

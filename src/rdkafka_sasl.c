@@ -155,7 +155,7 @@ int rd_kafka_sasl_recv (rd_kafka_transport_t *rktrans,
  */
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
                             char *errstr, size_t errstr_size) {
-        rd_kafka_buf_t *rkbuf;
+        rd_kafka_buf_t *rkbuf = NULL;
         int r;
         const void *buf;
         size_t len;

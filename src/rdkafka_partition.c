@@ -83,7 +83,7 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
 					       void *opaque) {
         rd_kafka_toppar_t *rktp = opaque;
         rd_kafka_topic_partition_list_t *offsets;
-        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_t *rktpar = NULL;
 
         offsets = rd_kafka_topic_partition_list_new(1);
 
@@ -1325,7 +1325,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 					   void *opaque) {
         rd_kafka_toppar_t *rktp = opaque;
         rd_kafka_topic_partition_list_t *offsets;
-        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_t *rktpar = NULL;
         int64_t Offset;
         int actions = 0;
 

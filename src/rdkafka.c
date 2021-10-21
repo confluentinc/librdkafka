@@ -438,7 +438,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
         _ERR_DESC(RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL,
 		  "Local: Unknown protocol"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-		  "Local: Not implemented"),
+		  "Local: Compression Codec not implemented"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__AUTHENTICATION,
 		  "Local: Authentication failure"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__NO_OFFSET,

@@ -262,7 +262,7 @@ enum ErrorCode {
         ERR__STATE = -172,
 	/** Unknown protocol */
         ERR__UNKNOWN_PROTOCOL = -171,
-	/** Not implemented */
+	/** Compression Codec not implemented */
         ERR__NOT_IMPLEMENTED = -170,
 	/** Authentication failure*/
 	ERR__AUTHENTICATION = -169,

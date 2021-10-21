@@ -49,13 +49,13 @@ int main_0031_get_offsets (int argc, char **argv) {
 	rd_kafka_resp_err_t err;
 	test_timing_t t_qry, t_get;
 	uint64_t testid;
+	rd_kafka_topic_partition_list_t *qry_parts;
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, 0, msgcnt);
 
 	/* Get offsets */
-	rk = test_create_consumer(NULL, NULL, NULL, NULL
-);
+	rk = test_create_consumer(NULL, NULL, NULL, NULL);
 
 	TIMING_START(&t_qry, "query_watermark_offsets");
 	err = rd_kafka_query_watermark_offsets(rk, topic, 0,
@@ -66,13 +66,38 @@ int main_0031_get_offsets (int argc, char **argv) {
 		TEST_FAIL("query_watermark_offsets failed: %s\n",
 			  rd_kafka_err2str(err));
 
-	if (qry_low != 0 && qry_high != msgcnt)
+	if (qry_low != 0 || qry_high != msgcnt)
 		TEST_FAIL("Expected low,high %d,%d, but got "
 			  "%"PRId64",%"PRId64,
 			  0, msgcnt, qry_low, qry_high);
 
 	TEST_SAY("query_watermark_offsets: "
 		 "offsets %"PRId64", %"PRId64"\n", qry_low, qry_high);
+
+	qry_parts = rd_kafka_topic_partition_list_new(2);
+	rd_kafka_topic_partition_list_add(qry_parts, topic, 0);
+	rd_kafka_topic_partition_list_add(qry_parts, topic, 1);
+	TIMING_START(&t_qry, "query_watermark_offsets_list");
+	err = rd_kafka_query_watermark_offsets_list(rk, qry_parts,
+						    RD_KAFKA_OFFSET_END,
+						    tmout_multip(10*1000));
+	TIMING_STOP(&t_qry);
+	if (err)
+		TEST_FAIL("query_watermark_offsets_list failed: %s\n",
+			  rd_kafka_err2str(err));
+
+	if (qry_parts->elems[0].offset != msgcnt ||
+	    qry_parts->elems[1].offset != 0)
+		TEST_FAIL("Expected partitions 0,1 %d,%d, but got "
+			  "%"PRId64",%"PRId64,
+			  msgcnt, 0,
+			  qry_parts->elems[0].offset,
+			  qry_parts->elems[1].offset);
+
+	TEST_SAY("query_watermark_offsets_list: "
+		 "offsets[0,1] %"PRId64", %"PRId64"\n",
+		 qry_parts->elems[0].offset,
+		 qry_parts->elems[1].offset);
 
 	/* Now start consuming to update the offset cache, then query it
 	 * with the get_ API. */

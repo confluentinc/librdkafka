@@ -3516,6 +3516,126 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+struct _query_wmark_offsets_list_state {
+        rd_kafka_resp_err_t             err;
+        rd_kafka_topic_partition_list_t *partitions;
+        rd_ts_t                         ts_end;
+        int                             requestidx;
+        int                             state_version;
+};
+
+static void rd_kafka_query_wmark_offsets_list_resp_cb (rd_kafka_t *rk,
+                                                       rd_kafka_broker_t *rkb,
+                                                       rd_kafka_resp_err_t err,
+                                                       rd_kafka_buf_t *rkbuf,
+                                                       rd_kafka_buf_t *request,
+                                                       void *opaque) {
+        struct _query_wmark_offsets_list_state *state;
+        rd_kafka_topic_partition_list_t *offsets;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* 'state' has gone out of scope when query_watermark..()
+                 * timed out and returned to the caller. */
+                return;
+        }
+
+        state = opaque;
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request, offsets);
+        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                rd_kafka_topic_partition_list_destroy(offsets);
+                return; /* Retrying */
+        }
+
+        /* Retry if no broker connection is available yet. */
+        if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+                err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+                rkb &&
+                rd_kafka_brokers_wait_state_change(
+                        rkb->rkb_rk, state->state_version,
+                        rd_timeout_remains(state->ts_end))) {
+                /* Retry */
+                state->state_version = rd_kafka_brokers_get_state_version(rk);
+                request->rkbuf_retries = 0;
+                if (rd_kafka_buf_retry(rkb, request)) {
+                        rd_kafka_topic_partition_list_destroy(offsets);
+                        return; /* Retry in progress */
+                }
+                /* FALLTHRU */
+        }
+
+        rd_kafka_topic_partition_list_update(state->partitions, offsets);
+        rd_kafka_topic_partition_list_destroy(offsets);
+        ++state->requestidx;
+
+        if (err)
+                state->err = err;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_query_watermark_offsets_list(rd_kafka_t *rk,
+                                      rd_kafka_topic_partition_list_t *partitions,
+                                      int logical_offset, int timeout_ms) {
+        rd_kafka_q_t *rkq;
+        struct _query_wmark_offsets_list_state state;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        rd_list_t leaders;
+        rd_kafka_resp_err_t err;
+        int i;
+
+        if (logical_offset != RD_KAFKA_OFFSET_BEGINNING &&
+            logical_offset != RD_KAFKA_OFFSET_BEGINNING)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        rd_list_init(&leaders, partitions->cnt,
+                     (void *)rd_kafka_partition_leader_destroy);
+
+        err = rd_kafka_topic_partition_list_query_leaders(rk, partitions,
+                                                          &leaders,
+                                                          timeout_ms);
+        if (err) {
+                rd_list_destroy(&leaders);
+                return err;
+        }
+
+        state.partitions = partitions;
+        state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+        state.ts_end = ts_end;
+        state.state_version = rd_kafka_brokers_get_state_version(rk);
+        state.requestidx = 0;
+
+        rkq = rd_kafka_q_new(rk);
+
+        for (i = 0; i < rd_list_cnt(&leaders); ++i) {
+                struct rd_kafka_partition_leader *leader;
+
+                leader = rd_list_elem(&leaders, i);
+                rd_kafka_topic_partition_list_reset_offsets(leader->partitions,
+                                                            logical_offset);
+                rd_kafka_OffsetRequest(
+                        leader->rkb, leader->partitions, 0,
+                        RD_KAFKA_REPLYQ(rkq, 0),
+                        rd_kafka_query_wmark_offsets_list_resp_cb,
+                        &state);
+        }
+
+        /* Wait for reply (or timeout) */
+        while (state.requestidx < rd_list_cnt(&leaders) &&
+               state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS &&
+               rd_kafka_q_serve(rkq, 100, 0, RD_KAFKA_Q_CB_CALLBACK,
+                                rd_kafka_poll_cb, NULL) !=
+               RD_KAFKA_OP_RES_YIELD)
+                ;
+
+        rd_list_destroy(&leaders);
+        rd_kafka_q_destroy_owner(rkq);
+
+        if (state.err && state.err != RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                return state.err;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 rd_kafka_resp_err_t
 rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,

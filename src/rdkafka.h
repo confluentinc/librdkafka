@@ -3061,6 +3061,18 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk,
 		      const char *topic, int32_t partition,
 		      int64_t *low, int64_t *high, int timeout_ms);
 
+/**
+ * @brief Query broker for low (oldest/beginning) or high (newest/end) offsets
+ *        for multiple partitions
+ *
+ * \p logical_offset must be RD_KAFKA_OFFSET_BEGINNING or RD_KAFKA_OFFSET_END.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on failure.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_query_watermark_offsets_list (rd_kafka_t *rk,
+				       rd_kafka_topic_partition_list_t *partitions,
+				       int logical_offset, int timeout_ms);
 
 /**
  * @brief Get last known low (oldest/beginning) and high (newest/end) offsets

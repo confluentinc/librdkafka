@@ -2511,7 +2511,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
             RD_KAFKA_CONF_OK)
                 rd_snprintf(builtin_features, sizeof(builtin_features), "?");
         rd_kafka_dbg(rk, ALL, "INIT",
-                     "librdkafka v%s (0x%x) %s initialized "
+                     "librdkafka v%s (0x%x) [CUSTOM BUILD 1] %s initialized "
                      "(builtin.features %s, %s, debug 0x%x)",
                      rd_kafka_version_str(), rd_kafka_version(),
                      rk->rk_name,

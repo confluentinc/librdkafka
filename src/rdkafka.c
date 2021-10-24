@@ -3487,11 +3487,12 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
         rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
-        while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS &&
-               rd_kafka_q_serve(rkq, 100, 0, RD_KAFKA_Q_CB_CALLBACK,
-                                rd_kafka_poll_cb, NULL) !=
-               RD_KAFKA_OP_RES_YIELD)
-                ;
+        while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                if (rd_kafka_q_serve(rkq, 100, 0, RD_KAFKA_Q_CB_CALLBACK,
+                                     rd_kafka_poll_cb, NULL) == 0) {
+                        state.err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                }
+        }
 
         rd_kafka_q_destroy_owner(rkq);
 

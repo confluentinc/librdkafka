@@ -2305,6 +2305,128 @@ static void do_test_unstable_offset_commit (void) {
 }
 
 
+
+/**
+ * @brief #3575: OUT_OF_ORDER_SEQ must raise a fatal txn error.
+ *
+ * This is a special fix for v1.6.x to avoid silent message loss.
+ * v1.8.x and later has a proper fix that transitions the transaction to
+ * the abortable state.
+ */
+static void do_test_out_of_order_seq_is_fatal (void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
+        int32_t txn_coord = 1, leader = 2;
+        const char *txnid = "myTxnId";
+        test_timing_t timing;
+        rd_kafka_resp_err_t err;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 "batch.num.messages", "1",
+                                 NULL);
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
+                                      txn_coord);
+
+        rd_kafka_mock_partition_set_leader(mcluster, "mytopic", 0, leader);
+
+        test_curr->ignore_dr_err = rd_true;
+        test_curr->is_fatal_cb = NULL;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        /*
+         * Start a transaction
+         */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+
+
+        /* Produce one seeding message first to get the leader up and running */
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+        test_flush(rk, -1);
+
+        /* Let partition leader have a latency of 2 seconds
+         * so that we can have multiple messages in-flight. */
+        rd_kafka_mock_broker_set_rtt(mcluster, leader, 2*1000);
+
+        /* Produce a message, let it fail with with different errors,
+         * ending with OUT_OF_ORDER which previously triggered an
+         * Epoch bump. */
+        rd_kafka_mock_push_request_errors(
+                mcluster,
+                RD_KAFKAP_Produce,
+                3,
+                RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+                RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+                RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER);
+
+        /* Produce three messages that will be delayed
+         * and have errors injected.*/
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+        TEST_CALL_ERR__(rd_kafka_producev(rk,
+                                          RD_KAFKA_V_TOPIC("mytopic"),
+                                          RD_KAFKA_V_PARTITION(0),
+                                          RD_KAFKA_V_VALUE("hi", 2),
+                                          RD_KAFKA_V_END));
+
+        /* Now sleep a short while so that the messages are processed
+         * by the broker and errors are returned. */
+        TEST_SAY("Sleeping..\n");
+        rd_sleep(5);
+
+        rd_kafka_mock_broker_set_rtt(mcluster, leader, 0);
+
+        /* Produce a fifth message, should fail with ERR__FATAL since
+         * a fatal error should have been raised. */
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_PARTITION(0),
+                                RD_KAFKA_V_VALUE("hi", 2),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__FATAL,
+                    "Expected produce() to fail with ERR__FATAL, not %s",
+                    rd_kafka_err2name(err));
+        TEST_SAY("produce() failed as expected: %s\n",
+                 rd_kafka_err2str(err));
+
+        /* Commit the transaction, should fail with a fatal error. */
+        TIMING_START(&timing, "commit_transaction(-1)");
+        error = rd_kafka_commit_transaction(rk, -1);
+        TIMING_STOP(&timing);
+        TEST_ASSERT(error != NULL, "Expected commit_transaction() to fail");
+
+        TEST_SAY("commit_transaction() failed (expectedly): %s\n",
+                 rd_kafka_error_string(error));
+
+        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                    "Expected fatal error");
+        TEST_ASSERT(!rd_kafka_error_txn_requires_abort(error),
+                    "Did not expect abortable error");
+        rd_kafka_error_destroy(error);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock (int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -2362,6 +2484,8 @@ int main_0105_transactions_mock (int argc, char **argv) {
                 do_test_txn_switch_coordinator();
 
         do_test_txn_switch_coordinator_refresh();
+
+        do_test_out_of_order_seq_is_fatal();
 
         return 0;
 }

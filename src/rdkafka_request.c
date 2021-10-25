@@ -2654,6 +2654,34 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                         perr->update_next_ack = rd_false;
                         perr->update_next_err = rd_true;
 
+                        if (rd_kafka_is_transactional(rk))
+                                rd_kafka_txn_set_fatal_error(
+                                        rk, RD_DO_LOCK,
+                                        perr->err,
+                                        "ProduceRequest for %.*s [%"PRId32"] "
+                                        "with %d message(s) failed "
+                                        "due to skipped sequence numbers "
+                                        "(%s, base seq %"PRId32" > "
+                                        "next seq %"PRId32") "
+                                        "caused by previous failed request "
+                                        "(%s, actions %s, "
+                                        "base seq %"PRId32"..%"PRId32
+                                        ", base msgid %"PRIu64", %"PRId64"ms "
+                                        "ago)",
+                                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                         rkt_topic),
+                                        rktp->rktp_partition,
+                                        rd_kafka_msgq_len(&batch->msgq),
+                                        rd_kafka_pid2str(batch->pid),
+                                        batch->first_seq,
+                                        perr->next_ack_seq,
+                                        rd_kafka_err2name(last_err.err),
+                                        rd_kafka_actions2str(last_err.actions),
+                                        last_err.base_seq, last_err.last_seq,
+                                        last_err.base_msgid,
+                                        last_err.ts ?
+                                        (now - last_err.ts)/1000 : -1);
+
                         rd_kafka_idemp_drain_epoch_bump(
                                 rk, "skipped sequence numbers");
 

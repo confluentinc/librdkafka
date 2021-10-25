@@ -2,6 +2,18 @@
 
 librdkafka v1.6.2 is a maintenance release with the following backported fixes:
 
+ * Upon quick repeated leader changes the transactional producer could receive
+   an `OUT_OF_ORDER_SEQUENCE` error from the broker, which triggered an
+   Epoch bump on the producer resulting in an InitProducerIdRequest being sent
+   to the transaction coordinator in the middle of a transaction.
+   This request would start a new transaction on the coordinator, but the
+   producer would still think (erroneously) it was in the current transaction.
+   Any messages produced in the current transaction prior to this event would
+   be silently lost when the application committed the transaction, leading
+   to message loss.
+   To avoid message loss a fatal error is now raised.
+   This fix is specific to v1.6.x. librdkafka v1.8.x implements a recoverable
+   error state instead. #3575.
  * The transactional producer could stall during a transaction if the transaction
    coordinator changed while adding offsets to the transaction (send_offsets_to_transaction()).
    This stall lasted until the coordinator connection went down, the
@@ -11,7 +23,7 @@ librdkafka v1.6.2 is a maintenance release with the following backported fixes:
    which would result in some timeout operations not being enforced correctly,
    e.g., the transactional producer API timeouts.
    These timers are now started with a timeout of 1 microsecond.
- * Force address resolution if the broker epoch changes (#3238)
+ * Force address resolution if the broker epoch changes (#3238).
 
 
 # librdkafka v1.6.1

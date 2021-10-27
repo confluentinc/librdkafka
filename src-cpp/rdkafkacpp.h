@@ -2790,6 +2790,12 @@ public:
    */
   virtual bool assignment_lost () = 0;
 
+  /** @brief Check whether the consumer is currently rebalancing
+   *
+   * @returns Returns true if currently consumer is rebalancing, false otherwise.
+   */
+  virtual bool is_rebalancing () = 0;
+
   /**
    * @brief The rebalance protocol currently in use. This will be
    *        "NONE" if the consumer has not (yet) joined a group, else it will

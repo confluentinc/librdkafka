@@ -181,6 +181,15 @@ rd_kafka_assignment_lost (rd_kafka_t *rk) {
         return rd_kafka_cgrp_assignment_is_lost(rkcg) == rd_true;
 }
 
+int
+rd_kafka_consumer_is_rebalancing (rd_kafka_t *rk) {
+    rd_kafka_cgrp_t *rkcg;
+
+    if (!(rkcg = rd_kafka_cgrp_get(rk)))
+        return 0;
+
+    return rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY;
+}
 
 const char *
 rd_kafka_rebalance_protocol (rd_kafka_t *rk) {

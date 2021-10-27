@@ -3871,6 +3871,15 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
+/**
+ * @brief Check whether consumer is rebalancing
+ *
+ * @returns Returns 1 if the consumer is rebalancing, 0 otherwise.
+ *
+ */
+RD_EXPORT
+int rd_kafka_consumer_is_rebalancing (rd_kafka_t *rk);
+
 
 /**
  * @brief Incrementally add \p partitions to the current assignment.

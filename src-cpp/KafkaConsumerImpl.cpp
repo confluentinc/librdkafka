@@ -148,7 +148,10 @@ RdKafka::KafkaConsumerImpl::assignment_lost () {
   return rd_kafka_assignment_lost(rk_) ? true : false;
 }
 
-
+bool
+RdKafka::KafkaConsumerImpl::is_rebalancing () {
+  return rd_kafka_consumer_is_rebalancing(rk_) ? true : false;
+}
 
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::subscription (std::vector<std::string> &topics) {

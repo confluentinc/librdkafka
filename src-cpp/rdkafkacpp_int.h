@@ -1138,6 +1138,7 @@ public:
 
   ErrorCode assignment (std::vector<TopicPartition*> &partitions);
   bool assignment_lost ();
+  bool is_rebalancing ();
   std::string rebalance_protocol () {
     const char *str = rd_kafka_rebalance_protocol(rk_);
     return std::string(str ? str : "");

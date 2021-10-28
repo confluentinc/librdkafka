@@ -158,10 +158,9 @@ Commercial support is available from [Confluent Inc](https://www.confluent.io/)
 
 **Only the [last official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
 
-File bug reports, feature requests and questions using
-[GitHub Issues](https://github.com/edenhill/librdkafka/issues)
+File bug reports and feature requests using [GitHub Issues](https://github.com/edenhill/librdkafka/issues).
 
-Questions and discussions are also welcome on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel.
+Questions and discussions are welcome on the [Discussions](https://github.com/edenhill/librdkafka/discussions) forum, and on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel.
 
 
 # Language bindings #

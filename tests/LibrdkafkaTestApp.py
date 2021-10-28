@@ -6,13 +6,12 @@
 #  trivup python module
 #  gradle in your PATH
 
-from trivup.trivup import Cluster, App, UuidAllocator
+from trivup.trivup import App, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 
 import json
-import subprocess
 
 
 class LibrdkafkaTestApp(App):
@@ -77,14 +76,18 @@ class LibrdkafkaTestApp(App):
                 kdc = cluster.find_app(KerberosKdcApp)
                 if kdc is None:
                     self.log(
-                        'WARNING: sasl_mechanisms is GSSAPI set but no KerberosKdcApp available: client SASL config will be invalid (which might be intentional)')
+                        'WARNING: sasl_mechanisms is GSSAPI set but no '
+                        'KerberosKdcApp available: client SASL config will '
+                        'be invalid (which might be intentional)')
                 else:
                     self.env_add('KRB5_CONFIG', kdc.conf['krb5_conf'])
                     self.env_add('KRB5_KDC_PROFILE', kdc.conf['kdc_conf'])
-                    principal, keytab = kdc.add_principal(self.name,
-                                                          conf.get('advertised_hostname', self.node.name))
+                    principal, keytab = kdc.add_principal(
+                        self.name,
+                        conf.get('advertised_hostname', self.node.name))
                     conf_blob.append('sasl.kerberos.service.name=%s' %
-                                     self.conf.get('sasl_servicename', 'kafka'))
+                                     self.conf.get('sasl_servicename',
+                                                   'kafka'))
                     conf_blob.append('sasl.kerberos.keytab=%s' % keytab)
                     conf_blob.append(
                         'sasl.kerberos.principal=%s' %
@@ -92,7 +95,7 @@ class LibrdkafkaTestApp(App):
 
             else:
                 self.log(
-                    'WARNING: FIXME: SASL %s client config not written to %s: unhandled mechanism' %
+                    'WARNING: FIXME: SASL %s client config not written to %s: unhandled mechanism' %  # noqa: E501
                     (mech, self.test_conf_file))
 
         # SSL config
@@ -138,7 +141,7 @@ class LibrdkafkaTestApp(App):
         if len(bootstrap_servers) == 0:
             bootstrap_servers = all_listeners[0]
             self.log(
-                'WARNING: No eligible listeners for security.protocol=%s in %s: falling back to first listener: %s: tests will fail (which might be the intention)' %
+                'WARNING: No eligible listeners for security.protocol=%s in %s: falling back to first listener: %s: tests will fail (which might be the intention)' %  # noqa: E501
                 (self.security_protocol, all_listeners, bootstrap_servers))
 
         self.bootstrap_servers = bootstrap_servers
@@ -187,7 +190,9 @@ class LibrdkafkaTestApp(App):
         for b in [x for x in self.cluster.apps if isinstance(
                 x, KafkaBrokerApp)]:
             self.env_add('BROKER_ADDRESS_%d' % b.appid,
-                         ','.join([x for x in b.conf['listeners'].split(',') if x.startswith(self.security_protocol)]))
+                         ','.join([x for x in
+                                   b.conf['listeners'].split(',')
+                                   if x.startswith(self.security_protocol)]))
             # Add each broker pid as an env so they can be killed
             # indivdidually.
             self.env_add('BROKER_PID_%d' % b.appid, str(b.proc.pid))
@@ -203,7 +208,8 @@ class LibrdkafkaTestApp(App):
             extra_args.append(self.conf.get('args'))
         extra_args.append('-E')
         return './run-test.sh -p%d -K %s %s' % (
-            int(self.conf.get('parallel', 5)), ' '.join(extra_args), self.test_mode)
+            int(self.conf.get('parallel', 5)), ' '.join(extra_args),
+            self.test_mode)
 
     def report(self):
         if self.test_mode == 'bash':

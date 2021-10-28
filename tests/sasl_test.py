@@ -8,7 +8,11 @@
 #  trivup python module
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary, read_scenario_conf
+from cluster_testing import (
+    LibrdkafkaTestCluster,
+    print_report_summary,
+    print_test_report_summary,
+    read_scenario_conf)
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
 import os
@@ -98,27 +102,33 @@ def handle_report(report, version, suite):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
-        description='Run librdkafka test suit using SASL on a trivupped cluster')
+        description='Run librdkafka test suit using SASL on a '
+        'trivupped cluster')
 
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='trivup JSON config object (not file)')
     parser.add_argument('--rdkconf', type=str, dest='rdkconf', default=None,
-                        help='trivup JSON config object (not file) for LibrdkafkaTestApp')
+                        help='trivup JSON config object (not file) '
+                        'for LibrdkafkaTestApp')
     parser.add_argument('--scenario', type=str, dest='scenario',
                         default='default',
                         help='Test scenario (see scenarios/ directory)')
     parser.add_argument('--tests', type=str, dest='tests', default=None,
                         help='Test to run (e.g., "0002")')
-    parser.add_argument('--no-ssl', action='store_false', dest='ssl', default=True,
+    parser.add_argument('--no-ssl', action='store_false', dest='ssl',
+                        default=True,
                         help='Don\'t run SSL tests')
-    parser.add_argument('--no-sasl', action='store_false', dest='sasl', default=True,
+    parser.add_argument('--no-sasl', action='store_false', dest='sasl',
+                        default=True,
                         help='Don\'t run SASL tests')
-    parser.add_argument('--no-plaintext', action='store_false', dest='plaintext', default=True,
+    parser.add_argument('--no-plaintext', action='store_false',
+                        dest='plaintext', default=True,
                         help='Don\'t run PLAINTEXT tests')
 
     parser.add_argument('--report', type=str, dest='report', default=None,
                         help='Write test suites report to this filename')
-    parser.add_argument('--debug', action='store_true', dest='debug', default=False,
+    parser.add_argument('--debug', action='store_true', dest='debug',
+                        default=False,
                         help='Enable trivup debugging')
     parser.add_argument('versions', type=str, default=None,
                         nargs='*', help='Limit broker versions to these')
@@ -157,7 +167,8 @@ if __name__ == '__main__':
                            'sasl_users': 'myuser=mypassword',
                            'security.protocol': 'SSL'}
     sasl_oauthbearer_conf = {'sasl_mechanisms': 'OAUTHBEARER',
-                             'sasl_oauthbearer_config': 'scope=requiredScope principal=admin'}
+                             'sasl_oauthbearer_config':
+                             'scope=requiredScope principal=admin'}
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
@@ -237,7 +248,8 @@ if __name__ == '__main__':
                 tests_to_run = suite.get('tests', None)
             else:
                 tests_to_run = tests
-            report = test_it(version, tests=tests_to_run, conf=_conf, rdkconf=_rdkconf,
+            report = test_it(version, tests=tests_to_run, conf=_conf,
+                             rdkconf=_rdkconf,
                              debug=args.debug, scenario=args.scenario)
 
             # Handle test report

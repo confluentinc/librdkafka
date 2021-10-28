@@ -8,19 +8,18 @@
 #  trivup python module
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster, print_report_summary, read_scenario_conf
+from cluster_testing import (
+    LibrdkafkaTestCluster,
+    print_report_summary,
+    read_scenario_conf)
 from LibrdkafkaTestApp import LibrdkafkaTestApp
-from trivup.apps.ZookeeperApp import ZookeeperApp
-from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 
 import subprocess
-import time
 import tempfile
 import os
 import sys
 import argparse
 import json
-import tempfile
 
 
 def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
@@ -47,7 +46,7 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     cluster.start(timeout=30)
 
     if conf.get('test_mode', '') == 'bash':
-        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\\w$ "\')' % (
+        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\\w$ "\')' % (  # noqa: E501
             cluster.name, version)
         subprocess.call(
             cmd,
@@ -70,10 +69,12 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
             print(
                 '# Connect to cluster with bootstrap.servers %s' %
                 cluster.bootstrap_servers())
-            print('# Exiting the shell will bring down the cluster. Good luck.')
+            print('# Exiting the shell will bring down the cluster. '
+                  'Good luck.')
             subprocess.call(
-                'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\\w$ "\')' %
-                (cluster.name, version), env=rdkafka.env, shell=True, executable='/bin/bash')
+                'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\\w$ "\')' %  # noqa: E501
+                (cluster.name, version), env=rdkafka.env, shell=True,
+                executable='/bin/bash')
 
     cluster.stop(force=True)
 
@@ -122,8 +123,10 @@ if __name__ == '__main__':
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='trivup JSON config object (not file)')
     parser.add_argument('--rdkconf', type=str, dest='rdkconf', default=None,
-                        help='trivup JSON config object (not file) for LibrdkafkaTestApp')
-    parser.add_argument('--scenario', type=str, dest='scenario', default='default',
+                        help='trivup JSON config object (not file) '
+                        'for LibrdkafkaTestApp')
+    parser.add_argument('--scenario', type=str, dest='scenario',
+                        default='default',
                         help='Test scenario (see scenarios/ directory)')
     parser.add_argument('--tests', type=str, dest='tests', default=None,
                         help='Test to run (e.g., "0002")')
@@ -131,11 +134,13 @@ if __name__ == '__main__':
                         help='Write test suites report to this filename')
     parser.add_argument('--interact', action='store_true', dest='interact',
                         default=False,
-                        help='On test failure start a shell before bringing the cluster down.')
+                        help='On test failure start a shell before bringing '
+                        'the cluster down.')
     parser.add_argument('versions', type=str, nargs='*',
                         default=['0.8.1.1', '0.8.2.2', '0.9.0.1', '2.3.0'],
                         help='Broker versions to test')
-    parser.add_argument('--interactive', action='store_true', dest='interactive',
+    parser.add_argument('--interactive', action='store_true',
+                        dest='interactive',
                         default=False,
                         help='Start a shell instead of running tests')
     parser.add_argument(
@@ -161,7 +166,8 @@ if __name__ == '__main__':
         type=int,
         default=3,
         help='Number of Kafka brokers')
-    parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
+    parser.add_argument('--ssl', dest='ssl', action='store_true',
+                        default=False,
                         help='Enable SSL endpoints')
     parser.add_argument(
         '--sasl',
@@ -230,7 +236,8 @@ if __name__ == '__main__':
             # Run tests
             print('#### Version %s, suite %s, scenario %s: STARTING' %
                   (version, suite['name'], args.scenario))
-            report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
+            report = test_it(version, tests=tests, conf=_conf,
+                             rdkconf=_rdkconf,
                              interact=args.interact, debug=args.debug,
                              scenario=args.scenario)
 

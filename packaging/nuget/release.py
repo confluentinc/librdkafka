@@ -24,7 +24,8 @@ if __name__ == '__main__':
         help="Don't collect from S3",
         action="store_true")
     parser.add_argument("--dry-run",
-                        help="Locate artifacts but don't actually download or do anything",
+                        help="Locate artifacts but don't actually "
+                        "download or do anything",
                         action="store_true")
     parser.add_argument(
         "--directory",
@@ -42,7 +43,10 @@ if __name__ == '__main__':
         "--nuget-version",
         help="The nuget package version (defaults to same as tag)",
         default=None)
-    parser.add_argument("--upload", help="Upload package to after building, using provided NuGet API key (either file or the key itself)", default=None,
+    parser.add_argument("--upload", help="Upload package to after building, "
+                        "using provided NuGet API key "
+                        "(either file or the key itself)",
+                        default=None,
                         type=str)
     parser.add_argument(
         "--class",
@@ -141,6 +145,6 @@ if __name__ == '__main__':
 
         print('Uploading %s to NuGet' % pkgfile)
         r = os.system("./push-to-nuget.sh '%s' %s" % (nuget_key, pkgfile))
-        assert int(
-            r) == 0, "NuGet upload failed with exit code {}, see previous errors".format(r)
+        assert int(r) == 0, \
+            f"NuGet upload failed with exit code {r}, see previous errors"
         print('%s successfully uploaded to NuGet' % pkgfile)

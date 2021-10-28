@@ -59,7 +59,8 @@ def may_delete(path):
     if tag is None:
         return True
 
-    if re.match(r'^v?\d+\.\d+\.\d+(-?RC\d+)?$', tag, flags=re.IGNORECASE) is None:
+    if re.match(r'^v?\d+\.\d+\.\d+(-?RC\d+)?$', tag,
+                flags=re.IGNORECASE) is None:
         return True
 
     return False
@@ -100,6 +101,7 @@ def chunk_list(lst, cnt):
     """ Split list into lists of cnt """
     for i in range(0, len(lst), cnt):
         yield lst[i:i + cnt]
+
 
 if __name__ == '__main__':
 

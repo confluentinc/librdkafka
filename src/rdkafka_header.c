@@ -31,14 +31,14 @@
 
 
 
-#define rd_kafka_header_destroy        rd_free
+#define rd_kafka_header_destroy rd_free
 
-void rd_kafka_headers_destroy (rd_kafka_headers_t *hdrs) {
+void rd_kafka_headers_destroy(rd_kafka_headers_t *hdrs) {
         rd_list_destroy(&hdrs->rkhdrs_list);
         rd_free(hdrs);
 }
 
-rd_kafka_headers_t *rd_kafka_headers_new (size_t initial_count) {
+rd_kafka_headers_t *rd_kafka_headers_new(size_t initial_count) {
         rd_kafka_headers_t *hdrs;
 
         hdrs = rd_malloc(sizeof(*hdrs));
@@ -49,18 +49,16 @@ rd_kafka_headers_t *rd_kafka_headers_new (size_t initial_count) {
         return hdrs;
 }
 
-static void *rd_kafka_header_copy (const void *_src, void *opaque) {
-        rd_kafka_headers_t *hdrs = opaque;
+static void *rd_kafka_header_copy(const void *_src, void *opaque) {
+        rd_kafka_headers_t *hdrs     = opaque;
         const rd_kafka_header_t *src = (const rd_kafka_header_t *)_src;
 
         return (void *)rd_kafka_header_add(
-                hdrs,
-                src->rkhdr_name, src->rkhdr_name_size,
-                src->rkhdr_value, src->rkhdr_value_size);
+            hdrs, src->rkhdr_name, src->rkhdr_name_size, src->rkhdr_value,
+            src->rkhdr_value_size);
 }
 
-rd_kafka_headers_t *
-rd_kafka_headers_copy (const rd_kafka_headers_t *src) {
+rd_kafka_headers_t *rd_kafka_headers_copy(const rd_kafka_headers_t *src) {
         rd_kafka_headers_t *dst;
 
         dst = rd_malloc(sizeof(*dst));
@@ -75,10 +73,11 @@ rd_kafka_headers_copy (const rd_kafka_headers_t *src) {
 
 
 
-rd_kafka_resp_err_t
-rd_kafka_header_add (rd_kafka_headers_t *hdrs,
-                     const char *name, ssize_t name_size,
-                     const void *value, ssize_t value_size) {
+rd_kafka_resp_err_t rd_kafka_header_add(rd_kafka_headers_t *hdrs,
+                                        const char *name,
+                                        ssize_t name_size,
+                                        const void *value,
+                                        ssize_t value_size) {
         rd_kafka_header_t *hdr;
         char varint_NameLen[RD_UVARINT_ENC_SIZEOF(int32_t)];
         char varint_ValueLen[RD_UVARINT_ENC_SIZEOF(int32_t)];
@@ -97,7 +96,7 @@ rd_kafka_header_add (rd_kafka_headers_t *hdrs,
         hdr->rkhdr_name[name_size] = '\0';
 
         if (likely(value != NULL)) {
-                hdr->rkhdr_value = hdr->rkhdr_name+name_size+1;
+                hdr->rkhdr_value = hdr->rkhdr_name + name_size + 1;
                 memcpy((void *)hdr->rkhdr_value, value, value_size);
                 hdr->rkhdr_value[value_size] = '\0';
                 hdr->rkhdr_value_size        = value_size;
@@ -110,12 +109,10 @@ rd_kafka_header_add (rd_kafka_headers_t *hdrs,
 
         /* Calculate serialized size of header */
         hdr->rkhdr_ser_size = name_size + value_size;
-        hdr->rkhdr_ser_size += rd_uvarint_enc_i64(varint_NameLen,
-                                                  sizeof(varint_NameLen),
-                                                  name_size);
-        hdr->rkhdr_ser_size += rd_uvarint_enc_i64(varint_ValueLen,
-                                                  sizeof(varint_ValueLen),
-                                                  value_size);
+        hdr->rkhdr_ser_size += rd_uvarint_enc_i64(
+            varint_NameLen, sizeof(varint_NameLen), name_size);
+        hdr->rkhdr_ser_size += rd_uvarint_enc_i64(
+            varint_ValueLen, sizeof(varint_ValueLen), value_size);
         hdrs->rkhdrs_ser_size += hdr->rkhdr_ser_size;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -125,15 +122,15 @@ rd_kafka_header_add (rd_kafka_headers_t *hdrs,
 /**
  * @brief header_t(name) to char * comparator
  */
-static int rd_kafka_header_cmp_str (void *_a, void *_b) {
+static int rd_kafka_header_cmp_str(void *_a, void *_b) {
         const rd_kafka_header_t *a = _a;
-        const char *b = _b;
+        const char *b              = _b;
 
         return strcmp(a->rkhdr_name, b);
 }
 
-rd_kafka_resp_err_t rd_kafka_header_remove (rd_kafka_headers_t *hdrs,
-                                            const char *name) {
+rd_kafka_resp_err_t rd_kafka_header_remove(rd_kafka_headers_t *hdrs,
+                                           const char *name) {
         size_t ser_size = 0;
         rd_kafka_header_t *hdr;
         int i;
@@ -156,10 +153,10 @@ rd_kafka_resp_err_t rd_kafka_header_remove (rd_kafka_headers_t *hdrs,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-rd_kafka_resp_err_t
-rd_kafka_header_get_last (const rd_kafka_headers_t *hdrs,
-                          const char *name,
-                          const void **valuep, size_t *sizep) {
+rd_kafka_resp_err_t rd_kafka_header_get_last(const rd_kafka_headers_t *hdrs,
+                                             const char *name,
+                                             const void **valuep,
+                                             size_t *sizep) {
         const rd_kafka_header_t *hdr;
         int i;
         size_t name_size = strlen(name);
@@ -168,7 +165,7 @@ rd_kafka_header_get_last (const rd_kafka_headers_t *hdrs,
                 if (hdr->rkhdr_name_size == name_size &&
                     !strcmp(hdr->rkhdr_name, name)) {
                         *valuep = hdr->rkhdr_value;
-                        *sizep = hdr->rkhdr_value_size;
+                        *sizep  = hdr->rkhdr_value_size;
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
         }
@@ -177,21 +174,21 @@ rd_kafka_header_get_last (const rd_kafka_headers_t *hdrs,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_header_get (const rd_kafka_headers_t *hdrs, size_t idx,
-                     const char *name,
-                     const void **valuep, size_t *sizep) {
+rd_kafka_resp_err_t rd_kafka_header_get(const rd_kafka_headers_t *hdrs,
+                                        size_t idx,
+                                        const char *name,
+                                        const void **valuep,
+                                        size_t *sizep) {
         const rd_kafka_header_t *hdr;
         int i;
-        size_t mi = 0; /* index for matching names */
+        size_t mi        = 0; /* index for matching names */
         size_t name_size = strlen(name);
 
         RD_LIST_FOREACH(hdr, &hdrs->rkhdrs_list, i) {
                 if (hdr->rkhdr_name_size == name_size &&
-                    !strcmp(hdr->rkhdr_name, name) &&
-                    mi++ == idx) {
+                    !strcmp(hdr->rkhdr_name, name) && mi++ == idx) {
                         *valuep = hdr->rkhdr_value;
-                        *sizep = hdr->rkhdr_value_size;
+                        *sizep  = hdr->rkhdr_value_size;
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
         }
@@ -200,10 +197,11 @@ rd_kafka_header_get (const rd_kafka_headers_t *hdrs, size_t idx,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_header_get_all (const rd_kafka_headers_t *hdrs, size_t idx,
-                         const char **namep,
-                         const void **valuep, size_t *sizep) {
+rd_kafka_resp_err_t rd_kafka_header_get_all(const rd_kafka_headers_t *hdrs,
+                                            size_t idx,
+                                            const char **namep,
+                                            const void **valuep,
+                                            size_t *sizep) {
         const rd_kafka_header_t *hdr;
 
         hdr = rd_list_elem(&hdrs->rkhdrs_list, (int)idx);

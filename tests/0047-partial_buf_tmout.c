@@ -51,48 +51,47 @@
 
 static int got_timeout_err = 0;
 
-static void my_error_cb (rd_kafka_t *rk, int err,
-			 const char *reason, void *opaque) {
-	got_timeout_err += (err == RD_KAFKA_RESP_ERR__TIMED_OUT);
+static void
+my_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
+        got_timeout_err += (err == RD_KAFKA_RESP_ERR__TIMED_OUT);
 
-	if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
-	    err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
-		TEST_SAY("Expected error: %s: %s\n",
-			 rd_kafka_err2str(err), reason);
-	else
-		TEST_FAIL("Unexpected error: %s: %s",
-			  rd_kafka_err2str(err), reason);
+        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
+                TEST_SAY("Expected error: %s: %s\n", rd_kafka_err2str(err),
+                         reason);
+        else
+                TEST_FAIL("Unexpected error: %s: %s", rd_kafka_err2str(err),
+                          reason);
 }
 
-int main_0047_partial_buf_tmout (int argc, char **argv) {
-	rd_kafka_t *rk;
-	rd_kafka_topic_t *rkt;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-	rd_kafka_conf_t *conf;
-	const size_t msg_size = 10000;
-	int msgcounter = 0;
+int main_0047_partial_buf_tmout(int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        rd_kafka_conf_t *conf;
+        const size_t msg_size = 10000;
+        int msgcounter        = 0;
 
-	test_conf_init(&conf, NULL, 30);
-	test_conf_set(conf, "socket.send.buffer.bytes", "1000");
-	test_conf_set(conf, "batch.num.messages", "100");
-	test_conf_set(conf, "queue.buffering.max.messages", "10000000");
-	rd_kafka_conf_set_error_cb(conf, my_error_cb);
-	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "socket.send.buffer.bytes", "1000");
+        test_conf_set(conf, "batch.num.messages", "100");
+        test_conf_set(conf, "queue.buffering.max.messages", "10000000");
+        rd_kafka_conf_set_error_cb(conf, my_error_cb);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-	rkt = test_create_producer_topic(rk, topic,
-					 "message.timeout.ms", "300", NULL);
+        rkt = test_create_producer_topic(rk, topic, "message.timeout.ms", "300",
+                                         NULL);
 
-	while (got_timeout_err == 0) {
-		test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
-					 10000, NULL, msg_size, 0,
-                                         &msgcounter);
-		rd_kafka_flush(rk, 100);
-	}
+        while (got_timeout_err == 0) {
+                test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
+                                         10000, NULL, msg_size, 0, &msgcounter);
+                rd_kafka_flush(rk, 100);
+        }
 
-	TEST_ASSERT(got_timeout_err > 0);
+        TEST_ASSERT(got_timeout_err > 0);
 
-	rd_kafka_topic_destroy(rkt);
-	rd_kafka_destroy(rk);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
 
         return 0;
 }

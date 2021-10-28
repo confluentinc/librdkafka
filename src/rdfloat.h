@@ -37,9 +37,8 @@
  * More info:
  *  http://docs.sun.com/source/806-3568/ncg_goldberg.html
  */
-static RD_INLINE RD_UNUSED
-int rd_dbl_eq0 (double a, double b, double prec) {
-  return fabs(a - b) < prec;
+static RD_INLINE RD_UNUSED int rd_dbl_eq0(double a, double b, double prec) {
+        return fabs(a - b) < prec;
 }
 
 /* A default 'good' double-equality precision value.
@@ -53,16 +52,16 @@ int rd_dbl_eq0 (double a, double b, double prec) {
  * rd_dbl_eq(a,b)
  * Same as rd_dbl_eq0() above but with a predefined 'good' precision.
  */
-#define rd_dbl_eq(a,b) rd_dbl_eq0(a,b,RD_DBL_EPSILON)
+#define rd_dbl_eq(a, b) rd_dbl_eq0(a, b, RD_DBL_EPSILON)
 
 /**
  * rd_dbl_ne(a,b)
  * Same as rd_dbl_eq() above but with reversed logic: not-equal.
  */
-#define rd_dbl_ne(a,b) (!rd_dbl_eq0(a,b,RD_DBL_EPSILON))
+#define rd_dbl_ne(a, b) (!rd_dbl_eq0(a, b, RD_DBL_EPSILON))
 
 /**
  * rd_dbl_zero(a)
  * Checks if the double `a' is zero (or close enough).
  */
-#define rd_dbl_zero(a)  rd_dbl_eq0(a,0.0,RD_DBL_EPSILON)
+#define rd_dbl_zero(a) rd_dbl_eq0(a, 0.0, RD_DBL_EPSILON)

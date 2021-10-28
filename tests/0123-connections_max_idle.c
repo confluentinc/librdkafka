@@ -41,20 +41,20 @@
  *
  */
 
-static void log_cb (const rd_kafka_t *rk, int level,
-                    const char *fac, const char *buf) {
+static void
+log_cb(const rd_kafka_t *rk, int level, const char *fac, const char *buf) {
         rd_atomic32_t *log_cntp = rd_kafka_opaque(rk);
 
         if (!strstr(buf, "Connection max idle time exceeded"))
                 return;
 
-        TEST_SAY("Log: %s level %d fac %s: %s\n",
-                 rd_kafka_name(rk), level, fac, buf);
+        TEST_SAY("Log: %s level %d fac %s: %s\n", rd_kafka_name(rk), level, fac,
+                 buf);
 
         rd_atomic32_add(log_cntp, 1);
 }
 
-static void do_test_idle (rd_bool_t set_idle) {
+static void do_test_idle(rd_bool_t set_idle) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_atomic32_t log_cnt;
@@ -89,7 +89,7 @@ static void do_test_idle (rd_bool_t set_idle) {
 }
 
 
-int main_0123_connections_max_idle (int argc, char **argv) {
+int main_0123_connections_max_idle(int argc, char **argv) {
 
         do_test_idle(rd_true);
         do_test_idle(rd_false);

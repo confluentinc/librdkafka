@@ -32,10 +32,10 @@
 
 
 typedef struct rd_kafka_plugin_s {
-        char *rkplug_path;         /* Library path */
-        rd_kafka_t *rkplug_rk;     /* Backpointer to the rk handle */
-        void *rkplug_handle;       /* dlopen (or similar) handle */
-        void *rkplug_opaque;       /* Plugin's opaque */
+        char *rkplug_path;     /* Library path */
+        rd_kafka_t *rkplug_rk; /* Backpointer to the rk handle */
+        void *rkplug_handle;   /* dlopen (or similar) handle */
+        void *rkplug_opaque;   /* Plugin's opaque */
 
 } rd_kafka_plugin_t;
 
@@ -43,7 +43,7 @@ typedef struct rd_kafka_plugin_s {
 /**
  * @brief Plugin path comparator
  */
-static int rd_kafka_plugin_cmp (const void *_a, const void *_b) {
+static int rd_kafka_plugin_cmp(const void *_a, const void *_b) {
         const rd_kafka_plugin_t *a = _a, *b = _b;
 
         return strcmp(a->rkplug_path, b->rkplug_path);
@@ -60,11 +60,12 @@ static int rd_kafka_plugin_cmp (const void *_a, const void *_b) {
  *         plugins referencing the library have been destroyed.
  *         (dlopen() and LoadLibrary() does this for us)
  */
-static rd_kafka_resp_err_t
-rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
-                     char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t rd_kafka_plugin_new(rd_kafka_conf_t *conf,
+                                               const char *path,
+                                               char *errstr,
+                                               size_t errstr_size) {
         rd_kafka_plugin_t *rkplug;
-        const rd_kafka_plugin_t skel = { .rkplug_path = (char *)path };
+        const rd_kafka_plugin_t skel = {.rkplug_path = (char *)path};
         rd_kafka_plugin_f_conf_init_t *conf_init;
         rd_kafka_resp_err_t err;
         void *handle;
@@ -72,25 +73,23 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
 
         /* Avoid duplicates */
         if (rd_list_find(&conf->plugins, &skel, rd_kafka_plugin_cmp)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Ignoring duplicate plugin %s", path);
+                rd_snprintf(errstr, errstr_size, "Ignoring duplicate plugin %s",
+                            path);
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
-        rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
-                      "Loading plugin \"%s\"", path);
+        rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD", "Loading plugin \"%s\"", path);
 
         /* Attempt to load library */
         if (!(handle = rd_dl_open(path, errstr, errstr_size))) {
                 rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
-                              "Failed to load plugin \"%s\": %s",
-                              path, errstr);
+                              "Failed to load plugin \"%s\": %s", path, errstr);
                 return RD_KAFKA_RESP_ERR__FS;
         }
 
         /* Find conf_init() function */
-        if (!(conf_init = rd_dl_sym(handle, "conf_init",
-                                    errstr, errstr_size))) {
+        if (!(conf_init =
+                  rd_dl_sym(handle, "conf_init", errstr, errstr_size))) {
                 rd_dl_close(handle);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
@@ -104,15 +103,14 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
                 return err;
         }
 
-        rkplug = rd_calloc(1, sizeof(*rkplug));
-        rkplug->rkplug_path        = rd_strdup(path);
-        rkplug->rkplug_handle      = handle;
+        rkplug                = rd_calloc(1, sizeof(*rkplug));
+        rkplug->rkplug_path   = rd_strdup(path);
+        rkplug->rkplug_handle = handle;
         rkplug->rkplug_opaque = plug_opaque;
 
         rd_list_add(&conf->plugins, rkplug);
 
-        rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
-                      "Plugin \"%s\" loaded", path);
+        rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD", "Plugin \"%s\" loaded", path);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -127,7 +125,7 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
  *         This is true for POSIX dlopen() and Win32 LoadLibrary().
  * @locality application thread
  */
-static void rd_kafka_plugin_destroy (rd_kafka_plugin_t *rkplug) {
+static void rd_kafka_plugin_destroy(rd_kafka_plugin_t *rkplug) {
         rd_dl_close(rkplug->rkplug_handle);
         rd_free(rkplug->rkplug_path);
         rd_free(rkplug);
@@ -143,9 +141,10 @@ static void rd_kafka_plugin_destroy (rd_kafka_plugin_t *rkplug) {
  * @returns the error code of the first failing plugin.
  * @locality application thread calling rd_kafka_new().
  */
-static rd_kafka_conf_res_t
-rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
-                            char *errstr, size_t errstr_size) {
+static rd_kafka_conf_res_t rd_kafka_plugins_conf_set0(rd_kafka_conf_t *conf,
+                                                      const char *paths,
+                                                      char *errstr,
+                                                      size_t errstr_size) {
         char *s;
 
         rd_list_destroy(&conf->plugins);
@@ -158,8 +157,8 @@ rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
         rd_strdupa(&s, paths);
 
         rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
-                      "Loading plugins from conf object %p: \"%s\"",
-                      conf, paths);
+                      "Loading plugins from conf object %p: \"%s\"", conf,
+                      paths);
 
         while (s && *s) {
                 char *path = s;
@@ -168,13 +167,13 @@ rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
 
                 if ((t = strchr(s, ';'))) {
                         *t = '\0';
-                        s = t+1;
+                        s  = t + 1;
                 } else {
                         s = NULL;
                 }
 
-                if ((err = rd_kafka_plugin_new(conf, path,
-                                               errstr, errstr_size))) {
+                if ((err = rd_kafka_plugin_new(conf, path, errstr,
+                                               errstr_size))) {
                         /* Failed to load plugin */
                         size_t elen = errstr_size > 0 ? strlen(errstr) : 0;
 
@@ -182,7 +181,7 @@ rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
                          * plugin path to the error message. */
                         if (elen + strlen("(plugin )") + strlen(path) <
                             errstr_size)
-                                rd_snprintf(errstr+elen, errstr_size-elen,
+                                rd_snprintf(errstr + elen, errstr_size - elen,
                                             " (plugin %s)", path);
 
                         rd_list_destroy(&conf->plugins);
@@ -197,13 +196,18 @@ rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
 /**
  * @brief Conf setter for "plugin.library.paths"
  */
-rd_kafka_conf_res_t rd_kafka_plugins_conf_set (
-        int scope, void *pconf, const char *name, const char *value,
-        void *dstptr, rd_kafka_conf_set_mode_t set_mode,
-        char *errstr, size_t errstr_size) {
+rd_kafka_conf_res_t rd_kafka_plugins_conf_set(int scope,
+                                              void *pconf,
+                                              const char *name,
+                                              const char *value,
+                                              void *dstptr,
+                                              rd_kafka_conf_set_mode_t set_mode,
+                                              char *errstr,
+                                              size_t errstr_size) {
 
         assert(scope == _RK_GLOBAL);
-        return rd_kafka_plugins_conf_set0((rd_kafka_conf_t *)pconf,
-                                          set_mode == _RK_CONF_PROP_SET_DEL ?
-                                          NULL : value, errstr, errstr_size);
+        return rd_kafka_plugins_conf_set0(
+            (rd_kafka_conf_t *)pconf,
+            set_mode == _RK_CONF_PROP_SET_DEL ? NULL : value, errstr,
+            errstr_size);
 }

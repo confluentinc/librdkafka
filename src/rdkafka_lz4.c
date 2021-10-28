@@ -47,9 +47,10 @@
  * Returns an error on failure to fix (nothing modified), else NO_ERROR.
  */
 static rd_kafka_resp_err_t
-rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
-                                           char *inbuf, size_t inlen) {
-        static const char magic[4] = { 0x04, 0x22, 0x4d, 0x18 };
+rd_kafka_lz4_decompress_fixup_bad_framing(rd_kafka_broker_t *rkb,
+                                          char *inbuf,
+                                          size_t inlen) {
+        static const char magic[4] = {0x04, 0x22, 0x4d, 0x18};
         uint8_t FLG, HC, correct_HC;
         size_t of = 4;
 
@@ -60,15 +61,15 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
          *  [ int64_t contentSize; ]
          *    int8_t  HC;
          */
-        if (inlen < 4+3 || memcmp(inbuf, magic, 4)) {
-                rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
+        if (inlen < 4 + 3 || memcmp(inbuf, magic, 4)) {
+                rd_rkb_dbg(rkb, BROKER, "LZ4FIXUP",
                            "Unable to fix-up legacy LZ4 framing "
-                           "(%"PRIusz" bytes): invalid length or magic value",
+                           "(%" PRIusz " bytes): invalid length or magic value",
                            inlen);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
 
-        of = 4; /* past magic */
+        of  = 4; /* past magic */
         FLG = inbuf[of++];
         of++; /* BD */
 
@@ -76,9 +77,9 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
                 of += 8;
 
         if (of >= inlen) {
-                rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
+                rd_rkb_dbg(rkb, BROKER, "LZ4FIXUP",
                            "Unable to fix-up legacy LZ4 framing "
-                           "(%"PRIusz" bytes): requires %"PRIusz" bytes",
+                           "(%" PRIusz " bytes): requires %" PRIusz " bytes",
                            inlen, of);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -87,7 +88,7 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
         HC = inbuf[of];
 
         /* Calculate correct header hash code */
-        correct_HC = (XXH32(inbuf+4, of-4, 0) >> 8) & 0xff;
+        correct_HC = (XXH32(inbuf + 4, of - 4, 0) >> 8) & 0xff;
 
         if (HC != correct_HC)
                 inbuf[of] = correct_HC;
@@ -106,9 +107,10 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
  * else NO_ERROR.
  */
 static rd_kafka_resp_err_t
-rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
-                                     char *outbuf, size_t outlen) {
-        static const char magic[4] = { 0x04, 0x22, 0x4d, 0x18 };
+rd_kafka_lz4_compress_break_framing(rd_kafka_broker_t *rkb,
+                                    char *outbuf,
+                                    size_t outlen) {
+        static const char magic[4] = {0x04, 0x22, 0x4d, 0x18};
         uint8_t FLG, HC, bad_HC;
         size_t of = 4;
 
@@ -119,15 +121,15 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
          *  [ int64_t contentSize; ]
          *    int8_t  HC;
          */
-        if (outlen < 4+3 || memcmp(outbuf, magic, 4)) {
-                rd_rkb_dbg(rkb, BROKER,  "LZ4FIXDOWN",
+        if (outlen < 4 + 3 || memcmp(outbuf, magic, 4)) {
+                rd_rkb_dbg(rkb, BROKER, "LZ4FIXDOWN",
                            "Unable to break legacy LZ4 framing "
-                           "(%"PRIusz" bytes): invalid length or magic value",
+                           "(%" PRIusz " bytes): invalid length or magic value",
                            outlen);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
 
-        of = 4; /* past magic */
+        of  = 4; /* past magic */
         FLG = outbuf[of++];
         of++; /* BD */
 
@@ -135,9 +137,9 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
                 of += 8;
 
         if (of >= outlen) {
-                rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
+                rd_rkb_dbg(rkb, BROKER, "LZ4FIXUP",
                            "Unable to break legacy LZ4 framing "
-                           "(%"PRIusz" bytes): requires %"PRIusz" bytes",
+                           "(%" PRIusz " bytes): requires %" PRIusz " bytes",
                            outlen, of);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -164,10 +166,13 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
  *
  * @remark May modify \p inbuf (if not \p proper_hc)
  */
-rd_kafka_resp_err_t
-rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
-                         char *inbuf, size_t inlen,
-                         void **outbuf, size_t *outlenp) {
+rd_kafka_resp_err_t rd_kafka_lz4_decompress(rd_kafka_broker_t *rkb,
+                                            int proper_hc,
+                                            int64_t Offset,
+                                            char *inbuf,
+                                            size_t inlen,
+                                            void **outbuf,
+                                            size_t *outlenp) {
         LZ4F_errorCode_t code;
         LZ4F_decompressionContext_t dctx;
         LZ4F_frameInfo_t fi;
@@ -177,7 +182,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         size_t estimated_uncompressed_size;
         size_t outlen;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        char *out = NULL;
+        char *out               = NULL;
 
         *outbuf = NULL;
 
@@ -193,14 +198,13 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                 /* The original/legacy LZ4 framing in Kafka was buggy and
                  * calculated the LZ4 framing header hash code (HC) incorrectly.
                  * We do a fix-up of it here. */
-                if ((err = rd_kafka_lz4_decompress_fixup_bad_framing(rkb,
-                                                                     inbuf,
+                if ((err = rd_kafka_lz4_decompress_fixup_bad_framing(rkb, inbuf,
                                                                      inlen)))
                         goto done;
         }
 
         in_sz = inlen;
-        r = LZ4F_getFrameInfo(dctx, &fi, (const void *)inbuf, &in_sz);
+        r     = LZ4F_getFrameInfo(dctx, &fi, (const void *)inbuf, &in_sz);
         if (LZ4F_isError(r)) {
                 rd_rkb_dbg(rkb, BROKER, "LZ4DECOMPR",
                            "Failed to gather LZ4 frame info: %s",
@@ -211,14 +215,13 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
 
         /* If uncompressed size is unknown or out of bounds, use a sane
          * default (4x compression) and reallocate if needed
-         * More info on max size: http://stackoverflow.com/a/25751871/1821055 
+         * More info on max size: http://stackoverflow.com/a/25751871/1821055
          * More info on lz4 compression ratios seen for different data sets:
          * http://dev.ti.com/tirex/content/simplelink_msp432p4_sdk_1_50_00_12/docs/lz4/users_guide/docguide.llQpgm/benchmarking.html
          */
         if (fi.contentSize == 0 || fi.contentSize > inlen * 255) {
                 estimated_uncompressed_size = RD_MIN(
-                        inlen * 4,
-                        (size_t)(rkb->rkb_rk->rk_conf.max_msg_size));
+                    inlen * 4, (size_t)(rkb->rkb_rk->rk_conf.max_msg_size));
         } else {
                 estimated_uncompressed_size = (size_t)fi.contentSize;
         }
@@ -229,7 +232,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         if (!out) {
                 rd_rkb_log(rkb, LOG_WARNING, "LZ4DEC",
                            "Unable to allocate decompression "
-                           "buffer of %"PRIusz" bytes: %s",
+                           "buffer of %" PRIusz " bytes: %s",
                            estimated_uncompressed_size, rd_strerror(errno));
                 err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 goto done;
@@ -238,26 +241,27 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
 
         /* Decompress input buffer to output buffer until input is exhausted. */
         outlen = estimated_uncompressed_size;
-        in_of = in_sz;
+        in_of  = in_sz;
         out_of = 0;
         while (in_of < inlen) {
                 out_sz = outlen - out_of;
-                in_sz = inlen - in_of;
-                r = LZ4F_decompress(dctx, out+out_of, &out_sz,
-                                    inbuf+in_of, &in_sz, NULL);
+                in_sz  = inlen - in_of;
+                r = LZ4F_decompress(dctx, out + out_of, &out_sz, inbuf + in_of,
+                                    &in_sz, NULL);
                 if (unlikely(LZ4F_isError(r))) {
                         rd_rkb_dbg(rkb, MSG, "LZ4DEC",
                                    "Failed to LZ4 (%s HC) decompress message "
-                                   "(offset %"PRId64") at "
-                                   "payload offset %"PRIusz"/%"PRIusz": %s",
-                                   proper_hc ? "proper":"legacy",
-                                   Offset, in_of, inlen,  LZ4F_getErrorName(r));
+                                   "(offset %" PRId64
+                                   ") at "
+                                   "payload offset %" PRIusz "/%" PRIusz ": %s",
+                                   proper_hc ? "proper" : "legacy", Offset,
+                                   in_of, inlen, LZ4F_getErrorName(r));
                         err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                         goto done;
                 }
 
                 rd_kafka_assert(NULL, out_of + out_sz <= outlen &&
-                                in_of + in_sz <= inlen);
+                                          in_of + in_sz <= inlen);
                 out_of += out_sz;
                 in_of += in_sz;
                 if (r == 0)
@@ -276,8 +280,9 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                         if (!(tmp = rd_realloc(out, outlen + extra))) {
                                 rd_rkb_log(rkb, LOG_WARNING, "LZ4DEC",
                                            "Unable to grow decompression "
-                                           "buffer to %"PRIusz"+%"PRIusz" bytes: %s",
-                                           outlen, extra,rd_strerror(errno));
+                                           "buffer to %" PRIusz "+%" PRIusz
+                                           " bytes: %s",
+                                           outlen, extra, rd_strerror(errno));
                                 err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                                 goto done;
                         }
@@ -290,18 +295,19 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         if (in_of < inlen) {
                 rd_rkb_dbg(rkb, MSG, "LZ4DEC",
                            "Failed to LZ4 (%s HC) decompress message "
-                           "(offset %"PRId64"): "
-                           "%"PRIusz" (out of %"PRIusz") bytes remaining",
-                           proper_hc ? "proper":"legacy",
-                           Offset, inlen-in_of, inlen);
+                           "(offset %" PRId64
+                           "): "
+                           "%" PRIusz " (out of %" PRIusz ") bytes remaining",
+                           proper_hc ? "proper" : "legacy", Offset,
+                           inlen - in_of, inlen);
                 err = RD_KAFKA_RESP_ERR__BAD_MSG;
                 goto done;
         }
 
-        *outbuf = out;
+        *outbuf  = out;
         *outlenp = out_of;
 
- done:
+done:
         code = LZ4F_freeDecompressionContext(dctx);
         if (LZ4F_isError(code)) {
                 rd_rkb_dbg(rkb, BROKER, "LZ4DECOMPR",
@@ -319,20 +325,24 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
 
 /**
  * Allocate space for \p *outbuf and compress all \p iovlen buffers in \p iov.
- * @param proper_hc generate a proper HC (checksum) (kafka >=0.10.0.0, MsgVersion >= 1)
+ * @param proper_hc generate a proper HC (checksum) (kafka >=0.10.0.0,
+ * MsgVersion >= 1)
  * @param MessageSetSize indicates (at least) full uncompressed data size,
  *                       possibly including MessageSet fields that will not
  *                       be compressed.
  *
  * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
  */
-rd_kafka_resp_err_t
-rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
-                       rd_slice_t *slice, void **outbuf, size_t *outlenp) {
+rd_kafka_resp_err_t rd_kafka_lz4_compress(rd_kafka_broker_t *rkb,
+                                          int proper_hc,
+                                          int comp_level,
+                                          rd_slice_t *slice,
+                                          void **outbuf,
+                                          size_t *outlenp) {
         LZ4F_compressionContext_t cctx;
         LZ4F_errorCode_t r;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        size_t len = rd_slice_remains(slice);
+        size_t len              = rd_slice_remains(slice);
         size_t out_sz;
         size_t out_of = 0;
         char *out;
@@ -340,11 +350,9 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
         size_t rlen;
 
         /* Required by Kafka */
-        const LZ4F_preferences_t prefs =
-                {
-                        .frameInfo = { .blockMode = LZ4F_blockIndependent },
-                        .compressionLevel = comp_level
-                };
+        const LZ4F_preferences_t prefs = {
+            .frameInfo        = {.blockMode = LZ4F_blockIndependent},
+            .compressionLevel = comp_level};
 
         *outbuf = NULL;
 
@@ -352,7 +360,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
         if (LZ4F_isError(out_sz)) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Unable to query LZ4 compressed size "
-                           "(for %"PRIusz" uncompressed bytes): %s",
+                           "(for %" PRIusz " uncompressed bytes): %s",
                            len, LZ4F_getErrorName(out_sz));
                 return RD_KAFKA_RESP_ERR__BAD_MSG;
         }
@@ -361,7 +369,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
         if (!out) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Unable to allocate output buffer "
-                           "(%"PRIusz" bytes): %s",
+                           "(%" PRIusz " bytes): %s",
                            out_sz, rd_strerror(errno));
                 return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
         }
@@ -379,7 +387,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
         if (LZ4F_isError(r)) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Unable to begin LZ4 compression "
-                           "(out buffer is %"PRIusz" bytes): %s",
+                           "(out buffer is %" PRIusz " bytes): %s",
                            out_sz, LZ4F_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -389,16 +397,17 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
 
         while ((rlen = rd_slice_reader(slice, &p))) {
                 rd_assert(out_of < out_sz);
-                r = LZ4F_compressUpdate(cctx, out+out_of, out_sz-out_of,
-                                        p, rlen, NULL);
+                r = LZ4F_compressUpdate(cctx, out + out_of, out_sz - out_of, p,
+                                        rlen, NULL);
                 if (unlikely(LZ4F_isError(r))) {
                         rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                                    "LZ4 compression failed "
-                                   "(at of %"PRIusz" bytes, with "
-                                   "%"PRIusz" bytes remaining in out buffer): "
+                                   "(at of %" PRIusz
+                                   " bytes, with "
+                                   "%" PRIusz
+                                   " bytes remaining in out buffer): "
                                    "%s",
-                                   rlen, out_sz - out_of,
-                                   LZ4F_getErrorName(r));
+                                   rlen, out_sz - out_of, LZ4F_getErrorName(r));
                         err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                         goto done;
                 }
@@ -408,11 +417,11 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
 
         rd_assert(rd_slice_remains(slice) == 0);
 
-        r = LZ4F_compressEnd(cctx, out+out_of, out_sz-out_of, NULL);
+        r = LZ4F_compressEnd(cctx, out + out_of, out_sz - out_of, NULL);
         if (unlikely(LZ4F_isError(r))) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Failed to finalize LZ4 compression "
-                           "of %"PRIusz" bytes: %s",
+                           "of %" PRIusz " bytes: %s",
                            len, LZ4F_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -423,20 +432,19 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
         /* For the broken legacy framing we need to mess up the header checksum
          * so that the Kafka client / broker code accepts it. */
         if (!proper_hc)
-                if ((err = rd_kafka_lz4_compress_break_framing(rkb,
-                                                               out, out_of)))
+                if ((err =
+                         rd_kafka_lz4_compress_break_framing(rkb, out, out_of)))
                         goto done;
 
 
         *outbuf  = out;
         *outlenp = out_of;
 
- done:
+done:
         LZ4F_freeCompressionContext(cctx);
 
         if (err)
                 rd_free(out);
 
         return err;
-
 }

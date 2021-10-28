@@ -40,11 +40,11 @@
 
 
 
-int main_0092_mixed_msgver (int argc, char **argv) {
+int main_0092_mixed_msgver(int argc, char **argv) {
         rd_kafka_t *rk;
         const char *topic = test_mk_topic_name("0092_mixed_msgver", 1);
         int32_t partition = 0;
-        const int msgcnt = 60;
+        const int msgcnt  = 60;
         int cnt;
         int64_t testid;
         int msgcounter = msgcnt;
@@ -59,38 +59,31 @@ int main_0092_mixed_msgver (int argc, char **argv) {
         rk = test_create_producer();
 
         /* Produce messages */
-        for (cnt = 0 ; cnt < msgcnt ; cnt++) {
+        for (cnt = 0; cnt < msgcnt; cnt++) {
                 rd_kafka_resp_err_t err;
                 char buf[230];
 
                 test_msg_fmt(buf, sizeof(buf), testid, partition, cnt);
 
                 err = rd_kafka_producev(
-                        rk,
-                        RD_KAFKA_V_TOPIC(topic),
-                        RD_KAFKA_V_PARTITION(partition),
-                        RD_KAFKA_V_VALUE(buf, sizeof(buf)),
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_OPAQUE(&msgcounter),
-                        RD_KAFKA_V_END);
-                TEST_ASSERT(!err, "producev() #%d failed: %s",
-                            cnt, rd_kafka_err2str(err));
+                    rk, RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_PARTITION(partition),
+                    RD_KAFKA_V_VALUE(buf, sizeof(buf)),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_OPAQUE(&msgcounter), RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "producev() #%d failed: %s", cnt,
+                            rd_kafka_err2str(err));
 
                 /* One message per batch */
-                rd_kafka_flush(rk, 30*1000);
+                rd_kafka_flush(rk, 30 * 1000);
 
                 if (cnt == msgcnt / 2) {
-                        const char *msgconf[] = {
-                                "message.format.version",
-                                "0.10.0.0"
-                        };
+                        const char *msgconf[] = {"message.format.version",
+                                                 "0.10.0.0"};
                         TEST_SAY("Changing message.format.version\n");
                         err = test_AlterConfigs_simple(
-                                rk,
-                                RD_KAFKA_RESOURCE_TOPIC, topic,
-                                msgconf, 1);
-                        TEST_ASSERT(!err,
-                                    "AlterConfigs failed: %s",
+                            rk, RD_KAFKA_RESOURCE_TOPIC, topic, msgconf, 1);
+                        TEST_ASSERT(!err, "AlterConfigs failed: %s",
                                     rd_kafka_err2str(err));
                 }
         }

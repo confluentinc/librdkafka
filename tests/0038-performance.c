@@ -30,7 +30,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -41,78 +41,80 @@
  */
 
 
-int main_0038_performance (int argc, char **argv) {
-	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-	const int partition = 0;
-	const int msgsize = 100;
-	uint64_t testid;
-	rd_kafka_conf_t *conf;
-	rd_kafka_t *rk;
-	rd_kafka_topic_t *rkt;
-	test_timing_t t_create, t_produce, t_consume;
-	int totsize = 1024 * 1024 * (test_quick ? 8 : 128);
-	int msgcnt;
+int main_0038_performance(int argc, char **argv) {
+        const char *topic   = test_mk_topic_name(__FUNCTION__, 1);
+        const int partition = 0;
+        const int msgsize   = 100;
+        uint64_t testid;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        test_timing_t t_create, t_produce, t_consume;
+        int totsize = 1024 * 1024 * (test_quick ? 8 : 128);
+        int msgcnt;
 
-	if (!strcmp(test_mode, "valgrind") || !strcmp(test_mode, "helgrind") ||
-	    !strcmp(test_mode, "drd"))
-		totsize = 1024*1024*8; /* 8 meg, valgrind is slow. */
+        if (!strcmp(test_mode, "valgrind") || !strcmp(test_mode, "helgrind") ||
+            !strcmp(test_mode, "drd"))
+                totsize = 1024 * 1024 * 8; /* 8 meg, valgrind is slow. */
 
-	msgcnt = totsize / msgsize;
+        msgcnt = totsize / msgsize;
 
-	TEST_SAY("Producing %d messages of size %d to %s [%d]\n",
-		 msgcnt, (int)msgsize, topic, partition);
-	testid = test_id_generate();
-	test_conf_init(&conf, NULL, 120);
-	rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-	test_conf_set(conf, "queue.buffering.max.messages", "10000000");
+        TEST_SAY("Producing %d messages of size %d to %s [%d]\n", msgcnt,
+                 (int)msgsize, topic, partition);
+        testid = test_id_generate();
+        test_conf_init(&conf, NULL, 120);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        test_conf_set(conf, "queue.buffering.max.messages", "10000000");
         test_conf_set(conf, "linger.ms", "100");
-	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-	rkt = test_create_producer_topic(rk, topic, "acks", "1", NULL);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt = test_create_producer_topic(rk, topic, "acks", "1", NULL);
 
-	/* First produce one message to create the topic, etc, this might take 
-	 * a while and we dont want this to affect the throughput timing. */
-	TIMING_START(&t_create, "CREATE TOPIC");
-	test_produce_msgs(rk, rkt, testid, partition, 0, 1, NULL, msgsize);
-	TIMING_STOP(&t_create);
+        /* First produce one message to create the topic, etc, this might take
+         * a while and we dont want this to affect the throughput timing. */
+        TIMING_START(&t_create, "CREATE TOPIC");
+        test_produce_msgs(rk, rkt, testid, partition, 0, 1, NULL, msgsize);
+        TIMING_STOP(&t_create);
 
-	TIMING_START(&t_produce, "PRODUCE");
-	test_produce_msgs(rk, rkt, testid, partition, 1, msgcnt-1, NULL, msgsize);
-	TIMING_STOP(&t_produce);
+        TIMING_START(&t_produce, "PRODUCE");
+        test_produce_msgs(rk, rkt, testid, partition, 1, msgcnt - 1, NULL,
+                          msgsize);
+        TIMING_STOP(&t_produce);
 
-	TEST_SAY("Destroying producer\n");
-	rd_kafka_topic_destroy(rkt);
-	rd_kafka_destroy(rk);
+        TEST_SAY("Destroying producer\n");
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
 
-	TEST_SAY("Creating consumer\n");
-	test_conf_init(&conf, NULL, 120);
-	rk = test_create_consumer(NULL, NULL, conf, NULL);
-	rkt = rd_kafka_topic_new(rk, topic, NULL);
+        TEST_SAY("Creating consumer\n");
+        test_conf_init(&conf, NULL, 120);
+        rk  = test_create_consumer(NULL, NULL, conf, NULL);
+        rkt = rd_kafka_topic_new(rk, topic, NULL);
 
-	test_consumer_start("CONSUME", rkt, partition,
-			    RD_KAFKA_OFFSET_BEGINNING);
-	TIMING_START(&t_consume, "CONSUME");
-	test_consume_msgs("CONSUME", rkt, testid, partition, TEST_NO_SEEK,
-			  0, msgcnt, 1);
-	TIMING_STOP(&t_consume);
-	test_consumer_stop("CONSUME", rkt, partition);
+        test_consumer_start("CONSUME", rkt, partition,
+                            RD_KAFKA_OFFSET_BEGINNING);
+        TIMING_START(&t_consume, "CONSUME");
+        test_consume_msgs("CONSUME", rkt, testid, partition, TEST_NO_SEEK, 0,
+                          msgcnt, 1);
+        TIMING_STOP(&t_consume);
+        test_consumer_stop("CONSUME", rkt, partition);
 
-	rd_kafka_topic_destroy(rkt);
-	rd_kafka_destroy(rk);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
 
-	TEST_REPORT("{ \"producer\": "
-		    " { \"mb_per_sec\": %.2f, \"records_per_sec\": %.2f },"
-		    " \"consumer\": "
-		    "{ \"mb_per_sec\": %.2f, \"records_per_sec\": %.2f } "
-		    "}",
-		    (double)
-		    (totsize/((double)TIMING_DURATION(&t_produce)/1000000.0f)) /
-		    1000000.0f,
-		    (float)
-		    (msgcnt/((double)TIMING_DURATION(&t_produce)/1000000.0f)),
-		    (double)
-		    (totsize/((double)TIMING_DURATION(&t_consume)/1000000.0f)) /
-		    1000000.0f,
-		    (float)
-		    (msgcnt/((double)TIMING_DURATION(&t_consume)/1000000.0f)));
-	return 0;
+        TEST_REPORT(
+            "{ \"producer\": "
+            " { \"mb_per_sec\": %.2f, \"records_per_sec\": %.2f },"
+            " \"consumer\": "
+            "{ \"mb_per_sec\": %.2f, \"records_per_sec\": %.2f } "
+            "}",
+            (double)(totsize /
+                     ((double)TIMING_DURATION(&t_produce) / 1000000.0f)) /
+                1000000.0f,
+            (float)(msgcnt /
+                    ((double)TIMING_DURATION(&t_produce) / 1000000.0f)),
+            (double)(totsize /
+                     ((double)TIMING_DURATION(&t_consume) / 1000000.0f)) /
+                1000000.0f,
+            (float)(msgcnt /
+                    ((double)TIMING_DURATION(&t_consume) / 1000000.0f)));
+        return 0;
 }

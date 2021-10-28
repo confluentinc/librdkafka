@@ -45,9 +45,10 @@
 namespace {
 class DrCb : public RdKafka::DeliveryReportCb {
  public:
-  DrCb (RdKafka::ErrorCode exp_err): ok(false), _exp_err(exp_err) {}
+  DrCb(RdKafka::ErrorCode exp_err) : ok(false), _exp_err(exp_err) {
+  }
 
-  void dr_cb (RdKafka::Message &msg) {
+  void dr_cb(RdKafka::Message &msg) {
     Test::Say("Delivery report: " + RdKafka::err2str(msg.err()) + "\n");
     if (msg.err() != _exp_err)
       Test::Fail("Delivery report: Expected " + RdKafka::err2str(_exp_err) +
@@ -63,12 +64,11 @@ class DrCb : public RdKafka::DeliveryReportCb {
  private:
   RdKafka::ErrorCode _exp_err;
 };
-};
+};  // namespace
 
-static void do_test_producer (bool timeout_too_short) {
-
-  Test::Say(tostr() << _C_MAG << "[ Test with timeout_too_short=" <<
-            (timeout_too_short ? "true" : "false") << " ]\n");
+static void do_test_producer(bool timeout_too_short) {
+  Test::Say(tostr() << _C_MAG << "[ Test with timeout_too_short="
+                    << (timeout_too_short ? "true" : "false") << " ]\n");
 
   std::string topic = Test::mk_topic_name("0110-delay_create_topics", 1);
 
@@ -83,8 +83,8 @@ static void do_test_producer (bool timeout_too_short) {
       Test::Fail(errstr);
   }
 
-  DrCb dr_cb(timeout_too_short ?
-             RdKafka::ERR_UNKNOWN_TOPIC_OR_PART : RdKafka::ERR_NO_ERROR);
+  DrCb dr_cb(timeout_too_short ? RdKafka::ERR_UNKNOWN_TOPIC_OR_PART
+                               : RdKafka::ERR_NO_ERROR);
   conf->set("dr_cb", &dr_cb, errstr);
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
@@ -93,15 +93,13 @@ static void do_test_producer (bool timeout_too_short) {
   delete conf;
 
   /* Produce a message to the yet non-existent topic. */
-  RdKafka::ErrorCode err = p->produce(topic, RdKafka::Topic::PARTITION_UA,
-                                      RdKafka::Producer::RK_MSG_COPY,
-                                      (void *)"hello", 5,
-                                      "hi", 2,
-                                      0, NULL, NULL);
+  RdKafka::ErrorCode err = p->produce(
+      topic, RdKafka::Topic::PARTITION_UA, RdKafka::Producer::RK_MSG_COPY,
+      (void *)"hello", 5, "hi", 2, 0, NULL, NULL);
   if (err)
     Test::Fail(tostr() << "produce failed: " << RdKafka::err2str(err));
 
-  int delay = 5;
+  int delay        = 5;
   int64_t end_wait = test_clock() + (delay * 1000000);
 
   while (test_clock() < end_wait)
@@ -109,21 +107,21 @@ static void do_test_producer (bool timeout_too_short) {
 
   Test::create_topic(NULL, topic.c_str(), 1, 3);
 
-  p->flush(10*1000);
+  p->flush(10 * 1000);
 
   if (!dr_cb.ok)
     Test::Fail("Did not get delivery report for message");
 
   delete p;
 
-  Test::Say(tostr() << _C_GRN << "[ Test with timeout_too_short=" <<
-            (timeout_too_short ? "true" : "false") << ": PASS ]\n");
+  Test::Say(tostr() << _C_GRN << "[ Test with timeout_too_short="
+                    << (timeout_too_short ? "true" : "false") << ": PASS ]\n");
 }
 
 extern "C" {
-  int main_0111_delay_create_topics (int argc, char **argv) {
-    do_test_producer(false);
-    do_test_producer(true);
-    return 0;
-  }
+int main_0111_delay_create_topics(int argc, char **argv) {
+  do_test_producer(false);
+  do_test_producer(true);
+  return 0;
+}
 }

@@ -30,8 +30,8 @@
 #define _RDKAFKA_COORD_H_
 
 
-typedef TAILQ_HEAD(rd_kafka_coord_cache_head_s, rd_kafka_coord_cache_entry_s)
-        rd_kafka_coord_cache_head_t;
+typedef TAILQ_HEAD(rd_kafka_coord_cache_head_s,
+                   rd_kafka_coord_cache_entry_s) rd_kafka_coord_cache_head_t;
 
 /**
  * @brief Coordinator cache entry
@@ -39,10 +39,10 @@ typedef TAILQ_HEAD(rd_kafka_coord_cache_head_s, rd_kafka_coord_cache_entry_s)
 typedef struct rd_kafka_coord_cache_entry_s {
         TAILQ_ENTRY(rd_kafka_coord_cache_entry_s) cce_link;
         rd_kafka_coordtype_t cce_coordtype; /**< Coordinator type */
-        char                *cce_coordkey;  /**< Coordinator type key,
+        char *cce_coordkey;                 /**< Coordinator type key,
                                              *   e.g the group id */
-        rd_ts_t              cce_ts_used;   /**< Last used timestamp */
-        rd_kafka_broker_t   *cce_rkb;       /**< The cached coordinator */
+        rd_ts_t cce_ts_used;                /**< Last used timestamp */
+        rd_kafka_broker_t *cce_rkb;         /**< The cached coordinator */
 
 } rd_kafka_coord_cache_entry_t;
 
@@ -50,21 +50,19 @@ typedef struct rd_kafka_coord_cache_entry_s {
  * @brief Coordinator cache
  */
 typedef struct rd_kafka_coord_cache_s {
-        rd_kafka_coord_cache_head_t cc_entries;      /**< Cache entries */
-        int                         cc_cnt;          /**< Number of entries */
-        rd_ts_t                     cc_expire_thres; /**< Entries not used in
-                                                      *   this long will be
-                                                      *   expired */
+        rd_kafka_coord_cache_head_t cc_entries; /**< Cache entries */
+        int cc_cnt;                             /**< Number of entries */
+        rd_ts_t cc_expire_thres;                /**< Entries not used in
+                                                 *   this long will be
+                                                 *   expired */
 } rd_kafka_coord_cache_t;
 
 
-void rd_kafka_coord_cache_expire (rd_kafka_coord_cache_t *cc);
-void rd_kafka_coord_cache_evict (rd_kafka_coord_cache_t *cc,
-                                 rd_kafka_broker_t *rkb);
-void rd_kafka_coord_cache_destroy (rd_kafka_coord_cache_t *cc);
-void rd_kafka_coord_cache_init (rd_kafka_coord_cache_t *cc,
-                                int expire_thres_ms);
-
+void rd_kafka_coord_cache_expire(rd_kafka_coord_cache_t *cc);
+void rd_kafka_coord_cache_evict(rd_kafka_coord_cache_t *cc,
+                                rd_kafka_broker_t *rkb);
+void rd_kafka_coord_cache_destroy(rd_kafka_coord_cache_t *cc);
+void rd_kafka_coord_cache_init(rd_kafka_coord_cache_t *cc, int expire_thres_ms);
 
 
 
@@ -78,52 +76,52 @@ void rd_kafka_coord_cache_init (rd_kafka_coord_cache_t *cc,
  */
 typedef struct rd_kafka_coord_req_s {
         TAILQ_ENTRY(rd_kafka_coord_req_s) creq_link; /**< rk_coord_reqs */
-        rd_kafka_coordtype_t creq_coordtype; /**< Coordinator type */
-        char                *creq_coordkey;  /**< Coordinator key */
+        rd_kafka_coordtype_t creq_coordtype;         /**< Coordinator type */
+        char *creq_coordkey;                         /**< Coordinator key */
 
-        rd_kafka_op_t *creq_rko;             /**< Requester's rko that is
-                                              *   provided to creq_send_req_cb
-                                              *   (optional). */
-        rd_ts_t        creq_ts_timeout;      /**< Absolute timeout.
-                                              *   Will fail with an error
-                                              *   code pertaining to the
-                                              *   current state */
+        rd_kafka_op_t *creq_rko; /**< Requester's rko that is
+                                  *   provided to creq_send_req_cb
+                                  *   (optional). */
+        rd_ts_t creq_ts_timeout; /**< Absolute timeout.
+                                  *   Will fail with an error
+                                  *   code pertaining to the
+                                  *   current state */
 
         rd_kafka_send_req_cb_t *creq_send_req_cb; /**< Sender callback */
 
-        rd_kafka_replyq_t   creq_replyq;     /**< Reply queue */
-        rd_kafka_resp_cb_t *creq_resp_cb;    /**< Reply queue response
-                                              *   parsing callback for the
-                                              *   request sent by
-                                              *   send_req_cb */
-        void               *creq_reply_opaque; /**< Opaque passed to
-                                                *   creq_send_req_cb and
-                                                *   creq_resp_cb. */
+        rd_kafka_replyq_t creq_replyq;    /**< Reply queue */
+        rd_kafka_resp_cb_t *creq_resp_cb; /**< Reply queue response
+                                           *   parsing callback for the
+                                           *   request sent by
+                                           *   send_req_cb */
+        void *creq_reply_opaque;          /**< Opaque passed to
+                                           *   creq_send_req_cb and
+                                           *   creq_resp_cb. */
 
-        int                 creq_refcnt;     /**< Internal reply queue for
-                                              *   FindCoordinator requests
-                                              *   which is forwarded to the
-                                              *   rk_ops queue, but allows
-                                              *   destroying the creq even
-                                              *   with outstanding
-                                              *   FindCoordinator requests. */
-        rd_bool_t           creq_done;      /**< True if request was sent */
+        int creq_refcnt;     /**< Internal reply queue for
+                              *   FindCoordinator requests
+                              *   which is forwarded to the
+                              *   rk_ops queue, but allows
+                              *   destroying the creq even
+                              *   with outstanding
+                              *   FindCoordinator requests. */
+        rd_bool_t creq_done; /**< True if request was sent */
 
 } rd_kafka_coord_req_t;
 
 
-void rd_kafka_coord_req (rd_kafka_t *rk,
-                         rd_kafka_coordtype_t coordtype,
-                         const char *coordkey,
-                         rd_kafka_send_req_cb_t *send_req_cb,
-                         rd_kafka_op_t *rko,
-                         int timeout_ms,
-                         rd_kafka_replyq_t replyq,
-                         rd_kafka_resp_cb_t *resp_cb,
-                         void *reply_opaque);
+void rd_kafka_coord_req(rd_kafka_t *rk,
+                        rd_kafka_coordtype_t coordtype,
+                        const char *coordkey,
+                        rd_kafka_send_req_cb_t *send_req_cb,
+                        rd_kafka_op_t *rko,
+                        int timeout_ms,
+                        rd_kafka_replyq_t replyq,
+                        rd_kafka_resp_cb_t *resp_cb,
+                        void *reply_opaque);
 
-void rd_kafka_coord_rkb_monitor_cb (rd_kafka_broker_t *rkb);
+void rd_kafka_coord_rkb_monitor_cb(rd_kafka_broker_t *rkb);
 
-void rd_kafka_coord_reqs_term (rd_kafka_t *rk);
-void rd_kafka_coord_reqs_init (rd_kafka_t *rk);
+void rd_kafka_coord_reqs_term(rd_kafka_t *rk);
+void rd_kafka_coord_reqs_init(rd_kafka_t *rk);
 #endif /* _RDKAFKA_COORD_H_ */

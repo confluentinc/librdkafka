@@ -34,14 +34,12 @@
 #include "rdkafkacpp_int.h"
 
 
-RdKafka::Producer::~Producer () {
-
+RdKafka::Producer::~Producer() {
 }
 
-static void dr_msg_cb_trampoline (rd_kafka_t *rk,
-                                  const rd_kafka_message_t *
-                                  rkmessage,
-                                  void *opaque) {
+static void dr_msg_cb_trampoline(rd_kafka_t *rk,
+                                 const rd_kafka_message_t *rkmessage,
+                                 void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
   RdKafka::MessageImpl message(RD_KAFKA_PRODUCER, NULL,
                                (rd_kafka_message_t *)rkmessage, false);
@@ -50,12 +48,13 @@ static void dr_msg_cb_trampoline (rd_kafka_t *rk,
 
 
 
-RdKafka::Producer *RdKafka::Producer::create (const RdKafka::Conf *conf,
-                                              std::string &errstr) {
+RdKafka::Producer *RdKafka::Producer::create(const RdKafka::Conf *conf,
+                                             std::string &errstr) {
   char errbuf[512];
-  const RdKafka::ConfImpl *confimpl = dynamic_cast<const RdKafka::ConfImpl *>(conf);
+  const RdKafka::ConfImpl *confimpl =
+      dynamic_cast<const RdKafka::ConfImpl *>(conf);
   RdKafka::ProducerImpl *rkp = new RdKafka::ProducerImpl();
-  rd_kafka_conf_t *rk_conf = NULL;
+  rd_kafka_conf_t *rk_conf   = NULL;
 
   if (confimpl) {
     if (!confimpl->rk_conf_) {
@@ -76,8 +75,8 @@ RdKafka::Producer *RdKafka::Producer::create (const RdKafka::Conf *conf,
 
 
   rd_kafka_t *rk;
-  if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, rk_conf,
-                          errbuf, sizeof(errbuf)))) {
+  if (!(rk =
+            rd_kafka_new(RD_KAFKA_PRODUCER, rk_conf, errbuf, sizeof(errbuf)))) {
     errstr = errbuf;
     // rd_kafka_new() takes ownership only if succeeds
     if (rk_conf)
@@ -92,16 +91,16 @@ RdKafka::Producer *RdKafka::Producer::create (const RdKafka::Conf *conf,
 }
 
 
-RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
-                                                   int32_t partition,
-                                                   int msgflags,
-                                                   void *payload, size_t len,
-                                                   const std::string *key,
-                                                   void *msg_opaque) {
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce(RdKafka::Topic *topic,
+                                                  int32_t partition,
+                                                  int msgflags,
+                                                  void *payload,
+                                                  size_t len,
+                                                  const std::string *key,
+                                                  void *msg_opaque) {
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
-  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
-                       payload, len,
+  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags, payload, len,
                        key ? key->c_str() : NULL, key ? key->size() : 0,
                        msg_opaque) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
@@ -110,91 +109,83 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
 }
 
 
-RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
-                                                   int32_t partition,
-                                                   int msgflags,
-                                                   void *payload, size_t len,
-                                                   const void *key,
-                                                   size_t key_len,
-                                                   void *msg_opaque) {
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce(RdKafka::Topic *topic,
+                                                  int32_t partition,
+                                                  int msgflags,
+                                                  void *payload,
+                                                  size_t len,
+                                                  const void *key,
+                                                  size_t key_len,
+                                                  void *msg_opaque) {
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
-  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
-                       payload, len, key, key_len,
-                       msg_opaque) == -1)
+  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags, payload, len, key,
+                       key_len, msg_opaque) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
 
 
-RdKafka::ErrorCode
-RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
-                                int32_t partition,
-                                const std::vector<char> *payload,
-                                const std::vector<char> *key,
-                                void *msg_opaque) {
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce(
+    RdKafka::Topic *topic,
+    int32_t partition,
+    const std::vector<char> *payload,
+    const std::vector<char> *key,
+    void *msg_opaque) {
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_produce(topicimpl->rkt_, partition, RD_KAFKA_MSG_F_COPY,
                        payload ? (void *)&(*payload)[0] : NULL,
-                       payload ? payload->size() : 0,
-                       key ? &(*key)[0] : NULL, key ? key->size() : 0,
-                       msg_opaque) == -1)
+                       payload ? payload->size() : 0, key ? &(*key)[0] : NULL,
+                       key ? key->size() : 0, msg_opaque) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
-
 }
 
-RdKafka::ErrorCode
-RdKafka::ProducerImpl::produce (const std::string topic_name,
-                                int32_t partition, int msgflags,
-                                void *payload, size_t len,
-                                const void *key, size_t key_len,
-                                int64_t timestamp, void *msg_opaque) {
-  return
-  static_cast<RdKafka::ErrorCode>
-    (
-      rd_kafka_producev(rk_,
-                        RD_KAFKA_V_TOPIC(topic_name.c_str()),
-                        RD_KAFKA_V_PARTITION(partition),
-                        RD_KAFKA_V_MSGFLAGS(msgflags),
-                        RD_KAFKA_V_VALUE(payload, len),
-                        RD_KAFKA_V_KEY(key, key_len),
-                        RD_KAFKA_V_TIMESTAMP(timestamp),
-                        RD_KAFKA_V_OPAQUE(msg_opaque),
-                        RD_KAFKA_V_END)
-      );
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce(const std::string topic_name,
+                                                  int32_t partition,
+                                                  int msgflags,
+                                                  void *payload,
+                                                  size_t len,
+                                                  const void *key,
+                                                  size_t key_len,
+                                                  int64_t timestamp,
+                                                  void *msg_opaque) {
+  return static_cast<RdKafka::ErrorCode>(rd_kafka_producev(
+      rk_, RD_KAFKA_V_TOPIC(topic_name.c_str()),
+      RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_MSGFLAGS(msgflags),
+      RD_KAFKA_V_VALUE(payload, len), RD_KAFKA_V_KEY(key, key_len),
+      RD_KAFKA_V_TIMESTAMP(timestamp), RD_KAFKA_V_OPAQUE(msg_opaque),
+      RD_KAFKA_V_END));
 }
 
-RdKafka::ErrorCode
-RdKafka::ProducerImpl::produce (const std::string topic_name,
-                                int32_t partition, int msgflags,
-                                void *payload, size_t len,
-                                const void *key, size_t key_len,
-                                int64_t timestamp,
-                                RdKafka::Headers *headers,
-                                void *msg_opaque) {
-  rd_kafka_headers_t *hdrs = NULL;
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce(const std::string topic_name,
+                                                  int32_t partition,
+                                                  int msgflags,
+                                                  void *payload,
+                                                  size_t len,
+                                                  const void *key,
+                                                  size_t key_len,
+                                                  int64_t timestamp,
+                                                  RdKafka::Headers *headers,
+                                                  void *msg_opaque) {
+  rd_kafka_headers_t *hdrs          = NULL;
   RdKafka::HeadersImpl *headersimpl = NULL;
   rd_kafka_resp_err_t err;
 
   if (headers) {
-    headersimpl = static_cast<RdKafka::HeadersImpl*>(headers);
-    hdrs = headersimpl->c_ptr();
+    headersimpl = static_cast<RdKafka::HeadersImpl *>(headers);
+    hdrs        = headersimpl->c_ptr();
   }
 
-  err = rd_kafka_producev(rk_,
-                          RD_KAFKA_V_TOPIC(topic_name.c_str()),
-                          RD_KAFKA_V_PARTITION(partition),
-                          RD_KAFKA_V_MSGFLAGS(msgflags),
-                          RD_KAFKA_V_VALUE(payload, len),
-                          RD_KAFKA_V_KEY(key, key_len),
-                          RD_KAFKA_V_TIMESTAMP(timestamp),
-                          RD_KAFKA_V_OPAQUE(msg_opaque),
-                          RD_KAFKA_V_HEADERS(hdrs),
-                          RD_KAFKA_V_END);
+  err = rd_kafka_producev(
+      rk_, RD_KAFKA_V_TOPIC(topic_name.c_str()),
+      RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_MSGFLAGS(msgflags),
+      RD_KAFKA_V_VALUE(payload, len), RD_KAFKA_V_KEY(key, key_len),
+      RD_KAFKA_V_TIMESTAMP(timestamp), RD_KAFKA_V_OPAQUE(msg_opaque),
+      RD_KAFKA_V_HEADERS(hdrs), RD_KAFKA_V_END);
 
   if (!err && headersimpl) {
     /* A successful producev() call will destroy the C headers. */

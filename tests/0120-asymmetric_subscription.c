@@ -35,35 +35,35 @@
 /**
  * @brief Verify proper assignment for asymmetrical subscriptions.
  */
-static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
+static void do_test_asymmetric(const char *assignor, const char *bootstraps) {
         rd_kafka_conf_t *conf;
 #define _C_CNT 3
         rd_kafka_t *c[_C_CNT];
-#define _S_CNT 2  /* max subscription count per consumer */
+#define _S_CNT 2 /* max subscription count per consumer */
         const char *topics[_C_CNT][_S_CNT] = {
-                /* c0 */ { "t1", "t2" },
-                /* c1 */ { "t2", "t3" },
-                /* c2 */ { "t4" },
+            /* c0 */ {"t1", "t2"},
+            /* c1 */ {"t2", "t3"},
+            /* c2 */ {"t4"},
         };
         struct {
                 const char *topic;
                 const int cnt;
                 int seen;
         } expect[_C_CNT][_S_CNT] = {
-                /* c0 */
-                {
-                        { "t1", _PART_CNT },
-                        { "t2", _PART_CNT/2 },
-                },
-                /* c1 */
-                {
-                        { "t2", _PART_CNT/2 },
-                        { "t3", _PART_CNT },
-                },
-                /* c2 */
-                {
-                        { "t4", _PART_CNT },
-                },
+            /* c0 */
+            {
+                {"t1", _PART_CNT},
+                {"t2", _PART_CNT / 2},
+            },
+            /* c1 */
+            {
+                {"t2", _PART_CNT / 2},
+                {"t3", _PART_CNT},
+            },
+            /* c2 */
+            {
+                {"t4", _PART_CNT},
+            },
         };
         const char *groupid = assignor;
         int i;
@@ -74,18 +74,18 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "partition.assignment.strategy", assignor);
 
-        for (i = 0 ; i < _C_CNT ; i++) {
+        for (i = 0; i < _C_CNT; i++) {
                 char name[16];
                 rd_kafka_topic_partition_list_t *tlist =
-                        rd_kafka_topic_partition_list_new(2);
+                    rd_kafka_topic_partition_list_new(2);
                 int j;
 
                 rd_snprintf(name, sizeof(name), "c%d", i);
                 test_conf_set(conf, "client.id", name);
 
-                for (j = 0 ; j < _S_CNT && topics[i][j] ; j++)
+                for (j = 0; j < _S_CNT && topics[i][j]; j++)
                         rd_kafka_topic_partition_list_add(
-                                tlist, topics[i][j], RD_KAFKA_PARTITION_UA);
+                            tlist, topics[i][j], RD_KAFKA_PARTITION_UA);
 
                 c[i] = test_create_consumer(groupid, NULL,
                                             rd_kafka_conf_dup(conf), NULL);
@@ -99,11 +99,11 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
 
 
         /* Await assignments for all consumers */
-        for (i = 0 ; i < _C_CNT ; i++)
+        for (i = 0; i < _C_CNT; i++)
                 test_consumer_wait_assignment(c[i], rd_true);
 
         /* All have assignments, grab them. */
-        for (i = 0 ; i < _C_CNT ; i++) {
+        for (i = 0; i < _C_CNT; i++) {
                 int j;
                 int p;
                 rd_kafka_topic_partition_list_t *assignment;
@@ -113,12 +113,12 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
                 TEST_ASSERT(assignment, "No assignment for %s",
                             rd_kafka_name(c[i]));
 
-                for (p = 0 ; p < assignment->cnt ; p++) {
+                for (p = 0; p < assignment->cnt; p++) {
                         const rd_kafka_topic_partition_t *part =
-                                &assignment->elems[p];
+                            &assignment->elems[p];
                         rd_bool_t found = rd_false;
 
-                        for (j = 0 ; j < _S_CNT && expect[i][j].topic ; j++) {
+                        for (j = 0; j < _S_CNT && expect[i][j].topic; j++) {
                                 if (!strcmp(part->topic, expect[i][j].topic)) {
                                         expect[i][j].seen++;
                                         found = rd_true;
@@ -129,24 +129,21 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
                         TEST_ASSERT(found,
                                     "%s was assigned unexpected topic %s",
                                     rd_kafka_name(c[i]), part->topic);
-
                 }
 
-                for (j = 0 ; j < _S_CNT && expect[i][j].topic ; j++) {
+                for (j = 0; j < _S_CNT && expect[i][j].topic; j++) {
                         TEST_ASSERT(expect[i][j].seen == expect[i][j].cnt,
                                     "%s expected %d assigned partitions "
                                     "for %s, not %d",
-                                    rd_kafka_name(c[i]),
-                                    expect[i][j].cnt,
-                                    expect[i][j].topic,
-                                    expect[i][j].seen);
+                                    rd_kafka_name(c[i]), expect[i][j].cnt,
+                                    expect[i][j].topic, expect[i][j].seen);
                 }
 
                 rd_kafka_topic_partition_list_destroy(assignment);
         }
 
 
-        for (i = 0 ; i < _C_CNT ; i++) {
+        for (i = 0; i < _C_CNT; i++) {
                 if (strcmp(assignor, "range") && (i & 1) == 0)
                         test_consumer_close(c[i]);
                 rd_kafka_destroy(c[i]);
@@ -157,7 +154,7 @@ static void do_test_asymmetric (const char *assignor, const char *bootstraps) {
 }
 
 
-int main_0120_asymmetric_subscription (int argc, char **argv) {
+int main_0120_asymmetric_subscription(int argc, char **argv) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
 

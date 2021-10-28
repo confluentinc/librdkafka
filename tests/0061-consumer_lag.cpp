@@ -39,21 +39,21 @@ static std::string topic;
 
 class StatsCb : public RdKafka::EventCb {
  public:
-  int64_t calc_lag; //calculated lag
-  int lag_valid;  // number of times lag has been valid
+  int64_t calc_lag;  // calculated lag
+  int lag_valid;     // number of times lag has been valid
 
   StatsCb() {
-    calc_lag = -1;
+    calc_lag  = -1;
     lag_valid = 0;
   }
 
   /**
    * @brief Event callback
    */
-  void event_cb (RdKafka::Event &event) {
+  void event_cb(RdKafka::Event &event) {
     if (event.type() == RdKafka::Event::EVENT_LOG) {
-      Test::Say(tostr() << "LOG-" << event.severity() << "-" << event.fac() <<
-                ": " << event.str() << "\n");
+      Test::Say(tostr() << "LOG-" << event.severity() << "-" << event.fac()
+                        << ": " << event.str() << "\n");
       return;
     } else if (event.type() != RdKafka::Event::EVENT_STATS) {
       Test::Say(tostr() << "Dropping event " << event.type() << "\n");
@@ -67,7 +67,8 @@ class StatsCb : public RdKafka::EventCb {
       Test::Say(2, "Skipping old stats with invalid consumer_lag\n");
       return; /* Old stats generated before first message consumed */
     } else if (consumer_lag != calc_lag)
-      Test::Fail(tostr() << "Stats consumer_lag " << consumer_lag << ", expected " << calc_lag << "\n");
+      Test::Fail(tostr() << "Stats consumer_lag " << consumer_lag
+                         << ", expected " << calc_lag << "\n");
     else
       lag_valid++;
   }
@@ -77,22 +78,20 @@ class StatsCb : public RdKafka::EventCb {
    * @brief Naiive JSON parsing, find the consumer_lag for partition 0
    * and return it.
    */
-  static int64_t parse_json (const char *json_doc) {
+  static int64_t parse_json(const char *json_doc) {
     const std::string match_topic(std::string("\"") + topic + "\":");
-    const char *search[] = { "\"topics\":",
-                             match_topic.c_str(),
-                             "\"partitions\":",
-                             "\"0\":",
-                             "\"consumer_lag_stored\":",
-                             NULL };
+    const char *search[] = {
+        "\"topics\":", match_topic.c_str(),        "\"partitions\":",
+        "\"0\":",      "\"consumer_lag_stored\":", NULL};
     const char *remain = json_doc;
 
-    for (const char **sp = search ; *sp ; sp++) {
+    for (const char **sp = search; *sp; sp++) {
       const char *t = strstr(remain, *sp);
       if (!t)
-        Test::Fail(tostr() << "Couldnt find " << *sp <<
-                   " in remaining stats output:\n" << remain <<
-                   "\n====================\n" << json_doc << "\n");
+        Test::Fail(tostr() << "Couldnt find " << *sp
+                           << " in remaining stats output:\n"
+                           << remain << "\n====================\n"
+                           << json_doc << "\n");
       remain = t + strlen(*sp);
     }
 
@@ -115,14 +114,15 @@ class StatsCb : public RdKafka::EventCb {
 /**
  * @brief Produce \p msgcnt in a transaction that is aborted.
  */
-static void produce_aborted_txns (const std::string &topic,
-                                  int32_t partition, int msgcnt) {
+static void produce_aborted_txns(const std::string &topic,
+                                 int32_t partition,
+                                 int msgcnt) {
   RdKafka::Producer *p;
   RdKafka::Conf *conf;
   RdKafka::Error *error;
 
-  Test::Say(tostr() << "Producing " << msgcnt << " transactional messages " <<
-            "which will be aborted\n");
+  Test::Say(tostr() << "Producing " << msgcnt << " transactional messages "
+                    << "which will be aborted\n");
   Test::conf_init(&conf, NULL, 0);
 
   Test::conf_set(conf, "transactional.id", "txn_id_" + topic);
@@ -141,13 +141,11 @@ static void produce_aborted_txns (const std::string &topic,
   if (error)
     Test::Fail("begin_transaction() failed: " + error->str());
 
-  for (int i = 0 ; i < msgcnt ; i++) {
+  for (int i = 0; i < msgcnt; i++) {
     RdKafka::ErrorCode err;
 
-    err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
-                     &i, sizeof(i),
-                     NULL, 0,
-                     0, NULL);
+    err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY, &i,
+                     sizeof(i), NULL, 0, 0, NULL);
     if (err)
       Test::Fail("produce() failed: " + RdKafka::err2str(err));
   }
@@ -168,14 +166,14 @@ static void produce_aborted_txns (const std::string &topic,
 }
 
 
-static void do_test_consumer_lag (bool with_txns) {
-  int msgcnt = test_quick ? 5 : 10;
+static void do_test_consumer_lag(bool with_txns) {
+  int msgcnt     = test_quick ? 5 : 10;
   int txn_msgcnt = 3;
-  int addcnt = 0;
+  int addcnt     = 0;
   std::string errstr;
   RdKafka::ErrorCode err;
 
-  SUB_TEST("Test consumer lag %s transactions", with_txns ? "with":"without");
+  SUB_TEST("Test consumer lag %s transactions", with_txns ? "with" : "without");
 
   topic = Test::mk_topic_name("0061-consumer_lag", 1);
 
@@ -210,7 +208,7 @@ static void do_test_consumer_lag (bool with_txns) {
   delete conf;
 
   /* Assign partitions */
-  std::vector<RdKafka::TopicPartition*> parts;
+  std::vector<RdKafka::TopicPartition *> parts;
   parts.push_back(RdKafka::TopicPartition::create(topic, 0));
   if ((err = c->assign(parts)))
     Test::Fail("assign failed: " + RdKafka::err2str(err));
@@ -222,42 +220,42 @@ static void do_test_consumer_lag (bool with_txns) {
   while (cnt < msgcnt + addcnt) {
     RdKafka::Message *msg = c->consume(1000);
 
-    switch (msg->err())
-      {
-      case RdKafka::ERR__TIMED_OUT:
-        if (with_txns && cnt >= msgcnt && stats.calc_lag == 0)
-          addcnt = 0; /* done */
-        break;
-      case RdKafka::ERR__PARTITION_EOF:
-        Test::Fail(tostr() << "Unexpected PARTITION_EOF (not enbaled) after "
-                   << cnt << "/" << msgcnt << " messages: " << msg->errstr());
-        break;
+    switch (msg->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+      if (with_txns && cnt >= msgcnt && stats.calc_lag == 0)
+        addcnt = 0; /* done */
+      break;
+    case RdKafka::ERR__PARTITION_EOF:
+      Test::Fail(tostr() << "Unexpected PARTITION_EOF (not enbaled) after "
+                         << cnt << "/" << msgcnt
+                         << " messages: " << msg->errstr());
+      break;
 
-      case RdKafka::ERR_NO_ERROR:
-        /* Proper message. Update calculated lag for later
-         * checking in stats callback */
-        if (msg->offset()+1 >= msgcnt && with_txns)
-          stats.calc_lag = 0;
-        else
-          stats.calc_lag = (msgcnt+addcnt) - (msg->offset()+1);
-        cnt++;
-        Test::Say(2, tostr() << "Received message #" << cnt << "/" << msgcnt <<
-                  " at offset " << msg->offset() << " (calc lag " << stats.calc_lag << ")\n");
-        /* Slow down message "processing" to make sure we get
-         * at least one stats callback per message. */
-        if (cnt < msgcnt)
-          rd_sleep(1);
-        break;
+    case RdKafka::ERR_NO_ERROR:
+      /* Proper message. Update calculated lag for later
+       * checking in stats callback */
+      if (msg->offset() + 1 >= msgcnt && with_txns)
+        stats.calc_lag = 0;
+      else
+        stats.calc_lag = (msgcnt + addcnt) - (msg->offset() + 1);
+      cnt++;
+      Test::Say(2, tostr() << "Received message #" << cnt << "/" << msgcnt
+                           << " at offset " << msg->offset() << " (calc lag "
+                           << stats.calc_lag << ")\n");
+      /* Slow down message "processing" to make sure we get
+       * at least one stats callback per message. */
+      if (cnt < msgcnt)
+        rd_sleep(1);
+      break;
 
-      default:
-        Test::Fail("Consume error: " + msg->errstr());
-        break;
-      }
+    default:
+      Test::Fail("Consume error: " + msg->errstr());
+      break;
+    }
 
     delete msg;
   }
-  Test::Say(tostr() << "Done, lag was valid " <<
-            stats.lag_valid << " times\n");
+  Test::Say(tostr() << "Done, lag was valid " << stats.lag_valid << " times\n");
   if (stats.lag_valid == 0)
     Test::Fail("No valid consumer_lag in statistics seen");
 
@@ -268,10 +266,10 @@ static void do_test_consumer_lag (bool with_txns) {
 }
 
 extern "C" {
-  int main_0061_consumer_lag (int argc, char **argv) {
-    do_test_consumer_lag(false/*no txns*/);
-    if (test_broker_version >= TEST_BRKVER(0,11,0,0))
-      do_test_consumer_lag(true/*txns*/);
-    return 0;
-  }
+int main_0061_consumer_lag(int argc, char **argv) {
+  do_test_consumer_lag(false /*no txns*/);
+  if (test_broker_version >= TEST_BRKVER(0, 11, 0, 0))
+    do_test_consumer_lag(true /*txns*/);
+  return 0;
+}
 }

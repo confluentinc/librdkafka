@@ -43,8 +43,8 @@
  * @brief Call the registered background_event_cb.
  * @locality rdkafka background queue thread
  */
-static RD_INLINE void
-rd_kafka_call_background_event_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+static RD_INLINE void rd_kafka_call_background_event_cb(rd_kafka_t *rk,
+                                                        rd_kafka_op_t *rko) {
         rd_assert(!rk->rk_background.calling);
         rk->rk_background.calling = 1;
 
@@ -64,11 +64,11 @@ rd_kafka_call_background_event_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
  *    APIs to the background queue.
  */
 static rd_kafka_op_res_t
-rd_kafka_background_queue_serve (rd_kafka_t *rk,
-                                 rd_kafka_q_t *rkq,
-                                 rd_kafka_op_t *rko,
-                                 rd_kafka_q_cb_type_t cb_type,
-                                 void *opaque) {
+rd_kafka_background_queue_serve(rd_kafka_t *rk,
+                                rd_kafka_q_t *rkq,
+                                rd_kafka_op_t *rko,
+                                rd_kafka_q_cb_type_t cb_type,
+                                void *opaque) {
         rd_kafka_op_res_t res;
 
         /*
@@ -109,7 +109,7 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
 /**
  * @brief Main loop for background queue thread.
  */
-int rd_kafka_background_thread_main (void *arg) {
+int rd_kafka_background_thread_main(void *arg) {
         rd_kafka_t *rk = arg;
 
         rd_kafka_set_thread_name("background");
@@ -130,7 +130,7 @@ int rd_kafka_background_thread_main (void *arg) {
         mtx_unlock(&rk->rk_init_lock);
 
         while (likely(!rd_kafka_terminating(rk))) {
-                rd_kafka_q_serve(rk->rk_background.q, 10*1000, 0,
+                rd_kafka_q_serve(rk->rk_background.q, 10 * 1000, 0,
                                  RD_KAFKA_Q_CB_RETURN,
                                  rd_kafka_background_queue_serve, NULL);
         }
@@ -144,8 +144,7 @@ int rd_kafka_background_thread_main (void *arg) {
         rd_kafka_q_disable(rk->rk_background.q);
         rd_kafka_q_purge(rk->rk_background.q);
 
-        rd_kafka_dbg(rk, GENERIC, "BGQUEUE",
-                     "Background queue thread exiting");
+        rd_kafka_dbg(rk, GENERIC, "BGQUEUE", "Background queue thread exiting");
 
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BACKGROUND);
 
@@ -161,9 +160,9 @@ int rd_kafka_background_thread_main (void *arg) {
  * @locks_acquired rk_init_lock
  * @locks_required rd_kafka_wrlock()
  */
-rd_kafka_resp_err_t rd_kafka_background_thread_create (rd_kafka_t *rk,
-                                                       char *errstr,
-                                                       size_t errstr_size) {
+rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
+                                                      char *errstr,
+                                                      size_t errstr_size) {
 #ifndef _WIN32
         sigset_t newset, oldset;
 #endif
@@ -188,9 +187,8 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create (rd_kafka_t *rk,
         sigemptyset(&oldset);
         sigfillset(&newset);
         if (rk->rk_conf.term_sig) {
-                struct sigaction sa_term = {
-                        .sa_handler = rd_kafka_term_sig_handler
-                };
+                struct sigaction sa_term = {.sa_handler =
+                                                rd_kafka_term_sig_handler};
                 sigaction(rk->rk_conf.term_sig, &sa_term, NULL);
         }
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);

@@ -37,16 +37,15 @@
 typedef struct rd_http_error_s {
         int code;
         char *errstr;
-        char data[1];  /**< This is where the error string begins. */
+        char data[1]; /**< This is where the error string begins. */
 } rd_http_error_t;
 
-void rd_http_error_destroy (rd_http_error_t *herr);
+void rd_http_error_destroy(rd_http_error_t *herr);
 
-rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp);
-rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp);
+rd_http_error_t *rd_http_get(const char *url, rd_buf_t **rbufp);
+rd_http_error_t *rd_http_get_json(const char *url, cJSON **jsonp);
 
-void rd_http_global_init (void);
-
+void rd_http_global_init(void);
 
 
 
@@ -56,16 +55,16 @@ void rd_http_global_init (void);
 
 
 typedef struct rd_http_req_s {
-        CURL *hreq_curl;     /**< CURL handle */
-        rd_buf_t *hreq_buf;  /**< Response buffer */
-        int hreq_code;       /**< HTTP response code */
+        CURL *hreq_curl;                        /**< CURL handle */
+        rd_buf_t *hreq_buf;                     /**< Response buffer */
+        int hreq_code;                          /**< HTTP response code */
         char hreq_curl_errstr[CURL_ERROR_SIZE]; /**< Error string for curl to
                                                  *   write to. */
 } rd_http_req_t;
 
-static void rd_http_req_destroy (rd_http_req_t *hreq);
-rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url);
-rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq);
+static void rd_http_req_destroy(rd_http_req_t *hreq);
+rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url);
+rd_http_error_t *rd_http_req_perform_sync(rd_http_req_t *hreq);
 #endif
 
 

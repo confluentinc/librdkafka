@@ -41,8 +41,10 @@
 static rd_kafka_t *c1, *c2;
 static rd_kafka_resp_err_t state1, state2;
 
-static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                          rd_kafka_topic_partition_list_t *parts, void *opaque) {
+static void rebalance_cb(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *parts,
+                         void *opaque) {
         rd_kafka_resp_err_t *statep = NULL;
 
         if (rk == c1)
@@ -52,7 +54,8 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         else
                 TEST_FAIL("Invalid rk %p", rk);
 
-        TEST_SAY("Rebalance for %s: %s:\n", rd_kafka_name(rk), rd_kafka_err2str(err));
+        TEST_SAY("Rebalance for %s: %s:\n", rd_kafka_name(rk),
+                 rd_kafka_err2str(err));
         test_print_partition_list(parts);
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
@@ -64,7 +67,7 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 }
 
 
-int main_0069_consumer_add_parts (int argc, char **argv) {
+int main_0069_consumer_add_parts(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__ + 5, 1);
         int64_t ts_start;
         int wait_sec;
@@ -78,7 +81,7 @@ int main_0069_consumer_add_parts (int argc, char **argv) {
         TEST_SAY("Creating topic %s with 2 partitions\n", topic);
         test_create_topic(c1, topic, 2, 1);
 
-        test_wait_topic_exists(c1, topic, 10*1000);
+        test_wait_topic_exists(c1, topic, 10 * 1000);
 
         TEST_SAY("Subscribing\n");
         test_consumer_subscribe(c1, topic);
@@ -96,7 +99,9 @@ int main_0069_consumer_add_parts (int argc, char **argv) {
         TEST_SAY("Changing partition count for topic %s\n", topic);
         test_create_partitions(NULL, topic, 4);
 
-        TEST_SAY("Closing consumer 1 (to quickly trigger rebalance with new partitions)\n");
+        TEST_SAY(
+            "Closing consumer 1 (to quickly trigger rebalance with new "
+            "partitions)\n");
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
 

@@ -31,38 +31,40 @@
 #include "rdregex.h"
 
 typedef struct rd_kafka_pattern_s {
-        TAILQ_ENTRY(rd_kafka_pattern_s)  rkpat_link;
+        TAILQ_ENTRY(rd_kafka_pattern_s) rkpat_link;
 
-	rd_regex_t  *rkpat_re;   /* Compiled regex */
-        char        *rkpat_orig;  /* Original pattern */
+        rd_regex_t *rkpat_re; /* Compiled regex */
+        char *rkpat_orig;     /* Original pattern */
 } rd_kafka_pattern_t;
 
 typedef struct rd_kafka_pattern_list_s {
-        TAILQ_HEAD(,rd_kafka_pattern_s) rkpl_head;
-        char   *rkpl_orig;
+        TAILQ_HEAD(, rd_kafka_pattern_s) rkpl_head;
+        char *rkpl_orig;
 } rd_kafka_pattern_list_t;
 
-void rd_kafka_pattern_destroy (rd_kafka_pattern_list_t *plist,
-                               rd_kafka_pattern_t *rkpat);
-void rd_kafka_pattern_add (rd_kafka_pattern_list_t *plist,
-                           rd_kafka_pattern_t *rkpat);
-rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
-                                          char *errstr, int errstr_size);
-int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str);
-int rd_kafka_pattern_list_append (rd_kafka_pattern_list_t *plist,
-                                  const char *pattern,
-                                  char *errstr, int errstr_size);
-int rd_kafka_pattern_list_remove (rd_kafka_pattern_list_t *plist,
-                                  const char *pattern);
-void rd_kafka_pattern_list_clear (rd_kafka_pattern_list_t *plist);
-void rd_kafka_pattern_list_destroy (rd_kafka_pattern_list_t *plist);
-int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
-                                const char *patternlist,
-                                char *errstr, size_t errstr_size);
-rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
-                                                    char *errstr,
-                                                    int errstr_size);
+void rd_kafka_pattern_destroy(rd_kafka_pattern_list_t *plist,
+                              rd_kafka_pattern_t *rkpat);
+void rd_kafka_pattern_add(rd_kafka_pattern_list_t *plist,
+                          rd_kafka_pattern_t *rkpat);
+rd_kafka_pattern_t *
+rd_kafka_pattern_new(const char *pattern, char *errstr, int errstr_size);
+int rd_kafka_pattern_match(rd_kafka_pattern_list_t *plist, const char *str);
+int rd_kafka_pattern_list_append(rd_kafka_pattern_list_t *plist,
+                                 const char *pattern,
+                                 char *errstr,
+                                 int errstr_size);
+int rd_kafka_pattern_list_remove(rd_kafka_pattern_list_t *plist,
+                                 const char *pattern);
+void rd_kafka_pattern_list_clear(rd_kafka_pattern_list_t *plist);
+void rd_kafka_pattern_list_destroy(rd_kafka_pattern_list_t *plist);
+int rd_kafka_pattern_list_init(rd_kafka_pattern_list_t *plist,
+                               const char *patternlist,
+                               char *errstr,
+                               size_t errstr_size);
+rd_kafka_pattern_list_t *rd_kafka_pattern_list_new(const char *patternlist,
+                                                   char *errstr,
+                                                   int errstr_size);
 rd_kafka_pattern_list_t *
-rd_kafka_pattern_list_copy (rd_kafka_pattern_list_t *src);
+rd_kafka_pattern_list_copy(rd_kafka_pattern_list_t *src);
 
 #endif /* _RDKAFKA_PATTERN_H_ */

@@ -43,45 +43,43 @@ const int64_t RdKafka::Topic::OFFSET_STORED = RD_KAFKA_OFFSET_STORED;
 
 const int64_t RdKafka::Topic::OFFSET_INVALID = RD_KAFKA_OFFSET_INVALID;
 
-RdKafka::Topic::~Topic () {
-
+RdKafka::Topic::~Topic() {
 }
 
-static int32_t partitioner_cb_trampoline (const rd_kafka_topic_t *rkt,
-                                          const void *keydata,
-                                          size_t keylen,
-                                          int32_t partition_cnt,
-                                          void *rkt_opaque,
-                                          void *msg_opaque) {
+static int32_t partitioner_cb_trampoline(const rd_kafka_topic_t *rkt,
+                                         const void *keydata,
+                                         size_t keylen,
+                                         int32_t partition_cnt,
+                                         void *rkt_opaque,
+                                         void *msg_opaque) {
   RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(rkt_opaque);
   std::string key(static_cast<const char *>(keydata), keylen);
   return topicimpl->partitioner_cb_->partitioner_cb(topicimpl, &key,
                                                     partition_cnt, msg_opaque);
 }
 
-static int32_t partitioner_kp_cb_trampoline (const rd_kafka_topic_t *rkt,
-                                             const void *keydata,
-                                             size_t keylen,
-                                             int32_t partition_cnt,
-                                             void *rkt_opaque,
-                                             void *msg_opaque) {
+static int32_t partitioner_kp_cb_trampoline(const rd_kafka_topic_t *rkt,
+                                            const void *keydata,
+                                            size_t keylen,
+                                            int32_t partition_cnt,
+                                            void *rkt_opaque,
+                                            void *msg_opaque) {
   RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(rkt_opaque);
-  return topicimpl->partitioner_kp_cb_->partitioner_cb(topicimpl,
-                                                       keydata, keylen,
-                                                       partition_cnt,
-                                                       msg_opaque);
+  return topicimpl->partitioner_kp_cb_->partitioner_cb(
+      topicimpl, keydata, keylen, partition_cnt, msg_opaque);
 }
 
 
 
-RdKafka::Topic *RdKafka::Topic::create (Handle *base,
-					const std::string &topic_str,
-					const Conf *conf,
-					std::string &errstr) {
-  const RdKafka::ConfImpl *confimpl = static_cast<const RdKafka::ConfImpl *>(conf);
+RdKafka::Topic *RdKafka::Topic::create(Handle *base,
+                                       const std::string &topic_str,
+                                       const Conf *conf,
+                                       std::string &errstr) {
+  const RdKafka::ConfImpl *confimpl =
+      static_cast<const RdKafka::ConfImpl *>(conf);
   rd_kafka_topic_t *rkt;
   rd_kafka_topic_conf_t *rkt_conf;
-  rd_kafka_t *rk = dynamic_cast<HandleImpl*>(base)->rk_;
+  rd_kafka_t *rk = dynamic_cast<HandleImpl *>(base)->rk_;
 
   RdKafka::TopicImpl *topic = new RdKafka::TopicImpl();
 
@@ -123,6 +121,4 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
   topic->rkt_ = rkt;
 
   return topic;
-
 }
-

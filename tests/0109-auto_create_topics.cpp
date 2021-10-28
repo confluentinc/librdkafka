@@ -42,22 +42,22 @@
  */
 
 
-static void do_test_consumer (bool allow_auto_create_topics,
-                              bool with_wildcards) {
-  Test::Say(tostr() << _C_MAG << "[ Test allow.auto.create.topics=" <<
-            (allow_auto_create_topics ? "true":"false") <<
-            " with_wildcards=" << (with_wildcards ? "true":"false") << " ]\n");
+static void do_test_consumer(bool allow_auto_create_topics,
+                             bool with_wildcards) {
+  Test::Say(tostr() << _C_MAG << "[ Test allow.auto.create.topics="
+                    << (allow_auto_create_topics ? "true" : "false")
+                    << " with_wildcards=" << (with_wildcards ? "true" : "false")
+                    << " ]\n");
 
-  bool has_acl_cli =
-    test_broker_version >= TEST_BRKVER(2,1,0,0) &&
-    !test_needs_auth(); /* We can't bother passing Java security config to
-                         * kafka-acls.sh */
+  bool has_acl_cli = test_broker_version >= TEST_BRKVER(2, 1, 0, 0) &&
+                     !test_needs_auth(); /* We can't bother passing Java
+                                          * security config to kafka-acls.sh */
 
-  bool supports_allow = test_broker_version >= TEST_BRKVER(0,11,0,0);
+  bool supports_allow = test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
 
-  std::string topic_exists = Test::mk_topic_name("0109-exists", 1);
+  std::string topic_exists    = Test::mk_topic_name("0109-exists", 1);
   std::string topic_notexists = Test::mk_topic_name("0109-notexists", 1);
-  std::string topic_unauth = Test::mk_topic_name("0109-unauthorized", 1);
+  std::string topic_unauth    = Test::mk_topic_name("0109-unauthorized", 1);
 
   /* Create consumer */
   RdKafka::Conf *conf;
@@ -87,23 +87,24 @@ static void do_test_consumer (bool allow_auto_create_topics,
     Test::create_topic(c, topic_unauth.c_str(), 1, 1);
 
     /* Add denying ACL for unauth topic */
-    test_kafka_cmd("kafka-acls.sh --bootstrap-server %s "
-                   "--add --deny-principal 'User:*' "
-                   "--operation All --deny-host '*' "
-                   "--topic '%s'",
-                   bootstraps.c_str(), topic_unauth.c_str());
+    test_kafka_cmd(
+        "kafka-acls.sh --bootstrap-server %s "
+        "--add --deny-principal 'User:*' "
+        "--operation All --deny-host '*' "
+        "--topic '%s'",
+        bootstraps.c_str(), topic_unauth.c_str());
   }
 
 
   /* Wait for topic to be fully created */
-  test_wait_topic_exists(NULL, topic_exists.c_str(), 10*1000);
+  test_wait_topic_exists(NULL, topic_exists.c_str(), 10 * 1000);
 
 
   /*
    * Subscribe
    */
   std::vector<std::string> topics;
-  std::map<std::string,RdKafka::ErrorCode> exp_errors;
+  std::map<std::string, RdKafka::ErrorCode> exp_errors;
 
   topics.push_back(topic_notexists);
   if (has_acl_cli)
@@ -118,7 +119,7 @@ static void do_test_consumer (bool allow_auto_create_topics,
      * not triggering topic auto creation).
      * We need to handle the expected error cases accordingly. */
     exp_errors["^" + topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
-    exp_errors[topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
+    exp_errors[topic_notexists]       = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
 
     if (has_acl_cli) {
       /* Unauthorized topics are not included in list-all-topics Metadata,
@@ -145,53 +146,50 @@ static void do_test_consumer (bool allow_auto_create_topics,
   bool run = true;
   while (run) {
     RdKafka::Message *msg = c->consume(tmout_multip(1000));
-    switch (msg->err())
-      {
-      case RdKafka::ERR__TIMED_OUT:
-      case RdKafka::ERR_NO_ERROR:
-        break;
+    switch (msg->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+    case RdKafka::ERR_NO_ERROR:
+      break;
 
-      case RdKafka::ERR__PARTITION_EOF:
-        run = false;
-        break;
+    case RdKafka::ERR__PARTITION_EOF:
+      run = false;
+      break;
 
-      default:
-        Test::Say("Consume error on " + msg->topic_name() +
-                  ": " + msg->errstr() + "\n");
+    default:
+      Test::Say("Consume error on " + msg->topic_name() + ": " + msg->errstr() +
+                "\n");
 
-        std::map<std::string,RdKafka::ErrorCode>::iterator it =
+      std::map<std::string, RdKafka::ErrorCode>::iterator it =
           exp_errors.find(msg->topic_name());
 
-        /* Temporary unknown-topic errors are okay for auto-created topics. */
-        bool unknown_is_ok =
-          allow_auto_create_topics &&
-          !with_wildcards &&
-          msg->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART &&
-          msg->topic_name() == topic_notexists;
+      /* Temporary unknown-topic errors are okay for auto-created topics. */
+      bool unknown_is_ok = allow_auto_create_topics && !with_wildcards &&
+                           msg->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART &&
+                           msg->topic_name() == topic_notexists;
 
-        if (it == exp_errors.end()) {
-          if (unknown_is_ok)
-            Test::Say("Ignoring temporary auto-create error for topic " +
-                      msg->topic_name() + ": " +
-                      RdKafka::err2str(msg->err()) + "\n");
-          else
-            Test::Fail("Did not expect error for " + msg->topic_name() +
-                       ": got: " + RdKafka::err2str(msg->err()));
-        } else if (msg->err() != it->second) {
-          if (unknown_is_ok)
-            Test::Say("Ignoring temporary auto-create error for topic " +
-                      msg->topic_name() + ": " +
-                      RdKafka::err2str(msg->err()) + "\n");
-          else
-            Test::Fail("Expected '" + RdKafka::err2str(it->second) + "' for " +
-                       msg->topic_name() + ", got " +
-                       RdKafka::err2str(msg->err()));
-        } else {
-          exp_errors.erase(msg->topic_name());
-        }
-
-        break;
+      if (it == exp_errors.end()) {
+        if (unknown_is_ok)
+          Test::Say("Ignoring temporary auto-create error for topic " +
+                    msg->topic_name() + ": " + RdKafka::err2str(msg->err()) +
+                    "\n");
+        else
+          Test::Fail("Did not expect error for " + msg->topic_name() +
+                     ": got: " + RdKafka::err2str(msg->err()));
+      } else if (msg->err() != it->second) {
+        if (unknown_is_ok)
+          Test::Say("Ignoring temporary auto-create error for topic " +
+                    msg->topic_name() + ": " + RdKafka::err2str(msg->err()) +
+                    "\n");
+        else
+          Test::Fail("Expected '" + RdKafka::err2str(it->second) + "' for " +
+                     msg->topic_name() + ", got " +
+                     RdKafka::err2str(msg->err()));
+      } else {
+        exp_errors.erase(msg->topic_name());
       }
+
+      break;
+    }
 
     delete msg;
   }
@@ -207,14 +205,14 @@ static void do_test_consumer (bool allow_auto_create_topics,
 }
 
 extern "C" {
-  int main_0109_auto_create_topics (int argc, char **argv) {
-    /* Parameters:
-     *  allow auto create, with wildcards */
-    do_test_consumer(true, true);
-    do_test_consumer(true, false);
-    do_test_consumer(false, true);
-    do_test_consumer(false, false);
+int main_0109_auto_create_topics(int argc, char **argv) {
+  /* Parameters:
+   *  allow auto create, with wildcards */
+  do_test_consumer(true, true);
+  do_test_consumer(true, false);
+  do_test_consumer(false, true);
+  do_test_consumer(false, false);
 
-    return 0;
-  }
+  return 0;
+}
 }

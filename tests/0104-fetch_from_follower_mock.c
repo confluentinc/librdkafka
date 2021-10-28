@@ -41,13 +41,13 @@
  *        a reset is performed. See do_test_offset_reset_lag()
  *        for the case where the replica is lagging and can't be trusted.
  */
-static void do_test_offset_reset (const char *auto_offset_reset) {
+static void do_test_offset_reset(const char *auto_offset_reset) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         rd_kafka_t *c;
-        const char *topic = "test";
-        const int msgcnt = 1000;
+        const char *topic    = "test";
+        const int msgcnt     = 1000;
         const size_t msgsize = 1000;
 
         TEST_SAY(_C_MAG "[ Test FFF auto.offset.reset=%s ]\n",
@@ -58,8 +58,7 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
         /* Seed the topic with messages */
         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
                                  "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "10",
-                                 NULL);
+                                 "batch.num.messages", "10", NULL);
 
         /* Set partition leader to broker 1, follower to broker 2 */
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
@@ -79,12 +78,10 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
          * will go to the follower. We want the third fetch, second one on
          * the follower, to fail and trigger an offset reset. */
         rd_kafka_mock_push_request_errors(
-                mcluster,
-                1/*FetchRequest*/,
-                3,
-                RD_KAFKA_RESP_ERR_NO_ERROR /*leader*/,
-                RD_KAFKA_RESP_ERR_NO_ERROR /*follower*/,
-                RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE /*follower: fail*/);
+            mcluster, 1 /*FetchRequest*/, 3,
+            RD_KAFKA_RESP_ERR_NO_ERROR /*leader*/,
+            RD_KAFKA_RESP_ERR_NO_ERROR /*follower*/,
+            RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE /*follower: fail*/);
 
         test_consumer_assign_partition(auto_offset_reset, c, topic, 0,
                                        RD_KAFKA_OFFSET_INVALID);
@@ -92,8 +89,7 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
         if (!strcmp(auto_offset_reset, "latest"))
                 test_consumer_poll_no_msgs(auto_offset_reset, c, 0, 5000);
         else
-                test_consumer_poll(auto_offset_reset, c, 0, 1, 0,
-                                   msgcnt, NULL);
+                test_consumer_poll(auto_offset_reset, c, 0, 1, 0, msgcnt, NULL);
 
         test_consumer_close(c);
 
@@ -111,14 +107,14 @@ static void do_test_offset_reset (const char *auto_offset_reset) {
  *        who's high-watermark is behind the leader, which means
  *        an offset reset should not be triggered.
  */
-static void do_test_offset_reset_lag (void) {
+static void do_test_offset_reset_lag(void) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         rd_kafka_t *c;
-        const char *topic = "test";
-        const int msgcnt = 10;
-        const int lag = 3;
+        const char *topic    = "test";
+        const int msgcnt     = 10;
+        const int lag        = 3;
         const size_t msgsize = 1000;
 
         TEST_SAY(_C_MAG "[ Test lagging FFF offset reset ]\n");
@@ -128,8 +124,7 @@ static void do_test_offset_reset_lag (void) {
         /* Seed the topic with messages */
         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
                                  "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "1",
-                                 NULL);
+                                 "batch.num.messages", "1", NULL);
 
         /* Set broker rack */
         /* Set partition leader to broker 1, follower to broker 2 */
@@ -138,8 +133,8 @@ static void do_test_offset_reset_lag (void) {
 
         /* Make follower lag by some messages
          * ( .. -1 because offsets start at 0) */
-        rd_kafka_mock_partition_set_follower_wmarks(mcluster, topic, 0,
-                                                    -1, msgcnt - lag - 1);
+        rd_kafka_mock_partition_set_follower_wmarks(mcluster, topic, 0, -1,
+                                                    msgcnt - lag - 1);
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -181,13 +176,13 @@ static void do_test_offset_reset_lag (void) {
  *        is questionable but for a later PR). Then change to a valid
  *        replica and verify messages can be consumed.
  */
-static void do_test_unknown_follower (void) {
+static void do_test_unknown_follower(void) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         rd_kafka_t *c;
-        const char *topic = "test";
-        const int msgcnt = 1000;
+        const char *topic    = "test";
+        const int msgcnt     = 1000;
         const size_t msgsize = 1000;
         test_msgver_t mv;
 
@@ -198,8 +193,7 @@ static void do_test_unknown_follower (void) {
         /* Seed the topic with messages */
         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
                                  "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "10",
-                                 NULL);
+                                 "batch.num.messages", "10", NULL);
 
         /* Set partition leader to broker 1, follower
          * to non-existent broker 19 */
@@ -225,11 +219,10 @@ static void do_test_unknown_follower (void) {
         test_msgver_init(&mv, 0);
         test_consumer_poll("proper follower", c, 0, 1, 0, msgcnt, &mv);
         /* Verify messages were indeed received from broker 3 */
-        test_msgver_verify0(__FUNCTION__, __LINE__, "broker_id",
-                            &mv, TEST_MSGVER_BY_BROKER_ID,
-                            (struct test_mv_vs){ .msg_base = 0,
-                                            .exp_cnt = msgcnt,
-                                            .broker_id = 3 });
+        test_msgver_verify0(
+            __FUNCTION__, __LINE__, "broker_id", &mv, TEST_MSGVER_BY_BROKER_ID,
+            (struct test_mv_vs) {
+                .msg_base = 0, .exp_cnt = msgcnt, .broker_id = 3});
         test_msgver_clear(&mv);
 
         test_consumer_close(c);
@@ -247,13 +240,13 @@ static void do_test_unknown_follower (void) {
  *        periodic metadata timeout when leader broker is no longer
  *        a replica.
  */
-static void do_test_replica_not_available (void) {
+static void do_test_replica_not_available(void) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         rd_kafka_t *c;
         const char *topic = "test";
-        const int msgcnt = 1000;
+        const int msgcnt  = 1000;
 
         TEST_SAY(_C_MAG "[ Test REPLICA_NOT_AVAIALBLE ]\n");
 
@@ -262,8 +255,7 @@ static void do_test_replica_not_available (void) {
         /* Seed the topic with messages */
         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 1000,
                                  "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "10",
-                                 NULL);
+                                 "batch.num.messages", "10", NULL);
 
         /* Set partition leader to broker 1. */
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
@@ -278,20 +270,17 @@ static void do_test_replica_not_available (void) {
         c = test_create_consumer("mygroup", NULL, conf, NULL);
 
         rd_kafka_mock_broker_push_request_error_rtts(
-                mcluster,
-                1/*Broker 1*/,
-                1/*FetchRequest*/,
-                10,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
-                RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0);
+            mcluster, 1 /*Broker 1*/, 1 /*FetchRequest*/, 10,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0,
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0);
 
 
         test_consumer_assign_partition("REPLICA_NOT_AVAIALBLE", c, topic, 0,
@@ -315,7 +304,7 @@ static void do_test_replica_not_available (void) {
 }
 
 
-int main_0104_fetch_from_follower_mock (int argc, char **argv) {
+int main_0104_fetch_from_follower_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");

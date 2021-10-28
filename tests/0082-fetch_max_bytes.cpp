@@ -41,18 +41,18 @@
  */
 
 
-static void do_test_fetch_max_bytes (void) {
+static void do_test_fetch_max_bytes(void) {
   const int partcnt = 3;
-  int msgcnt = 10 * partcnt;
-  const int msgsize = 900*1024;  /* Less than 1 Meg to account
-                                  * for batch overhead */
+  int msgcnt        = 10 * partcnt;
+  const int msgsize = 900 * 1024; /* Less than 1 Meg to account
+                                   * for batch overhead */
   std::string errstr;
   RdKafka::ErrorCode err;
 
   std::string topic = Test::mk_topic_name("0081-fetch_max_bytes", 1);
 
   /* Produce messages to partitions */
-  for (int32_t p = 0 ; p < (int32_t)partcnt ; p++)
+  for (int32_t p = 0; p < (int32_t)partcnt; p++)
     test_produce_msgs_easy_size(topic.c_str(), 0, p, msgcnt, msgsize);
 
   /* Create consumer */
@@ -79,8 +79,8 @@ static void do_test_fetch_max_bytes (void) {
    * larger than fetch.max.bytes.
    */
   Test::conf_set(conf, "max.partition.fetch.bytes", "20000000"); /* ~20MB */
-  Test::conf_set(conf, "fetch.max.bytes", "1000000"); /* ~1MB */
-  Test::conf_set(conf, "receive.message.max.bytes", "1000512"); /* ~1MB+512 */
+  Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
+  Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
@@ -98,19 +98,18 @@ static void do_test_fetch_max_bytes (void) {
   int cnt = 0;
   while (cnt < msgcnt) {
     RdKafka::Message *msg = c->consume(tmout_multip(1000));
-    switch (msg->err())
-      {
-      case RdKafka::ERR__TIMED_OUT:
-        break;
+    switch (msg->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+      break;
 
-      case RdKafka::ERR_NO_ERROR:
-        cnt++;
-        break;
+    case RdKafka::ERR_NO_ERROR:
+      cnt++;
+      break;
 
-      default:
-        Test::Fail("Consume error: " + msg->errstr());
-        break;
-      }
+    default:
+      Test::Fail("Consume error: " + msg->errstr());
+      break;
+    }
 
     delete msg;
   }
@@ -121,14 +120,14 @@ static void do_test_fetch_max_bytes (void) {
 }
 
 extern "C" {
-  int main_0082_fetch_max_bytes (int argc, char **argv) {
-    if (test_quick) {
-      Test::Skip("Test skipped due to quick mode\n");
-      return 0;
-    }
-
-    do_test_fetch_max_bytes();
-
+int main_0082_fetch_max_bytes(int argc, char **argv) {
+  if (test_quick) {
+    Test::Skip("Test skipped due to quick mode\n");
     return 0;
   }
+
+  do_test_fetch_max_bytes();
+
+  return 0;
+}
 }

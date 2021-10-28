@@ -145,6 +145,6 @@ if __name__ == '__main__':
 
     grid = []
     for i in range(0, len(plots), args.chart_cols):
-        grid.append(plots[i:i+args.chart_cols])
+        grid.append(plots[i:i + args.chart_cols])
 
     pandas_bokeh.plot_grid(grid)

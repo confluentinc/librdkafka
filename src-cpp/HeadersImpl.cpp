@@ -34,7 +34,7 @@
 #include "rdkafkacpp_int.h"
 
 RdKafka::Headers *RdKafka::Headers::create() {
-    return new RdKafka::HeadersImpl();
+  return new RdKafka::HeadersImpl();
 }
 
 RdKafka::Headers *RdKafka::Headers::create(const std::vector<Header> &headers) {
@@ -44,4 +44,5 @@ RdKafka::Headers *RdKafka::Headers::create(const std::vector<Header> &headers) {
     return new RdKafka::HeadersImpl();
 }
 
-RdKafka::Headers::~Headers() {}
+RdKafka::Headers::~Headers() {
+}

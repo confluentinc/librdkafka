@@ -38,57 +38,59 @@
 
 
 extern "C" {
-  int main_0078_c_from_cpp (int argc, char **argv) {
-    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+int main_0078_c_from_cpp(int argc, char **argv) {
+  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
-    std::string errstr;
+  std::string errstr;
 
-    if (conf->set("client.id", "myclient", errstr))
-      Test::Fail("conf->set() failed: " + errstr);
+  if (conf->set("client.id", "myclient", errstr))
+    Test::Fail("conf->set() failed: " + errstr);
 
-    RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-    if (!p)
-      Test::Fail("Failed to create Producer: " + errstr);
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail("Failed to create Producer: " + errstr);
 
-    delete conf;
+  delete conf;
 
-    /*
-     * Acquire rd_kafka_t and compare its name to the configured client.id
-     */
-    rd_kafka_t *rk = p->c_ptr();
-    if (!rk)
-      Test::Fail("Failed to acquire c_ptr");
+  /*
+   * Acquire rd_kafka_t and compare its name to the configured client.id
+   */
+  rd_kafka_t *rk = p->c_ptr();
+  if (!rk)
+    Test::Fail("Failed to acquire c_ptr");
 
-    std::string name = p->name();
-    std::string c_name = rd_kafka_name(rk);
+  std::string name   = p->name();
+  std::string c_name = rd_kafka_name(rk);
 
-    Test::Say("Compare C name " + c_name + " to C++ name " + name + "\n");
-    if (c_name != name)
-      Test::Fail("Expected C client name " + c_name + " to match C++ " + name);
+  Test::Say("Compare C name " + c_name + " to C++ name " + name + "\n");
+  if (c_name != name)
+    Test::Fail("Expected C client name " + c_name + " to match C++ " + name);
 
-    /*
-     * Create topic object, acquire rd_kafka_topic_t and compare
-     * its topic name.
-     */
+  /*
+   * Create topic object, acquire rd_kafka_topic_t and compare
+   * its topic name.
+   */
 
-    RdKafka::Topic *topic = RdKafka::Topic::create(p, "mytopic", NULL, errstr);
-    if (!topic)
-      Test::Fail("Failed to create Topic: " + errstr);
+  RdKafka::Topic *topic = RdKafka::Topic::create(p, "mytopic", NULL, errstr);
+  if (!topic)
+    Test::Fail("Failed to create Topic: " + errstr);
 
-    rd_kafka_topic_t *rkt = topic->c_ptr();
-    if (!rkt)
-      Test::Fail("Failed to acquire topic c_ptr");
+  rd_kafka_topic_t *rkt = topic->c_ptr();
+  if (!rkt)
+    Test::Fail("Failed to acquire topic c_ptr");
 
-    std::string topicname = topic->name();
-    std::string c_topicname = rd_kafka_topic_name(rkt);
+  std::string topicname   = topic->name();
+  std::string c_topicname = rd_kafka_topic_name(rkt);
 
-    Test::Say("Compare C topic " + c_topicname + " to C++ topic " + topicname + "\n");
-    if (c_topicname != topicname)
-      Test::Fail("Expected C topic " + c_topicname + " to match C++ topic " + topicname);
+  Test::Say("Compare C topic " + c_topicname + " to C++ topic " + topicname +
+            "\n");
+  if (c_topicname != topicname)
+    Test::Fail("Expected C topic " + c_topicname + " to match C++ topic " +
+               topicname);
 
-    delete topic;
-    delete p;
+  delete topic;
+  delete p;
 
-    return 0;
-  }
+  return 0;
+}
 }

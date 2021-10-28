@@ -29,7 +29,7 @@
 #include "test.h"
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -37,7 +37,7 @@
  *        successfully.
  *
  */
-static void do_test_create_producer () {
+static void do_test_create_producer() {
         const char *topic;
         uint64_t testid;
         rd_kafka_t *rk;
@@ -49,10 +49,7 @@ static void do_test_create_producer () {
 
         test_conf_init(&conf, NULL, 60);
 
-        res = rd_kafka_conf_set(conf,
-                                "sasl.oauthbearer.method",
-                                "oidc",
-                                errstr,
+        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.method", "oidc", errstr,
                                 sizeof(errstr));
 
         if (res == RD_KAFKA_CONF_INVALID) {
@@ -64,20 +61,14 @@ static void do_test_create_producer () {
         if (res != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s", errstr);
 
-        test_conf_set(conf,
-                      "sasl.oauthbearer.client.id",
-                      "randomuniqclientid");
-        test_conf_set(conf,
-                      "sasl.oauthbearer.client.secret",
+        test_conf_set(conf, "sasl.oauthbearer.client.id", "randomuniqclientid");
+        test_conf_set(conf, "sasl.oauthbearer.client.secret",
                       "randomuniqclientsecret");
-        test_conf_set(conf,
-                      "sasl.oauthbearer.client.secret",
+        test_conf_set(conf, "sasl.oauthbearer.client.secret",
                       "randomuniqclientsecret");
-        test_conf_set(conf,
-                      "sasl.oauthbearer.extensions",
+        test_conf_set(conf, "sasl.oauthbearer.extensions",
                       "supportFeatureX=true");
-        test_conf_set(conf,
-                      "sasl.oauthbearer.token.endpoint.url",
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
                       "https://localhost:1/token");
 
         testid = test_id_generate();
@@ -99,7 +90,7 @@ static void do_test_create_producer () {
 }
 
 
-int main_0126_oauthbearer_oidc (int argc, char **argv) {
+int main_0126_oauthbearer_oidc(int argc, char **argv) {
         do_test_create_producer();
         return 0;
 }

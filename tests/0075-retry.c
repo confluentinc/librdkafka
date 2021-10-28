@@ -42,24 +42,24 @@
  * reject all the rest (connection refused) to make sure we're only
  * playing with one single broker for this test. */
 static struct {
-        mtx_t     lock;
-        cnd_t     cnd;
+        mtx_t lock;
+        cnd_t cnd;
         sockem_t *skm;
-        thrd_t    thrd;
+        thrd_t thrd;
         struct {
-                int64_t   ts_at;   /* to ctrl thread: at this time, set delay */
-                int       delay;
-                int       ack;     /* from ctrl thread: new delay acked */
+                int64_t ts_at; /* to ctrl thread: at this time, set delay */
+                int delay;
+                int ack; /* from ctrl thread: new delay acked */
         } cmd;
         struct {
-                int64_t   ts_at;   /* to ctrl thread: at this time, set delay */
-                int       delay;
+                int64_t ts_at; /* to ctrl thread: at this time, set delay */
+                int delay;
 
         } next;
-        int       term;
+        int term;
 } ctrl;
 
-static int ctrl_thrd_main (void *arg) {
+static int ctrl_thrd_main(void *arg) {
 
 
         mtx_lock(&ctrl.lock);
@@ -71,21 +71,21 @@ static int ctrl_thrd_main (void *arg) {
                 if (ctrl.cmd.ts_at) {
                         ctrl.next.ts_at = ctrl.cmd.ts_at;
                         ctrl.next.delay = ctrl.cmd.delay;
-                        ctrl.cmd.ts_at = 0;
-                        ctrl.cmd.ack = 1;
-                        printf(_C_CYA "## %s: sockem: "
+                        ctrl.cmd.ts_at  = 0;
+                        ctrl.cmd.ack    = 1;
+                        printf(_C_CYA
+                               "## %s: sockem: "
                                "receieved command to set delay "
                                "to %d in %dms\n" _C_CLR,
-                               __FILE__,
-                               ctrl.next.delay,
+                               __FILE__, ctrl.next.delay,
                                (int)(ctrl.next.ts_at - test_clock()) / 1000);
-
                 }
 
                 now = test_clock();
                 if (ctrl.next.ts_at && now > ctrl.next.ts_at) {
                         assert(ctrl.skm);
-                        printf(_C_CYA "## %s: "
+                        printf(_C_CYA
+                               "## %s: "
                                "sockem: setting socket delay to %d\n" _C_CLR,
                                __FILE__, ctrl.next.delay);
                         sockem_set(ctrl.skm, "delay", ctrl.next.delay, NULL);
@@ -103,7 +103,7 @@ static int ctrl_thrd_main (void *arg) {
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
  */
-static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
+static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
 
         mtx_lock(&ctrl.lock);
         if (ctrl.skm) {
@@ -121,8 +121,8 @@ static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
         return 0;
 }
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
          * .. connectivity.
          * SASL auther will think a connection-down even in the auth
@@ -139,13 +139,13 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 /**
  * @brief Set socket delay to kick in after \p after ms
  */
-static void set_delay (int after, int delay) {
+static void set_delay(int after, int delay) {
         TEST_SAY("Set delay to %dms (after %dms)\n", delay, after);
 
         mtx_lock(&ctrl.lock);
-        ctrl.cmd.ts_at = test_clock() + (after*1000);
+        ctrl.cmd.ts_at = test_clock() + (after * 1000);
         ctrl.cmd.delay = delay;
-        ctrl.cmd.ack = 0;
+        ctrl.cmd.ack   = 0;
         cnd_broadcast(&ctrl.cnd);
 
         /* Wait for ack from sockem thread */
@@ -160,7 +160,7 @@ static void set_delay (int after, int delay) {
  * @brief Test that Metadata requests are retried properly when
  *        timing out due to high broker rtt.
  */
-static void do_test_low_socket_timeout (const char *topic) {
+static void do_test_low_socket_timeout(const char *topic) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
@@ -181,10 +181,10 @@ static void do_test_low_socket_timeout (const char *topic) {
          * the way of our test */
         test_conf_set(conf, "api.version.request", "false");
         test_socket_enable(conf);
-        test_curr->connect_cb = connect_cb;
+        test_curr->connect_cb  = connect_cb;
         test_curr->is_fatal_cb = is_fatal_cb;
 
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         TEST_SAY("Waiting for sockem connect..\n");
@@ -193,8 +193,9 @@ static void do_test_low_socket_timeout (const char *topic) {
                 cnd_wait(&ctrl.cnd, &ctrl.lock);
         mtx_unlock(&ctrl.lock);
 
-        TEST_SAY("Connected, fire off a undelayed metadata() to "
-                 "make sure connection is up\n");
+        TEST_SAY(
+            "Connected, fire off a undelayed metadata() to "
+            "make sure connection is up\n");
 
         err = rd_kafka_metadata(rk, 0, rkt, &md, tmout_multip(2000));
         TEST_ASSERT(!err, "metadata(undelayed) failed: %s",
@@ -208,15 +209,19 @@ static void do_test_low_socket_timeout (const char *topic) {
 
         /* After two retries, remove the delay, the third retry
          * should kick in and work. */
-        set_delay(((1000 /*socket.timeout.ms*/ +
-                    5000 /*retry.backoff.ms*/) * 2) - 2000, 0);
+        set_delay(
+            ((1000 /*socket.timeout.ms*/ + 5000 /*retry.backoff.ms*/) * 2) -
+                2000,
+            0);
 
-        TEST_SAY("Calling metadata() again which should succeed after "
-                 "3 internal retries\n");
+        TEST_SAY(
+            "Calling metadata() again which should succeed after "
+            "3 internal retries\n");
         /* Metadata should be returned after the third retry */
-        err = rd_kafka_metadata(rk, 0, rkt, &md,
-                                ((1000 /*socket.timeout.ms*/ +
-                                  5000 /*retry.backoff.ms*/) * 2) + 5000);
+        err = rd_kafka_metadata(
+            rk, 0, rkt, &md,
+            ((1000 /*socket.timeout.ms*/ + 5000 /*retry.backoff.ms*/) * 2) +
+                5000);
         TEST_SAY("metadata() returned %s\n", rd_kafka_err2str(err));
         TEST_ASSERT(!err, "metadata(undelayed) failed: %s",
                     rd_kafka_err2str(err));
@@ -235,7 +240,7 @@ static void do_test_low_socket_timeout (const char *topic) {
         mtx_destroy(&ctrl.lock);
 }
 
-int main_0075_retry (int argc, char **argv) {
+int main_0075_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0075_retry", 1);
 
         do_test_low_socket_timeout(topic);

@@ -47,7 +47,7 @@
  */
 
 
-const int64_t processing_time = 31*1000*1000; /*31s*/
+const int64_t processing_time = 31 * 1000 * 1000; /*31s*/
 
 struct _consumer {
         rd_kafka_t *rk;
@@ -57,23 +57,21 @@ struct _consumer {
         int max_rebalance_cnt;
 };
 
-static void do_consume (struct _consumer *cons, int timeout_s) {
+static void do_consume(struct _consumer *cons, int timeout_s) {
         rd_kafka_message_t *rkm;
 
-        rkm = rd_kafka_consumer_poll(cons->rk, timeout_s*1000);
+        rkm = rd_kafka_consumer_poll(cons->rk, timeout_s * 1000);
         if (!rkm)
                 return;
 
-        TEST_ASSERT(!rkm->err,
-                    "%s consumer error: %s (last poll was %dms ago)",
-                    rd_kafka_name(cons->rk),
-                    rd_kafka_message_errstr(rkm),
-                    (int)((test_clock() - cons->last)/1000));
+        TEST_ASSERT(!rkm->err, "%s consumer error: %s (last poll was %dms ago)",
+                    rd_kafka_name(cons->rk), rd_kafka_message_errstr(rkm),
+                    (int)((test_clock() - cons->last) / 1000));
 
-        TEST_SAY("%s: processing message #%d from "
-                 "partition %"PRId32" at offset %"PRId64"\n",
-                 rd_kafka_name(cons->rk), cons->cnt,
-                 rkm->partition, rkm->offset);
+        TEST_SAY(
+            "%s: processing message #%d from "
+            "partition %" PRId32 " at offset %" PRId64 "\n",
+            rd_kafka_name(cons->rk), cons->cnt, rkm->partition, rkm->offset);
 
         rd_kafka_message_destroy(rkm);
 
@@ -86,24 +84,22 @@ static void do_consume (struct _consumer *cons, int timeout_s) {
 }
 
 
-static void rebalance_cb (rd_kafka_t *rk,
-                          rd_kafka_resp_err_t err,
-                          rd_kafka_topic_partition_list_t *parts,
-                          void *opaque) {
+static void rebalance_cb(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *parts,
+                         void *opaque) {
         struct _consumer *cons = opaque;
 
         cons->rebalance_cnt++;
 
         TEST_SAY(_C_BLU "%s rebalance #%d/%d: %s: %d partition(s)\n",
-                 rd_kafka_name(cons->rk),
-                 cons->rebalance_cnt, cons->max_rebalance_cnt,
-                 rd_kafka_err2name(err),
-                 parts->cnt);
+                 rd_kafka_name(cons->rk), cons->rebalance_cnt,
+                 cons->max_rebalance_cnt, rd_kafka_err2name(err), parts->cnt);
 
         TEST_ASSERT(cons->rebalance_cnt <= cons->max_rebalance_cnt,
                     "%s rebalanced %d times, max was %d",
-                    rd_kafka_name(cons->rk),
-                    cons->rebalance_cnt, cons->max_rebalance_cnt);
+                    rd_kafka_name(cons->rk), cons->rebalance_cnt,
+                    cons->max_rebalance_cnt);
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
                 rd_kafka_assign(rk, parts);
@@ -113,9 +109,9 @@ static void rebalance_cb (rd_kafka_t *rk,
 
 
 #define _CONSUMER_CNT 2
-static void do_test_with_subscribe (const char *topic) {
+static void do_test_with_subscribe(const char *topic) {
         int64_t testid;
-        const int msgcnt = 3;
+        const int msgcnt                  = 3;
         struct _consumer c[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_kafka_conf_t *conf;
 
@@ -124,12 +120,12 @@ static void do_test_with_subscribe (const char *topic) {
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL,
-                       10 + (int)(processing_time/1000000) * msgcnt);
+                       10 + (int)(processing_time / 1000000) * msgcnt);
 
         /* Produce extra messages since we can't fully rely on the
          * random partitioner to provide exact distribution. */
         test_produce_msgs_easy(topic, testid, -1, msgcnt * _CONSUMER_CNT * 2);
-        test_produce_msgs_easy(topic, testid, 1, msgcnt/2);
+        test_produce_msgs_easy(topic, testid, 1, msgcnt / 2);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "20000" /*20s*/);
@@ -141,8 +137,8 @@ static void do_test_with_subscribe (const char *topic) {
         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         rd_kafka_conf_set_opaque(conf, &c[0]);
-        c[0].rk = test_create_consumer(topic, NULL,
-                                       rd_kafka_conf_dup(conf), NULL);
+        c[0].rk =
+            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
         rd_kafka_conf_set_opaque(conf, &c[1]);
         c[1].rk = test_create_consumer(topic, NULL, conf, NULL);
@@ -158,10 +154,10 @@ static void do_test_with_subscribe (const char *topic) {
         while (1) {
                 rd_kafka_topic_partition_list_t *parts = NULL;
 
-                do_consume(&c[0], 1/*1s*/);
+                do_consume(&c[0], 1 /*1s*/);
 
                 if (rd_kafka_assignment(c[0].rk, &parts) !=
-                    RD_KAFKA_RESP_ERR_NO_ERROR ||
+                        RD_KAFKA_RESP_ERR_NO_ERROR ||
                     !parts || parts->cnt == 0) {
                         if (parts)
                                 rd_kafka_topic_partition_list_destroy(parts);
@@ -179,7 +175,7 @@ static void do_test_with_subscribe (const char *topic) {
         /* Poll until both consumers have finished reading N messages */
         while (c[0].cnt < msgcnt && c[1].cnt < msgcnt) {
                 do_consume(&c[0], 0);
-                do_consume(&c[1], 10/*10s*/);
+                do_consume(&c[1], 10 /*10s*/);
         }
 
         /* Allow the extra revoke rebalance on close() */
@@ -201,7 +197,7 @@ static void do_test_with_subscribe (const char *topic) {
  * @brief Verify that max.poll.interval.ms does NOT kick in
  *        when just using assign() and not subscribe().
  */
-static void do_test_with_assign (const char *topic) {
+static void do_test_with_assign(const char *topic) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_message_t *rkm;
@@ -226,8 +222,7 @@ static void do_test_with_assign (const char *topic) {
 
         /* Make sure no error was raised */
         while ((rkm = rd_kafka_consumer_poll(rk, 0))) {
-                TEST_ASSERT(!rkm->err,
-                            "Unexpected consumer error: %s: %s",
+                TEST_ASSERT(!rkm->err, "Unexpected consumer error: %s: %s",
                             rd_kafka_err2name(rkm->err),
                             rd_kafka_message_errstr(rkm));
 
@@ -238,8 +233,7 @@ static void do_test_with_assign (const char *topic) {
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN
-                 "[ Test max.poll.interval.ms with assign(): PASS ]\n");
+        TEST_SAY(_C_GRN "[ Test max.poll.interval.ms with assign(): PASS ]\n");
 }
 
 
@@ -247,7 +241,7 @@ static void do_test_with_assign (const char *topic) {
  * @brief Verify that max.poll.interval.ms kicks in even if
  *        the application hasn't called poll once.
  */
-static void do_test_no_poll (const char *topic) {
+static void do_test_no_poll(const char *topic) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_message_t *rkm;
@@ -287,9 +281,9 @@ static void do_test_no_poll (const char *topic) {
 }
 
 
-int main_0091_max_poll_interval_timeout (int argc, char **argv) {
-        const char *topic = test_mk_topic_name("0091_max_poll_interval_tmout",
-                                               1);
+int main_0091_max_poll_interval_timeout(int argc, char **argv) {
+        const char *topic =
+            test_mk_topic_name("0091_max_poll_interval_tmout", 1);
 
         test_create_topic(NULL, topic, 2, 1);
 

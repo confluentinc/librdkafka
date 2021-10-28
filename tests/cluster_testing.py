@@ -7,7 +7,7 @@
 #  trivup python module
 #  gradle in your PATH
 
-from trivup.trivup import Cluster, UuidAllocator
+from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
@@ -46,8 +46,9 @@ class LibrdkafkaTestCluster(Cluster):
         \\p conf dict is passed to KafkaBrokerApp classes, etc.
         """
 
-        super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__,
-                                                    os.environ.get('TRIVUP_ROOT', 'tmp'), debug=debug)
+        super(LibrdkafkaTestCluster, self).__init__(
+            self.__class__.__name__,
+            os.environ.get('TRIVUP_ROOT', 'tmp'), debug=debug)
 
         # Read trivup config from scenario definition.
         defconf = read_scenario_conf(scenario)
@@ -83,7 +84,7 @@ class LibrdkafkaTestCluster(Cluster):
                     {
                         'conf': [
                             'broker.rack=RACK${appid}',
-                            'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
+                            'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})  # noqa: E501
             self.brokers.append(KafkaBrokerApp(self, defconf))
 
     def bootstrap_servers(self):

@@ -11,10 +11,8 @@ import os
 import tempfile
 import shutil
 import subprocess
-import urllib
 from fnmatch import fnmatch
 from string import Template
-from collections import defaultdict
 import boto3
 from zfile import zfile
 import magic
@@ -37,7 +35,8 @@ rename_vals = {'plat': {'windows': 'win'},
 # This is used to verify that an artifact has the expected file type.
 magic_patterns = {
     ('win', 'x64', '.dll'): re.compile('PE32.*DLL.* x86-64, for MS Windows'),
-    ('win', 'x86', '.dll'): re.compile('PE32.*DLL.* Intel 80386, for MS Windows'),
+    ('win', 'x86', '.dll'):
+    re.compile('PE32.*DLL.* Intel 80386, for MS Windows'),
     ('win', 'x64', '.lib'): re.compile('current ar archive'),
     ('win', 'x86', '.lib'): re.compile('current ar archive'),
     ('linux', 'x64', '.so'): re.compile('ELF 64.* x86-64'),
@@ -60,7 +59,8 @@ def magic_mismatch(path, a):
     minfo = magic.id_filename(path)
     if not pattern.match(minfo):
         print(
-            f"Warning: {path} magic \"{minfo}\" does not match expected {pattern} for key {k}")
+            f"Warning: {path} magic \"{minfo}\" "
+            f"does not match expected {pattern} for key {k}")
         return True
 
     return False
@@ -170,8 +170,6 @@ class Artifacts (object):
         :param: req_tag bool: Require tag to match.
         """
 
-        #print('?  %s' % path)
-
         # For local files, strip download path.
         # Also ignore any parent directories.
         if path.startswith(self.dlpath):
@@ -209,13 +207,13 @@ class Artifacts (object):
         # Make sure all matches were satisfied, unless this is a
         # common artifact.
         if info.get('p', '') != 'common' and len(unmatched) > 0:
-            # print('%s: %s did not match %s' % (info.get('p', None), folder, unmatched))
             return None
 
         return Artifact(self, path, info)
 
     def collect_s3(self):
-        """ Collect and download build-artifacts from S3 based on git reference """
+        """ Collect and download build-artifacts from S3 based on
+        git reference """
         print(
             'Collecting artifacts matching %s from S3 bucket %s' %
             (self.match, s3_bucket))
@@ -229,14 +227,15 @@ class Artifacts (object):
         more = True
         while more:
             if cont_token is not None:
-                res = self.s3_client.list_objects_v2(Bucket=s3_bucket,
-                                                     Prefix='librdkafka/',
-                                                     ContinuationToken=cont_token)
+                res = self.s3_client.list_objects_v2(
+                    Bucket=s3_bucket,
+                    Prefix='librdkafka/',
+                    ContinuationToken=cont_token)
             else:
                 res = self.s3_client.list_objects_v2(Bucket=s3_bucket,
                                                      Prefix='librdkafka/')
 
-            if res.get('IsTruncated') == True:
+            if res.get('IsTruncated') is True:
                 cont_token = res.get('NextContinuationToken')
             else:
                 more = False
@@ -278,7 +277,8 @@ class Package (object):
         self.files[file] = True
 
     def build(self):
-        """ Build package output(s), return a list of paths to built packages """
+        """ Build package output(s), return a list of paths "
+        to built packages """
         raise NotImplementedError
 
     def cleanup(self):
@@ -404,8 +404,10 @@ class NugetPackage (Package):
              'LICENSES.txt'],
 
             # Travis OSX build
-            [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'},
-                './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
+            [{'arch': 'x64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-clang.tar.gz'},
+             './lib/librdkafka.dylib',
+             'runtimes/osx-x64/native/librdkafka.dylib'],
             # Travis Manylinux build
             [{'arch': 'x64',
               'plat': 'linux',
@@ -426,15 +428,20 @@ class NugetPackage (Package):
              './usr/lib64/librdkafka.so.1',
              'runtimes/linux-x64/native/centos7-librdkafka.so'],
             # Travis Alpine build
-            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'alpine-librdkafka.tgz'},
-                'librdkafka.so.1', 'runtimes/linux-x64/native/alpine-librdkafka.so'],
+            [{'arch': 'x64', 'plat': 'linux',
+              'fname_glob': 'alpine-librdkafka.tgz'},
+             'librdkafka.so.1',
+             'runtimes/linux-x64/native/alpine-librdkafka.so'],
             # Travis arm64 Linux build
-            [{'arch': 'arm64', 'plat': 'linux', 'fname_glob': 'librdkafka-gcc.tar.gz'},
-                './lib/librdkafka.so.1', 'runtimes/linux-arm64/native/librdkafka.so'],
+            [{'arch': 'arm64', 'plat': 'linux',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/librdkafka.so.1',
+             'runtimes/linux-arm64/native/librdkafka.so'],
 
             # Common Win runtime
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr140.zip'},
-                'vcruntime140.dll', 'runtimes/win-x64/native/vcruntime140.dll'],
+             'vcruntime140.dll',
+             'runtimes/win-x64/native/vcruntime140.dll'],
             [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr140.zip'},
                 'msvcp140.dll', 'runtimes/win-x64/native/msvcp140.dll'],
             # matches librdkafka.redist.{VER}.nupkg
@@ -469,13 +476,18 @@ class NugetPackage (Package):
              'build/native/bin/v140/x64/Release/zstd.dll',
              'runtimes/win-x64/native/zstd.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v140/x64/Release/librdkafka.lib', 'build/native/lib/win/x64/win-x64-Release/v140/librdkafka.lib'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v140/x64/Release/librdkafkacpp.lib', 'build/native/lib/win/x64/win-x64-Release/v140/librdkafkacpp.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg',
+              'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/x64/Release/librdkafka.lib',
+             'build/native/lib/win/x64/win-x64-Release/v140/librdkafka.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg',
+              'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/x64/Release/librdkafkacpp.lib',
+             'build/native/lib/win/x64/win-x64-Release/v140/librdkafkacpp.lib'],  # noqa: E501
 
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr140.zip'},
-                'vcruntime140.dll', 'runtimes/win-x86/native/vcruntime140.dll'],
+                'vcruntime140.dll',
+             'runtimes/win-x86/native/vcruntime140.dll'],
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr140.zip'},
                 'msvcp140.dll', 'runtimes/win-x86/native/msvcp140.dll'],
             # matches librdkafka.redist.{VER}.nupkg
@@ -512,10 +524,14 @@ class NugetPackage (Package):
              'runtimes/win-x86/native/zstd.dll'],
 
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v140/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v140/librdkafka.lib'],
-            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v140/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v140/librdkafkacpp.lib']
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg',
+              'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/Win32/Release/librdkafka.lib',
+             'build/native/lib/win/x86/win-x86-Release/v140/librdkafka.lib'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*.nupkg',
+              'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v140/Win32/Release/librdkafkacpp.lib',
+             'build/native/lib/win/x86/win-x86-Release/v140/librdkafkacpp.lib']
         ]
 
         for m in mappings:
@@ -551,11 +567,11 @@ class NugetPackage (Package):
 
                 try:
                     zfile.ZFile.extract(a.lpath, member, outf)
-                except KeyError as e:
+                except KeyError:
                     continue
                 except Exception as e:
                     raise Exception(
-                        'file not found in archive %s: %s. Files in archive are: %s' %
+                        'file not found in archive %s: %s. Files in archive are: %s' %  # noqa: E501
                         (a.lpath, e, zfile.ZFile(
                             a.lpath).getnames()))
 
@@ -569,7 +585,7 @@ class NugetPackage (Package):
 
             if not found:
                 raise MissingArtifactError(
-                    'unable to find artifact with tags %s matching "%s" for file "%s"' %
+                    'unable to find artifact with tags %s matching "%s" for file "%s"' %  # noqa: E501
                     (str(attributes), fname_glob, member))
 
         print('Tree extracted to %s' % self.stpath)
@@ -577,8 +593,9 @@ class NugetPackage (Package):
         # After creating a bare-bone nupkg layout containing the artifacts
         # and some spec and props files, call the 'nuget' utility to
         # make a proper nupkg of it (with all the metadata files).
-        subprocess.check_call("./nuget.sh pack %s -BasePath '%s' -NonInteractive" %
-                              (os.path.join(self.stpath, 'librdkafka.redist.nuspec'),
+        subprocess.check_call("./nuget.sh pack %s -BasePath '%s' -NonInteractive" %  # noqa: E501
+                              (os.path.join(self.stpath,
+                                            'librdkafka.redist.nuspec'),
                                self.stpath), shell=True)
 
         return 'librdkafka.redist.%s.nupkg' % vless_version
@@ -705,13 +722,16 @@ class StaticPackage (Package):
               'fname_glob': 'librdkafka-clang.tar.gz'},
              './lib/librdkafka-static.a',
              'librdkafka_darwin.a'],
-            [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka-clang.tar.gz'},
+            [{'arch': 'x64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-clang.tar.gz'},
                 './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_darwin.pc'],
 
             # win static lib and pkg-config file (mingw)
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-gcc.tar.gz'},
+            [{'arch': 'x64', 'plat': 'win',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
                 './lib/librdkafka-static.a', 'librdkafka_windows.a'],
-            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka-gcc.tar.gz'},
+            [{'arch': 'x64', 'plat': 'win',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
                 './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_windows.pc'],
         ]
 
@@ -757,7 +777,7 @@ class StaticPackage (Package):
                 zfile.ZFile.extract(artifact.lpath, member, outf)
             except KeyError as e:
                 raise Exception(
-                    'file not found in archive %s: %s. Files in archive are: %s' %
+                    'file not found in archive %s: %s. Files in archive are: %s' %  # noqa: E501
                     (artifact.lpath, e, zfile.ZFile(
                         artifact.lpath).getnames()))
 

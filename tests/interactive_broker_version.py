@@ -16,7 +16,6 @@ from trivup.apps.SslApp import SslApp
 from cluster_testing import read_scenario_conf
 
 import subprocess
-import time
 import tempfile
 import os
 import sys
@@ -31,7 +30,8 @@ def version_as_number(version):
     return float('%s.%s' % (tokens[0], tokens[1]))
 
 
-def test_version(version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
+def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
+                 exec_cnt=1,
                  root_path='tmp', broker_cnt=3, scenario='default'):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \\p version
@@ -68,7 +68,7 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=
                 {
                     'conf': [
                         'broker.rack=RACK${appid}',
-                        'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
+                        'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})  # noqa: E501
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()
@@ -101,9 +101,11 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=
         elif mech == 'OAUTHBEARER':
             security_protocol = 'SASL_PLAINTEXT'
             os.write(
-                fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode('ascii')))
+                fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode(
+                    'ascii')))
             os.write(fd, ('sasl.oauthbearer.config=%s\n' %
-                          'scope=requiredScope principal=admin').encode('ascii'))
+                          'scope=requiredScope principal=admin').encode(
+                              'ascii'))
         else:
             print(
                 '# FIXME: SASL %s client config not written to %s' %
@@ -170,7 +172,7 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=
 
     if not cluster.wait_operational(30):
         cluster.stop(force=True)
-        raise Exception('Cluster %s did not go operational, see logs in %s/%s' %
+        raise Exception('Cluster %s did not go operational, see logs in %s/%s' %  # noqa: E501
                         (cluster.name, cluster.root_path, cluster.instance))
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
@@ -233,17 +235,21 @@ if __name__ == '__main__':
 
     parser.add_argument('versions', type=str, default=None, nargs='+',
                         help='Kafka version(s) to deploy')
-    parser.add_argument('--no-deploy', action='store_false', dest='deploy', default=True,
-                        help='Dont deploy applications, assume already deployed.')
+    parser.add_argument('--no-deploy', action='store_false', dest='deploy',
+                        default=True,
+                        help='Dont deploy applications, '
+                        'assume already deployed.')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='JSON config object (not file)')
-    parser.add_argument('--scenario', type=str, dest='scenario', default='default',
+    parser.add_argument('--scenario', type=str, dest='scenario',
+                        default='default',
                         help='Test scenario (see scenarios/ directory)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
     parser.add_argument('-n', type=int, dest='exec_cnt', default=1,
                         help='Number of times to execute -c ..')
-    parser.add_argument('--debug', action='store_true', dest='debug', default=False,
+    parser.add_argument('--debug', action='store_true', dest='debug',
+                        default=False,
                         help='Enable trivup debugging')
     parser.add_argument(
         '--root',
@@ -268,7 +274,8 @@ if __name__ == '__main__':
         type=int,
         default=3,
         help='Number of Kafka brokers')
-    parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
+    parser.add_argument('--ssl', dest='ssl', action='store_true',
+                        default=False,
                         help='Enable SSL endpoints')
     parser.add_argument(
         '--sasl',
@@ -302,7 +309,8 @@ if __name__ == '__main__':
     retcode = 0
     for version in args.versions:
         r = test_version(version, cmd=args.cmd, deploy=args.deploy,
-                         conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
+                         conf=args.conf, debug=args.debug,
+                         exec_cnt=args.exec_cnt,
                          root_path=args.root, broker_cnt=args.broker_cnt,
                          scenario=args.scenario)
         if not r:

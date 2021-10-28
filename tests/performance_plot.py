@@ -61,7 +61,6 @@ def get_perf_data(perfname, stats):
 
 def plot(description, name, stats, perfname, outfile=None):
     labels, x, y, errs = get_perf_data(perfname, stats)
-    colors = np.random.rand(len(labels))
     plt.title('%s: %s %s' % (description, name, perfname))
     plt.xlabel('Kafka version')
     plt.ylabel(perfname)
@@ -112,4 +111,5 @@ if __name__ == '__main__':
         for perfname in ['mb_per_sec', 'records_per_sec']:
             plot('librdkafka 0038_performance test: %s (%d samples)' %
                  (outfile, len(reports)),
-                 t, stats[t], perfname, outfile='%s_%s_%s.png' % (outfile, t, perfname))
+                 t, stats[t], perfname, outfile='%s_%s_%s.png' % (
+                     outfile, t, perfname))

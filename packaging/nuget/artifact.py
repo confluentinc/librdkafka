@@ -24,8 +24,9 @@
 
 import re
 import os
-import argparse
 import boto3
+
+import packaging
 
 s3_bucket = 'librdkafka-ci-packages'
 dry_run = False
@@ -151,7 +152,8 @@ class Artifacts (object):
         return Artifact(self, path, info)
 
     def collect_s3(self):
-        """ Collect and download build-artifacts from S3 based on git reference """
+        """ Collect and download build-artifacts from S3 based on
+        git reference """
         print(
             'Collecting artifacts matching %s from S3 bucket %s' %
             (self.match, s3_bucket))

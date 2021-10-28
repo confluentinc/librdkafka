@@ -512,7 +512,8 @@ static int empty(Renode *node) {
         }
 }
 
-static Renode *newrep(Restate *g, Renode *atom, int ng, int min, int max) {
+static Renode *
+newrep(Restate *g, Renode *atom, int ng, unsigned char min, unsigned char max) {
         Renode *rep = newnode(g, P_REP);
         if (max == REPINF && empty(atom))
                 die(g, "infinite loop matching the empty string");
@@ -618,11 +619,14 @@ static Renode *parserep(Restate *g) {
 
         atom = parseatom(g);
         if (g->lookahead == L_COUNT) {
-                int min = g->yymin, max = g->yymax;
+                unsigned char min = g->yymin, max = g->yymax;
                 next(g);
+                if ((g->yymin & ~(0xff)) || (g->yymax & ~(0xff)))
+                        die(g,
+                            "invalid quantifier: min & max should be in "
+                            "[0-255]");
                 if (max < min)
                         die(g, "invalid quantifier");
-                return newrep(g, atom, re_accept(g, '?'), min, max);
         }
         if (re_accept(g, '*'))
                 return newrep(g, atom, re_accept(g, '?'), 0, REPINF);

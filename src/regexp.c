@@ -559,7 +559,8 @@ static Renode *parseatom(Restate *g) {
         }
         if (g->lookahead == L_REF) {
                 atom = newnode(g, P_REF);
-                if (g->yychar == 0 || g->yychar > g->nsub || !g->sub[g->yychar])
+                if (g->yychar == 0 || g->yychar >= g->nsub ||
+                    !g->sub[g->yychar])
                         die(g, "invalid back-reference");
                 atom->n = g->yychar;
                 atom->x = g->sub[g->yychar];

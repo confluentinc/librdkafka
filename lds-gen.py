@@ -47,7 +47,9 @@ if __name__ == '__main__':
         if m:
             sym = m.group(2)
             # Ignore static (unused) functions
-            m2 = re.match(r'(RD_UNUSED|__attribute__\(\(unused\)\))', last_line)
+            m2 = re.match(
+                r'(RD_UNUSED|__attribute__\(\(unused\)\))',
+                last_line)
             if not m2:
                 funcs.append(sym)
             last_line = ''

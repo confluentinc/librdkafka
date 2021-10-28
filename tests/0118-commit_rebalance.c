@@ -35,12 +35,13 @@
 static rd_kafka_t *c1, *c2;
 
 
-static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                          rd_kafka_topic_partition_list_t *parts,
-                          void *opaque) {
+static void rebalance_cb(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
+                         rd_kafka_topic_partition_list_t *parts,
+                         void *opaque) {
 
-        TEST_SAY("Rebalance for %s: %s: %d partition(s)\n",
-                 rd_kafka_name(rk), rd_kafka_err2name(err), parts->cnt);
+        TEST_SAY("Rebalance for %s: %s: %d partition(s)\n", rd_kafka_name(rk),
+                 rd_kafka_err2name(err), parts->cnt);
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
                 TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
@@ -67,24 +68,22 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                  * since it will have started to shut down after the assign
                  * call. */
                 TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
-                commit_err = rd_kafka_commit(rk, parts, 0/*sync*/);
-                TEST_SAY("%s: Commit result: %s\n",
-                         rd_kafka_name(rk), rd_kafka_err2name(commit_err));
+                commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/);
+                TEST_SAY("%s: Commit result: %s\n", rd_kafka_name(rk),
+                         rd_kafka_err2name(commit_err));
 
                 TEST_ASSERT(commit_err,
                             "Expected closing consumer %s's commit to "
                             "fail, but got %s",
-                            rd_kafka_name(rk),
-                            rd_kafka_err2name(commit_err));
+                            rd_kafka_name(rk), rd_kafka_err2name(commit_err));
 
         } else {
                 TEST_FAIL("Unhandled event: %s", rd_kafka_err2name(err));
         }
-
 }
 
 
-int main_0118_commit_rebalance (int argc, char **argv) {
+int main_0118_commit_rebalance(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         const int msgcnt = 1000;
@@ -94,11 +93,11 @@ int main_0118_commit_rebalance (int argc, char **argv) {
         test_conf_set(conf, "auto.offset.reset", "earliest");
         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
-        test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0,
-                                 msgcnt, 10, NULL);
+        test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, 10,
+                                 NULL);
 
-        c1 = test_create_consumer(topic, rebalance_cb,
-                                  rd_kafka_conf_dup(conf), NULL);
+        c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
+                                  NULL);
         c2 = test_create_consumer(topic, rebalance_cb, conf, NULL);
 
         test_consumer_subscribe(c1, topic);

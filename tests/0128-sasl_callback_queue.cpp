@@ -37,25 +37,26 @@
 namespace {
 /* Provide our own token refresh callback */
 class MyCb : public RdKafka::OAuthBearerTokenRefreshCb {
-public:
-  MyCb (): called(false) {}
+ public:
+  MyCb() : called(false) {
+  }
 
-  void oauthbearer_token_refresh_cb (RdKafka::Handle *handle,
-                                     const std::string &oauthbearer_config) {
-    handle->oauthbearer_set_token_failure("Not implemented by this test, "
-                                          "but that's okay");
+  void oauthbearer_token_refresh_cb(RdKafka::Handle *handle,
+                                    const std::string &oauthbearer_config) {
+    handle->oauthbearer_set_token_failure(
+        "Not implemented by this test, "
+        "but that's okay");
     called = true;
     Test::Say("Callback called!\n");
   }
 
   bool called;
 };
-};
+};  // namespace
 
 
-static void do_test (bool use_background_queue) {
-  SUB_TEST("Use background queue = %s",
-           use_background_queue ? "yes" : "no");
+static void do_test(bool use_background_queue) {
+  SUB_TEST("Use background queue = %s", use_background_queue ? "yes" : "no");
 
   bool expect_called = use_background_queue;
 
@@ -87,7 +88,7 @@ static void do_test (bool use_background_queue) {
 
   /* This call should fail since the refresh callback fails,
    * and there are no brokers configured anyway. */
-  const std::string clusterid = p->clusterid(5*1000);
+  const std::string clusterid = p->clusterid(5 * 1000);
 
   TEST_ASSERT(clusterid.empty(),
               "Expected clusterid() to fail since the token was not set");
@@ -105,10 +106,10 @@ static void do_test (bool use_background_queue) {
 }
 
 extern "C" {
-  int main_0128_sasl_callback_queue (int argc, char **argv) {
-    do_test(true);
-    do_test(false);
+int main_0128_sasl_callback_queue(int argc, char **argv) {
+  do_test(true);
+  do_test(false);
 
-    return 0;
-  }
+  return 0;
+}
 }

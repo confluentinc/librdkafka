@@ -38,26 +38,27 @@
 
 
 
-#define check_err(ERR,EXP) do {                                         \
-    if ((ERR) != (EXP))                                                 \
-      Test::Fail(tostr() << __FUNCTION__ << ":" << __LINE__ << ": " <<  \
-                 "Expected " << RdKafka::err2str(EXP) << ", got " <<    \
-                 RdKafka::err2str(ERR));                                \
+#define check_err(ERR, EXP)                                                    \
+  do {                                                                         \
+    if ((ERR) != (EXP))                                                        \
+      Test::Fail(tostr() << __FUNCTION__ << ":" << __LINE__ << ": "            \
+                         << "Expected " << RdKafka::err2str(EXP) << ", got "   \
+                         << RdKafka::err2str(ERR));                            \
   } while (0)
 
 class DrCb0057 : public RdKafka::DeliveryReportCb {
  public:
-  void dr_cb (RdKafka::Message &msg) {
+  void dr_cb(RdKafka::Message &msg) {
     std::string val((const char *)msg.payload());
 
-    Test::Say(tostr() << "DeliveryReport for " << val << " message on " <<
-              msg.topic_name() << " [" << msg.partition() << "]: " <<
-              msg.errstr() << "\n");
+    Test::Say(tostr() << "DeliveryReport for " << val << " message on "
+                      << msg.topic_name() << " [" << msg.partition()
+                      << "]: " << msg.errstr() << "\n");
 
     if (val == "good")
       check_err(msg.err(), RdKafka::ERR_NO_ERROR);
     else if (val == "bad") {
-      if (test_broker_version >= TEST_BRKVER(0,8,2,2))
+      if (test_broker_version >= TEST_BRKVER(0, 8, 2, 2))
         check_err(msg.err(), RdKafka::ERR_TOPIC_EXCEPTION);
       else
         check_err(msg.err(), RdKafka::ERR_UNKNOWN);
@@ -65,9 +66,9 @@ class DrCb0057 : public RdKafka::DeliveryReportCb {
   }
 };
 
-static void test_invalid_topic (void) {
-  std::string topic_bad = Test::mk_topic_name("0057-invalid_topic$#!", 1);
-  std::string topic_good =Test::mk_topic_name("0057-invalid_topic_good", 1);
+static void test_invalid_topic(void) {
+  std::string topic_bad  = Test::mk_topic_name("0057-invalid_topic$#!", 1);
+  std::string topic_good = Test::mk_topic_name("0057-invalid_topic_good", 1);
   RdKafka::Conf *conf;
   std::string errstr;
 
@@ -82,15 +83,13 @@ static void test_invalid_topic (void) {
 
   RdKafka::ErrorCode err;
 
-  for (int i = -1 ; i < 3 ; i++) {
-    err = p->produce(topic_bad, i,
-                     RdKafka::Producer::RK_MSG_COPY,
+  for (int i = -1; i < 3; i++) {
+    err = p->produce(topic_bad, i, RdKafka::Producer::RK_MSG_COPY,
                      (void *)"bad", 4, NULL, 0, 0, NULL);
     if (err) /* Error is probably delayed until delivery report */
       check_err(err, RdKafka::ERR_TOPIC_EXCEPTION);
 
-    err = p->produce(topic_good, i,
-                     RdKafka::Producer::RK_MSG_COPY,
+    err = p->produce(topic_good, i, RdKafka::Producer::RK_MSG_COPY,
                      (void *)"good", 5, NULL, 0, 0, NULL);
     check_err(err, RdKafka::ERR_NO_ERROR);
   }
@@ -98,17 +97,16 @@ static void test_invalid_topic (void) {
   p->flush(tmout_multip(10000));
 
   if (p->outq_len() > 0)
-    Test::Fail(tostr() << "Expected producer to be flushed, " <<
-               p->outq_len() << " messages remain");
+    Test::Fail(tostr() << "Expected producer to be flushed, " << p->outq_len()
+                       << " messages remain");
 
   delete p;
   delete conf;
-
 }
 
 extern "C" {
-  int main_0057_invalid_topic (int argc, char **argv) {
-    test_invalid_topic();
-    return 0;
-  }
+int main_0057_invalid_topic(int argc, char **argv) {
+  test_invalid_topic();
+  return 0;
+}
 }

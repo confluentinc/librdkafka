@@ -49,7 +49,7 @@ static volatile sig_atomic_t run = 1;
 /**
  * @brief Signal termination of program
  */
-static void stop (int sig) {
+static void stop(int sig) {
         run = 0;
 }
 
@@ -58,10 +58,10 @@ static void stop (int sig) {
 /**
  * @returns 1 if all bytes are printable, else 0.
  */
-static int is_printable (const char *buf, size_t size) {
+static int is_printable(const char *buf, size_t size) {
         size_t i;
 
-        for (i = 0 ; i < size ; i++)
+        for (i = 0; i < size; i++)
                 if (!isprint((int)buf[i]))
                         return 0;
 
@@ -69,7 +69,7 @@ static int is_printable (const char *buf, size_t size) {
 }
 
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
         rd_kafka_t *rk;          /* Consumer instance handle */
         rd_kafka_conf_t *conf;   /* Temporary configuration object */
         rd_kafka_resp_err_t err; /* librdkafka API error code */
@@ -107,8 +107,8 @@ int main (int argc, char **argv) {
          * host or host:port (default port 9092).
          * librdkafka will use the bootstrap brokers to acquire the full
          * set of brokers from the cluster. */
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -119,8 +119,8 @@ int main (int argc, char **argv) {
          * group, and the subscribed topic' partitions will be assigned
          * according to the partition.assignment.strategy
          * (consumer config property) to the consumers in the group. */
-        if (rd_kafka_conf_set(conf, "group.id", groupid,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "group.id", groupid, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -131,8 +131,8 @@ int main (int argc, char **argv) {
          * in the partition to start fetching messages.
          * By setting this to earliest the consumer will read all messages
          * in the partition if there was no previously committed offset. */
-        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -147,8 +147,8 @@ int main (int argc, char **argv) {
          */
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
         if (!rk) {
-                fprintf(stderr,
-                        "%% Failed to create new consumer: %s\n", errstr);
+                fprintf(stderr, "%% Failed to create new consumer: %s\n",
+                        errstr);
                 return 1;
         }
 
@@ -169,9 +169,8 @@ int main (int argc, char **argv) {
 
         /* Convert the list of topics to a format suitable for librdkafka */
         subscription = rd_kafka_topic_partition_list_new(topic_cnt);
-        for (i = 0 ; i < topic_cnt ; i++)
-                rd_kafka_topic_partition_list_add(subscription,
-                                                  topics[i],
+        for (i = 0; i < topic_cnt; i++)
+                rd_kafka_topic_partition_list_add(subscription, topics[i],
                                                   /* the partition is ignored
                                                    * by subscribe() */
                                                   RD_KAFKA_PARTITION_UA);
@@ -179,8 +178,7 @@ int main (int argc, char **argv) {
         /* Subscribe to the list of topics */
         err = rd_kafka_subscribe(rk, subscription);
         if (err) {
-                fprintf(stderr,
-                        "%% Failed to subscribe to %d topics: %s\n",
+                fprintf(stderr, "%% Failed to subscribe to %d topics: %s\n",
                         subscription->cnt, rd_kafka_err2str(err));
                 rd_kafka_topic_partition_list_destroy(subscription);
                 rd_kafka_destroy(rk);
@@ -220,29 +218,28 @@ int main (int argc, char **argv) {
                         /* Consumer errors are generally to be considered
                          * informational as the consumer will automatically
                          * try to recover from all types of errors. */
-                        fprintf(stderr,
-                                "%% Consumer error: %s\n",
+                        fprintf(stderr, "%% Consumer error: %s\n",
                                 rd_kafka_message_errstr(rkm));
                         rd_kafka_message_destroy(rkm);
                         continue;
                 }
 
                 /* Proper message. */
-                printf("Message on %s [%"PRId32"] at offset %"PRId64":\n",
+                printf("Message on %s [%" PRId32 "] at offset %" PRId64 ":\n",
                        rd_kafka_topic_name(rkm->rkt), rkm->partition,
                        rkm->offset);
 
                 /* Print the message key. */
                 if (rkm->key && is_printable(rkm->key, rkm->key_len))
-                        printf(" Key: %.*s\n",
-                               (int)rkm->key_len, (const char *)rkm->key);
+                        printf(" Key: %.*s\n", (int)rkm->key_len,
+                               (const char *)rkm->key);
                 else if (rkm->key)
                         printf(" Key: (%d bytes)\n", (int)rkm->key_len);
 
                 /* Print the message value/payload. */
                 if (rkm->payload && is_printable(rkm->payload, rkm->len))
-                        printf(" Value: %.*s\n",
-                               (int)rkm->len, (const char *)rkm->payload);
+                        printf(" Value: %.*s\n", (int)rkm->len,
+                               (const char *)rkm->payload);
                 else if (rkm->payload)
                         printf(" Value: (%d bytes)\n", (int)rkm->len);
 

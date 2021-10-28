@@ -46,24 +46,25 @@ struct state {
 struct state state;
 
 
-static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
-                      void *opaque) {
+static int stats_cb(rd_kafka_t *rk, char *json, size_t json_len, void *opaque) {
         const int64_t now = test_clock();
         /* Fake the first elapsed time since we dont really know how
          * long rd_kafka_new() takes and at what time the timer is started. */
-        const int64_t elapsed = state.ts_last ?
-                now - state.ts_last : state.interval;
+        const int64_t elapsed =
+            state.ts_last ? now - state.ts_last : state.interval;
         const int64_t overshoot = elapsed - state.interval;
-        const int wiggleroom_up = (int)((double)state.interval *
-					(!strcmp(test_mode, "bare") ? 0.2 : 1.0));
-	const int wiggleroom_down = (int)((double)state.interval * 0.1);
+        const int wiggleroom_up =
+            (int)((double)state.interval *
+                  (!strcmp(test_mode, "bare") ? 0.2 : 1.0));
+        const int wiggleroom_down = (int)((double)state.interval * 0.1);
 
-        TEST_SAY("Call #%d: after %"PRId64"ms, %.0f%% outside "
-                 "interval %"PRId64"  >-%d <+%d\n",
+        TEST_SAY("Call #%d: after %" PRId64
+                 "ms, %.0f%% outside "
+                 "interval %" PRId64 "  >-%d <+%d\n",
                  state.calls, elapsed / 1000,
                  ((double)overshoot / state.interval) * 100.0,
-                 (int64_t)state.interval / 1000,
-		 wiggleroom_down / 1000, wiggleroom_up / 1000);
+                 (int64_t)state.interval / 1000, wiggleroom_down / 1000,
+                 wiggleroom_up / 1000);
 
         if (overshoot < -wiggleroom_down || overshoot > wiggleroom_up) {
                 TEST_WARN("^ outside range\n");
@@ -81,7 +82,7 @@ static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
  * Enable statistics with a set interval, make sure the stats callbacks are
  * called within reasonable intervals.
  */
-static void do_test_stats_timer (void) {
+static void do_test_stats_timer(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const int exp_calls = 10;
@@ -89,7 +90,7 @@ static void do_test_stats_timer (void) {
 
         memset(&state, 0, sizeof(state));
 
-        state.interval = 600*1000;
+        state.interval = 600 * 1000;
 
         test_conf_init(&conf, NULL, 200);
 
@@ -101,9 +102,10 @@ static void do_test_stats_timer (void) {
         rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
         TIMING_STOP(&t_new);
 
-        TEST_SAY("Starting wait loop for %d expected stats_cb calls "
-                 "with an interval of %dms\n",
-                 exp_calls, state.interval/1000);
+        TEST_SAY(
+            "Starting wait loop for %d expected stats_cb calls "
+            "with an interval of %dms\n",
+            exp_calls, state.interval / 1000);
 
 
         while (state.calls < exp_calls) {
@@ -112,33 +114,34 @@ static void do_test_stats_timer (void) {
                 rd_kafka_poll(rk, 100);
                 TIMING_STOP(&t_poll);
 
-                if (TIMING_DURATION(&t_poll) > 150*1000)
-                        TEST_WARN("rd_kafka_poll(rk,100) "
-                                  "took more than 50%% extra\n");
+                if (TIMING_DURATION(&t_poll) > 150 * 1000)
+                        TEST_WARN(
+                            "rd_kafka_poll(rk,100) "
+                            "took more than 50%% extra\n");
         }
 
         rd_kafka_destroy(rk);
 
         if (state.calls > exp_calls)
-                TEST_SAY("Got more calls than expected: %d > %d\n",
-                         state.calls, exp_calls);
+                TEST_SAY("Got more calls than expected: %d > %d\n", state.calls,
+                         exp_calls);
 
         if (state.fails) {
                 /* We can't rely on CIs giving our test job enough CPU to finish
                  * in time, so don't error out even if the time is outside
                  * the window */
                 if (test_on_ci)
-                        TEST_WARN("%d/%d intervals failed\n",
-                                  state.fails, state.calls);
+                        TEST_WARN("%d/%d intervals failed\n", state.fails,
+                                  state.calls);
                 else
-                        TEST_FAIL("%d/%d intervals failed\n",
-                                  state.fails, state.calls);
+                        TEST_FAIL("%d/%d intervals failed\n", state.fails,
+                                  state.calls);
         } else
                 TEST_SAY("All %d intervals okay\n", state.calls);
 }
 
 
-int main_0025_timers (int argc, char **argv) {
+int main_0025_timers(int argc, char **argv) {
         do_test_stats_timer();
         return 0;
 }

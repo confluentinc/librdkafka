@@ -34,14 +34,14 @@
 #if HAVE_REGEX
 #include <regex.h>
 struct rd_regex_s {
-	regex_t re;
+        regex_t re;
 };
 
 #else
 
 #include "regexp.h"
 struct rd_regex_s {
-	Reprog *re;
+        Reprog *re;
 };
 #endif
 
@@ -49,13 +49,13 @@ struct rd_regex_s {
 /**
  * @brief Destroy compiled regex
  */
-void rd_regex_destroy (rd_regex_t *re) {
+void rd_regex_destroy(rd_regex_t *re) {
 #if HAVE_REGEX
-	regfree(&re->re);
+        regfree(&re->re);
 #else
-	re_regfree(re->re);
+        re_regfree(re->re);
 #endif
-	rd_free(re);
+        rd_free(re);
 }
 
 
@@ -64,31 +64,31 @@ void rd_regex_destroy (rd_regex_t *re) {
  * @returns Compiled regex object on success on error.
  */
 rd_regex_t *
-rd_regex_comp (const char *pattern, char *errstr, size_t errstr_size) {
-	rd_regex_t *re = rd_calloc(1, sizeof(*re));
+rd_regex_comp(const char *pattern, char *errstr, size_t errstr_size) {
+        rd_regex_t *re = rd_calloc(1, sizeof(*re));
 #if HAVE_REGEX
-	int r;
+        int r;
 
-	r = regcomp(&re->re, pattern, REG_EXTENDED|REG_NOSUB);
-	if (r) {
-		if (errstr)
-			regerror(r, &re->re, errstr, errstr_size);
-		rd_free(re);
-		return NULL;
-	}
+        r = regcomp(&re->re, pattern, REG_EXTENDED | REG_NOSUB);
+        if (r) {
+                if (errstr)
+                        regerror(r, &re->re, errstr, errstr_size);
+                rd_free(re);
+                return NULL;
+        }
 #else
-	const char *errstr2;
+        const char *errstr2;
 
-	re->re = re_regcomp(pattern, 0, &errstr2);
-	if (!re->re) {
+        re->re = re_regcomp(pattern, 0, &errstr2);
+        if (!re->re) {
                 if (errstr)
                         rd_strlcpy(errstr, errstr2, errstr_size);
-		rd_free(re);
-		return NULL;
-	}
+                rd_free(re);
+                return NULL;
+        }
 #endif
 
-	return re;
+        return re;
 }
 
 
@@ -96,11 +96,11 @@ rd_regex_comp (const char *pattern, char *errstr, size_t errstr_size) {
  * @brief Match \p str to pre-compiled regex \p re
  * @returns 1 on match, else 0
  */
-int rd_regex_exec (rd_regex_t *re, const char *str) {
+int rd_regex_exec(rd_regex_t *re, const char *str) {
 #if HAVE_REGEX
-	return regexec(&re->re, str, 0, NULL, 0) != REG_NOMATCH;
+        return regexec(&re->re, str, 0, NULL, 0) != REG_NOMATCH;
 #else
-	return !re_regexec(re->re, str, NULL, 0);	
+        return !re_regexec(re->re, str, NULL, 0);
 #endif
 }
 
@@ -112,43 +112,45 @@ int rd_regex_exec (rd_regex_t *re, const char *str) {
  *          in which case a human readable error string is written to
  *          \p errstr (if not NULL).
  */
-int rd_regex_match (const char *pattern, const char *str,
-		    char *errstr, size_t errstr_size) {
-#if HAVE_REGEX  /* use libc regex */
-	regex_t re;
-	int r;
+int rd_regex_match(const char *pattern,
+                   const char *str,
+                   char *errstr,
+                   size_t errstr_size) {
+#if HAVE_REGEX /* use libc regex */
+        regex_t re;
+        int r;
 
-	/* FIXME: cache compiled regex */
-	r = regcomp(&re, pattern, REG_EXTENDED|REG_NOSUB);
-	if (r) {
-		if (errstr)
-			regerror(r, &re, errstr, errstr_size);
-		return 0;
-	}
+        /* FIXME: cache compiled regex */
+        r = regcomp(&re, pattern, REG_EXTENDED | REG_NOSUB);
+        if (r) {
+                if (errstr)
+                        regerror(r, &re, errstr, errstr_size);
+                return 0;
+        }
 
-	r = regexec(&re, str, 0, NULL, 0) != REG_NOMATCH;
+        r = regexec(&re, str, 0, NULL, 0) != REG_NOMATCH;
 
-	regfree(&re);
+        regfree(&re);
 
-	return r;
+        return r;
 
 #else /* Using regexp.h from minilibs (included) */
-	Reprog *re;
-	int r;
-	const char *errstr2;
+        Reprog *re;
+        int r;
+        const char *errstr2;
 
-	/* FIXME: cache compiled regex */
-	re = re_regcomp(pattern, 0, &errstr2);
-	if (!re) {
+        /* FIXME: cache compiled regex */
+        re = re_regcomp(pattern, 0, &errstr2);
+        if (!re) {
                 if (errstr)
                         rd_strlcpy(errstr, errstr2, errstr_size);
-		return -1;
-	}
+                return -1;
+        }
 
-	r = !re_regexec(re, str, NULL, 0);
+        r = !re_regexec(re, str, NULL, 0);
 
-	re_regfree(re);
+        re_regfree(re);
 
-	return r;
+        return r;
 #endif
 }

@@ -43,16 +43,16 @@ static void *my_opaque = (void *)0x5678;
 /*
  * Common methods
  */
-rd_kafka_resp_err_t conf_init (rd_kafka_conf_t *conf,
-                               void **plug_opaquep,
-                               char *errstr, size_t errstr_size) {
+rd_kafka_resp_err_t conf_init(rd_kafka_conf_t *conf,
+                              void **plug_opaquep,
+                              char *errstr,
+                              size_t errstr_size) {
         printf("plugin conf_init called!\n");
         *plug_opaquep = my_opaque;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-void conf_destroy (const rd_kafka_conf_t *conf, void *plug_opaque) {
+void conf_destroy(const rd_kafka_conf_t *conf, void *plug_opaque) {
         assert(plug_opaque == plug_opaque);
         printf("plugin destroy called\n");
 }
-

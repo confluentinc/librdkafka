@@ -36,8 +36,8 @@
  *        with additional fields to keep track of the total on-wire size.
  */
 struct rd_kafka_headers_s {
-        rd_list_t rkhdrs_list;      /**< List of (rd_kafka_header_t *) */
-        size_t    rkhdrs_ser_size;  /**< Total serialized size of headers */
+        rd_list_t rkhdrs_list;  /**< List of (rd_kafka_header_t *) */
+        size_t rkhdrs_ser_size; /**< Total serialized size of headers */
 };
 
 
@@ -56,11 +56,11 @@ typedef struct rd_kafka_header_s {
         size_t rkhdr_ser_size;   /**< Serialized size */
         size_t rkhdr_value_size; /**< Value length (without nul-term) */
         size_t rkhdr_name_size;  /**< Header name size (w/o nul-term) */
-        char  *rkhdr_value;      /**< Header value (nul-terminated string but
+        char *rkhdr_value;       /**< Header value (nul-terminated string but
                                   *   considered binary).
                                   *   Will be NULL for null values, else
                                   *   points to rkhdr_name+.. */
-        char   rkhdr_name[1];    /**< Header name (nul-terminated string).
+        char rkhdr_name[1];      /**< Header name (nul-terminated string).
                                   *   Followed by allocation for value+nul */
 } rd_kafka_header_t;
 
@@ -69,7 +69,7 @@ typedef struct rd_kafka_header_s {
  * @returns the serialized size for the headers
  */
 static RD_INLINE RD_UNUSED size_t
-rd_kafka_headers_serialized_size (const rd_kafka_headers_t *hdrs) {
+rd_kafka_headers_serialized_size(const rd_kafka_headers_t *hdrs) {
         return hdrs->rkhdrs_ser_size;
 }
 

@@ -43,15 +43,15 @@
 
 
 
-int main_0089_max_poll_interval (int argc, char **argv) {
+int main_0089_max_poll_interval(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         uint64_t testid;
         const int msgcnt = 10;
         rd_kafka_t *c[2];
         rd_kafka_conf_t *conf;
-        int64_t ts_next[2] = { 0, 0 };
-        int64_t ts_exp_msg[2] = { 0, 0 };
-        int cmsgcnt = 0;
+        int64_t ts_next[2]    = {0, 0};
+        int64_t ts_exp_msg[2] = {0, 0};
+        int cmsgcnt           = 0;
         int i;
         int bad = -1;
 
@@ -74,7 +74,7 @@ int main_0089_max_poll_interval (int argc, char **argv) {
         test_consumer_subscribe(c[1], topic);
 
         while (1) {
-                for (i = 0 ; i < 2 ; i++) {
+                for (i = 0; i < 2; i++) {
                         int64_t now;
                         rd_kafka_message_t *rkm;
 
@@ -87,9 +87,10 @@ int main_0089_max_poll_interval (int argc, char **argv) {
                                 continue;
 
                         if (rkm->err) {
-                                TEST_WARN("Consumer %d error: %s: "
-                                          "ignoring\n", i,
-                                          rd_kafka_message_errstr(rkm));
+                                TEST_WARN(
+                                    "Consumer %d error: %s: "
+                                    "ignoring\n",
+                                    i, rd_kafka_message_errstr(rkm));
                                 continue;
                         }
 
@@ -97,29 +98,30 @@ int main_0089_max_poll_interval (int argc, char **argv) {
 
                         cmsgcnt++;
 
-                        TEST_SAY("Consumer %d received message (#%d) "
-                                 "at offset %"PRId64"\n",
-                                 i, cmsgcnt, rkm->offset);
+                        TEST_SAY(
+                            "Consumer %d received message (#%d) "
+                            "at offset %" PRId64 "\n",
+                            i, cmsgcnt, rkm->offset);
 
                         if (ts_exp_msg[i]) {
                                 /* This consumer is expecting a message
                                  * after a certain time, namely after the
                                  * rebalance following max.poll.. being
                                  * exceeded in the other consumer */
-                                TEST_ASSERT(now > ts_exp_msg[i],
-                                            "Consumer %d: did not expect "
-                                            "message for at least %dms",
-                                            i,
-                                            (int)((ts_exp_msg[i] - now)/1000));
-                                TEST_ASSERT(now < ts_exp_msg[i] + 10000*1000,
-                                            "Consumer %d: expected message "
-                                            "within 10s, not after %dms",
-                                            i,
-                                            (int)((now - ts_exp_msg[i])/1000));
-                                TEST_SAY("Consumer %d: received message "
-                                         "at offset %"PRId64
-                                         " after rebalance\n",
-                                         i, rkm->offset);
+                                TEST_ASSERT(
+                                    now > ts_exp_msg[i],
+                                    "Consumer %d: did not expect "
+                                    "message for at least %dms",
+                                    i, (int)((ts_exp_msg[i] - now) / 1000));
+                                TEST_ASSERT(
+                                    now < ts_exp_msg[i] + 10000 * 1000,
+                                    "Consumer %d: expected message "
+                                    "within 10s, not after %dms",
+                                    i, (int)((now - ts_exp_msg[i]) / 1000));
+                                TEST_SAY(
+                                    "Consumer %d: received message "
+                                    "at offset %" PRId64 " after rebalance\n",
+                                    i, rkm->offset);
 
                                 rd_kafka_message_destroy(rkm);
                                 goto done;
@@ -130,25 +132,28 @@ int main_0089_max_poll_interval (int argc, char **argv) {
 
                                 /* Exp message on other consumer after
                                  * max.poll.interval.ms */
-                                ts_exp_msg[i^1] = now + (10000 * 1000);
+                                ts_exp_msg[i ^ 1] = now + (10000 * 1000);
 
                                 /* This is the bad consumer */
                                 bad = i;
 
-                                TEST_SAY("Consumer %d processing message at "
-                                         "offset %"PRId64"\n",
-                                         i, rkm->offset);
+                                TEST_SAY(
+                                    "Consumer %d processing message at "
+                                    "offset %" PRId64 "\n",
+                                    i, rkm->offset);
                                 rd_kafka_message_destroy(rkm);
                         } else {
                                 rd_kafka_message_destroy(rkm);
 
-                                TEST_FAIL("Consumer %d did not expect "
-                                          "a message", i);
+                                TEST_FAIL(
+                                    "Consumer %d did not expect "
+                                    "a message",
+                                    i);
                         }
                 }
         }
 
- done:
+done:
 
         TEST_ASSERT(bad != -1, "Bad consumer not set");
 
@@ -174,7 +179,7 @@ int main_0089_max_poll_interval (int argc, char **argv) {
         }
 
 
-        for (i = 0 ; i < 2 ; i++)
+        for (i = 0; i < 2; i++)
                 rd_kafka_destroy_flags(c[i],
                                        RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
         return 0;

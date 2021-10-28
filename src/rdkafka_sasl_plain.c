@@ -40,13 +40,16 @@
 /**
  * @brief Handle received frame from broker.
  */
-static int rd_kafka_sasl_plain_recv (struct rd_kafka_transport_s *rktrans,
-                                     const void *buf, size_t size,
-                                     char *errstr, size_t errstr_size) {
+static int rd_kafka_sasl_plain_recv(struct rd_kafka_transport_s *rktrans,
+                                    const void *buf,
+                                    size_t size,
+                                    char *errstr,
+                                    size_t errstr_size) {
         if (size)
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLPLAIN",
                            "Received non-empty SASL PLAIN (builtin) "
-                           "response from broker (%"PRIusz" bytes)", size);
+                           "response from broker (%" PRIusz " bytes)",
+                           size);
 
         rd_kafka_sasl_auth_done(rktrans);
 
@@ -61,19 +64,22 @@ static int rd_kafka_sasl_plain_recv (struct rd_kafka_transport_s *rktrans,
  *
  * @locality broker thread
  */
-int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
-                                    const char *hostname,
-                                    char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
+                                   const char *hostname,
+                                   char *errstr,
+                                   size_t errstr_size) {
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
-        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_t *rk         = rkb->rkb_rk;
         /* [authzid] UTF8NUL authcid UTF8NUL passwd */
         char *buf;
-        int of = 0;
+        int of     = 0;
         int zidlen = 0;
-        int cidlen = rk->rk_conf.sasl.username ?
-                (int)strlen(rk->rk_conf.sasl.username) : 0;
-        int pwlen = rk->rk_conf.sasl.password ?
-                (int)strlen(rk->rk_conf.sasl.password) : 0;
+        int cidlen = rk->rk_conf.sasl.username
+                         ? (int)strlen(rk->rk_conf.sasl.username)
+                         : 0;
+        int pwlen = rk->rk_conf.sasl.password
+                        ? (int)strlen(rk->rk_conf.sasl.password)
+                        : 0;
 
 
         buf = rd_alloca(zidlen + 1 + cidlen + 1 + pwlen + 1);
@@ -93,8 +99,7 @@ int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
         rd_rkb_dbg(rkb, SECURITY, "SASLPLAIN",
                    "Sending SASL PLAIN (builtin) authentication token");
 
-        if (rd_kafka_sasl_send(rktrans, buf, of,
-                               errstr, errstr_size))
+        if (rd_kafka_sasl_send(rktrans, buf, of, errstr, errstr_size))
                 return -1;
 
         /* PLAIN is appearantly done here, but we still need to make sure
@@ -107,9 +112,9 @@ int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
 /**
  * @brief Validate PLAIN config
  */
-static int rd_kafka_sasl_plain_conf_validate (rd_kafka_t *rk,
-                                              char *errstr,
-                                              size_t errstr_size) {
+static int rd_kafka_sasl_plain_conf_validate(rd_kafka_t *rk,
+                                             char *errstr,
+                                             size_t errstr_size) {
         if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.username and sasl.password must be set");
@@ -121,8 +126,7 @@ static int rd_kafka_sasl_plain_conf_validate (rd_kafka_t *rk,
 
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider = {
-        .name          = "PLAIN (builtin)",
-        .client_new    = rd_kafka_sasl_plain_client_new,
-        .recv          = rd_kafka_sasl_plain_recv,
-        .conf_validate = rd_kafka_sasl_plain_conf_validate
-};
+    .name          = "PLAIN (builtin)",
+    .client_new    = rd_kafka_sasl_plain_client_new,
+    .recv          = rd_kafka_sasl_plain_recv,
+    .conf_validate = rd_kafka_sasl_plain_conf_validate};

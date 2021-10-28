@@ -51,8 +51,8 @@ class MyCbs : public RdKafka::OffsetCommitCb, public RdKafka::EventCb {
   int seen_commit;
   int seen_stats;
 
-  void offset_commit_cb (RdKafka::ErrorCode err,
-                         std::vector<RdKafka::TopicPartition*>&offsets) {
+  void offset_commit_cb(RdKafka::ErrorCode err,
+                        std::vector<RdKafka::TopicPartition *> &offsets) {
     if (err)
       Test::Fail("Offset commit failed: " + RdKafka::err2str(err));
 
@@ -60,22 +60,21 @@ class MyCbs : public RdKafka::OffsetCommitCb, public RdKafka::EventCb {
     Test::Say("Got commit callback!\n");
   }
 
-  void event_cb (RdKafka::Event &event) {
-    switch (event.type())
-      {
-      case RdKafka::Event::EVENT_STATS:
-        Test::Say("Got stats callback!\n");
-        seen_stats++;
-        break;
-      default:
-        break;
+  void event_cb(RdKafka::Event &event) {
+    switch (event.type()) {
+    case RdKafka::Event::EVENT_STATS:
+      Test::Say("Got stats callback!\n");
+      seen_stats++;
+      break;
+    default:
+      break;
     }
   }
 };
 
 
 
-static void do_test_commit_cb (void) {
+static void do_test_commit_cb(void) {
   const int msgcnt = test_quick ? 100 : 1000;
   std::string errstr;
   RdKafka::ErrorCode err;
@@ -128,8 +127,11 @@ static void do_test_commit_cb (void) {
       Test::Say(tostr() << "Received message #" << cnt << "\n");
       if (cnt > 10)
         Test::Fail(tostr() << "Should've seen the "
-                   "offset commit (" << cbs.seen_commit << ") and "
-                   "stats callbacks (" << cbs.seen_stats << ") by now");
+                              "offset commit ("
+                           << cbs.seen_commit
+                           << ") and "
+                              "stats callbacks ("
+                           << cbs.seen_stats << ") by now");
 
       /* Commit the first message to trigger the offset commit_cb */
       if (cnt == 1) {
@@ -154,8 +156,8 @@ static void do_test_commit_cb (void) {
 }
 
 extern "C" {
-  int main_0060_op_prio (int argc, char **argv) {
-    do_test_commit_cb();
-    return 0;
-  }
+int main_0060_op_prio(int argc, char **argv) {
+  do_test_commit_cb();
+  return 0;
+}
 }

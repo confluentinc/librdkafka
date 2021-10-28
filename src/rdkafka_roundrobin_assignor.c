@@ -30,7 +30,8 @@
 
 
 /**
- * Source: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/RoundRobinAssignor.java
+ * Source:
+ * https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/RoundRobinAssignor.java
  *
  * The roundrobin assignor lays out all the available partitions and all the
  * available consumers. It then proceeds to do a roundrobin assignment from
@@ -48,63 +49,61 @@
  * C1: [t0p1, t1p0, t1p2]
  */
 
-rd_kafka_resp_err_t
-rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
-				        const rd_kafka_assignor_t *rkas,
-					const char *member_id,
-					const rd_kafka_metadata_t *metadata,
-					rd_kafka_group_member_t *members,
-					size_t member_cnt,
-					rd_kafka_assignor_topic_t
-					**eligible_topics,
-					size_t eligible_topic_cnt,
-					char *errstr, size_t errstr_size,
-					void *opaque) {
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_assign_cb(
+    rd_kafka_t *rk,
+    const rd_kafka_assignor_t *rkas,
+    const char *member_id,
+    const rd_kafka_metadata_t *metadata,
+    rd_kafka_group_member_t *members,
+    size_t member_cnt,
+    rd_kafka_assignor_topic_t **eligible_topics,
+    size_t eligible_topic_cnt,
+    char *errstr,
+    size_t errstr_size,
+    void *opaque) {
         unsigned int ti;
-	int next = -1; /* Next member id */
+        int next = -1; /* Next member id */
 
-	/* Sort topics by name */
-	qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
-	      rd_kafka_assignor_topic_cmp);
+        /* Sort topics by name */
+        qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
+              rd_kafka_assignor_topic_cmp);
 
-	/* Sort members by name */
-	qsort(members, member_cnt, sizeof(*members),
-	      rd_kafka_group_member_cmp);
+        /* Sort members by name */
+        qsort(members, member_cnt, sizeof(*members), rd_kafka_group_member_cmp);
 
-        for (ti = 0 ; ti < eligible_topic_cnt ; ti++) {
+        for (ti = 0; ti < eligible_topic_cnt; ti++) {
                 rd_kafka_assignor_topic_t *eligible_topic = eligible_topics[ti];
-		int partition;
+                int partition;
 
-		/* For each topic+partition, assign one member (in a cyclic
-		 * iteration) per partition until the partitions are exhausted*/
-		for (partition = 0 ;
-		     partition < eligible_topic->metadata->partition_cnt ;
-		     partition++) {
-			rd_kafka_group_member_t *rkgm;
+                /* For each topic+partition, assign one member (in a cyclic
+                 * iteration) per partition until the partitions are exhausted*/
+                for (partition = 0;
+                     partition < eligible_topic->metadata->partition_cnt;
+                     partition++) {
+                        rd_kafka_group_member_t *rkgm;
 
                         /* Scan through members until we find one with a
                          * subscription to this topic. */
                         do {
-                                next = (next+1) % member_cnt;
+                                next = (next + 1) % member_cnt;
                         } while (!rd_kafka_group_member_find_subscription(
-                                         rk, &members[next],
-                                         eligible_topic->metadata->topic));
+                            rk, &members[next],
+                            eligible_topic->metadata->topic));
 
-			rkgm = &members[next];
+                        rkgm = &members[next];
 
-			rd_kafka_dbg(rk, CGRP, "ASSIGN",
-				     "roundrobin: Member \"%s\": "
-				     "assigned topic %s partition %d",
-				     rkgm->rkgm_member_id->str,
-				     eligible_topic->metadata->topic,
-				     partition);
+                        rd_kafka_dbg(rk, CGRP, "ASSIGN",
+                                     "roundrobin: Member \"%s\": "
+                                     "assigned topic %s partition %d",
+                                     rkgm->rkgm_member_id->str,
+                                     eligible_topic->metadata->topic,
+                                     partition);
 
-			rd_kafka_topic_partition_list_add(
-				rkgm->rkgm_assignment,
-				eligible_topic->metadata->topic, partition);
-
-		}
-	}
+                        rd_kafka_topic_partition_list_add(
+                            rkgm->rkgm_assignment,
+                            eligible_topic->metadata->topic, partition);
+                }
+        }
 
 
         return 0;
@@ -115,11 +114,10 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 /**
  * @brief Initialzie and add roundrobin assignor.
  */
-rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init (rd_kafka_t *rk) {
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init(rd_kafka_t *rk) {
         return rd_kafka_assignor_add(
-                rk, "consumer", "roundrobin",
-                RD_KAFKA_REBALANCE_PROTOCOL_EAGER,
-                rd_kafka_roundrobin_assignor_assign_cb,
-                rd_kafka_assignor_get_metadata_with_empty_userdata,
-                NULL, NULL, NULL, NULL);
+            rk, "consumer", "roundrobin", RD_KAFKA_REBALANCE_PROTOCOL_EAGER,
+            rd_kafka_roundrobin_assignor_assign_cb,
+            rd_kafka_assignor_get_metadata_with_empty_userdata, NULL, NULL,
+            NULL, NULL);
 }

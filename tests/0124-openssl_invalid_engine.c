@@ -28,7 +28,7 @@
 
 #include "test.h"
 
-int main_0124_openssl_invalid_engine (int argc, char **argv) {
+int main_0124_openssl_invalid_engine(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         char errstr[512];
@@ -47,18 +47,22 @@ int main_0124_openssl_invalid_engine (int argc, char **argv) {
         if (res != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s", errstr);
 
-        if (rd_kafka_conf_set(conf, "security.protocol", "ssl",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        if (rd_kafka_conf_set(conf, "security.protocol", "ssl", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s", errstr);
 
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(!rk, "kafka_new() should not succeed with invalid engine"
-                " path, error: %s", errstr);
+        TEST_ASSERT(!rk,
+                    "kafka_new() should not succeed with invalid engine"
+                    " path, error: %s",
+                    errstr);
         TEST_SAY("rd_kafka_new() failed (as expected): %s\n", errstr);
 
-        TEST_ASSERT(strstr(errstr, "engine initialization failed in"), "engine"
-                " initialization failure expected because of invalid engine"
-                " path, error: %s", errstr);
+        TEST_ASSERT(strstr(errstr, "engine initialization failed in"),
+                    "engine"
+                    " initialization failure expected because of invalid engine"
+                    " path, error: %s",
+                    errstr);
 
         rd_kafka_conf_destroy(conf);
         return 0;

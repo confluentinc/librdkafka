@@ -33,29 +33,29 @@
 
 struct sockem_cmd {
         TAILQ_ENTRY(sockem_cmd) link;
-        int64_t   ts_at; /**< to ctrl thread: at this time, set delay*/
-        int       delay;
+        int64_t ts_at; /**< to ctrl thread: at this time, set delay*/
+        int delay;
 };
 
 
 typedef struct sockem_ctrl_s {
-        mtx_t     lock;
-        cnd_t     cnd;
-        thrd_t    thrd;
+        mtx_t lock;
+        cnd_t cnd;
+        thrd_t thrd;
 
-        int       cmd_seq;      /**< Command sequence id */
-        int       cmd_ack;      /**< Last acked (seen) command sequence id */
+        int cmd_seq; /**< Command sequence id */
+        int cmd_ack; /**< Last acked (seen) command sequence id */
 
         TAILQ_HEAD(, sockem_cmd) cmds; /**< Queue of commands. */
 
-        int       term;          /**< Terminate */
+        int term; /**< Terminate */
 
         struct test *test;
 } sockem_ctrl_t;
 
 
-void sockem_ctrl_set_delay (sockem_ctrl_t *ctrl, int after, int delay);
-void sockem_ctrl_init (sockem_ctrl_t *ctrl);
-void sockem_ctrl_term (sockem_ctrl_t *ctrl);
+void sockem_ctrl_set_delay(sockem_ctrl_t *ctrl, int after, int delay);
+void sockem_ctrl_init(sockem_ctrl_t *ctrl);
+void sockem_ctrl_term(sockem_ctrl_t *ctrl);
 
 #endif /* _SOCKEM_CTRL_H_ */

@@ -30,7 +30,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -42,12 +42,9 @@
 
 
 
-
-
-
-int main_0021_rkt_destroy (int argc, char **argv) {
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-	rd_kafka_t *rk;
+int main_0021_rkt_destroy(int argc, char **argv) {
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
         const int msgcnt = 1000;
         uint64_t testid;
@@ -57,12 +54,12 @@ int main_0021_rkt_destroy (int argc, char **argv) {
 
 
         testid = test_id_generate();
-        rk = test_create_producer();
-        rkt = test_create_producer_topic(rk, topic, NULL);
+        rk     = test_create_producer();
+        rkt    = test_create_producer_topic(rk, topic, NULL);
 
 
-        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 0, msgcnt, NULL, 0, 0, &remains);
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA, 0,
+                                 msgcnt, NULL, 0, 0, &remains);
 
         rd_kafka_topic_destroy(rkt);
 

@@ -34,5 +34,5 @@
 #include "rdkafkacpp_int.h"
 
 
-RdKafka::Message::~Message() {}
-
+RdKafka::Message::~Message() {
+}

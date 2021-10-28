@@ -30,7 +30,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -38,60 +38,60 @@
  */
 
 
-int main_0016_assign_partition (int argc, char **argv) {
-	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-	rd_kafka_t *rk_p, *rk_c;
+int main_0016_assign_partition(int argc, char **argv) {
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_t *rk_p, *rk_c;
         rd_kafka_topic_t *rkt_p;
-	int msg_cnt = 1000;
-	int msg_base = 0;
+        int msg_cnt       = 1000;
+        int msg_base      = 0;
         int partition_cnt = 2;
         int partition;
-	uint64_t testid;
+        uint64_t testid;
         rd_kafka_topic_conf_t *default_topic_conf;
-	rd_kafka_topic_partition_list_t *partitions;
-	char errstr[512];
+        rd_kafka_topic_partition_list_t *partitions;
+        char errstr[512];
 
-	testid = test_id_generate();
+        testid = test_id_generate();
 
-	/* Produce messages */
-	rk_p = test_create_producer();
-	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
+        /* Produce messages */
+        rk_p  = test_create_producer();
+        rkt_p = test_create_producer_topic(rk_p, topic, NULL);
 
-        for (partition = 0 ; partition < partition_cnt ; partition++) {
+        for (partition = 0; partition < partition_cnt; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,
-                                  msg_base+(partition*msg_cnt), msg_cnt,
-				  NULL, 0);
+                                  msg_base + (partition * msg_cnt), msg_cnt,
+                                  NULL, 0);
         }
 
-	rd_kafka_topic_destroy(rkt_p);
-	rd_kafka_destroy(rk_p);
+        rd_kafka_topic_destroy(rkt_p);
+        rd_kafka_destroy(rk_p);
 
 
         test_conf_init(NULL, &default_topic_conf, 0);
         if (rd_kafka_topic_conf_set(default_topic_conf, "auto.offset.reset",
-				    "smallest", errstr, sizeof(errstr)) !=
-	    RD_KAFKA_CONF_OK)
-		TEST_FAIL("%s\n", errstr);
+                                    "smallest", errstr,
+                                    sizeof(errstr)) != RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s\n", errstr);
 
-        rk_c = test_create_consumer(topic/*group_id*/, NULL,
-				    default_topic_conf);
+        rk_c =
+            test_create_consumer(topic /*group_id*/, NULL, default_topic_conf);
 
-	/* Fill in partition set */
-	partitions = rd_kafka_topic_partition_list_new(partition_cnt);
+        /* Fill in partition set */
+        partitions = rd_kafka_topic_partition_list_new(partition_cnt);
 
-        for (partition = 0 ; partition < partition_cnt ; partition++)
-		rd_kafka_topic_partition_list_add(partitions, topic, partition);
+        for (partition = 0; partition < partition_cnt; partition++)
+                rd_kafka_topic_partition_list_add(partitions, topic, partition);
 
-	test_consumer_assign("assign.partition", rk_c, partitions);
+        test_consumer_assign("assign.partition", rk_c, partitions);
 
-	/* Make sure all messages are available */
-	test_consumer_poll("verify.all", rk_c, testid, partition_cnt,
-                           msg_base, partition_cnt * msg_cnt);
+        /* Make sure all messages are available */
+        test_consumer_poll("verify.all", rk_c, testid, partition_cnt, msg_base,
+                           partition_cnt * msg_cnt);
 
         /* Stop assignments */
-	test_consumer_unassign("unassign.partitions", rk_c);
+        test_consumer_unassign("unassign.partitions", rk_c);
 
-#if 0 // FIXME when get_offset() is functional
+#if 0  // FIXME when get_offset() is functional
         /* Acquire stored offsets */
         for (partition = 0 ; partition < partition_cnt ; partition++) {
                 rd_kafka_resp_err_t err;
@@ -116,7 +116,7 @@ int main_0016_assign_partition (int argc, char **argv) {
 #endif
         test_consumer_close(rk_c);
 
-	rd_kafka_destroy(rk_c);
+        rd_kafka_destroy(rk_c);
 
-	return 0;
+        return 0;
 }

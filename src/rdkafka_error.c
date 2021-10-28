@@ -38,7 +38,7 @@
 #include <stdarg.h>
 
 
-void rd_kafka_error_destroy (rd_kafka_error_t *error) {
+void rd_kafka_error_destroy(rd_kafka_error_t *error) {
         if (error)
                 rd_free(error);
 }
@@ -47,8 +47,8 @@ void rd_kafka_error_destroy (rd_kafka_error_t *error) {
 /**
  * @brief Creates a new error object using the optional va-args format list.
  */
-rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
-                                        const char *fmt, va_list ap) {
+rd_kafka_error_t *
+rd_kafka_error_new_v(rd_kafka_resp_err_t code, const char *fmt, va_list ap) {
         rd_kafka_error_t *error;
         ssize_t strsz = 0;
 
@@ -59,14 +59,14 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
                 va_end(ap2);
         }
 
-        error = rd_malloc(sizeof(*error) + strsz);
-        error->code = code;
-        error->fatal = rd_false;
-        error->retriable = rd_false;
+        error                     = rd_malloc(sizeof(*error) + strsz);
+        error->code               = code;
+        error->fatal              = rd_false;
+        error->retriable          = rd_false;
         error->txn_requires_abort = rd_false;
 
         if (strsz > 0) {
-                error->errstr = (char *)(error+1);
+                error->errstr = (char *)(error + 1);
                 rd_vsnprintf(error->errstr, strsz, fmt, ap);
         } else {
                 error->errstr = NULL;
@@ -75,7 +75,7 @@ rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
         return error;
 }
 
-rd_kafka_error_t *rd_kafka_error_copy (const rd_kafka_error_t *src) {
+rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src) {
         rd_kafka_error_t *error;
         ssize_t strsz = 0;
 
@@ -83,14 +83,14 @@ rd_kafka_error_t *rd_kafka_error_copy (const rd_kafka_error_t *src) {
                 strsz = strlen(src->errstr);
         }
 
-        error = rd_malloc(sizeof(*error) + strsz);
-        error->code = src->code;
-        error->fatal = src->fatal;
-        error->retriable = src->retriable;
+        error                     = rd_malloc(sizeof(*error) + strsz);
+        error->code               = src->code;
+        error->fatal              = src->fatal;
+        error->retriable          = src->retriable;
         error->txn_requires_abort = src->txn_requires_abort;
 
         if (strsz > 0) {
-                error->errstr = (char *)(error+1);
+                error->errstr = (char *)(error + 1);
                 rd_strlcpy(error->errstr, src->errstr, strsz);
         } else {
                 error->errstr = NULL;
@@ -100,8 +100,8 @@ rd_kafka_error_t *rd_kafka_error_copy (const rd_kafka_error_t *src) {
 }
 
 
-rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
-                                      const char *fmt, ...) {
+rd_kafka_error_t *
+rd_kafka_error_new(rd_kafka_resp_err_t code, const char *fmt, ...) {
         rd_kafka_error_t *error;
         va_list ap;
 
@@ -112,8 +112,8 @@ rd_kafka_error_t *rd_kafka_error_new (rd_kafka_resp_err_t code,
         return error;
 }
 
-rd_kafka_error_t *rd_kafka_error_new_fatal (rd_kafka_resp_err_t code,
-                                                const char *fmt, ...) {
+rd_kafka_error_t *
+rd_kafka_error_new_fatal(rd_kafka_resp_err_t code, const char *fmt, ...) {
         rd_kafka_error_t *error;
         va_list ap;
 
@@ -126,8 +126,8 @@ rd_kafka_error_t *rd_kafka_error_new_fatal (rd_kafka_resp_err_t code,
         return error;
 }
 
-rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
-                                                const char *fmt, ...) {
+rd_kafka_error_t *
+rd_kafka_error_new_retriable(rd_kafka_resp_err_t code, const char *fmt, ...) {
         rd_kafka_error_t *error;
         va_list ap;
 
@@ -140,8 +140,10 @@ rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
         return error;
 }
 
-rd_kafka_error_t *rd_kafka_error_new_txn_requires_abort (
-        rd_kafka_resp_err_t code, const char *fmt, ...) {
+rd_kafka_error_t *
+rd_kafka_error_new_txn_requires_abort(rd_kafka_resp_err_t code,
+                                      const char *fmt,
+                                      ...) {
         rd_kafka_error_t *error;
         va_list ap;
 
@@ -155,43 +157,43 @@ rd_kafka_error_t *rd_kafka_error_new_txn_requires_abort (
 }
 
 
-rd_kafka_resp_err_t rd_kafka_error_code (const rd_kafka_error_t *error) {
+rd_kafka_resp_err_t rd_kafka_error_code(const rd_kafka_error_t *error) {
         return error ? error->code : RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-const char *rd_kafka_error_name (const rd_kafka_error_t *error) {
+const char *rd_kafka_error_name(const rd_kafka_error_t *error) {
         return error ? rd_kafka_err2name(error->code) : "";
 }
 
-const char *rd_kafka_error_string (const rd_kafka_error_t *error) {
+const char *rd_kafka_error_string(const rd_kafka_error_t *error) {
         if (!error)
                 return "";
         return error->errstr ? error->errstr : rd_kafka_err2str(error->code);
 }
 
-int rd_kafka_error_is_fatal (const rd_kafka_error_t *error) {
+int rd_kafka_error_is_fatal(const rd_kafka_error_t *error) {
         return error && error->fatal ? 1 : 0;
 }
 
-int rd_kafka_error_is_retriable (const rd_kafka_error_t *error) {
+int rd_kafka_error_is_retriable(const rd_kafka_error_t *error) {
         return error && error->retriable ? 1 : 0;
 }
 
-int rd_kafka_error_txn_requires_abort (const rd_kafka_error_t *error) {
+int rd_kafka_error_txn_requires_abort(const rd_kafka_error_t *error) {
         return error && error->txn_requires_abort ? 1 : 0;
 }
 
 
 
-void rd_kafka_error_set_fatal (rd_kafka_error_t *error) {
+void rd_kafka_error_set_fatal(rd_kafka_error_t *error) {
         error->fatal = rd_true;
 }
 
-void rd_kafka_error_set_retriable (rd_kafka_error_t *error) {
+void rd_kafka_error_set_retriable(rd_kafka_error_t *error) {
         error->retriable = rd_true;
 }
 
-void rd_kafka_error_set_txn_requires_abort (rd_kafka_error_t *error) {
+void rd_kafka_error_set_txn_requires_abort(rd_kafka_error_t *error) {
         error->txn_requires_abort = rd_true;
 }
 
@@ -203,9 +205,9 @@ void rd_kafka_error_set_txn_requires_abort (rd_kafka_error_t *error) {
  *
  * @remark The \p error object is destroyed.
  */
-rd_kafka_resp_err_t
-rd_kafka_error_to_legacy (rd_kafka_error_t *error,
-                          char *errstr, size_t errstr_size) {
+rd_kafka_resp_err_t rd_kafka_error_to_legacy(rd_kafka_error_t *error,
+                                             char *errstr,
+                                             size_t errstr_size) {
         rd_kafka_resp_err_t err = error->code;
 
         rd_snprintf(errstr, errstr_size, "%s", rd_kafka_error_string(error));

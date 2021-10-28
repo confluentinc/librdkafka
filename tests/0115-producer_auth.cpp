@@ -36,9 +36,10 @@
 namespace {
 class DrCb : public RdKafka::DeliveryReportCb {
  public:
-  DrCb (RdKafka::ErrorCode exp_err): cnt(0), exp_err(exp_err) {}
+  DrCb(RdKafka::ErrorCode exp_err) : cnt(0), exp_err(exp_err) {
+  }
 
-  void dr_cb (RdKafka::Message &msg) {
+  void dr_cb(RdKafka::Message &msg) {
     Test::Say("Delivery report: " + RdKafka::err2str(msg.err()) + "\n");
     if (msg.err() != exp_err)
       Test::Fail("Delivery report: Expected " + RdKafka::err2str(exp_err) +
@@ -49,7 +50,7 @@ class DrCb : public RdKafka::DeliveryReportCb {
   int cnt;
   RdKafka::ErrorCode exp_err;
 };
-};
+};  // namespace
 
 /**
  * @brief Test producer auth failures.
@@ -62,9 +63,9 @@ class DrCb : public RdKafka::DeliveryReportCb {
  */
 
 
-static void do_test_producer (bool topic_known) {
-  Test::Say(tostr() << _C_MAG << "[ Test producer auth with topic " <<
-            (topic_known ? "" : "not ") << "known ]\n");
+static void do_test_producer(bool topic_known) {
+  Test::Say(tostr() << _C_MAG << "[ Test producer auth with topic "
+                    << (topic_known ? "" : "not ") << "known ]\n");
 
   /* Create producer */
   RdKafka::Conf *conf;
@@ -94,48 +95,36 @@ static void do_test_producer (bool topic_known) {
   if (topic_known) {
     /* Produce a single message to make sure metadata is known. */
     Test::Say("Producing seeding message 0\n");
-    err = p->produce(topic_unauth,
-                     RdKafka::Topic::PARTITION_UA,
-                     RdKafka::Producer::RK_MSG_COPY,
-                     (void *)"0", 1,
-                     NULL, 0,
-                     0, NULL);
-    TEST_ASSERT(!err,
-                "produce() failed: %s", RdKafka::err2str(err).c_str());
+    err = p->produce(topic_unauth, RdKafka::Topic::PARTITION_UA,
+                     RdKafka::Producer::RK_MSG_COPY, (void *)"0", 1, NULL, 0, 0,
+                     NULL);
+    TEST_ASSERT(!err, "produce() failed: %s", RdKafka::err2str(err).c_str());
 
     p->flush(-1);
     exp_dr_cnt++;
   }
 
   /* Add denying ACL for unauth topic */
-  test_kafka_cmd("kafka-acls.sh --bootstrap-server %s "
-                 "--add --deny-principal 'User:*' "
-                 "--operation All --deny-host '*' "
-                 "--topic '%s'",
-                 bootstraps.c_str(), topic_unauth.c_str());
+  test_kafka_cmd(
+      "kafka-acls.sh --bootstrap-server %s "
+      "--add --deny-principal 'User:*' "
+      "--operation All --deny-host '*' "
+      "--topic '%s'",
+      bootstraps.c_str(), topic_unauth.c_str());
 
   /* Produce message to any partition. */
   Test::Say("Producing message 1 to any partition\n");
-  err = p->produce(topic_unauth,
-                   RdKafka::Topic::PARTITION_UA,
-                   RdKafka::Producer::RK_MSG_COPY,
-                   (void *)"1", 1,
-                   NULL, 0,
-                   0, NULL);
-  TEST_ASSERT(!err,
-              "produce() failed: %s", RdKafka::err2str(err).c_str());
+  err = p->produce(topic_unauth, RdKafka::Topic::PARTITION_UA,
+                   RdKafka::Producer::RK_MSG_COPY, (void *)"1", 1, NULL, 0, 0,
+                   NULL);
+  TEST_ASSERT(!err, "produce() failed: %s", RdKafka::err2str(err).c_str());
   exp_dr_cnt++;
 
   /* Produce message to specific partition. */
   Test::Say("Producing message 2 to partition 0\n");
-  err = p->produce(topic_unauth,
-                   0,
-                   RdKafka::Producer::RK_MSG_COPY,
-                   (void *)"3", 1,
-                   NULL, 0,
-                   0, NULL);
-  TEST_ASSERT(!err,
-              "produce() failed: %s", RdKafka::err2str(err).c_str());
+  err = p->produce(topic_unauth, 0, RdKafka::Producer::RK_MSG_COPY, (void *)"3",
+                   1, NULL, 0, 0, NULL);
+  TEST_ASSERT(!err, "produce() failed: %s", RdKafka::err2str(err).c_str());
   exp_dr_cnt++;
 
   /* Wait for DRs */
@@ -145,51 +134,46 @@ static void do_test_producer (bool topic_known) {
 
   /* Produce message to any and specific partition, should fail immediately. */
   Test::Say("Producing message 3 to any partition\n");
-  err = p->produce(topic_unauth,
-                   RdKafka::Topic::PARTITION_UA,
-                   RdKafka::Producer::RK_MSG_COPY,
-                   (void *)"3", 1,
-                   NULL, 0,
-                   0, NULL);
+  err = p->produce(topic_unauth, RdKafka::Topic::PARTITION_UA,
+                   RdKafka::Producer::RK_MSG_COPY, (void *)"3", 1, NULL, 0, 0,
+                   NULL);
   TEST_ASSERT(err == dr.exp_err,
               "Expected produce() to fail with ERR_TOPIC_AUTHORIZATION_FAILED, "
-              "not %s", RdKafka::err2str(err).c_str());
+              "not %s",
+              RdKafka::err2str(err).c_str());
 
   /* Specific partition */
   Test::Say("Producing message 4 to partition 0\n");
-  err = p->produce(topic_unauth,
-                   0,
-                   RdKafka::Producer::RK_MSG_COPY,
-                   (void *)"4", 1,
-                   NULL, 0,
-                   0, NULL);
+  err = p->produce(topic_unauth, 0, RdKafka::Producer::RK_MSG_COPY, (void *)"4",
+                   1, NULL, 0, 0, NULL);
   TEST_ASSERT(err == dr.exp_err,
               "Expected produce() to fail with ERR_TOPIC_AUTHORIZATION_FAILED, "
-              "not %s", RdKafka::err2str(err).c_str());
+              "not %s",
+              RdKafka::err2str(err).c_str());
 
   /* Final flush just to make sure */
   p->flush(-1);
 
-  TEST_ASSERT(exp_dr_cnt == dr.cnt,
-              "Expected %d deliveries, not %d", exp_dr_cnt, dr.cnt);
+  TEST_ASSERT(exp_dr_cnt == dr.cnt, "Expected %d deliveries, not %d",
+              exp_dr_cnt, dr.cnt);
 
-  Test::Say(tostr() << _C_GRN << "[ Test producer auth with topic " <<
-            (topic_known ? "" : "not ") << "known: PASS ]\n");
+  Test::Say(tostr() << _C_GRN << "[ Test producer auth with topic "
+                    << (topic_known ? "" : "not ") << "known: PASS ]\n");
 
   delete p;
 }
 
 extern "C" {
-  int main_0115_producer_auth (int argc, char **argv) {
-    /* We can't bother passing Java security config to kafka-acls.sh */
-    if (test_needs_auth()) {
-      Test::Skip("Cluster authentication required\n");
-      return 0;
-    }
-
-    do_test_producer(true);
-    do_test_producer(false);
-
+int main_0115_producer_auth(int argc, char **argv) {
+  /* We can't bother passing Java security config to kafka-acls.sh */
+  if (test_needs_auth()) {
+    Test::Skip("Cluster authentication required\n");
     return 0;
   }
+
+  do_test_producer(true);
+  do_test_producer(false);
+
+  return 0;
+}
 }

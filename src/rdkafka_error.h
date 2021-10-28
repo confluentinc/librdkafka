@@ -45,32 +45,34 @@ struct rd_kafka_error_s {
                                    *   Possibly NULL. */
         rd_bool_t fatal;          /**< This error is a fatal error. */
         rd_bool_t retriable;      /**< Operation is retriable. */
-        rd_bool_t txn_requires_abort;  /**< This is an abortable transaction error.*/
+        rd_bool_t
+            txn_requires_abort; /**< This is an abortable transaction error.*/
 };
 
 
-rd_kafka_error_t *rd_kafka_error_new_v (rd_kafka_resp_err_t code,
-                                        const char *fmt, va_list ap);
-
-rd_kafka_error_t *rd_kafka_error_copy (const rd_kafka_error_t *src);
-
-void rd_kafka_error_set_fatal (rd_kafka_error_t *error);
-void rd_kafka_error_set_retriable (rd_kafka_error_t *error);
-void rd_kafka_error_set_txn_requires_abort (rd_kafka_error_t *error);
-
-
-rd_kafka_error_t *rd_kafka_error_new_fatal (rd_kafka_resp_err_t code,
-                                            const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
-rd_kafka_error_t *rd_kafka_error_new_retriable (rd_kafka_resp_err_t code,
-                                                const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
 rd_kafka_error_t *
-rd_kafka_error_new_txn_requires_abort (rd_kafka_resp_err_t code,
-                                       const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
+rd_kafka_error_new_v(rd_kafka_resp_err_t code, const char *fmt, va_list ap);
+
+rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src);
+
+void rd_kafka_error_set_fatal(rd_kafka_error_t *error);
+void rd_kafka_error_set_retriable(rd_kafka_error_t *error);
+void rd_kafka_error_set_txn_requires_abort(rd_kafka_error_t *error);
 
 
-rd_kafka_resp_err_t rd_kafka_error_to_legacy (rd_kafka_error_t *error,
-                                              char *errstr, size_t errstr_size);
+rd_kafka_error_t *rd_kafka_error_new_fatal(rd_kafka_resp_err_t code,
+                                           const char *fmt,
+                                           ...) RD_FORMAT(printf, 2, 3);
+rd_kafka_error_t *rd_kafka_error_new_retriable(rd_kafka_resp_err_t code,
+                                               const char *fmt,
+                                               ...) RD_FORMAT(printf, 2, 3);
+rd_kafka_error_t *
+rd_kafka_error_new_txn_requires_abort(rd_kafka_resp_err_t code,
+                                      const char *fmt,
+                                      ...) RD_FORMAT(printf, 2, 3);
+
+
+rd_kafka_resp_err_t rd_kafka_error_to_legacy(rd_kafka_error_t *error,
+                                             char *errstr,
+                                             size_t errstr_size);
 #endif /* _RDKAFKA_ERROR_H_ */

@@ -65,8 +65,8 @@
  * 6b. Try to recover within the current epoch, the broker is expecting
  *     sequence 2, 3, 4, or 5, depending on what it managed to persist
  *     before the connection went down.
- *     The producer should produce msg 2 but it no longer exists due to timed out.
- *     If lucky, only 2 was persisted by the broker, which means the Producer
+ *     The producer should produce msg 2 but it no longer exists due to timed
+ * out. If lucky, only 2 was persisted by the broker, which means the Producer
  *     can successfully produce 3.
  *     If 3 was persisted the producer would get a DuplicateSequence error
  *     back, indicating that it was already produced, this would get
@@ -101,8 +101,9 @@ static struct {
 } counters;
 
 
-static void my_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
-                          void *opaque) {
+static void my_dr_msg_cb(rd_kafka_t *rk,
+                         const rd_kafka_message_t *rkmessage,
+                         void *opaque) {
 
         if (rd_kafka_message_status(rkmessage) >=
             RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED)
@@ -116,8 +117,8 @@ static void my_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
         }
 }
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
          * .. connectivity.
          * SASL auther will think a connection-down even in the auth
@@ -132,21 +133,23 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 }
 
 
-static void do_test_produce_timeout (const char *topic, const int msgrate) {
+static void do_test_produce_timeout(const char *topic, const int msgrate) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
         uint64_t testid;
         rd_kafka_resp_err_t err;
         const int partition = RD_KAFKA_PARTITION_UA;
-        int msgcnt = msgrate * 20;
-        const int msgsize = 100*1000;
+        int msgcnt          = msgrate * 20;
+        const int msgsize   = 100 * 1000;
         sockem_ctrl_t ctrl;
         int msgcounter = 0;
         test_msgver_t mv;
 
-        TEST_SAY(_C_BLU "Test idempotent producer "
-                 "with message timeouts (%d msgs/s)\n", msgrate);
+        TEST_SAY(_C_BLU
+                 "Test idempotent producer "
+                 "with message timeouts (%d msgs/s)\n",
+                 msgrate);
 
         testid = test_id_generate();
 
@@ -163,24 +166,24 @@ static void do_test_produce_timeout (const char *topic, const int msgrate) {
         test_socket_enable(conf);
         test_curr->is_fatal_cb = is_fatal_cb;
 
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        rkt = test_create_producer_topic(rk, topic,
-                                         "message.timeout.ms", "5000", NULL);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt = test_create_producer_topic(rk, topic, "message.timeout.ms",
+                                         "5000", NULL);
 
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
         TEST_ASSERT(!err, "topic creation failed: %s", rd_kafka_err2str(err));
 
         /* After 1 seconds, set socket delay to 2*message.timeout.ms */
-        sockem_ctrl_set_delay(&ctrl, 1000, 2*5000);
+        sockem_ctrl_set_delay(&ctrl, 1000, 2 * 5000);
 
         /* After 3*message.timeout.ms seconds, remove delay. */
-        sockem_ctrl_set_delay(&ctrl, 3*5000, 0);
+        sockem_ctrl_set_delay(&ctrl, 3 * 5000, 0);
 
-        test_produce_msgs_nowait(rk, rkt, testid, partition, 0,
-                           msgcnt, NULL, msgsize, msgrate, &msgcounter);
+        test_produce_msgs_nowait(rk, rkt, testid, partition, 0, msgcnt, NULL,
+                                 msgsize, msgrate, &msgcounter);
 
-        test_flush(rk, 3*5000);
+        test_flush(rk, 3 * 5000);
 
         TEST_SAY("%d/%d messages produced, %d delivered, %d failed\n",
                  msgcounter, msgcnt, counters.dr_ok, counters.dr_fail);
@@ -194,21 +197,23 @@ static void do_test_produce_timeout (const char *topic, const int msgrate) {
                  counters.dr_ok);
 
         test_msgver_init(&mv, testid);
-        test_consume_msgs_easy_mv(NULL, topic, partition,
-                                  testid, 1, -1, NULL, &mv);
+        test_consume_msgs_easy_mv(NULL, topic, partition, testid, 1, -1, NULL,
+                                  &mv);
         test_msgver_verify_compare("delivered", &mv, &counters.mv_delivered,
-                                   TEST_MSGVER_ORDER|TEST_MSGVER_DUP|
-                                   TEST_MSGVER_BY_MSGID|
-                                   TEST_MSGVER_SUBSET);
+                                   TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+                                       TEST_MSGVER_BY_MSGID |
+                                       TEST_MSGVER_SUBSET);
         test_msgver_clear(&mv);
         test_msgver_clear(&counters.mv_delivered);
 
 
-        TEST_SAY(_C_GRN "Test idempotent producer "
-                 "with message timeouts (%d msgs/s): SUCCESS\n", msgrate);
+        TEST_SAY(_C_GRN
+                 "Test idempotent producer "
+                 "with message timeouts (%d msgs/s): SUCCESS\n",
+                 msgrate);
 }
 
-int main_0094_idempotence_msg_timeout (int argc, char **argv) {
+int main_0094_idempotence_msg_timeout(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
         do_test_produce_timeout(topic, 10);

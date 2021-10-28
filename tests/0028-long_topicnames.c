@@ -30,7 +30,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -40,40 +40,40 @@
  */
 
 
-int main_0028_long_topicnames (int argc, char **argv) {
+int main_0028_long_topicnames(int argc, char **argv) {
         const int msgcnt = 1000;
         uint64_t testid;
-	char topic[256];
-	rd_kafka_t *rk_c;
+        char topic[256];
+        rd_kafka_t *rk_c;
 
-	if (!test_can_create_topics(1))
-		return 0;
+        if (!test_can_create_topics(1))
+                return 0;
 
-	memset(topic, 'a', sizeof(topic)-1);
-	topic[sizeof(topic)-1] = '\0';
+        memset(topic, 'a', sizeof(topic) - 1);
+        topic[sizeof(topic) - 1] = '\0';
 
-	strncpy(topic, test_mk_topic_name(topic, 1), sizeof(topic)-1);
+        strncpy(topic, test_mk_topic_name(topic, 1), sizeof(topic) - 1);
 
-	TEST_SAY("Using topic name of %d bytes: %s\n",
-		 (int)strlen(topic), topic);
+        TEST_SAY("Using topic name of %d bytes: %s\n", (int)strlen(topic),
+                 topic);
 
-	/* First try a non-verifying consumer. The consumer has been known
-	 * to crash when the broker bug kicks in. */
-	rk_c = test_create_consumer(topic, NULL, NULL, NULL);
+        /* First try a non-verifying consumer. The consumer has been known
+         * to crash when the broker bug kicks in. */
+        rk_c = test_create_consumer(topic, NULL, NULL, NULL);
 
         /* Create topic */
         test_create_topic(rk_c, topic, 1, 1);
 
-	test_consumer_subscribe(rk_c, topic);
-	test_consumer_poll_no_msgs("consume.nomsgs", rk_c, 0, 5000);
-	test_consumer_close(rk_c);
+        test_consumer_subscribe(rk_c, topic);
+        test_consumer_poll_no_msgs("consume.nomsgs", rk_c, 0, 5000);
+        test_consumer_close(rk_c);
 
         /* Produce messages */
-        testid = test_produce_msgs_easy(topic, 0,
-                                        RD_KAFKA_PARTITION_UA, msgcnt);
+        testid =
+            test_produce_msgs_easy(topic, 0, RD_KAFKA_PARTITION_UA, msgcnt);
 
-	/* Consume messages */
-	test_consume_msgs_easy(NULL, topic, testid, -1, msgcnt, NULL);
+        /* Consume messages */
+        test_consume_msgs_easy(NULL, topic, testid, -1, msgcnt, NULL);
 
         return 0;
 }

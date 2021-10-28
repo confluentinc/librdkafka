@@ -46,41 +46,37 @@ typedef struct rd_kafka_aborted_txns_s {
 } rd_kafka_aborted_txns_t;
 
 
-rd_kafka_aborted_txns_t *rd_kafka_aborted_txns_new (int32_t txn_cnt);
+rd_kafka_aborted_txns_t *rd_kafka_aborted_txns_new(int32_t txn_cnt);
 
-void
-rd_kafka_aborted_txns_destroy (rd_kafka_aborted_txns_t *aborted_txns);
+void rd_kafka_aborted_txns_destroy(rd_kafka_aborted_txns_t *aborted_txns);
 
-void
-rd_kafka_aborted_txns_sort (rd_kafka_aborted_txns_t *aborted_txns);
+void rd_kafka_aborted_txns_sort(rd_kafka_aborted_txns_t *aborted_txns);
 
-void
-rd_kafka_aborted_txns_add (rd_kafka_aborted_txns_t *aborted_txns,
-                          int64_t pid,
-                          int64_t first_offset);
+void rd_kafka_aborted_txns_add(rd_kafka_aborted_txns_t *aborted_txns,
+                               int64_t pid,
+                               int64_t first_offset);
 
 
 /**
  * @name MessageSet writers
  */
-rd_kafka_buf_t *
-rd_kafka_msgset_create_ProduceRequest (rd_kafka_broker_t *rkb,
-                                       rd_kafka_toppar_t *rktp,
-                                       rd_kafka_msgq_t *rkmq,
-                                       const rd_kafka_pid_t pid,
-                                       uint64_t epoch_base_msgid,
-                                       size_t *MessageSetSizep);
+rd_kafka_buf_t *rd_kafka_msgset_create_ProduceRequest(rd_kafka_broker_t *rkb,
+                                                      rd_kafka_toppar_t *rktp,
+                                                      rd_kafka_msgq_t *rkmq,
+                                                      const rd_kafka_pid_t pid,
+                                                      uint64_t epoch_base_msgid,
+                                                      size_t *MessageSetSizep);
 
 /**
  * @name MessageSet readers
  */
 rd_kafka_resp_err_t
-rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
-                       rd_kafka_buf_t *request,
-                       rd_kafka_toppar_t *rktp,
-                       rd_kafka_aborted_txns_t *aborted_txns,
-                       const struct rd_kafka_toppar_ver *tver);
+rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
+                      rd_kafka_buf_t *request,
+                      rd_kafka_toppar_t *rktp,
+                      rd_kafka_aborted_txns_t *aborted_txns,
+                      const struct rd_kafka_toppar_ver *tver);
 
-int unittest_aborted_txns (void);
+int unittest_aborted_txns(void);
 
 #endif /* _RDKAFKA_MSGSET_H_ */

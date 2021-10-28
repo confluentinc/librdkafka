@@ -48,15 +48,15 @@ static rd_atomic32_t refuse_connect;
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
  */
-static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
+static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
         if (rd_atomic32_get(&refuse_connect) > 0)
                 return -1;
         else
                 return 0;
 }
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
          * .. connectivity.
          * SASL auther will think a connection-down even in the auth
@@ -70,14 +70,14 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         return 1;
 }
 
-static int msg_dr_cnt = 0;
+static int msg_dr_cnt      = 0;
 static int msg_dr_fail_cnt = 0;
 
-static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
-                       void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         msg_dr_cnt++;
-        TEST_SAYL(3, "Delivery for message %.*s: %s\n",
-                  (int)rkmessage->len, (const char *)rkmessage->payload,
+        TEST_SAYL(3, "Delivery for message %.*s: %s\n", (int)rkmessage->len,
+                  (const char *)rkmessage->payload,
                   rd_kafka_err2name(rkmessage->err));
 
         if (rkmessage->err) {
@@ -89,12 +89,12 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 
 
 
-int main_0088_produce_metadata_timeout (int argc, char **argv) {
+int main_0088_produce_metadata_timeout(int argc, char **argv) {
         int64_t testid;
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
-        const char *topic = test_mk_topic_name("0088_produce_metadata_timeout",
-                                               1);
+        const char *topic =
+            test_mk_topic_name("0088_produce_metadata_timeout", 1);
         int msgcnt = 0;
         rd_kafka_conf_t *conf;
 
@@ -108,7 +108,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
         test_conf_set(conf, "batch.num.messages", "5");
 
         test_socket_enable(conf);
-        test_curr->connect_cb = connect_cb;
+        test_curr->connect_cb  = connect_cb;
         test_curr->is_fatal_cb = is_fatal_cb;
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -119,39 +119,40 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
         /* Produce first set of messages and wait for delivery */
-        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA, msgcnt,
+                                 20, NULL, 0, 0, &msgcnt);
         while (msg_dr_cnt < 5)
                 rd_kafka_poll(rk, 1000);
 
-        TEST_SAY(_C_YEL "Disconnecting sockets and "
+        TEST_SAY(_C_YEL
+                 "Disconnecting sockets and "
                  "refusing future connections\n");
         rd_atomic32_set(&refuse_connect, 1);
-        test_socket_close_all(test_curr, 1/*reinit*/);
+        test_socket_close_all(test_curr, 1 /*reinit*/);
 
 
         /* Wait for metadata timeout */
         TEST_SAY("Waiting for metadata timeout\n");
-        rd_sleep(10+5);
+        rd_sleep(10 + 5);
 
         /* These messages will be put on the UA queue */
-        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA, msgcnt,
+                                 20, NULL, 0, 0, &msgcnt);
 
         /* Restore the connection(s) when metadata has timed out. */
         TEST_SAY(_C_YEL "Allowing connections\n");
         rd_atomic32_set(&refuse_connect, 0);
 
         rd_sleep(3);
-        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA, msgcnt,
+                                 20, NULL, 0, 0, &msgcnt);
 
-        test_flush(rk, 2*5*1000); /* linger.ms * 2 */
+        test_flush(rk, 2 * 5 * 1000); /* linger.ms * 2 */
 
-        TEST_ASSERT(msg_dr_cnt == msgcnt,
-                    "expected %d, got %d", msgcnt, msg_dr_cnt);
-        TEST_ASSERT(msg_dr_fail_cnt == 0,
-                    "expected %d dr failures, got %d", 0, msg_dr_fail_cnt);
+        TEST_ASSERT(msg_dr_cnt == msgcnt, "expected %d, got %d", msgcnt,
+                    msg_dr_cnt);
+        TEST_ASSERT(msg_dr_fail_cnt == 0, "expected %d dr failures, got %d", 0,
+                    msg_dr_fail_cnt);
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);

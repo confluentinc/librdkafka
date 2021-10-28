@@ -35,7 +35,7 @@
  *        build options, OpenSSL version, etc.
  *        Useful for manually verifying build options in CI logs.
  */
-static void show_build_opts (void) {
+static void show_build_opts(void) {
         rd_kafka_conf_t *conf = rd_kafka_conf_new();
         rd_kafka_t *rk;
         char errstr[512];
@@ -46,8 +46,8 @@ static void show_build_opts (void) {
         test_conf_set(conf, "debug", "generic,security");
 
         /* Try with SSL first, which may or may not be a build option. */
-        if (rd_kafka_conf_set(conf, "security.protocol", "SSL",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        if (rd_kafka_conf_set(conf, "security.protocol", "SSL", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 TEST_SAY("Failed to security.protocol=SSL: %s\n", errstr);
 
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -60,7 +60,7 @@ static void show_build_opts (void) {
 /**
  * @brief Call librdkafka built-in unit-tests
  */
-int main_0000_unittests (int argc, char **argv) {
+int main_0000_unittests(int argc, char **argv) {
         int fails = 0;
 
         show_build_opts();

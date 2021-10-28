@@ -32,7 +32,7 @@
  */
 
 #ifdef __APPLE__
-#define _DARWIN_C_SOURCE  /* required for rusage.ru_maxrss, etc. */
+#define _DARWIN_C_SOURCE /* required for rusage.ru_maxrss, etc. */
 #endif
 
 #include "test.h"
@@ -47,7 +47,7 @@
 /**
  * @brief Call getrusage(2)
  */
-static int test_getrusage (struct rusage *ru) {
+static int test_getrusage(struct rusage *ru) {
         if (getrusage(RUSAGE_SELF, ru) == -1) {
                 TEST_WARN("getrusage() failed: %s\n", rd_strerror(errno));
                 return -1;
@@ -57,11 +57,11 @@ static int test_getrusage (struct rusage *ru) {
 }
 
 /* Convert timeval to seconds */
-#define _tv2s(TV) (double)((double)(TV).tv_sec +                \
-                           ((double)(TV).tv_usec / 1000000.0))
+#define _tv2s(TV)                                                              \
+        (double)((double)(TV).tv_sec + ((double)(TV).tv_usec / 1000000.0))
 
 /* Convert timeval to CPU usage percentage (5 = 5%, 130.3 = 130.3%) */
-#define _tv2cpu(TV,DURATION) ((_tv2s(TV) / (DURATION)) * 100.0)
+#define _tv2cpu(TV, DURATION) ((_tv2s(TV) / (DURATION)) * 100.0)
 
 
 /**
@@ -69,9 +69,9 @@ static int test_getrusage (struct rusage *ru) {
  *
  * @returns the delta
  */
-static struct rusage test_rusage_calc (const struct rusage *start,
-                                       const struct rusage *end,
-                                       double duration) {
+static struct rusage test_rusage_calc(const struct rusage *start,
+                                      const struct rusage *end,
+                                      double duration) {
         struct rusage delta = RD_ZERO_INIT;
 
         timersub(&end->ru_utime, &start->ru_utime, &delta.ru_utime);
@@ -81,20 +81,18 @@ static struct rusage test_rusage_calc (const struct rusage *start,
          *        maximum RSS, not the current one.
          *        Read this from /proc/<pid>/.. instead */
         delta.ru_maxrss = end->ru_maxrss - start->ru_maxrss;
-        delta.ru_nvcsw  = end->ru_nvcsw  - start->ru_nvcsw;
+        delta.ru_nvcsw  = end->ru_nvcsw - start->ru_nvcsw;
         /* skip fields we're not interested in */
 
-        TEST_SAY(_C_MAG "Test resource usage summary: "
+        TEST_SAY(_C_MAG
+                 "Test resource usage summary: "
                  "%.3fs (%.1f%%) User CPU time, "
                  "%.3fs (%.1f%%) Sys CPU time, "
                  "%.3fMB RSS memory increase, "
                  "%ld Voluntary context switches\n",
-                 _tv2s(delta.ru_utime),
-                 _tv2cpu(delta.ru_utime, duration),
-                 _tv2s(delta.ru_stime),
-                 _tv2cpu(delta.ru_stime, duration),
-                 (double)delta.ru_maxrss / (1024.0*1024.0),
-                 delta.ru_nvcsw);
+                 _tv2s(delta.ru_utime), _tv2cpu(delta.ru_utime, duration),
+                 _tv2s(delta.ru_stime), _tv2cpu(delta.ru_stime, duration),
+                 (double)delta.ru_maxrss / (1024.0 * 1024.0), delta.ru_nvcsw);
 
         return delta;
 }
@@ -103,27 +101,27 @@ static struct rusage test_rusage_calc (const struct rusage *start,
 /**
  * @brief Check that test ran within threshold levels
  */
-static int test_rusage_check_thresholds (struct test *test,
-                                         const struct rusage *ru,
-                                         double duration) {
+static int test_rusage_check_thresholds(struct test *test,
+                                        const struct rusage *ru,
+                                        double duration) {
         static const struct rusage_thres defaults = {
-                .ucpu  = 5.0,  /* min value, see below */
-                .scpu  = 2.5,  /* min value, see below */
-                .rss   = 10.0, /* 10 megs */
-                .ctxsw = 100,  /* this is the default number of context switches
-                                * per test second.
-                                * note: when ctxsw is specified on a test
-                                *       it should be specified as the total
-                                *       number of context switches. */
+            .ucpu  = 5.0,  /* min value, see below */
+            .scpu  = 2.5,  /* min value, see below */
+            .rss   = 10.0, /* 10 megs */
+            .ctxsw = 100,  /* this is the default number of context switches
+                            * per test second.
+                            * note: when ctxsw is specified on a test
+                            *       it should be specified as the total
+                            *       number of context switches. */
         };
         /* CPU usage thresholds are too blunt for very quick tests.
          * Use a forgiving default CPU threshold for any test that
          * runs below a certain duration. */
         const double min_duration = 2.0; /* minimum test duration for
                                           * CPU thresholds to have effect. */
-        const double lax_cpu = 1000.0;     /* 1000% CPU usage (e.g 10 cores
-                                            * at full speed) allowed for any
-                                            * test that finishes in under 2s */
+        const double lax_cpu = 1000.0;   /* 1000% CPU usage (e.g 10 cores
+                                          * at full speed) allowed for any
+                                          * test that finishes in under 2s */
         const struct rusage_thres *thres = &test->rusage_thres;
         double cpu, mb, uthres, uthres_orig, sthres, rssthres;
         int csthres;
@@ -138,7 +136,7 @@ static int test_rusage_check_thresholds (struct test *test,
         uthres_orig = uthres;
         uthres *= test_rusage_cpu_calibration;
 
-        cpu  = _tv2cpu(ru->ru_utime, duration);
+        cpu = _tv2cpu(ru->ru_utime, duration);
         if (cpu > uthres) {
                 rd_snprintf(reasons[fails], sizeof(reasons[fails]),
                             "User CPU time (%.3fs) exceeded: %.1f%% > %.1f%%",
@@ -150,12 +148,13 @@ static int test_rusage_check_thresholds (struct test *test,
         /* Let the default Sys CPU be the maximum of the defaults.cpu
          * and 20% of the User CPU. */
         if (rd_dbl_zero((sthres = thres->scpu)))
-                sthres = duration < min_duration ? lax_cpu :
-                        RD_MAX(uthres_orig * 0.20, defaults.scpu);
+                sthres = duration < min_duration
+                             ? lax_cpu
+                             : RD_MAX(uthres_orig * 0.20, defaults.scpu);
 
         sthres *= test_rusage_cpu_calibration;
 
-        cpu  = _tv2cpu(ru->ru_stime, duration);
+        cpu = _tv2cpu(ru->ru_stime, duration);
         if (cpu > sthres) {
                 rd_snprintf(reasons[fails], sizeof(reasons[fails]),
                             "Sys CPU time (%.3fs) exceeded: %.1f%% > %.1f%%",
@@ -165,24 +164,26 @@ static int test_rusage_check_thresholds (struct test *test,
         }
 
         rssthres = thres->rss > 0.0 ? thres->rss : defaults.rss;
-        if ((mb = (double)ru->ru_maxrss / (1024.0*1024.0)) > rssthres) {
+        if ((mb = (double)ru->ru_maxrss / (1024.0 * 1024.0)) > rssthres) {
                 rd_snprintf(reasons[fails], sizeof(reasons[fails]),
-                            "RSS memory exceeded: %.2fMB > %.2fMB",
-                            mb, rssthres);
+                            "RSS memory exceeded: %.2fMB > %.2fMB", mb,
+                            rssthres);
                 TEST_WARN("%s\n", reasons[fails]);
                 fails++;
         }
 
 
         if (!(csthres = thres->ctxsw))
-                csthres = duration < min_duration ? defaults.ctxsw * 100 :
-                        (int)(duration * (double)defaults.ctxsw);
+                csthres = duration < min_duration
+                              ? defaults.ctxsw * 100
+                              : (int)(duration * (double)defaults.ctxsw);
 
         /* FIXME: not sure how to use this */
         if (0 && ru->ru_nvcsw > csthres) {
-                TEST_WARN("Voluntary context switches exceeded: "
-                          "%ld > %d\n",
-                          ru->ru_nvcsw, csthres);
+                TEST_WARN(
+                    "Voluntary context switches exceeded: "
+                    "%ld > %d\n",
+                    ru->ru_nvcsw, csthres);
                 fails++;
         }
 
@@ -193,11 +194,8 @@ static int test_rusage_check_thresholds (struct test *test,
                 return 0;
 
         TEST_FAIL("Test resource usage exceeds %d threshold(s): %s%s%s%s%s",
-                  fails,
-                  reasons[0],
-                  fails > 1 ? ", " : "",
-                  fails > 1 ? reasons[1] : "",
-                  fails > 2 ? ", " : "",
+                  fails, reasons[0], fails > 1 ? ", " : "",
+                  fails > 1 ? reasons[1] : "", fails > 2 ? ", " : "",
                   fails > 2 ? reasons[2] : "");
 
 
@@ -207,7 +205,7 @@ static int test_rusage_check_thresholds (struct test *test,
 
 
 
-void test_rusage_start (struct test *test) {
+void test_rusage_start(struct test *test) {
 #if HAVE_GETRUSAGE
         /* Can't do per-test rusage checks when tests run in parallel. */
         if (test_concurrent_max > 1)
@@ -225,7 +223,7 @@ void test_rusage_start (struct test *test) {
  *
  * @returns -1 if thresholds were exceeded, else 0.
  */
- int test_rusage_stop (struct test *test, double duration) {
+int test_rusage_stop(struct test *test, double duration) {
 #if HAVE_GETRUSAGE
         struct rusage start, end;
 
@@ -241,7 +239,7 @@ void test_rusage_start (struct test *test) {
         if (duration < 0.001)
                 duration = 0.001;
 
-        start = test->rusage;
+        start        = test->rusage;
         test->rusage = test_rusage_calc(&start, &end, duration);
 
         return test_rusage_check_thresholds(test, &test->rusage, duration);

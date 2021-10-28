@@ -36,33 +36,33 @@ extern "C" {
 
 class myThreadCb {
  public:
-  myThreadCb(): startCnt_(0), exitCnt_(0) {
+  myThreadCb() : startCnt_(0), exitCnt_(0) {
     mtx_init(&lock_, mtx_plain);
   }
   ~myThreadCb() {
     mtx_destroy(&lock_);
   }
-  int startCount () {
+  int startCount() {
     int cnt;
     mtx_lock(&lock_);
     cnt = startCnt_;
     mtx_unlock(&lock_);
     return cnt;
   }
-  int exitCount () {
+  int exitCount() {
     int cnt;
     mtx_lock(&lock_);
     cnt = exitCnt_;
     mtx_unlock(&lock_);
     return cnt;
   }
-  virtual void thread_start_cb (const char *threadname) {
+  virtual void thread_start_cb(const char *threadname) {
     Test::Say(tostr() << "Started thread: " << threadname << "\n");
     mtx_lock(&lock_);
     startCnt_++;
     mtx_unlock(&lock_);
   }
-  virtual void thread_exit_cb (const char *threadname) {
+  virtual void thread_exit_cb(const char *threadname) {
     Test::Say(tostr() << "Exiting from thread: " << threadname << "\n");
     mtx_lock(&lock_);
     exitCnt_++;
@@ -79,15 +79,15 @@ class myThreadCb {
 /**
  * @brief C to C++ callback trampoline.
  */
-static rd_kafka_resp_err_t
-on_thread_start_trampoline (rd_kafka_t *rk,
-                            rd_kafka_thread_type_t thread_type,
-                            const char *threadname,
-                            void *ic_opaque) {
+static rd_kafka_resp_err_t on_thread_start_trampoline(
+    rd_kafka_t *rk,
+    rd_kafka_thread_type_t thread_type,
+    const char *threadname,
+    void *ic_opaque) {
   myThreadCb *threadcb = (myThreadCb *)ic_opaque;
 
-  Test::Say(tostr() << "on_thread_start(" << thread_type << ", " <<
-            threadname << ") called\n");
+  Test::Say(tostr() << "on_thread_start(" << thread_type << ", " << threadname
+                    << ") called\n");
 
   threadcb->thread_start_cb(threadname);
 
@@ -97,15 +97,15 @@ on_thread_start_trampoline (rd_kafka_t *rk,
 /**
  * @brief C to C++ callback trampoline.
  */
-static rd_kafka_resp_err_t
-on_thread_exit_trampoline (rd_kafka_t *rk,
-                           rd_kafka_thread_type_t thread_type,
-                           const char *threadname,
-                           void *ic_opaque) {
+static rd_kafka_resp_err_t on_thread_exit_trampoline(
+    rd_kafka_t *rk,
+    rd_kafka_thread_type_t thread_type,
+    const char *threadname,
+    void *ic_opaque) {
   myThreadCb *threadcb = (myThreadCb *)ic_opaque;
 
-  Test::Say(tostr() << "on_thread_exit(" << thread_type << ", " <<
-            threadname << ") called\n");
+  Test::Say(tostr() << "on_thread_exit(" << thread_type << ", " << threadname
+                    << ") called\n");
 
   threadcb->thread_exit_cb(threadname);
 
@@ -117,16 +117,16 @@ on_thread_exit_trampoline (rd_kafka_t *rk,
  *        prior to any threads being created.
  *        We use it to set up the instance's thread interceptors.
  */
-static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
-                                   void *ic_opaque,
-                                   char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t on_new(rd_kafka_t *rk,
+                                  const rd_kafka_conf_t *conf,
+                                  void *ic_opaque,
+                                  char *errstr,
+                                  size_t errstr_size) {
   Test::Say("on_new() interceptor called\n");
-  rd_kafka_interceptor_add_on_thread_start(rk, "test:0100",
-                                           on_thread_start_trampoline,
-                                           ic_opaque);
+  rd_kafka_interceptor_add_on_thread_start(
+      rk, "test:0100", on_thread_start_trampoline, ic_opaque);
   rd_kafka_interceptor_add_on_thread_exit(rk, "test:0100",
-                                           on_thread_exit_trampoline,
-                                           ic_opaque);
+                                          on_thread_exit_trampoline, ic_opaque);
   return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -135,19 +135,19 @@ static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
  *        in case the config object is copied, since interceptors are not
  *        automatically copied.
  */
-static rd_kafka_resp_err_t on_conf_dup (rd_kafka_conf_t *new_conf,
-                                        const rd_kafka_conf_t *old_conf,
-                                        size_t filter_cnt,
-                                        const char **filter,
-                                        void *ic_opaque) {
+static rd_kafka_resp_err_t on_conf_dup(rd_kafka_conf_t *new_conf,
+                                       const rd_kafka_conf_t *old_conf,
+                                       size_t filter_cnt,
+                                       const char **filter,
+                                       void *ic_opaque) {
   Test::Say("on_conf_dup() interceptor called\n");
-  return rd_kafka_conf_interceptor_add_on_new(new_conf, "test:0100",
-                                              on_new, ic_opaque);
+  return rd_kafka_conf_interceptor_add_on_new(new_conf, "test:0100", on_new,
+                                              ic_opaque);
 }
 
 
 
-static void test_thread_cbs () {
+static void test_thread_cbs() {
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
   std::string errstr;
   rd_kafka_conf_t *c_conf;
@@ -163,7 +163,7 @@ static void test_thread_cbs () {
    *  4. In the on_new() interceptor, add the thread interceptors. */
   c_conf = conf->c_ptr_global();
   rd_kafka_conf_interceptor_add_on_new(c_conf, "test:0100", on_new,
-                                             &my_threads);
+                                       &my_threads);
   rd_kafka_conf_interceptor_add_on_conf_dup(c_conf, "test:0100", on_conf_dup,
                                             &my_threads);
 
@@ -174,8 +174,8 @@ static void test_thread_cbs () {
   delete conf;
   delete p;
 
-  Test::Say(tostr() << my_threads.startCount() << " thread start calls, " <<
-            my_threads.exitCount() << " thread exit calls seen\n");
+  Test::Say(tostr() << my_threads.startCount() << " thread start calls, "
+                    << my_threads.exitCount() << " thread exit calls seen\n");
 
   /* 3 = rdkafka main thread + internal broker + bootstrap broker */
   if (my_threads.startCount() < 3)
@@ -188,8 +188,8 @@ static void test_thread_cbs () {
 
 
 extern "C" {
-  int main_0100_thread_interceptors (int argc, char **argv) {
-    test_thread_cbs();
-    return 0;
-  }
+int main_0100_thread_interceptors(int argc, char **argv) {
+  test_thread_cbs();
+  return 0;
+}
 }

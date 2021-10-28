@@ -41,16 +41,16 @@
 #include "rdhttp.h"
 
 /** Maximum response size, increase as necessary. */
-#define RD_HTTP_RESPONSE_SIZE_MAX 1024*1024*500  /* 500kb */
+#define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
 
 
-void rd_http_error_destroy (rd_http_error_t *herr) {
+void rd_http_error_destroy(rd_http_error_t *herr) {
         rd_free(herr);
 }
 
-static rd_http_error_t *rd_http_error_new (int code, const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
-static rd_http_error_t *rd_http_error_new (int code, const char *fmt, ...) {
+static rd_http_error_t *rd_http_error_new(int code, const char *fmt, ...)
+    RD_FORMAT(printf, 2, 3);
+static rd_http_error_t *rd_http_error_new(int code, const char *fmt, ...) {
         size_t len = 0;
         rd_http_error_t *herr;
         va_list ap;
@@ -65,8 +65,8 @@ static rd_http_error_t *rd_http_error_new (int code, const char *fmt, ...) {
         }
 
         /* Use single allocation for both herr and the error string */
-        herr = rd_malloc(sizeof(*herr) + len + 1);
-        herr->code = code;
+        herr         = rd_malloc(sizeof(*herr) + len + 1);
+        herr->code   = code;
         herr->errstr = herr->data;
 
         if (len > 0)
@@ -83,21 +83,20 @@ static rd_http_error_t *rd_http_error_new (int code, const char *fmt, ...) {
  * @brief Same as rd_http_error_new() but reads the error string from the
  *        provided buffer.
  */
-static rd_http_error_t *rd_http_error_new_from_buf (int code,
-                                                    const rd_buf_t *rbuf) {
+static rd_http_error_t *rd_http_error_new_from_buf(int code,
+                                                   const rd_buf_t *rbuf) {
         rd_http_error_t *herr;
         rd_slice_t slice;
         size_t len = rd_buf_len(rbuf);
 
         if (len == 0)
                 return rd_http_error_new(
-                        code,
-                        "Server did not provide an error string");
+                    code, "Server did not provide an error string");
 
 
         /* Use single allocation for both herr and the error string */
-        herr = rd_malloc(sizeof(*herr) + len + 1);
-        herr->code = code;
+        herr         = rd_malloc(sizeof(*herr) + len + 1);
+        herr->code   = code;
         herr->errstr = herr->data;
         rd_slice_init_full(&slice, rbuf);
         rd_slice_read(&slice, herr->errstr, len);
@@ -106,7 +105,7 @@ static rd_http_error_t *rd_http_error_new_from_buf (int code,
         return herr;
 }
 
-void rd_http_req_destroy (rd_http_req_t *hreq) {
+void rd_http_req_destroy(rd_http_req_t *hreq) {
         RD_IF_FREE(hreq->hreq_curl, curl_easy_cleanup);
         RD_IF_FREE(hreq->hreq_buf, rd_buf_destroy);
 }
@@ -116,8 +115,8 @@ void rd_http_req_destroy (rd_http_req_t *hreq) {
  * @brief Curl writefunction. Writes the bytes passed from curl
  *        to the hreq's buffer.
  */
-static size_t rd_http_req_write_cb (char *ptr, size_t size, size_t nmemb,
-                                    void *userdata) {
+static size_t
+rd_http_req_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
         rd_http_req_t *hreq = (rd_http_req_t *)userdata;
 
         if (unlikely(rd_buf_len(hreq->hreq_buf) + nmemb >
@@ -129,7 +128,7 @@ static size_t rd_http_req_write_cb (char *ptr, size_t size, size_t nmemb,
         return nmemb;
 }
 
-rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url) {
+rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url) {
 
         memset(hreq, 0, sizeof(*hreq));
 
@@ -157,7 +156,7 @@ rd_http_error_t *rd_http_req_init (rd_http_req_t *hreq, const char *url) {
 /**
  * @brief Synchronously (blockingly) perform the HTTP operation.
  */
-rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq) {
+rd_http_error_t *rd_http_req_perform_sync(rd_http_req_t *hreq) {
         CURLcode res;
         long code = 0;
 
@@ -175,11 +174,11 @@ rd_http_error_t *rd_http_req_perform_sync (rd_http_req_t *hreq) {
 }
 
 
-int rd_http_req_get_code (const rd_http_req_t *hreq) {
+int rd_http_req_get_code(const rd_http_req_t *hreq) {
         return hreq->hreq_code;
 }
 
-const char *rd_http_req_get_content_type (rd_http_req_t *hreq) {
+const char *rd_http_req_get_content_type(rd_http_req_t *hreq) {
         const char *content_type = NULL;
 
         if (curl_easy_getinfo(hreq->hreq_curl, CURLINFO_CONTENT_TYPE,
@@ -201,7 +200,7 @@ const char *rd_http_req_get_content_type (rd_http_req_t *hreq) {
  * by calling rd_http_error_destroy(). In case of HTTP error the \p *rbufp
  * may be filled with the error response.
  */
-rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
+rd_http_error_t *rd_http_get(const char *url, rd_buf_t **rbufp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
 
@@ -217,7 +216,7 @@ rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
                 return herr;
         }
 
-        *rbufp = hreq.hreq_buf;
+        *rbufp        = hreq.hreq_buf;
         hreq.hreq_buf = NULL;
 
         return NULL;
@@ -230,7 +229,7 @@ rd_http_error_t *rd_http_get (const char *url, rd_buf_t **rbufp) {
  *
  * Same error semantics as rd_http_get().
  */
-rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp) {
+rd_http_error_t *rd_http_get_json(const char *url, cJSON **jsonp) {
         rd_http_req_t hreq;
         rd_http_error_t *herr;
         rd_slice_t slice;
@@ -248,7 +247,7 @@ rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp) {
         // FIXME: send Accept: json.. header?
 
         herr = rd_http_req_perform_sync(&hreq);
-        len = rd_buf_len(hreq.hreq_buf);
+        len  = rd_buf_len(hreq.hreq_buf);
         if (herr && len == 0) {
                 rd_http_req_destroy(&hreq);
                 return herr;
@@ -263,14 +262,12 @@ rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp) {
 
         content_type = rd_http_req_get_content_type(&hreq);
 
-        if (!content_type ||
-            rd_strncasecmp(content_type,
-                           "application/json", strlen("application/json"))) {
+        if (!content_type || rd_strncasecmp(content_type, "application/json",
+                                            strlen("application/json"))) {
                 if (!herr)
                         herr = rd_http_error_new(
-                                hreq.hreq_code,
-                                "Response is not JSON encoded: %s",
-                                content_type ? content_type : "(n/a)");
+                            hreq.hreq_code, "Response is not JSON encoded: %s",
+                            content_type ? content_type : "(n/a)");
                 rd_http_req_destroy(&hreq);
                 return herr;
         }
@@ -282,12 +279,12 @@ rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp) {
         raw_json[len] = '\0';
 
         /* Parse JSON */
-        end = NULL;
+        end    = NULL;
         *jsonp = cJSON_ParseWithOpts(raw_json, &end, 0);
         if (!*jsonp && !herr)
                 herr = rd_http_error_new(hreq.hreq_code,
                                          "Failed to parse JSON response "
-                                         "at %"PRIusz"/%"PRIusz,
+                                         "at %" PRIusz "/%" PRIusz,
                                          (size_t)(end - raw_json), len);
 
         rd_free(raw_json);
@@ -297,7 +294,7 @@ rd_http_error_t *rd_http_get_json (const char *url, cJSON **jsonp) {
 }
 
 
-void rd_http_global_init (void) {
+void rd_http_global_init(void) {
         curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
@@ -311,7 +308,7 @@ void rd_http_global_init (void) {
  * and 4xx response on $RD_UT_HTTP_URL/error (with whatever type of body).
  */
 
-int unittest_http (void) {
+int unittest_http(void) {
         const char *base_url = rd_getenv("RD_UT_HTTP_URL", NULL);
         char *error_url;
         size_t error_url_size;
@@ -325,7 +322,7 @@ int unittest_http (void) {
         RD_UT_BEGIN();
 
         error_url_size = strlen(base_url) + strlen("/error") + 1;
-        error_url = rd_alloca(error_url_size);
+        error_url      = rd_alloca(error_url_size);
         rd_snprintf(error_url, error_url_size, "%s/error", base_url);
 
         /* Try the base url first, parse its JSON and extract a key-value. */
@@ -341,9 +338,10 @@ int unittest_http (void) {
         }
         RD_UT_ASSERT(!empty, "Expected non-empty JSON response from %s",
                      base_url);
-        RD_UT_SAY("URL %s returned no error and a non-empty "
-                  "JSON object/array as expected",
-                  base_url);
+        RD_UT_SAY(
+            "URL %s returned no error and a non-empty "
+            "JSON object/array as expected",
+            base_url);
         cJSON_Delete(json);
 
 
@@ -351,12 +349,14 @@ int unittest_http (void) {
         json = NULL;
         herr = rd_http_get_json(error_url, &json);
         RD_UT_ASSERT(herr != NULL, "Expected get_json(%s) to fail", error_url);
-        RD_UT_ASSERT(herr->code >= 400, "Expected get_json(%s) error code >= "
-                     "400, got %d", error_url, herr->code);
-        RD_UT_SAY("Error URL %s returned code %d, errstr \"%s\" "
-                  "and %s JSON object as expected",
-                  error_url, herr->code, herr->errstr,
-                  json ? "a" : "no");
+        RD_UT_ASSERT(herr->code >= 400,
+                     "Expected get_json(%s) error code >= "
+                     "400, got %d",
+                     error_url, herr->code);
+        RD_UT_SAY(
+            "Error URL %s returned code %d, errstr \"%s\" "
+            "and %s JSON object as expected",
+            error_url, herr->code, herr->errstr, json ? "a" : "no");
         /* Check if there's a JSON document returned */
         if (json)
                 cJSON_Delete(json);

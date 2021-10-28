@@ -29,7 +29,7 @@
 #include "test.h"
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 typedef struct consumer_s {
         const char *what;
@@ -43,44 +43,47 @@ typedef struct consumer_s {
         struct test *test;
 } consumer_t;
 
-static int consumer_batch_queue (void *arg) {
+static int consumer_batch_queue(void *arg) {
         consumer_t *arguments = arg;
-        int msg_cnt = 0;
+        int msg_cnt           = 0;
         int i;
         test_timing_t t_cons;
 
-        rd_kafka_queue_t *rkq = arguments->rkq;
-        int timeout_ms = arguments->timeout_ms;
+        rd_kafka_queue_t *rkq     = arguments->rkq;
+        int timeout_ms            = arguments->timeout_ms;
         const int consume_msg_cnt = arguments->consume_msg_cnt;
-        rd_kafka_t *rk = arguments->rk;
-        uint64_t testid = arguments->testid;
+        rd_kafka_t *rk            = arguments->rk;
+        uint64_t testid           = arguments->testid;
         rd_kafka_message_t **rkmessage =
-                malloc(consume_msg_cnt * sizeof(*rkmessage));
+            malloc(consume_msg_cnt * sizeof(*rkmessage));
 
         if (arguments->test)
                 test_curr = arguments->test;
 
-        TEST_SAY("%s calling consume_batch_queue(timeout=%d, msgs=%d) "
-                 "and expecting %d messages back\n",
-                 rd_kafka_name(rk), timeout_ms, consume_msg_cnt,
-                 arguments->expected_msg_cnt);
+        TEST_SAY(
+            "%s calling consume_batch_queue(timeout=%d, msgs=%d) "
+            "and expecting %d messages back\n",
+            rd_kafka_name(rk), timeout_ms, consume_msg_cnt,
+            arguments->expected_msg_cnt);
 
         TIMING_START(&t_cons, "CONSUME");
-        msg_cnt = (int)rd_kafka_consume_batch_queue(
-                rkq, timeout_ms, rkmessage, consume_msg_cnt);
+        msg_cnt = (int)rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessage,
+                                                    consume_msg_cnt);
         TIMING_STOP(&t_cons);
 
-        TEST_SAY("%s consumed %d/%d/%d message(s)\n",
-                 rd_kafka_name(rk), msg_cnt, arguments->consume_msg_cnt,
+        TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
+                 msg_cnt, arguments->consume_msg_cnt,
                  arguments->expected_msg_cnt);
         TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,
-                    "consumed %d messages, expected %d",
-                    msg_cnt, arguments->expected_msg_cnt);
+                    "consumed %d messages, expected %d", msg_cnt,
+                    arguments->expected_msg_cnt);
 
         for (i = 0; i < msg_cnt; i++) {
                 if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
-                        TEST_FAIL("The message is not from testid "
-                                  "%"PRId64" \n", testid);
+                        TEST_FAIL(
+                            "The message is not from testid "
+                            "%" PRId64 " \n",
+                            testid);
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
@@ -119,7 +122,7 @@ static int consumer_batch_queue (void *arg) {
  *           verify if there isn't any missed or duplicate messages
  *
  */
-static void do_test_consume_batch (const char *strategy) {
+static void do_test_consume_batch(const char *strategy) {
         const int partition_cnt = 4;
         rd_kafka_queue_t *rkq1, *rkq2;
         const char *topic;
@@ -149,15 +152,12 @@ static void do_test_consume_batch (const char *strategy) {
         /* Produce messages */
         topic = test_mk_topic_name("0122-buffer_cleaning", 1);
 
-        for (p = 0 ; p < partition_cnt ; p++)
-                test_produce_msgs_easy(topic,
-                                       testid,
-                                       p,
+        for (p = 0; p < partition_cnt; p++)
+                test_produce_msgs_easy(topic, testid, p,
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        c1 = test_create_consumer(topic, NULL,
-                                  rd_kafka_conf_dup(conf), NULL);
+        c1 = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
         c2 = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(c1, topic);
@@ -166,17 +166,17 @@ static void do_test_consume_batch (const char *strategy) {
         /* Create generic consume queue */
         rkq1 = rd_kafka_queue_get_consumer(c1);
 
-        c1_args.what = "C1.PRE";
-        c1_args.rkq = rkq1;
-        c1_args.timeout_ms = timeout_ms;
-        c1_args.consume_msg_cnt = consume_msg_cnt;
+        c1_args.what             = "C1.PRE";
+        c1_args.rkq              = rkq1;
+        c1_args.timeout_ms       = timeout_ms;
+        c1_args.consume_msg_cnt  = consume_msg_cnt;
         c1_args.expected_msg_cnt = produce_msg_cnt / 2;
-        c1_args.rk = c1;
-        c1_args.testid = testid;
-        c1_args.mv = &mv;
-        c1_args.test = test_curr;
-        if (thrd_create(&thread_id, consumer_batch_queue, &c1_args)
-            != thrd_success)
+        c1_args.rk               = c1;
+        c1_args.testid           = testid;
+        c1_args.mv               = &mv;
+        c1_args.test             = test_curr;
+        if (thrd_create(&thread_id, consumer_batch_queue, &c1_args) !=
+            thrd_success)
                 TEST_FAIL("Failed to create thread for %s", "C1.PRE");
 
         test_consumer_subscribe(c2, topic);
@@ -188,21 +188,19 @@ static void do_test_consume_batch (const char *strategy) {
         rkq2 = rd_kafka_queue_get_consumer(c2);
 
         c2_args.what = "C2.PRE";
-        c2_args.rkq = rkq2;
+        c2_args.rkq  = rkq2;
         /* Second consumer should be able to consume all messages right away */
-        c2_args.timeout_ms = 5000;
-        c2_args.consume_msg_cnt = consume_msg_cnt;
+        c2_args.timeout_ms       = 5000;
+        c2_args.consume_msg_cnt  = consume_msg_cnt;
         c2_args.expected_msg_cnt = produce_msg_cnt / 2;
-        c2_args.rk = c2;
-        c2_args.testid = testid;
-        c2_args.mv = &mv;
+        c2_args.rk               = c2;
+        c2_args.testid           = testid;
+        c2_args.mv               = &mv;
 
         consumer_batch_queue(&c2_args);
 
-        test_msgver_verify("C1.PRE + C2.PRE",
-                           &mv,
-                           TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
-                           0,
+        test_msgver_verify("C1.PRE + C2.PRE", &mv,
+                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP, 0,
                            produce_msg_cnt);
         test_msgver_clear(&mv);
 
@@ -219,7 +217,7 @@ static void do_test_consume_batch (const char *strategy) {
 }
 
 
-int main_0122_buffer_cleaning_after_rebalance (int argc, char **argv) {
+int main_0122_buffer_cleaning_after_rebalance(int argc, char **argv) {
         do_test_consume_batch("range");
         do_test_consume_batch("cooperative-sticky");
         return 0;

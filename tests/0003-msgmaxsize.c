@@ -35,7 +35,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 static int msgs_wait = 0; /* bitmask */
@@ -44,8 +44,12 @@ static int msgs_wait = 0; /* bitmask */
  * Delivery report callback.
  * Called for each message once to signal its delivery status.
  */
-static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
-                   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
+static void dr_cb(rd_kafka_t *rk,
+                  void *payload,
+                  size_t len,
+                  rd_kafka_resp_err_t err,
+                  void *opaque,
+                  void *msg_opaque) {
         int msgid = *(int *)msg_opaque;
 
         free(msg_opaque);
@@ -55,17 +59,19 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
                           msgid, rd_kafka_err2str(err));
 
         if (!(msgs_wait & (1 << msgid)))
-                TEST_FAIL("Unwanted delivery report for message #%i "
-                          "(waiting for 0x%x)\n", msgid, msgs_wait);
+                TEST_FAIL(
+                    "Unwanted delivery report for message #%i "
+                    "(waiting for 0x%x)\n",
+                    msgid, msgs_wait);
 
-        TEST_SAY("Delivery report for message #%i: %s\n",
-                 msgid, rd_kafka_err2str(err));
+        TEST_SAY("Delivery report for message #%i: %s\n", msgid,
+                 rd_kafka_err2str(err));
 
         msgs_wait &= ~(1 << msgid);
 }
 
 
-int main_0003_msgmaxsize (int argc, char **argv) {
+int main_0003_msgmaxsize(int argc, char **argv) {
         int partition = 0;
         int r;
         rd_kafka_t *rk;
@@ -78,24 +84,22 @@ int main_0003_msgmaxsize (int argc, char **argv) {
                 ssize_t keylen;
                 ssize_t len;
                 rd_kafka_resp_err_t exp_err;
-        } sizes[] = {
-                /* message.max.bytes is including framing */
-                { -1, 5000, RD_KAFKA_RESP_ERR_NO_ERROR },
-                { 0, 99900, RD_KAFKA_RESP_ERR_NO_ERROR },
-                { 0, 100000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE },
-                { 100000, 0, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE },
-                { 1000, 100000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE },
-                { 0, 101000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE },
-                { 99000, -1, RD_KAFKA_RESP_ERR_NO_ERROR },
-                { -1, -1, RD_KAFKA_RESP_ERR__END }
-        };
+        } sizes[] = {/* message.max.bytes is including framing */
+                     {-1, 5000, RD_KAFKA_RESP_ERR_NO_ERROR},
+                     {0, 99900, RD_KAFKA_RESP_ERR_NO_ERROR},
+                     {0, 100000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE},
+                     {100000, 0, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE},
+                     {1000, 100000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE},
+                     {0, 101000, RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE},
+                     {99000, -1, RD_KAFKA_RESP_ERR_NO_ERROR},
+                     {-1, -1, RD_KAFKA_RESP_ERR__END}};
         int i;
 
         test_conf_init(&conf, &topic_conf, 10);
 
         /* Set a small maximum message size. */
-        if (rd_kafka_conf_set(conf, "message.max.bytes", "100000",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        if (rd_kafka_conf_set(conf, "message.max.bytes", "100000", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 TEST_FAIL("%s\n", errstr);
 
         /* Set delivery report callback */
@@ -104,47 +108,40 @@ int main_0003_msgmaxsize (int argc, char **argv) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0003", 0),
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0003", 0), topic_conf);
         if (!rkt)
-                TEST_FAIL("Failed to create topic: %s\n",
-                          rd_strerror(errno));
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
-        for (i = 0 ; sizes[i].exp_err != RD_KAFKA_RESP_ERR__END ; i++) {
-                void *value = sizes[i].len != -1 ?
-                        calloc(1, sizes[i].len) : NULL;
+        for (i = 0; sizes[i].exp_err != RD_KAFKA_RESP_ERR__END; i++) {
+                void *value =
+                    sizes[i].len != -1 ? calloc(1, sizes[i].len) : NULL;
                 size_t len = sizes[i].len != -1 ? sizes[i].len : 0;
-                void *key = sizes[i].keylen != -1 ?
-                        calloc(1, sizes[i].keylen) : NULL;
+                void *key =
+                    sizes[i].keylen != -1 ? calloc(1, sizes[i].keylen) : NULL;
                 size_t keylen = sizes[i].keylen != -1 ? sizes[i].keylen : 0;
-                int *msgidp = malloc(sizeof(*msgidp));
+                int *msgidp   = malloc(sizeof(*msgidp));
                 rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 *msgidp = i;
 
-                r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
-                                     value, len,
-                                     key, keylen,
-                                     msgidp);
+                r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY, value,
+                                     len, key, keylen, msgidp);
                 if (r == -1)
                         err = rd_kafka_last_error();
 
                 if (err != sizes[i].exp_err) {
-                        TEST_FAIL("Msg #%d produce(len=%"PRIdsz
-                                  ", keylen=%"PRIdsz"): got %s, expected %s",
-                                  i,
-                                  sizes[i].len,
-                                  sizes[i].keylen,
+                        TEST_FAIL("Msg #%d produce(len=%" PRIdsz
+                                  ", keylen=%" PRIdsz "): got %s, expected %s",
+                                  i, sizes[i].len, sizes[i].keylen,
                                   rd_kafka_err2name(err),
                                   rd_kafka_err2name(sizes[i].exp_err));
                 } else {
-                        TEST_SAY("Msg #%d produce() returned expected %s "
-                                 "for value size %"PRIdsz
-                                 " and key size %"PRIdsz"\n",
-                                 i,
-                                 rd_kafka_err2name(err),
-                                 sizes[i].len,
-                                 sizes[i].keylen);
+                        TEST_SAY(
+                            "Msg #%d produce() returned expected %s "
+                            "for value size %" PRIdsz " and key size %" PRIdsz
+                            "\n",
+                            i, rd_kafka_err2name(err), sizes[i].len,
+                            sizes[i].keylen);
 
                         if (!sizes[i].exp_err)
                                 msgs_wait |= (1 << i);

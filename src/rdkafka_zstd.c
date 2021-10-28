@@ -37,10 +37,11 @@
 #include <zstd.h>
 #include <zstd_errors.h>
 
-rd_kafka_resp_err_t
-rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
-                         char *inbuf, size_t inlen,
-                         void **outbuf, size_t *outlenp) {
+rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
+                                             char *inbuf,
+                                             size_t inlen,
+                                             void **outbuf,
+                                             size_t *outlenp) {
         unsigned long long out_bufsize = ZSTD_getFrameContentSize(inbuf, inlen);
 
         switch (out_bufsize) {
@@ -70,18 +71,18 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
                 if (!decompressed) {
                         rd_rkb_dbg(rkb, MSG, "ZSTD",
                                    "Unable to allocate output buffer "
-                                   "(%llu bytes for %"PRIusz
+                                   "(%llu bytes for %" PRIusz
                                    " compressed bytes): %s",
                                    out_bufsize, inlen, rd_strerror(errno));
                         return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 }
 
 
-                ret = ZSTD_decompress(decompressed, (size_t)out_bufsize,
-                                      inbuf, inlen);
+                ret = ZSTD_decompress(decompressed, (size_t)out_bufsize, inbuf,
+                                      inlen);
                 if (!ZSTD_isError(ret)) {
                         *outlenp = ret;
-                        *outbuf = decompressed;
+                        *outbuf  = decompressed;
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
 
@@ -107,7 +108,8 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, MSG, "ZSTD",
                    "Unable to decompress ZSTD "
-                   "(input buffer %"PRIusz", output buffer %llu): "
+                   "(input buffer %" PRIusz
+                   ", output buffer %llu): "
                    "output would exceed message.max.bytes (%d)",
                    inlen, out_bufsize, rkb->rkb_rk->rk_conf.max_msg_size);
 
@@ -115,24 +117,26 @@ rd_kafka_zstd_decompress (rd_kafka_broker_t *rkb,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
-                       rd_slice_t *slice, void **outbuf, size_t *outlenp) {
+rd_kafka_resp_err_t rd_kafka_zstd_compress(rd_kafka_broker_t *rkb,
+                                           int comp_level,
+                                           rd_slice_t *slice,
+                                           void **outbuf,
+                                           size_t *outlenp) {
         ZSTD_CStream *cctx;
         size_t r;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        size_t len = rd_slice_remains(slice);
+        size_t len              = rd_slice_remains(slice);
         ZSTD_outBuffer out;
         ZSTD_inBuffer in;
 
-        *outbuf = NULL;
-        out.pos = 0;
+        *outbuf  = NULL;
+        out.pos  = 0;
         out.size = ZSTD_compressBound(len);
-        out.dst = rd_malloc(out.size);
+        out.dst  = rd_malloc(out.size);
         if (!out.dst) {
                 rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                            "Unable to allocate output buffer "
-                           "(%"PRIusz" bytes): %s",
+                           "(%" PRIusz " bytes): %s",
                            out.size, rd_strerror(errno));
                 return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
         }
@@ -146,7 +150,8 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
                 goto done;
         }
 
-#if defined(WITH_ZSTD_STATIC) && ZSTD_VERSION_NUMBER >= (1*100*100+2*100+1) /* v1.2.1 */
+#if defined(WITH_ZSTD_STATIC) &&                                               \
+    ZSTD_VERSION_NUMBER >= (1 * 100 * 100 + 2 * 100 + 1) /* v1.2.1 */
         r = ZSTD_initCStream_srcSize(cctx, comp_level, len);
 #else
         /* libzstd not linked statically (or zstd version < 1.2.1):
@@ -157,7 +162,7 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
         if (ZSTD_isError(r)) {
                 rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                            "Unable to begin ZSTD compression "
-                           "(out buffer is %"PRIusz" bytes): %s",
+                           "(out buffer is %" PRIusz " bytes): %s",
                            out.size, ZSTD_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -165,12 +170,14 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
 
         while ((in.size = rd_slice_reader(slice, &in.src))) {
                 in.pos = 0;
-                r = ZSTD_compressStream(cctx, &out, &in);
+                r      = ZSTD_compressStream(cctx, &out, &in);
                 if (unlikely(ZSTD_isError(r))) {
                         rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                                    "ZSTD compression failed "
-                                   "(at of %"PRIusz" bytes, with "
-                                   "%"PRIusz" bytes remaining in out buffer): "
+                                   "(at of %" PRIusz
+                                   " bytes, with "
+                                   "%" PRIusz
+                                   " bytes remaining in out buffer): "
                                    "%s",
                                    in.size, out.size - out.pos,
                                    ZSTD_getErrorName(r));
@@ -189,7 +196,7 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
         if (rd_slice_remains(slice) != 0) {
                 rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                            "Failed to finalize ZSTD compression "
-                           "of %"PRIusz" bytes: %s",
+                           "of %" PRIusz " bytes: %s",
                            len, "Unexpected trailing data");
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -199,7 +206,7 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
         if (unlikely(ZSTD_isError(r) || r > 0)) {
                 rd_rkb_dbg(rkb, MSG, "ZSTDCOMPR",
                            "Failed to finalize ZSTD compression "
-                           "of %"PRIusz" bytes: %s",
+                           "of %" PRIusz " bytes: %s",
                            len, ZSTD_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -208,7 +215,7 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
         *outbuf  = out.dst;
         *outlenp = out.pos;
 
- done:
+done:
         if (cctx)
                 ZSTD_freeCStream(cctx);
 
@@ -216,5 +223,4 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
                 rd_free(out.dst);
 
         return err;
-
 }

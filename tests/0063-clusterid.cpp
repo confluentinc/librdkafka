@@ -35,8 +35,7 @@
  * Test Handle::clusterid() and Handle::controllerid()
  */
 
-static void do_test_clusterid (void) {
-
+static void do_test_clusterid(void) {
   Test::Say("[ do_test_clusterid ]\n");
 
   /*
@@ -107,8 +106,7 @@ static void do_test_clusterid (void) {
  *        This instantiates its own client to avoid having the value cached
  *        from do_test_clusterid(), but they are basically the same tests.
  */
-static void do_test_controllerid (void) {
-
+static void do_test_controllerid(void) {
   Test::Say("[ do_test_controllerid ]\n");
 
   /*
@@ -142,39 +140,41 @@ static void do_test_controllerid (void) {
   int32_t controllerid_good_1 = p_good->controllerid(tmout_multip(2000));
   if (controllerid_good_1 == -1)
     Test::Fail("good producer(w timeout): Controllerid is -1");
-  Test::Say(tostr() << "good producer(w timeout): Controllerid " <<  controllerid_good_1 << "\n");
+  Test::Say(tostr() << "good producer(w timeout): Controllerid "
+                    << controllerid_good_1 << "\n");
 
   /* Then retrieve a cached copy. */
   int32_t controllerid_good_2 = p_good->controllerid(0);
   if (controllerid_good_2 == -1)
     Test::Fail("good producer(0): Controllerid is -1");
-  Test::Say(tostr() << "good producer(0): Controllerid " << controllerid_good_2 << "\n");
+  Test::Say(tostr() << "good producer(0): Controllerid " << controllerid_good_2
+                    << "\n");
 
   if (controllerid_good_1 != controllerid_good_2)
-    Test::Fail(tostr() << "Good Controllerid mismatch: " <<
-               controllerid_good_1 << " != " << controllerid_good_2);
+    Test::Fail(tostr() << "Good Controllerid mismatch: " << controllerid_good_1
+                       << " != " << controllerid_good_2);
 
   /*
    * Try bad producer, should return -1
    */
   int32_t controllerid_bad_1 = p_bad->controllerid(tmout_multip(2000));
   if (controllerid_bad_1 != -1)
-    Test::Fail(tostr() <<
-               "bad producer(w timeout): Controllerid should be -1, not " <<
-               controllerid_bad_1);
+    Test::Fail(
+        tostr() << "bad producer(w timeout): Controllerid should be -1, not "
+                << controllerid_bad_1);
   int32_t controllerid_bad_2 = p_bad->controllerid(0);
   if (controllerid_bad_2 != -1)
-    Test::Fail(tostr() << "bad producer(0): Controllerid should be -1, not " <<
-               controllerid_bad_2);
+    Test::Fail(tostr() << "bad producer(0): Controllerid should be -1, not "
+                       << controllerid_bad_2);
 
   delete p_good;
   delete p_bad;
 }
 
 extern "C" {
-  int main_0063_clusterid (int argc, char **argv) {
-    do_test_clusterid();
-    do_test_controllerid();
-    return 0;
-  }
+int main_0063_clusterid(int argc, char **argv) {
+  do_test_clusterid();
+  do_test_controllerid();
+  return 0;
+}
 }

@@ -23,16 +23,18 @@ import sys
 import argparse
 import json
 
-def version_as_number (version):
+
+def version_as_number(version):
     if version == 'trunk':
-        return sys.maxint
+        return sys.maxsize
     tokens = version.split('.')
     return float('%s.%s' % (tokens[0], tokens[1]))
 
-def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
-                  root_path='tmp', broker_cnt=3, scenario='default'):
+
+def test_version(version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
+                 root_path='tmp', broker_cnt=3, scenario='default'):
     """
-    @brief Create, deploy and start a Kafka cluster using Kafka \p version
+    @brief Create, deploy and start a Kafka cluster using Kafka \\p version
     Then run librdkafka's regression tests.
     """
 
@@ -59,41 +61,53 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     brokers = []
     for n in range(0, broker_cnt):
-        # Configure rack & replica selector if broker supports fetch-from-follower
+        # Configure rack & replica selector if broker supports
+        # fetch-from-follower
         if version_as_number(version) >= 2.4:
-            defconf.update({'conf': ['broker.rack=RACK${appid}', 'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
+            defconf.update(
+                {
+                    'conf': [
+                        'broker.rack=RACK${appid}',
+                        'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()
 
     # Generate test config file
-    security_protocol='PLAINTEXT'
+    security_protocol = 'PLAINTEXT'
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
     os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
     os.write(fd, 'broker.address.family=v4\n'.encode('ascii'))
     if version.startswith('0.9') or version.startswith('0.8'):
         os.write(fd, 'api.version.request=false\n'.encode('ascii'))
-        os.write(fd, ('broker.version.fallback=%s\n' % version).encode('ascii'))
+        os.write(
+            fd, ('broker.version.fallback=%s\n' %
+                 version).encode('ascii'))
     # SASL (only one mechanism supported)
     mech = defconf.get('sasl_mechanisms', '').split(',')[0]
     if mech != '':
         os.write(fd, ('sasl.mechanisms=%s\n' % mech).encode('ascii'))
         if mech == 'PLAIN' or mech.find('SCRAM') != -1:
-            print('# Writing SASL %s client config to %s' % (mech, test_conf_file))
-            security_protocol='SASL_PLAINTEXT'
+            print(
+                '# Writing SASL %s client config to %s' %
+                (mech, test_conf_file))
+            security_protocol = 'SASL_PLAINTEXT'
             # Use first user as SASL user/pass
             for up in defconf.get('sasl_users', '').split(','):
-                u,p = up.split('=')
+                u, p = up.split('=')
                 os.write(fd, ('sasl.username=%s\n' % u).encode('ascii'))
                 os.write(fd, ('sasl.password=%s\n' % p).encode('ascii'))
                 break
         elif mech == 'OAUTHBEARER':
-            security_protocol='SASL_PLAINTEXT'
-            os.write(fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode('ascii')))
-            os.write(fd, ('sasl.oauthbearer.config=%s\n' % \
+            security_protocol = 'SASL_PLAINTEXT'
+            os.write(
+                fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode('ascii')))
+            os.write(fd, ('sasl.oauthbearer.config=%s\n' %
                           'scope=requiredScope principal=admin').encode('ascii'))
         else:
-            print('# FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
+            print(
+                '# FIXME: SASL %s client config not written to %s' %
+                (mech, test_conf_file))
 
     # SSL support
     ssl = getattr(cluster, 'ssl', None)
@@ -106,29 +120,41 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         key = ssl.create_cert('librdkafka')
 
         os.write(fd, ('ssl.ca.location=%s\n' % ssl.ca['pem']).encode('ascii'))
-        os.write(fd, ('ssl.certificate.location=%s\n' % key['pub']['pem']).encode('ascii'))
-        os.write(fd, ('ssl.key.location=%s\n' % key['priv']['pem']).encode('ascii'))
-        os.write(fd, ('ssl.key.password=%s\n' % key['password']).encode('ascii'))
+        os.write(fd, ('ssl.certificate.location=%s\n' %
+                 key['pub']['pem']).encode('ascii'))
+        os.write(
+            fd, ('ssl.key.location=%s\n' %
+                 key['priv']['pem']).encode('ascii'))
+        os.write(
+            fd, ('ssl.key.password=%s\n' %
+                 key['password']).encode('ascii'))
 
         for k, v in ssl.ca.items():
             cmd_env['RDK_SSL_ca_{}'.format(k)] = v
 
         # Set envs for all generated keys so tests can find them.
         for k, v in key.items():
-            if type(v) is dict:
+            if isinstance(v, dict):
                 for k2, v2 in v.items():
                     # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
                     cmd_env['RDK_SSL_{}_{}'.format(k, k2)] = v2
             else:
                 cmd_env['RDK_SSL_{}'.format(k)] = v
 
-
     # Define bootstrap brokers based on selected security protocol
     print('# Using client security.protocol=%s' % security_protocol)
-    all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')
-    bootstrap_servers = ','.join([x for x in all_listeners if x.startswith(security_protocol)])
-    os.write(fd, ('bootstrap.servers=%s\n' % bootstrap_servers).encode('ascii'))
-    os.write(fd, ('security.protocol=%s\n' % security_protocol).encode('ascii'))
+    all_listeners = (
+        ','.join(
+            cluster.get_all(
+                'listeners',
+                '',
+                KafkaBrokerApp))).split(',')
+    bootstrap_servers = ','.join(
+        [x for x in all_listeners if x.startswith(security_protocol)])
+    os.write(fd, ('bootstrap.servers=%s\n' %
+             bootstrap_servers).encode('ascii'))
+    os.write(fd, ('security.protocol=%s\n' %
+             security_protocol).encode('ascii'))
     os.close(fd)
 
     if deploy:
@@ -144,7 +170,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     if not cluster.wait_operational(30):
         cluster.stop(force=True)
-        raise Exception('Cluster %s did not go operational, see logs in %s/%s' % \
+        raise Exception('Cluster %s did not go operational, see logs in %s/%s' %
                         (cluster.name, cluster.root_path, cluster.instance))
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
@@ -163,7 +189,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     # Per broker env vars
     for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
         cmd_env['BROKER_ADDRESS_%d' % b.appid] = \
-            ','.join([x for x in b.conf['listeners'].split(',') if x.startswith(security_protocol)])
+            ','.join([x for x in b.conf['listeners'].split(
+                ',') if x.startswith(security_protocol)])
         # Add each broker pid as an env so they can be killed indivdidually.
         cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
         # JMX port, if available
@@ -172,20 +199,25 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
             cmd_env['BROKER_JMX_PORT_%d' % b.appid] = str(jmx_port)
 
     if not cmd:
-        cmd_env['PS1'] = '[TRIVUP:%s@%s] \\u@\\h:\w$ ' % (cluster.name, version)
+        cmd_env['PS1'] = '[TRIVUP:%s@%s] \\u@\\h:\\w$ ' % (
+            cluster.name, version)
         cmd = 'bash --rcfile <(cat ~/.bashrc)'
 
     ret = True
 
     for i in range(0, exec_cnt):
-        retcode = subprocess.call(cmd, env=cmd_env, shell=True, executable='/bin/bash')
+        retcode = subprocess.call(
+            cmd,
+            env=cmd_env,
+            shell=True,
+            executable='/bin/bash')
         if retcode != 0:
             print('# Command failed with returncode %d: %s' % (retcode, cmd))
             ret = False
 
     try:
         os.remove(test_conf_file)
-    except:
+    except BaseException:
         pass
 
     cluster.stop(force=True)
@@ -193,9 +225,11 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cluster.cleanup(keeptypes=['log'])
     return ret
 
+
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Start a Kafka cluster and provide an interactive shell')
+    parser = argparse.ArgumentParser(
+        description='Start a Kafka cluster and provide an interactive shell')
 
     parser.add_argument('versions', type=str, default=None, nargs='+',
                         help='Kafka version(s) to deploy')
@@ -211,13 +245,37 @@ if __name__ == '__main__':
                         help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
-    parser.add_argument('--root', type=str, default=os.environ.get('TRIVUP_ROOT', 'tmp'), help='Root working directory')
-    parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
-    parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
-    parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
+    parser.add_argument(
+        '--root',
+        type=str,
+        default=os.environ.get(
+            'TRIVUP_ROOT',
+            'tmp'),
+        help='Root working directory')
+    parser.add_argument(
+        '--port',
+        default=None,
+        help='Base TCP port to start allocating from')
+    parser.add_argument(
+        '--kafka-src',
+        dest='kafka_path',
+        type=str,
+        default=None,
+        help='Path to Kafka git repo checkout (used for version=trunk)')
+    parser.add_argument(
+        '--brokers',
+        dest='broker_cnt',
+        type=int,
+        default=3,
+        help='Number of Kafka brokers')
     parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
                         help='Enable SSL endpoints')
-    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, SCRAM-SHA-nnn, GSSAPI, OAUTHBEARER)')
+    parser.add_argument(
+        '--sasl',
+        dest='sasl',
+        type=str,
+        default=None,
+        help='SASL mechanism (PLAIN, SCRAM-SHA-nnn, GSSAPI, OAUTHBEARER)')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -234,7 +292,8 @@ if __name__ == '__main__':
     if args.ssl:
         args.conf['security.protocol'] = 'SSL'
     if args.sasl:
-        if (args.sasl == 'PLAIN' or args.sasl.find('SCRAM') != -1) and 'sasl_users' not in args.conf:
+        if (args.sasl == 'PLAIN' or args.sasl.find('SCRAM')
+                != -1) and 'sasl_users' not in args.conf:
             args.conf['sasl_users'] = 'testuser=testpass'
         args.conf['sasl_mechanisms'] = args.sasl
 
@@ -248,6 +307,5 @@ if __name__ == '__main__':
                          scenario=args.scenario)
         if not r:
             retcode = 2
-
 
     sys.exit(retcode)

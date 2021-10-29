@@ -421,12 +421,8 @@ extern int unittest_scram(void);
 extern int unittest_assignors(void);
 extern int unittest_map(void);
 #if WITH_CURL
-<<<<<<< HEAD
 extern int unittest_http(void);
-=======
-extern int unittest_http (void);
-extern int unittest_sasl_oauthbearer_oidc (void);
->>>>>>> Retrieve jwt token from token provider
+extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
 
 int rd_unittest(void) {
@@ -464,7 +460,7 @@ int rd_unittest(void) {
                 {"assignors", unittest_assignors},
 #if WITH_CURL
                 {"http", unittest_http},
-                { "sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc },
+                {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
                 {NULL}
         };

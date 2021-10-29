@@ -54,6 +54,7 @@ librdkafka also provides a native C++ interface.
         - [Threads and callbacks](#threads-and-callbacks)
         - [Brokers](#brokers)
             - [SSL](#ssl)
+            - [OAUTHBEARER with Support for OIDC](#oauthbearer-oidc)
             - [Sparse connections](#sparse-connections)
                 - [Random broker selection](#random-broker-selection)
                 - [Persistent broker connections](#persistent-broker-connections)
@@ -1120,6 +1121,31 @@ The predefined system store names are:
 For example, to read both intermediate and root CAs, set
 `ssl.ca.certificate.stores=CA,Root`.
 
+
+#### OAUTHBEARER with Support for OIDC
+
+Oauthbearer with OIDC is another way for client to connect to a broker's
+SSL endpoints/listeners. If this way is used, the client needs to be
+configured with `security.protocol=SASL_SSL` for SASL authentication
+and SSL transport, `sasl.oauthbearer.method=OIDC` to use the
+OAUTHBEARER with OIDC method.
+
+The OAUTHBEARER with OIDC will also require the configuration of the
+following:
+
+  * `sasl.oauthbearer.token.endpoint.url` - OAUTH issuer token endpoint HTTP(S)
+    URI used to retrieve the token
+  * `sasl.oauthbearer.client.id` - A public identifier for the application
+    It must be unique across all clients that the authorization server handles
+  * `sasl.oauthbearer.client.secret` - This is only known to the application
+    and the authorization server. This should be a sufficiently random string
+    that are not guessable
+  * `sasl.oauthbearer.scope` - Client use this to specify the scope of the
+    access request to the broker
+  * `sasl.oauthbearer.extensions` - Allow additional information to be provided
+    to the broker. "It's comma-separated list of key=value pairs.
+    The example of the input is
+    `supportFeatureX=true,organizationId=sales-emea`
 
 
 #### Sparse connections

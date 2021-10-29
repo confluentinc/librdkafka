@@ -54,6 +54,9 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#if WITH_CURL
+#include "rdkafka_sasl_oauthbearer_oidc.h"
+#endif
 #if WITH_SSL
 #include "rdkafka_ssl.h"
 #endif
@@ -2238,11 +2241,20 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                     &rk->rk_conf, rd_kafka_oauthbearer_unsecured_token);
 
-        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
+        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb &&
+            rk->rk_conf.sasl.oauthbearer.method !=
+                RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC)
                 rk->rk_conf.enabled_events |=
                     RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif
 
+#if WITH_CURL
+        if (rk->rk_conf.sasl.oauthbearer.method ==
+                RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+            !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
+                rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+                    &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
+#endif
         rk->rk_controllerid = -1;
 
         /* Admin client defaults */
@@ -2330,6 +2342,24 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
         }
 
+        /* Create background thread and queue if background_event_cb()
+         * RD_KAFKA_EVENT_BACKGROUND has been enabled.
+         * Do this before creating the main thread since after
+         * the main thread is created it is no longer trivial to error
+         * out from rd_kafka_new(). */
+
+        if (rk->rk_conf.background_event_cb ||
+            (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
+                rd_kafka_resp_err_t err;
+                rd_kafka_wrlock(rk);
+                err =
+                    rd_kafka_background_thread_create(rk, errstr, errstr_size);
+                rd_kafka_wrunlock(rk);
+                if (err)
+                        goto fail;
+        }
+
+        mtx_lock(&rk->rk_init_lock);
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
@@ -2396,24 +2426,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         }
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
-
-        /* Create background thread and queue if background_event_cb()
-         * RD_KAFKA_EVENT_BACKGROUND has been enabled.
-         * Do this before creating the main thread since after
-         * the main thread is created it is no longer trivial to error
-         * out from rd_kafka_new(). */
-        if (rk->rk_conf.background_event_cb ||
-            (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
-                rd_kafka_resp_err_t err;
-                rd_kafka_wrlock(rk);
-                err =
-                    rd_kafka_background_thread_create(rk, errstr, errstr_size);
-                rd_kafka_wrunlock(rk);
-                if (err)
-                        goto fail;
-        }
-
-        mtx_lock(&rk->rk_init_lock);
 
         /* Lock handle here to synchronise state, i.e., hold off
          * the thread until we've finalized the handle. */

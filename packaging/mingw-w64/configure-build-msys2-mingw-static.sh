@@ -51,6 +51,8 @@ popd
 rm -rf ./mergescratch
 
 export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
+pwd
+find . -iname test-runner.exe
 cd tests
 ls -la
 dumpbin /dependents test-runner.exe || echo "nope"

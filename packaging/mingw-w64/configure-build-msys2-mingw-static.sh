@@ -2,6 +2,7 @@
 
 set -ex
 
+echo building
 cmake \
     -G "MinGW Makefiles" \
     -D CMAKE_INSTALL_PREFIX="$PWD/dest/" \
@@ -63,5 +64,6 @@ ls -la
 dumpbin /dependents test-runner.exe || echo "nope"
 ldd test-runner.exe
 ./test-runner.exe -l -Q -p1 0000 || echo "failed to call test-runner"
+./test-runner.exe --help 2>&1
 echo exit $?
 

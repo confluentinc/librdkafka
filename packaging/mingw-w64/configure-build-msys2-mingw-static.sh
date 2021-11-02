@@ -21,6 +21,9 @@ cp /C/tools/msys64/mingw64/lib/libssl.a ./
 cp /C/tools/msys64/mingw64/lib/libz.a ./
 cp ../src/librdkafka.a ./
 
+echo "pwd? $PWD"
+pwd
+
 # Have to rename because ar won't work with + in the name
 cp ../src-cpp/librdkafka++.a ./librdkafkacpp.a
 ar -M << EOF
@@ -50,6 +53,8 @@ cp ./librdkafkacpp-static.a ../dest/lib/librdkafka++-static.a
 popd
 rm -rf ./mergescratch
 
+echo "I'm on $PWD or $(pwd)"
+echo "Why is there no output? $PWD" >2
 export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
 pwd
 find . -iname test-runner.exe

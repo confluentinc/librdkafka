@@ -202,6 +202,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                              "token from \"%s\": %s (%d)",
                              token_url, herr->errstr, herr->code);
                 rd_kafka_oauthbearer_set_token_failure(rk, herr->errstr);
+                rd_http_error_destroy(herr);
                 goto done;
         }
 

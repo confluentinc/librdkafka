@@ -17,6 +17,17 @@ librdkafka v1.9.0 is a feature release:
    if not already created.
 
 
+## Fixes
+
+### General fixes
+
+ * Windows: some applications would crash with an error message like
+   `no OPENSSL_Applink()` written to the console if `ssl.keystore.location`
+   was configured.
+   This regression was introduced in v1.8.0 due to use of vcpkgs and how
+   keystore file was read. #3554.
+
+
 
 # librdkafka v1.8.2
 

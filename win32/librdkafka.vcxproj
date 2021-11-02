@@ -19,6 +19,9 @@
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win64\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC\static</LibraryPath>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>

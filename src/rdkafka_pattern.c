@@ -29,30 +29,30 @@
 #include "rdkafka_int.h"
 #include "rdkafka_pattern.h"
 
-void rd_kafka_pattern_destroy (rd_kafka_pattern_list_t *plist,
-                               rd_kafka_pattern_t *rkpat) {
+void rd_kafka_pattern_destroy(rd_kafka_pattern_list_t *plist,
+                              rd_kafka_pattern_t *rkpat) {
         TAILQ_REMOVE(&plist->rkpl_head, rkpat, rkpat_link);
-	rd_regex_destroy(rkpat->rkpat_re);
+        rd_regex_destroy(rkpat->rkpat_re);
         rd_free(rkpat->rkpat_orig);
         rd_free(rkpat);
 }
 
-void rd_kafka_pattern_add (rd_kafka_pattern_list_t *plist,
-                           rd_kafka_pattern_t *rkpat) {
+void rd_kafka_pattern_add(rd_kafka_pattern_list_t *plist,
+                          rd_kafka_pattern_t *rkpat) {
         TAILQ_INSERT_TAIL(&plist->rkpl_head, rkpat, rkpat_link);
 }
 
-rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
-                                          char *errstr, int errstr_size) {
+rd_kafka_pattern_t *
+rd_kafka_pattern_new(const char *pattern, char *errstr, int errstr_size) {
         rd_kafka_pattern_t *rkpat;
 
-	rkpat = rd_calloc(1, sizeof(*rkpat));
+        rkpat = rd_calloc(1, sizeof(*rkpat));
 
-	/* Verify and precompile pattern */
-	if (!(rkpat->rkpat_re = rd_regex_comp(pattern, errstr, errstr_size))) {
-		rd_free(rkpat);
-		return NULL;
-	}
+        /* Verify and precompile pattern */
+        if (!(rkpat->rkpat_re = rd_regex_comp(pattern, errstr, errstr_size))) {
+                rd_free(rkpat);
+                return NULL;
+        }
 
         rkpat->rkpat_orig = rd_strdup(pattern);
 
@@ -61,11 +61,11 @@ rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
 
 
 
-int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str) {
+int rd_kafka_pattern_match(rd_kafka_pattern_list_t *plist, const char *str) {
         rd_kafka_pattern_t *rkpat;
 
         TAILQ_FOREACH(rkpat, &plist->rkpl_head, rkpat_link) {
-		if (rd_regex_exec(rkpat->rkpat_re, str))
+                if (rd_regex_exec(rkpat->rkpat_re, str))
                         return 1;
         }
 
@@ -76,9 +76,10 @@ int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str) {
 /**
  * Append pattern to list.
  */
-int rd_kafka_pattern_list_append (rd_kafka_pattern_list_t *plist,
-                                  const char *pattern,
-                                  char *errstr, int errstr_size) {
+int rd_kafka_pattern_list_append(rd_kafka_pattern_list_t *plist,
+                                 const char *pattern,
+                                 char *errstr,
+                                 int errstr_size) {
         rd_kafka_pattern_t *rkpat;
         rkpat = rd_kafka_pattern_new(pattern, errstr, errstr_size);
         if (!rkpat)
@@ -92,8 +93,8 @@ int rd_kafka_pattern_list_append (rd_kafka_pattern_list_t *plist,
  * Remove matching patterns.
  * Returns the number of removed patterns.
  */
-int rd_kafka_pattern_list_remove (rd_kafka_pattern_list_t *plist,
-                                  const char *pattern) {
+int rd_kafka_pattern_list_remove(rd_kafka_pattern_list_t *plist,
+                                 const char *pattern) {
         rd_kafka_pattern_t *rkpat, *rkpat_tmp;
         int cnt = 0;
 
@@ -109,11 +110,12 @@ int rd_kafka_pattern_list_remove (rd_kafka_pattern_list_t *plist,
 /**
  * Parse a patternlist and populate a list with it.
  */
-static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
-                                        const char *patternlist,
-                                        char *errstr, size_t errstr_size) {
-		char *s;
-		rd_strdupa(&s, patternlist);
+static int rd_kafka_pattern_list_parse(rd_kafka_pattern_list_t *plist,
+                                       const char *patternlist,
+                                       char *errstr,
+                                       size_t errstr_size) {
+        char *s;
+        rd_strdupa(&s, patternlist);
 
         while (s && *s) {
                 char *t = s;
@@ -121,10 +123,10 @@ static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
 
                 /* Find separator */
                 while ((t = strchr(t, ','))) {
-                        if (t > s && *(t-1) == ',') {
+                        if (t > s && *(t - 1) == ',') {
                                 /* separator was escaped,
                                    remove escape and scan again. */
-                                memmove(t-1, t, strlen(t)+1);
+                                memmove(t - 1, t, strlen(t) + 1);
                                 t++;
                         } else {
                                 *t = '\0';
@@ -137,7 +139,8 @@ static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
                                                  sizeof(re_errstr)) == -1) {
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to parse pattern \"%s\": "
-                                    "%s", s, re_errstr);
+                                    "%s",
+                                    s, re_errstr);
                         rd_kafka_pattern_list_clear(plist);
                         return -1;
                 }
@@ -152,7 +155,7 @@ static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
 /**
  * Clear a pattern list.
  */
-void rd_kafka_pattern_list_clear (rd_kafka_pattern_list_t *plist) {
+void rd_kafka_pattern_list_clear(rd_kafka_pattern_list_t *plist) {
         rd_kafka_pattern_t *rkpat;
 
         while ((rkpat = TAILQ_FIRST(&plist->rkpl_head)))
@@ -168,7 +171,7 @@ void rd_kafka_pattern_list_clear (rd_kafka_pattern_list_t *plist) {
 /**
  * Free a pattern list previously created with list_new()
  */
-void rd_kafka_pattern_list_destroy (rd_kafka_pattern_list_t *plist) {
+void rd_kafka_pattern_list_destroy(rd_kafka_pattern_list_t *plist) {
         rd_kafka_pattern_list_clear(plist);
         rd_free(plist);
 }
@@ -177,13 +180,14 @@ void rd_kafka_pattern_list_destroy (rd_kafka_pattern_list_t *plist) {
  * Initialize a pattern list, optionally populating it with the
  * comma-separated patterns in 'patternlist'.
  */
-int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
-                                const char *patternlist,
-                                char *errstr, size_t errstr_size) {
+int rd_kafka_pattern_list_init(rd_kafka_pattern_list_t *plist,
+                               const char *patternlist,
+                               char *errstr,
+                               size_t errstr_size) {
         TAILQ_INIT(&plist->rkpl_head);
         if (patternlist) {
-                if (rd_kafka_pattern_list_parse(plist, patternlist,
-                                                errstr, errstr_size) == -1)
+                if (rd_kafka_pattern_list_parse(plist, patternlist, errstr,
+                                                errstr_size) == -1)
                         return -1;
                 plist->rkpl_orig = rd_strdup(patternlist);
         } else
@@ -196,15 +200,15 @@ int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
 /**
  * Allocate and initialize a new list.
  */
-rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
-                                                    char *errstr,
-                                                    int errstr_size) {
+rd_kafka_pattern_list_t *rd_kafka_pattern_list_new(const char *patternlist,
+                                                   char *errstr,
+                                                   int errstr_size) {
         rd_kafka_pattern_list_t *plist;
 
         plist = rd_calloc(1, sizeof(*plist));
 
-        if (rd_kafka_pattern_list_init(plist, patternlist,
-                                       errstr, errstr_size) == -1) {
+        if (rd_kafka_pattern_list_init(plist, patternlist, errstr,
+                                       errstr_size) == -1) {
                 rd_free(plist);
                 return NULL;
         }
@@ -217,8 +221,8 @@ rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
  * Make a copy of a pattern list.
  */
 rd_kafka_pattern_list_t *
-rd_kafka_pattern_list_copy (rd_kafka_pattern_list_t *src) {
-	char errstr[16];
-	return rd_kafka_pattern_list_new(src->rkpl_orig,
-					 errstr, sizeof(errstr));
+rd_kafka_pattern_list_copy(rd_kafka_pattern_list_t *src) {
+        char errstr[16];
+        return rd_kafka_pattern_list_new(src->rkpl_orig, errstr,
+                                         sizeof(errstr));
 }

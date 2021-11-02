@@ -44,13 +44,14 @@
 
 class DrCb0065 : public RdKafka::DeliveryReportCb {
  public:
-  int cnt; // dr messages seen
-  bool do_yield; // whether to yield for each message or not
+  int cnt;        // dr messages seen
+  bool do_yield;  // whether to yield for each message or not
   RdKafka::Producer *p;
 
-  DrCb0065(bool yield):  cnt(0), do_yield(yield), p(NULL) {}
+  DrCb0065(bool yield) : cnt(0), do_yield(yield), p(NULL) {
+  }
 
-  void dr_cb (RdKafka::Message &message) {
+  void dr_cb(RdKafka::Message &message) {
     if (message.err())
       Test::Fail("DR: message failed: " + RdKafka::err2str(message.err()));
 
@@ -63,7 +64,7 @@ class DrCb0065 : public RdKafka::DeliveryReportCb {
 };
 
 
-static void do_test_producer (bool do_yield) {
+static void do_test_producer(bool do_yield) {
   int msgcnt = 100;
   std::string errstr;
   RdKafka::ErrorCode err;
@@ -88,12 +89,12 @@ static void do_test_producer (bool do_yield) {
 
   dr.p = p;
 
-  Test::Say(tostr() << (do_yield ? "Yield: " : "Dont Yield: ") <<
-            "Producing " << msgcnt << " messages to " << topic << "\n");
+  Test::Say(tostr() << (do_yield ? "Yield: " : "Dont Yield: ") << "Producing "
+                    << msgcnt << " messages to " << topic << "\n");
 
-  for (int i = 0 ; i < msgcnt ; i++) {
-    err = p->produce(topic, 0, RdKafka::Producer::RK_MSG_COPY,
-                     (void *)"hi", 2, NULL, 0, 0, NULL);
+  for (int i = 0; i < msgcnt; i++) {
+    err = p->produce(topic, 0, RdKafka::Producer::RK_MSG_COPY, (void *)"hi", 2,
+                     NULL, 0, 0, NULL);
     if (err)
       Test::Fail("produce() failed: " + RdKafka::err2str(err));
   }
@@ -114,8 +115,8 @@ static void do_test_producer (bool do_yield) {
     }
 
     if (this_dr_cnt != exp_msgs_per_poll)
-      Test::Fail(tostr() << "Expected " << exp_msgs_per_poll <<
-                 " DRs per poll() call, got " << this_dr_cnt);
+      Test::Fail(tostr() << "Expected " << exp_msgs_per_poll
+                         << " DRs per poll() call, got " << this_dr_cnt);
     else
       Test::Say(3, tostr() << dr.cnt << "/" << msgcnt << "\n");
   }
@@ -123,17 +124,17 @@ static void do_test_producer (bool do_yield) {
   if (dr.cnt != msgcnt)
     Test::Fail(tostr() << "Expected " << msgcnt << " DRs, got " << dr.cnt);
 
-  Test::Say(tostr() << (do_yield ? "Yield: " : "Dont Yield: ") <<
-            "Success: " << dr.cnt << " DRs received in batches of " <<
-            exp_msgs_per_poll << "\n");
+  Test::Say(tostr() << (do_yield ? "Yield: " : "Dont Yield: ")
+                    << "Success: " << dr.cnt << " DRs received in batches of "
+                    << exp_msgs_per_poll << "\n");
 
   delete p;
 }
 
 extern "C" {
-  int main_0065_yield (int argc, char **argv) {
-    do_test_producer(1/*yield*/);
-    do_test_producer(0/*dont yield*/);
-    return 0;
-  }
+int main_0065_yield(int argc, char **argv) {
+  do_test_producer(1 /*yield*/);
+  do_test_producer(0 /*dont yield*/);
+  return 0;
+}
 }

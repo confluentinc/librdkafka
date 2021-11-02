@@ -46,27 +46,27 @@
 static mtx_t value_mtx;
 static char *value;
 
-static const int msg_rate = 10;  /**< Messages produced per second */
+static const int msg_rate = 10; /**< Messages produced per second */
 
-static struct test *this_test;   /**< Exposes current test struct (in TLS) to
-                                  *   producer thread. */
+static struct test *this_test; /**< Exposes current test struct (in TLS) to
+                                *   producer thread. */
 
 
 /**
  * @brief Treat all error_cb as non-test-fatal.
  */
-static int is_error_fatal (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                           const char *reason) {
+static int
+is_error_fatal(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         return rd_false;
 }
 
 /**
  * @brief Producing thread
  */
-static int run_producer (void *arg) {
-        const char *topic = arg;
+static int run_producer(void *arg) {
+        const char *topic    = arg;
         rd_kafka_t *producer = test_create_producer();
-        int ret = 0;
+        int ret              = 0;
 
         test_curr = this_test;
 
@@ -89,11 +89,9 @@ static int run_producer (void *arg) {
                 }
 
                 err = rd_kafka_producev(
-                        producer,
-                        RD_KAFKA_V_TOPIC(topic),
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_VALUE(value, strlen(value)),
-                        RD_KAFKA_V_END);
+                    producer, RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_VALUE(value, strlen(value)), RD_KAFKA_V_END);
 
                 if (err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
                     err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
@@ -114,9 +112,8 @@ static int run_producer (void *arg) {
                 TEST_WARN("Failed to flush all message(s), %d remain\n",
                           rd_kafka_outq_len(producer));
                 /* Purge the messages to see which partition they were for */
-                rd_kafka_purge(producer,
-                               RD_KAFKA_PURGE_F_QUEUE|
-                               RD_KAFKA_PURGE_F_INFLIGHT);
+                rd_kafka_purge(producer, RD_KAFKA_PURGE_F_QUEUE |
+                                             RD_KAFKA_PURGE_F_INFLIGHT);
                 rd_kafka_flush(producer, 5000);
                 TEST_SAY("%d message(s) in queue after purge\n",
                          rd_kafka_outq_len(producer));
@@ -134,13 +131,13 @@ static int run_producer (void *arg) {
  * @brief Expect at least \p cnt messages with value matching \p exp_value,
  *        else fail the current test.
  */
-static void expect_messages (rd_kafka_t *consumer, int cnt,
-                             const char *exp_value) {
+static void
+expect_messages(rd_kafka_t *consumer, int cnt, const char *exp_value) {
         int match_cnt = 0, other_cnt = 0, err_cnt = 0;
         size_t exp_len = strlen(exp_value);
 
-        TEST_SAY("Expecting >= %d messages with value \"%s\"...\n",
-                 cnt, exp_value);
+        TEST_SAY("Expecting >= %d messages with value \"%s\"...\n", cnt,
+                 exp_value);
 
         while (match_cnt < cnt) {
                 rd_kafka_message_t *rkmessage;
@@ -157,20 +154,21 @@ static void expect_messages (rd_kafka_t *consumer, int cnt,
                            !memcmp(rkmessage->payload, exp_value, exp_len)) {
                         match_cnt++;
                 } else {
-                        TEST_SAYL(3, "Received \"%.*s\", expected \"%s\": "
+                        TEST_SAYL(3,
+                                  "Received \"%.*s\", expected \"%s\": "
                                   "ignored\n",
                                   (int)rkmessage->len,
-                                  (const char *)rkmessage->payload,
-                                  exp_value);
+                                  (const char *)rkmessage->payload, exp_value);
                         other_cnt++;
                 }
 
                 rd_kafka_message_destroy(rkmessage);
         }
 
-        TEST_SAY("Consumed %d messages matching \"%s\", "
-                 "ignored %d others, saw %d error(s)\n",
-                 match_cnt, exp_value, other_cnt, err_cnt);
+        TEST_SAY(
+            "Consumed %d messages matching \"%s\", "
+            "ignored %d others, saw %d error(s)\n",
+            match_cnt, exp_value, other_cnt, err_cnt);
 }
 
 
@@ -178,11 +176,11 @@ static void expect_messages (rd_kafka_t *consumer, int cnt,
  * @brief Test topic create + delete + create with first topic having
  *        \p part_cnt_1 partitions and second topic having \p part_cnt_2 .
  */
-static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
+static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
         rd_kafka_t *consumer;
         thrd_t producer_thread;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-        int ret = 0;
+        int ret           = 0;
 
         TEST_SAY(_C_MAG
                  "[ Test topic create(%d parts)+delete+create(%d parts) ]\n",
@@ -202,8 +200,8 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
         mtx_unlock(&value_mtx);
 
         /* Create producer thread */
-        if (thrd_create(&producer_thread, run_producer,
-                        (void *)topic) != thrd_success)
+        if (thrd_create(&producer_thread, run_producer, (void *)topic) !=
+            thrd_success)
                 TEST_FAIL("thrd_create failed");
 
         /* Consume messages for 5s */
@@ -244,7 +242,7 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
 }
 
 
-int main_0107_topic_recreate (int argc, char **argv) {
+int main_0107_topic_recreate(int argc, char **argv) {
         this_test = test_curr; /* Need to expose current test struct (in TLS)
                                 * to producer thread. */
 

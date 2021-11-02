@@ -47,12 +47,12 @@
 #include <sspi.h>
 
 
-#define RD_KAFKA_SASL_SSPI_CTX_ATTRS \
- (ISC_REQ_CONFIDENTIALITY | ISC_REQ_REPLAY_DETECT | \
-  ISC_REQ_SEQUENCE_DETECT | ISC_REQ_CONNECTION)
+#define RD_KAFKA_SASL_SSPI_CTX_ATTRS                                           \
+        (ISC_REQ_CONFIDENTIALITY | ISC_REQ_REPLAY_DETECT |                     \
+         ISC_REQ_SEQUENCE_DETECT | ISC_REQ_CONNECTION)
 
 
- /* Default maximum kerberos token size for newer versions of Windows */
+/* Default maximum kerberos token size for newer versions of Windows */
 #define RD_KAFKA_SSPI_MAX_TOKEN_SIZE 48000
 
 
@@ -62,42 +62,41 @@
 typedef struct rd_kafka_sasl_win32_state_s {
         CredHandle *cred;
         CtxtHandle *ctx;
-        wchar_t principal[512];  /* Broker service principal and hostname */
+        wchar_t principal[512]; /* Broker service principal and hostname */
 } rd_kafka_sasl_win32_state_t;
 
 
 /**
  * @returns the string representation of a SECURITY_STATUS error code
  */
-static const char *rd_kafka_sasl_sspi_err2str (SECURITY_STATUS sr) {
-        switch (sr)
-        {
-                case SEC_E_INSUFFICIENT_MEMORY:
-                        return "Insufficient memory";
-                case SEC_E_INTERNAL_ERROR:
-                        return "Internal error";
-                case SEC_E_INVALID_HANDLE:
-                        return "Invalid handle";
-                case SEC_E_INVALID_TOKEN:
-                        return "Invalid token";
-                case SEC_E_LOGON_DENIED:
-                        return "Logon denied";
-                case SEC_E_NO_AUTHENTICATING_AUTHORITY:
-                        return "No authority could be contacted for authentication.";
-                case SEC_E_NO_CREDENTIALS:
-                        return "No credentials";
-                case SEC_E_TARGET_UNKNOWN:
-                        return "Target unknown";
-                case SEC_E_UNSUPPORTED_FUNCTION:
-                        return "Unsupported functionality";
-                case SEC_E_WRONG_CREDENTIAL_HANDLE:
-                        return "The principal that received the authentication "
-                                "request is not the same as the one passed "
-                                "into  the pszTargetName parameter. "
-                                "This indicates a failure in mutual "
-                                "authentication.";
-                default:
-                        return "(no string representation)";
+static const char *rd_kafka_sasl_sspi_err2str(SECURITY_STATUS sr) {
+        switch (sr) {
+        case SEC_E_INSUFFICIENT_MEMORY:
+                return "Insufficient memory";
+        case SEC_E_INTERNAL_ERROR:
+                return "Internal error";
+        case SEC_E_INVALID_HANDLE:
+                return "Invalid handle";
+        case SEC_E_INVALID_TOKEN:
+                return "Invalid token";
+        case SEC_E_LOGON_DENIED:
+                return "Logon denied";
+        case SEC_E_NO_AUTHENTICATING_AUTHORITY:
+                return "No authority could be contacted for authentication.";
+        case SEC_E_NO_CREDENTIALS:
+                return "No credentials";
+        case SEC_E_TARGET_UNKNOWN:
+                return "Target unknown";
+        case SEC_E_UNSUPPORTED_FUNCTION:
+                return "Unsupported functionality";
+        case SEC_E_WRONG_CREDENTIAL_HANDLE:
+                return "The principal that received the authentication "
+                       "request is not the same as the one passed "
+                       "into  the pszTargetName parameter. "
+                       "This indicates a failure in mutual "
+                       "authentication.";
+        default:
+                return "(no string representation)";
         }
 }
 
@@ -105,22 +104,23 @@ static const char *rd_kafka_sasl_sspi_err2str (SECURITY_STATUS sr) {
 /**
  * @brief Create new CredHandle
  */
-static CredHandle *
-rd_kafka_sasl_sspi_cred_new (rd_kafka_transport_t *rktrans,
-                              char *errstr, size_t errstr_size) {
-        TimeStamp expiry = { 0, 0 };
+static CredHandle *rd_kafka_sasl_sspi_cred_new(rd_kafka_transport_t *rktrans,
+                                               char *errstr,
+                                               size_t errstr_size) {
+        TimeStamp expiry = {0, 0};
         SECURITY_STATUS sr;
         CredHandle *cred = rd_calloc(1, sizeof(*cred));
 
-        sr = AcquireCredentialsHandle(
-                NULL, __TEXT("Kerberos"), SECPKG_CRED_OUTBOUND,
-                NULL, NULL, NULL, NULL, cred, &expiry);
+        sr = AcquireCredentialsHandle(NULL, __TEXT("Kerberos"),
+                                      SECPKG_CRED_OUTBOUND, NULL, NULL, NULL,
+                                      NULL, cred, &expiry);
 
         if (sr != SEC_E_OK) {
                 rd_free(cred);
                 rd_snprintf(errstr, errstr_size,
                             "Failed to acquire CredentialsHandle: "
-                            "error code %d", sr);
+                            "error code %d",
+                            sr);
                 return NULL;
         }
 
@@ -133,16 +133,18 @@ rd_kafka_sasl_sspi_cred_new (rd_kafka_transport_t *rktrans,
 
 
 /**
-  * @brief Start or continue SSPI-based authentication processing.
-  */
-static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
-                                        const void *inbuf, size_t insize,
-                                        char *errstr, size_t errstr_size) {
+ * @brief Start or continue SSPI-based authentication processing.
+ */
+static int rd_kafka_sasl_sspi_continue(rd_kafka_transport_t *rktrans,
+                                       const void *inbuf,
+                                       size_t insize,
+                                       char *errstr,
+                                       size_t errstr_size) {
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SecBufferDesc outbufdesc, inbufdesc;
         SecBuffer outsecbuf, insecbuf;
         BYTE outbuf[RD_KAFKA_SSPI_MAX_TOKEN_SIZE];
-        TimeStamp lifespan = { 0, 0 };
+        TimeStamp lifespan = {0, 0};
         ULONG ret_ctxattrs;
         CtxtHandle *ctx;
         SECURITY_STATUS sr;
@@ -150,13 +152,15 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         if (inbuf) {
                 if (insize > ULONG_MAX) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Input buffer length too large (%"PRIusz") "
-                                    "and would overflow", insize);
+                                    "Input buffer length too large (%" PRIusz
+                                    ") "
+                                    "and would overflow",
+                                    insize);
                         return -1;
                 }
 
                 inbufdesc.ulVersion = SECBUFFER_VERSION;
-                inbufdesc.cBuffers = 1;
+                inbufdesc.cBuffers  = 1;
                 inbufdesc.pBuffers  = &insecbuf;
 
                 insecbuf.cbBuffer   = (unsigned long)insize;
@@ -179,48 +183,46 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         }
 
         sr = InitializeSecurityContext(
-                state->cred, state->ctx, state->principal,
-                RD_KAFKA_SASL_SSPI_CTX_ATTRS |
+            state->cred, state->ctx, state->principal,
+            RD_KAFKA_SASL_SSPI_CTX_ATTRS |
                 (state->ctx ? 0 : ISC_REQ_MUTUAL_AUTH | ISC_REQ_IDENTIFY),
-                0, SECURITY_NATIVE_DREP,
-                inbuf ? &inbufdesc : NULL,
-                0, ctx, &outbufdesc, &ret_ctxattrs, &lifespan);
+            0, SECURITY_NATIVE_DREP, inbuf ? &inbufdesc : NULL, 0, ctx,
+            &outbufdesc, &ret_ctxattrs, &lifespan);
 
         if (!state->ctx)
                 state->ctx = ctx;
 
-        switch (sr)
-        {
-                case SEC_E_OK:
-                        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
-                                   "Initialized security context");
+        switch (sr) {
+        case SEC_E_OK:
+                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
+                           "Initialized security context");
 
-                        rktrans->rktrans_sasl.complete = 1;
-                        break;
-                case SEC_I_CONTINUE_NEEDED:
-                        break;
-                case SEC_I_COMPLETE_NEEDED:
-                case SEC_I_COMPLETE_AND_CONTINUE:
-                        rd_snprintf(errstr, errstr_size,
-                                    "CompleteAuthToken (Digest auth, %d) "
-                                    "not implemented", sr);
-                        return -1;
-                case SEC_I_INCOMPLETE_CREDENTIALS:
-                        rd_snprintf(errstr, errstr_size,
-                                    "Incomplete credentials: "
-                                    "invalid or untrusted certificate");
-                        return -1;
-                default:
-                        rd_snprintf(errstr, errstr_size,
-                                    "InitializeSecurityContext "
-                                    "failed: %s (0x%x)",
-                                    rd_kafka_sasl_sspi_err2str(sr), sr);
-                        return -1;
+                rktrans->rktrans_sasl.complete = 1;
+                break;
+        case SEC_I_CONTINUE_NEEDED:
+                break;
+        case SEC_I_COMPLETE_NEEDED:
+        case SEC_I_COMPLETE_AND_CONTINUE:
+                rd_snprintf(errstr, errstr_size,
+                            "CompleteAuthToken (Digest auth, %d) "
+                            "not implemented",
+                            sr);
+                return -1;
+        case SEC_I_INCOMPLETE_CREDENTIALS:
+                rd_snprintf(errstr, errstr_size,
+                            "Incomplete credentials: "
+                            "invalid or untrusted certificate");
+                return -1;
+        default:
+                rd_snprintf(errstr, errstr_size,
+                            "InitializeSecurityContext "
+                            "failed: %s (0x%x)",
+                            rd_kafka_sasl_sspi_err2str(sr), sr);
+                return -1;
         }
 
-        if (rd_kafka_sasl_send(rktrans,
-                                outsecbuf.pvBuffer, outsecbuf.cbBuffer,
-                                errstr, errstr_size) == -1)
+        if (rd_kafka_sasl_send(rktrans, outsecbuf.pvBuffer, outsecbuf.cbBuffer,
+                               errstr, errstr_size) == -1)
                 return -1;
 
         return 0;
@@ -228,12 +230,12 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
 
 
 /**
-* @brief Sends the token response to the broker
-*/
-static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
-                                              char *errstr,
-                                              size_t errstr_size,
-                                              SecBuffer *server_token) {
+ * @brief Sends the token response to the broker
+ */
+static int rd_kafka_sasl_win32_send_response(rd_kafka_transport_t *rktrans,
+                                             char *errstr,
+                                             size_t errstr_size,
+                                             SecBuffer *server_token) {
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SECURITY_STATUS sr;
         SecBuffer in_buffer;
@@ -270,7 +272,8 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         namelen = strlen(names.sUserName) + 1;
         if (namelen > ULONG_MAX) {
                 rd_snprintf(errstr, errstr_size,
-                            "User name length too large (%"PRIusz") "
+                            "User name length too large (%" PRIusz
+                            ") "
                             "and would overflow");
                 return -1;
         }
@@ -278,31 +281,32 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         in_buffer.pvBuffer = (char *)names.sUserName;
         in_buffer.cbBuffer = (unsigned long)namelen;
 
-        buffer_desc.cBuffers = 4;
-        buffer_desc.pBuffers = buffers;
+        buffer_desc.cBuffers  = 4;
+        buffer_desc.pBuffers  = buffers;
         buffer_desc.ulVersion = SECBUFFER_VERSION;
 
         /* security trailer */
-        buffers[0].cbBuffer = sizes.cbSecurityTrailer;
+        buffers[0].cbBuffer   = sizes.cbSecurityTrailer;
         buffers[0].BufferType = SECBUFFER_TOKEN;
-        buffers[0].pvBuffer = rd_calloc(1, sizes.cbSecurityTrailer);
+        buffers[0].pvBuffer   = rd_calloc(1, sizes.cbSecurityTrailer);
 
         /* protection level and buffer size received from the server */
-        buffers[1].cbBuffer = server_token->cbBuffer;
+        buffers[1].cbBuffer   = server_token->cbBuffer;
         buffers[1].BufferType = SECBUFFER_DATA;
-        buffers[1].pvBuffer = rd_calloc(1, server_token->cbBuffer);
-        memcpy(buffers[1].pvBuffer, server_token->pvBuffer, server_token->cbBuffer);
+        buffers[1].pvBuffer   = rd_calloc(1, server_token->cbBuffer);
+        memcpy(buffers[1].pvBuffer, server_token->pvBuffer,
+               server_token->cbBuffer);
 
         /* user principal */
-        buffers[2].cbBuffer = in_buffer.cbBuffer;
+        buffers[2].cbBuffer   = in_buffer.cbBuffer;
         buffers[2].BufferType = SECBUFFER_DATA;
-        buffers[2].pvBuffer = rd_calloc(1, buffers[2].cbBuffer);
+        buffers[2].pvBuffer   = rd_calloc(1, buffers[2].cbBuffer);
         memcpy(buffers[2].pvBuffer, in_buffer.pvBuffer, in_buffer.cbBuffer);
 
         /* padding */
-        buffers[3].cbBuffer = sizes.cbBlockSize;
+        buffers[3].cbBuffer   = sizes.cbBlockSize;
         buffers[3].BufferType = SECBUFFER_PADDING;
-        buffers[3].pvBuffer = rd_calloc(1, buffers[2].cbBuffer);
+        buffers[3].pvBuffer   = rd_calloc(1, buffers[2].cbBuffer);
 
         sr = EncryptMessage(state->ctx, KERB_WRAP_NO_ENCRYPT, &buffer_desc, 0);
         if (sr != SEC_E_OK) {
@@ -318,33 +322,29 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                 return -1;
         }
 
-        out_buffer.cbBuffer = buffers[0].cbBuffer +
-                              buffers[1].cbBuffer +
-                              buffers[2].cbBuffer +
-                              buffers[3].cbBuffer;
+        out_buffer.cbBuffer = buffers[0].cbBuffer + buffers[1].cbBuffer +
+                              buffers[2].cbBuffer + buffers[3].cbBuffer;
 
-        out_buffer.pvBuffer = rd_calloc(1, buffers[0].cbBuffer +
-                                        buffers[1].cbBuffer +
-                                        buffers[2].cbBuffer +
-                                        buffers[3].cbBuffer);
+        out_buffer.pvBuffer =
+            rd_calloc(1, buffers[0].cbBuffer + buffers[1].cbBuffer +
+                             buffers[2].cbBuffer + buffers[3].cbBuffer);
 
         memcpy(out_buffer.pvBuffer, buffers[0].pvBuffer, buffers[0].cbBuffer);
 
         memcpy((unsigned char *)out_buffer.pvBuffer + (int)buffers[0].cbBuffer,
                buffers[1].pvBuffer, buffers[1].cbBuffer);
 
-        memcpy((unsigned char *)out_buffer.pvBuffer +
-                buffers[0].cbBuffer + buffers[1].cbBuffer,
-                buffers[2].pvBuffer, buffers[2].cbBuffer);
+        memcpy((unsigned char *)out_buffer.pvBuffer + buffers[0].cbBuffer +
+                   buffers[1].cbBuffer,
+               buffers[2].pvBuffer, buffers[2].cbBuffer);
 
-        memcpy((unsigned char *)out_buffer.pvBuffer +
-                buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer,
-                buffers[3].pvBuffer, buffers[3].cbBuffer);
+        memcpy((unsigned char *)out_buffer.pvBuffer + buffers[0].cbBuffer +
+                   buffers[1].cbBuffer + buffers[2].cbBuffer,
+               buffers[3].pvBuffer, buffers[3].cbBuffer);
 
-        send_response = rd_kafka_sasl_send(rktrans,
-                                           out_buffer.pvBuffer,
-                                           out_buffer.cbBuffer,
-                                           errstr, errstr_size);
+        send_response =
+            rd_kafka_sasl_send(rktrans, out_buffer.pvBuffer,
+                               out_buffer.cbBuffer, errstr, errstr_size);
 
         FreeContextBuffer(in_buffer.pvBuffer);
         rd_free(out_buffer.pvBuffer);
@@ -358,13 +358,13 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
 
 
 /**
-* @brief Unwrap and validate token response from broker.
-*/
-static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
-                                               const void *inbuf,
-                                               size_t insize,
-                                               char *errstr,
-                                               size_t errstr_size) {
+ * @brief Unwrap and validate token response from broker.
+ */
+static int rd_kafka_sasl_win32_validate_token(rd_kafka_transport_t *rktrans,
+                                              const void *inbuf,
+                                              size_t insize,
+                                              char *errstr,
+                                              size_t errstr_size) {
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SecBuffer buffers[2];
         SecBufferDesc buffer_desc;
@@ -373,22 +373,23 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
 
         if (insize > ULONG_MAX) {
                 rd_snprintf(errstr, errstr_size,
-                            "Input buffer length too large (%"PRIusz") "
+                            "Input buffer length too large (%" PRIusz
+                            ") "
                             "and would overflow");
                 return -1;
         }
 
-        buffer_desc.cBuffers = 2;
-        buffer_desc.pBuffers = buffers;
+        buffer_desc.cBuffers  = 2;
+        buffer_desc.pBuffers  = buffers;
         buffer_desc.ulVersion = SECBUFFER_VERSION;
 
-        buffers[0].cbBuffer = (unsigned long)insize;
+        buffers[0].cbBuffer   = (unsigned long)insize;
         buffers[0].BufferType = SECBUFFER_STREAM;
-        buffers[0].pvBuffer = (void *)inbuf;
+        buffers[0].pvBuffer   = (void *)inbuf;
 
-        buffers[1].cbBuffer = 0;
+        buffers[1].cbBuffer   = 0;
         buffers[1].BufferType = SECBUFFER_DATA;
-        buffers[1].pvBuffer = NULL;
+        buffers[1].pvBuffer   = NULL;
 
         sr = DecryptMessage(state->ctx, &buffer_desc, 0, NULL);
         if (sr != SEC_E_OK) {
@@ -416,17 +417,19 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
                    "Validated server token");
 
-        return rd_kafka_sasl_win32_send_response(rktrans, errstr,
-                                                 errstr_size, &buffers[1]);
+        return rd_kafka_sasl_win32_send_response(rktrans, errstr, errstr_size,
+                                                 &buffers[1]);
 }
 
 
 /**
-* @brief Handle SASL frame received from broker.
-*/
-static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
-                                     const void *buf, size_t size,
-                                     char *errstr, size_t errstr_size) {
+ * @brief Handle SASL frame received from broker.
+ */
+static int rd_kafka_sasl_win32_recv(struct rd_kafka_transport_s *rktrans,
+                                    const void *buf,
+                                    size_t size,
+                                    char *errstr,
+                                    size_t errstr_size) {
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
 
         if (rktrans->rktrans_sasl.complete) {
@@ -442,7 +445,7 @@ static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
                         int r;
 
                         r = rd_kafka_sasl_win32_validate_token(
-                                rktrans, buf, size, errstr, errstr_size);
+                            rktrans, buf, size, errstr, errstr_size);
 
                         if (r == -1) {
                                 rktrans->rktrans_sasl.complete = 0;
@@ -464,15 +467,15 @@ static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
                 return 0;
         }
 
-        return rd_kafka_sasl_sspi_continue(rktrans, buf, size,
-                                           errstr, errstr_size);
+        return rd_kafka_sasl_sspi_continue(rktrans, buf, size, errstr,
+                                           errstr_size);
 }
 
 
 /**
-* @brief Decommission SSPI state
-*/
-static void rd_kafka_sasl_win32_close (rd_kafka_transport_t *rktrans) {
+ * @brief Decommission SSPI state
+ */
+static void rd_kafka_sasl_win32_close(rd_kafka_transport_t *rktrans) {
         rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
 
         if (!state)
@@ -490,9 +493,10 @@ static void rd_kafka_sasl_win32_close (rd_kafka_transport_t *rktrans) {
 }
 
 
-static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
-                                           const char *hostname,
-                                           char *errstr, size_t errstr_size) {
+static int rd_kafka_sasl_win32_client_new(rd_kafka_transport_t *rktrans,
+                                          const char *hostname,
+                                          char *errstr,
+                                          size_t errstr_size) {
         rd_kafka_t *rk = rktrans->rktrans_rkb->rkb_rk;
         rd_kafka_sasl_win32_state_t *state;
 
@@ -503,21 +507,19 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
                 return -1;
         }
 
-        state = rd_calloc(1, sizeof(*state));
+        state                       = rd_calloc(1, sizeof(*state));
         rktrans->rktrans_sasl.state = state;
 
-        _snwprintf(state->principal, RD_ARRAYSIZE(state->principal),
-                   L"%hs/%hs",
+        _snwprintf(state->principal, RD_ARRAYSIZE(state->principal), L"%hs/%hs",
                    rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.service_name,
                    hostname);
 
-        state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr,
-                                                  errstr_size);
+        state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr, errstr_size);
         if (!state->cred)
                 return -1;
 
-        if (rd_kafka_sasl_sspi_continue(rktrans, NULL, 0,
-                                        errstr, errstr_size) == -1)
+        if (rd_kafka_sasl_sspi_continue(rktrans, NULL, 0, errstr,
+                                        errstr_size) == -1)
                 return -1;
 
         return 0;
@@ -526,9 +528,9 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 /**
  * @brief Validate config
  */
-static int rd_kafka_sasl_win32_conf_validate (rd_kafka_t *rk,
-                                              char *errstr,
-                                              size_t errstr_size) {
+static int rd_kafka_sasl_win32_conf_validate(rd_kafka_t *rk,
+                                             char *errstr,
+                                             size_t errstr_size) {
         if (!rk->rk_conf.sasl.service_name) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.kerberos.service.name must be set");
@@ -539,9 +541,8 @@ static int rd_kafka_sasl_win32_conf_validate (rd_kafka_t *rk,
 }
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider = {
-        .name          = "Win32 SSPI",
-        .client_new    = rd_kafka_sasl_win32_client_new,
-        .recv          = rd_kafka_sasl_win32_recv,
-        .close         = rd_kafka_sasl_win32_close,
-        .conf_validate = rd_kafka_sasl_win32_conf_validate
-};
+    .name          = "Win32 SSPI",
+    .client_new    = rd_kafka_sasl_win32_client_new,
+    .recv          = rd_kafka_sasl_win32_recv,
+    .close         = rd_kafka_sasl_win32_close,
+    .conf_validate = rd_kafka_sasl_win32_conf_validate};

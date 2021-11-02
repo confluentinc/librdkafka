@@ -29,23 +29,24 @@
 #ifndef _RDKAFKA_SASL_OAUTHBEARER_H_
 #define _RDKAFKA_SASL_OAUTHBEARER_H_
 
-void rd_kafka_oauthbearer_unsecured_token (rd_kafka_t *rk,
-                                           const char *oauthbearer_config,
-                                           void *opaque);
+void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk,
+                                          const char *oauthbearer_config,
+                                          void *opaque);
 
 rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token0 (rd_kafka_t *rk,
-                                 const char *token_value,
-                                 int64_t md_lifetime_ms,
-                                 const char *md_principal_name,
-                                 const char **extensions,
-                                 size_t extension_size,
-                                 char *errstr, size_t errstr_size);
+rd_kafka_oauthbearer_set_token0(rd_kafka_t *rk,
+                                const char *token_value,
+                                int64_t md_lifetime_ms,
+                                const char *md_principal_name,
+                                const char **extensions,
+                                size_t extension_size,
+                                char *errstr,
+                                size_t errstr_size);
 
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token_failure0 (rd_kafka_t *rk, const char *errstr);
+rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure0(rd_kafka_t *rk,
+                                                            const char *errstr);
 
-int unittest_sasl_oauthbearer (void);
+int unittest_sasl_oauthbearer(void);
 
 
 #endif /* _RDKAFKA_SASL_OAUTHBEARER_H_ */

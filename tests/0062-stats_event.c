@@ -35,7 +35,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 static int stats_count = 0;
@@ -43,82 +43,84 @@ static int stats_count = 0;
 /**
  * Handle stats
  */
-static void handle_stats (rd_kafka_event_t *rkev) {
-    const char *stats_json = NULL;
-    stats_json = rd_kafka_event_stats(rkev);
-    if (stats_json != NULL) {
-        TEST_SAY("Stats: %s\n", stats_json);
-        stats_count++;
-    } else {
-        TEST_FAIL("Stats: failed to get stats\n");
-    }
+static void handle_stats(rd_kafka_event_t *rkev) {
+        const char *stats_json = NULL;
+        stats_json             = rd_kafka_event_stats(rkev);
+        if (stats_json != NULL) {
+                TEST_SAY("Stats: %s\n", stats_json);
+                stats_count++;
+        } else {
+                TEST_FAIL("Stats: failed to get stats\n");
+        }
 }
 
-int main_0062_stats_event (int argc, char **argv) {
-    rd_kafka_t *rk;
-    rd_kafka_conf_t *conf;
-    test_timing_t t_delivery;
-    rd_kafka_queue_t *eventq;
-    const int iterations = 5;
-    int i;
-    test_conf_init(NULL, NULL, 10);
+int main_0062_stats_event(int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        test_timing_t t_delivery;
+        rd_kafka_queue_t *eventq;
+        const int iterations = 5;
+        int i;
+        test_conf_init(NULL, NULL, 10);
 
-    /* Set up a global config object */
-    conf = rd_kafka_conf_new();
-    rd_kafka_conf_set(conf,"statistics.interval.ms", "100", NULL, 0);
+        /* Set up a global config object */
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_set(conf, "statistics.interval.ms", "100", NULL, 0);
 
-    rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_STATS);
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_STATS);
 
-    /* Create kafka instance */
-    rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        /* Create kafka instance */
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-    eventq = rd_kafka_queue_get_main(rk);
+        eventq = rd_kafka_queue_get_main(rk);
 
-    /* Wait for stats event */
-    for (i = 0 ; i < iterations ; i++) {
-            TIMING_START(&t_delivery, "STATS_EVENT");
-            stats_count = 0;
-            while (stats_count == 0) {
-                    rd_kafka_event_t *rkev;
-                    rkev = rd_kafka_queue_poll(eventq, 100);
-                    switch (rd_kafka_event_type(rkev))
-                    {
-                    case RD_KAFKA_EVENT_STATS:
-                            TEST_SAY("%s event\n", rd_kafka_event_name(rkev));
-                            handle_stats(rkev);
-                            break;
-                    case RD_KAFKA_EVENT_NONE:
-                            break;
-                    default:
-                            TEST_SAY("Ignore event: %s\n",
-                                     rd_kafka_event_name(rkev));
-                            break;
-                    }
-                    rd_kafka_event_destroy(rkev);
-            }
-            TIMING_STOP(&t_delivery);
+        /* Wait for stats event */
+        for (i = 0; i < iterations; i++) {
+                TIMING_START(&t_delivery, "STATS_EVENT");
+                stats_count = 0;
+                while (stats_count == 0) {
+                        rd_kafka_event_t *rkev;
+                        rkev = rd_kafka_queue_poll(eventq, 100);
+                        switch (rd_kafka_event_type(rkev)) {
+                        case RD_KAFKA_EVENT_STATS:
+                                TEST_SAY("%s event\n",
+                                         rd_kafka_event_name(rkev));
+                                handle_stats(rkev);
+                                break;
+                        case RD_KAFKA_EVENT_NONE:
+                                break;
+                        default:
+                                TEST_SAY("Ignore event: %s\n",
+                                         rd_kafka_event_name(rkev));
+                                break;
+                        }
+                        rd_kafka_event_destroy(rkev);
+                }
+                TIMING_STOP(&t_delivery);
 
-            if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.5 ||
-                TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.5) {
-                    /* CIs and valgrind are too flaky/slow to
-                     * make this failure meaningful. */
-                    if (!test_on_ci && !strcmp(test_mode, "bare")) {
-                            TEST_FAIL("Stats duration %.3fms is >= 50%% "
-                                      "outside statistics.interval.ms 100",
-                                      (float)TIMING_DURATION(&t_delivery)/
-                                      1000.0f);
-                    } else {
-                            TEST_WARN("Stats duration %.3fms is >= 50%% "
-                                      "outside statistics.interval.ms 100\n",
-                                      (float)TIMING_DURATION(&t_delivery)/
-                                      1000.0f);
-                    }
-            }
-    }
+                if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.5 ||
+                    TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.5) {
+                        /* CIs and valgrind are too flaky/slow to
+                         * make this failure meaningful. */
+                        if (!test_on_ci && !strcmp(test_mode, "bare")) {
+                                TEST_FAIL(
+                                    "Stats duration %.3fms is >= 50%% "
+                                    "outside statistics.interval.ms 100",
+                                    (float)TIMING_DURATION(&t_delivery) /
+                                        1000.0f);
+                        } else {
+                                TEST_WARN(
+                                    "Stats duration %.3fms is >= 50%% "
+                                    "outside statistics.interval.ms 100\n",
+                                    (float)TIMING_DURATION(&t_delivery) /
+                                        1000.0f);
+                        }
+                }
+        }
 
-    rd_kafka_queue_destroy(eventq);
+        rd_kafka_queue_destroy(eventq);
 
-    rd_kafka_destroy(rk);
+        rd_kafka_destroy(rk);
 
-    return 0;
+        return 0;
 }

@@ -55,40 +55,41 @@ typedef struct rd_kafka_confval_s {
         int is_enabled;                    /**< Confval is enabled. */
         union {
                 struct {
-                        int v;             /**< Current value */
-                        int vmin;          /**< Minimum value (inclusive) */
-                        int vmax;          /**< Maximum value (inclusive) */
-                        int vdef;          /**< Default value */
+                        int v;    /**< Current value */
+                        int vmin; /**< Minimum value (inclusive) */
+                        int vmax; /**< Maximum value (inclusive) */
+                        int vdef; /**< Default value */
                 } INT;
                 struct {
-                        char  *v;          /**< Current value */
-                        int    allowempty; /**< Allow empty string as value */
-                        size_t minlen;     /**< Minimum string length excl \0 */
-                        size_t maxlen;     /**< Maximum string length excl \0 */
-                        const char *vdef;  /**< Default value */
+                        char *v;          /**< Current value */
+                        int allowempty;   /**< Allow empty string as value */
+                        size_t minlen;    /**< Minimum string length excl \0 */
+                        size_t maxlen;    /**< Maximum string length excl \0 */
+                        const char *vdef; /**< Default value */
                 } STR;
-                void *PTR;                 /**< Pointer */
+                void *PTR; /**< Pointer */
         } u;
 } rd_kafka_confval_t;
 
 
 
-void rd_kafka_confval_init_int (rd_kafka_confval_t *confval,
-                                const char *name,
-                                int vmin, int vmax, int vdef);
-void rd_kafka_confval_init_ptr (rd_kafka_confval_t *confval,
-                                const char *name);
-void rd_kafka_confval_disable (rd_kafka_confval_t *confval, const char *name);
+void rd_kafka_confval_init_int(rd_kafka_confval_t *confval,
+                               const char *name,
+                               int vmin,
+                               int vmax,
+                               int vdef);
+void rd_kafka_confval_init_ptr(rd_kafka_confval_t *confval, const char *name);
+void rd_kafka_confval_disable(rd_kafka_confval_t *confval, const char *name);
 
-rd_kafka_resp_err_t
-rd_kafka_confval_set_type (rd_kafka_confval_t *confval,
-                           rd_kafka_confval_type_t valuetype,
-                           const void *valuep,
-                           char *errstr, size_t errstr_size);
+rd_kafka_resp_err_t rd_kafka_confval_set_type(rd_kafka_confval_t *confval,
+                                              rd_kafka_confval_type_t valuetype,
+                                              const void *valuep,
+                                              char *errstr,
+                                              size_t errstr_size);
 
-int rd_kafka_confval_get_int (const rd_kafka_confval_t *confval);
-const char *rd_kafka_confval_get_str (const rd_kafka_confval_t *confval);
-void *rd_kafka_confval_get_ptr (const rd_kafka_confval_t *confval);
+int rd_kafka_confval_get_int(const rd_kafka_confval_t *confval);
+const char *rd_kafka_confval_get_str(const rd_kafka_confval_t *confval);
+void *rd_kafka_confval_get_ptr(const rd_kafka_confval_t *confval);
 
 /**@}*/
 

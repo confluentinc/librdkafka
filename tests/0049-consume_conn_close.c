@@ -43,7 +43,7 @@ static int simulate_network_down = 0;
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
  */
-static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
+static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
         int r;
 
         TEST_LOCK();
@@ -61,8 +61,8 @@ static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
         return 0;
 }
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
          * .. connectivity.
          * SASL auther will think a connection-down even in the auth
@@ -75,7 +75,7 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 }
 
 
-int main_0049_consume_conn_close (int argc, char **argv) {
+int main_0049_consume_conn_close(int argc, char **argv) {
         rd_kafka_t *rk;
         const char *topic = test_mk_topic_name("0049_consume_conn_close", 1);
         uint64_t testid;
@@ -87,8 +87,9 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         rd_kafka_resp_err_t err;
 
         if (!test_conf_match(NULL, "sasl.mechanisms", "GSSAPI")) {
-                TEST_SKIP("KNOWN ISSUE: ApiVersionRequest+SaslHandshake "
-                          "will not play well with sudden disconnects\n");
+                TEST_SKIP(
+                    "KNOWN ISSUE: ApiVersionRequest+SaslHandshake "
+                    "will not play well with sudden disconnects\n");
                 return 0;
         }
 
@@ -101,7 +102,7 @@ int main_0049_consume_conn_close (int argc, char **argv) {
 
 
         test_socket_enable(conf);
-        test_curr->connect_cb = connect_cb;
+        test_curr->connect_cb  = connect_cb;
         test_curr->is_fatal_cb = is_fatal_cb;
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
@@ -112,7 +113,7 @@ int main_0049_consume_conn_close (int argc, char **argv) {
 
         test_msgver_init(&mv, testid);
 
-        test_consumer_poll("consume.up", rk, testid, -1, 0, msgcnt/2, &mv);
+        test_consumer_poll("consume.up", rk, testid, -1, 0, msgcnt / 2, &mv);
 
         err = rd_kafka_assignment(rk, &assignment);
         TEST_ASSERT(!err, "assignment() failed: %s", rd_kafka_err2str(err));
@@ -123,7 +124,7 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         TEST_LOCK();
         simulate_network_down = 1;
         TEST_UNLOCK();
-        test_socket_close_all(test_curr, 1/*reinit*/);
+        test_socket_close_all(test_curr, 1 /*reinit*/);
 
         TEST_SAY("Waiting for session timeout to expire (6s), and then some\n");
 
@@ -131,7 +132,7 @@ int main_0049_consume_conn_close (int argc, char **argv) {
          * callback fallback (CONSUMER_ERR) */
         assignment->elems[0].offset = 123456789;
         TEST_SAY("Committing offsets while down, should fail eventually\n");
-        err = rd_kafka_commit(rk, assignment, 1/*async*/);
+        err = rd_kafka_commit(rk, assignment, 1 /*async*/);
         TEST_ASSERT(!err, "async commit failed: %s", rd_kafka_err2str(err));
         rd_kafka_topic_partition_list_destroy(assignment);
 
@@ -143,10 +144,10 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         TEST_UNLOCK();
 
         TEST_SAY("Continuing to consume..\n");
-        test_consumer_poll("consume.up2", rk, testid, -1, msgcnt/2, msgcnt/2,
-                           &mv);
+        test_consumer_poll("consume.up2", rk, testid, -1, msgcnt / 2,
+                           msgcnt / 2, &mv);
 
-        test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
+        test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
                            0, msgcnt);
 
         test_msgver_clear(&mv);

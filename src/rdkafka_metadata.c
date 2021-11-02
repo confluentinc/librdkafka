@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2012-2013, Magnus Edenhill
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -40,24 +40,25 @@
 
 
 rd_kafka_resp_err_t
-rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
-                   rd_kafka_topic_t *only_rkt,
-                   const struct rd_kafka_metadata **metadatap,
-                   int timeout_ms) {
+rd_kafka_metadata(rd_kafka_t *rk,
+                  int all_topics,
+                  rd_kafka_topic_t *only_rkt,
+                  const struct rd_kafka_metadata **metadatap,
+                  int timeout_ms) {
         rd_kafka_q_t *rkq;
         rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_list_t topics;
         rd_bool_t allow_auto_create_topics =
-                rk->rk_conf.allow_auto_create_topics;
+            rk->rk_conf.allow_auto_create_topics;
 
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
         rkb = rd_kafka_broker_any_usable(rk, timeout_ms, RD_DO_LOCK, 0,
                                          "application metadata request");
-	if (!rkb)
-		return RD_KAFKA_RESP_ERR__TRANSPORT;
+        if (!rkb)
+                return RD_KAFKA_RESP_ERR__TRANSPORT;
 
         rkq = rd_kafka_q_new(rk);
 
@@ -74,7 +75,6 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                         if (rd_list_cnt(&topics) == cache_cnt)
                                 allow_auto_create_topics = rd_true;
                 }
-
         }
 
         /* Async: request metadata */
@@ -90,8 +90,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                                   * topics in the cluster, since a
                                   * partial request may make it seem
                                   * like some subscribed topics are missing. */
-                                 all_topics ? rd_true : rd_false,
-                                 rko);
+                                 all_topics ? rd_true : rd_false, rko);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -114,7 +113,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 
         /* Reply: pass metadata pointer to application who now owns it*/
         rd_kafka_assert(rk, rko->rko_u.metadata.md);
-        *metadatap = rko->rko_u.metadata.md;
+        *metadatap             = rko->rko_u.metadata.md;
         rko->rko_u.metadata.md = NULL;
         rd_kafka_op_destroy(rko);
 
@@ -123,7 +122,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 
 
 
-void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata) {
+void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata) {
         rd_free((void *)metadata);
 }
 
@@ -132,84 +131,72 @@ void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata) {
  * @returns a newly allocated copy of metadata \p src of size \p size
  */
 struct rd_kafka_metadata *
-rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
-	struct rd_kafka_metadata *md;
-	rd_tmpabuf_t tbuf;
-	int i;
+rd_kafka_metadata_copy(const struct rd_kafka_metadata *src, size_t size) {
+        struct rd_kafka_metadata *md;
+        rd_tmpabuf_t tbuf;
+        int i;
 
-	/* metadata is stored in one contigious buffer where structs and
-	 * and pointed-to fields are layed out in a memory aligned fashion.
-	 * rd_tmpabuf_t provides the infrastructure to do this.
-	 * Because of this we copy all the structs verbatim but
-	 * any pointer fields needs to be copied explicitly to update
-	 * the pointer address. */
-	rd_tmpabuf_new(&tbuf, size, 1/*assert on fail*/);
-	md = rd_tmpabuf_write(&tbuf, src, sizeof(*md));
+        /* metadata is stored in one contigious buffer where structs and
+         * and pointed-to fields are layed out in a memory aligned fashion.
+         * rd_tmpabuf_t provides the infrastructure to do this.
+         * Because of this we copy all the structs verbatim but
+         * any pointer fields needs to be copied explicitly to update
+         * the pointer address. */
+        rd_tmpabuf_new(&tbuf, size, 1 /*assert on fail*/);
+        md = rd_tmpabuf_write(&tbuf, src, sizeof(*md));
 
-	rd_tmpabuf_write_str(&tbuf, src->orig_broker_name);
-
-
-	/* Copy Brokers */
-	md->brokers = rd_tmpabuf_write(&tbuf, src->brokers,
-				      md->broker_cnt * sizeof(*md->brokers));
-
-	for (i = 0 ; i < md->broker_cnt ; i++)
-		md->brokers[i].host =
-			rd_tmpabuf_write_str(&tbuf, src->brokers[i].host);
+        rd_tmpabuf_write_str(&tbuf, src->orig_broker_name);
 
 
-	/* Copy TopicMetadata */
+        /* Copy Brokers */
+        md->brokers = rd_tmpabuf_write(&tbuf, src->brokers,
+                                       md->broker_cnt * sizeof(*md->brokers));
+
+        for (i = 0; i < md->broker_cnt; i++)
+                md->brokers[i].host =
+                    rd_tmpabuf_write_str(&tbuf, src->brokers[i].host);
+
+
+        /* Copy TopicMetadata */
         md->topics = rd_tmpabuf_write(&tbuf, src->topics,
-				      md->topic_cnt * sizeof(*md->topics));
+                                      md->topic_cnt * sizeof(*md->topics));
 
-	for (i = 0 ; i < md->topic_cnt ; i++) {
-		int j;
+        for (i = 0; i < md->topic_cnt; i++) {
+                int j;
 
-		md->topics[i].topic = rd_tmpabuf_write_str(&tbuf,
-							   src->topics[i].topic);
+                md->topics[i].topic =
+                    rd_tmpabuf_write_str(&tbuf, src->topics[i].topic);
 
 
-		/* Copy partitions */
-		md->topics[i].partitions =
-			rd_tmpabuf_write(&tbuf, src->topics[i].partitions,
-					 md->topics[i].partition_cnt *
-					 sizeof(*md->topics[i].partitions));
+                /* Copy partitions */
+                md->topics[i].partitions =
+                    rd_tmpabuf_write(&tbuf, src->topics[i].partitions,
+                                     md->topics[i].partition_cnt *
+                                         sizeof(*md->topics[i].partitions));
 
-		for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
-			/* Copy replicas and ISRs */
-			md->topics[i].partitions[j].replicas =
-				rd_tmpabuf_write(&tbuf,
-						 src->topics[i].partitions[j].
-						 replicas,
-						 md->topics[i].partitions[j].
-						 replica_cnt *
-						 sizeof(*md->topics[i].
-							partitions[j].
-							replicas));
+                for (j = 0; j < md->topics[i].partition_cnt; j++) {
+                        /* Copy replicas and ISRs */
+                        md->topics[i].partitions[j].replicas = rd_tmpabuf_write(
+                            &tbuf, src->topics[i].partitions[j].replicas,
+                            md->topics[i].partitions[j].replica_cnt *
+                                sizeof(*md->topics[i].partitions[j].replicas));
 
-			md->topics[i].partitions[j].isrs =
-				rd_tmpabuf_write(&tbuf,
-						 src->topics[i].partitions[j].
-						 isrs,
-						 md->topics[i].partitions[j].
-						 isr_cnt *
-						 sizeof(*md->topics[i].
-							partitions[j].
-							isrs));
+                        md->topics[i].partitions[j].isrs = rd_tmpabuf_write(
+                            &tbuf, src->topics[i].partitions[j].isrs,
+                            md->topics[i].partitions[j].isr_cnt *
+                                sizeof(*md->topics[i].partitions[j].isrs));
+                }
+        }
 
-		}
-	}
+        /* Check for tmpabuf errors */
+        if (rd_tmpabuf_failed(&tbuf))
+                rd_kafka_assert(NULL, !*"metadata copy failed");
 
-	/* Check for tmpabuf errors */
-	if (rd_tmpabuf_failed(&tbuf))
-		rd_kafka_assert(NULL, !*"metadata copy failed");
+        /* Delibarely not destroying the tmpabuf since we return
+         * its allocated memory. */
 
-	/* Delibarely not destroying the tmpabuf since we return
-	 * its allocated memory. */
-
-	return md;
+        return md;
 }
-
 
 
 
@@ -226,45 +213,45 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
  *
  * @locality rdkafka main thread
  */
-rd_kafka_resp_err_t
-rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
-                         rd_kafka_buf_t *request,
-                         rd_kafka_buf_t *rkbuf,
-                         struct rd_kafka_metadata **mdp) {
+rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                                            rd_kafka_buf_t *request,
+                                            rd_kafka_buf_t *rkbuf,
+                                            struct rd_kafka_metadata **mdp) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
         struct rd_kafka_metadata *md;
         size_t rkb_namelen;
-        const int log_decode_errors = LOG_ERR;
-        rd_list_t *missing_topics = NULL;
+        const int log_decode_errors       = LOG_ERR;
+        rd_list_t *missing_topics         = NULL;
         const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
         rd_bool_t all_topics = request->rkbuf_u.Metadata.all_topics;
-        rd_bool_t cgrp_update = request->rkbuf_u.Metadata.cgrp_update &&
-                rk->rk_cgrp;
-        const char *reason = request->rkbuf_u.Metadata.reason ?
-                request->rkbuf_u.Metadata.reason : "(no reason)";
-        int ApiVersion = request->rkbuf_reqhdr.ApiVersion;
+        rd_bool_t cgrp_update =
+            request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
+        const char *reason = request->rkbuf_u.Metadata.reason
+                                 ? request->rkbuf_u.Metadata.reason
+                                 : "(no reason)";
+        int ApiVersion             = request->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
-        int32_t controller_id = -1;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int broker_changes = 0;
-        int topic_changes = 0;
+        int32_t controller_id      = -1;
+        rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int broker_changes         = 0;
+        int topic_changes          = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
         /* Remove topics from missing_topics as they are seen in Metadata. */
         if (requested_topics)
-                missing_topics = rd_list_copy(requested_topics,
-                                              rd_list_string_copy, NULL);
+                missing_topics =
+                    rd_list_copy(requested_topics, rd_list_string_copy, NULL);
 
         rd_kafka_broker_lock(rkb);
-        rkb_namelen = strlen(rkb->rkb_name)+1;
+        rkb_namelen = strlen(rkb->rkb_name) + 1;
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
         rd_tmpabuf_new(&tbuf,
                        sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
-                       0/*dont assert on fail*/);
+                       0 /*dont assert on fail*/);
 
         if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md)))) {
                 rd_kafka_broker_unlock(rkb);
@@ -273,8 +260,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         }
 
         md->orig_broker_id = rkb->rkb_nodeid;
-        md->orig_broker_name = rd_tmpabuf_write(&tbuf,
-                                                rkb->rkb_name, rkb_namelen);
+        md->orig_broker_name =
+            rd_tmpabuf_write(&tbuf, rkb->rkb_name, rkb_namelen);
         rd_kafka_broker_unlock(rkb);
 
         if (ApiVersion >= 3)
@@ -287,14 +274,15 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                         md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
 
         if (!(md->brokers = rd_tmpabuf_alloc(&tbuf, md->broker_cnt *
-                                             sizeof(*md->brokers))))
+                                                        sizeof(*md->brokers))))
                 rd_kafka_buf_parse_fail(rkbuf,
                                         "%d brokers: tmpabuf memory shortage",
                                         md->broker_cnt);
 
-        for (i = 0 ; i < md->broker_cnt ; i++) {
+        for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
-                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, md->brokers[i].host);
+                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
+                                              md->brokers[i].host);
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
 
                 if (ApiVersion >= 1) {
@@ -308,8 +296,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 1) {
                 rd_kafka_buf_read_i32(rkbuf, &controller_id);
-                rd_rkb_dbg(rkb, METADATA,
-                           "METADATA", "ClusterId: %.*s, ControllerId: %"PRId32,
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "ClusterId: %.*s, ControllerId: %" PRId32,
                            RD_KAFKAP_STR_PR(&cluster_id), controller_id);
         }
 
@@ -321,20 +309,19 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                    md->broker_cnt, md->topic_cnt);
 
         if (md->topic_cnt > RD_KAFKAP_TOPICS_MAX)
-                rd_kafka_buf_parse_fail(rkbuf, "TopicMetadata_cnt %"PRId32
-                                        " > TOPICS_MAX %i",
-                                        md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "TopicMetadata_cnt %" PRId32 " > TOPICS_MAX %i",
+                    md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
-        if (!(md->topics = rd_tmpabuf_alloc(&tbuf,
-                                            md->topic_cnt *
-                                            sizeof(*md->topics))))
-                rd_kafka_buf_parse_fail(rkbuf,
-                                        "%d topics: tmpabuf memory shortage",
-                                        md->topic_cnt);
+        if (!(md->topics =
+                  rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics))))
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "%d topics: tmpabuf memory shortage", md->topic_cnt);
 
-        for (i = 0 ; i < md->topic_cnt ; i++) {
+        for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
-                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, md->topics[i].topic);
+                rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
+                                              md->topics[i].topic);
                 if (ApiVersion >= 1) {
                         int8_t is_internal;
                         rd_kafka_buf_read_i8(rkbuf, &is_internal);
@@ -350,95 +337,100 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                                 i, md->topics[i].partition_cnt,
                                                 RD_KAFKAP_PARTITIONS_MAX);
 
-                if (!(md->topics[i].partitions =
-                      rd_tmpabuf_alloc(&tbuf,
-                                       md->topics[i].partition_cnt *
-                                       sizeof(*md->topics[i].partitions))))
+                if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
+                          &tbuf, md->topics[i].partition_cnt *
+                                     sizeof(*md->topics[i].partitions))))
                         rd_kafka_buf_parse_fail(rkbuf,
                                                 "%s: %d partitions: "
                                                 "tmpabuf memory shortage",
                                                 md->topics[i].topic,
                                                 md->topics[i].partition_cnt);
 
-                for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
-                        rd_kafka_buf_read_i16a(rkbuf, md->topics[i].partitions[j].err);
-                        rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].id);
-                        rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].leader);
+                for (j = 0; j < md->topics[i].partition_cnt; j++) {
+                        rd_kafka_buf_read_i16a(rkbuf,
+                                               md->topics[i].partitions[j].err);
+                        rd_kafka_buf_read_i32a(rkbuf,
+                                               md->topics[i].partitions[j].id);
+                        rd_kafka_buf_read_i32a(
+                            rkbuf, md->topics[i].partitions[j].leader);
 
                         /* Replicas */
-                        rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].replica_cnt);
+                        rd_kafka_buf_read_i32a(
+                            rkbuf, md->topics[i].partitions[j].replica_cnt);
                         if (md->topics[i].partitions[j].replica_cnt >
                             RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(rkbuf,
-                                                        "TopicMetadata[%i]."
-                                                        "PartitionMetadata[%i]."
-                                                        "Replica_cnt "
-                                                        "%i > BROKERS_MAX %i",
-                                                        i, j,
-                                                        md->topics[i].
-                                                        partitions[j].
-                                                        replica_cnt,
-                                                        RD_KAFKAP_BROKERS_MAX);
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "TopicMetadata[%i]."
+                                    "PartitionMetadata[%i]."
+                                    "Replica_cnt "
+                                    "%i > BROKERS_MAX %i",
+                                    i, j,
+                                    md->topics[i].partitions[j].replica_cnt,
+                                    RD_KAFKAP_BROKERS_MAX);
 
                         if (!(md->topics[i].partitions[j].replicas =
-                              rd_tmpabuf_alloc(&tbuf,
-                                               md->topics[i].
-                                               partitions[j].replica_cnt *
-                                               sizeof(*md->topics[i].
-                                                      partitions[j].replicas))))
+                                  rd_tmpabuf_alloc(
+                                      &tbuf,
+                                      md->topics[i].partitions[j].replica_cnt *
+                                          sizeof(*md->topics[i]
+                                                      .partitions[j]
+                                                      .replicas))))
                                 rd_kafka_buf_parse_fail(
-                                        rkbuf,
-                                        "%s [%"PRId32"]: %d replicas: "
-                                        "tmpabuf memory shortage",
-                                        md->topics[i].topic,
-                                        md->topics[i].partitions[j].id,
-                                        md->topics[i].partitions[j].replica_cnt);
+                                    rkbuf,
+                                    "%s [%" PRId32
+                                    "]: %d replicas: "
+                                    "tmpabuf memory shortage",
+                                    md->topics[i].topic,
+                                    md->topics[i].partitions[j].id,
+                                    md->topics[i].partitions[j].replica_cnt);
 
 
-                        for (k = 0 ;
-                             k < md->topics[i].partitions[j].replica_cnt; k++)
-                                rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].
-                                           replicas[k]);
+                        for (k = 0; k < md->topics[i].partitions[j].replica_cnt;
+                             k++)
+                                rd_kafka_buf_read_i32a(
+                                    rkbuf,
+                                    md->topics[i].partitions[j].replicas[k]);
 
                         /* Isrs */
-                        rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].isr_cnt);
+                        rd_kafka_buf_read_i32a(
+                            rkbuf, md->topics[i].partitions[j].isr_cnt);
                         if (md->topics[i].partitions[j].isr_cnt >
                             RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(rkbuf,
-                                                        "TopicMetadata[%i]."
-                                                        "PartitionMetadata[%i]."
-                                                        "Isr_cnt "
-                                                        "%i > BROKERS_MAX %i",
-                                                        i, j,
-                                                        md->topics[i].
-                                                        partitions[j].isr_cnt,
-                                                        RD_KAFKAP_BROKERS_MAX);
-
-                        if (!(md->topics[i].partitions[j].isrs =
-                              rd_tmpabuf_alloc(&tbuf,
-                                               md->topics[i].
-                                               partitions[j].isr_cnt *
-                                               sizeof(*md->topics[i].
-                                                      partitions[j].isrs))))
                                 rd_kafka_buf_parse_fail(
-                                        rkbuf,
-                                        "%s [%"PRId32"]: %d isrs: "
-                                        "tmpabuf memory shortage",
-                                        md->topics[i].topic,
-                                        md->topics[i].partitions[j].id,
-                                        md->topics[i].partitions[j].isr_cnt);
+                                    rkbuf,
+                                    "TopicMetadata[%i]."
+                                    "PartitionMetadata[%i]."
+                                    "Isr_cnt "
+                                    "%i > BROKERS_MAX %i",
+                                    i, j, md->topics[i].partitions[j].isr_cnt,
+                                    RD_KAFKAP_BROKERS_MAX);
+
+                        if (!(md->topics[i]
+                                  .partitions[j]
+                                  .isrs = rd_tmpabuf_alloc(
+                                  &tbuf,
+                                  md->topics[i].partitions[j].isr_cnt *
+                                      sizeof(
+                                          *md->topics[i].partitions[j].isrs))))
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "%s [%" PRId32
+                                    "]: %d isrs: "
+                                    "tmpabuf memory shortage",
+                                    md->topics[i].topic,
+                                    md->topics[i].partitions[j].id,
+                                    md->topics[i].partitions[j].isr_cnt);
 
 
-                        for (k = 0 ;
-                             k < md->topics[i].partitions[j].isr_cnt; k++)
-                                rd_kafka_buf_read_i32a(rkbuf, md->topics[i].
-                                                       partitions[j].isrs[k]);
-
+                        for (k = 0; k < md->topics[i].partitions[j].isr_cnt;
+                             k++)
+                                rd_kafka_buf_read_i32a(
+                                    rkbuf, md->topics[i].partitions[j].isrs[k]);
                 }
 
                 /* Sort partitions by partition id */
-                qsort(md->topics[i].partitions,
-                      md->topics[i].partition_cnt,
+                qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
                       sizeof(*md->topics[i].partitions),
                       rd_kafka_metadata_partition_id_cmp);
         }
@@ -460,24 +452,21 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         }
 
         /* Update our list of brokers. */
-        for (i = 0 ; i < md->broker_cnt ; i++) {
+        for (i = 0; i < md->broker_cnt; i++) {
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "  Broker #%i/%i: %s:%i NodeId %"PRId32,
-                           i, md->broker_cnt,
-                           md->brokers[i].host,
-                           md->brokers[i].port,
-                           md->brokers[i].id);
+                           "  Broker #%i/%i: %s:%i NodeId %" PRId32, i,
+                           md->broker_cnt, md->brokers[i].host,
+                           md->brokers[i].port, md->brokers[i].id);
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i], NULL);
         }
 
         /* Update partition count and leader for each topic we know about */
-        for (i = 0 ; i < md->topic_cnt ; i++) {
+        for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_metadata_topic_t *mdt = &md->topics[i];
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "  Topic #%i/%i: %s with %i partitions%s%s",
-                           i, md->topic_cnt, mdt->topic,
-                           mdt->partition_cnt,
+                           "  Topic #%i/%i: %s with %i partitions%s%s", i,
+                           md->topic_cnt, mdt->topic, mdt->partition_cnt,
                            mdt->err ? ": " : "",
                            mdt->err ? rd_kafka_err2str(mdt->err) : "");
 
@@ -487,7 +476,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                            mdt->topic)) {
                         rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
                                    "Ignoring blacklisted topic \"%s\" "
-                                   "in metadata", mdt->topic);
+                                   "in metadata",
+                                   mdt->topic);
                         continue;
                 }
 
@@ -511,12 +501,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            mdt->topic,
-                                                           (void*)strcmp));
+                                                           (void *)strcmp));
                         if (!all_topics) {
                                 rd_kafka_wrlock(rk);
                                 rd_kafka_metadata_cache_topic_update(
-                                        rk, mdt,
-                                        rd_false/*propagate later*/);
+                                    rk, mdt, rd_false /*propagate later*/);
                                 topic_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
@@ -530,16 +519,16 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
                            "%d/%d requested topic(s) seen in metadata",
                            rd_list_cnt(requested_topics) -
-                           rd_list_cnt(missing_topics),
+                               rd_list_cnt(missing_topics),
                            rd_list_cnt(requested_topics));
-                for (i = 0 ; i < rd_list_cnt(missing_topics) ; i++)
+                for (i = 0; i < rd_list_cnt(missing_topics); i++)
                         rd_rkb_dbg(rkb, TOPIC, "METADATA", "wanted %s",
                                    (char *)(missing_topics->rl_elems[i]));
                 RD_LIST_FOREACH(topic, missing_topics, i) {
                         rd_kafka_topic_t *rkt;
 
-                        rkt = rd_kafka_topic_find(rkb->rkb_rk,
-                                                  topic, 1/*lock*/);
+                        rkt =
+                            rd_kafka_topic_find(rkb->rkb_rk, topic, 1 /*lock*/);
                         if (rkt) {
                                 /* Received metadata response contained no
                                  * information about topic 'rkt' and thus
@@ -548,7 +537,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                  * Mark the topic as non-existent */
                                 rd_kafka_topic_wrlock(rkt);
                                 rd_kafka_topic_set_notexists(
-                                        rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                                    rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
                                 rd_kafka_topic_wrunlock(rkt);
 
                                 rd_kafka_topic_destroy0(rkt);
@@ -565,10 +554,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&
             (!rk->rk_clusterid ||
              rd_kafkap_str_cmp_str(&cluster_id, rk->rk_clusterid))) {
-                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_GENERIC, "CLUSTERID",
+                rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_GENERIC, "CLUSTERID",
                            "ClusterId update \"%s\" -> \"%.*s\"",
-                           rk->rk_clusterid ?
-                           rk->rk_clusterid : "",
+                           rk->rk_clusterid ? rk->rk_clusterid : "",
                            RD_KAFKAP_STR_PR(&cluster_id));
                 if (rk->rk_clusterid) {
                         rd_kafka_log(rk, LOG_WARNING, "CLUSTERID",
@@ -588,20 +576,21 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         /* Update controller id. */
         if (rkb->rkb_rk->rk_controllerid != controller_id) {
                 rd_rkb_dbg(rkb, BROKER, "CONTROLLERID",
-                           "ControllerId update %"PRId32" -> %"PRId32,
+                           "ControllerId update %" PRId32 " -> %" PRId32,
                            rkb->rkb_rk->rk_controllerid, controller_id);
                 rkb->rkb_rk->rk_controllerid = controller_id;
                 broker_changes++;
         }
 
         if (all_topics) {
-                rd_kafka_metadata_cache_update(rkb->rkb_rk,
-                                               md, 1/*abs update*/);
+                rd_kafka_metadata_cache_update(rkb->rkb_rk, md,
+                                               1 /*abs update*/);
 
                 if (rkb->rkb_rk->rk_full_metadata)
-                        rd_kafka_metadata_destroy(rkb->rkb_rk->rk_full_metadata);
+                        rd_kafka_metadata_destroy(
+                            rkb->rkb_rk->rk_full_metadata);
                 rkb->rkb_rk->rk_full_metadata =
-                        rd_kafka_metadata_copy(md, tbuf.of);
+                    rd_kafka_metadata_copy(md, tbuf.of);
                 rkb->rkb_rk->rk_ts_full_metadata = rkb->rkb_rk->rk_ts_metadata;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Caching full metadata with "
@@ -632,8 +621,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
          * the effective subscription of available topics) as to not
          * propagate non-included topics as non-existent. */
         if (cgrp_update && (requested_topics || all_topics))
-                rd_kafka_cgrp_metadata_update_check(
-                        rkb->rkb_rk->rk_cgrp, rd_true/*do join*/);
+                rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
+                                                    rd_true /*do join*/);
 
         /* Try to acquire a Producer ID from this broker if we
          * don't have one. */
@@ -657,9 +646,9 @@ done:
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
- err_parse:
+err_parse:
         err = rkbuf->rkbuf_err;
- err:
+err:
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for
                  * the requested topics. */
@@ -692,9 +681,10 @@ done:
  * @locality any
  */
 size_t
-rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
-                               const rd_kafka_topic_partition_list_t *match,
-                               rd_kafka_topic_partition_list_t *errored) {
+rd_kafka_metadata_topic_match(rd_kafka_t *rk,
+                              rd_list_t *tinfos,
+                              const rd_kafka_topic_partition_list_t *match,
+                              rd_kafka_topic_partition_list_t *errored) {
         int ti, i;
         size_t cnt = 0;
         const struct rd_kafka_metadata *metadata;
@@ -717,7 +707,7 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
 
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
-        for (ti = 0 ; ti < metadata->topic_cnt ; ti++) {
+        for (ti = 0; ti < metadata->topic_cnt; ti++) {
                 const char *topic = metadata->topics[ti].topic;
 
                 /* Ignore topics in blacklist */
@@ -726,28 +716,27 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
                         continue;
 
                 /* Scan for matches */
-                for (i = 0 ; i < match->cnt ; i++) {
-                        if (!rd_kafka_topic_match(rk,
-                                                  match->elems[i].topic, topic))
+                for (i = 0; i < match->cnt; i++) {
+                        if (!rd_kafka_topic_match(rk, match->elems[i].topic,
+                                                  topic))
                                 continue;
 
                         /* Remove from unmatched */
                         rd_kafka_topic_partition_list_del(
-                                unmatched, match->elems[i].topic,
-                                RD_KAFKA_PARTITION_UA);
+                            unmatched, match->elems[i].topic,
+                            RD_KAFKA_PARTITION_UA);
 
                         if (metadata->topics[ti].err) {
                                 rd_kafka_topic_partition_list_add(
-                                        errored, topic,
-                                        RD_KAFKA_PARTITION_UA)->err =
-                                        metadata->topics[ti].err;
+                                    errored, topic, RD_KAFKA_PARTITION_UA)
+                                    ->err = metadata->topics[ti].err;
                                 continue; /* Skip errored topics */
                         }
 
-                        rd_list_add(tinfos,
-                                    rd_kafka_topic_info_new(
-                                            topic,
-                                            metadata->topics[ti].partition_cnt));
+                        rd_list_add(
+                            tinfos,
+                            rd_kafka_topic_info_new(
+                                topic, metadata->topics[ti].partition_cnt));
 
                         cnt++;
                 }
@@ -756,13 +745,12 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
 
         /* Any topics/patterns still in unmatched did not match any
          * existing topics, add them to `errored`. */
-        for (i = 0 ; i < unmatched->cnt ; i++) {
+        for (i = 0; i < unmatched->cnt; i++) {
                 rd_kafka_topic_partition_t *elem = &unmatched->elems[i];
 
-                rd_kafka_topic_partition_list_add(errored,
-                                                  elem->topic,
-                                                  RD_KAFKA_PARTITION_UA)->err =
-                        RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+                rd_kafka_topic_partition_list_add(errored, elem->topic,
+                                                  RD_KAFKA_PARTITION_UA)
+                    ->err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         }
 
         rd_kafka_topic_partition_list_destroy(unmatched);
@@ -783,15 +771,16 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk, rd_list_t *tinfos,
  * @locks none
  */
 size_t
-rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
-                                const rd_kafka_topic_partition_list_t *match,
-                                rd_kafka_topic_partition_list_t *errored) {
+rd_kafka_metadata_topic_filter(rd_kafka_t *rk,
+                               rd_list_t *tinfos,
+                               const rd_kafka_topic_partition_list_t *match,
+                               rd_kafka_topic_partition_list_t *errored) {
         int i;
         size_t cnt = 0;
 
         rd_kafka_rdlock(rk);
         /* For each topic in match, look up the topic in the cache. */
-        for (i = 0 ; i < match->cnt ; i++) {
+        for (i = 0; i < match->cnt; i++) {
                 const char *topic = match->elems[i].topic;
                 const rd_kafka_metadata_topic_t *mtopic;
 
@@ -800,21 +789,20 @@ rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
                     rd_kafka_pattern_match(rk->rk_conf.topic_blacklist, topic))
                         continue;
 
-                mtopic = rd_kafka_metadata_cache_topic_get(rk, topic,
-                                                           1/*valid*/);
+                mtopic =
+                    rd_kafka_metadata_cache_topic_get(rk, topic, 1 /*valid*/);
 
                 if (!mtopic)
-                        rd_kafka_topic_partition_list_add(
-                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
-                                RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+                        rd_kafka_topic_partition_list_add(errored, topic,
+                                                          RD_KAFKA_PARTITION_UA)
+                            ->err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
                 else if (mtopic->err)
-                        rd_kafka_topic_partition_list_add(
-                                errored, topic, RD_KAFKA_PARTITION_UA)->err =
-                                mtopic->err;
+                        rd_kafka_topic_partition_list_add(errored, topic,
+                                                          RD_KAFKA_PARTITION_UA)
+                            ->err = mtopic->err;
                 else {
-                        rd_list_add(tinfos,
-                                    rd_kafka_topic_info_new(
-                                            topic, mtopic->partition_cnt));
+                        rd_list_add(tinfos, rd_kafka_topic_info_new(
+                                                topic, mtopic->partition_cnt));
 
                         cnt++;
                 }
@@ -825,34 +813,32 @@ rd_kafka_metadata_topic_filter (rd_kafka_t *rk, rd_list_t *tinfos,
 }
 
 
-void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
-                            const struct rd_kafka_metadata *md) {
+void rd_kafka_metadata_log(rd_kafka_t *rk,
+                           const char *fac,
+                           const struct rd_kafka_metadata *md) {
         int i;
 
         rd_kafka_dbg(rk, METADATA, fac,
                      "Metadata with %d broker(s) and %d topic(s):",
                      md->broker_cnt, md->topic_cnt);
 
-        for (i = 0 ; i < md->broker_cnt ; i++) {
+        for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_dbg(rk, METADATA, fac,
-                             "  Broker #%i/%i: %s:%i NodeId %"PRId32,
-                             i, md->broker_cnt,
-                             md->brokers[i].host,
-                             md->brokers[i].port,
-                             md->brokers[i].id);
+                             "  Broker #%i/%i: %s:%i NodeId %" PRId32, i,
+                             md->broker_cnt, md->brokers[i].host,
+                             md->brokers[i].port, md->brokers[i].id);
         }
 
-        for (i = 0 ; i < md->topic_cnt ; i++) {
-                rd_kafka_dbg(rk, METADATA, fac,
-                             "  Topic #%i/%i: %s with %i partitions%s%s",
-                             i, md->topic_cnt, md->topics[i].topic,
-                             md->topics[i].partition_cnt,
-                             md->topics[i].err ? ": " : "",
-                             md->topics[i].err ?
-                             rd_kafka_err2str(md->topics[i].err) : "");
+        for (i = 0; i < md->topic_cnt; i++) {
+                rd_kafka_dbg(
+                    rk, METADATA, fac,
+                    "  Topic #%i/%i: %s with %i partitions%s%s", i,
+                    md->topic_cnt, md->topics[i].topic,
+                    md->topics[i].partition_cnt, md->topics[i].err ? ": " : "",
+                    md->topics[i].err ? rd_kafka_err2str(md->topics[i].err)
+                                      : "");
         }
 }
-
 
 
 
@@ -874,11 +860,13 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  * @locks none
  */
 rd_kafka_resp_err_t
-rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const rd_list_t *topics, rd_bool_t force,
-                                  rd_bool_t allow_auto_create,
-                                  rd_bool_t cgrp_update,
-                                  const char *reason) {
+rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
+                                 rd_kafka_broker_t *rkb,
+                                 const rd_list_t *topics,
+                                 rd_bool_t force,
+                                 rd_bool_t allow_auto_create,
+                                 rd_bool_t cgrp_update,
+                                 const char *reason) {
         rd_list_t q_topics;
         int destroy_rkb = 0;
 
@@ -890,15 +878,14 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rk);
 
         if (!rkb) {
-                if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
-                                                       RD_DONT_LOCK, 0,
-                                                       reason))) {
+                if (!(rkb = rd_kafka_broker_any_usable(
+                          rk, RD_POLL_NOWAIT, RD_DONT_LOCK, 0, reason))) {
                         /* Hint cache that something is interested in
                          * these topics so that they will be included in
                          * a future all known_topics query. */
                         rd_kafka_metadata_cache_hint(rk, topics, NULL,
                                                      RD_KAFKA_RESP_ERR__NOENT,
-                                                     0/*dont replace*/);
+                                                     0 /*dont replace*/);
 
                         rd_kafka_wrunlock(rk);
                         rd_kafka_dbg(rk, METADATA, "METADATA",
@@ -920,7 +907,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                  * q_topics will contain remaining topics to query. */
                 rd_kafka_metadata_cache_hint(rk, topics, &q_topics,
                                              RD_KAFKA_RESP_ERR__WAIT_CACHE,
-                                             rd_false/*dont replace*/);
+                                             rd_false /*dont replace*/);
                 rd_kafka_wrunlock(rk);
 
                 if (rd_list_cnt(&q_topics) == 0) {
@@ -970,8 +957,10 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @locks none
  */
 rd_kafka_resp_err_t
-rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                        rd_bool_t force, const char *reason) {
+rd_kafka_metadata_refresh_known_topics(rd_kafka_t *rk,
+                                       rd_kafka_broker_t *rkb,
+                                       rd_bool_t force,
+                                       const char *reason) {
         rd_list_t topics;
         rd_kafka_resp_err_t err;
         int cache_cnt = 0;
@@ -986,17 +975,14 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         /* Allow topic auto creation if there are locally known topics (rkt)
          * and not just cached (to be queried) topics. */
         allow_auto_create_topics = rk->rk_conf.allow_auto_create_topics &&
-                rd_list_cnt(&topics) > cache_cnt;
+                                   rd_list_cnt(&topics) > cache_cnt;
 
         if (rd_list_cnt(&topics) == 0)
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
                 err = rd_kafka_metadata_refresh_topics(
-                        rk, rkb,
-                        &topics, force,
-                        allow_auto_create_topics,
-                        rd_false/*!cgrp_update*/,
-                        reason);
+                    rk, rkb, &topics, force, allow_auto_create_topics,
+                    rd_false /*!cgrp_update*/, reason);
 
         rd_list_destroy(&topics);
 
@@ -1018,14 +1004,14 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @locks_acquired rk(read)
  */
 rd_kafka_resp_err_t
-rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
-                                           rd_kafka_broker_t *rkb,
-                                           const char *reason) {
+rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
+                                          rd_kafka_broker_t *rkb,
+                                          const char *reason) {
         rd_list_t topics;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
         rd_bool_t allow_auto_create_topics =
-                rk->rk_conf.allow_auto_create_topics;
+            rk->rk_conf.allow_auto_create_topics;
         int cache_cnt = 0;
 
         if (!rk) {
@@ -1054,18 +1040,15 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
         /* Add subscribed (non-wildcard) topics, if any. */
         if (rkcg->rkcg_subscription)
                 rd_kafka_topic_partition_list_get_topic_names(
-                        rkcg->rkcg_subscription, &topics,
-                        rd_false/*no wildcards*/);
+                    rkcg->rkcg_subscription, &topics,
+                    rd_false /*no wildcards*/);
 
         if (rd_list_cnt(&topics) == 0)
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
                 err = rd_kafka_metadata_refresh_topics(
-                        rk, rkb, &topics,
-                        rd_true/*force*/,
-                        allow_auto_create_topics,
-                        rd_true/*cgrp_update*/,
-                        reason);
+                    rk, rkb, &topics, rd_true /*force*/,
+                    allow_auto_create_topics, rd_true /*cgrp_update*/, reason);
 
         rd_list_destroy(&topics);
 
@@ -1087,13 +1070,13 @@ rd_kafka_metadata_refresh_consumer_topics (rd_kafka_t *rk,
  * @locality any
  * @locks none
  */
-rd_kafka_resp_err_t
-rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                   const char *reason) {
+rd_kafka_resp_err_t rd_kafka_metadata_refresh_brokers(rd_kafka_t *rk,
+                                                      rd_kafka_broker_t *rkb,
+                                                      const char *reason) {
         return rd_kafka_metadata_request(rk, rkb, NULL /*brokers only*/,
-                                         rd_false/*!allow auto create topics*/,
-                                         rd_false/*no cgrp update */,
-                                         reason, NULL);
+                                         rd_false /*!allow auto create topics*/,
+                                         rd_false /*no cgrp update */, reason,
+                                         NULL);
 }
 
 
@@ -1106,9 +1089,9 @@ rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @locality any
  * @locks none
  */
-rd_kafka_resp_err_t
-rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                               const char *reason) {
+rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
+                                                  rd_kafka_broker_t *rkb,
+                                                  const char *reason) {
         int destroy_rkb = 0;
         rd_list_t topics;
 
@@ -1119,17 +1102,15 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         if (!rkb) {
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
-                                                       RD_DO_LOCK, 0,
-                                                       reason)))
+                                                       RD_DO_LOCK, 0, reason)))
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 destroy_rkb = 1;
         }
 
         rd_list_init(&topics, 0, NULL); /* empty list = all topics */
         rd_kafka_MetadataRequest(rkb, &topics, reason,
-                                 rd_false/*no auto create*/,
-                                 rd_true/*cgrp update*/,
-                                 NULL);
+                                 rd_false /*no auto create*/,
+                                 rd_true /*cgrp update*/, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1150,23 +1131,23 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @locality any
  */
 rd_kafka_resp_err_t
-rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                           const rd_list_t *topics,
-                           rd_bool_t allow_auto_create_topics,
-                           rd_bool_t cgrp_update,
-                           const char *reason, rd_kafka_op_t *rko) {
+rd_kafka_metadata_request(rd_kafka_t *rk,
+                          rd_kafka_broker_t *rkb,
+                          const rd_list_t *topics,
+                          rd_bool_t allow_auto_create_topics,
+                          rd_bool_t cgrp_update,
+                          const char *reason,
+                          rd_kafka_op_t *rko) {
         int destroy_rkb = 0;
 
         if (!rkb) {
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT,
-                                                       RD_DO_LOCK, 0,
-                                                       reason)))
+                                                       RD_DO_LOCK, 0, reason)))
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 destroy_rkb = 1;
         }
 
-        rd_kafka_MetadataRequest(rkb, topics, reason,
-                                 allow_auto_create_topics,
+        rd_kafka_MetadataRequest(rkb, topics, reason, allow_auto_create_topics,
                                  cgrp_update, rko);
 
         if (destroy_rkb)
@@ -1183,9 +1164,9 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @locks none
  * @locality rdkafka main thread
  */
-static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
-                                                   void *arg) {
-        rd_kafka_t *rk = rkts->rkts_rk;
+static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
+                                                  void *arg) {
+        rd_kafka_t *rk         = rkts->rkts_rk;
         rd_kafka_timer_t *rtmr = &rk->rk_metadata_cache.rkmc_query_tmr;
         rd_kafka_topic_t *rkt;
         rd_list_t topics;
@@ -1203,14 +1184,16 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                         continue;
                 }
 
-                require_metadata = rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
+                require_metadata =
+                    rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
                 /* Check if any partitions are missing brokers. */
-                for (i = 0 ; !require_metadata && i < rkt->rkt_partition_cnt ; i++) {
+                for (i = 0; !require_metadata && i < rkt->rkt_partition_cnt;
+                     i++) {
                         rd_kafka_toppar_t *rktp = rkt->rkt_p[i];
                         rd_kafka_toppar_lock(rktp);
-                        require_metadata = !rktp->rktp_broker &&
-                                !rktp->rktp_next_broker;
+                        require_metadata =
+                            !rktp->rktp_broker && !rktp->rktp_next_broker;
                         rd_kafka_toppar_unlock(rktp);
                 }
 
@@ -1224,21 +1207,19 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
 
         if (rd_list_cnt(&topics) == 0) {
                 /* No leader-less topics+partitions, stop the timer. */
-                rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
+                rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
         } else {
                 rd_kafka_metadata_refresh_topics(
-                        rk, NULL, &topics,
-                        rd_true/*force*/,
-                        rk->rk_conf.allow_auto_create_topics,
-                        rd_false/*!cgrp_update*/,
-                        "partition leader query");
+                    rk, NULL, &topics, rd_true /*force*/,
+                    rk->rk_conf.allow_auto_create_topics,
+                    rd_false /*!cgrp_update*/, "partition leader query");
                 /* Back off next query exponentially until we reach
                  * the standard query interval - then stop the timer
                  * since the intervalled querier will do the job for us. */
                 if (rk->rk_conf.metadata_refresh_interval_ms > 0 &&
                     rtmr->rtmr_interval * 2 / 1000 >=
-                    rk->rk_conf.metadata_refresh_interval_ms)
-                        rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
+                        rk->rk_conf.metadata_refresh_interval_ms)
+                        rd_kafka_timer_stop(rkts, rtmr, 1 /*lock*/);
                 else
                         rd_kafka_timer_exp_backoff(rkts, rtmr);
         }
@@ -1257,27 +1238,23 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
  * @locks none
  * @locality any
  */
-void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk) {
+void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
         rd_ts_t next;
 
         /* Restart the timer if it will speed things up. */
-        next = rd_kafka_timer_next(&rk->rk_timers,
-                                   &rk->rk_metadata_cache.rkmc_query_tmr,
-                                   1/*lock*/);
+        next = rd_kafka_timer_next(
+            &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr, 1 /*lock*/);
         if (next == -1 /* not started */ ||
             next >
-            (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
-                rd_kafka_dbg(rk, METADATA|RD_KAFKA_DBG_TOPIC, "FASTQUERY",
+                (rd_ts_t)rk->rk_conf.metadata_refresh_fast_interval_ms * 1000) {
+                rd_kafka_dbg(rk, METADATA | RD_KAFKA_DBG_TOPIC, "FASTQUERY",
                              "Starting fast leader query");
-                rd_kafka_timer_start(&rk->rk_timers,
-                                     &rk->rk_metadata_cache.rkmc_query_tmr,
-                                     rk->rk_conf.
-                                     metadata_refresh_fast_interval_ms*1000,
-                                     rd_kafka_metadata_leader_query_tmr_cb,
-                                     NULL);
+                rd_kafka_timer_start(
+                    &rk->rk_timers, &rk->rk_metadata_cache.rkmc_query_tmr,
+                    rk->rk_conf.metadata_refresh_fast_interval_ms * 1000,
+                    rd_kafka_metadata_leader_query_tmr_cb, NULL);
         }
 }
-
 
 
 
@@ -1293,8 +1270,8 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk) {
  * @sa rd_kafka_metadata_copy()
  */
 rd_kafka_metadata_t *
-rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
-                                  size_t topic_cnt) {
+rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
+                                 size_t topic_cnt) {
         rd_kafka_metadata_t *md;
         rd_tmpabuf_t tbuf;
         size_t topic_names_size = 0;
@@ -1303,7 +1280,7 @@ rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
 
         /* Calculate total partition count and topic names size before
          * allocating memory. */
-        for (i = 0 ; i < topic_cnt ; i++) {
+        for (i = 0; i < topic_cnt; i++) {
                 topic_names_size += 1 + strlen(topics[i].topic);
                 total_partition_cnt += topics[i].partition_cnt;
         }
@@ -1311,36 +1288,33 @@ rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
 
         /* Allocate contiguous buffer which will back all the memory
          * needed by the final metadata_t object */
-        rd_tmpabuf_new(&tbuf,
-                       sizeof(*md) +
-                       (sizeof(*md->topics) * topic_cnt) +
-                       topic_names_size +
-                       (64/*topic name size..*/ * topic_cnt) +
-                       (sizeof(*md->topics[0].partitions) *
-                        total_partition_cnt),
-                       1/*assert on fail*/);
+        rd_tmpabuf_new(
+            &tbuf,
+            sizeof(*md) + (sizeof(*md->topics) * topic_cnt) + topic_names_size +
+                (64 /*topic name size..*/ * topic_cnt) +
+                (sizeof(*md->topics[0].partitions) * total_partition_cnt),
+            1 /*assert on fail*/);
 
         md = rd_tmpabuf_alloc(&tbuf, sizeof(*md));
         memset(md, 0, sizeof(*md));
 
         md->topic_cnt = (int)topic_cnt;
-        md->topics = rd_tmpabuf_alloc(&tbuf,
-                                      md->topic_cnt * sizeof(*md->topics));
+        md->topics =
+            rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics));
 
-        for (i = 0 ; i < (size_t)md->topic_cnt ; i++) {
+        for (i = 0; i < (size_t)md->topic_cnt; i++) {
                 int j;
 
-                md->topics[i].topic = rd_tmpabuf_write_str(
-                        &tbuf, topics[i].topic);
+                md->topics[i].topic =
+                    rd_tmpabuf_write_str(&tbuf, topics[i].topic);
                 md->topics[i].partition_cnt = topics[i].partition_cnt;
-                md->topics[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                md->topics[i].err           = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-                md->topics[i].partitions =
-                        rd_tmpabuf_alloc(&tbuf,
-                                         md->topics[i].partition_cnt *
-                                         sizeof(*md->topics[i].partitions));
+                md->topics[i].partitions = rd_tmpabuf_alloc(
+                    &tbuf, md->topics[i].partition_cnt *
+                               sizeof(*md->topics[i].partitions));
 
-                for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
+                for (j = 0; j < md->topics[i].partition_cnt; j++) {
                         memset(&md->topics[i].partitions[j], 0,
                                sizeof(md->topics[i].partitions[j]));
                         md->topics[i].partitions[j].id = j;
@@ -1368,7 +1342,7 @@ rd_kafka_metadata_new_topic_mock (const rd_kafka_metadata_topic_t *topics,
  *
  * @sa rd_kafka_metadata_new_topic_mock()
  */
-rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...) {
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...) {
         rd_kafka_metadata_topic_t *topics;
         va_list ap;
         size_t i;
@@ -1376,8 +1350,8 @@ rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv (size_t topic_cnt, ...) {
         topics = rd_alloca(sizeof(*topics) * topic_cnt);
 
         va_start(ap, topic_cnt);
-        for (i = 0 ; i < topic_cnt ; i++) {
-                topics[i].topic = va_arg(ap, char *);
+        for (i = 0; i < topic_cnt; i++) {
+                topics[i].topic         = va_arg(ap, char *);
                 topics[i].partition_cnt = va_arg(ap, int);
         }
         va_end(ap);

@@ -49,47 +49,47 @@ static const int16_t rd_kafka_ProduceRequest_max_version = 7;
 
 
 typedef struct rd_kafka_msgset_writer_s {
-        rd_kafka_buf_t *msetw_rkbuf;     /* Backing store buffer (refcounted)*/
+        rd_kafka_buf_t *msetw_rkbuf; /* Backing store buffer (refcounted)*/
 
-        int16_t msetw_ApiVersion;        /* ProduceRequest ApiVersion */
-        int     msetw_MsgVersion;        /* MsgVersion to construct */
-        int     msetw_features;          /* Protocol features to use */
+        int16_t msetw_ApiVersion; /* ProduceRequest ApiVersion */
+        int msetw_MsgVersion;     /* MsgVersion to construct */
+        int msetw_features;       /* Protocol features to use */
         rd_kafka_compression_t msetw_compression; /**< Compression type */
-        int     msetw_msgcntmax;         /* Max number of messages to send
-                                          * in a batch. */
-        size_t  msetw_messages_len;      /* Total size of Messages, with Message
-                                          * framing but without
-                                          * MessageSet header */
-        size_t  msetw_messages_kvlen;    /* Total size of Message keys
-                                          * and values */
+        int msetw_msgcntmax;         /* Max number of messages to send
+                                      * in a batch. */
+        size_t msetw_messages_len;   /* Total size of Messages, with Message
+                                      * framing but without
+                                      * MessageSet header */
+        size_t msetw_messages_kvlen; /* Total size of Message keys
+                                      * and values */
 
-        size_t  msetw_MessageSetSize;    /* Current MessageSetSize value */
-        size_t  msetw_of_MessageSetSize; /* offset of MessageSetSize */
-        size_t  msetw_of_start;          /* offset of MessageSet */
+        size_t msetw_MessageSetSize;    /* Current MessageSetSize value */
+        size_t msetw_of_MessageSetSize; /* offset of MessageSetSize */
+        size_t msetw_of_start;          /* offset of MessageSet */
 
-        int     msetw_relative_offsets;  /* Bool: use relative offsets */
+        int msetw_relative_offsets; /* Bool: use relative offsets */
 
         /* For MessageSet v2 */
-        int     msetw_Attributes;        /* MessageSet Attributes */
-        int64_t msetw_MaxTimestamp;      /* Maximum timestamp in batch */
-        size_t  msetw_of_CRC;            /* offset of MessageSet.CRC */
+        int msetw_Attributes;       /* MessageSet Attributes */
+        int64_t msetw_MaxTimestamp; /* Maximum timestamp in batch */
+        size_t msetw_of_CRC;        /* offset of MessageSet.CRC */
 
         rd_kafka_msgbatch_t *msetw_batch; /**< Convenience pointer to
                                            *   rkbuf_u.Produce.batch */
 
         /* First message information */
         struct {
-                size_t     of;  /* rkbuf's first message position */
-                int64_t    timestamp;
+                size_t of; /* rkbuf's first message position */
+                int64_t timestamp;
         } msetw_firstmsg;
 
-        rd_kafka_pid_t msetw_pid;        /**< Idempotent producer's
-                                          *   current Producer Id */
-        rd_kafka_broker_t *msetw_rkb;    /* @warning Not a refcounted
-                                          *          reference! */
-        rd_kafka_toppar_t *msetw_rktp;   /* @warning Not a refcounted
-                                          *          reference! */
-        rd_kafka_msgq_t *msetw_msgq;     /**< Input message queue */
+        rd_kafka_pid_t msetw_pid;      /**< Idempotent producer's
+                                        *   current Producer Id */
+        rd_kafka_broker_t *msetw_rkb;  /* @warning Not a refcounted
+                                        *          reference! */
+        rd_kafka_toppar_t *msetw_rktp; /* @warning Not a refcounted
+                                        *          reference! */
+        rd_kafka_msgq_t *msetw_msgq;   /**< Input message queue */
 } rd_kafka_msgset_writer_t;
 
 
@@ -102,34 +102,34 @@ typedef struct rd_kafka_msgset_writer_s {
  * @locality broker thread
  */
 static RD_INLINE int
-rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
-        rd_kafka_broker_t *rkb = msetw->msetw_rkb;
-        rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
+rd_kafka_msgset_writer_select_MsgVersion(rd_kafka_msgset_writer_t *msetw) {
+        rd_kafka_broker_t *rkb       = msetw->msetw_rkb;
+        rd_kafka_toppar_t *rktp      = msetw->msetw_rktp;
         const int16_t max_ApiVersion = rd_kafka_ProduceRequest_max_version;
-        int16_t min_ApiVersion = 0;
+        int16_t min_ApiVersion       = 0;
         int feature;
         /* Map compression types to required feature and ApiVersion */
         static const struct {
                 int feature;
                 int16_t ApiVersion;
         } compr_req[RD_KAFKA_COMPRESSION_NUM] = {
-                [RD_KAFKA_COMPRESSION_LZ4] = { RD_KAFKA_FEATURE_LZ4, 0 },
+                [RD_KAFKA_COMPRESSION_LZ4] = {RD_KAFKA_FEATURE_LZ4, 0},
 #if WITH_ZSTD
-                [RD_KAFKA_COMPRESSION_ZSTD] = { RD_KAFKA_FEATURE_ZSTD, 7 },
+                [RD_KAFKA_COMPRESSION_ZSTD] = {RD_KAFKA_FEATURE_ZSTD, 7},
 #endif
         };
 
         if ((feature = rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)) {
-                min_ApiVersion = 3;
+                min_ApiVersion          = 3;
                 msetw->msetw_MsgVersion = 2;
                 msetw->msetw_features |= feature;
         } else if ((feature = rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)) {
-                min_ApiVersion = 2;
+                min_ApiVersion          = 2;
                 msetw->msetw_MsgVersion = 1;
                 msetw->msetw_features |= feature;
         } else {
                 if ((feature =
-                     rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)) {
+                         rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)) {
                         min_ApiVersion = 1;
                         msetw->msetw_features |= feature;
                 } else
@@ -145,49 +145,49 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
          */
         if (msetw->msetw_compression &&
             (rd_kafka_broker_ApiVersion_supported(
-                    rkb, RD_KAFKAP_Produce,
-                    0, compr_req[msetw->msetw_compression].ApiVersion,
-                    NULL) == -1 ||
+                 rkb, RD_KAFKAP_Produce, 0,
+                 compr_req[msetw->msetw_compression].ApiVersion, NULL) == -1 ||
              (compr_req[msetw->msetw_compression].feature &&
               !(msetw->msetw_rkb->rkb_features &
                 compr_req[msetw->msetw_compression].feature)))) {
-                if (unlikely(rd_interval(
-                                     &rkb->rkb_suppress.unsupported_compression,
-                                     /* at most once per day */
-                                     (rd_ts_t)86400 * 1000 * 1000, 0) > 0))
-                        rd_rkb_log(rkb, LOG_NOTICE, "COMPRESSION",
-                                   "%.*s [%"PRId32"]: "
-                                   "Broker does not support compression "
-                                   "type %s: not compressing batch",
-                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   rd_kafka_compression2str(
-                                           msetw->msetw_compression));
+                if (unlikely(
+                        rd_interval(&rkb->rkb_suppress.unsupported_compression,
+                                    /* at most once per day */
+                                    (rd_ts_t)86400 * 1000 * 1000, 0) > 0))
+                        rd_rkb_log(
+                            rkb, LOG_NOTICE, "COMPRESSION",
+                            "%.*s [%" PRId32
+                            "]: "
+                            "Broker does not support compression "
+                            "type %s: not compressing batch",
+                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                            rktp->rktp_partition,
+                            rd_kafka_compression2str(msetw->msetw_compression));
                 else
-                        rd_rkb_dbg(rkb, MSG, "PRODUCE",
-                                   "%.*s [%"PRId32"]: "
-                                   "Broker does not support compression "
-                                   "type %s: not compressing batch",
-                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   rd_kafka_compression2str(
-                                           msetw->msetw_compression));
+                        rd_rkb_dbg(
+                            rkb, MSG, "PRODUCE",
+                            "%.*s [%" PRId32
+                            "]: "
+                            "Broker does not support compression "
+                            "type %s: not compressing batch",
+                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                            rktp->rktp_partition,
+                            rd_kafka_compression2str(msetw->msetw_compression));
 
                 msetw->msetw_compression = RD_KAFKA_COMPRESSION_NONE;
         } else {
                 /* Broker supports this compression type. */
                 msetw->msetw_features |=
-                        compr_req[msetw->msetw_compression].feature;
+                    compr_req[msetw->msetw_compression].feature;
 
                 if (min_ApiVersion <
                     compr_req[msetw->msetw_compression].ApiVersion)
                         min_ApiVersion =
-                                compr_req[msetw->msetw_compression].ApiVersion;
+                            compr_req[msetw->msetw_compression].ApiVersion;
         }
 
         /* MsgVersion specific setup. */
-        switch (msetw->msetw_MsgVersion)
-        {
+        switch (msetw->msetw_MsgVersion) {
         case 2:
                 msetw->msetw_relative_offsets = 1; /* OffsetDelta */
                 break;
@@ -199,8 +199,7 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
 
         /* Set the highest ApiVersion supported by us and broker */
         msetw->msetw_ApiVersion = rd_kafka_broker_ApiVersion_supported(
-                rkb,
-                RD_KAFKAP_Produce, min_ApiVersion, max_ApiVersion, NULL);
+            rkb, RD_KAFKAP_Produce, min_ApiVersion, max_ApiVersion, NULL);
 
         if (msetw->msetw_ApiVersion == -1) {
                 rd_kafka_msg_t *rkm;
@@ -208,17 +207,18 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
                  * no matching ProduceRequest versions, which should never
                  * happen. */
                 rd_rkb_log(rkb, LOG_ERR, "PRODUCE",
-                           "%.*s [%"PRId32"]: "
+                           "%.*s [%" PRId32
+                           "]: "
                            "No viable ProduceRequest ApiVersions (v%d..%d) "
                            "supported by broker: unable to produce",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition,
-                           min_ApiVersion, max_ApiVersion);
+                           rktp->rktp_partition, min_ApiVersion,
+                           max_ApiVersion);
 
                 /* Back off and retry in 5s */
                 rkm = rd_kafka_msgq_first(msetw->msetw_msgq);
                 rd_assert(rkm);
-                rkm->rkm_u.producer.ts_backoff = rd_clock() + (5 * 1000*1000);
+                rkm->rkm_u.producer.ts_backoff = rd_clock() + (5 * 1000 * 1000);
                 return -1;
         }
 
@@ -239,12 +239,11 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
  * The allocated size is the minimum of message.max.bytes
  * or queued_bytes + msgcntmax * msg_overhead
  */
-static void
-rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
-        rd_kafka_t *rk = msetw->msetw_rkb->rkb_rk;
+static void rd_kafka_msgset_writer_alloc_buf(rd_kafka_msgset_writer_t *msetw) {
+        rd_kafka_t *rk      = msetw->msetw_rkb->rkb_rk;
         size_t msg_overhead = 0;
-        size_t hdrsize = 0;
-        size_t msgsetsize = 0;
+        size_t hdrsize      = 0;
+        size_t msgsetsize   = 0;
         size_t bufsize;
 
         rd_kafka_assert(NULL, !msetw->msetw_rkbuf);
@@ -267,8 +266,7 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
         /*
          * ProduceRequest header sizes
          */
-        switch (msetw->msetw_ApiVersion)
-        {
+        switch (msetw->msetw_ApiVersion) {
         case 7:
         case 6:
         case 5:
@@ -281,13 +279,12 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
         case 1:
         case 2:
                 hdrsize +=
-                        /* RequiredAcks + Timeout + TopicCnt */
-                        2 + 4 + 4 +
-                        /* Topic */
-                        RD_KAFKAP_STR_SIZE(msetw->msetw_rktp->
-                                           rktp_rkt->rkt_topic) +
-                        /* PartitionCnt + Partition + MessageSetSize */
-                        4 + 4 + 4;
+                    /* RequiredAcks + Timeout + TopicCnt */
+                    2 + 4 + 4 +
+                    /* Topic */
+                    RD_KAFKAP_STR_SIZE(msetw->msetw_rktp->rktp_rkt->rkt_topic) +
+                    /* PartitionCnt + Partition + MessageSetSize */
+                    4 + 4 + 4;
                 msgsetsize += 4; /* MessageSetSize */
                 break;
 
@@ -300,8 +297,7 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
          * - (Worst-case) Message overhead: message fields
          * - MessageSet header size
          */
-        switch (msetw->msetw_MsgVersion)
-        {
+        switch (msetw->msetw_MsgVersion) {
         case 0:
                 /* MsgVer0 */
                 msg_overhead = RD_KAFKAP_MESSAGE_V0_OVERHEAD;
@@ -316,20 +312,14 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
                 msg_overhead += RD_KAFKAP_MESSAGE_V2_MAX_OVERHEAD;
 
                 /* MessageSet header fields */
-                msgsetsize +=
-                        8 /* BaseOffset */ +
-                        4 /* Length */ +
-                        4 /* PartitionLeaderEpoch */ +
-                        1 /* Magic (MsgVersion) */ +
-                        4 /* CRC (CRC32C) */ +
-                        2 /* Attributes */ +
-                        4 /* LastOffsetDelta */ +
-                        8 /* BaseTimestamp */ +
-                        8 /* MaxTimestamp */ +
-                        8 /* ProducerId */ +
-                        2 /* ProducerEpoch */ +
-                        4 /* BaseSequence */ +
-                        4 /* RecordCount */;
+                msgsetsize += 8 /* BaseOffset */ + 4 /* Length */ +
+                              4 /* PartitionLeaderEpoch */ +
+                              1 /* Magic (MsgVersion) */ +
+                              4 /* CRC (CRC32C) */ + 2 /* Attributes */ +
+                              4 /* LastOffsetDelta */ + 8 /* BaseTimestamp */ +
+                              8 /* MaxTimestamp */ + 8 /* ProducerId */ +
+                              2 /* ProducerEpoch */ + 4 /* BaseSequence */ +
+                              4 /* RecordCount */;
                 break;
 
         default:
@@ -346,9 +336,9 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
          */
         if (rk->rk_conf.msg_copy_max_size > 0) {
                 size_t queued_bytes = rd_kafka_msgq_size(msetw->msetw_msgq);
-                bufsize += RD_MIN(queued_bytes,
-                                  (size_t)rk->rk_conf.msg_copy_max_size *
-                                  msetw->msetw_msgcntmax);
+                bufsize +=
+                    RD_MIN(queued_bytes, (size_t)rk->rk_conf.msg_copy_max_size *
+                                             msetw->msetw_msgcntmax);
         }
 
         /* Add estimed per-message overhead */
@@ -363,12 +353,10 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
          * and allocate auxilliery space for message headers, etc.
          */
         msetw->msetw_rkbuf =
-                rd_kafka_buf_new_request(msetw->msetw_rkb, RD_KAFKAP_Produce,
-                                         msetw->msetw_msgcntmax/2 + 10,
-                                         bufsize);
+            rd_kafka_buf_new_request(msetw->msetw_rkb, RD_KAFKAP_Produce,
+                                     msetw->msetw_msgcntmax / 2 + 10, bufsize);
 
-        rd_kafka_buf_ApiVersion_set(msetw->msetw_rkbuf,
-                                    msetw->msetw_ApiVersion,
+        rd_kafka_buf_ApiVersion_set(msetw->msetw_rkbuf, msetw->msetw_ApiVersion,
                                     msetw->msetw_features);
 }
 
@@ -377,9 +365,8 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
  * @brief Write the MessageSet header.
  * @remark Must only be called for MsgVersion 2
  */
-static void
-rd_kafka_msgset_writer_write_MessageSet_v2_header (
-        rd_kafka_msgset_writer_t *msetw) {
+static void rd_kafka_msgset_writer_write_MessageSet_v2_header(
+    rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
 
         rd_kafka_assert(NULL, msetw->msetw_ApiVersion >= 3);
@@ -427,7 +414,6 @@ rd_kafka_msgset_writer_write_MessageSet_v2_header (
 
         /* RecordCount: udpated later */
         rd_kafka_buf_write_i32(rkbuf, 0);
-
 }
 
 
@@ -438,10 +424,10 @@ rd_kafka_msgset_writer_write_MessageSet_v2_header (
  *        msetw_MessageSetSize will have been set to the messageset header.
  */
 static void
-rd_kafka_msgset_writer_write_Produce_header (rd_kafka_msgset_writer_t *msetw) {
+rd_kafka_msgset_writer_write_Produce_header(rd_kafka_msgset_writer_t *msetw) {
 
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
-        rd_kafka_t *rk = msetw->msetw_rkb->rkb_rk;
+        rd_kafka_t *rk        = msetw->msetw_rkb->rkb_rk;
         rd_kafka_topic_t *rkt = msetw->msetw_rktp->rktp_rkt;
 
         /* V3: TransactionalId */
@@ -493,12 +479,12 @@ rd_kafka_msgset_writer_write_Produce_header (rd_kafka_msgset_writer_t *msetw) {
  *
  * @locality broker thread
  */
-static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
-                                        rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *rktp,
-                                        rd_kafka_msgq_t *rkmq,
-                                        rd_kafka_pid_t pid,
-                                        uint64_t epoch_base_msgid) {
+static int rd_kafka_msgset_writer_init(rd_kafka_msgset_writer_t *msetw,
+                                       rd_kafka_broker_t *rkb,
+                                       rd_kafka_toppar_t *rktp,
+                                       rd_kafka_msgq_t *rkmq,
+                                       rd_kafka_pid_t pid,
+                                       uint64_t epoch_base_msgid) {
         int msgcnt = rd_kafka_msgq_len(rkmq);
 
         if (msgcnt == 0)
@@ -507,16 +493,15 @@ static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
         memset(msetw, 0, sizeof(*msetw));
 
         msetw->msetw_rktp = rktp;
-        msetw->msetw_rkb = rkb;
+        msetw->msetw_rkb  = rkb;
         msetw->msetw_msgq = rkmq;
-        msetw->msetw_pid = pid;
+        msetw->msetw_pid  = pid;
 
         /* Max number of messages to send in a batch,
          * limited by current queue size or configured batch size,
          * whichever is lower. */
-        msetw->msetw_msgcntmax = RD_MIN(msgcnt,
-                                        rkb->rkb_rk->rk_conf.
-                                        batch_num_messages);
+        msetw->msetw_msgcntmax =
+            RD_MIN(msgcnt, rkb->rkb_rk->rk_conf.batch_num_messages);
         rd_dassert(msetw->msetw_msgcntmax > 0);
 
         /* Select MsgVersion to use */
@@ -533,11 +518,11 @@ static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
          * is located.
          * Record the current buffer position so it can be rewound later
          * in case of compression. */
-        msetw->msetw_firstmsg.of = rd_buf_write_pos(&msetw->msetw_rkbuf->
-                                                    rkbuf_buf);
+        msetw->msetw_firstmsg.of =
+            rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf);
 
-        rd_kafka_msgbatch_init(&msetw->msetw_rkbuf->rkbuf_u.Produce.batch,
-                               rktp, pid, epoch_base_msgid);
+        rd_kafka_msgbatch_init(&msetw->msetw_rkbuf->rkbuf_u.Produce.batch, rktp,
+                               pid, epoch_base_msgid);
         msetw->msetw_batch = &msetw->msetw_rkbuf->rkbuf_u.Produce.batch;
 
         return msetw->msetw_msgcntmax;
@@ -549,10 +534,10 @@ static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
  * @brief Copy or link message payload to buffer.
  */
 static RD_INLINE void
-rd_kafka_msgset_writer_write_msg_payload (rd_kafka_msgset_writer_t *msetw,
-                                          const rd_kafka_msg_t *rkm,
-                                          void (*free_cb)(void *)) {
-        const rd_kafka_t *rk = msetw->msetw_rkb->rkb_rk;
+rd_kafka_msgset_writer_write_msg_payload(rd_kafka_msgset_writer_t *msetw,
+                                         const rd_kafka_msg_t *rkm,
+                                         void (*free_cb)(void *)) {
+        const rd_kafka_t *rk  = msetw->msetw_rkb->rkb_rk;
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
 
         /* If payload is below the copy limit and there is still
@@ -560,8 +545,7 @@ rd_kafka_msgset_writer_write_msg_payload (rd_kafka_msgset_writer_t *msetw,
          * otherwise we push a reference to the memory. */
         if (rkm->rkm_len <= (size_t)rk->rk_conf.msg_copy_max_size &&
             rd_buf_write_remains(&rkbuf->rkbuf_buf) > rkm->rkm_len) {
-                rd_kafka_buf_write(rkbuf,
-                                   rkm->rkm_payload, rkm->rkm_len);
+                rd_kafka_buf_write(rkbuf, rkm->rkm_payload, rkm->rkm_len);
                 if (free_cb)
                         free_cb(rkm->rkm_payload);
         } else
@@ -577,8 +561,8 @@ rd_kafka_msgset_writer_write_msg_payload (rd_kafka_msgset_writer_t *msetw,
  * @returns the number of bytes written to msetw->msetw_rkbuf
  */
 static size_t
-rd_kafka_msgset_writer_write_msg_headers (rd_kafka_msgset_writer_t *msetw,
-                                          const rd_kafka_headers_t *hdrs) {
+rd_kafka_msgset_writer_write_msg_headers(rd_kafka_msgset_writer_t *msetw,
+                                         const rd_kafka_headers_t *hdrs) {
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
         const rd_kafka_header_t *hdr;
         int i;
@@ -587,13 +571,12 @@ rd_kafka_msgset_writer_write_msg_headers (rd_kafka_msgset_writer_t *msetw,
 
         RD_LIST_FOREACH(hdr, &hdrs->rkhdrs_list, i) {
                 rd_kafka_buf_write_varint(rkbuf, hdr->rkhdr_name_size);
-                rd_kafka_buf_write(rkbuf,
-                                   hdr->rkhdr_name, hdr->rkhdr_name_size);
-                rd_kafka_buf_write_varint(rkbuf,
-                                          hdr->rkhdr_value ?
-                                          (int64_t)hdr->rkhdr_value_size : -1);
-                rd_kafka_buf_write(rkbuf,
-                                   hdr->rkhdr_value,
+                rd_kafka_buf_write(rkbuf, hdr->rkhdr_name,
+                                   hdr->rkhdr_name_size);
+                rd_kafka_buf_write_varint(
+                    rkbuf,
+                    hdr->rkhdr_value ? (int64_t)hdr->rkhdr_value_size : -1);
+                rd_kafka_buf_write(rkbuf, hdr->rkhdr_value,
                                    hdr->rkhdr_value_size);
         }
 
@@ -610,11 +593,11 @@ rd_kafka_msgset_writer_write_msg_headers (rd_kafka_msgset_writer_t *msetw,
  * @returns the number of bytes written.
  */
 static size_t
-rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
-                                       rd_kafka_msg_t *rkm,
-                                       int64_t Offset,
-                                       int8_t MsgAttributes,
-                                       void (*free_cb)(void *)) {
+rd_kafka_msgset_writer_write_msg_v0_1(rd_kafka_msgset_writer_t *msetw,
+                                      rd_kafka_msg_t *rkm,
+                                      int64_t Offset,
+                                      int8_t MsgAttributes,
+                                      void (*free_cb)(void *)) {
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
         size_t MessageSize;
         size_t of_Crc;
@@ -627,10 +610,9 @@ rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
         rd_kafka_buf_write_i64(rkbuf, Offset);
 
         /* MessageSize */
-        MessageSize =
-                4 + 1 + 1 + /* Crc+MagicByte+Attributes */
-                4 /* KeyLength */ + rkm->rkm_key_len +
-                4 /* ValueLength */ + rkm->rkm_len;
+        MessageSize = 4 + 1 + 1 + /* Crc+MagicByte+Attributes */
+                      4 /* KeyLength */ + rkm->rkm_key_len +
+                      4 /* ValueLength */ + rkm->rkm_len;
 
         if (msetw->msetw_MsgVersion == 1)
                 MessageSize += 8; /* Timestamp i64 */
@@ -672,7 +654,7 @@ rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
 
 
         /* Return written message size */
-        return 8/*Offset*/ + 4/*MessageSize*/ + MessageSize;
+        return 8 /*Offset*/ + 4 /*MessageSize*/ + MessageSize;
 }
 
 /**
@@ -680,13 +662,13 @@ rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
  * @returns the number of bytes written.
  */
 static size_t
-rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
-                                     rd_kafka_msg_t *rkm,
-                                     int64_t Offset,
-                                     int8_t MsgAttributes,
-                                     void (*free_cb)(void *)) {
+rd_kafka_msgset_writer_write_msg_v2(rd_kafka_msgset_writer_t *msetw,
+                                    rd_kafka_msg_t *rkm,
+                                    int64_t Offset,
+                                    int8_t MsgAttributes,
+                                    void (*free_cb)(void *)) {
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
-        size_t MessageSize = 0;
+        size_t MessageSize    = 0;
         char varint_Length[RD_UVARINT_ENC_SIZEOF(int32_t)];
         char varint_TimestampDelta[RD_UVARINT_ENC_SIZEOF(int64_t)];
         char varint_OffsetDelta[RD_UVARINT_ENC_SIZEOF(int64_t)];
@@ -699,7 +681,7 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         size_t sz_KeyLen;
         size_t sz_ValueLen;
         size_t sz_HeaderCount;
-        int    HeaderCount = 0;
+        int HeaderCount   = 0;
         size_t HeaderSize = 0;
 
         if (rkm->rkm_headers) {
@@ -712,34 +694,27 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
          * correct varint encoded width. */
 
         sz_TimestampDelta = rd_uvarint_enc_i64(
-                varint_TimestampDelta, sizeof(varint_TimestampDelta),
-                rkm->rkm_timestamp - msetw->msetw_firstmsg.timestamp);
-        sz_OffsetDelta = rd_uvarint_enc_i64(
-                varint_OffsetDelta, sizeof(varint_OffsetDelta), Offset);
-        sz_KeyLen = rd_uvarint_enc_i32(
-                varint_KeyLen, sizeof(varint_KeyLen),
-                rkm->rkm_key ? (int32_t)rkm->rkm_key_len :
-                (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
+            varint_TimestampDelta, sizeof(varint_TimestampDelta),
+            rkm->rkm_timestamp - msetw->msetw_firstmsg.timestamp);
+        sz_OffsetDelta = rd_uvarint_enc_i64(varint_OffsetDelta,
+                                            sizeof(varint_OffsetDelta), Offset);
+        sz_KeyLen   = rd_uvarint_enc_i32(varint_KeyLen, sizeof(varint_KeyLen),
+                                       rkm->rkm_key
+                                           ? (int32_t)rkm->rkm_key_len
+                                           : (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
         sz_ValueLen = rd_uvarint_enc_i32(
-                varint_ValueLen, sizeof(varint_ValueLen),
-                rkm->rkm_payload ? (int32_t)rkm->rkm_len :
-                (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
-        sz_HeaderCount = rd_uvarint_enc_i32(
-                varint_HeaderCount, sizeof(varint_HeaderCount),
-                (int32_t)HeaderCount);
+            varint_ValueLen, sizeof(varint_ValueLen),
+            rkm->rkm_payload ? (int32_t)rkm->rkm_len
+                             : (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
+        sz_HeaderCount =
+            rd_uvarint_enc_i32(varint_HeaderCount, sizeof(varint_HeaderCount),
+                               (int32_t)HeaderCount);
 
         /* Calculate MessageSize without length of Length (added later)
          * to store it in Length. */
-        MessageSize =
-                1 /* MsgAttributes */ +
-                sz_TimestampDelta +
-                sz_OffsetDelta +
-                sz_KeyLen +
-                rkm->rkm_key_len +
-                sz_ValueLen +
-                rkm->rkm_len +
-                sz_HeaderCount +
-                HeaderSize;
+        MessageSize = 1 /* MsgAttributes */ + sz_TimestampDelta +
+                      sz_OffsetDelta + sz_KeyLen + rkm->rkm_key_len +
+                      sz_ValueLen + rkm->rkm_len + sz_HeaderCount + HeaderSize;
 
         /* Length */
         sz_Length = rd_uvarint_enc_i64(varint_Length, sizeof(varint_Length),
@@ -788,19 +763,17 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
  * @brief Write message to messageset buffer.
  * @returns the number of bytes written.
  */
-static size_t
-rd_kafka_msgset_writer_write_msg (rd_kafka_msgset_writer_t *msetw,
-                                  rd_kafka_msg_t *rkm,
-                                  int64_t Offset, int8_t MsgAttributes,
-                                  void (*free_cb)(void *)) {
+static size_t rd_kafka_msgset_writer_write_msg(rd_kafka_msgset_writer_t *msetw,
+                                               rd_kafka_msg_t *rkm,
+                                               int64_t Offset,
+                                               int8_t MsgAttributes,
+                                               void (*free_cb)(void *)) {
         size_t outlen;
-        size_t (*writer[]) (rd_kafka_msgset_writer_t *,
-                            rd_kafka_msg_t *, int64_t, int8_t,
-                            void (*)(void *)) = {
-                [0] = rd_kafka_msgset_writer_write_msg_v0_1,
-                [1] = rd_kafka_msgset_writer_write_msg_v0_1,
-                [2] = rd_kafka_msgset_writer_write_msg_v2
-        };
+        size_t (*writer[])(rd_kafka_msgset_writer_t *, rd_kafka_msg_t *,
+                           int64_t, int8_t, void (*)(void *)) = {
+            [0] = rd_kafka_msgset_writer_write_msg_v0_1,
+            [1] = rd_kafka_msgset_writer_write_msg_v0_1,
+            [2] = rd_kafka_msgset_writer_write_msg_v2};
         size_t actual_written;
         size_t pre_pos;
 
@@ -809,18 +782,16 @@ rd_kafka_msgset_writer_write_msg (rd_kafka_msgset_writer_t *msetw,
 
         pre_pos = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf);
 
-        outlen = writer[msetw->msetw_MsgVersion](msetw, rkm,
-                                                 Offset, MsgAttributes,
-                                                 free_cb);
+        outlen = writer[msetw->msetw_MsgVersion](msetw, rkm, Offset,
+                                                 MsgAttributes, free_cb);
 
-        actual_written = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) -
-                pre_pos;
+        actual_written =
+            rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) - pre_pos;
         rd_assert(outlen <=
-                   rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
+                  rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
         rd_assert(outlen == actual_written);
 
         return outlen;
-
 }
 
 /**
@@ -831,26 +802,24 @@ rd_kafka_msgset_writer_write_msg (rd_kafka_msgset_writer_t *msetw,
  *
  * @returns 1 on success or 0 on error.
  */
-static int
-rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
-                                   rd_kafka_msgq_t *rkmq) {
+static int rd_kafka_msgset_writer_write_msgq(rd_kafka_msgset_writer_t *msetw,
+                                             rd_kafka_msgq_t *rkmq) {
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
-        rd_kafka_broker_t *rkb = msetw->msetw_rkb;
-        size_t len = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf);
-        size_t max_msg_size = RD_MIN((size_t)msetw->msetw_rkb->rkb_rk->
-                                     rk_conf.max_msg_size,
-                                     (size_t)msetw->msetw_rkb->rkb_rk->
-                                     rk_conf.batch_size);
+        rd_kafka_broker_t *rkb  = msetw->msetw_rkb;
+        size_t len              = rd_buf_len(&msetw->msetw_rkbuf->rkbuf_buf);
+        size_t max_msg_size =
+            RD_MIN((size_t)msetw->msetw_rkb->rkb_rk->rk_conf.max_msg_size,
+                   (size_t)msetw->msetw_rkb->rkb_rk->rk_conf.batch_size);
         rd_ts_t int_latency_base;
         rd_ts_t MaxTimestamp = 0;
         rd_kafka_msg_t *rkm;
-        int msgcnt = 0;
+        int msgcnt        = 0;
         const rd_ts_t now = rd_clock();
 
         /* Internal latency calculation base.
          * Uses rkm_ts_timeout which is enqueue time + timeout */
-        int_latency_base = now +
-                ((rd_ts_t) rktp->rktp_rkt->rkt_conf.message_timeout_ms * 1000);
+        int_latency_base =
+            now + ((rd_ts_t)rktp->rktp_rkt->rkt_conf.message_timeout_ms * 1000);
 
         /* Acquire BaseTimestamp from first message. */
         rkm = TAILQ_FIRST(&rkmq->rkmq_msgs);
@@ -866,15 +835,16 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
         do {
                 if (unlikely(msetw->msetw_batch->last_msgid &&
                              msetw->msetw_batch->last_msgid <
-                             rkm->rkm_u.producer.msgid)) {
+                                 rkm->rkm_u.producer.msgid)) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
-                                   "%.*s [%"PRId32"]: "
+                                   "%.*s [%" PRId32
+                                   "]: "
                                    "Reconstructed MessageSet "
-                                   "(%d message(s), %"PRIusz" bytes, "
-                                   "MsgIds %"PRIu64"..%"PRIu64")",
+                                   "(%d message(s), %" PRIusz
+                                   " bytes, "
+                                   "MsgIds %" PRIu64 "..%" PRIu64 ")",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   msgcnt, len,
+                                   rktp->rktp_partition, msgcnt, len,
                                    msetw->msetw_batch->first_msgid,
                                    msetw->msetw_batch->last_msgid);
                         break;
@@ -888,18 +858,18 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                  * overshoot the message.max.bytes limit by one message to
                  * avoid getting stuck here.
                  * The actual messageset size is enforced by the broker. */
-                if (unlikely(msgcnt == msetw->msetw_msgcntmax ||
-                             (msgcnt > 0 &&
-                              len + rd_kafka_msg_wire_size(rkm, msetw->
-                                                           msetw_MsgVersion) >
-                              max_msg_size))) {
+                if (unlikely(
+                        msgcnt == msetw->msetw_msgcntmax ||
+                        (msgcnt > 0 && len + rd_kafka_msg_wire_size(
+                                                 rkm, msetw->msetw_MsgVersion) >
+                                           max_msg_size))) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
-                                   "%.*s [%"PRId32"]: "
+                                   "%.*s [%" PRId32
+                                   "]: "
                                    "No more space in current MessageSet "
-                                   "(%i message(s), %"PRIusz" bytes)",
+                                   "(%i message(s), %" PRIusz " bytes)",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   msgcnt, len);
+                                   rktp->rktp_partition, msgcnt, len);
                         break;
                 }
 
@@ -951,17 +921,17 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                 if (unlikely(lastmsg->rkm_u.producer.msgid !=
                              msetw->msetw_batch->last_msgid)) {
                         rd_kafka_set_fatal_error(
-                                rkb->rkb_rk,
-                                RD_KAFKA_RESP_ERR__INCONSISTENT,
-                                "Unable to reconstruct MessageSet "
-                                "(currently with %d message(s)) "
-                                "with msgid range %"PRIu64"..%"PRIu64": "
-                                "last message added has msgid %"PRIu64": "
-                                "unable to guarantee consistency",
-                                msgcnt,
-                                msetw->msetw_batch->first_msgid,
-                                msetw->msetw_batch->last_msgid,
-                                lastmsg->rkm_u.producer.msgid);
+                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__INCONSISTENT,
+                            "Unable to reconstruct MessageSet "
+                            "(currently with %d message(s)) "
+                            "with msgid range %" PRIu64 "..%" PRIu64
+                            ": "
+                            "last message added has msgid %" PRIu64
+                            ": "
+                            "unable to guarantee consistency",
+                            msgcnt, msetw->msetw_batch->first_msgid,
+                            msetw->msetw_batch->last_msgid,
+                            lastmsg->rkm_u.producer.msgid);
                         return 0;
                 }
         }
@@ -973,12 +943,11 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
 /**
  * @brief Compress messageset using gzip/zlib
  */
-static int
-rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
-                                      rd_slice_t *slice,
-                                      struct iovec *ciov) {
+static int rd_kafka_msgset_writer_compress_gzip(rd_kafka_msgset_writer_t *msetw,
+                                                rd_slice_t *slice,
+                                                struct iovec *ciov) {
 
-        rd_kafka_broker_t *rkb = msetw->msetw_rkb;
+        rd_kafka_broker_t *rkb  = msetw->msetw_rkb;
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         z_stream strm;
         size_t len = rd_slice_remains(slice);
@@ -986,46 +955,47 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
         size_t rlen;
         int r;
         int comp_level =
-                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
+            msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
 
         memset(&strm, 0, sizeof(strm));
-        r = deflateInit2(&strm, comp_level,
-                         Z_DEFLATED, 15+16,
-                         8, Z_DEFAULT_STRATEGY);
+        r = deflateInit2(&strm, comp_level, Z_DEFLATED, 15 + 16, 8,
+                         Z_DEFAULT_STRATEGY);
         if (r != Z_OK) {
                 rd_rkb_log(rkb, LOG_ERR, "GZIP",
                            "Failed to initialize gzip for "
-                           "compressing %"PRIusz" bytes in "
-                           "topic %.*s [%"PRId32"]: %s (%i): "
+                           "compressing %" PRIusz
+                           " bytes in "
+                           "topic %.*s [%" PRId32
+                           "]: %s (%i): "
                            "sending uncompressed",
-                           len,
-                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition,
-                           strm.msg ? strm.msg : "", r);
+                           len, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, strm.msg ? strm.msg : "", r);
                 return -1;
         }
 
         /* Calculate maximum compressed size and
          * allocate an output buffer accordingly, being
          * prefixed with the Message header. */
-        ciov->iov_len = deflateBound(&strm, (uLong)rd_slice_remains(slice));
+        ciov->iov_len  = deflateBound(&strm, (uLong)rd_slice_remains(slice));
         ciov->iov_base = rd_malloc(ciov->iov_len);
 
         strm.next_out  = (void *)ciov->iov_base;
-        strm.avail_out =   (uInt)ciov->iov_len;
+        strm.avail_out = (uInt)ciov->iov_len;
 
         /* Iterate through each segment and compress it. */
         while ((rlen = rd_slice_reader(slice, &p))) {
 
                 strm.next_in  = (void *)p;
-                strm.avail_in =   (uInt)rlen;
+                strm.avail_in = (uInt)rlen;
 
                 /* Compress message */
                 if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
                         rd_rkb_log(rkb, LOG_ERR, "GZIP",
                                    "Failed to gzip-compress "
-                                   "%"PRIusz" bytes (%"PRIusz" total) for "
-                                   "topic %.*s [%"PRId32"]: "
+                                   "%" PRIusz " bytes (%" PRIusz
+                                   " total) for "
+                                   "topic %.*s [%" PRId32
+                                   "]: "
                                    "%s (%i): "
                                    "sending uncompressed",
                                    rlen, len,
@@ -1044,14 +1014,14 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
         if ((r = deflate(&strm, Z_FINISH)) != Z_STREAM_END) {
                 rd_rkb_log(rkb, LOG_ERR, "GZIP",
                            "Failed to finish gzip compression "
-                           " of %"PRIusz" bytes for "
-                           "topic %.*s [%"PRId32"]: "
+                           " of %" PRIusz
+                           " bytes for "
+                           "topic %.*s [%" PRId32
+                           "]: "
                            "%s (%i): "
                            "sending uncompressed",
-                           len,
-                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition,
-                           strm.msg ? strm.msg : "", r);
+                           len, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, strm.msg ? strm.msg : "", r);
                 deflateEnd(&strm);
                 rd_free(ciov->iov_base);
                 return -1;
@@ -1072,9 +1042,10 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
  * @brief Compress messageset using Snappy
  */
 static int
-rd_kafka_msgset_writer_compress_snappy (rd_kafka_msgset_writer_t *msetw,
-                                        rd_slice_t *slice, struct iovec *ciov) {
-        rd_kafka_broker_t *rkb = msetw->msetw_rkb;
+rd_kafka_msgset_writer_compress_snappy(rd_kafka_msgset_writer_t *msetw,
+                                       rd_slice_t *slice,
+                                       struct iovec *ciov) {
+        rd_kafka_broker_t *rkb  = msetw->msetw_rkb;
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         struct iovec *iov;
         size_t iov_max, iov_cnt;
@@ -1083,15 +1054,15 @@ rd_kafka_msgset_writer_compress_snappy (rd_kafka_msgset_writer_t *msetw,
         int r;
 
         /* Initialize snappy compression environment */
-        rd_kafka_snappy_init_env_sg(&senv, 1/*iov enable*/);
+        rd_kafka_snappy_init_env_sg(&senv, 1 /*iov enable*/);
 
         /* Calculate maximum compressed size and
          * allocate an output buffer accordingly. */
-        ciov->iov_len = rd_kafka_snappy_max_compressed_length(len);
+        ciov->iov_len  = rd_kafka_snappy_max_compressed_length(len);
         ciov->iov_base = rd_malloc(ciov->iov_len);
 
         iov_max = slice->buf->rbuf_segment_cnt;
-        iov = rd_alloca(sizeof(*iov) * iov_max);
+        iov     = rd_alloca(sizeof(*iov) * iov_max);
 
         rd_slice_get_iov(slice, iov, &iov_cnt, iov_max, len);
 
@@ -1100,12 +1071,13 @@ rd_kafka_msgset_writer_compress_snappy (rd_kafka_msgset_writer_t *msetw,
                                               ciov)) != 0) {
                 rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
                            "Failed to snappy-compress "
-                           "%"PRIusz" bytes for "
-                           "topic %.*s [%"PRId32"]: %s: "
+                           "%" PRIusz
+                           " bytes for "
+                           "topic %.*s [%" PRId32
+                           "]: %s: "
                            "sending uncompressed",
                            len, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition,
-                           rd_strerror(-r));
+                           rktp->rktp_partition, rd_strerror(-r));
                 rd_free(ciov->iov_base);
                 return -1;
         }
@@ -1120,17 +1092,17 @@ rd_kafka_msgset_writer_compress_snappy (rd_kafka_msgset_writer_t *msetw,
 /**
  * @brief Compress messageset using LZ4F
  */
-static int
-rd_kafka_msgset_writer_compress_lz4 (rd_kafka_msgset_writer_t *msetw,
-                                     rd_slice_t *slice, struct iovec *ciov) {
+static int rd_kafka_msgset_writer_compress_lz4(rd_kafka_msgset_writer_t *msetw,
+                                               rd_slice_t *slice,
+                                               struct iovec *ciov) {
         rd_kafka_resp_err_t err;
         int comp_level =
-                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
+            msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
         err = rd_kafka_lz4_compress(msetw->msetw_rkb,
                                     /* Correct or incorrect HC */
                                     msetw->msetw_MsgVersion >= 1 ? 1 : 0,
-                                    comp_level,
-                                    slice, &ciov->iov_base, &ciov->iov_len);
+                                    comp_level, slice, &ciov->iov_base,
+                                    &ciov->iov_len);
         return (err ? -1 : 0);
 }
 
@@ -1138,15 +1110,14 @@ rd_kafka_msgset_writer_compress_lz4 (rd_kafka_msgset_writer_t *msetw,
 /**
  * @brief Compress messageset using ZSTD
  */
-static int
-rd_kafka_msgset_writer_compress_zstd (rd_kafka_msgset_writer_t *msetw,
-                                     rd_slice_t *slice, struct iovec *ciov) {
+static int rd_kafka_msgset_writer_compress_zstd(rd_kafka_msgset_writer_t *msetw,
+                                                rd_slice_t *slice,
+                                                struct iovec *ciov) {
         rd_kafka_resp_err_t err;
         int comp_level =
-                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
-        err = rd_kafka_zstd_compress(msetw->msetw_rkb,
-                                    comp_level,
-                                    slice, &ciov->iov_base, &ciov->iov_len);
+            msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
+        err = rd_kafka_zstd_compress(msetw->msetw_rkb, comp_level, slice,
+                                     &ciov->iov_base, &ciov->iov_len);
         return (err ? -1 : 0);
 }
 #endif
@@ -1159,14 +1130,13 @@ rd_kafka_msgset_writer_compress_zstd (rd_kafka_msgset_writer_t *msetw,
  * @remark Compression failures are not critical, we'll just send the
  *         the messageset uncompressed.
  */
-static int
-rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
-                                 size_t *outlenp) {
+static int rd_kafka_msgset_writer_compress(rd_kafka_msgset_writer_t *msetw,
+                                           size_t *outlenp) {
         rd_buf_t *rbuf = &msetw->msetw_rkbuf->rkbuf_buf;
         rd_slice_t slice;
-        size_t len = *outlenp;
+        size_t len        = *outlenp;
         struct iovec ciov = RD_ZERO_INIT; /* Compressed output buffer */
-        int r = -1;
+        int r             = -1;
         size_t outlen;
 
         rd_assert(rd_buf_len(rbuf) >= msetw->msetw_firstmsg.of + len);
@@ -1175,8 +1145,7 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
         r = rd_slice_init(&slice, rbuf, msetw->msetw_firstmsg.of, len);
         rd_assert(r == 0 || !*"invalid firstmsg position");
 
-        switch (msetw->msetw_compression)
-        {
+        switch (msetw->msetw_compression) {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
                 r = rd_kafka_msgset_writer_compress_gzip(msetw, &slice, &ciov);
@@ -1238,15 +1207,13 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
         } else {
                 /* Older MessageSets envelope/wrap the compressed MessageSet
                  * in an outer Message. */
-                rd_kafka_msg_t rkm = {
-                        .rkm_len       = ciov.iov_len,
-                        .rkm_payload   = ciov.iov_base,
-                        .rkm_timestamp = msetw->msetw_firstmsg.timestamp
-                };
-                outlen = rd_kafka_msgset_writer_write_msg(
-                        msetw, &rkm, 0,
-                        msetw->msetw_compression,
-                        rd_free/*free for ciov.iov_base*/);
+                rd_kafka_msg_t rkm = {.rkm_len     = ciov.iov_len,
+                                      .rkm_payload = ciov.iov_base,
+                                      .rkm_timestamp =
+                                          msetw->msetw_firstmsg.timestamp};
+                outlen             = rd_kafka_msgset_writer_write_msg(
+                    msetw, &rkm, 0, msetw->msetw_compression,
+                    rd_free /*free for ciov.iov_base*/);
         }
 
         *outlenp = outlen;
@@ -1256,23 +1223,22 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
 
 
 
-
 /**
  * @brief Calculate MessageSet v2 CRC (CRC32C) when messageset is complete.
  */
 static void
-rd_kafka_msgset_writer_calc_crc_v2 (rd_kafka_msgset_writer_t *msetw) {
+rd_kafka_msgset_writer_calc_crc_v2(rd_kafka_msgset_writer_t *msetw) {
         int32_t crc;
         rd_slice_t slice;
         int r;
 
         r = rd_slice_init(&slice, &msetw->msetw_rkbuf->rkbuf_buf,
-                          msetw->msetw_of_CRC+4,
+                          msetw->msetw_of_CRC + 4,
                           rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) -
-                          msetw->msetw_of_CRC-4);
-       rd_assert(!r && *"slice_init failed");
+                              msetw->msetw_of_CRC - 4);
+        rd_assert(!r && *"slice_init failed");
 
-       /* CRC32C calculation */
+        /* CRC32C calculation */
         crc = rd_slice_crc32c(&slice);
 
         /* Update CRC at MessageSet v2 CRC offset */
@@ -1282,56 +1248,56 @@ rd_kafka_msgset_writer_calc_crc_v2 (rd_kafka_msgset_writer_t *msetw) {
 /**
  * @brief Finalize MessageSet v2 header fields.
  */
-static void
-rd_kafka_msgset_writer_finalize_MessageSet_v2_header (
-        rd_kafka_msgset_writer_t *msetw) {
+static void rd_kafka_msgset_writer_finalize_MessageSet_v2_header(
+    rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
-        int msgcnt = rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq);
+        int msgcnt            = rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq);
 
         rd_kafka_assert(NULL, msgcnt > 0);
         rd_kafka_assert(NULL, msetw->msetw_ApiVersion >= 3);
 
-        msetw->msetw_MessageSetSize = RD_KAFKAP_MSGSET_V2_SIZE +
-                msetw->msetw_messages_len;
+        msetw->msetw_MessageSetSize =
+            RD_KAFKAP_MSGSET_V2_SIZE + msetw->msetw_messages_len;
 
         /* MessageSet.Length is the same as
          * MessageSetSize minus field widths for FirstOffset+Length */
-        rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_Length,
-                                (int32_t)msetw->msetw_MessageSetSize - (8+4));
+        rd_kafka_buf_update_i32(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_Length,
+            (int32_t)msetw->msetw_MessageSetSize - (8 + 4));
 
         msetw->msetw_Attributes |= RD_KAFKA_MSG_ATTR_CREATE_TIME;
 
         if (rd_kafka_is_transactional(msetw->msetw_rkb->rkb_rk))
                 msetw->msetw_Attributes |=
-                        RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL;
+                    RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL;
 
-        rd_kafka_buf_update_i16(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_Attributes,
-                                msetw->msetw_Attributes);
+        rd_kafka_buf_update_i16(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_Attributes,
+            msetw->msetw_Attributes);
 
-        rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta,
-                                msgcnt-1);
+        rd_kafka_buf_update_i32(rkbuf,
+                                msetw->msetw_of_start +
+                                    RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta,
+                                msgcnt - 1);
 
-        rd_kafka_buf_update_i64(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp,
-                                msetw->msetw_firstmsg.timestamp);
+        rd_kafka_buf_update_i64(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp,
+            msetw->msetw_firstmsg.timestamp);
 
-        rd_kafka_buf_update_i64(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp,
-                                msetw->msetw_MaxTimestamp);
+        rd_kafka_buf_update_i64(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp,
+            msetw->msetw_MaxTimestamp);
 
-        rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_BaseSequence,
-                                msetw->msetw_batch->first_seq);
+        rd_kafka_buf_update_i32(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_BaseSequence,
+            msetw->msetw_batch->first_seq);
 
-        rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
-                                RD_KAFKAP_MSGSET_V2_OF_RecordCount, msgcnt);
+        rd_kafka_buf_update_i32(
+            rkbuf, msetw->msetw_of_start + RD_KAFKAP_MSGSET_V2_OF_RecordCount,
+            msgcnt);
 
         rd_kafka_msgset_writer_calc_crc_v2(msetw);
 }
-
 
 
 
@@ -1339,20 +1305,19 @@ rd_kafka_msgset_writer_finalize_MessageSet_v2_header (
  * @brief Finalize the MessageSet header, if applicable.
  */
 static void
-rd_kafka_msgset_writer_finalize_MessageSet (rd_kafka_msgset_writer_t *msetw) {
+rd_kafka_msgset_writer_finalize_MessageSet(rd_kafka_msgset_writer_t *msetw) {
         rd_dassert(msetw->msetw_messages_len > 0);
 
         if (msetw->msetw_MsgVersion == 2)
                 rd_kafka_msgset_writer_finalize_MessageSet_v2_header(msetw);
         else
-                msetw->msetw_MessageSetSize = RD_KAFKAP_MSGSET_V0_SIZE +
-                        msetw->msetw_messages_len;
+                msetw->msetw_MessageSetSize =
+                    RD_KAFKAP_MSGSET_V0_SIZE + msetw->msetw_messages_len;
 
         /* Update MessageSetSize */
         rd_kafka_buf_update_i32(msetw->msetw_rkbuf,
                                 msetw->msetw_of_MessageSetSize,
                                 (int32_t)msetw->msetw_MessageSetSize);
-
 }
 
 
@@ -1371,28 +1336,29 @@ rd_kafka_msgset_writer_finalize_MessageSet (rd_kafka_msgset_writer_t *msetw) {
  *          in messageset.
  */
 static rd_kafka_buf_t *
-rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
-                                 size_t *MessageSetSizep) {
-        rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
+rd_kafka_msgset_writer_finalize(rd_kafka_msgset_writer_t *msetw,
+                                size_t *MessageSetSizep) {
+        rd_kafka_buf_t *rkbuf   = msetw->msetw_rkbuf;
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         size_t len;
         int cnt;
 
         /* No messages added, bail out early. */
-        if (unlikely((cnt =
-                      rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq)) == 0)) {
+        if (unlikely((cnt = rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq)) ==
+                     0)) {
                 rd_kafka_buf_destroy(rkbuf);
                 return NULL;
         }
 
         /* Total size of messages */
         len = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) -
-                msetw->msetw_firstmsg.of;
+              msetw->msetw_firstmsg.of;
         rd_assert(len > 0);
         rd_assert(len <= (size_t)rktp->rktp_rkt->rkt_rk->rk_conf.max_msg_size);
 
         rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
-        rd_atomic64_add(&rktp->rktp_c.tx_msg_bytes, msetw->msetw_messages_kvlen);
+        rd_atomic64_add(&rktp->rktp_c.tx_msg_bytes,
+                        msetw->msetw_messages_kvlen);
 
         /* Idempotent Producer:
          * Store request's PID for matching on response
@@ -1415,19 +1381,21 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
         *MessageSetSizep = msetw->msetw_MessageSetSize;
 
         rd_rkb_dbg(msetw->msetw_rkb, MSG, "PRODUCE",
-                   "%s [%"PRId32"]: "
-                   "Produce MessageSet with %i message(s) (%"PRIusz" bytes, "
-                   "ApiVersion %d, MsgVersion %d, MsgId %"PRIu64", "
-                   "BaseSeq %"PRId32", %s, %s)",
-                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                   cnt, msetw->msetw_MessageSetSize,
-                   msetw->msetw_ApiVersion, msetw->msetw_MsgVersion,
-                   msetw->msetw_batch->first_msgid,
+                   "%s [%" PRId32
+                   "]: "
+                   "Produce MessageSet with %i message(s) (%" PRIusz
+                   " bytes, "
+                   "ApiVersion %d, MsgVersion %d, MsgId %" PRIu64
+                   ", "
+                   "BaseSeq %" PRId32 ", %s, %s)",
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition, cnt,
+                   msetw->msetw_MessageSetSize, msetw->msetw_ApiVersion,
+                   msetw->msetw_MsgVersion, msetw->msetw_batch->first_msgid,
                    msetw->msetw_batch->first_seq,
                    rd_kafka_pid2str(msetw->msetw_pid),
-                   msetw->msetw_compression ?
-                   rd_kafka_compression2str(msetw->msetw_compression) :
-                   "uncompressed");
+                   msetw->msetw_compression
+                       ? rd_kafka_compression2str(msetw->msetw_compression)
+                       : "uncompressed");
 
         rd_kafka_msgq_verify_order(rktp, &msetw->msetw_batch->msgq,
                                    msetw->msetw_batch->first_msgid, rd_false);
@@ -1452,26 +1420,25 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
  *
  * @locality broker thread
  */
-rd_kafka_buf_t *
-rd_kafka_msgset_create_ProduceRequest (rd_kafka_broker_t *rkb,
-                                       rd_kafka_toppar_t *rktp,
-                                       rd_kafka_msgq_t *rkmq,
-                                       const rd_kafka_pid_t pid,
-                                       uint64_t epoch_base_msgid,
-                                       size_t *MessageSetSizep) {
+rd_kafka_buf_t *rd_kafka_msgset_create_ProduceRequest(rd_kafka_broker_t *rkb,
+                                                      rd_kafka_toppar_t *rktp,
+                                                      rd_kafka_msgq_t *rkmq,
+                                                      const rd_kafka_pid_t pid,
+                                                      uint64_t epoch_base_msgid,
+                                                      size_t *MessageSetSizep) {
 
         rd_kafka_msgset_writer_t msetw;
 
-        if (rd_kafka_msgset_writer_init(&msetw, rkb, rktp, rkmq,
-                                        pid, epoch_base_msgid) <= 0)
+        if (rd_kafka_msgset_writer_init(&msetw, rkb, rktp, rkmq, pid,
+                                        epoch_base_msgid) <= 0)
                 return NULL;
 
         if (!rd_kafka_msgset_writer_write_msgq(&msetw, msetw.msetw_msgq)) {
                 /* Error while writing messages to MessageSet,
                  * move all messages back on the xmit queue. */
                 rd_kafka_msgq_insert_msgq(
-                        rkmq, &msetw.msetw_batch->msgq,
-                        rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+                    rkmq, &msetw.msetw_batch->msgq,
+                    rktp->rktp_rkt->rkt_conf.msg_order_cmp);
         }
 
         return rd_kafka_msgset_writer_finalize(&msetw, MessageSetSizep);

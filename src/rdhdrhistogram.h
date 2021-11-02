@@ -32,33 +32,33 @@
 
 
 typedef struct rd_hdr_histogram_s {
-        int64_t  lowestTrackableValue;
-        int64_t  highestTrackableValue;
-        int64_t  unitMagnitude;
-        int64_t  significantFigures;
-        int32_t  subBucketHalfCountMagnitude;
-        int32_t  subBucketHalfCount;
-        int64_t  subBucketMask;
-        int32_t  subBucketCount;
-        int32_t  bucketCount;
-        int32_t  countsLen;
-        int64_t  totalCount;
+        int64_t lowestTrackableValue;
+        int64_t highestTrackableValue;
+        int64_t unitMagnitude;
+        int64_t significantFigures;
+        int32_t subBucketHalfCountMagnitude;
+        int32_t subBucketHalfCount;
+        int64_t subBucketMask;
+        int32_t subBucketCount;
+        int32_t bucketCount;
+        int32_t countsLen;
+        int64_t totalCount;
         int64_t *counts;
-        int64_t  outOfRangeCount;   /**< Number of rejected records due to
-                                     *   value being out of range. */
-        int64_t  lowestOutOfRange;  /**< Lowest value that was out of range.
-                                     *   Initialized to lowestTrackableValue */
-        int64_t  highestOutOfRange; /**< Highest value that was out of range.
-                                     *   Initialized to highestTrackableValue */
-        int32_t  allocatedSize;     /**< Allocated size of histogram, for
-                                     *   sigfigs tuning. */
+        int64_t outOfRangeCount;   /**< Number of rejected records due to
+                                    *   value being out of range. */
+        int64_t lowestOutOfRange;  /**< Lowest value that was out of range.
+                                    *   Initialized to lowestTrackableValue */
+        int64_t highestOutOfRange; /**< Highest value that was out of range.
+                                    *   Initialized to highestTrackableValue */
+        int32_t allocatedSize;     /**< Allocated size of histogram, for
+                                    *   sigfigs tuning. */
 } rd_hdr_histogram_t;
 
 
 #endif /* !_RDHDR_HISTOGRAM_H_ */
 
 
-void rd_hdr_histogram_destroy (rd_hdr_histogram_t *hdr);
+void rd_hdr_histogram_destroy(rd_hdr_histogram_t *hdr);
 
 /**
  * @brief Create a new Hdr_Histogram.
@@ -69,18 +69,19 @@ void rd_hdr_histogram_destroy (rd_hdr_histogram_t *hdr);
  *
  * @sa rd_hdr_histogram_destroy()
  */
-rd_hdr_histogram_t *rd_hdr_histogram_new (int64_t minValue, int64_t maxValue,
-                                          int significantFigures);
+rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
+                                         int64_t maxValue,
+                                         int significantFigures);
 
-void rd_hdr_histogram_reset (rd_hdr_histogram_t *hdr);
+void rd_hdr_histogram_reset(rd_hdr_histogram_t *hdr);
 
-int rd_hdr_histogram_record (rd_hdr_histogram_t *hdr, int64_t v);
+int rd_hdr_histogram_record(rd_hdr_histogram_t *hdr, int64_t v);
 
-double rd_hdr_histogram_stddev (rd_hdr_histogram_t *hdr);
-double rd_hdr_histogram_mean (const rd_hdr_histogram_t *hdr);
-int64_t rd_hdr_histogram_max (const rd_hdr_histogram_t *hdr);
-int64_t rd_hdr_histogram_min (const rd_hdr_histogram_t *hdr);
-int64_t rd_hdr_histogram_quantile (const rd_hdr_histogram_t *hdr, double q);
+double rd_hdr_histogram_stddev(rd_hdr_histogram_t *hdr);
+double rd_hdr_histogram_mean(const rd_hdr_histogram_t *hdr);
+int64_t rd_hdr_histogram_max(const rd_hdr_histogram_t *hdr);
+int64_t rd_hdr_histogram_min(const rd_hdr_histogram_t *hdr);
+int64_t rd_hdr_histogram_quantile(const rd_hdr_histogram_t *hdr, double q);
 
 
-int unittest_rdhdrhistogram (void);
+int unittest_rdhdrhistogram(void);

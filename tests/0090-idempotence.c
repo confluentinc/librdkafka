@@ -51,10 +51,10 @@ static struct {
  *
  * @locality an internal rdkafka thread
  */
-static rd_kafka_resp_err_t handle_ProduceResponse (rd_kafka_t *rk,
-                                                   int32_t brokerid,
-                                                   uint64_t msgseq,
-                                                   rd_kafka_resp_err_t err) {
+static rd_kafka_resp_err_t handle_ProduceResponse(rd_kafka_t *rk,
+                                                  int32_t brokerid,
+                                                  uint64_t msgseq,
+                                                  rd_kafka_resp_err_t err) {
         rd_kafka_resp_err_t new_err = err;
         int n;
 
@@ -68,20 +68,20 @@ static rd_kafka_resp_err_t handle_ProduceResponse (rd_kafka_t *rk,
          * Do allow the first request through. */
         if (n > 1 && n <= state.initial_fail_batch_cnt) {
                 if (err)
-                        TEST_WARN("First %d ProduceRequests should not "
-                                  "have failed, this is #%d with error %s for "
-                                  "brokerid %"PRId32" and msgseq %"PRIu64"\n",
-                                  state.initial_fail_batch_cnt, n,
-                                  rd_kafka_err2name(err), brokerid, msgseq);
+                        TEST_WARN(
+                            "First %d ProduceRequests should not "
+                            "have failed, this is #%d with error %s for "
+                            "brokerid %" PRId32 " and msgseq %" PRIu64 "\n",
+                            state.initial_fail_batch_cnt, n,
+                            rd_kafka_err2name(err), brokerid, msgseq);
                 assert(!err &&
                        *"First N ProduceRequests should not have failed");
                 new_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
         }
 
-        TEST_SAY("handle_ProduceResponse(broker %"PRId32
-                 ", MsgSeq %"PRId64", Error %s) -> new Error %s\n",
-                 brokerid, msgseq,
-                 rd_kafka_err2name(err),
+        TEST_SAY("handle_ProduceResponse(broker %" PRId32 ", MsgSeq %" PRId64
+                 ", Error %s) -> new Error %s\n",
+                 brokerid, msgseq, rd_kafka_err2name(err),
                  rd_kafka_err2name(new_err));
 
         return new_err;
@@ -95,13 +95,14 @@ static rd_kafka_resp_err_t handle_ProduceResponse (rd_kafka_t *rk,
  * @param initial_fail_batch_cnt How many of the initial batches should
  *                               fail with an emulated network timeout.
  */
-static void do_test_implicit_ack (const char *what,
-                                  int batch_cnt, int initial_fail_batch_cnt) {
+static void do_test_implicit_ack(const char *what,
+                                 int batch_cnt,
+                                 int initial_fail_batch_cnt) {
         rd_kafka_t *rk;
         const char *topic = test_mk_topic_name("0090_idempotence_impl_ack", 1);
         const int32_t partition = 0;
         uint64_t testid;
-        int msgcnt = 10*batch_cnt;
+        int msgcnt = 10 * batch_cnt;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
         test_msgver_t mv;
@@ -109,7 +110,7 @@ static void do_test_implicit_ack (const char *what,
         TEST_SAY(_C_MAG "[ Test implicit ack: %s ]\n", what);
 
         rd_atomic32_init(&state.produce_cnt, 0);
-        state.batch_cnt = batch_cnt;
+        state.batch_cnt              = batch_cnt;
         state.initial_fail_batch_cnt = initial_fail_batch_cnt;
 
         testid = test_id_generate();
@@ -145,8 +146,8 @@ static void do_test_implicit_ack (const char *what,
 
         TEST_SAY("Verifying messages with consumer\n");
         test_msgver_init(&mv, testid);
-        test_consume_msgs_easy_mv(NULL, topic, partition,
-                                  testid, 1, msgcnt, NULL, &mv);
+        test_consume_msgs_easy_mv(NULL, topic, partition, testid, 1, msgcnt,
+                                  NULL, &mv);
         test_msgver_verify("verify", &mv, TEST_MSGVER_ALL, 0, msgcnt);
         test_msgver_clear(&mv);
 
@@ -154,7 +155,7 @@ static void do_test_implicit_ack (const char *what,
 }
 
 
-int main_0090_idempotence (int argc, char **argv) {
+int main_0090_idempotence(int argc, char **argv) {
         /* The broker maintains a window of the N last ProduceRequests
          * per partition and producer to allow ProduceRequest retries
          * for previously successful requests to return a non-error response.
@@ -162,12 +163,10 @@ int main_0090_idempotence (int argc, char **argv) {
         const int broker_req_window = 5;
 
         do_test_implicit_ack("within broker request window",
-                             broker_req_window * 2,
-                             broker_req_window);
+                             broker_req_window * 2, broker_req_window);
 
         do_test_implicit_ack("outside broker request window",
-                             broker_req_window + 3,
-                             broker_req_window + 3);
+                             broker_req_window + 3, broker_req_window + 3);
 
         return 0;
 }

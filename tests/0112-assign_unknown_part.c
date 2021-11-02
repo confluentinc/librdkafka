@@ -37,10 +37,10 @@
  * See #2915.
  */
 
-int main_0112_assign_unknown_part (int argc, char **argv) {
+int main_0112_assign_unknown_part(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__ + 5, 1);
-        int64_t offset = RD_KAFKA_OFFSET_BEGINNING;
-        uint64_t testid = test_id_generate();
+        int64_t offset    = RD_KAFKA_OFFSET_BEGINNING;
+        uint64_t testid   = test_id_generate();
         rd_kafka_t *c;
         rd_kafka_topic_partition_list_t *tpl;
         int r;
@@ -52,7 +52,7 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
 
         TEST_SAY("Creating topic %s with 1 partition\n", topic);
         test_create_topic(c, topic, 1, 1);
-        test_wait_topic_exists(c, topic, 10*1000);
+        test_wait_topic_exists(c, topic, 10 * 1000);
 
         TEST_SAY("Producing message to partition 0\n");
         test_produce_msgs_easy(topic, testid, 0, 1);
@@ -73,8 +73,10 @@ int main_0112_assign_unknown_part (int argc, char **argv) {
          *        which causes the produce to fail.
          *        Loop until the partition count is correct. */
         while ((r = test_get_partition_count(c, topic, 5000)) != 2) {
-                TEST_SAY("Waiting for %s partition count to reach 2, "
-                         "currently %d\n", topic, r);
+                TEST_SAY(
+                    "Waiting for %s partition count to reach 2, "
+                    "currently %d\n",
+                    topic, r);
                 rd_sleep(1);
         }
 

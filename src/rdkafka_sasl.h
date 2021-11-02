@@ -31,27 +31,33 @@
 
 
 
-int rd_kafka_sasl_recv (rd_kafka_transport_t *rktrans,
-                        const void *buf, size_t len,
-                        char *errstr, size_t errstr_size);
-int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-			    char *errstr, size_t errstr_size);
-void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans);
-int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, size_t errstr_size);
+int rd_kafka_sasl_recv(rd_kafka_transport_t *rktrans,
+                       const void *buf,
+                       size_t len,
+                       char *errstr,
+                       size_t errstr_size);
+int rd_kafka_sasl_io_event(rd_kafka_transport_t *rktrans,
+                           int events,
+                           char *errstr,
+                           size_t errstr_size);
+void rd_kafka_sasl_close(rd_kafka_transport_t *rktrans);
+int rd_kafka_sasl_client_new(rd_kafka_transport_t *rktrans,
+                             char *errstr,
+                             size_t errstr_size);
 
-void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb);
-void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb);
+void rd_kafka_sasl_broker_term(rd_kafka_broker_t *rkb);
+void rd_kafka_sasl_broker_init(rd_kafka_broker_t *rkb);
 
-int rd_kafka_sasl_init (rd_kafka_t *rk, char *errstr, size_t errstr_size);
-void rd_kafka_sasl_term (rd_kafka_t *rk);
+int rd_kafka_sasl_init(rd_kafka_t *rk, char *errstr, size_t errstr_size);
+void rd_kafka_sasl_term(rd_kafka_t *rk);
 
-rd_bool_t rd_kafka_sasl_ready (rd_kafka_t *rk);
+rd_bool_t rd_kafka_sasl_ready(rd_kafka_t *rk);
 
-void rd_kafka_sasl_global_term (void);
-int rd_kafka_sasl_global_init (void);
+void rd_kafka_sasl_global_term(void);
+int rd_kafka_sasl_global_init(void);
 
-int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
-                                   char *errstr, size_t errstr_size);
+int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
+                                  char *errstr,
+                                  size_t errstr_size);
 
 #endif /* _RDKAFKA_SASL_H_ */

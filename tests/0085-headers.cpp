@@ -41,67 +41,61 @@ static void assert_all_headers_match(RdKafka::Headers *actual,
   }
   if (actual->size() != expected->size()) {
     Test::Fail(tostr() << "Expected headers length to equal "
-               << expected->size() << " instead equals " << actual->size() << "\n");
+                       << expected->size() << " instead equals "
+                       << actual->size() << "\n");
   }
 
-  std::vector<RdKafka::Headers::Header> actual_headers = actual->get_all();
+  std::vector<RdKafka::Headers::Header> actual_headers   = actual->get_all();
   std::vector<RdKafka::Headers::Header> expected_headers = expected->get_all();
   Test::Say(3, tostr() << "Header size " << actual_headers.size() << "\n");
-  for(size_t i = 0; i < actual_headers.size(); i++) {
-    RdKafka::Headers::Header actual_header = actual_headers[i];
+  for (size_t i = 0; i < actual_headers.size(); i++) {
+    RdKafka::Headers::Header actual_header         = actual_headers[i];
     const RdKafka::Headers::Header expected_header = expected_headers[i];
-    std::string actual_key = actual_header.key();
-    std::string actual_value = std::string(
-      actual_header.value_string(),
-      actual_header.value_size()
-      );
+    std::string actual_key                         = actual_header.key();
+    std::string actual_value =
+        std::string(actual_header.value_string(), actual_header.value_size());
     std::string expected_key = expected_header.key();
-    std::string expected_value = std::string(
-      actual_header.value_string(),
-      expected_header.value_size()
-      );
+    std::string expected_value =
+        std::string(actual_header.value_string(), expected_header.value_size());
 
-    Test::Say(3,
-              tostr() <<
-              "Expected Key " << expected_key <<
-              ", Expected val " << expected_value <<
-              ", Actual key " << actual_key <<
-              ", Actual val " << actual_value << "\n");
+    Test::Say(3, tostr() << "Expected Key " << expected_key << ", Expected val "
+                         << expected_value << ", Actual key " << actual_key
+                         << ", Actual val " << actual_value << "\n");
 
     if (actual_key != expected_key) {
       Test::Fail(tostr() << "Header key does not match, expected '"
-                 << actual_key << "' but got '" << expected_key << "'\n");
+                         << actual_key << "' but got '" << expected_key
+                         << "'\n");
     }
     if (actual_value != expected_value) {
       Test::Fail(tostr() << "Header value does not match, expected '"
-                 << actual_value << "' but got '" << expected_value << "'\n");
+                         << actual_value << "' but got '" << expected_value
+                         << "'\n");
     }
   }
 }
 
-static void test_headers (RdKafka::Headers *produce_headers,
-                          const RdKafka::Headers *compare_headers) {
-
+static void test_headers(RdKafka::Headers *produce_headers,
+                         const RdKafka::Headers *compare_headers) {
   RdKafka::ErrorCode err;
 
-  err = producer->produce(topic, 0,
-                          RdKafka::Producer::RK_MSG_COPY,
-                          (void *)"message", 7,
-                          (void *)"key", 3, 0, produce_headers, NULL);
+  err = producer->produce(topic, 0, RdKafka::Producer::RK_MSG_COPY,
+                          (void *)"message", 7, (void *)"key", 3, 0,
+                          produce_headers, NULL);
   if (err)
     Test::Fail("produce() failed: " + RdKafka::err2str(err));
 
-  producer->flush(tmout_multip(10*1000));
+  producer->flush(tmout_multip(10 * 1000));
 
   if (producer->outq_len() > 0)
-    Test::Fail(tostr() << "Expected producer to be flushed, " <<
-               producer->outq_len() << " messages remain");
+    Test::Fail(tostr() << "Expected producer to be flushed, "
+                       << producer->outq_len() << " messages remain");
 
-  int cnt = 0;
+  int cnt      = 0;
   bool running = true;
 
   while (running) {
-    RdKafka::Message *msg = consumer->consume(10*1000);
+    RdKafka::Message *msg = consumer->consume(10 * 1000);
 
     if (msg->err() == RdKafka::ERR_NO_ERROR) {
       cnt++;
@@ -121,9 +115,9 @@ static void test_headers (RdKafka::Headers *produce_headers,
   }
 }
 
-static void test_headers (int num_hdrs) {
-  Test::Say(tostr() << "Test " << num_hdrs <<
-            " headers in consumed message.\n");
+static void test_headers(int num_hdrs) {
+  Test::Say(tostr() << "Test " << num_hdrs
+                    << " headers in consumed message.\n");
   RdKafka::Headers *produce_headers = RdKafka::Headers::create();
   RdKafka::Headers *compare_headers = RdKafka::Headers::create();
   for (int i = 0; i < num_hdrs; ++i) {
@@ -158,9 +152,9 @@ static void test_headers (int num_hdrs) {
   delete compare_headers;
 }
 
-static void  test_duplicate_keys () {
+static void test_duplicate_keys() {
   Test::Say("Test multiple headers with duplicate keys.\n");
-  int num_hdrs = 4;
+  int num_hdrs                      = 4;
   RdKafka::Headers *produce_headers = RdKafka::Headers::create();
   RdKafka::Headers *compare_headers = RdKafka::Headers::create();
   for (int i = 0; i < num_hdrs; ++i) {
@@ -175,7 +169,7 @@ static void  test_duplicate_keys () {
   delete compare_headers;
 }
 
-static void test_remove_after_add () {
+static void test_remove_after_add() {
   Test::Say("Test removing after adding headers.\n");
   RdKafka::Headers *headers = RdKafka::Headers::create();
 
@@ -192,9 +186,8 @@ static void test_remove_after_add () {
   // Assert header length is 2
   size_t expected_size = 2;
   if (headers->size() != expected_size) {
-    Test::Fail(tostr() << "Expected header->size() to equal "
-                       << expected_size << ", instead got "
-                       << headers->size() << "\n");
+    Test::Fail(tostr() << "Expected header->size() to equal " << expected_size
+                       << ", instead got " << headers->size() << "\n");
   }
 
   // Remove key_one and assert headers == 1
@@ -209,7 +202,7 @@ static void test_remove_after_add () {
   delete headers;
 }
 
-static void test_remove_all_duplicate_keys () {
+static void test_remove_all_duplicate_keys() {
   Test::Say("Test removing duplicate keys removes all headers.\n");
   RdKafka::Headers *headers = RdKafka::Headers::create();
 
@@ -227,9 +220,8 @@ static void test_remove_all_duplicate_keys () {
   // Assert header length is 3
   size_t expected_size = 3;
   if (headers->size() != expected_size) {
-    Test::Fail(tostr() << "Expected header->size() to equal "
-                       << expected_size << ", instead got "
-                       << headers->size() << "\n");
+    Test::Fail(tostr() << "Expected header->size() to equal " << expected_size
+                       << ", instead got " << headers->size() << "\n");
   }
 
   // Remove key_one and assert headers == 1
@@ -244,14 +236,14 @@ static void test_remove_all_duplicate_keys () {
   delete headers;
 }
 
-static void test_get_last_gives_last_added_val () {
+static void test_get_last_gives_last_added_val() {
   Test::Say("Test get_last returns the last added value of duplicate keys.\n");
   RdKafka::Headers *headers = RdKafka::Headers::create();
 
   // Add two duplicate keys
-  std::string dup_key = "dup_key";
-  std::string val_one = "val_one";
-  std::string val_two = "val_two";
+  std::string dup_key   = "dup_key";
+  std::string val_one   = "val_one";
+  std::string val_two   = "val_two";
   std::string val_three = "val_three";
   headers->add(dup_key, val_one);
   headers->add(dup_key, val_two);
@@ -260,33 +252,32 @@ static void test_get_last_gives_last_added_val () {
   // Assert header length is 3
   size_t expected_size = 3;
   if (headers->size() != expected_size) {
-    Test::Fail(tostr() << "Expected header->size() to equal "
-                       << expected_size << ", instead got "
-                       << headers->size() << "\n");
+    Test::Fail(tostr() << "Expected header->size() to equal " << expected_size
+                       << ", instead got " << headers->size() << "\n");
   }
 
   // Get last of duplicate key and assert it equals val_two
   RdKafka::Headers::Header last = headers->get_last(dup_key);
-  std::string value = std::string(last.value_string());
+  std::string value             = std::string(last.value_string());
   if (value != val_three) {
     Test::Fail(tostr() << "Expected get_last to return " << val_two
-                       << " as the value of the header instead got "
-                       << value << "\n");
+                       << " as the value of the header instead got " << value
+                       << "\n");
   }
 
   delete headers;
 }
 
-static void test_get_of_key_returns_all () {
+static void test_get_of_key_returns_all() {
   Test::Say("Test get returns all the headers of a duplicate key.\n");
   RdKafka::Headers *headers = RdKafka::Headers::create();
 
   // Add two duplicate keys
   std::string unique_key = "unique";
-  std::string dup_key = "dup_key";
-  std::string val_one = "val_one";
-  std::string val_two = "val_two";
-  std::string val_three = "val_three";
+  std::string dup_key    = "dup_key";
+  std::string val_one    = "val_one";
+  std::string val_two    = "val_two";
+  std::string val_three  = "val_three";
   headers->add(unique_key, val_one);
   headers->add(dup_key, val_one);
   headers->add(dup_key, val_two);
@@ -295,14 +286,13 @@ static void test_get_of_key_returns_all () {
   // Assert header length is 4
   size_t expected_size = 4;
   if (headers->size() != expected_size) {
-    Test::Fail(tostr() << "Expected header->size() to equal "
-                       << expected_size << ", instead got "
-                       << headers->size() << "\n");
+    Test::Fail(tostr() << "Expected header->size() to equal " << expected_size
+                       << ", instead got " << headers->size() << "\n");
   }
 
   // Get all of the duplicate key
   std::vector<RdKafka::Headers::Header> get = headers->get(dup_key);
-  size_t expected_get_size = 3;
+  size_t expected_get_size                  = 3;
   if (get.size() != expected_get_size) {
     Test::Fail(tostr() << "Expected header->size() to equal "
                        << expected_get_size << ", instead got "
@@ -312,16 +302,14 @@ static void test_get_of_key_returns_all () {
   delete headers;
 }
 
-static void test_failed_produce () {
-
+static void test_failed_produce() {
   RdKafka::Headers *headers = RdKafka::Headers::create();
   headers->add("my", "header");
 
   RdKafka::ErrorCode err;
 
   err = producer->produce(topic, 999 /* invalid partition */,
-                          RdKafka::Producer::RK_MSG_COPY,
-                          (void *)"message", 7,
+                          RdKafka::Producer::RK_MSG_COPY, (void *)"message", 7,
                           (void *)"key", 3, 0, headers, NULL);
   if (!err)
     Test::Fail("Expected produce() to fail");
@@ -329,7 +317,7 @@ static void test_failed_produce () {
   delete headers;
 }
 
-static void test_assignment_op () {
+static void test_assignment_op() {
   Test::Say("Test Header assignment operator\n");
 
   RdKafka::Headers *headers = RdKafka::Headers::create();
@@ -337,65 +325,64 @@ static void test_assignment_op () {
   headers->add("abc", "123");
   headers->add("def", "456");
 
-  RdKafka::Headers::Header h = headers->get_last("abc");
-  h = headers->get_last("def");
+  RdKafka::Headers::Header h  = headers->get_last("abc");
+  h                           = headers->get_last("def");
   RdKafka::Headers::Header h2 = h;
-  h = headers->get_last("nope");
+  h                           = headers->get_last("nope");
   RdKafka::Headers::Header h3 = h;
-  h = headers->get_last("def");
+  h                           = headers->get_last("def");
 
   delete headers;
 }
 
 
 extern "C" {
-  int main_0085_headers (int argc, char **argv) {
-    topic = Test::mk_topic_name("0085-headers", 1);
+int main_0085_headers(int argc, char **argv) {
+  topic = Test::mk_topic_name("0085-headers", 1);
 
-    RdKafka::Conf *conf;
-    std::string errstr;
+  RdKafka::Conf *conf;
+  std::string errstr;
 
-    Test::conf_init(&conf, NULL, 0);
+  Test::conf_init(&conf, NULL, 0);
 
-    RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-    if (!p)
-      Test::Fail("Failed to create Producer: " + errstr);
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail("Failed to create Producer: " + errstr);
 
-    Test::conf_set(conf, "group.id", topic);
+  Test::conf_set(conf, "group.id", topic);
 
-    RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
-    if (!c)
-      Test::Fail("Failed to create KafkaConsumer: " + errstr);
+  RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
+  if (!c)
+    Test::Fail("Failed to create KafkaConsumer: " + errstr);
 
-    delete conf;
+  delete conf;
 
-    std::vector<RdKafka::TopicPartition*> parts;
-    parts.push_back(RdKafka::TopicPartition::create(topic, 0,
-                                                    RdKafka::Topic::
-                                                    OFFSET_BEGINNING));
-    RdKafka::ErrorCode err = c->assign(parts);
-    if (err != RdKafka::ERR_NO_ERROR)
-      Test::Fail("assign() failed: " + RdKafka::err2str(err));
-    RdKafka::TopicPartition::destroy(parts);
+  std::vector<RdKafka::TopicPartition *> parts;
+  parts.push_back(RdKafka::TopicPartition::create(
+      topic, 0, RdKafka::Topic::OFFSET_BEGINNING));
+  RdKafka::ErrorCode err = c->assign(parts);
+  if (err != RdKafka::ERR_NO_ERROR)
+    Test::Fail("assign() failed: " + RdKafka::err2str(err));
+  RdKafka::TopicPartition::destroy(parts);
 
-    producer = p;
-    consumer = c;
+  producer = p;
+  consumer = c;
 
-    test_headers(0);
-    test_headers(1);
-    test_headers(261);
-    test_duplicate_keys();
-    test_remove_after_add();
-    test_remove_all_duplicate_keys();
-    test_get_last_gives_last_added_val();
-    test_get_of_key_returns_all();
-    test_failed_produce();
-    test_assignment_op();
+  test_headers(0);
+  test_headers(1);
+  test_headers(261);
+  test_duplicate_keys();
+  test_remove_after_add();
+  test_remove_all_duplicate_keys();
+  test_get_last_gives_last_added_val();
+  test_get_of_key_returns_all();
+  test_failed_produce();
+  test_assignment_op();
 
-    c->close();
-    delete c;
-    delete p;
+  c->close();
+  delete c;
+  delete p;
 
-    return 0;
-  }
+  return 0;
+}
 }

@@ -86,9 +86,9 @@ after_test:
 deploy:
 - provider: S3
   access_key_id:
-    secure: iBK0xb23FMYOrOsOb8cw3YGyU+6vvPX5BF+PXuMub8M=
+    secure: 3SmFFB3J1WWjLqxouvH8zLdcmrFNVHHbkROb+2BBVJE=
   secret_access_key:
-    secure: jJsj373UiOtuXf/u0LLL0Q8XQMyu4s/ucx0+vH4GpKbAfZJUwYB4dEO1//mQDNuC
+    secure: VT0D5uzlaJI6gfZbemKCnf0MMh6qnlcmioVADK0oCkW6syz+n17VzWScRjvAifPm
   region: us-west-1
   bucket: librdkafka-ci-packages
   folder: librdkafka/p-librdkafka__bld-appveyor__plat-windows__arch-$(platform)__bldtype-$(configuration)__tag-$(APPVEYOR_REPO_TAG_NAME)__sha-$(APPVEYOR_REPO_COMMIT)__bid-$(APPVEYOR_BUILD_ID)

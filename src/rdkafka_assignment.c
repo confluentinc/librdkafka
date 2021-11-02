@@ -99,27 +99,23 @@
 #include "rdkafka_request.h"
 
 
-static void rd_kafka_assignment_dump (rd_kafka_t *rk) {
+static void rd_kafka_assignment_dump(rd_kafka_t *rk) {
         rd_kafka_dbg(rk, CGRP, "DUMP",
                      "Assignment dump (started_cnt=%d, wait_stop_cnt=%d)",
                      rk->rk_consumer.assignment.started_cnt,
                      rk->rk_consumer.assignment.wait_stop_cnt);
 
-        rd_kafka_topic_partition_list_log(
-                rk, "DUMP_ALL", RD_KAFKA_DBG_CGRP,
-                rk->rk_consumer.assignment.all);
+        rd_kafka_topic_partition_list_log(rk, "DUMP_ALL", RD_KAFKA_DBG_CGRP,
+                                          rk->rk_consumer.assignment.all);
 
-        rd_kafka_topic_partition_list_log(
-                rk, "DUMP_PND", RD_KAFKA_DBG_CGRP,
-                rk->rk_consumer.assignment.pending);
+        rd_kafka_topic_partition_list_log(rk, "DUMP_PND", RD_KAFKA_DBG_CGRP,
+                                          rk->rk_consumer.assignment.pending);
 
-        rd_kafka_topic_partition_list_log(
-                rk, "DUMP_QRY", RD_KAFKA_DBG_CGRP,
-                rk->rk_consumer.assignment.queried);
+        rd_kafka_topic_partition_list_log(rk, "DUMP_QRY", RD_KAFKA_DBG_CGRP,
+                                          rk->rk_consumer.assignment.queried);
 
-        rd_kafka_topic_partition_list_log(
-                rk, "DUMP_REM", RD_KAFKA_DBG_CGRP,
-                rk->rk_consumer.assignment.removed);
+        rd_kafka_topic_partition_list_log(rk, "DUMP_REM", RD_KAFKA_DBG_CGRP,
+                                          rk->rk_consumer.assignment.removed);
 }
 
 /**
@@ -133,20 +129,21 @@ static void rd_kafka_assignment_dump (rd_kafka_t *rk) {
  * Called from the FetchOffsets response handler below.
  */
 static void
-rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
-                                   rd_kafka_topic_partition_list_t *offsets,
-                                   rd_kafka_resp_err_t err) {
+rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
+                                  rd_kafka_topic_partition_list_t *offsets,
+                                  rd_kafka_resp_err_t err) {
         rd_kafka_topic_partition_t *rktpar;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, offsets) {
                 rd_kafka_toppar_t *rktp = rktpar->_private; /* May be NULL */
 
                 if (!rd_kafka_topic_partition_list_del(
-                            rk->rk_consumer.assignment.queried,
-                            rktpar->topic, rktpar->partition)) {
+                        rk->rk_consumer.assignment.queried, rktpar->topic,
+                        rktpar->partition)) {
                         rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
                                      "Ignoring OffsetFetch "
-                                     "response for %s [%"PRId32"] which is no "
+                                     "response for %s [%" PRId32
+                                     "] which is no "
                                      "longer in the queried list "
                                      "(possibly unassigned?)",
                                      rktpar->topic, rktpar->partition);
@@ -164,27 +161,24 @@ rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
                          * later handling by the assignment state machine. */
 
                         rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
-                                     "Adding %s [%"PRId32"] back to pending "
+                                     "Adding %s [%" PRId32
+                                     "] back to pending "
                                      "list because on-going transaction is "
                                      "blocking offset retrieval",
-                                     rktpar->topic,
-                                     rktpar->partition);
+                                     rktpar->topic, rktpar->partition);
 
                         rd_kafka_topic_partition_list_add_copy(
-                                rk->rk_consumer.assignment.pending, rktpar);
+                            rk->rk_consumer.assignment.pending, rktpar);
 
                 } else if (rktpar->err) {
                         /* Partition-level error */
                         rd_kafka_consumer_err(
-                                rk->rk_consumer.q, RD_KAFKA_NODEID_UA,
-                                rktpar->err, 0,
-                                rktpar->topic, rktp,
-                                RD_KAFKA_OFFSET_INVALID,
-                                "Failed to fetch committed offset for "
-                                "group \"%s\" topic %s [%"PRId32"]: %s",
-                                rk->rk_group_id->str,
-                                rktpar->topic, rktpar->partition,
-                                rd_kafka_err2str(rktpar->err));
+                            rk->rk_consumer.q, RD_KAFKA_NODEID_UA, rktpar->err,
+                            0, rktpar->topic, rktp, RD_KAFKA_OFFSET_INVALID,
+                            "Failed to fetch committed offset for "
+                            "group \"%s\" topic %s [%" PRId32 "]: %s",
+                            rk->rk_group_id->str, rktpar->topic,
+                            rktpar->partition, rd_kafka_err2str(rktpar->err));
 
                         /* The partition will not be added back to .pending
                          * and thus only reside on .all until the application
@@ -201,17 +195,16 @@ rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
                         /* Add partition to pending list where serve()
                          * will start the fetcher. */
                         rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
-                                     "Adding %s [%"PRId32"] back to pending "
+                                     "Adding %s [%" PRId32
+                                     "] back to pending "
                                      "list with offset %s",
-                                     rktpar->topic,
-                                     rktpar->partition,
+                                     rktpar->topic, rktpar->partition,
                                      rd_kafka_offset2str(rktpar->offset));
 
                         rd_kafka_topic_partition_list_add_copy(
-                                rk->rk_consumer.assignment.pending, rktpar);
+                            rk->rk_consumer.assignment.pending, rktpar);
                 }
                 /* Do nothing for request-level errors (err is set). */
-
         }
 
         if (offsets->cnt > 0)
@@ -228,19 +221,18 @@ rd_kafka_assignment_apply_offsets (rd_kafka_t *rk,
  *
  * @locality rdkafka main thread
  */
-static void
-rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
-                                        rd_kafka_broker_t *rkb,
-                                        rd_kafka_resp_err_t err,
-                                        rd_kafka_buf_t *reply,
-                                        rd_kafka_buf_t *request,
-                                        void *opaque) {
+static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
+                                                   rd_kafka_broker_t *rkb,
+                                                   rd_kafka_resp_err_t err,
+                                                   rd_kafka_buf_t *reply,
+                                                   rd_kafka_buf_t *request,
+                                                   void *opaque) {
         rd_kafka_topic_partition_list_t *offsets = NULL;
-        int64_t *req_assignment_version = (int64_t *)opaque;
+        int64_t *req_assignment_version          = (int64_t *)opaque;
         /* Only allow retries if there's been no change to the assignment,
          * otherwise rely on assignment state machine to retry. */
-        rd_bool_t allow_retry = *req_assignment_version ==
-                rk->rk_consumer.assignment.version;
+        rd_bool_t allow_retry =
+            *req_assignment_version == rk->rk_consumer.assignment.version;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination, quick cleanup. */
@@ -248,11 +240,9 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
                 return;
         }
 
-        err = rd_kafka_handle_OffsetFetch(rk, rkb, err,
-                                          reply, request, &offsets,
-                                          rd_true/* Update toppars */,
-                                          rd_true/* Add parts */,
-                                          allow_retry);
+        err = rd_kafka_handle_OffsetFetch(
+            rk, rkb, err, reply, request, &offsets,
+            rd_true /* Update toppars */, rd_true /* Add parts */, allow_retry);
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                 if (offsets)
                         rd_kafka_topic_partition_list_destroy(offsets);
@@ -268,18 +258,15 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
                 if (!err)
                         err = RD_KAFKA_RESP_ERR__NO_OFFSET;
 
-                rd_kafka_dbg(rk, CGRP, "OFFSET",
-                             "Offset fetch error: %s",
+                rd_kafka_dbg(rk, CGRP, "OFFSET", "Offset fetch error: %s",
                              rd_kafka_err2str(err));
-                rd_kafka_consumer_err(rk->rk_consumer.q,
-                                      rd_kafka_broker_id(rkb),
-                                      err, 0, NULL, NULL,
-                                      RD_KAFKA_OFFSET_INVALID,
-                                      "Failed to fetch committed "
-                                      "offsets for partitions "
-                                      "in group \"%s\": %s",
-                                      rk->rk_group_id->str,
-                                      rd_kafka_err2str(err));
+                rd_kafka_consumer_err(
+                    rk->rk_consumer.q, rd_kafka_broker_id(rkb), err, 0, NULL,
+                    NULL, RD_KAFKA_OFFSET_INVALID,
+                    "Failed to fetch committed "
+                    "offsets for partitions "
+                    "in group \"%s\": %s",
+                    rk->rk_group_id->str, rd_kafka_err2str(err));
 
                 return;
         }
@@ -290,15 +277,12 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
                 rd_kafka_dbg(rk, CGRP, "OFFSET",
                              "Offset fetch error for %d partition(s): %s",
                              offsets->cnt, rd_kafka_err2str(err));
-                rd_kafka_consumer_err(rk->rk_consumer.q,
-                                      rd_kafka_broker_id(rkb),
-                                      err, 0, NULL, NULL,
-                                      RD_KAFKA_OFFSET_INVALID,
-                                      "Failed to fetch committed offsets for "
-                                      "%d partition(s) in group \"%s\": %s",
-                                      offsets->cnt,
-                                      rk->rk_group_id->str,
-                                      rd_kafka_err2str(err));
+                rd_kafka_consumer_err(
+                    rk->rk_consumer.q, rd_kafka_broker_id(rkb), err, 0, NULL,
+                    NULL, RD_KAFKA_OFFSET_INVALID,
+                    "Failed to fetch committed offsets for "
+                    "%d partition(s) in group \"%s\": %s",
+                    offsets->cnt, rk->rk_group_id->str, rd_kafka_err2str(err));
         }
 
         /* Apply the fetched offsets to the assignment */
@@ -313,8 +297,7 @@ rd_kafka_assignment_handle_OffsetFetch (rd_kafka_t *rk,
  *
  * @returns >0 if there are removal operations in progress, else 0.
  */
-static int
-rd_kafka_assignment_serve_removals (rd_kafka_t *rk) {
+static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
         rd_kafka_topic_partition_t *rktpar;
         int valid_offsets = 0;
 
@@ -327,25 +310,24 @@ rd_kafka_assignment_serve_removals (rd_kafka_t *rk) {
                  * Outstanding OffsetFetch query results will be ignored
                  * for partitions that are no longer on the .queried list. */
                 was_pending = rd_kafka_topic_partition_list_del(
-                        rk->rk_consumer.assignment.pending,
-                        rktpar->topic, rktpar->partition);
+                    rk->rk_consumer.assignment.pending, rktpar->topic,
+                    rktpar->partition);
                 was_queried = rd_kafka_topic_partition_list_del(
-                        rk->rk_consumer.assignment.queried,
-                        rktpar->topic, rktpar->partition);
+                    rk->rk_consumer.assignment.queried, rktpar->topic,
+                    rktpar->partition);
 
                 if (rktp->rktp_started) {
                         /* Partition was started, stop the fetcher. */
                         rd_assert(rk->rk_consumer.assignment.started_cnt > 0);
 
                         rd_kafka_toppar_op_fetch_stop(
-                                rktp, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
+                            rktp, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
                         rk->rk_consumer.assignment.wait_stop_cnt++;
                 }
 
                 /* Reset the (lib) pause flag which may have been set by
                  * the cgrp when scheduling the rebalance callback. */
-                rd_kafka_toppar_op_pause_resume(rktp,
-                                                rd_false/*resume*/,
+                rd_kafka_toppar_op_pause_resume(rktp, rd_false /*resume*/,
                                                 RD_KAFKA_TOPPAR_F_LIB_PAUSE,
                                                 RD_KAFKA_NO_REPLYQ);
 
@@ -368,17 +350,17 @@ rd_kafka_assignment_serve_removals (rd_kafka_t *rk) {
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_dbg(rk, CGRP, "REMOVE",
-                             "Removing %s [%"PRId32"] from assignment "
+                             "Removing %s [%" PRId32
+                             "] from assignment "
                              "(started=%s, pending=%s, queried=%s, "
                              "stored offset=%s)",
                              rktpar->topic, rktpar->partition,
                              RD_STR_ToF(rktp->rktp_started),
-                             RD_STR_ToF(was_pending),
-                             RD_STR_ToF(was_queried),
+                             RD_STR_ToF(was_pending), RD_STR_ToF(was_queried),
                              rd_kafka_offset2str(rktpar->offset));
         }
 
-        rd_kafka_dbg(rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REMOVE",
+        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "REMOVE",
                      "Served %d removed partition(s), "
                      "with %d offset(s) to commit",
                      rk->rk_consumer.assignment.removed->cnt, valid_offsets);
@@ -387,21 +369,18 @@ rd_kafka_assignment_serve_removals (rd_kafka_t *rk) {
          * Commit final offsets to broker for the removed partitions,
          * unless this is a consumer destruction with a close() call. */
         if (valid_offsets > 0 &&
-            rk->rk_conf.offset_store_method ==
-            RD_KAFKA_OFFSET_METHOD_BROKER &&
-            rk->rk_cgrp &&
-            rk->rk_conf.enable_auto_commit &&
+            rk->rk_conf.offset_store_method == RD_KAFKA_OFFSET_METHOD_BROKER &&
+            rk->rk_cgrp && rk->rk_conf.enable_auto_commit &&
             !rd_kafka_destroy_flags_no_consumer_close(rk))
                 rd_kafka_cgrp_assigned_offsets_commit(
-                        rk->rk_cgrp,
-                        rk->rk_consumer.assignment.removed,
-                        rd_false /* use offsets from .removed */,
-                        "unassigned partitions");
+                    rk->rk_cgrp, rk->rk_consumer.assignment.removed,
+                    rd_false /* use offsets from .removed */,
+                    "unassigned partitions");
 
         rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.removed);
 
         return rk->rk_consumer.assignment.wait_stop_cnt +
-                rk->rk_consumer.wait_commit_cnt;
+               rk->rk_consumer.wait_commit_cnt;
 }
 
 
@@ -414,8 +393,7 @@ rd_kafka_assignment_serve_removals (rd_kafka_t *rk) {
  * @returns >0 if there are pending operations in progress for the current
  *          assignment, else 0.
  */
-static int
-rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
+static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
         rd_kafka_topic_partition_list_t *partitions_to_query = NULL;
         /* We can query committed offsets only if all of the following are true:
          *  - We have a group coordinator.
@@ -426,21 +404,20 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
          *    is unassigned and then assigned again).
          */
         rd_kafka_broker_t *coord =
-                rk->rk_cgrp ? rd_kafka_cgrp_get_coord(rk->rk_cgrp) : NULL;
+            rk->rk_cgrp ? rd_kafka_cgrp_get_coord(rk->rk_cgrp) : NULL;
         rd_bool_t can_query_offsets =
-                coord &&
-                rk->rk_consumer.wait_commit_cnt == 0 &&
-                rk->rk_consumer.assignment.queried->cnt == 0;
+            coord && rk->rk_consumer.wait_commit_cnt == 0 &&
+            rk->rk_consumer.assignment.queried->cnt == 0;
         int i;
 
         if (can_query_offsets)
                 partitions_to_query = rd_kafka_topic_partition_list_new(
-                        rk->rk_consumer.assignment.pending->cnt);
+                    rk->rk_consumer.assignment.pending->cnt);
 
         /* Scan the list backwards so removals are cheap (no array shuffle) */
-        for (i = rk->rk_consumer.assignment.pending->cnt - 1 ; i >= 0 ; i--) {
+        for (i = rk->rk_consumer.assignment.pending->cnt - 1; i >= 0; i--) {
                 rd_kafka_topic_partition_t *rktpar =
-                        &rk->rk_consumer.assignment.pending->elems[i];
+                    &rk->rk_consumer.assignment.pending->elems[i];
                 rd_kafka_toppar_t *rktp = rktpar->_private; /* Borrow ref */
 
                 rd_assert(!rktp->rktp_started);
@@ -462,25 +439,23 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
 
                         rd_kafka_dbg(rk, CGRP, "SRVPEND",
                                      "Starting pending assigned partition "
-                                     "%s [%"PRId32"] at offset %s",
+                                     "%s [%" PRId32 "] at offset %s",
                                      rktpar->topic, rktpar->partition,
                                      rd_kafka_offset2str(rktpar->offset));
 
                         /* Reset the (lib) pause flag which may have been set by
                          * the cgrp when scheduling the rebalance callback. */
                         rd_kafka_toppar_op_pause_resume(
-                                rktp,
-                                rd_false/*resume*/,
-                                RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-                                RD_KAFKA_NO_REPLYQ);
+                            rktp, rd_false /*resume*/,
+                            RD_KAFKA_TOPPAR_F_LIB_PAUSE, RD_KAFKA_NO_REPLYQ);
 
                         /* Start the fetcher */
                         rktp->rktp_started = rd_true;
                         rk->rk_consumer.assignment.started_cnt++;
 
-                        rd_kafka_toppar_op_fetch_start(
-                                rktp, rktpar->offset,
-                                rk->rk_consumer.q, RD_KAFKA_NO_REPLYQ);
+                        rd_kafka_toppar_op_fetch_start(rktp, rktpar->offset,
+                                                       rk->rk_consumer.q,
+                                                       RD_KAFKA_NO_REPLYQ);
 
 
                 } else if (can_query_offsets) {
@@ -491,42 +466,44 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
                          * to the group coordinator. */
 
                         rd_dassert(!rd_kafka_topic_partition_list_find(
-                                           rk->rk_consumer.assignment.queried,
-                                           rktpar->topic, rktpar->partition));
+                            rk->rk_consumer.assignment.queried, rktpar->topic,
+                            rktpar->partition));
 
                         rd_kafka_topic_partition_list_add_copy(
-                                partitions_to_query, rktpar);
+                            partitions_to_query, rktpar);
 
                         rd_kafka_topic_partition_list_add_copy(
-                                rk->rk_consumer.assignment.queried, rktpar);
+                            rk->rk_consumer.assignment.queried, rktpar);
 
                         rd_kafka_dbg(rk, CGRP, "SRVPEND",
                                      "Querying committed offset for pending "
-                                     "assigned partition %s [%"PRId32"]",
+                                     "assigned partition %s [%" PRId32 "]",
                                      rktpar->topic, rktpar->partition);
 
 
                 } else {
-                        rd_kafka_dbg(rk, CGRP, "SRVPEND",
-                                     "Pending assignment partition "
-                                     "%s [%"PRId32"] can't fetch committed "
-                                     "offset yet "
-                                     "(cgrp state %s, awaiting %d commits, "
-                                     "%d partition(s) already being queried)",
-                                     rktpar->topic, rktpar->partition,
-                                     rk->rk_cgrp ?
-                                     rd_kafka_cgrp_state_names[
-                                             rk->rk_cgrp->rkcg_state] :
-                                     "n/a",
-                                     rk->rk_consumer.wait_commit_cnt,
-                                     rk->rk_consumer.assignment.queried->cnt);
+                        rd_kafka_dbg(
+                            rk, CGRP, "SRVPEND",
+                            "Pending assignment partition "
+                            "%s [%" PRId32
+                            "] can't fetch committed "
+                            "offset yet "
+                            "(cgrp state %s, awaiting %d commits, "
+                            "%d partition(s) already being queried)",
+                            rktpar->topic, rktpar->partition,
+                            rk->rk_cgrp
+                                ? rd_kafka_cgrp_state_names[rk->rk_cgrp
+                                                                ->rkcg_state]
+                                : "n/a",
+                            rk->rk_consumer.wait_commit_cnt,
+                            rk->rk_consumer.assignment.queried->cnt);
 
                         continue; /* Keep rktpar on pending list */
                 }
 
                 /* Remove rktpar from the pending list */
                 rd_kafka_topic_partition_list_del_by_idx(
-                        rk->rk_consumer.assignment.pending, i);
+                    rk->rk_consumer.assignment.pending, i);
         }
 
 
@@ -534,7 +511,7 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
                 if (coord)
                         rd_kafka_broker_destroy(coord);
                 return rk->rk_consumer.assignment.pending->cnt +
-                        rk->rk_consumer.assignment.queried->cnt;
+                       rk->rk_consumer.assignment.queried->cnt;
         }
 
 
@@ -548,14 +525,13 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
                              partitions_to_query->cnt);
 
                 rd_kafka_OffsetFetchRequest(
-                        coord,
-                        partitions_to_query,
-                        rk->rk_conf.isolation_level ==
-                        RD_KAFKA_READ_COMMITTED/*require_stable*/,
-                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_assignment_handle_OffsetFetch,
-                        /* Must be freed by handler */
-                        (void *)req_assignment_version);
+                    coord, partitions_to_query,
+                    rk->rk_conf.isolation_level ==
+                        RD_KAFKA_READ_COMMITTED /*require_stable*/,
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_assignment_handle_OffsetFetch,
+                    /* Must be freed by handler */
+                    (void *)req_assignment_version);
         }
 
         if (coord)
@@ -564,7 +540,7 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
         rd_kafka_topic_partition_list_destroy(partitions_to_query);
 
         return rk->rk_consumer.assignment.pending->cnt +
-                rk->rk_consumer.assignment.queried->cnt;
+               rk->rk_consumer.assignment.queried->cnt;
 }
 
 
@@ -577,9 +553,9 @@ rd_kafka_assignment_serve_pending (rd_kafka_t *rk) {
  * - wait_commit_cnt reaches 0
  * - partition fetcher is stopped
  */
-void rd_kafka_assignment_serve (rd_kafka_t *rk) {
+void rd_kafka_assignment_serve(rd_kafka_t *rk) {
         int inp_removals = 0;
-        int inp_pending = 0;
+        int inp_pending  = 0;
 
         rd_kafka_assignment_dump(rk);
 
@@ -593,15 +569,15 @@ void rd_kafka_assignment_serve (rd_kafka_t *rk) {
          * to finish (since we might need the committed offsets as start
          * offsets). */
         if (rk->rk_consumer.assignment.wait_stop_cnt == 0 &&
-            rk->rk_consumer.wait_commit_cnt == 0 &&
-            inp_removals == 0 &&
+            rk->rk_consumer.wait_commit_cnt == 0 && inp_removals == 0 &&
             rk->rk_consumer.assignment.pending->cnt > 0)
                 inp_pending = rd_kafka_assignment_serve_pending(rk);
 
         if (inp_removals + inp_pending +
-            rk->rk_consumer.assignment.queried->cnt +
-            rk->rk_consumer.assignment.wait_stop_cnt +
-            rk->rk_consumer.wait_commit_cnt == 0) {
+                rk->rk_consumer.assignment.queried->cnt +
+                rk->rk_consumer.assignment.wait_stop_cnt +
+                rk->rk_consumer.wait_commit_cnt ==
+            0) {
                 /* No assignment operations in progress,
                  * signal assignment done back to cgrp to let it
                  * transition to its next state if necessary.
@@ -615,8 +591,7 @@ void rd_kafka_assignment_serve (rd_kafka_t *rk) {
                              "with %d pending adds, %d offset queries, "
                              "%d partitions awaiting stop and "
                              "%d offset commits in progress",
-                             rk->rk_consumer.assignment.all->cnt,
-                             inp_pending,
+                             rk->rk_consumer.assignment.all->cnt, inp_pending,
                              rk->rk_consumer.assignment.queried->cnt,
                              rk->rk_consumer.assignment.wait_stop_cnt,
                              rk->rk_consumer.wait_commit_cnt);
@@ -628,12 +603,12 @@ void rd_kafka_assignment_serve (rd_kafka_t *rk) {
  * @returns true if the current or previous assignment has operations in
  *          progress, such as waiting for partition fetchers to stop.
  */
-rd_bool_t rd_kafka_assignment_in_progress (rd_kafka_t *rk) {
+rd_bool_t rd_kafka_assignment_in_progress(rd_kafka_t *rk) {
         return rk->rk_consumer.wait_commit_cnt > 0 ||
-                rk->rk_consumer.assignment.wait_stop_cnt > 0 ||
-                rk->rk_consumer.assignment.pending->cnt > 0 ||
-                rk->rk_consumer.assignment.queried->cnt > 0 ||
-                rk->rk_consumer.assignment.removed->cnt > 0;
+               rk->rk_consumer.assignment.wait_stop_cnt > 0 ||
+               rk->rk_consumer.assignment.pending->cnt > 0 ||
+               rk->rk_consumer.assignment.queried->cnt > 0 ||
+               rk->rk_consumer.assignment.removed->cnt > 0;
 }
 
 
@@ -645,17 +620,16 @@ rd_bool_t rd_kafka_assignment_in_progress (rd_kafka_t *rk) {
  *
  * @returns the number of partitions removed.
  */
-int rd_kafka_assignment_clear (rd_kafka_t *rk) {
+int rd_kafka_assignment_clear(rd_kafka_t *rk) {
         int cnt = rk->rk_consumer.assignment.all->cnt;
 
         if (cnt == 0) {
-                rd_kafka_dbg(rk, CONSUMER|RD_KAFKA_DBG_CGRP,
-                             "CLEARASSIGN",
+                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLEARASSIGN",
                              "No current assignment to clear");
                 return 0;
         }
 
-        rd_kafka_dbg(rk, CONSUMER|RD_KAFKA_DBG_CGRP, "CLEARASSIGN",
+        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLEARASSIGN",
                      "Clearing current assignment of %d partition(s)",
                      rk->rk_consumer.assignment.all->cnt);
 
@@ -663,8 +637,7 @@ int rd_kafka_assignment_clear (rd_kafka_t *rk) {
         rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.queried);
 
         rd_kafka_topic_partition_list_add_list(
-                rk->rk_consumer.assignment.removed,
-                rk->rk_consumer.assignment.all);
+            rk->rk_consumer.assignment.removed, rk->rk_consumer.assignment.all);
         rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.all);
 
         rk->rk_consumer.assignment.version++;
@@ -683,8 +656,8 @@ int rd_kafka_assignment_clear (rd_kafka_t *rk) {
  *         return from this function.
  */
 rd_kafka_error_t *
-rd_kafka_assignment_add (rd_kafka_t *rk,
-                         rd_kafka_topic_partition_list_t *partitions) {
+rd_kafka_assignment_add(rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *partitions) {
         rd_bool_t was_empty = rk->rk_consumer.assignment.all->cnt == 0;
         int i;
 
@@ -692,10 +665,10 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
          * invalid offsets in the input partitions. */
         rd_kafka_topic_partition_list_sort(partitions, NULL, NULL);
 
-        for (i = 0 ; i < partitions->cnt ; i++) {
+        for (i = 0; i < partitions->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
                 const rd_kafka_topic_partition_t *prev =
-                        i > 0 ? &partitions->elems[i-1] : NULL;
+                    i > 0 ? &partitions->elems[i - 1] : NULL;
 
                 if (RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) &&
                     rktpar->offset != RD_KAFKA_OFFSET_BEGINNING &&
@@ -704,26 +677,26 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
                     rktpar->offset != RD_KAFKA_OFFSET_INVALID &&
                     rktpar->offset > RD_KAFKA_OFFSET_TAIL_BASE)
                         return rd_kafka_error_new(
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "%s [%"PRId32"] has invalid start offset %"
-                                PRId64,
-                                rktpar->topic, rktpar->partition,
-                                rktpar->offset);
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "%s [%" PRId32
+                            "] has invalid start offset %" PRId64,
+                            rktpar->topic, rktpar->partition, rktpar->offset);
 
                 if (prev && !rd_kafka_topic_partition_cmp(rktpar, prev))
                         return rd_kafka_error_new(
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "Duplicate %s [%"PRId32"] in input list",
-                                rktpar->topic, rktpar->partition);
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate %s [%" PRId32 "] in input list",
+                            rktpar->topic, rktpar->partition);
 
                 if (rd_kafka_topic_partition_list_find(
-                            rk->rk_consumer.assignment.all,
-                            rktpar->topic, rktpar->partition))
-                        return rd_kafka_error_new(
-                                RD_KAFKA_RESP_ERR__CONFLICT,
-                                "%s [%"PRId32"] is already part of the "
-                                "current assignment",
-                                rktpar->topic, rktpar->partition);
+                        rk->rk_consumer.assignment.all, rktpar->topic,
+                        rktpar->partition))
+                        return rd_kafka_error_new(RD_KAFKA_RESP_ERR__CONFLICT,
+                                                  "%s [%" PRId32
+                                                  "] is already part of the "
+                                                  "current assignment",
+                                                  rktpar->topic,
+                                                  rktpar->partition);
 
                 /* Translate RD_KAFKA_OFFSET_INVALID to RD_KAFKA_OFFSET_STORED,
                  * i.e., read from committed offset, since we use INVALID
@@ -737,8 +710,7 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
                  * This is to make sure the rktp stays alive while unassigning
                  * any previous assignment in the call to
                  * assignment_clear() below. */
-                rd_kafka_topic_partition_ensure_toppar(rk, rktpar,
-                                                       rd_true);
+                rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
         }
 
         /* Add the new list of partitions to the current assignment.
@@ -747,22 +719,19 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
         rd_kafka_topic_partition_list_add_list(rk->rk_consumer.assignment.all,
                                                partitions);
         if (!was_empty)
-                rd_kafka_topic_partition_list_sort(rk->rk_consumer.
-                                                   assignment.all,
-                                                   NULL, NULL);
+                rd_kafka_topic_partition_list_sort(
+                    rk->rk_consumer.assignment.all, NULL, NULL);
 
         /* And add to .pending for serve_pending() to handle. */
-        rd_kafka_topic_partition_list_add_list(rk->rk_consumer.
-                                               assignment.pending,
-                                               partitions);
+        rd_kafka_topic_partition_list_add_list(
+            rk->rk_consumer.assignment.pending, partitions);
 
 
-        rd_kafka_dbg(rk, CONSUMER|RD_KAFKA_DBG_CGRP, "ASSIGNMENT",
+        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "ASSIGNMENT",
                      "Added %d partition(s) to assignment which "
                      "now consists of %d partition(s) where of %d are in "
                      "pending state and %d are being queried",
-                     partitions->cnt,
-                     rk->rk_consumer.assignment.all->cnt,
+                     partitions->cnt, rk->rk_consumer.assignment.all->cnt,
                      rk->rk_consumer.assignment.pending->cnt,
                      rk->rk_consumer.assignment.queried->cnt);
 
@@ -782,35 +751,35 @@ rd_kafka_assignment_add (rd_kafka_t *rk,
  *         return from this function.
  */
 rd_kafka_error_t *
-rd_kafka_assignment_subtract (rd_kafka_t *rk,
-                              rd_kafka_topic_partition_list_t *partitions) {
+rd_kafka_assignment_subtract(rd_kafka_t *rk,
+                             rd_kafka_topic_partition_list_t *partitions) {
         int i;
         int matched_queried_partitions = 0;
         int assignment_pre_cnt;
 
         if (rk->rk_consumer.assignment.all->cnt == 0 && partitions->cnt > 0)
                 return rd_kafka_error_new(
-                        RD_KAFKA_RESP_ERR__INVALID_ARG,
-                        "Can't subtract from empty assignment");
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Can't subtract from empty assignment");
 
         /* Verify that all partitions in \p partitions are in the assignment
          * before starting to modify the assignment. */
         rd_kafka_topic_partition_list_sort(partitions, NULL, NULL);
 
-        for (i = 0 ; i < partitions->cnt ; i++) {
+        for (i = 0; i < partitions->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
 
                 if (!rd_kafka_topic_partition_list_find(
-                            rk->rk_consumer.assignment.all,
-                            rktpar->topic, rktpar->partition))
+                        rk->rk_consumer.assignment.all, rktpar->topic,
+                        rktpar->partition))
                         return rd_kafka_error_new(
-                                RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                "%s [%"PRId32"] can't be unassigned since "
-                                "it is not in the current assignment",
-                                rktpar->topic, rktpar->partition);
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "%s [%" PRId32
+                            "] can't be unassigned since "
+                            "it is not in the current assignment",
+                            rktpar->topic, rktpar->partition);
 
-                rd_kafka_topic_partition_ensure_toppar(rk, rktpar,
-                                                       rd_true);
+                rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
         }
 
 
@@ -819,38 +788,39 @@ rd_kafka_assignment_subtract (rd_kafka_t *rk,
         /* Remove partitions in reverse order to avoid excessive
          * array shuffling of .all.
          * Add the removed partitions to .pending for serve() to handle. */
-        for (i = partitions->cnt-1 ; i >= 0 ; i--) {
+        for (i = partitions->cnt - 1; i >= 0; i--) {
                 const rd_kafka_topic_partition_t *rktpar =
-                        &partitions->elems[i];
+                    &partitions->elems[i];
 
                 if (!rd_kafka_topic_partition_list_del(
-                            rk->rk_consumer.assignment.all,
-                            rktpar->topic, rktpar->partition))
-                        RD_BUG("Removed partition %s [%"PRId32"] not found "
+                        rk->rk_consumer.assignment.all, rktpar->topic,
+                        rktpar->partition))
+                        RD_BUG("Removed partition %s [%" PRId32
+                               "] not found "
                                "in assignment.all",
                                rktpar->topic, rktpar->partition);
 
                 if (rd_kafka_topic_partition_list_del(
-                            rk->rk_consumer.assignment.queried,
-                            rktpar->topic, rktpar->partition))
+                        rk->rk_consumer.assignment.queried, rktpar->topic,
+                        rktpar->partition))
                         matched_queried_partitions++;
                 else
                         rd_kafka_topic_partition_list_del(
-                                rk->rk_consumer.assignment.pending,
-                                rktpar->topic, rktpar->partition);
+                            rk->rk_consumer.assignment.pending, rktpar->topic,
+                            rktpar->partition);
 
                 /* Add to .removed list which will be served by
                  * serve_removals(). */
                 rd_kafka_topic_partition_list_add_copy(
-                        rk->rk_consumer.assignment.removed, rktpar);
+                    rk->rk_consumer.assignment.removed, rktpar);
         }
 
         rd_kafka_dbg(rk, CGRP, "REMOVEASSIGN",
                      "Removed %d partition(s) "
                      "(%d with outstanding offset queries) from assignment "
                      "of %d partition(s)",
-                     partitions->cnt,
-                     matched_queried_partitions, assignment_pre_cnt);
+                     partitions->cnt, matched_queried_partitions,
+                     assignment_pre_cnt);
 
         if (rk->rk_consumer.assignment.all->cnt == 0) {
                 /* Some safe checking */
@@ -867,8 +837,8 @@ rd_kafka_assignment_subtract (rd_kafka_t *rk,
 /**
  * @brief Call when partition fetcher has stopped.
  */
-void rd_kafka_assignment_partition_stopped (rd_kafka_t *rk,
-                                            rd_kafka_toppar_t *rktp) {
+void rd_kafka_assignment_partition_stopped(rd_kafka_t *rk,
+                                           rd_kafka_toppar_t *rktp) {
         rd_assert(rk->rk_consumer.assignment.wait_stop_cnt > 0);
         rk->rk_consumer.assignment.wait_stop_cnt--;
 
@@ -895,7 +865,7 @@ void rd_kafka_assignment_partition_stopped (rd_kafka_t *rk,
  * Partitions will be resumed by calling rd_kafka_assignment_resume() or
  * from either serve_removals() or serve_pending() above.
  */
-void rd_kafka_assignment_pause (rd_kafka_t *rk, const char *reason) {
+void rd_kafka_assignment_pause(rd_kafka_t *rk, const char *reason) {
 
         if (rk->rk_consumer.assignment.all->cnt == 0)
                 return;
@@ -904,9 +874,7 @@ void rd_kafka_assignment_pause (rd_kafka_t *rk, const char *reason) {
                      "Pausing fetchers for %d assigned partition(s): %s",
                      rk->rk_consumer.assignment.all->cnt, reason);
 
-        rd_kafka_toppars_pause_resume(rk,
-                                      rd_true/*pause*/,
-                                      RD_ASYNC,
+        rd_kafka_toppars_pause_resume(rk, rd_true /*pause*/, RD_ASYNC,
                                       RD_KAFKA_TOPPAR_F_LIB_PAUSE,
                                       rk->rk_consumer.assignment.all);
 }
@@ -915,7 +883,7 @@ void rd_kafka_assignment_pause (rd_kafka_t *rk, const char *reason) {
  * @brief Resume fetching of the currently assigned partitions which have
  *        previously been paused by rd_kafka_assignment_pause().
  */
-void rd_kafka_assignment_resume (rd_kafka_t *rk, const char *reason) {
+void rd_kafka_assignment_resume(rd_kafka_t *rk, const char *reason) {
 
         if (rk->rk_consumer.assignment.all->cnt == 0)
                 return;
@@ -924,9 +892,7 @@ void rd_kafka_assignment_resume (rd_kafka_t *rk, const char *reason) {
                      "Resuming fetchers for %d assigned partition(s): %s",
                      rk->rk_consumer.assignment.all->cnt, reason);
 
-        rd_kafka_toppars_pause_resume(rk,
-                                      rd_false/*resume*/,
-                                      RD_ASYNC,
+        rd_kafka_toppars_pause_resume(rk, rd_false /*resume*/, RD_ASYNC,
                                       RD_KAFKA_TOPPAR_F_LIB_PAUSE,
                                       rk->rk_consumer.assignment.all);
 }
@@ -936,30 +902,28 @@ void rd_kafka_assignment_resume (rd_kafka_t *rk, const char *reason) {
 /**
  * @brief Destroy assignment state (but not \p assignment itself)
  */
-void rd_kafka_assignment_destroy (rd_kafka_t *rk) {
+void rd_kafka_assignment_destroy(rd_kafka_t *rk) {
         if (!rk->rk_consumer.assignment.all)
                 return; /* rd_kafka_assignment_init() not called */
+        rd_kafka_topic_partition_list_destroy(rk->rk_consumer.assignment.all);
         rd_kafka_topic_partition_list_destroy(
-                rk->rk_consumer.assignment.all);
+            rk->rk_consumer.assignment.pending);
         rd_kafka_topic_partition_list_destroy(
-                rk->rk_consumer.assignment.pending);
+            rk->rk_consumer.assignment.queried);
         rd_kafka_topic_partition_list_destroy(
-                rk->rk_consumer.assignment.queried);
-        rd_kafka_topic_partition_list_destroy(
-                rk->rk_consumer.assignment.removed);
+            rk->rk_consumer.assignment.removed);
 }
 
 
 /**
  * @brief Initialize the assignment struct.
  */
-void rd_kafka_assignment_init (rd_kafka_t *rk) {
-        rk->rk_consumer.assignment.all =
-                rd_kafka_topic_partition_list_new(100);
+void rd_kafka_assignment_init(rd_kafka_t *rk) {
+        rk->rk_consumer.assignment.all = rd_kafka_topic_partition_list_new(100);
         rk->rk_consumer.assignment.pending =
-                rd_kafka_topic_partition_list_new(100);
+            rd_kafka_topic_partition_list_new(100);
         rk->rk_consumer.assignment.queried =
-                rd_kafka_topic_partition_list_new(100);
+            rd_kafka_topic_partition_list_new(100);
         rk->rk_consumer.assignment.removed =
-                rd_kafka_topic_partition_list_new(100);
+            rd_kafka_topic_partition_list_new(100);
 }

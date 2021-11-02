@@ -36,46 +36,43 @@
 
 #define RD_AVL_NODE_HEIGHT(ran) ((ran) ? (ran)->ran_height : 0)
 
-#define RD_AVL_NODE_DELTA(ran) \
-        (RD_AVL_NODE_HEIGHT((ran)->ran_p[RD_AVL_LEFT]) - \
+#define RD_AVL_NODE_DELTA(ran)                                                 \
+        (RD_AVL_NODE_HEIGHT((ran)->ran_p[RD_AVL_LEFT]) -                       \
          RD_AVL_NODE_HEIGHT((ran)->ran_p[RD_AVL_RIGHT]))
 
 #define RD_DELTA_MAX 1
 
 
-static rd_avl_node_t *rd_avl_balance_node (rd_avl_node_t *ran);
+static rd_avl_node_t *rd_avl_balance_node(rd_avl_node_t *ran);
 
-static rd_avl_node_t *rd_avl_rotate (rd_avl_node_t *ran, rd_avl_dir_t dir) {
+static rd_avl_node_t *rd_avl_rotate(rd_avl_node_t *ran, rd_avl_dir_t dir) {
         rd_avl_node_t *n;
-        static const rd_avl_dir_t odirmap[] = { /* opposite direction map */
-                [RD_AVL_RIGHT] = RD_AVL_LEFT,
-                [RD_AVL_LEFT]  = RD_AVL_RIGHT
-        };
-        const int odir = odirmap[dir];
+        static const rd_avl_dir_t odirmap[] = {/* opposite direction map */
+                                               [RD_AVL_RIGHT] = RD_AVL_LEFT,
+                                               [RD_AVL_LEFT]  = RD_AVL_RIGHT};
+        const int odir                      = odirmap[dir];
 
-        n = ran->ran_p[odir];
+        n                = ran->ran_p[odir];
         ran->ran_p[odir] = n->ran_p[dir];
-        n->ran_p[dir] = rd_avl_balance_node(ran);
+        n->ran_p[dir]    = rd_avl_balance_node(ran);
 
         return rd_avl_balance_node(n);
 }
 
-static rd_avl_node_t *rd_avl_balance_node (rd_avl_node_t *ran) {
+static rd_avl_node_t *rd_avl_balance_node(rd_avl_node_t *ran) {
         const int d = RD_AVL_NODE_DELTA(ran);
         int h;
 
         if (d < -RD_DELTA_MAX) {
                 if (RD_AVL_NODE_DELTA(ran->ran_p[RD_AVL_RIGHT]) > 0)
-                        ran->ran_p[RD_AVL_RIGHT] =
-                                rd_avl_rotate(ran->ran_p[RD_AVL_RIGHT],
-                                              RD_AVL_RIGHT);
+                        ran->ran_p[RD_AVL_RIGHT] = rd_avl_rotate(
+                            ran->ran_p[RD_AVL_RIGHT], RD_AVL_RIGHT);
                 return rd_avl_rotate(ran, RD_AVL_LEFT);
 
         } else if (d > RD_DELTA_MAX) {
                 if (RD_AVL_NODE_DELTA(ran->ran_p[RD_AVL_LEFT]) < 0)
                         ran->ran_p[RD_AVL_LEFT] =
-                                rd_avl_rotate(ran->ran_p[RD_AVL_LEFT],
-                                              RD_AVL_LEFT);
+                            rd_avl_rotate(ran->ran_p[RD_AVL_LEFT], RD_AVL_LEFT);
 
                 return rd_avl_rotate(ran, RD_AVL_RIGHT);
         }
@@ -85,7 +82,8 @@ static rd_avl_node_t *rd_avl_balance_node (rd_avl_node_t *ran) {
         if ((h = RD_AVL_NODE_HEIGHT(ran->ran_p[RD_AVL_LEFT])) > ran->ran_height)
                 ran->ran_height = h;
 
-        if ((h = RD_AVL_NODE_HEIGHT(ran->ran_p[RD_AVL_RIGHT])) >ran->ran_height)
+        if ((h = RD_AVL_NODE_HEIGHT(ran->ran_p[RD_AVL_RIGHT])) >
+            ran->ran_height)
                 ran->ran_height = h;
 
         ran->ran_height++;
@@ -93,10 +91,10 @@ static rd_avl_node_t *rd_avl_balance_node (rd_avl_node_t *ran) {
         return ran;
 }
 
-rd_avl_node_t *rd_avl_insert_node (rd_avl_t *ravl,
-                                   rd_avl_node_t *parent,
-                                   rd_avl_node_t *ran,
-                                   rd_avl_node_t **existing) {
+rd_avl_node_t *rd_avl_insert_node(rd_avl_t *ravl,
+                                  rd_avl_node_t *parent,
+                                  rd_avl_node_t *ran,
+                                  rd_avl_node_t **existing) {
         rd_avl_dir_t dir;
         int r;
 
@@ -105,10 +103,10 @@ rd_avl_node_t *rd_avl_insert_node (rd_avl_t *ravl,
 
         if ((r = ravl->ravl_cmp(ran->ran_elm, parent->ran_elm)) == 0) {
                 /* Replace existing node with new one. */
-                ran->ran_p[RD_AVL_LEFT] = parent->ran_p[RD_AVL_LEFT];
+                ran->ran_p[RD_AVL_LEFT]  = parent->ran_p[RD_AVL_LEFT];
                 ran->ran_p[RD_AVL_RIGHT] = parent->ran_p[RD_AVL_RIGHT];
-                ran->ran_height = parent->ran_height;
-                *existing = parent;
+                ran->ran_height          = parent->ran_height;
+                *existing                = parent;
                 return ran;
         }
 
@@ -117,14 +115,14 @@ rd_avl_node_t *rd_avl_insert_node (rd_avl_t *ravl,
         else
                 dir = RD_AVL_RIGHT;
 
-        parent->ran_p[dir] = rd_avl_insert_node(ravl, parent->ran_p[dir],
-                                                ran, existing);
+        parent->ran_p[dir] =
+            rd_avl_insert_node(ravl, parent->ran_p[dir], ran, existing);
         return rd_avl_balance_node(parent);
 }
 
 
-static rd_avl_node_t *rd_avl_move (rd_avl_node_t *dst, rd_avl_node_t *src,
-                                   rd_avl_dir_t dir) {
+static rd_avl_node_t *
+rd_avl_move(rd_avl_node_t *dst, rd_avl_node_t *src, rd_avl_dir_t dir) {
 
         if (!dst)
                 return src;
@@ -134,11 +132,10 @@ static rd_avl_node_t *rd_avl_move (rd_avl_node_t *dst, rd_avl_node_t *src,
         return rd_avl_balance_node(dst);
 }
 
-static rd_avl_node_t *rd_avl_remove_node0 (rd_avl_node_t *ran) {
+static rd_avl_node_t *rd_avl_remove_node0(rd_avl_node_t *ran) {
         rd_avl_node_t *tmp;
 
-        tmp = rd_avl_move(ran->ran_p[RD_AVL_LEFT],
-                          ran->ran_p[RD_AVL_RIGHT],
+        tmp = rd_avl_move(ran->ran_p[RD_AVL_LEFT], ran->ran_p[RD_AVL_RIGHT],
                           RD_AVL_RIGHT);
 
         ran->ran_p[RD_AVL_LEFT] = ran->ran_p[RD_AVL_RIGHT] = NULL;
@@ -146,8 +143,8 @@ static rd_avl_node_t *rd_avl_remove_node0 (rd_avl_node_t *ran) {
 }
 
 
-rd_avl_node_t *rd_avl_remove_elm0 (rd_avl_t *ravl, rd_avl_node_t *parent,
-                                   const void *elm) {
+rd_avl_node_t *
+rd_avl_remove_elm0(rd_avl_t *ravl, rd_avl_node_t *parent, const void *elm) {
         rd_avl_dir_t dir;
         int r;
 
@@ -157,22 +154,21 @@ rd_avl_node_t *rd_avl_remove_elm0 (rd_avl_t *ravl, rd_avl_node_t *parent,
 
         if ((r = ravl->ravl_cmp(elm, parent->ran_elm)) == 0)
                 return rd_avl_remove_node0(parent);
-        else if  (r < 0)
+        else if (r < 0)
                 dir = RD_AVL_LEFT;
         else /* > 0 */
                 dir = RD_AVL_RIGHT;
 
-        parent->ran_p[dir] =
-                rd_avl_remove_elm0(ravl, parent->ran_p[dir], elm);
+        parent->ran_p[dir] = rd_avl_remove_elm0(ravl, parent->ran_p[dir], elm);
 
         return rd_avl_balance_node(parent);
 }
 
 
 
-rd_avl_node_t *rd_avl_find_node (const rd_avl_t *ravl,
-                                 const rd_avl_node_t *begin,
-                                 const void *elm) {
+rd_avl_node_t *rd_avl_find_node(const rd_avl_t *ravl,
+                                const rd_avl_node_t *begin,
+                                const void *elm) {
         int r;
 
         if (!begin)
@@ -187,7 +183,7 @@ rd_avl_node_t *rd_avl_find_node (const rd_avl_t *ravl,
 
 
 
-void rd_avl_destroy (rd_avl_t *ravl) {
+void rd_avl_destroy(rd_avl_t *ravl) {
         if (ravl->ravl_flags & RD_AVL_F_LOCKS)
                 rwlock_destroy(&ravl->ravl_rwlock);
 
@@ -195,7 +191,7 @@ void rd_avl_destroy (rd_avl_t *ravl) {
                 rd_free(ravl);
 }
 
-rd_avl_t *rd_avl_init (rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags) {
+rd_avl_t *rd_avl_init(rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags) {
 
         if (!ravl) {
                 ravl = rd_calloc(1, sizeof(*ravl));
@@ -205,7 +201,7 @@ rd_avl_t *rd_avl_init (rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags) {
         }
 
         ravl->ravl_flags = flags;
-        ravl->ravl_cmp = cmp;
+        ravl->ravl_cmp   = cmp;
 
         if (flags & RD_AVL_F_LOCKS)
                 rwlock_init(&ravl->ravl_rwlock);

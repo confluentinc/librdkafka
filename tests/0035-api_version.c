@@ -30,7 +30,7 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
 /**
@@ -41,34 +41,33 @@
  */
 
 
-int main_0035_api_version (int argc, char **argv) {
-	rd_kafka_t *rk;
-	rd_kafka_conf_t *conf;
-	const struct rd_kafka_metadata *metadata;
-	rd_kafka_resp_err_t err;
-	test_timing_t t_meta;
+int main_0035_api_version(int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const struct rd_kafka_metadata *metadata;
+        rd_kafka_resp_err_t err;
+        test_timing_t t_meta;
 
-	test_conf_init(&conf, NULL, 30);
-	test_conf_set(conf, "socket.timeout.ms", "12000");
-	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "socket.timeout.ms", "12000");
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-	TEST_SAY("Querying for metadata\n");
-	TIMING_START(&t_meta, "metadata()");
-	err = rd_kafka_metadata(rk, 0, NULL, &metadata, tmout_multip(5*1000));
-	TIMING_STOP(&t_meta);
-	if (err)
-		TEST_FAIL("metadata() failed: %s",
-			  rd_kafka_err2str(err));
+        TEST_SAY("Querying for metadata\n");
+        TIMING_START(&t_meta, "metadata()");
+        err = rd_kafka_metadata(rk, 0, NULL, &metadata, tmout_multip(5 * 1000));
+        TIMING_STOP(&t_meta);
+        if (err)
+                TEST_FAIL("metadata() failed: %s", rd_kafka_err2str(err));
 
-	if (TIMING_DURATION(&t_meta) / 1000 > 15*1000)
-		TEST_FAIL("metadata() took too long: %.3fms",
-			  (float)TIMING_DURATION(&t_meta) / 1000.0f);
+        if (TIMING_DURATION(&t_meta) / 1000 > 15 * 1000)
+                TEST_FAIL("metadata() took too long: %.3fms",
+                          (float)TIMING_DURATION(&t_meta) / 1000.0f);
 
-	rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_destroy(metadata);
 
-	TEST_SAY("Metadata succeeded\n");
+        TEST_SAY("Metadata succeeded\n");
 
-	rd_kafka_destroy(rk);
+        rd_kafka_destroy(rk);
 
-	return 0;
+        return 0;
 }

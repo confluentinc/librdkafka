@@ -35,7 +35,7 @@
  * @define The broker maintains a window of the 5 last Produce requests
  *         for a partition to be able to de-deduplicate resends.
  */
-#define RD_KAFKA_IDEMP_MAX_INFLIGHT      5
+#define RD_KAFKA_IDEMP_MAX_INFLIGHT     5
 #define RD_KAFKA_IDEMP_MAX_INFLIGHT_STR "5" /* For printouts */
 
 /**
@@ -49,7 +49,7 @@
  * @locks none
  */
 static RD_UNUSED RD_INLINE rd_kafka_pid_t
-rd_kafka_idemp_get_pid0 (rd_kafka_t *rk, rd_bool_t do_lock) {
+rd_kafka_idemp_get_pid0(rd_kafka_t *rk, rd_bool_t do_lock) {
         rd_kafka_pid_t pid;
 
         if (do_lock)
@@ -64,33 +64,34 @@ rd_kafka_idemp_get_pid0 (rd_kafka_t *rk, rd_bool_t do_lock) {
         return pid;
 }
 
-#define rd_kafka_idemp_get_pid(rk) rd_kafka_idemp_get_pid0(rk,rd_true/*lock*/)
+#define rd_kafka_idemp_get_pid(rk) rd_kafka_idemp_get_pid0(rk, rd_true /*lock*/)
 
-void rd_kafka_idemp_set_state (rd_kafka_t *rk,
-                               rd_kafka_idemp_state_t new_state);
-void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
-                                        rd_kafka_resp_err_t err);
-void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
-                                const rd_kafka_pid_t pid);
-void rd_kafka_idemp_pid_fsm (rd_kafka_t *rk);
-void rd_kafka_idemp_drain_reset (rd_kafka_t *rk, const char *reason);
-void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...)
-        RD_FORMAT(printf, 2, 3);
-void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp, const char *reason);
-void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,
-                                         rd_kafka_toppar_t *rktp);
-void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,
-                                         rd_kafka_toppar_t *rktp);
+void rd_kafka_idemp_set_state(rd_kafka_t *rk, rd_kafka_idemp_state_t new_state);
+void rd_kafka_idemp_request_pid_failed(rd_kafka_broker_t *rkb,
+                                       rd_kafka_resp_err_t err);
+void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
+                               const rd_kafka_pid_t pid);
+void rd_kafka_idemp_pid_fsm(rd_kafka_t *rk);
+void rd_kafka_idemp_drain_reset(rd_kafka_t *rk, const char *reason);
+void rd_kafka_idemp_drain_epoch_bump(rd_kafka_t *rk,
+                                     rd_kafka_resp_err_t err,
+                                     const char *fmt,
+                                     ...) RD_FORMAT(printf, 3, 4);
+void rd_kafka_idemp_drain_toppar(rd_kafka_toppar_t *rktp, const char *reason);
+void rd_kafka_idemp_inflight_toppar_sub(rd_kafka_t *rk,
+                                        rd_kafka_toppar_t *rktp);
+void rd_kafka_idemp_inflight_toppar_add(rd_kafka_t *rk,
+                                        rd_kafka_toppar_t *rktp);
 
-rd_kafka_broker_t *
-rd_kafka_idemp_broker_any (rd_kafka_t *rk,
-                           rd_kafka_resp_err_t *errp,
-                           char *errstr, size_t errstr_size);
+rd_kafka_broker_t *rd_kafka_idemp_broker_any(rd_kafka_t *rk,
+                                             rd_kafka_resp_err_t *errp,
+                                             char *errstr,
+                                             size_t errstr_size);
 
-rd_bool_t rd_kafka_idemp_check_error (rd_kafka_t *rk,
-                                      rd_kafka_resp_err_t err,
-                                      const char *errstr,
-                                      rd_bool_t is_fatal);
+rd_bool_t rd_kafka_idemp_check_error(rd_kafka_t *rk,
+                                     rd_kafka_resp_err_t err,
+                                     const char *errstr,
+                                     rd_bool_t is_fatal);
 
 
 /**
@@ -113,17 +114,18 @@ rd_bool_t rd_kafka_idemp_check_error (rd_kafka_t *rk,
  * @locality any thread
  * @locks none
  */
-#define rd_kafka_idemp_set_fatal_error(RK,ERR,...) do {                 \
-                if (rd_kafka_is_transactional(RK))                      \
-                        rd_kafka_txn_set_fatal_error(rk, RD_DO_LOCK, ERR, \
-                                                     __VA_ARGS__);      \
-                else                                                    \
-                        rd_kafka_set_fatal_error(RK, ERR, __VA_ARGS__); \
+#define rd_kafka_idemp_set_fatal_error(RK, ERR, ...)                           \
+        do {                                                                   \
+                if (rd_kafka_is_transactional(RK))                             \
+                        rd_kafka_txn_set_fatal_error(rk, RD_DO_LOCK, ERR,      \
+                                                     __VA_ARGS__);             \
+                else                                                           \
+                        rd_kafka_set_fatal_error(RK, ERR, __VA_ARGS__);        \
         } while (0)
 
-void rd_kafka_idemp_start (rd_kafka_t *rk, rd_bool_t immediate);
-void rd_kafka_idemp_init (rd_kafka_t *rk);
-void rd_kafka_idemp_term (rd_kafka_t *rk);
+void rd_kafka_idemp_start(rd_kafka_t *rk, rd_bool_t immediate);
+void rd_kafka_idemp_init(rd_kafka_t *rk);
+void rd_kafka_idemp_term(rd_kafka_t *rk);
 
 
 #endif /* _RD_KAFKA_IDEMPOTENCE_H_ */

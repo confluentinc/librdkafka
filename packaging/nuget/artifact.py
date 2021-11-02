@@ -24,11 +24,13 @@
 
 import re
 import os
-import argparse
 import boto3
+
+import packaging
 
 s3_bucket = 'librdkafka-ci-packages'
 dry_run = False
+
 
 class Artifact (object):
     def __init__(self, arts, path, info=None):
@@ -49,7 +51,7 @@ class Artifact (object):
             # Assign the map and convert all keys to lower case
             self.info = {k.lower(): v for k, v in info.items()}
             # Rename values, e.g., 'plat':'linux' to 'plat':'debian'
-            for k,v in self.info.items():
+            for k, v in self.info.items():
                 rdict = packaging.rename_vals.get(k, None)
                 if rdict is not None:
                     self.info[k] = rdict.get(v, v)
@@ -64,11 +66,10 @@ class Artifact (object):
         self.arts = arts
         arts.artifacts.append(self)
 
-
     def __repr__(self):
         return self.path
 
-    def __lt__ (self, other):
+    def __lt__(self, other):
         return self.score < other.score
 
     def download(self):
@@ -136,7 +137,7 @@ class Artifacts (object):
 
         # Match tag or sha to gitref
         unmatched = list()
-        for m,v in self.match.items():
+        for m, v in self.match.items():
             if m not in info or info[m] != v:
                 unmatched.append(m)
 
@@ -144,19 +145,23 @@ class Artifacts (object):
         # common artifact.
         if info.get('p', '') != 'common' and len(unmatched) > 0:
             print(info)
-            print('%s: %s did not match %s' % (info.get('p', None), folder, unmatched))
+            print('%s: %s did not match %s' %
+                  (info.get('p', None), folder, unmatched))
             return None
 
         return Artifact(self, path, info)
 
-
     def collect_s3(self):
-        """ Collect and download build-artifacts from S3 based on git reference """
-        print('Collecting artifacts matching %s from S3 bucket %s' % (self.match, s3_bucket))
+        """ Collect and download build-artifacts from S3 based on
+        git reference """
+        print(
+            'Collecting artifacts matching %s from S3 bucket %s' %
+            (self.match, s3_bucket))
         self.s3 = boto3.resource('s3')
         self.s3_bucket = self.s3.Bucket(s3_bucket)
         self.s3_client = boto3.client('s3')
-        for item in self.s3_client.list_objects(Bucket=s3_bucket, Prefix='librdkafka/').get('Contents'):
+        for item in self.s3_client.list_objects(
+                Bucket=s3_bucket, Prefix='librdkafka/').get('Contents'):
             self.collect_single(item.get('Key'))
 
         for a in self.artifacts:
@@ -165,9 +170,8 @@ class Artifacts (object):
     def collect_local(self, path, req_tag=True):
         """ Collect artifacts from a local directory possibly previously
         collected from s3 """
-        for f in [os.path.join(dp, f) for dp, dn, filenames in os.walk(path) for f in filenames]:
+        for f in [os.path.join(dp, f) for dp, dn,
+                  filenames in os.walk(path) for f in filenames]:
             if not os.path.isfile(f):
                 continue
             self.collect_single(f, req_tag)
-
-

@@ -2,26 +2,16 @@
 #include <string.h>
 #include <librdkafka/rdkafka.h>
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         char features[256];
         size_t fsize = sizeof(features);
         char errstr[512];
         const char *exp_features[] = {
-                "gzip",
-                "snappy",
-                "ssl",
-                "sasl",
-                "regex",
-                "lz4",
-                "sasl_gssapi",
-                "sasl_plain",
-                "sasl_scram",
-                "plugins",
-                "zstd",
-                "sasl_oauthbearer",
-                NULL,
+            "gzip", "snappy",           "ssl",        "sasl",       "regex",
+            "lz4",  "sasl_gssapi",      "sasl_plain", "sasl_scram", "plugins",
+            "zstd", "sasl_oauthbearer", NULL,
         };
         const char **exp;
         int missing = 0;
@@ -39,14 +29,13 @@ int main (int argc, char **argv) {
         printf("builtin.features %s\n", features);
 
         /* Verify that expected features are enabled. */
-        for (exp = exp_features ; *exp ; exp++) {
+        for (exp = exp_features; *exp; exp++) {
                 const char *t = features;
-                size_t elen = strlen(*exp);
-                int match = 0;
+                size_t elen   = strlen(*exp);
+                int match     = 0;
 
                 while ((t = strstr(t, *exp))) {
-                        if (t[elen] == ',' ||
-                            t[elen] == '\0') {
+                        if (t[elen] == ',' || t[elen] == '\0') {
                                 match = 1;
                                 break;
                         }
@@ -60,16 +49,16 @@ int main (int argc, char **argv) {
                 missing++;
         }
 
-        if (rd_kafka_conf_set(conf, "security.protocol", "SASL_SSL",
-                              errstr, sizeof(errstr)) ||
-            rd_kafka_conf_set(conf, "sasl.mechanism", "PLAIN",
-                              errstr, sizeof(errstr)) ||
-            rd_kafka_conf_set(conf, "sasl.username", "username",
-                              errstr, sizeof(errstr)) ||
-            rd_kafka_conf_set(conf, "sasl.password", "password",
-                              errstr, sizeof(errstr)) ||
-            rd_kafka_conf_set(conf, "debug", "security",
-                              errstr, sizeof(errstr))) {
+        if (rd_kafka_conf_set(conf, "security.protocol", "SASL_SSL", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "sasl.mechanism", "PLAIN", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "sasl.username", "username", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "sasl.password", "password", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "debug", "security", errstr,
+                              sizeof(errstr))) {
                 fprintf(stderr, "conf_set failed: %s\n", errstr);
                 return 1;
         }

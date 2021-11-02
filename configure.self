@@ -20,6 +20,7 @@ mkl_require zlib
 mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
+mkl_require libcurl
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
@@ -105,6 +106,7 @@ void foo (void) {
     mkl_check "libssl"
     mkl_check "libsasl2"
     mkl_check "libzstd"
+    mkl_check "libcurl"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then

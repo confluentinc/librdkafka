@@ -31,24 +31,24 @@
 
 
 class errorEventCb : public RdKafka::EventCb {
-public:
-  errorEventCb(): error_seen(false) { }
+ public:
+  errorEventCb() : error_seen(false) {
+  }
 
-  void event_cb (RdKafka::Event &event) {
-    switch (event.type())
-      {
+  void event_cb(RdKafka::Event &event) {
+    switch (event.type()) {
     case RdKafka::Event::EVENT_ERROR:
-      Test::Say(tostr() << "Error: " << RdKafka::err2str(event.err()) <<
-        ": " << event.str() << "\n");
+      Test::Say(tostr() << "Error: " << RdKafka::err2str(event.err()) << ": "
+                        << event.str() << "\n");
       if (event.err() == RdKafka::ERR__ALL_BROKERS_DOWN)
         error_seen = true;
       break;
 
-      case RdKafka::Event::EVENT_LOG:
-        Test::Say(tostr() << "Log: " << event.str() << "\n");
-        break;
+    case RdKafka::Event::EVENT_LOG:
+      Test::Say(tostr() << "Log: " << event.str() << "\n");
+      break;
 
-      default:
+    default:
       break;
     }
   }
@@ -58,65 +58,65 @@ public:
 
 
 extern "C" {
-  int main_0095_all_brokers_down (int argc, char **argv) {
-    RdKafka::Conf *conf;
-    std::string errstr;
+int main_0095_all_brokers_down(int argc, char **argv) {
+  RdKafka::Conf *conf;
+  std::string errstr;
 
-    Test::conf_init(&conf, NULL, 20);
-    /* Two broker addresses that will quickly reject the connection */
-    Test::conf_set(conf, "bootstrap.servers", "127.0.0.1:1,127.0.0.1:2");
+  Test::conf_init(&conf, NULL, 20);
+  /* Two broker addresses that will quickly reject the connection */
+  Test::conf_set(conf, "bootstrap.servers", "127.0.0.1:1,127.0.0.1:2");
 
-    /*
-     * First test producer
-     */
-    errorEventCb pEvent = errorEventCb();
+  /*
+   * First test producer
+   */
+  errorEventCb pEvent = errorEventCb();
 
-    if (conf->set("event_cb", &pEvent, errstr) != RdKafka::Conf::CONF_OK)
-      Test::Fail(errstr);
+  if (conf->set("event_cb", &pEvent, errstr) != RdKafka::Conf::CONF_OK)
+    Test::Fail(errstr);
 
-    Test::Say("Test Producer\n");
+  Test::Say("Test Producer\n");
 
-    RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-    if (!p)
-      Test::Fail("Failed to create Producer: " + errstr);
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail("Failed to create Producer: " + errstr);
 
-    /* Wait for all brokers down */
-    while (!pEvent.error_seen)
-      p->poll(1000);
+  /* Wait for all brokers down */
+  while (!pEvent.error_seen)
+    p->poll(1000);
 
-    delete p;
+  delete p;
 
 
-    /*
-     * Test high-level consumer that has a logical broker (group coord),
-     * which has caused AllBrokersDown generation problems (#2259)
-     */
-    errorEventCb cEvent = errorEventCb();
+  /*
+   * Test high-level consumer that has a logical broker (group coord),
+   * which has caused AllBrokersDown generation problems (#2259)
+   */
+  errorEventCb cEvent = errorEventCb();
 
-    Test::conf_set(conf, "group.id", "test");
+  Test::conf_set(conf, "group.id", "test");
 
-    if (conf->set("event_cb", &cEvent, errstr) != RdKafka::Conf::CONF_OK)
-      Test::Fail(errstr);
+  if (conf->set("event_cb", &cEvent, errstr) != RdKafka::Conf::CONF_OK)
+    Test::Fail(errstr);
 
-    Test::Say("Test KafkaConsumer\n");
+  Test::Say("Test KafkaConsumer\n");
 
-    RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
-    if (!c)
-      Test::Fail("Failed to create KafkaConsumer: " + errstr);
+  RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
+  if (!c)
+    Test::Fail("Failed to create KafkaConsumer: " + errstr);
 
-    delete conf;
+  delete conf;
 
-    /* Wait for all brokers down */
-    while (!cEvent.error_seen) {
-      RdKafka::Message *m = c->consume(1000);
-      if (m)
-        delete m;
-    }
-
-    c->close();
-
-    delete c;
-
-    return 0;
+  /* Wait for all brokers down */
+  while (!cEvent.error_seen) {
+    RdKafka::Message *m = c->consume(1000);
+    if (m)
+      delete m;
   }
+
+  c->close();
+
+  delete c;
+
+  return 0;
+}
 }

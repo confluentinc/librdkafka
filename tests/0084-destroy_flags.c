@@ -36,16 +36,16 @@
 
 static RD_TLS int rebalance_cnt = 0;
 
-static void destroy_flags_rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                                        rd_kafka_topic_partition_list_t *parts,
-                                        void *opaque) {
+static void destroy_flags_rebalance_cb(rd_kafka_t *rk,
+                                       rd_kafka_resp_err_t err,
+                                       rd_kafka_topic_partition_list_t *parts,
+                                       void *opaque) {
         rebalance_cnt++;
 
         TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
                  rd_kafka_err2str(err), parts->cnt);
 
-        switch (err)
-        {
+        switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 test_consumer_assign("rebalance", rk, parts);
                 break;
@@ -66,20 +66,20 @@ struct df_args {
         int consumer_unsubscribe;
 };
 
-static void do_test_destroy_flags (const char *topic,
-                                   int destroy_flags,
-                                   int local_mode,
-                                   const struct df_args *args) {
+static void do_test_destroy_flags(const char *topic,
+                                  int destroy_flags,
+                                  int local_mode,
+                                  const struct df_args *args) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         test_timing_t t_destroy;
 
-        TEST_SAY(_C_MAG "[ test destroy_flags 0x%x for client_type %d, "
+        TEST_SAY(_C_MAG
+                 "[ test destroy_flags 0x%x for client_type %d, "
                  "produce_cnt %d, subscribe %d, unsubscribe %d, "
                  "%s mode ]\n" _C_CLR,
-                 destroy_flags, args->client_type,
-                 args->produce_cnt, args->consumer_subscribe,
-                 args->consumer_unsubscribe,
+                 destroy_flags, args->client_type, args->produce_cnt,
+                 args->consumer_subscribe, args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 
         test_conf_init(&conf, NULL, 20);
@@ -96,11 +96,9 @@ static void do_test_destroy_flags (const char *topic,
                         int msgcounter = 0;
 
                         rkt = test_create_producer_topic(rk, topic, NULL);
-                        test_produce_msgs_nowait(rk, rkt, 0,
-                                                 RD_KAFKA_PARTITION_UA,
-                                                 0, args->produce_cnt,
-                                                 NULL, 100, 0,
-                                                 &msgcounter);
+                        test_produce_msgs_nowait(
+                            rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
+                            args->produce_cnt, NULL, 100, 0, &msgcounter);
                         rd_kafka_topic_destroy(rkt);
                 }
 
@@ -122,14 +120,14 @@ static void do_test_destroy_flags (const char *topic,
                         }
                 }
 
-                for (i = 0 ; i < 5 ; i++)
+                for (i = 0; i < 5; i++)
                         test_consumer_poll_once(rk, NULL, 100);
 
                 if (args->consumer_unsubscribe) {
                         /* Test that calling rd_kafka_unsubscribe immediately
                          * prior to rd_kafka_destroy_flags doesn't cause the
                          * latter to hang. */
-                        TEST_SAY(_C_YEL"Calling rd_kafka_unsubscribe\n"_C_CLR);
+                        TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n"_C_CLR);
                         rd_kafka_unsubscribe(rk);
                 }
         }
@@ -156,12 +154,12 @@ static void do_test_destroy_flags (const char *topic,
                             "expected no rebalance callbacks, got %d",
                             rebalance_cnt);
 
-        TEST_SAY(_C_GRN "[ test destroy_flags 0x%x for client_type %d, "
+        TEST_SAY(_C_GRN
+                 "[ test destroy_flags 0x%x for client_type %d, "
                  "produce_cnt %d, subscribe %d, unsubscribe %d, "
                  "%s mode: PASS ]\n" _C_CLR,
-                 destroy_flags, args->client_type,
-                 args->produce_cnt, args->consumer_subscribe,
-                 args->consumer_unsubscribe,
+                 destroy_flags, args->client_type, args->produce_cnt,
+                 args->consumer_subscribe, args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 }
 
@@ -169,19 +167,17 @@ static void do_test_destroy_flags (const char *topic,
 /**
  * @brief Destroy with flags
  */
-static void destroy_flags (int local_mode) {
+static void destroy_flags(int local_mode) {
         const struct df_args args[] = {
-                { RD_KAFKA_PRODUCER, 0, 0, 0 },
-                { RD_KAFKA_PRODUCER, test_quick ? 100 : 10000, 0, 0 },
-                { RD_KAFKA_CONSUMER, 0, 1, 0 },
-                { RD_KAFKA_CONSUMER, 0, 1, 1 },
-                { RD_KAFKA_CONSUMER, 0, 0, 0 }
-        };
-        const int flag_combos[] = { 0,
-                                    RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE };
-        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+            {RD_KAFKA_PRODUCER, 0, 0, 0},
+            {RD_KAFKA_PRODUCER, test_quick ? 100 : 10000, 0, 0},
+            {RD_KAFKA_CONSUMER, 0, 1, 0},
+            {RD_KAFKA_CONSUMER, 0, 1, 1},
+            {RD_KAFKA_CONSUMER, 0, 0, 0}};
+        const int flag_combos[] = {0, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE};
+        const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
         const rd_bool_t can_subscribe =
-                test_broker_version >= TEST_BRKVER(0,9,0,0);
+            test_broker_version >= TEST_BRKVER(0, 9, 0, 0);
         int i, j;
 
         /* Create the topic to avoid not-yet-auto-created-topics being
@@ -189,29 +185,25 @@ static void destroy_flags (int local_mode) {
         if (!local_mode)
                 test_create_topic(NULL, topic, 3, 1);
 
-        for (i = 0 ; i < (int)RD_ARRAYSIZE(args) ; i++) {
-                for (j = 0 ; j < (int)RD_ARRAYSIZE(flag_combos) ; j++) {
-                        if (!can_subscribe &&
-                            (args[i].consumer_subscribe ||
-                             args[i].consumer_unsubscribe))
+        for (i = 0; i < (int)RD_ARRAYSIZE(args); i++) {
+                for (j = 0; j < (int)RD_ARRAYSIZE(flag_combos); j++) {
+                        if (!can_subscribe && (args[i].consumer_subscribe ||
+                                               args[i].consumer_unsubscribe))
                                 continue;
-                        do_test_destroy_flags(topic,
-                                              flag_combos[j],
-                                              local_mode,
+                        do_test_destroy_flags(topic, flag_combos[j], local_mode,
                                               &args[i]);
                 }
         }
-
 }
 
 
 
-int main_0084_destroy_flags_local (int argc, char **argv) {
-        destroy_flags(1/*no brokers*/);
+int main_0084_destroy_flags_local(int argc, char **argv) {
+        destroy_flags(1 /*no brokers*/);
         return 0;
 }
 
-int main_0084_destroy_flags (int argc, char **argv) {
-        destroy_flags(0/*with brokers*/);
+int main_0084_destroy_flags(int argc, char **argv) {
+        destroy_flags(0 /*with brokers*/);
         return 0;
 }

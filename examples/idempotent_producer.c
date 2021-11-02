@@ -57,13 +57,13 @@ static volatile sig_atomic_t run = 1;
 /**
  * @brief Signal termination of program
  */
-static void stop (int sig) {
+static void stop(int sig) {
         run = 0;
 }
 
 
 static int deliveredcnt = 0;
-static int msgerrcnt = 0;
+static int msgerrcnt    = 0;
 
 /**
  * @brief Message delivery report callback.
@@ -76,8 +76,8 @@ static int msgerrcnt = 0;
  * The callback is triggered from rd_kafka_poll() or rd_kafka_flush() and
  * executes on the application's thread.
  */
-static void dr_msg_cb (rd_kafka_t *rk,
-                       const rd_kafka_message_t *rkmessage, void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         if (rkmessage->err) {
                 fprintf(stderr, "%% Message delivery failed: %s\n",
                         rd_kafka_err2str(rkmessage->err));
@@ -85,9 +85,8 @@ static void dr_msg_cb (rd_kafka_t *rk,
         } else {
                 fprintf(stderr,
                         "%% Message delivered (%zd bytes, topic %s, "
-                        "partition %"PRId32", offset %"PRId64")\n",
-                        rkmessage->len,
-                        rd_kafka_topic_name(rkmessage->rkt),
+                        "partition %" PRId32 ", offset %" PRId64 ")\n",
+                        rkmessage->len, rd_kafka_topic_name(rkmessage->rkt),
                         rkmessage->partition, rkmessage->offset);
                 deliveredcnt++;
         }
@@ -112,8 +111,8 @@ static void dr_msg_cb (rd_kafka_t *rk,
  * the idempotence guarantees can't be satisfied, these errors
  * are identified by a the `RD_KAFKA_RESP_ERR__FATAL` error code.
  */
-static void error_cb (rd_kafka_t *rk, int err, const
-                      char *reason, void *opaque) {
+static void
+error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
         rd_kafka_resp_err_t orig_err;
         char errstr[512];
 
@@ -143,8 +142,8 @@ static void error_cb (rd_kafka_t *rk, int err, const
          */
 
         orig_err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
-        fprintf(stderr, "%% FATAL ERROR: %s: %s\n",
-                rd_kafka_err2name(orig_err), errstr);
+        fprintf(stderr, "%% FATAL ERROR: %s: %s\n", rd_kafka_err2name(orig_err),
+                errstr);
 
         /* Clean termination to get delivery results (from rd_kafka_flush())
          * for all outstanding/in-transit/queued messages. */
@@ -153,7 +152,7 @@ static void error_cb (rd_kafka_t *rk, int err, const
 }
 
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
         rd_kafka_t *rk;          /* Producer instance handle */
         rd_kafka_conf_t *conf;   /* Temporary configuration object */
         char errstr[512];        /* librdkafka API error reporting buffer */
@@ -183,16 +182,16 @@ int main (int argc, char **argv) {
          * host or host:port (default port 9092).
          * librdkafka will use the bootstrap brokers to acquire the full
          * set of brokers from the cluster. */
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
 
         /* Enable the idempotent producer */
-        if (rd_kafka_conf_set(conf, "enable.idempotence", "true",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "enable.idempotence", "true", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -222,8 +221,8 @@ int main (int argc, char **argv) {
          */
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if (!rk) {
-                fprintf(stderr,
-                        "%% Failed to create new producer: %s\n", errstr);
+                fprintf(stderr, "%% Failed to create new producer: %s\n",
+                        errstr);
                 return 1;
         }
 
@@ -252,21 +251,19 @@ int main (int argc, char **argv) {
                  */
         retry:
                 err = rd_kafka_producev(
-                        rk,
-                        RD_KAFKA_V_TOPIC(topic),
-                        RD_KAFKA_V_VALUE(buf, strlen(buf)),
-                        /* Copy the message payload so the `buf` can
-                         * be reused for the next message. */
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_END);
+                    rk, RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_VALUE(buf, strlen(buf)),
+                    /* Copy the message payload so the `buf` can
+                     * be reused for the next message. */
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END);
 
                 if (err) {
                         /**
                          * Failed to *enqueue* message for producing.
                          */
                         fprintf(stderr,
-                                "%% Failed to produce to topic %s: %s\n",
-                                topic, rd_kafka_err2str(err));
+                                "%% Failed to produce to topic %s: %s\n", topic,
+                                rd_kafka_err2str(err));
 
                         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
                                 /* If the internal queue is full, wait for
@@ -279,7 +276,8 @@ int main (int argc, char **argv) {
                                  * The internal queue is limited by the
                                  * configuration property
                                  * queue.buffering.max.messages */
-                                rd_kafka_poll(rk, 1000/*block for max 1000ms*/);
+                                rd_kafka_poll(rk,
+                                              1000 /*block for max 1000ms*/);
                                 goto retry;
                         } else {
                                 /* Produce failed, most likely due to a
@@ -304,7 +302,7 @@ int main (int argc, char **argv) {
                  * to make sure previously produced messages have their
                  * delivery report callback served (and any other callbacks
                  * you register). */
-                rd_kafka_poll(rk, 0/*non-blocking*/);
+                rd_kafka_poll(rk, 0 /*non-blocking*/);
 
                 msgcnt++;
 
@@ -313,10 +311,9 @@ int main (int argc, char **argv) {
                  * some time. */
                 if (msgcnt == 13)
                         rd_kafka_test_fatal_error(
-                                rk,
-                                RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
-                                "This is a fabricated error to test the "
-                                "fatal error handling");
+                            rk, RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                            "This is a fabricated error to test the "
+                            "fatal error handling");
 
                 /* Short sleep to rate-limit this example.
                  * A real application should not do this. */
@@ -328,9 +325,8 @@ int main (int argc, char **argv) {
          * rd_kafka_flush() is an abstraction over rd_kafka_poll() which
          * waits for all messages to be delivered. */
         fprintf(stderr, "%% Flushing outstanding messages..\n");
-        rd_kafka_flush(rk, 10*1000 /* wait for max 10 seconds */);
-        fprintf(stderr,
-                "%% %d message(s) produced, %d delivered, %d failed\n",
+        rd_kafka_flush(rk, 10 * 1000 /* wait for max 10 seconds */);
+        fprintf(stderr, "%% %d message(s) produced, %d delivered, %d failed\n",
                 msgcnt, deliveredcnt, msgerrcnt);
 
         /* Save fatal error prior for using with exit status below. */
@@ -344,4 +340,4 @@ int main (int argc, char **argv) {
                 return 1;
         else
                 return 0;
-        }
+}

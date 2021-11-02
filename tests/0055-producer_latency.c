@@ -34,30 +34,30 @@
 struct latconf {
         const char *name;
         const char *conf[16];
-        int min;    /* Minimum expected latency */
-        int max;    /* Maximum expected latency */
+        int min; /* Minimum expected latency */
+        int max; /* Maximum expected latency */
 
-        float rtt;  /* Network+broker latency */
+        float rtt; /* Network+broker latency */
 
 
-        char        linger_ms_conf[32]; /**< Read back to show actual value */
+        char linger_ms_conf[32]; /**< Read back to show actual value */
 
         /* Result vector */
         float latency[_MSG_COUNT];
         float sum;
-        int   cnt;
+        int cnt;
 };
 
 
-static void dr_msg_cb (rd_kafka_t *rk,
-                       const rd_kafka_message_t *rkmessage, void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         struct latconf *latconf = opaque;
-        int64_t *ts_send = (int64_t *)rkmessage->_private;
+        int64_t *ts_send        = (int64_t *)rkmessage->_private;
         float delivery_time;
 
         if (rkmessage->err)
-                TEST_FAIL("%s: delivery failed: %s\n",
-                          latconf->name, rd_kafka_err2str(rkmessage->err));
+                TEST_FAIL("%s: delivery failed: %s\n", latconf->name,
+                          rd_kafka_err2str(rkmessage->err));
 
         if (!rkmessage->_private)
                 return; /* Priming message, ignore. */
@@ -68,19 +68,19 @@ static void dr_msg_cb (rd_kafka_t *rk,
 
         TEST_ASSERT(latconf->cnt < _MSG_COUNT, "");
 
-        TEST_SAY("%s: Message %d delivered in %.3fms\n",
-                 latconf->name, latconf->cnt, delivery_time);
+        TEST_SAY("%s: Message %d delivered in %.3fms\n", latconf->name,
+                 latconf->cnt, delivery_time);
 
         latconf->latency[latconf->cnt++] = delivery_time;
         latconf->sum += delivery_time;
 }
 
 
-static int verify_latency (struct latconf *latconf) {
+static int verify_latency(struct latconf *latconf) {
         float avg;
         int fails = 0;
-        double ext_overhead = latconf->rtt +
-                5.0 /* broker ProduceRequest handling time, maybe */;
+        double ext_overhead =
+            latconf->rtt + 5.0 /* broker ProduceRequest handling time, maybe */;
 
         ext_overhead *= test_timeout_multiplier;
 
@@ -91,17 +91,18 @@ static int verify_latency (struct latconf *latconf) {
 
         if (avg < (float)latconf->min ||
             avg > (float)latconf->max + ext_overhead) {
-                TEST_FAIL_LATER("%s: average latency %.3fms is "
-                                "outside range %d..%d +%.0fms",
-                                latconf->name, avg, latconf->min, latconf->max,
-                                ext_overhead);
+                TEST_FAIL_LATER(
+                    "%s: average latency %.3fms is "
+                    "outside range %d..%d +%.0fms",
+                    latconf->name, avg, latconf->min, latconf->max,
+                    ext_overhead);
                 fails++;
         }
 
         return fails;
 }
 
-static void measure_rtt (struct latconf *latconf, rd_kafka_t *rk) {
+static void measure_rtt(struct latconf *latconf, rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         const struct rd_kafka_metadata *md;
         int64_t ts = test_clock();
@@ -110,13 +111,12 @@ static void measure_rtt (struct latconf *latconf, rd_kafka_t *rk) {
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         latconf->rtt = (float)(test_clock() - ts) / 1000.0f;
 
-        TEST_SAY("%s: broker base RTT is %.3fms\n",
-                 latconf->name, latconf->rtt);
+        TEST_SAY("%s: broker base RTT is %.3fms\n", latconf->name,
+                 latconf->rtt);
         rd_kafka_metadata_destroy(md);
 }
 
-static int test_producer_latency (const char *topic,
-                                  struct latconf *latconf) {
+static int test_producer_latency(const char *topic, struct latconf *latconf) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
@@ -129,10 +129,10 @@ static int test_producer_latency (const char *topic,
         rd_kafka_conf_set_opaque(conf, latconf);
 
         TEST_SAY(_C_BLU "[%s: begin]\n" _C_CLR, latconf->name);
-        for (i = 0 ; latconf->conf[i] ; i += 2) {
-                TEST_SAY("%s:  set conf %s = %s\n",
-                         latconf->name, latconf->conf[i], latconf->conf[i+1]);
-                test_conf_set(conf, latconf->conf[i], latconf->conf[i+1]);
+        for (i = 0; latconf->conf[i]; i += 2) {
+                TEST_SAY("%s:  set conf %s = %s\n", latconf->name,
+                         latconf->conf[i], latconf->conf[i + 1]);
+                test_conf_set(conf, latconf->conf[i], latconf->conf[i + 1]);
         }
 
         sz = sizeof(latconf->linger_ms_conf);
@@ -143,15 +143,13 @@ static int test_producer_latency (const char *topic,
         TEST_SAY("%s: priming producer\n", latconf->name);
         /* Send a priming message to make sure everything is up
          * and functional before starting measurements */
-        err = rd_kafka_producev(rk,
-                                RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_PARTITION(0),
-                                RD_KAFKA_V_VALUE("priming", 7),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_END);
+        err = rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("priming", 7),
+            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END);
         if (err)
-                TEST_FAIL("%s: priming producev failed: %s",
-                          latconf->name, rd_kafka_err2str(err));
+                TEST_FAIL("%s: priming producev failed: %s", latconf->name,
+                          rd_kafka_err2str(err));
 
         /* Await delivery */
         rd_kafka_flush(rk, tmout_multip(5000));
@@ -160,22 +158,20 @@ static int test_producer_latency (const char *topic,
         measure_rtt(latconf, rk);
 
         TEST_SAY("%s: producing %d messages\n", latconf->name, _MSG_COUNT);
-        for (i = 0 ; i < _MSG_COUNT ; i++) {
+        for (i = 0; i < _MSG_COUNT; i++) {
                 int64_t *ts_send;
 
-                ts_send = malloc(sizeof(*ts_send));
+                ts_send  = malloc(sizeof(*ts_send));
                 *ts_send = test_clock();
 
-                err = rd_kafka_producev(rk,
-                                        RD_KAFKA_V_TOPIC(topic),
-                                        RD_KAFKA_V_PARTITION(0),
-                                        RD_KAFKA_V_VALUE("hi", 2),
-                                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                        RD_KAFKA_V_OPAQUE(ts_send),
-                                        RD_KAFKA_V_END);
+                err = rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+                    RD_KAFKA_V_VALUE("hi", 2),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_OPAQUE(ts_send), RD_KAFKA_V_END);
                 if (err)
-                        TEST_FAIL("%s: producev #%d failed: %s",
-                                  latconf->name, i, rd_kafka_err2str(err));
+                        TEST_FAIL("%s: producev #%d failed: %s", latconf->name,
+                                  i, rd_kafka_err2str(err));
 
                 /* Await delivery */
                 rd_kafka_poll(rk, 5000);
@@ -187,48 +183,56 @@ static int test_producer_latency (const char *topic,
 }
 
 
-static float find_min (const struct latconf *latconf) {
+static float find_min(const struct latconf *latconf) {
         int i;
         float v = 1000000;
 
-        for (i = 0 ; i < latconf->cnt ; i++)
+        for (i = 0; i < latconf->cnt; i++)
                 if (latconf->latency[i] < v)
                         v = latconf->latency[i];
 
         return v;
 }
 
-static float find_max (const struct latconf *latconf) {
+static float find_max(const struct latconf *latconf) {
         int i;
         float v = 0;
 
-        for (i = 0 ; i < latconf->cnt ; i++)
+        for (i = 0; i < latconf->cnt; i++)
                 if (latconf->latency[i] > v)
                         v = latconf->latency[i];
 
         return v;
 }
 
-int main_0055_producer_latency (int argc, char **argv) {
+int main_0055_producer_latency(int argc, char **argv) {
         struct latconf latconfs[] = {
-                { "standard settings", {NULL}, 5, 5 }, /* default is now 5ms */
-                { "low queue.buffering.max.ms",
-                  {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
-                { "microsecond queue.buffering.max.ms",
-                  {"queue.buffering.max.ms", "0.001", NULL}, 0, 1 },
-                { "high queue.buffering.max.ms",
-                  {"queue.buffering.max.ms", "3000", NULL}, 3000, 3100},
-                { "queue.buffering.max.ms < 1000", /* internal block_max_ms */
-                  {"queue.buffering.max.ms", "500", NULL}, 500, 600 },
-                { "no acks",
-                  {"queue.buffering.max.ms", "0",
-                   "acks", "0",
-                   "enable.idempotence", "false", NULL}, 0, 0 },
-                { NULL }
-        };
+            {"standard settings", {NULL}, 5, 5}, /* default is now 5ms */
+            {"low queue.buffering.max.ms",
+             {"queue.buffering.max.ms", "0", NULL},
+             0,
+             0},
+            {"microsecond queue.buffering.max.ms",
+             {"queue.buffering.max.ms", "0.001", NULL},
+             0,
+             1},
+            {"high queue.buffering.max.ms",
+             {"queue.buffering.max.ms", "3000", NULL},
+             3000,
+             3100},
+            {"queue.buffering.max.ms < 1000", /* internal block_max_ms */
+             {"queue.buffering.max.ms", "500", NULL},
+             500,
+             600},
+            {"no acks",
+             {"queue.buffering.max.ms", "0", "acks", "0", "enable.idempotence",
+              "false", NULL},
+             0,
+             0},
+            {NULL}};
         struct latconf *latconf;
         const char *topic = test_mk_topic_name("0055_producer_latency", 0);
-        int fails = 0;
+        int fails         = 0;
 
         if (test_on_ci) {
                 TEST_SKIP("Latency measurements not reliable on CI\n");
@@ -238,25 +242,22 @@ int main_0055_producer_latency (int argc, char **argv) {
         /* Create topic without replicas to keep broker-side latency down */
         test_create_topic(NULL, topic, 4, 1);
 
-        for (latconf = latconfs ; latconf->name ; latconf++)
+        for (latconf = latconfs; latconf->name; latconf++)
                 fails += test_producer_latency(topic, latconf);
 
         if (fails)
                 TEST_FAIL("See %d previous failure(s)", fails);
 
         TEST_SAY(_C_YEL "Latency tests summary:\n" _C_CLR);
-        TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s\n",
-                 "Name", "linger.ms",
-                 "MinExp", "MaxExp", "RTT", "Min", "Average", "Max");
+        TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s\n", "Name",
+                 "linger.ms", "MinExp", "MaxExp", "RTT", "Min", "Average",
+                 "Max");
 
-        for (latconf = latconfs ; latconf->name ; latconf++)
+        for (latconf = latconfs; latconf->name; latconf++)
                 TEST_SAY("%-40s %9s  %6d..%-6d  %7g  %9g %9g %9g\n",
-                         latconf->name, latconf->linger_ms_conf,
-                         latconf->min, latconf->max,
-                         latconf->rtt,
-                         find_min(latconf),
-                         latconf->sum / latconf->cnt,
-                         find_max(latconf));
+                         latconf->name, latconf->linger_ms_conf, latconf->min,
+                         latconf->max, latconf->rtt, find_min(latconf),
+                         latconf->sum / latconf->cnt, find_max(latconf));
 
         return 0;
 }

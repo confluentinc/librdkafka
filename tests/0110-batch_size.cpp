@@ -45,20 +45,20 @@
 
 class myAvgStatsCb : public RdKafka::EventCb {
  public:
-  myAvgStatsCb(std::string topic):
-      avg_batchsize(0), min_batchsize(0), max_batchsize(0), topic_(topic) {}
+  myAvgStatsCb(std::string topic) :
+      avg_batchsize(0), min_batchsize(0), max_batchsize(0), topic_(topic) {
+  }
 
-  void event_cb (RdKafka::Event &event) {
-    switch (event.type())
-    {
-      case RdKafka::Event::EVENT_LOG:
-        Test::Say(event.str() + "\n");
-        break;
-      case RdKafka::Event::EVENT_STATS:
-        read_batch_stats(event.str());
-        break;
-      default:
-        break;
+  void event_cb(RdKafka::Event &event) {
+    switch (event.type()) {
+    case RdKafka::Event::EVENT_LOG:
+      Test::Say(event.str() + "\n");
+      break;
+    case RdKafka::Event::EVENT_STATS:
+      read_batch_stats(event.str());
+      break;
+    default:
+      break;
     }
   }
 
@@ -67,14 +67,13 @@ class myAvgStatsCb : public RdKafka::EventCb {
   int max_batchsize;
 
  private:
-
-  void read_val (rapidjson::Document &d, const std::string &path, int &val) {
+  void read_val(rapidjson::Document &d, const std::string &path, int &val) {
     rapidjson::Pointer jpath(path.c_str());
 
     if (!jpath.IsValid())
-      Test::Fail(tostr() << "json pointer parse " << path << " failed at " <<
-                 jpath.GetParseErrorOffset() << " with error code " <<
-                 jpath.GetParseErrorCode());
+      Test::Fail(tostr() << "json pointer parse " << path << " failed at "
+                         << jpath.GetParseErrorOffset() << " with error code "
+                         << jpath.GetParseErrorCode());
 
     rapidjson::Value *pp = rapidjson::GetValueByPointer(d, jpath);
     if (!pp) {
@@ -85,13 +84,13 @@ class myAvgStatsCb : public RdKafka::EventCb {
     val = pp->GetInt();
   }
 
-  void read_batch_stats (const std::string &stats) {
+  void read_batch_stats(const std::string &stats) {
     rapidjson::Document d;
 
     if (d.Parse(stats.c_str()).HasParseError())
-      Test::Fail(tostr() << "Failed to parse stats JSON: " <<
-                 rapidjson::GetParseError_En(d.GetParseError()) <<
-                 " at " << d.GetErrorOffset());
+      Test::Fail(tostr() << "Failed to parse stats JSON: "
+                         << rapidjson::GetParseError_En(d.GetParseError())
+                         << " at " << d.GetErrorOffset());
 
     read_val(d, "/topics/" + topic_ + "/batchsize/avg", avg_batchsize);
     read_val(d, "/topics/" + topic_ + "/batchsize/min", min_batchsize);
@@ -106,7 +105,7 @@ class myAvgStatsCb : public RdKafka::EventCb {
  * @brief Specify batch.size and parse stats to verify it takes effect.
  *
  */
-static void do_test_batch_size () {
+static void do_test_batch_size() {
   std::string topic = Test::mk_topic_name(__FILE__, 0);
 
   myAvgStatsCb event_cb(topic);
@@ -114,10 +113,10 @@ static void do_test_batch_size () {
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);
 
-  const int msgcnt = 1000;
-  const int msgsize = 1000;
-  int batchsize = 5000;
-  int exp_min_batchsize = batchsize - msgsize - 100/*~framing overhead*/;
+  const int msgcnt      = 1000;
+  const int msgsize     = 1000;
+  int batchsize         = 5000;
+  int exp_min_batchsize = batchsize - msgsize - 100 /*~framing overhead*/;
 
   Test::conf_set(conf, "batch.size", "5000");
 
@@ -132,52 +131,51 @@ static void do_test_batch_size () {
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
-          Test::Fail("Failed to create Producer: " + errstr);
+    Test::Fail("Failed to create Producer: " + errstr);
 
   /* Produce messages */
   char val[msgsize];
   memset(val, 'a', msgsize);
 
-  for (int i = 0 ; i < msgcnt ; i++) {
-    RdKafka::ErrorCode err = p->produce(topic, 0,
-                                        RdKafka::Producer::RK_MSG_COPY,
-                                        val, msgsize, NULL, 0, -1, NULL);
+  for (int i = 0; i < msgcnt; i++) {
+    RdKafka::ErrorCode err =
+        p->produce(topic, 0, RdKafka::Producer::RK_MSG_COPY, val, msgsize, NULL,
+                   0, -1, NULL);
     if (err)
       Test::Fail("Produce failed: " + RdKafka::err2str(err));
   }
 
   Test::Say(tostr() << "Produced " << msgcnt << " messages\n");
-  p->flush(5*1000);
+  p->flush(5 * 1000);
 
   Test::Say("Waiting for stats\n");
   while (event_cb.avg_batchsize == 0)
     p->poll(1000);
 
-  Test::Say(tostr() << "Batchsize: " <<
-            "configured " << batchsize <<
-            ", min " << event_cb.min_batchsize <<
-            ", max " << event_cb.max_batchsize <<
-            ", avg " << event_cb.avg_batchsize <<
-            "\n");
+  Test::Say(tostr() << "Batchsize: "
+                    << "configured " << batchsize << ", min "
+                    << event_cb.min_batchsize << ", max "
+                    << event_cb.max_batchsize << ", avg "
+                    << event_cb.avg_batchsize << "\n");
 
   /* The average batchsize should within a message size from batch.size. */
   if (event_cb.avg_batchsize < exp_min_batchsize ||
       event_cb.avg_batchsize > batchsize)
-    Test::Fail(tostr() << "Expected avg batchsize to be within " <<
-               exp_min_batchsize << ".." << batchsize <<
-               " but got " << event_cb.avg_batchsize);
+    Test::Fail(tostr() << "Expected avg batchsize to be within "
+                       << exp_min_batchsize << ".." << batchsize << " but got "
+                       << event_cb.avg_batchsize);
 
   delete p;
 }
 #endif
 
 extern "C" {
-  int main_0110_batch_size (int argc, char **argv) {
+int main_0110_batch_size(int argc, char **argv) {
 #if WITH_RAPIDJSON
-    do_test_batch_size();
+  do_test_batch_size();
 #else
-    Test::Skip("RapidJSON >=1.1.0 not available\n");
+  Test::Skip("RapidJSON >=1.1.0 not available\n");
 #endif
-    return 0;
-  }
+  return 0;
+}
 }

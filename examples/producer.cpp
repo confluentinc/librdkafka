@@ -52,34 +52,34 @@
 
 static volatile sig_atomic_t run = 1;
 
-static void sigterm (int sig) {
+static void sigterm(int sig) {
   run = 0;
 }
 
 
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
-public:
-  void dr_cb (RdKafka::Message &message) {
+ public:
+  void dr_cb(RdKafka::Message &message) {
     /* If message.err() is non-zero the message delivery failed permanently
      * for the message. */
     if (message.err())
-      std::cerr << "% Message delivery failed: " << message.errstr() << std::endl;
+      std::cerr << "% Message delivery failed: " << message.errstr()
+                << std::endl;
     else
-      std::cerr << "% Message delivered to topic " << message.topic_name() <<
-        " [" << message.partition() << "] at offset " <<
-        message.offset() << std::endl;
+      std::cerr << "% Message delivered to topic " << message.topic_name()
+                << " [" << message.partition() << "] at offset "
+                << message.offset() << std::endl;
   }
 };
 
-int main (int argc, char **argv) {
-
+int main(int argc, char **argv) {
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <brokers> <topic>\n";
     exit(1);
   }
 
   std::string brokers = argv[1];
-  std::string topic = argv[2];
+  std::string topic   = argv[2];
 
   /*
    * Create configuration object
@@ -133,8 +133,8 @@ int main (int argc, char **argv) {
   /*
    * Read messages from stdin and produce to broker.
    */
-  std::cout << "% Type message value and hit enter " <<
-    "to produce message." << std::endl;
+  std::cout << "% Type message value and hit enter "
+            << "to produce message." << std::endl;
 
   for (std::string line; run && std::getline(std::cin, line);) {
     if (line.empty()) {
@@ -153,32 +153,31 @@ int main (int argc, char **argv) {
      * has been delivered (or failed permanently after retries).
      */
   retry:
-    RdKafka::ErrorCode err =
-      producer->produce(
-                        /* Topic name */
-                        topic,
-                        /* Any Partition: the builtin partitioner will be
-                         * used to assign the message to a topic based
-                         * on the message key, or random partition if
-                         * the key is not set. */
-                        RdKafka::Topic::PARTITION_UA,
-                        /* Make a copy of the value */
-                        RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-                        /* Value */
-                        const_cast<char *>(line.c_str()), line.size(),
-                        /* Key */
-                        NULL, 0,
-                        /* Timestamp (defaults to current time) */
-                        0,
-                        /* Message headers, if any */
-                        NULL,
-                        /* Per-message opaque value passed to
-                         * delivery report */
-                        NULL);
+    RdKafka::ErrorCode err = producer->produce(
+        /* Topic name */
+        topic,
+        /* Any Partition: the builtin partitioner will be
+         * used to assign the message to a topic based
+         * on the message key, or random partition if
+         * the key is not set. */
+        RdKafka::Topic::PARTITION_UA,
+        /* Make a copy of the value */
+        RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+        /* Value */
+        const_cast<char *>(line.c_str()), line.size(),
+        /* Key */
+        NULL, 0,
+        /* Timestamp (defaults to current time) */
+        0,
+        /* Message headers, if any */
+        NULL,
+        /* Per-message opaque value passed to
+         * delivery report */
+        NULL);
 
     if (err != RdKafka::ERR_NO_ERROR) {
-      std::cerr << "% Failed to produce to topic " << topic << ": " <<
-        RdKafka::err2str(err) << std::endl;
+      std::cerr << "% Failed to produce to topic " << topic << ": "
+                << RdKafka::err2str(err) << std::endl;
 
       if (err == RdKafka::ERR__QUEUE_FULL) {
         /* If the internal queue is full, wait for
@@ -191,13 +190,13 @@ int main (int argc, char **argv) {
          * The internal queue is limited by the
          * configuration property
          * queue.buffering.max.messages */
-        producer->poll(1000/*block for max 1000ms*/);
+        producer->poll(1000 /*block for max 1000ms*/);
         goto retry;
       }
 
     } else {
-      std::cerr << "% Enqueued message (" << line.size() << " bytes) " <<
-        "for topic " << topic << std::endl;
+      std::cerr << "% Enqueued message (" << line.size() << " bytes) "
+                << "for topic " << topic << std::endl;
     }
 
     /* A producer application should continually serve
@@ -217,11 +216,11 @@ int main (int argc, char **argv) {
    * flush() is an abstraction over poll() which
    * waits for all messages to be delivered. */
   std::cerr << "% Flushing final messages..." << std::endl;
-  producer->flush(10*1000 /* wait for max 10 seconds */);
+  producer->flush(10 * 1000 /* wait for max 10 seconds */);
 
   if (producer->outq_len() > 0)
-    std::cerr << "% " << producer->outq_len() <<
-              " message(s) were not delivered" << std::endl;
+    std::cerr << "% " << producer->outq_len()
+              << " message(s) were not delivered" << std::endl;
 
   delete producer;
 

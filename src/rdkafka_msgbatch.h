@@ -28,35 +28,35 @@
 #define _RDKAFKA_MSGBATCH_H_
 
 typedef struct rd_kafka_msgbatch_s {
-        rd_kafka_toppar_t *rktp;    /**< Reference to partition */
+        rd_kafka_toppar_t *rktp; /**< Reference to partition */
 
-        rd_kafka_msgq_t msgq;       /**< Messages in batch */
+        rd_kafka_msgq_t msgq; /**< Messages in batch */
 
         /* Following fields are for Idempotent Producer use */
-        rd_kafka_pid_t pid;         /**< Producer Id and Epoch */
-        int32_t        first_seq;   /**< Base sequence */
-        int64_t        first_msgid; /**< Base msgid */
-        uint64_t       epoch_base_msgid; /**< The partition epoch's
-                                          *   base msgid. */
-        uint64_t       last_msgid;  /**< Last message to add to batch.
-                                     *   This is used when reconstructing
-                                     *   batches for resends with
-                                     *   the idempotent producer which
-                                     *   require retries to have the
-                                     *   exact same messages in them. */
+        rd_kafka_pid_t pid;        /**< Producer Id and Epoch */
+        int32_t first_seq;         /**< Base sequence */
+        int64_t first_msgid;       /**< Base msgid */
+        uint64_t epoch_base_msgid; /**< The partition epoch's
+                                    *   base msgid. */
+        uint64_t last_msgid;       /**< Last message to add to batch.
+                                    *   This is used when reconstructing
+                                    *   batches for resends with
+                                    *   the idempotent producer which
+                                    *   require retries to have the
+                                    *   exact same messages in them. */
 
 } rd_kafka_msgbatch_t;
 
 
 
 /* defined in rdkafka_msg.c */
-void rd_kafka_msgbatch_destroy (rd_kafka_msgbatch_t *rkmb);
-void rd_kafka_msgbatch_init (rd_kafka_msgbatch_t *rkmb,
-                             rd_kafka_toppar_t *rktp,
-                             rd_kafka_pid_t pid,
-                             uint64_t epoch_base_msgid);
-void rd_kafka_msgbatch_set_first_msg (rd_kafka_msgbatch_t *rkmb,
-                                      rd_kafka_msg_t *rkm);
-void rd_kafka_msgbatch_ready_produce (rd_kafka_msgbatch_t *rkmb);
+void rd_kafka_msgbatch_destroy(rd_kafka_msgbatch_t *rkmb);
+void rd_kafka_msgbatch_init(rd_kafka_msgbatch_t *rkmb,
+                            rd_kafka_toppar_t *rktp,
+                            rd_kafka_pid_t pid,
+                            uint64_t epoch_base_msgid);
+void rd_kafka_msgbatch_set_first_msg(rd_kafka_msgbatch_t *rkmb,
+                                     rd_kafka_msg_t *rkm);
+void rd_kafka_msgbatch_ready_produce(rd_kafka_msgbatch_t *rkmb);
 
 #endif /* _RDKAFKA_MSGBATCH_H_ */

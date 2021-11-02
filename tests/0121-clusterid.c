@@ -41,14 +41,13 @@
  *
  */
 
-static void log_cb (const rd_kafka_t *rk, int level,
-                    const char *fac, const char *buf) {
+static void
+log_cb(const rd_kafka_t *rk, int level, const char *fac, const char *buf) {
         rd_atomic32_t *log_cntp = rd_kafka_opaque(rk);
-        rd_bool_t matched =  !strcmp(fac, "CLUSTERID") &&
-                strstr(buf, "reports different ClusterId");
+        rd_bool_t matched       = !strcmp(fac, "CLUSTERID") &&
+                            strstr(buf, "reports different ClusterId");
 
-        TEST_SAY("%sLog: %s level %d fac %s: %s\n",
-                 matched ? _C_GRN : "",
+        TEST_SAY("%sLog: %s level %d fac %s: %s\n", matched ? _C_GRN : "",
                  rd_kafka_name(rk), level, fac, buf);
 
         if (matched)
@@ -56,7 +55,7 @@ static void log_cb (const rd_kafka_t *rk, int level,
 }
 
 
-int main_0121_clusterid (int argc, char **argv) {
+int main_0121_clusterid(int argc, char **argv) {
         rd_kafka_mock_cluster_t *cluster_a, *cluster_b;
         const char *bootstraps_a, *bootstraps_b;
         size_t bs_size;
@@ -79,7 +78,7 @@ int main_0121_clusterid (int argc, char **argv) {
         test_conf_init(&conf, NULL, 10);
 
         /* Combine bootstraps from both clusters */
-        bs_size = strlen(bootstraps_a) + strlen(bootstraps_b) + 2;
+        bs_size    = strlen(bootstraps_a) + strlen(bootstraps_b) + 2;
         bootstraps = malloc(bs_size);
         rd_snprintf(bootstraps, bs_size, "%s,%s", bootstraps_a, bootstraps_b);
         test_conf_set(conf, "bootstrap.servers", bootstraps);

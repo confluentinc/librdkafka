@@ -35,23 +35,27 @@
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h" /* for Kafka driver */
 
 
-static int msgid_next = 0;
-static int fails = 0;
-static int msgcounter = 0;
-static int *dr_partition_count = NULL;
-static const int topic_num_partitions = 4;
-static int msg_partition_wo_flag = 2;
+static int msgid_next                    = 0;
+static int fails                         = 0;
+static int msgcounter                    = 0;
+static int *dr_partition_count           = NULL;
+static const int topic_num_partitions    = 4;
+static int msg_partition_wo_flag         = 2;
 static int msg_partition_wo_flag_success = 0;
 
 /**
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
  */
-static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
-                   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
+static void dr_single_partition_cb(rd_kafka_t *rk,
+                                   void *payload,
+                                   size_t len,
+                                   rd_kafka_resp_err_t err,
+                                   void *opaque,
+                                   void *msg_opaque) {
         int msgid = *(int *)msg_opaque;
 
         free(msg_opaque);
@@ -62,17 +66,16 @@ static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 
         if (msgid != msgid_next) {
                 fails++;
-                TEST_FAIL("Delivered msg %i, expected %i\n",
-                         msgid, msgid_next);
+                TEST_FAIL("Delivered msg %i, expected %i\n", msgid, msgid_next);
                 return;
         }
 
-        msgid_next = msgid+1;
+        msgid_next = msgid + 1;
         msgcounter--;
 }
 
 /* Produce a batch of messages to a single partition. */
-static void test_single_partition (void) {
+static void test_single_partition(void) {
         int partition = 0;
         int r;
         rd_kafka_t *rk;
@@ -80,7 +83,7 @@ static void test_single_partition (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128];
-        int msgcnt = test_quick ? 100 : 100000;
+        int msgcnt  = test_quick ? 100 : 100000;
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
@@ -98,23 +101,21 @@ static void test_single_partition (void) {
         TEST_SAY("test_single_partition: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
         if (!rkt)
-                TEST_FAIL("Failed to create topic: %s\n",
-                          rd_strerror(errno));
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
-                *msgidp = i;
+                *msgidp     = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
-                         __FILE__, __FUNCTION__, i);
+                            __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload  = rd_strdup(msg);
-                rkmessages[i].len      = strlen(msg);
-                rkmessages[i]._private = msgidp;
+                rkmessages[i].payload   = rd_strdup(msg);
+                rkmessages[i].len       = strlen(msg);
+                rkmessages[i]._private  = msgidp;
                 rkmessages[i].partition = 2; /* Will be ignored since
                                               * RD_KAFKA_MSG_F_PARTITION
                                               * is not supplied. */
@@ -124,30 +125,34 @@ static void test_single_partition (void) {
                                    rkmessages, msgcnt);
 
         /* Scan through messages to check for errors. */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 if (rkmessages[i].err) {
                         failcnt++;
                         if (failcnt < 100)
-                                TEST_SAY("Message #%i failed: %s\n",
-                                         i,
+                                TEST_SAY("Message #%i failed: %s\n", i,
                                          rd_kafka_err2str(rkmessages[i].err));
                 }
         }
 
         /* All messages should've been produced. */
         if (r < msgcnt) {
-                TEST_SAY("Not all messages were accepted "
-                         "by produce_batch(): %i < %i\n", r, msgcnt);
+                TEST_SAY(
+                    "Not all messages were accepted "
+                    "by produce_batch(): %i < %i\n",
+                    r, msgcnt);
                 if (msgcnt - r != failcnt)
-                        TEST_SAY("Discrepency between failed messages (%i) "
-                                 "and return value %i (%i - %i)\n",
-                                 failcnt, msgcnt - r, msgcnt, r);
+                        TEST_SAY(
+                            "Discrepency between failed messages (%i) "
+                            "and return value %i (%i - %i)\n",
+                            failcnt, msgcnt - r, msgcnt, r);
                 TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
         }
 
         free(rkmessages);
-        TEST_SAY("Single partition: "
-                 "Produced %i messages, waiting for deliveries\n", r);
+        TEST_SAY(
+            "Single partition: "
+            "Produced %i messages, waiting for deliveries\n",
+            r);
 
         msgcounter = msgcnt;
 
@@ -177,8 +182,12 @@ static void test_single_partition (void) {
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
  */
-static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
-                   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
+static void dr_partitioner_cb(rd_kafka_t *rk,
+                              void *payload,
+                              size_t len,
+                              rd_kafka_resp_err_t err,
+                              void *opaque,
+                              void *msg_opaque) {
         int msgid = *(int *)msg_opaque;
 
         free(msg_opaque);
@@ -188,13 +197,15 @@ static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
                           rd_kafka_err2str(err));
 
         if (msgcounter <= 0)
-                TEST_FAIL("Too many message dr_cb callback calls "
-                          "(at msgid #%i)\n", msgid);
+                TEST_FAIL(
+                    "Too many message dr_cb callback calls "
+                    "(at msgid #%i)\n",
+                    msgid);
         msgcounter--;
 }
 
 /* Produce a batch of messages using random (default) partitioner */
-static void test_partitioner (void) {
+static void test_partitioner(void) {
         int partition = RD_KAFKA_PARTITION_UA;
         int r;
         rd_kafka_t *rk;
@@ -202,7 +213,7 @@ static void test_partitioner (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128];
-        int msgcnt = test_quick ? 100 : 100000;
+        int msgcnt  = test_quick ? 100 : 100000;
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
@@ -218,22 +229,20 @@ static void test_partitioner (void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
         if (!rkt)
-                TEST_FAIL("Failed to create topic: %s\n",
-                          rd_strerror(errno));
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
-                *msgidp = i;
+                *msgidp     = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
-                         __FILE__, __FUNCTION__, i);
+                            __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload = rd_strdup(msg);
-                rkmessages[i].len     = strlen(msg);
+                rkmessages[i].payload  = rd_strdup(msg);
+                rkmessages[i].len      = strlen(msg);
                 rkmessages[i]._private = msgidp;
         }
 
@@ -241,30 +250,34 @@ static void test_partitioner (void) {
                                    rkmessages, msgcnt);
 
         /* Scan through messages to check for errors. */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 if (rkmessages[i].err) {
                         failcnt++;
                         if (failcnt < 100)
-                                TEST_SAY("Message #%i failed: %s\n",
-                                         i,
+                                TEST_SAY("Message #%i failed: %s\n", i,
                                          rd_kafka_err2str(rkmessages[i].err));
                 }
         }
 
         /* All messages should've been produced. */
         if (r < msgcnt) {
-                TEST_SAY("Not all messages were accepted "
-                         "by produce_batch(): %i < %i\n", r, msgcnt);
+                TEST_SAY(
+                    "Not all messages were accepted "
+                    "by produce_batch(): %i < %i\n",
+                    r, msgcnt);
                 if (msgcnt - r != failcnt)
-                        TEST_SAY("Discrepency between failed messages (%i) "
-                                 "and return value %i (%i - %i)\n",
-                                 failcnt, msgcnt - r, msgcnt, r);
+                        TEST_SAY(
+                            "Discrepency between failed messages (%i) "
+                            "and return value %i (%i - %i)\n",
+                            failcnt, msgcnt - r, msgcnt, r);
                 TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
         }
 
         free(rkmessages);
-        TEST_SAY("Partitioner: "
-                 "Produced %i messages, waiting for deliveries\n", r);
+        TEST_SAY(
+            "Partitioner: "
+            "Produced %i messages, waiting for deliveries\n",
+            r);
 
         msgcounter = msgcnt;
         /* Wait for messages to be delivered */
@@ -274,8 +287,8 @@ static void test_partitioner (void) {
                 TEST_FAIL("%i failures, see previous errors", fails);
 
         if (msgcounter != 0)
-                TEST_FAIL("Still waiting for %i/%i messages\n",
-                          msgcounter, msgcnt);
+                TEST_FAIL("Still waiting for %i/%i messages\n", msgcounter,
+                          msgcnt);
 
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
@@ -287,20 +300,21 @@ static void test_partitioner (void) {
         return;
 }
 
-static void
-dr_per_message_partition_cb (rd_kafka_t *rk,
-                             const rd_kafka_message_t *rkmessage,
-                             void *opaque) {
+static void dr_per_message_partition_cb(rd_kafka_t *rk,
+                                        const rd_kafka_message_t *rkmessage,
+                                        void *opaque) {
 
         free(rkmessage->_private);
 
         if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
-            TEST_FAIL("Message delivery failed: %s\n",
-                      rd_kafka_err2str(rkmessage->err));
+                TEST_FAIL("Message delivery failed: %s\n",
+                          rd_kafka_err2str(rkmessage->err));
 
         if (msgcounter <= 0)
-            TEST_FAIL("Too many message dr_cb callback calls "
-                      "(at msg offset #%"PRId64")\n", rkmessage->offset);
+                TEST_FAIL(
+                    "Too many message dr_cb callback calls "
+                    "(at msg offset #%" PRId64 ")\n",
+                    rkmessage->offset);
 
         TEST_ASSERT(rkmessage->partition < topic_num_partitions);
         msgcounter--;
@@ -309,7 +323,7 @@ dr_per_message_partition_cb (rd_kafka_t *rk,
 }
 
 /* Produce a batch of messages using with per message partition flag */
-static void test_per_message_partition_flag (void) {
+static void test_per_message_partition_flag(void) {
         int partition = 0;
         int r;
         rd_kafka_t *rk;
@@ -317,7 +331,7 @@ static void test_per_message_partition_flag (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128 + sizeof(__FILE__) + sizeof(__FUNCTION__)];
-        int msgcnt = test_quick ? 100 : 1000;
+        int msgcnt  = test_quick ? 100 : 1000;
         int failcnt = 0;
         int i;
         int *rkpartition_counts;
@@ -337,75 +351,77 @@ static void test_per_message_partition_flag (void) {
         topic_name = test_mk_topic_name("0011_per_message_flag", 1);
         test_create_topic(rk, topic_name, topic_num_partitions, 1);
 
-        rkt = rd_kafka_topic_new(rk, topic_name,
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
-                TEST_FAIL("Failed to create topic: %s\n",
-                          rd_strerror(errno));
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
         /* Create messages */
         rkpartition_counts = calloc(sizeof(int), topic_num_partitions);
         dr_partition_count = calloc(sizeof(int), topic_num_partitions);
-        rkmessages = calloc(sizeof(*rkmessages), msgcnt);
-        for (i = 0 ; i < msgcnt ; i++) {
+        rkmessages         = calloc(sizeof(*rkmessages), msgcnt);
+        for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
-                *msgidp = i;
+                *msgidp     = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload = rd_strdup(msg);
-                rkmessages[i].len     = strlen(msg);
-                rkmessages[i]._private = msgidp;
+                rkmessages[i].payload   = rd_strdup(msg);
+                rkmessages[i].len       = strlen(msg);
+                rkmessages[i]._private  = msgidp;
                 rkmessages[i].partition = jitter(0, topic_num_partitions - 1);
                 rkpartition_counts[rkmessages[i].partition]++;
         }
 
-        r = rd_kafka_produce_batch(rkt, partition,
-                                   RD_KAFKA_MSG_F_PARTITION|RD_KAFKA_MSG_F_FREE,
-                                   rkmessages, msgcnt);
+        r = rd_kafka_produce_batch(
+            rkt, partition, RD_KAFKA_MSG_F_PARTITION | RD_KAFKA_MSG_F_FREE,
+            rkmessages, msgcnt);
 
         /* Scan through messages to check for errors. */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 if (rkmessages[i].err) {
                         failcnt++;
                         if (failcnt < 100)
-                                TEST_SAY("Message #%i failed: %s\n",
-                                         i,
+                                TEST_SAY("Message #%i failed: %s\n", i,
                                          rd_kafka_err2str(rkmessages[i].err));
                 }
         }
 
         /* All messages should've been produced. */
         if (r < msgcnt) {
-                TEST_SAY("Not all messages were accepted "
-                         "by produce_batch(): %i < %i\n", r, msgcnt);
+                TEST_SAY(
+                    "Not all messages were accepted "
+                    "by produce_batch(): %i < %i\n",
+                    r, msgcnt);
                 if (msgcnt - r != failcnt)
-                        TEST_SAY("Discrepency between failed messages (%i) "
-                                 "and return value %i (%i - %i)\n",
-                                 failcnt, msgcnt - r, msgcnt, r);
+                        TEST_SAY(
+                            "Discrepency between failed messages (%i) "
+                            "and return value %i (%i - %i)\n",
+                            failcnt, msgcnt - r, msgcnt, r);
                 TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
         }
 
         free(rkmessages);
-        TEST_SAY("Per-message partition: "
-                 "Produced %i messages, waiting for deliveries\n", r);
+        TEST_SAY(
+            "Per-message partition: "
+            "Produced %i messages, waiting for deliveries\n",
+            r);
 
         msgcounter = msgcnt;
         /* Wait for messages to be delivered */
         test_wait_delivery(rk, &msgcounter);
 
         if (msgcounter != 0)
-                TEST_FAIL("Still waiting for %i/%i messages\n",
-                          msgcounter, msgcnt);
+                TEST_FAIL("Still waiting for %i/%i messages\n", msgcounter,
+                          msgcnt);
 
         for (i = 0; i < topic_num_partitions; i++) {
                 if (dr_partition_count[i] != rkpartition_counts[i]) {
-                        TEST_FAIL("messages were not sent to designated "
-                                  "partitions expected messages %i in "
-                                  "partition %i, but only "
-                                  "%i messages were sent",
-                                  rkpartition_counts[i],
-                                  i, dr_partition_count[i]);
+                        TEST_FAIL(
+                            "messages were not sent to designated "
+                            "partitions expected messages %i in "
+                            "partition %i, but only "
+                            "%i messages were sent",
+                            rkpartition_counts[i], i, dr_partition_count[i]);
                 }
         }
 
@@ -423,17 +439,19 @@ static void test_per_message_partition_flag (void) {
 }
 
 static void
-dr_partitioner_wo_per_message_flag_cb (rd_kafka_t *rk,
-                                       const rd_kafka_message_t *rkmessage,
-                                       void *opaque) {
+dr_partitioner_wo_per_message_flag_cb(rd_kafka_t *rk,
+                                      const rd_kafka_message_t *rkmessage,
+                                      void *opaque) {
         free(rkmessage->_private);
 
         if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
                 TEST_FAIL("Message delivery failed: %s\n",
                           rd_kafka_err2str(rkmessage->err));
         if (msgcounter <= 0)
-                TEST_FAIL("Too many message dr_cb callback calls "
-                          "(at msg offset #%"PRId64")\n", rkmessage->offset);
+                TEST_FAIL(
+                    "Too many message dr_cb callback calls "
+                    "(at msg offset #%" PRId64 ")\n",
+                    rkmessage->offset);
         if (rkmessage->partition != msg_partition_wo_flag)
                 msg_partition_wo_flag_success = 1;
         msgcounter--;
@@ -443,7 +461,7 @@ dr_partitioner_wo_per_message_flag_cb (rd_kafka_t *rk,
  * @brief Produce a batch of messages using partitioner
  *        without per message partition flag
  */
-static void test_message_partitioner_wo_per_message_flag (void) {
+static void test_message_partitioner_wo_per_message_flag(void) {
         int partition = RD_KAFKA_PARTITION_UA;
         int r;
         rd_kafka_t *rk;
@@ -451,7 +469,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128 + sizeof(__FILE__) + sizeof(__FUNCTION__)];
-        int msgcnt = test_quick ? 100 : 1000;
+        int msgcnt  = test_quick ? 100 : 1000;
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;
@@ -469,23 +487,21 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         TEST_SAY("test_partitioner: Created kafka instance %s\n",
                  rd_kafka_name(rk));
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
-                                 topic_conf);
+        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0), topic_conf);
         if (!rkt)
-                TEST_FAIL("Failed to create topic: %s\n",
-                        rd_strerror(errno));
+                TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 int *msgidp = malloc(sizeof(*msgidp));
-                *msgidp = i;
+                *msgidp     = i;
                 rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                             __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload = rd_strdup(msg);
-                rkmessages[i].len     = strlen(msg);
-                rkmessages[i]._private = msgidp;
+                rkmessages[i].payload   = rd_strdup(msg);
+                rkmessages[i].len       = strlen(msg);
+                rkmessages[i]._private  = msgidp;
                 rkmessages[i].partition = msg_partition_wo_flag;
         }
 
@@ -493,30 +509,34 @@ static void test_message_partitioner_wo_per_message_flag (void) {
                                    rkmessages, msgcnt);
 
         /* Scan through messages to check for errors. */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 if (rkmessages[i].err) {
                         failcnt++;
                         if (failcnt < 100)
-                                TEST_SAY("Message #%i failed: %s\n",
-                                         i,
+                                TEST_SAY("Message #%i failed: %s\n", i,
                                          rd_kafka_err2str(rkmessages[i].err));
                 }
         }
 
         /* All messages should've been produced. */
         if (r < msgcnt) {
-                TEST_SAY("Not all messages were accepted "
-                         "by produce_batch(): %i < %i\n", r, msgcnt);
+                TEST_SAY(
+                    "Not all messages were accepted "
+                    "by produce_batch(): %i < %i\n",
+                    r, msgcnt);
                 if (msgcnt - r != failcnt)
-                        TEST_SAY("Discrepency between failed messages (%i) "
-                                 "and return value %i (%i - %i)\n",
-                                 failcnt, msgcnt - r, msgcnt, r);
+                        TEST_SAY(
+                            "Discrepency between failed messages (%i) "
+                            "and return value %i (%i - %i)\n",
+                            failcnt, msgcnt - r, msgcnt, r);
                 TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
         }
 
         free(rkmessages);
-        TEST_SAY("Partitioner: "
-                 "Produced %i messages, waiting for deliveries\n", r);
+        TEST_SAY(
+            "Partitioner: "
+            "Produced %i messages, waiting for deliveries\n",
+            r);
 
         msgcounter = msgcnt;
         /* Wait for messages to be delivered */
@@ -526,11 +546,13 @@ static void test_message_partitioner_wo_per_message_flag (void) {
                 TEST_FAIL("%i failures, see previous errors", fails);
 
         if (msgcounter != 0)
-                TEST_FAIL("Still waiting for %i/%i messages\n",
-                          msgcounter, msgcnt);
+                TEST_FAIL("Still waiting for %i/%i messages\n", msgcounter,
+                          msgcnt);
         if (msg_partition_wo_flag_success == 0) {
-                TEST_FAIL("partitioner was not used, all messages were sent to "
-                          "message specified partition %i", i);
+                TEST_FAIL(
+                    "partitioner was not used, all messages were sent to "
+                    "message specified partition %i",
+                    i);
         }
 
         /* Destroy topic */
@@ -544,7 +566,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
 }
 
 
-int main_0011_produce_batch (int argc, char **argv) {
+int main_0011_produce_batch(int argc, char **argv) {
         test_message_partitioner_wo_per_message_flag();
         test_single_partition();
         test_partitioner();

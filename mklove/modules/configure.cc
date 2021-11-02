@@ -112,12 +112,12 @@ function checks {
 	if [[ $MKL_DISTRO == "sunos" ]]; then
 	    mkl_meta_set ginstall name "GNU install"
 	    if mkl_command_check ginstall "" ignore "ginstall --version"; then
-		INSTALL=ginstall
+		INSTALL=$(which ginstall)
 	    else
-		INSTALL=install
+		INSTALL=$(which install)
 	    fi
         else
-            INSTALL=install
+            INSTALL=$(which install)
 	fi
     fi
 
@@ -158,6 +158,11 @@ function checks {
             mkl_mkvar_set staticlinking HAS_LIBTOOL_STATIC y
         fi
     fi
+
+    # Check for GNU ar (which has the -M option)
+    mkl_meta_set "gnuar" "name" "GNU ar"
+    mkl_command_check "gnuar" "HAS_GNU_AR" disable \
+                          "ar -V 2>/dev/null | grep -q GNU"
 }
 
 

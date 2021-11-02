@@ -36,7 +36,7 @@
 #include "tinycthread.h"
 
 
-int thrd_setname (const char *name) {
+int thrd_setname(const char *name) {
 #if HAVE_PTHREAD_SETNAME_GNU
         if (!pthread_setname_np(pthread_self(), name))
                 return thrd_success;
@@ -59,6 +59,22 @@ int thrd_is_current(thrd_t thr) {
 }
 
 
+#ifdef _WIN32
+void cnd_wait_enter(cnd_t *cond) {
+        /* Increment number of waiters */
+        EnterCriticalSection(&cond->mWaitersCountLock);
+        ++cond->mWaitersCount;
+        LeaveCriticalSection(&cond->mWaitersCountLock);
+}
+
+void cnd_wait_exit(cnd_t *cond) {
+        /* Increment number of waiters */
+        EnterCriticalSection(&cond->mWaitersCountLock);
+        --cond->mWaitersCount;
+        LeaveCriticalSection(&cond->mWaitersCountLock);
+}
+#endif
+
 
 
 int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
@@ -71,10 +87,10 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
         struct timespec ts;
 
         gettimeofday(&tv, NULL);
-        ts.tv_sec = tv.tv_sec;
+        ts.tv_sec  = tv.tv_sec;
         ts.tv_nsec = tv.tv_usec * 1000;
 
-        ts.tv_sec  += timeout_ms / 1000;
+        ts.tv_sec += timeout_ms / 1000;
         ts.tv_nsec += (timeout_ms % 1000) * 1000000;
 
         if (ts.tv_nsec >= 1000000000) {
@@ -86,18 +102,18 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
 #endif
 }
 
-int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
+int cnd_timedwait_msp(cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
         rd_ts_t pre = rd_clock();
         int r;
         r = cnd_timedwait_ms(cnd, mtx, *timeout_msp);
         if (r != thrd_timedout) {
                 /* Subtract spent time */
-                (*timeout_msp) -= (int)(rd_clock()-pre) / 1000;
+                (*timeout_msp) -= (int)(rd_clock() - pre) / 1000;
         }
         return r;
 }
 
-int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
+int cnd_timedwait_abs(cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
         if (tspec->tv_sec == RD_POLL_INFINITE)
                 return cnd_wait(cnd, mtx);
         else if (tspec->tv_sec == RD_POLL_NOWAIT)
@@ -112,7 +128,7 @@ int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
  * @{
  */
 #ifndef _WIN32
-int rwlock_init (rwlock_t *rwl) {
+int rwlock_init(rwlock_t *rwl) {
         int r = pthread_rwlock_init(rwl, NULL);
         if (r) {
                 errno = r;
@@ -121,7 +137,7 @@ int rwlock_init (rwlock_t *rwl) {
         return thrd_success;
 }
 
-int rwlock_destroy (rwlock_t *rwl) {
+int rwlock_destroy(rwlock_t *rwl) {
         int r = pthread_rwlock_destroy(rwl);
         if (r) {
                 errno = r;
@@ -130,25 +146,25 @@ int rwlock_destroy (rwlock_t *rwl) {
         return thrd_success;
 }
 
-int rwlock_rdlock (rwlock_t *rwl) {
+int rwlock_rdlock(rwlock_t *rwl) {
         int r = pthread_rwlock_rdlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
-int rwlock_wrlock (rwlock_t *rwl) {
+int rwlock_wrlock(rwlock_t *rwl) {
         int r = pthread_rwlock_wrlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
-int rwlock_rdunlock (rwlock_t *rwl) {
+int rwlock_rdunlock(rwlock_t *rwl) {
         int r = pthread_rwlock_unlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
-int rwlock_wrunlock (rwlock_t *rwl) {
+int rwlock_wrunlock(rwlock_t *rwl) {
         int r = pthread_rwlock_unlock(rwl);
         assert(r == 0);
         return thrd_success;

@@ -56,10 +56,10 @@ static const int producer_ic_cnt = 5;
 static const int consumer_ic_cnt = 10;
 
 /* The base values help differentiating opaque values between interceptors */
-static const int on_send_base    = 1<<24;
-static const int on_ack_base     = 1<<25;
-static const int on_consume_base = 1<<26;
-static const int on_commit_base  = 1<<27;
+static const int on_send_base    = 1 << 24;
+static const int on_ack_base     = 1 << 25;
+static const int on_consume_base = 1 << 26;
+static const int on_commit_base  = 1 << 27;
 static const int base_mask       = 0xff << 24;
 
 #define _ON_SEND    0
@@ -68,7 +68,7 @@ static const int base_mask       = 0xff << 24;
 #define _ON_CNT     3
 struct msg_state {
         int id;
-        int bits[_ON_CNT];  /* Bit field, one bit per interceptor */
+        int bits[_ON_CNT]; /* Bit field, one bit per interceptor */
         mtx_t lock;
 };
 
@@ -87,30 +87,34 @@ static int on_commit_bits = 0;
  * must be reflected here, meaning that all lower bits must be set,
  * and no higher ones.
  */
-static void msg_verify_ic_cnt (const struct msg_state *msg, const char *what,
-                               int bits, int exp_cnt) {
-        int exp_bits = exp_cnt ? (1 << exp_cnt)-1 : 0;
+static void msg_verify_ic_cnt(const struct msg_state *msg,
+                              const char *what,
+                              int bits,
+                              int exp_cnt) {
+        int exp_bits = exp_cnt ? (1 << exp_cnt) - 1 : 0;
 
         TEST_ASSERT(bits == exp_bits,
-                    "msg #%d: %s: expected bits 0x%x (%d), got 0x%x",
-                    msg->id, what, exp_bits, exp_cnt, bits);
+                    "msg #%d: %s: expected bits 0x%x (%d), got 0x%x", msg->id,
+                    what, exp_bits, exp_cnt, bits);
 }
 
 /*
  * @brief Same as msg_verify_ic_cnt() without the msg reliance
  */
-static void verify_ic_cnt (const char *what, int bits, int exp_cnt) {
-        int exp_bits = exp_cnt ? (1 << exp_cnt)-1 : 0;
+static void verify_ic_cnt(const char *what, int bits, int exp_cnt) {
+        int exp_bits = exp_cnt ? (1 << exp_cnt) - 1 : 0;
 
-        TEST_ASSERT(bits == exp_bits,
-                    "%s: expected bits 0x%x (%d), got 0x%x",
+        TEST_ASSERT(bits == exp_bits, "%s: expected bits 0x%x (%d), got 0x%x",
                     what, exp_bits, exp_cnt, bits);
 }
 
 
 
-static void verify_msg (const char *what, int base, int bitid,
-                        rd_kafka_message_t *rkmessage, void *ic_opaque) {
+static void verify_msg(const char *what,
+                       int base,
+                       int bitid,
+                       rd_kafka_message_t *rkmessage,
+                       void *ic_opaque) {
         const char *id_str = rkmessage->key;
         struct msg_state *msg;
         int id;
@@ -122,25 +126,24 @@ static void verify_msg (const char *what, int base, int bitid,
 
         /* Find message by id */
         TEST_ASSERT(rkmessage->key && rkmessage->key_len > 0 &&
-                    id_str[(int)rkmessage->key_len-1] == '\0' &&
+                    id_str[(int)rkmessage->key_len - 1] == '\0' &&
                     strlen(id_str) > 0 && isdigit(*id_str));
         id = atoi(id_str);
-        TEST_ASSERT(id >= 0 && id < msgcnt,
-                    "%s: bad message id %s", what, id_str);
+        TEST_ASSERT(id >= 0 && id < msgcnt, "%s: bad message id %s", what,
+                    id_str);
         msg = &msgs[id];
 
         mtx_lock(&msg->lock);
 
-        TEST_ASSERT(msg->id == id, "expected msg #%d has wrong id %d",
-                    id, msg->id);
+        TEST_ASSERT(msg->id == id, "expected msg #%d has wrong id %d", id,
+                    msg->id);
 
         /* Verify message opaque */
-        if (!strcmp(what, "on_send") ||
-            !strncmp(what, "on_ack", 6))
+        if (!strcmp(what, "on_send") || !strncmp(what, "on_ack", 6))
                 TEST_ASSERT(rkmessage->_private == (void *)msg);
 
-        TEST_SAYL(3, "%s: interceptor #%d called for message #%d (%d)\n",
-                  what, ic_id, id, msg->id);
+        TEST_SAYL(3, "%s: interceptor #%d called for message #%d (%d)\n", what,
+                  ic_id, id, msg->id);
 
         msg_verify_ic_cnt(msg, what, msg->bits[bitid], ic_id);
 
@@ -151,25 +154,22 @@ static void verify_msg (const char *what, int base, int bitid,
 }
 
 
-static rd_kafka_resp_err_t on_send (rd_kafka_t *rk,
-                                    rd_kafka_message_t *rkmessage,
-                                    void *ic_opaque) {
+static rd_kafka_resp_err_t
+on_send(rd_kafka_t *rk, rd_kafka_message_t *rkmessage, void *ic_opaque) {
         TEST_ASSERT(ic_opaque != NULL);
         verify_msg("on_send", on_send_base, _ON_SEND, rkmessage, ic_opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-static rd_kafka_resp_err_t on_ack (rd_kafka_t *rk,
-                                   rd_kafka_message_t *rkmessage,
-                                   void *ic_opaque) {
+static rd_kafka_resp_err_t
+on_ack(rd_kafka_t *rk, rd_kafka_message_t *rkmessage, void *ic_opaque) {
         TEST_ASSERT(ic_opaque != NULL);
         verify_msg("on_ack", on_ack_base, _ON_ACK, rkmessage, ic_opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-static rd_kafka_resp_err_t on_consume (rd_kafka_t *rk,
-                                       rd_kafka_message_t *rkmessage,
-                                       void *ic_opaque) {
+static rd_kafka_resp_err_t
+on_consume(rd_kafka_t *rk, rd_kafka_message_t *rkmessage, void *ic_opaque) {
         TEST_ASSERT(ic_opaque != NULL);
         verify_msg("on_consume", on_consume_base, _ON_CONSUME, rkmessage,
                    ic_opaque);
@@ -177,9 +177,11 @@ static rd_kafka_resp_err_t on_consume (rd_kafka_t *rk,
 }
 
 
-static rd_kafka_resp_err_t on_commit (
-        rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
-        rd_kafka_resp_err_t err, void *ic_opaque) {
+static rd_kafka_resp_err_t
+on_commit(rd_kafka_t *rk,
+          const rd_kafka_topic_partition_list_t *offsets,
+          rd_kafka_resp_err_t err,
+          void *ic_opaque) {
         int ic_id = (int)(intptr_t)ic_opaque;
 
         /* Since on_commit is triggered a bit randomly and not per
@@ -216,9 +218,12 @@ static rd_kafka_resp_err_t on_commit (
 }
 
 
-static void do_test_produce (rd_kafka_t *rk, const char *topic,
-                             int32_t partition, int msgid, int exp_fail,
-                             int exp_ic_cnt) {
+static void do_test_produce(rd_kafka_t *rk,
+                            const char *topic,
+                            int32_t partition,
+                            int msgid,
+                            int exp_fail,
+                            int exp_ic_cnt) {
         rd_kafka_resp_err_t err;
         char key[16];
         struct msg_state *msg = &msgs[msgid];
@@ -226,28 +231,27 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
 
         /* Message state should be empty, no interceptors should have
          * been called yet.. */
-        for (i = 0 ; i < _ON_CNT ; i++)
+        for (i = 0; i < _ON_CNT; i++)
                 TEST_ASSERT(msg->bits[i] == 0);
 
         mtx_init(&msg->lock, mtx_plain);
         msg->id = msgid;
         rd_snprintf(key, sizeof(key), "%d", msgid);
 
-        err = rd_kafka_producev(rk,
-                                RD_KAFKA_V_TOPIC(topic),
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC(topic),
                                 RD_KAFKA_V_PARTITION(partition),
-                                RD_KAFKA_V_KEY(key, strlen(key)+1),
+                                RD_KAFKA_V_KEY(key, strlen(key) + 1),
                                 RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_OPAQUE(msg),
-                                RD_KAFKA_V_END);
+                                RD_KAFKA_V_OPAQUE(msg), RD_KAFKA_V_END);
 
         mtx_lock(&msg->lock);
         msg_verify_ic_cnt(msg, "on_send", msg->bits[_ON_SEND], exp_ic_cnt);
 
         if (err) {
-                msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], exp_ic_cnt);
-                TEST_ASSERT(exp_fail,
-                            "producev() failed: %s", rd_kafka_err2str(err));
+                msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK],
+                                  exp_ic_cnt);
+                TEST_ASSERT(exp_fail, "producev() failed: %s",
+                            rd_kafka_err2str(err));
         } else {
                 msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], 0);
                 TEST_ASSERT(!exp_fail,
@@ -259,24 +263,25 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
 
 
 
-static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
-                                            const rd_kafka_conf_t *conf,
-                                            void *ic_opaque,
-                                            char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t on_new_producer(rd_kafka_t *rk,
+                                           const rd_kafka_conf_t *conf,
+                                           void *ic_opaque,
+                                           char *errstr,
+                                           size_t errstr_size) {
         int i;
 
-        for (i = 0 ; i < producer_ic_cnt ; i++) {
+        for (i = 0; i < producer_ic_cnt; i++) {
                 rd_kafka_resp_err_t err;
 
                 err = rd_kafka_interceptor_add_on_send(
-                        rk, tsprintf("on_send:%d",i),
-                        on_send, (void *)(intptr_t)(on_send_base | i));
+                    rk, tsprintf("on_send:%d", i), on_send,
+                    (void *)(intptr_t)(on_send_base | i));
                 TEST_ASSERT(!err, "add_on_send failed: %s",
                             rd_kafka_err2str(err));
 
                 err = rd_kafka_interceptor_add_on_acknowledgement(
-                        rk, tsprintf("on_acknowledgement:%d",i),
-                        on_ack, (void *)(intptr_t)(on_ack_base | i));
+                    rk, tsprintf("on_acknowledgement:%d", i), on_ack,
+                    (void *)(intptr_t)(on_ack_base | i));
                 TEST_ASSERT(!err, "add_on_ack.. failed: %s",
                             rd_kafka_err2str(err));
 
@@ -284,15 +289,13 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
                 /* Add consumer interceptors as well to make sure
                  * they are not called. */
                 err = rd_kafka_interceptor_add_on_consume(
-                        rk, tsprintf("on_consume:%d",i),
-                        on_consume, NULL);
+                    rk, tsprintf("on_consume:%d", i), on_consume, NULL);
                 TEST_ASSERT(!err, "add_on_consume failed: %s",
                             rd_kafka_err2str(err));
 
 
                 err = rd_kafka_interceptor_add_on_commit(
-                        rk, tsprintf("on_commit:%d",i),
-                        on_commit, NULL);
+                    rk, tsprintf("on_commit:%d", i), on_commit, NULL);
                 TEST_ASSERT(!err, "add_on_commit failed: %s",
                             rd_kafka_err2str(err));
         }
@@ -300,7 +303,7 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-static void do_test_producer (const char *topic) {
+static void do_test_producer(const char *topic) {
         rd_kafka_conf_t *conf;
         int i;
         rd_kafka_t *rk;
@@ -315,7 +318,7 @@ static void do_test_producer (const char *topic) {
         /* Create producer */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        for (i = 0 ; i < msgcnt-1 ; i++)
+        for (i = 0; i < msgcnt - 1; i++)
                 do_test_produce(rk, topic, RD_KAFKA_PARTITION_UA, i, 0,
                                 producer_ic_cnt);
 
@@ -328,7 +331,7 @@ static void do_test_producer (const char *topic) {
 
 
         /* Verify acks */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 struct msg_state *msg = &msgs[i];
                 mtx_lock(&msg->lock);
                 msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK],
@@ -340,30 +343,29 @@ static void do_test_producer (const char *topic) {
 }
 
 
-static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk,
-                                            const rd_kafka_conf_t *conf,
-                                            void *ic_opaque,
-                                            char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t on_new_consumer(rd_kafka_t *rk,
+                                           const rd_kafka_conf_t *conf,
+                                           void *ic_opaque,
+                                           char *errstr,
+                                           size_t errstr_size) {
         int i;
 
-        for (i = 0 ; i < consumer_ic_cnt ; i++) {
+        for (i = 0; i < consumer_ic_cnt; i++) {
                 rd_kafka_interceptor_add_on_consume(
-                        rk, tsprintf("on_consume:%d",i),
-                        on_consume, (void *)(intptr_t)(on_consume_base | i));
+                    rk, tsprintf("on_consume:%d", i), on_consume,
+                    (void *)(intptr_t)(on_consume_base | i));
 
                 rd_kafka_interceptor_add_on_commit(
-                        rk, tsprintf("on_commit:%d",i),
-                        on_commit, (void *)(intptr_t)(on_commit_base | i));
+                    rk, tsprintf("on_commit:%d", i), on_commit,
+                    (void *)(intptr_t)(on_commit_base | i));
 
                 /* Add producer interceptors as well to make sure they
                  * are not called. */
-                rd_kafka_interceptor_add_on_send(
-                        rk, tsprintf("on_send:%d",i),
-                        on_send, NULL);
+                rd_kafka_interceptor_add_on_send(rk, tsprintf("on_send:%d", i),
+                                                 on_send, NULL);
 
                 rd_kafka_interceptor_add_on_acknowledgement(
-                        rk, tsprintf("on_acknowledgement:%d",i),
-                        on_ack, NULL);
+                    rk, tsprintf("on_acknowledgement:%d", i), on_ack, NULL);
         }
 
 
@@ -371,7 +373,7 @@ static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk,
 }
 
 
-static void do_test_consumer (const char *topic) {
+static void do_test_consumer(const char *topic) {
 
         rd_kafka_conf_t *conf;
         int i;
@@ -392,11 +394,11 @@ static void do_test_consumer (const char *topic) {
         test_consumer_subscribe(rk, topic);
 
         /* Consume messages (-1 for the one that failed producing) */
-        test_consumer_poll("interceptors.consume", rk, 0, -1, -1, msgcnt-1,
+        test_consumer_poll("interceptors.consume", rk, 0, -1, -1, msgcnt - 1,
                            NULL);
 
         /* Verify on_consume */
-        for (i = 0 ; i < msgcnt-1 ; i++) {
+        for (i = 0; i < msgcnt - 1; i++) {
                 struct msg_state *msg = &msgs[i];
                 mtx_lock(&msg->lock);
                 msg_verify_ic_cnt(msg, "on_consume", msg->bits[_ON_CONSUME],
@@ -406,10 +408,10 @@ static void do_test_consumer (const char *topic) {
 
         /* Verify that the produce-failed message didnt have
          * interceptors called */
-        mtx_lock(&msgs[msgcnt-1].lock);
-        msg_verify_ic_cnt(&msgs[msgcnt-1], "on_consume",
-                          msgs[msgcnt-1].bits[_ON_CONSUME], 0);
-        mtx_unlock(&msgs[msgcnt-1].lock);
+        mtx_lock(&msgs[msgcnt - 1].lock);
+        msg_verify_ic_cnt(&msgs[msgcnt - 1], "on_consume",
+                          msgs[msgcnt - 1].bits[_ON_CONSUME], 0);
+        mtx_unlock(&msgs[msgcnt - 1].lock);
 
         test_consumer_close(rk);
 
@@ -425,7 +427,7 @@ static void do_test_consumer (const char *topic) {
  *        is not duplicated without the interceptor's knowledge or
  *        assistance.
  */
-static void do_test_conf_copy (const char *topic) {
+static void do_test_conf_copy(const char *topic) {
         rd_kafka_conf_t *conf, *conf2;
         int i;
         rd_kafka_t *rk;
@@ -442,20 +444,20 @@ static void do_test_conf_copy (const char *topic) {
         /* Now copy the configuration to verify that interceptors are
          * NOT copied. */
         conf2 = conf;
-        conf = rd_kafka_conf_dup(conf2);
+        conf  = rd_kafka_conf_dup(conf2);
         rd_kafka_conf_destroy(conf2);
 
         /* Create producer */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        for (i = 0 ; i < msgcnt-1 ; i++)
+        for (i = 0; i < msgcnt - 1; i++)
                 do_test_produce(rk, topic, RD_KAFKA_PARTITION_UA, i, 0, 0);
 
         /* Wait for messages to be delivered */
         test_flush(rk, -1);
 
         /* Verify acks */
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 struct msg_state *msg = &msgs[i];
                 mtx_lock(&msg->lock);
                 msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], 0);
@@ -466,7 +468,7 @@ static void do_test_conf_copy (const char *topic) {
 }
 
 
-int main_0064_interceptors (int argc, char **argv) {
+int main_0064_interceptors(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
         do_test_producer(topic);
@@ -477,4 +479,3 @@ int main_0064_interceptors (int argc, char **argv) {
 
         return 0;
 }
-

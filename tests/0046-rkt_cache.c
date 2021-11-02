@@ -39,27 +39,27 @@
  */
 
 
-int main_0046_rkt_cache (int argc, char **argv) {
-	rd_kafka_t *rk;
-	rd_kafka_topic_t *rkt;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-	int i;
+int main_0046_rkt_cache(int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        int i;
 
-	rk = test_create_producer();
+        rk = test_create_producer();
 
-	rkt = test_create_producer_topic(rk, topic, NULL);
+        rkt = test_create_producer_topic(rk, topic, NULL);
 
-	for (i = 0 ; i < 100 ; i++) {
-		rd_kafka_topic_t *rkt2;
+        for (i = 0; i < 100; i++) {
+                rd_kafka_topic_t *rkt2;
 
-		rkt2 = rd_kafka_topic_new(rk, topic, NULL);
-		TEST_ASSERT(rkt2 != NULL);
+                rkt2 = rd_kafka_topic_new(rk, topic, NULL);
+                TEST_ASSERT(rkt2 != NULL);
 
-		rd_kafka_topic_destroy(rkt2);
-	}
+                rd_kafka_topic_destroy(rkt2);
+        }
 
-	rd_kafka_topic_destroy(rkt);
-	rd_kafka_destroy(rk);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
 
         return 0;
 }

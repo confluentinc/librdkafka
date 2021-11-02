@@ -30,30 +30,30 @@
 
 #include "rdkafkacpp_int.h"
 
-int RdKafka::version () {
+int RdKafka::version() {
   return rd_kafka_version();
 }
 
-std::string RdKafka::version_str () {
+std::string RdKafka::version_str() {
   return std::string(rd_kafka_version_str());
 }
 
 std::string RdKafka::get_debug_contexts() {
-	return std::string(RD_KAFKA_DEBUG_CONTEXTS);
+  return std::string(RD_KAFKA_DEBUG_CONTEXTS);
 }
 
-std::string RdKafka::err2str (RdKafka::ErrorCode err) {
+std::string RdKafka::err2str(RdKafka::ErrorCode err) {
   return std::string(rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)));
 }
 
-int RdKafka::wait_destroyed (int timeout_ms) {
+int RdKafka::wait_destroyed(int timeout_ms) {
   return rd_kafka_wait_destroyed(timeout_ms);
 }
 
-void *RdKafka::mem_malloc (size_t size) {
+void *RdKafka::mem_malloc(size_t size) {
   return rd_kafka_mem_malloc(NULL, size);
 }
 
-void RdKafka::mem_free (void *ptr) {
+void RdKafka::mem_free(void *ptr) {
   rd_kafka_mem_free(NULL, ptr);
 }

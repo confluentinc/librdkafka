@@ -62,27 +62,27 @@ static int produce_req_cnt = 0;
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
  */
-static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
+static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
         sockem_set(skm, "delay", 500, NULL);
         return 0;
 }
 
-static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
-                                            int sockfd,
-                                            const char *brokername,
-                                            int32_t brokerid,
-                                            int16_t ApiKey,
-                                            int16_t ApiVersion,
-                                            int32_t CorrId,
-                                            size_t  size,
-                                            void *ic_opaque) {
+static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
+                                           int sockfd,
+                                           const char *brokername,
+                                           int32_t brokerid,
+                                           int16_t ApiKey,
+                                           int16_t ApiVersion,
+                                           int32_t CorrId,
+                                           size_t size,
+                                           void *ic_opaque) {
 
         /* Ignore if not a ProduceRequest */
         if (ApiKey != 0)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        TEST_SAY("ProduceRequest sent to %s (%"PRId32")\n",
-                 brokername, brokerid);
+        TEST_SAY("ProduceRequest sent to %s (%" PRId32 ")\n", brokername,
+                 brokerid);
 
         mtx_lock(&produce_req_lock);
         produce_req_cnt++;
@@ -95,20 +95,20 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
-                                            const rd_kafka_conf_t *conf,
-                                            void *ic_opaque,
-                                            char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t on_new_producer(rd_kafka_t *rk,
+                                           const rd_kafka_conf_t *conf,
+                                           void *ic_opaque,
+                                           char *errstr,
+                                           size_t errstr_size) {
         return rd_kafka_interceptor_add_on_request_sent(
-                rk, "catch_producer_req",
-                on_request_sent, NULL);
+            rk, "catch_producer_req", on_request_sent, NULL);
 }
 #endif
 
 
 
-static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
-                       void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         int msgid;
         struct waitmsgs *waitmsgs = rkmessage->_private;
 
@@ -117,19 +117,19 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
         waitmsgs->cnt--;
 
         TEST_ASSERT(rkmessage->len == sizeof(msgid),
-                    "invalid message size %"PRIusz", expected sizeof(int)",
+                    "invalid message size %" PRIusz ", expected sizeof(int)",
                     rkmessage->len);
 
         memcpy(&msgid, rkmessage->payload, rkmessage->len);
 
-        TEST_ASSERT(msgid >= 0 && msgid < msgcnt,
-                    "msgid %d out of range 0..%d", msgid, msgcnt - 1);
+        TEST_ASSERT(msgid >= 0 && msgid < msgcnt, "msgid %d out of range 0..%d",
+                    msgid, msgcnt - 1);
 
         TEST_ASSERT((int)waitmsgs->exp_err[msgid] != 12345,
                     "msgid %d delivered twice", msgid);
 
-        TEST_SAY("DeliveryReport for msg #%d: %s\n",
-                 msgid, rd_kafka_err2name(rkmessage->err));
+        TEST_SAY("DeliveryReport for msg #%d: %s\n", msgid,
+                 rd_kafka_err2name(rkmessage->err));
 
         if (rkmessage->err != waitmsgs->exp_err[msgid]) {
                 TEST_FAIL_LATER("Expected message #%d to fail with %s, not %s",
@@ -144,44 +144,45 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 
 
 
-
-
-
-
-static void purge_and_expect (const char *what, int line,
-                              rd_kafka_t *rk, int purge_flags,
-                              struct waitmsgs *waitmsgs,
-                              int exp_remain, const char *reason) {
+static void purge_and_expect(const char *what,
+                             int line,
+                             rd_kafka_t *rk,
+                             int purge_flags,
+                             struct waitmsgs *waitmsgs,
+                             int exp_remain,
+                             const char *reason) {
         test_timing_t t_purge;
         rd_kafka_resp_err_t err;
 
-        TEST_SAY("%s:%d: purge(0x%x): "
-                 "expecting %d messages to remain when done\n",
-                 what, line, purge_flags, exp_remain);
+        TEST_SAY(
+            "%s:%d: purge(0x%x): "
+            "expecting %d messages to remain when done\n",
+            what, line, purge_flags, exp_remain);
         TIMING_START(&t_purge, "%s:%d: purge(0x%x)", what, line, purge_flags);
         err = rd_kafka_purge(rk, purge_flags);
         TIMING_STOP(&t_purge);
 
-        TEST_ASSERT(!err, "purge(0x%x) at %d failed: %s",
-                    purge_flags, line, rd_kafka_err2str(err));
+        TEST_ASSERT(!err, "purge(0x%x) at %d failed: %s", purge_flags, line,
+                    rd_kafka_err2str(err));
 
         rd_kafka_poll(rk, 0);
         TEST_ASSERT(waitmsgs->cnt == exp_remain,
-                    "%s:%d: expected %d messages remaining, not %d",
-                    what, line, exp_remain, waitmsgs->cnt);
+                    "%s:%d: expected %d messages remaining, not %d", what, line,
+                    exp_remain, waitmsgs->cnt);
 }
 
 
 /**
  * @brief Don't treat ERR__GAPLESS_GUARANTEE as a fatal error
  */
-static int gapless_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                                    const char *reason) {
+static int gapless_is_not_fatal_cb(rd_kafka_t *rk,
+                                   rd_kafka_resp_err_t err,
+                                   const char *reason) {
         return err != RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE;
 }
 
-static void do_test_purge (const char *what, int remote,
-                           int idempotence, int gapless) {
+static void
+do_test_purge(const char *what, int remote, int idempotence, int gapless) {
         const char *topic = test_mk_topic_name("0086_purge", 0);
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
@@ -203,8 +204,10 @@ static void do_test_purge (const char *what, int remote,
         test_conf_set(conf, "batch.num.messages", "10");
         test_conf_set(conf, "max.in.flight", "1");
         test_conf_set(conf, "linger.ms", "500");
-        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
-        test_conf_set(conf, "enable.gapless.guarantee", gapless?"true":"false");
+        test_conf_set(conf, "enable.idempotence",
+                      idempotence ? "true" : "false");
+        test_conf_set(conf, "enable.gapless.guarantee",
+                      gapless ? "true" : "false");
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
         if (remote) {
@@ -228,7 +231,7 @@ static void do_test_purge (const char *what, int remote,
 
         TEST_SAY("Producing %d messages to topic %s\n", msgcnt, topic);
 
-        for (i = 0 ; i < msgcnt ; i++) {
+        for (i = 0; i < msgcnt; i++) {
                 int32_t partition;
 
                 if (remote) {
@@ -240,19 +243,18 @@ static void do_test_purge (const char *what, int remote,
                         partition = (i < 10 ? i % 3 : RD_KAFKA_PARTITION_UA);
                 }
 
-                err = rd_kafka_producev(rk,
-                                        RD_KAFKA_V_TOPIC(topic),
-                                        RD_KAFKA_V_PARTITION(partition),
-                                        RD_KAFKA_V_VALUE((void *)&i, sizeof(i)),
-                                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                        RD_KAFKA_V_OPAQUE(&waitmsgs),
-                                        RD_KAFKA_V_END);
-                TEST_ASSERT(!err, "producev(#%d) failed: %s",
-                            i, rd_kafka_err2str(err));
+                err = rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_PARTITION(partition),
+                    RD_KAFKA_V_VALUE((void *)&i, sizeof(i)),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_OPAQUE(&waitmsgs), RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "producev(#%d) failed: %s", i,
+                            rd_kafka_err2str(err));
 
-                waitmsgs.exp_err[i] = (remote && i < 10 ?
-                                       RD_KAFKA_RESP_ERR__PURGE_INFLIGHT :
-                                       RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                waitmsgs.exp_err[i] =
+                    (remote && i < 10 ? RD_KAFKA_RESP_ERR__PURGE_INFLIGHT
+                                      : RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
                 waitmsgs.cnt++;
         }
@@ -261,7 +263,8 @@ static void do_test_purge (const char *what, int remote,
         if (remote) {
                 /* Wait for ProduceRequest to be sent */
                 mtx_lock(&produce_req_lock);
-                cnd_timedwait_ms(&produce_req_cnd, &produce_req_lock, 15*1000);
+                cnd_timedwait_ms(&produce_req_cnd, &produce_req_lock,
+                                 15 * 1000);
                 TEST_ASSERT(produce_req_cnt > 0,
                             "First Produce request should've been sent by now");
                 mtx_unlock(&produce_req_lock);
@@ -270,11 +273,10 @@ static void do_test_purge (const char *what, int remote,
                                  &waitmsgs, 10,
                                  "in-flight messages should not be purged");
 
-                purge_and_expect(what, __LINE__, rk,
-                                 RD_KAFKA_PURGE_F_INFLIGHT|
-                                 RD_KAFKA_PURGE_F_QUEUE,
-                                 &waitmsgs, 0,
-                                 "all messages should have been purged");
+                purge_and_expect(
+                    what, __LINE__, rk,
+                    RD_KAFKA_PURGE_F_INFLIGHT | RD_KAFKA_PURGE_F_QUEUE,
+                    &waitmsgs, 0, "all messages should have been purged");
         } else {
                 purge_and_expect(what, __LINE__, rk, RD_KAFKA_PURGE_F_INFLIGHT,
                                  &waitmsgs, msgcnt,
@@ -292,23 +294,24 @@ static void do_test_purge (const char *what, int remote,
 }
 
 
-int main_0086_purge_remote (int argc, char **argv) {
+int main_0086_purge_remote(int argc, char **argv) {
         const rd_bool_t has_idempotence =
-                test_broker_version >= TEST_BRKVER(0,11,0,0);
+            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
 
-        do_test_purge("remote", 1/*remote*/, 0/*idempotence*/, 0/*!gapless*/);
+        do_test_purge("remote", 1 /*remote*/, 0 /*idempotence*/,
+                      0 /*!gapless*/);
 
         if (has_idempotence) {
-                do_test_purge("remote,idempotence",
-                              1/*remote*/, 1/*idempotence*/, 0/*!gapless*/);
-                do_test_purge("remote,idempotence,gapless",
-                              1/*remote*/, 1/*idempotence*/, 1/*!gapless*/);
+                do_test_purge("remote,idempotence", 1 /*remote*/,
+                              1 /*idempotence*/, 0 /*!gapless*/);
+                do_test_purge("remote,idempotence,gapless", 1 /*remote*/,
+                              1 /*idempotence*/, 1 /*!gapless*/);
         }
         return 0;
 }
 
 
-int main_0086_purge_local (int argc, char **argv) {
-        do_test_purge("local", 0/*local*/, 0, 0);
+int main_0086_purge_local(int argc, char **argv) {
+        do_test_purge("local", 0 /*local*/, 0, 0);
         return 0;
 }

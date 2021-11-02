@@ -1236,30 +1236,32 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
          * ssl.keystore.location
          */
         if (rk->rk_conf.ssl.keystore_location) {
-                FILE *fp;
                 EVP_PKEY *pkey;
                 X509 *cert;
                 STACK_OF(X509) *ca = NULL;
+                BIO *bio;
                 PKCS12 *p12;
 
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Loading client's keystore file from %s",
                              rk->rk_conf.ssl.keystore_location);
 
-                if (!(fp = fopen(rk->rk_conf.ssl.keystore_location, "rb"))) {
+                bio = BIO_new_file(rk->rk_conf.ssl.keystore_location, "r");
+                if (!bio) {
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to open ssl.keystore.location: "
-                                    "%s: %s",
-                                    rk->rk_conf.ssl.keystore_location,
-                                    rd_strerror(errno));
+                                    "%s: ",
+                                    rk->rk_conf.ssl.keystore_location);
                         return -1;
                 }
 
-                p12 = d2i_PKCS12_fp(fp, NULL);
-                fclose(fp);
+                p12 = d2i_PKCS12_bio(bio, NULL);
                 if (!p12) {
+                        BIO_free(bio);
                         rd_snprintf(errstr, errstr_size,
-                                    "Error reading PKCS#12 file: ");
+                                    "Error reading ssl.keystore.location "
+                                    "PKCS#12 file: %s: ",
+                                    rk->rk_conf.ssl.keystore_location);
                         return -1;
                 }
 
@@ -1270,10 +1272,12 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         EVP_PKEY_free(pkey);
                         X509_free(cert);
                         PKCS12_free(p12);
+                        BIO_free(bio);
                         if (ca != NULL)
                                 sk_X509_pop_free(ca, X509_free);
                         rd_snprintf(errstr, errstr_size,
-                                    "Failed to parse PKCS#12 file: %s: ",
+                                    "Failed to parse ssl.keystore.location "
+                                    "PKCS#12 file: %s: ",
                                     rk->rk_conf.ssl.keystore_location);
                         return -1;
                 }
@@ -1282,6 +1286,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         sk_X509_pop_free(ca, X509_free);
 
                 PKCS12_free(p12);
+                BIO_free(bio);
 
                 r = SSL_CTX_use_certificate(ctx, cert);
                 X509_free(cert);

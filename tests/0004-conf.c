@@ -643,7 +643,51 @@ int main_0004_conf(int argc, char **argv) {
                             "invalid ssl.ca.location");
                 TEST_SAY("rd_kafka_new() failed as expected: %s\n", errstr);
         }
-#endif
+
+#ifdef _WIN32
+        {
+                FILE *fp;
+                TEST_SAY(
+                    "Verifying that OpenSSL_AppLink "
+                    "is not needed (#3554)\n");
+
+                /* Create dummy file so the file open works,
+                 * but parsing fails. */
+                fp = fopen("_tmp_0004", "w");
+                TEST_ASSERT(fp != NULL, "Failed to create dummy file: %s",
+                            rd_strerror(errno));
+                if (fwrite("?", 1, 1, fp) != 1)
+                        TEST_FAIL("Failed to write to dummy file _tmp_0004: %s",
+                                  rd_strerror(errno));
+                fclose(fp);
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "security.protocol", "SSL");
+                test_conf_set(conf, "ssl.keystore.location", "_tmp_0004");
+                test_conf_set(conf, "ssl.keystore.password", "x");
+
+                /* Prior to the fix OpenSSL will assert with a message like
+                 * this: "OPENSSL_Uplink(00007FF9C0229D30,08): no
+                 * OPENSSL_Applink"
+                 * and the program will exit with error code 1. */
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                _unlink("tmp_0004");
+
+                TEST_ASSERT(!rk,
+                            "Expected rd_kafka_new() to fail due to "
+                            "dummy ssl.keystore.location");
+                TEST_ASSERT(strstr(errstr, "ssl.keystore.location") != NULL,
+                            "Expected rd_kafka_new() to fail with "
+                            "dummy ssl.keystore.location, not: %s",
+                            errstr);
+
+                TEST_SAY("rd_kafka_new() failed as expected: %s\n", errstr);
+        }
+#endif /* _WIN32 */
+
+#endif /* WITH_SSL */
 
         /* Canonical int values, aliases, s2i-verified strings, doubles */
         {

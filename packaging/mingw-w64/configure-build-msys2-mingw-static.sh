@@ -54,6 +54,7 @@ export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
 cd tests
 ls -la
 dumpbin /dependents test-runner.exe || echo "nope"
+ldd test-runner.exe
 ./test-runner.exe -l -Q -p1 0000 || echo "failed to call test-runner"
 echo exit $?
 

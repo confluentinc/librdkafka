@@ -2,7 +2,7 @@
 #include <librdkafka/rdkafkacpp.h>
 
 
-int main () {
+int main() {
   std::cout << "librdkafka++ " << RdKafka::version_str() << std::endl;
 
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);

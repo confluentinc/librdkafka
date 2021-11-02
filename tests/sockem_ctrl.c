@@ -36,7 +36,7 @@
 #include "sockem.h"
 #include "sockem_ctrl.h"
 
-static int sockem_ctrl_thrd_main (void *arg) {
+static int sockem_ctrl_thrd_main(void *arg) {
         sockem_ctrl_t *ctrl = (sockem_ctrl_t *)arg;
         int64_t next_wakeup = 0;
         mtx_lock(&ctrl->lock);
@@ -62,7 +62,7 @@ static int sockem_ctrl_thrd_main (void *arg) {
 
                 /* Serve expired commands */
                 next_wakeup = 0;
-                now = test_clock();
+                now         = test_clock();
                 while ((cmd = TAILQ_FIRST(&ctrl->cmds))) {
                         if (!ctrl->term) {
                                 if (cmd->ts_at > now) {
@@ -70,12 +70,12 @@ static int sockem_ctrl_thrd_main (void *arg) {
                                         break;
                                 }
 
-                                printf(_C_CYA "## %s: "
-                                       "sockem: setting socket delay to %d\n"
-                                       _C_CLR,
+                                printf(_C_CYA
+                                       "## %s: "
+                                       "sockem: setting socket delay to "
+                                       "%d\n" _C_CLR,
                                        __FILE__, cmd->delay);
-                                test_socket_sockem_set_all("delay",
-                                                           cmd->delay);
+                                test_socket_sockem_set_all("delay", cmd->delay);
                         }
                         TAILQ_REMOVE(&ctrl->cmds, cmd, link);
                         free(cmd);
@@ -91,14 +91,14 @@ static int sockem_ctrl_thrd_main (void *arg) {
 /**
  * @brief Set socket delay to kick in after \p after ms
  */
-void sockem_ctrl_set_delay (sockem_ctrl_t *ctrl, int after, int delay) {
+void sockem_ctrl_set_delay(sockem_ctrl_t *ctrl, int after, int delay) {
         struct sockem_cmd *cmd;
         int wait_seq;
 
         TEST_SAY("Set delay to %dms (after %dms)\n", delay, after);
 
-        cmd = calloc(1, sizeof(*cmd));
-        cmd->ts_at = test_clock() + (after*1000);
+        cmd        = calloc(1, sizeof(*cmd));
+        cmd->ts_at = test_clock() + (after * 1000);
         cmd->delay = delay;
 
         mtx_lock(&ctrl->lock);
@@ -115,7 +115,7 @@ void sockem_ctrl_set_delay (sockem_ctrl_t *ctrl, int after, int delay) {
 }
 
 
-void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
+void sockem_ctrl_init(sockem_ctrl_t *ctrl) {
         memset(ctrl, 0, sizeof(*ctrl));
         mtx_init(&ctrl->lock, mtx_plain);
         cnd_init(&ctrl->cnd);
@@ -123,13 +123,13 @@ void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
         ctrl->test = test_curr;
 
         mtx_lock(&ctrl->lock);
-        if (thrd_create(&ctrl->thrd, sockem_ctrl_thrd_main,
-                        ctrl) != thrd_success)
+        if (thrd_create(&ctrl->thrd, sockem_ctrl_thrd_main, ctrl) !=
+            thrd_success)
                 TEST_FAIL("Failed to create sockem ctrl thread");
         mtx_unlock(&ctrl->lock);
 }
 
-void sockem_ctrl_term (sockem_ctrl_t *ctrl) {
+void sockem_ctrl_term(sockem_ctrl_t *ctrl) {
         int res;
 
         /* Join controller thread */

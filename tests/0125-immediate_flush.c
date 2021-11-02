@@ -33,12 +33,12 @@
  * Verify that flush() overrides the linger.ms time.
  *
  */
-int main_0125_immediate_flush (int argc, char **argv) {
+int main_0125_immediate_flush(int argc, char **argv) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const char *topic = test_mk_topic_name("0125_immediate_flush", 1);
-        const int msgcnt = 100;
-        int remains = 0;
+        const int msgcnt  = 100;
+        int remains       = 0;
         test_timing_t t_time;
 
         test_conf_init(&conf, NULL, 30);
@@ -50,8 +50,8 @@ int main_0125_immediate_flush (int argc, char **argv) {
         test_create_topic(rk, topic, 1, 1);
 
         /* Produce half set of messages without waiting for delivery. */
-        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt/2,
-                                  NULL, 50, &remains);
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt / 2, NULL, 50,
+                                  &remains);
 
         TIMING_START(&t_time, "NO_FLUSH");
         do {
@@ -60,8 +60,8 @@ int main_0125_immediate_flush (int argc, char **argv) {
         TIMING_ASSERT(&t_time, 10000, 15000);
 
         /* Produce remaining messages without waiting for delivery. */
-        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt/2,
-                                  NULL, 50, &remains);
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 0, msgcnt / 2, NULL, 50,
+                                  &remains);
 
         /* The linger time should be overriden when flushing */
         TIMING_START(&t_time, "FLUSH");

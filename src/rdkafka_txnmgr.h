@@ -36,10 +36,9 @@
  * @locality application thread
  * @locks none
  */
-static RD_INLINE RD_UNUSED rd_bool_t
-rd_kafka_txn_may_enq_msg (rd_kafka_t *rk) {
+static RD_INLINE RD_UNUSED rd_bool_t rd_kafka_txn_may_enq_msg(rd_kafka_t *rk) {
         return !rd_kafka_is_transactional(rk) ||
-                rd_atomic32_get(&rk->rk_eos.txn_may_enq);
+               rd_atomic32_get(&rk->rk_eos.txn_may_enq);
 }
 
 
@@ -50,8 +49,7 @@ rd_kafka_txn_may_enq_msg (rd_kafka_t *rk) {
  * @locality broker thread
  * @locks none
  */
-static RD_INLINE RD_UNUSED rd_bool_t
-rd_kafka_txn_may_send_msg (rd_kafka_t *rk) {
+static RD_INLINE RD_UNUSED rd_bool_t rd_kafka_txn_may_send_msg(rd_kafka_t *rk) {
         rd_bool_t ret;
 
         rd_kafka_rdlock(rk);
@@ -71,7 +69,7 @@ rd_kafka_txn_may_send_msg (rd_kafka_t *rk) {
  * @locks toppar_lock MUST be held
  */
 static RD_INLINE RD_UNUSED rd_bool_t
-rd_kafka_txn_toppar_may_send_msg (rd_kafka_toppar_t *rktp) {
+rd_kafka_txn_toppar_may_send_msg(rd_kafka_toppar_t *rktp) {
         if (likely(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_IN_TXN))
                 return rd_true;
 
@@ -80,8 +78,7 @@ rd_kafka_txn_toppar_may_send_msg (rd_kafka_toppar_t *rktp) {
 
 
 
-void rd_kafka_txn_schedule_register_partitions (rd_kafka_t *rk,
-                                                int backoff_ms);
+void rd_kafka_txn_schedule_register_partitions(rd_kafka_t *rk, int backoff_ms);
 
 
 /**
@@ -95,8 +92,8 @@ void rd_kafka_txn_schedule_register_partitions (rd_kafka_t *rk,
  * @locality application thread
  * @locks none
  */
-static RD_INLINE RD_UNUSED
-void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
+static RD_INLINE RD_UNUSED void
+rd_kafka_txn_add_partition(rd_kafka_toppar_t *rktp) {
         rd_kafka_t *rk;
         rd_bool_t schedule = rd_false;
 
@@ -127,48 +124,48 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
         rd_kafka_dbg(rk, EOS, "ADDPARTS",
-                     "Marked %.*s [%"PRId32"] as part of transaction: "
+                     "Marked %.*s [%" PRId32
+                     "] as part of transaction: "
                      "%sscheduling registration",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition,
-                     schedule ? "" : "not ");
+                     rktp->rktp_partition, schedule ? "" : "not ");
 
 
         /* Schedule registration of partitions by the rdkafka main thread */
         if (unlikely(schedule))
-                rd_kafka_txn_schedule_register_partitions(
-                        rk, 1/*immediate*/);
+                rd_kafka_txn_schedule_register_partitions(rk, 1 /*immediate*/);
 }
 
 
 
+void rd_kafka_txn_idemp_state_change(rd_kafka_t *rk,
+                                     rd_kafka_idemp_state_t state);
 
-void rd_kafka_txn_idemp_state_change (rd_kafka_t *rk,
-                                      rd_kafka_idemp_state_t state);
+void rd_kafka_txn_set_abortable_error0(rd_kafka_t *rk,
+                                       rd_kafka_resp_err_t err,
+                                       rd_bool_t requires_epoch_bump,
+                                       const char *fmt,
+                                       ...) RD_FORMAT(printf, 4, 5);
+#define rd_kafka_txn_set_abortable_error(rk, err, ...)                         \
+        rd_kafka_txn_set_abortable_error0(rk, err, rd_false, __VA_ARGS__)
 
-void rd_kafka_txn_set_abortable_error0 (rd_kafka_t *rk,
-                                        rd_kafka_resp_err_t err,
-                                        rd_bool_t requires_epoch_bump,
-                                        const char *fmt, ...)
-        RD_FORMAT(printf, 4, 5);
-#define rd_kafka_txn_set_abortable_error(rk,err,...)                    \
-        rd_kafka_txn_set_abortable_error0(rk,err,rd_false,__VA_ARGS__)
+#define rd_kafka_txn_set_abortable_error_with_bump(rk, err, ...)               \
+        rd_kafka_txn_set_abortable_error0(rk, err, rd_true, __VA_ARGS__)
 
-#define rd_kafka_txn_set_abortable_error_with_bump(rk,err,...)  \
-        rd_kafka_txn_set_abortable_error0(rk,err,rd_true,__VA_ARGS__)
+void rd_kafka_txn_set_fatal_error(rd_kafka_t *rk,
+                                  rd_dolock_t do_lock,
+                                  rd_kafka_resp_err_t err,
+                                  const char *fmt,
+                                  ...) RD_FORMAT(printf, 4, 5);
 
-void rd_kafka_txn_set_fatal_error (rd_kafka_t *rk, rd_dolock_t do_lock,
-                                   rd_kafka_resp_err_t err,
-                                   const char *fmt, ...)
-        RD_FORMAT(printf, 4, 5);
+rd_bool_t rd_kafka_txn_coord_query(rd_kafka_t *rk, const char *reason);
 
-rd_bool_t rd_kafka_txn_coord_query (rd_kafka_t *rk, const char *reason);
+rd_bool_t rd_kafka_txn_coord_set(rd_kafka_t *rk,
+                                 rd_kafka_broker_t *rkb,
+                                 const char *fmt,
+                                 ...) RD_FORMAT(printf, 3, 4);
 
-rd_bool_t rd_kafka_txn_coord_set (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const char *fmt, ...)
-        RD_FORMAT(printf, 3, 4);
-
-void rd_kafka_txns_term (rd_kafka_t *rk);
-void rd_kafka_txns_init (rd_kafka_t *rk);
+void rd_kafka_txns_term(rd_kafka_t *rk);
+void rd_kafka_txns_init(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_TXNMGR_H_ */

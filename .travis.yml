@@ -1,5 +1,5 @@
 language: c
-dist: trusty
+dist: xenial
 cache: ccache
 
 addons:
@@ -13,8 +13,8 @@ addons:
 
 env:
   global:
-   - secure: "N6iA5+uNcMVvl6KWIiNMdm8MbTX1sviOG2cKBehL+t36ebQOmsi6amRhNseVHdgboALHeWqKf7N8OdMZGbkE8MkgC4mZk+oBunCAZCyBFqwFmVTYuCvsk5Zr1RFw/GbeiGHTmHQYKOol5ct18L6zQnsxV136uxDOOgVk2TizRO8="
-   - secure: "XcfZ5u15+saEPVmqM6hBfrdNcZdAZgZhRwTSpTMtFagByb7kE/XtIL/n3qNoDrmgAG2cu8chWI6Tj8Jd1gQU6TjbePfoDK3hRH7gtRumw4vGwFf3bCalOCED6ekYy9qTE+Eymfax8QsH4Qs1e7duFK4d6AeIljG3M01bjnutCIY="
+  - secure: "q7DQ6KCiQyMEpBf8mxPFl6hY9JEoaOUdIaLh1IuYn5TctiNIA+J6O/bL/dyDSy2Yjor61WAiiMOh77eMykm1wPl72kqjR97ui0uCq7BQQn4MWtKrXXi0eWLF3bYt2FbUGJZvrM0xeoWzSYT6np7CKu8ssgL8Fvr4bmf152IpdQ8="
+  - secure: "XpFExynXwbSr6vTuGsZVyqF4sti+UmRxX2sztjpTdaIH0yo60d6KYT0SRW7BLdZNA6/XI1l1GPTAwcDwTM1XasnnFrD7i88uZsAneA/xEgZTGXtnVVWPJAcVoX/75Rxeibc8CfSc5MO9QmBMiGGuI3S6HHCj4RzCJacBhOjIhfA="
 
 matrix:
  include:
@@ -32,7 +32,7 @@ matrix:
    compiler: gcc
    env: ADDITIONAL_BUILDS="centos" SKIP_MAKE=y
 
- - name: "Linux clang: +alpine +manylinux"
+ - name: "Linux clang: +alpine +manylinux +werror"
    os: linux
    compiler: clang
    env: ADDITIONAL_BUILDS="alpine manylinux2010_x86_64" LINKAGE=std
@@ -51,19 +51,17 @@ matrix:
    if: tag IS PRESENT
    os: osx
    compiler: gcc
-   env: LINKAGE=std
+   env: LINKAGE=std HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-werror --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "OSX clang: +static"
+   if: tag IS PRESENT
    os: osx
-   # Use an older image to disable syslog and for broader compatibility
-   # with old and new osx versions.
-   osx_image: xcode9.2
    compiler: clang
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --disable-lz4-ext --prefix="$PWD/dest" --enable-static --disable-syslog --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
 
  - name: "Windows MinGW-w64 Dynamic"
    if: tag IS PRESENT
@@ -110,6 +108,7 @@ matrix:
     - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
  - name: "Linux GCC s390x: +devel"
+   if: tag IS PRESENT
    os: linux
    arch: s390x
    dist: bionic
@@ -143,13 +142,14 @@ script:
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
 - if [[ -z $TRAVIS_TAG && $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.7.0) || travis_terminate 1 ; fi
 - if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
+- sha256sum artifacts/* || true
 
 deploy:
   provider: s3
   access_key_id:
-    secure: "m8FQrFesK0xSS1wHo2S7cuWkpO7VB91dBmj1XIYLRXZSkbMpKBJATcFcHNbrAp3slEp7wLAnT7CHrQ4ccQi4H68Z7mjEwdq4VKRE+7zqJ/feK8MOFNeSHWLQzgwLUYlRlc9+tzLNwxMuL2ilWgdjKOArsUVHo9LEKNfQ3T6zCJU="
+    secure: "sRsKY1YoPDb3b+9hHnBv4tDSdyB/FraYEKI1/+aKmqWxvOI6xYYFFP0Tvn6f4Rgk0wzYmxO/5V+cR+fmKxVhb1pItFXOdVqML0ilOTP5gtlOPUeHu9fytqw3q7GgMV8JR75g60BNVko9vZegtd2LIq6FWzAIvPSUJOAw7qekjGU="
   secret_access_key:
-    secure: "GE6O0gk5VRervntCKAmczfBdSOvbr9bouJ15H2rpcOgHi8KTDEjI/NS69eLiRRSHBCARtcRqN4wfgy+/dn7D1VklY8a1rAKu02wGjw+fq7k7GVSSmynR/aF619R4SIABsaAhNCwswXnLHuLlq8HFk5ulG3z8DUvYBczB45bWZfQ="
+    secure: "ZDjH6Z9CJr2yo7Splm+0xpo30QbO+cpeqxFUn1d9XOyLZQ0dapr6iboxdPlJaCOIhqVUWXS0IJgFwCW+5vWb9Za6tFumP1MtJGiwE6bqr820G8E02umwSvbNijr44h+EyxQcxP71Ljjk22Pfu7SLKWqMJ/iIzcYe6Z6Sz8obSWA="
   bucket: librdkafka-ci-packages
   region: us-west-1
   skip_cleanup: true

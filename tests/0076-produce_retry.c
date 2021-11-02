@@ -32,8 +32,8 @@
 #include <stdarg.h>
 #include <errno.h>
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
+static int
+is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
          * .. connectivity.
          * SASL auther will think a connection-down even in the auth
@@ -65,10 +65,10 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
  *
  * @param should_fail If true, do negative testing which should fail.
  */
-static void do_test_produce_retries (const char *topic,
-                                     int idempotence,
-                                     int try_fail,
-                                     int should_fail) {
+static void do_test_produce_retries(const char *topic,
+                                    int idempotence,
+                                    int try_fail,
+                                    int should_fail) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
@@ -77,7 +77,8 @@ static void do_test_produce_retries (const char *topic,
         int msgcnt = 1;
         sockem_ctrl_t ctrl;
 
-        TEST_SAY(_C_BLU "Test produce retries "
+        TEST_SAY(_C_BLU
+                 "Test produce retries "
                  "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
                  idempotence, try_fail, should_fail);
 
@@ -86,10 +87,10 @@ static void do_test_produce_retries (const char *topic,
         test_conf_init(&conf, NULL, 60);
 
         if (should_fail &&
-            !strcmp(test_conf_get(conf, "enable.sparse.connections"),
-                    "true")) {
+            !strcmp(test_conf_get(conf, "enable.sparse.connections"), "true")) {
                 rd_kafka_conf_destroy(conf);
-                TEST_SAY(_C_YEL "Sparse connections enabled: "
+                TEST_SAY(_C_YEL
+                         "Sparse connections enabled: "
                          "skipping connection-timing related test\n");
                 return;
         }
@@ -99,8 +100,9 @@ static void do_test_produce_retries (const char *topic,
         test_conf_set(conf, "socket.timeout.ms", "1000");
         /* Avoid disconnects on request timeouts */
         test_conf_set(conf, "socket.max.fails", "100");
-        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
-        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_conf_set(conf, "enable.idempotence",
+                      idempotence ? "true" : "false");
+        test_curr->exp_dr_err    = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_PERSISTED;
         if (!try_fail) {
                 test_conf_set(conf, "retries", "5");
@@ -112,8 +114,10 @@ static void do_test_produce_retries (const char *topic,
                 else
                         test_conf_set(conf, "retries", "0");
                 if (should_fail) {
-                        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
-                        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                        test_curr->exp_dr_err =
+                            RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+                        test_curr->exp_dr_status =
+                            RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
                 }
         }
         test_conf_set(conf, "retry.backoff.ms", "5000");
@@ -121,7 +125,7 @@ static void do_test_produce_retries (const char *topic,
         test_socket_enable(conf);
         test_curr->is_fatal_cb = is_fatal_cb;
 
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         /* Create the topic to make sure connections are up and ready. */
@@ -133,12 +137,14 @@ static void do_test_produce_retries (const char *topic,
 
         /* After two retries, remove the delay, the third retry
          * should kick in and work. */
-        sockem_ctrl_set_delay(&ctrl,
-                              ((1000 /*socket.timeout.ms*/ +
-                                5000 /*retry.backoff.ms*/) * 2) - 2000, 0);
+        sockem_ctrl_set_delay(
+            &ctrl,
+            ((1000 /*socket.timeout.ms*/ + 5000 /*retry.backoff.ms*/) * 2) -
+                2000,
+            0);
 
-        test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                          0, msgcnt, NULL, 0);
+        test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA, 0, msgcnt,
+                          NULL, 0);
 
 
         rd_kafka_topic_destroy(rkt);
@@ -151,12 +157,12 @@ static void do_test_produce_retries (const char *topic,
 
         sockem_ctrl_term(&ctrl);
 
-        TEST_SAY(_C_GRN "Test produce retries "
+        TEST_SAY(_C_GRN
+                 "Test produce retries "
                  "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
                  idempotence, try_fail, should_fail);
 }
 #endif
-
 
 
 
@@ -168,15 +174,15 @@ static void do_test_produce_retries (const char *topic,
  */
 static mtx_t produce_disconnect_lock;
 static int produce_disconnects = 0;
-static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
-                                            int sockfd,
-                                            const char *brokername,
-                                            int32_t brokerid,
-                                            int16_t ApiKey,
-                                            int16_t ApiVersion,
-                                            int32_t CorrId,
-                                            size_t  size,
-                                            void *ic_opaque) {
+static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
+                                           int sockfd,
+                                           const char *brokername,
+                                           int32_t brokerid,
+                                           int16_t ApiKey,
+                                           int16_t ApiVersion,
+                                           int32_t CorrId,
+                                           size_t size,
+                                           void *ic_opaque) {
 
         /* Ignore if not a ProduceRequest */
         if (ApiKey != 0)
@@ -198,8 +204,9 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
                  * socket recv buffer to make sure librdkafka does not see
                  * the response. */
                 while ((r = recv(sockfd, buf, sizeof(buf), 0)) > 0)
-                        printf(_C_CYA "%s:%d: "
-                               "purged %"PRIdsz" bytes from socket\n",
+                        printf(_C_CYA
+                               "%s:%d: "
+                               "purged %" PRIdsz " bytes from socket\n",
                                __FILE__, __LINE__, r);
                 produce_disconnects = 1;
         }
@@ -209,13 +216,13 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
 }
 
 
-static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
-                                            const rd_kafka_conf_t *conf,
-                                            void *ic_opaque,
-                                            char *errstr, size_t errstr_size) {
+static rd_kafka_resp_err_t on_new_producer(rd_kafka_t *rk,
+                                           const rd_kafka_conf_t *conf,
+                                           void *ic_opaque,
+                                           char *errstr,
+                                           size_t errstr_size) {
         return rd_kafka_interceptor_add_on_request_sent(
-                rk, "disconnect_on_send",
-                on_request_sent, NULL);
+            rk, "disconnect_on_send", on_request_sent, NULL);
 }
 
 /**
@@ -224,10 +231,10 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
  *
  * @param should_fail If true, do negative testing which should fail.
  */
-static void do_test_produce_retries_disconnect (const char *topic,
-                                                int idempotence,
-                                                int try_fail,
-                                                int should_fail) {
+static void do_test_produce_retries_disconnect(const char *topic,
+                                               int idempotence,
+                                               int try_fail,
+                                               int should_fail) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
@@ -236,7 +243,8 @@ static void do_test_produce_retries_disconnect (const char *topic,
         int msgcnt = 1;
         int partition_cnt;
 
-        TEST_SAY(_C_BLU "Test produce retries by disconnect "
+        TEST_SAY(_C_BLU
+                 "Test produce retries by disconnect "
                  "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
                  idempotence, try_fail, should_fail);
 
@@ -246,9 +254,11 @@ static void do_test_produce_retries_disconnect (const char *topic,
 
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        test_conf_set(conf, "socket.timeout.ms", test_quick ? "3000":"10000");
-        test_conf_set(conf, "message.timeout.ms", test_quick ? "9000":"30000");
-        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
+        test_conf_set(conf, "socket.timeout.ms", test_quick ? "3000" : "10000");
+        test_conf_set(conf, "message.timeout.ms",
+                      test_quick ? "9000" : "30000");
+        test_conf_set(conf, "enable.idempotence",
+                      idempotence ? "true" : "false");
         if (!try_fail) {
                 test_conf_set(conf, "retries", "1");
         } else {
@@ -264,7 +274,7 @@ static void do_test_produce_retries_disconnect (const char *topic,
         rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
                                              on_new_producer, NULL);
 
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         err = test_produce_sync(rk, rkt, testid, 0);
@@ -284,8 +294,8 @@ static void do_test_produce_retries_disconnect (const char *topic,
         }
 
         mtx_lock(&produce_disconnect_lock);
-        TEST_ASSERT(produce_disconnects == 1,
-                    "expected %d disconnects, not %d", 1, produce_disconnects);
+        TEST_ASSERT(produce_disconnects == 1, "expected %d disconnects, not %d",
+                    1, produce_disconnects);
         mtx_unlock(&produce_disconnect_lock);
 
 
@@ -304,16 +314,17 @@ static void do_test_produce_retries_disconnect (const char *topic,
                                 * count (-1). */
                                should_fail ? -1 : msgcnt, NULL);
 
-        TEST_SAY(_C_GRN "Test produce retries by disconnect "
+        TEST_SAY(_C_GRN
+                 "Test produce retries by disconnect "
                  "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
                  idempotence, try_fail, should_fail);
 }
 
 
-int main_0076_produce_retry (int argc, char **argv) {
+int main_0076_produce_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
         const rd_bool_t has_idempotence =
-                test_broker_version >= TEST_BRKVER(0,11,0,0);
+            test_broker_version >= TEST_BRKVER(0, 11, 0, 0);
 
 #if WITH_SOCKEM
         if (has_idempotence) {
@@ -337,5 +348,3 @@ int main_0076_produce_retry (int argc, char **argv) {
 
         return 0;
 }
-
-

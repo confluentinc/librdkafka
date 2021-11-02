@@ -39,6 +39,8 @@ MKL_NO_DOWNLOAD=0
 MKL_INSTALL_DEPS=n
 MKL_SOURCE_DEPS_ONLY=n
 
+MKL_DESTDIR_ADDED=n
+
 if [[ -z "$MKL_REPO_URL" ]]; then
     MKL_REPO_URL="http://github.com/edenhill/mklove/raw/master"
 fi
@@ -328,7 +330,7 @@ function mkl_depdir {
 
 # Returns the package's installation directory / DESTDIR.
 function mkl_dep_destdir {
-    echo "$(mkl_depdir)/dest/$1"
+    echo "$(mkl_depdir)/dest"
 }
 
 # Returns the package's source directory.
@@ -499,7 +501,9 @@ function mkl_dep_install_source {
     else
         mkl_dbg "Source install of $name failed"
         mkl_check_failed "$iname" "" disable "source installer failed (see $ilog)"
-        mkl_err "$name source build failed, see $ilog for details. Last 50 lines:"
+        mkl_err "$name source build failed, see $ilog for details. First 50 and last 50 lines:"
+        head -50 "$ilog"
+        echo " .... and last 50 lines ...."
         tail -50 "$ilog"
     fi
 
@@ -596,16 +600,63 @@ function mkl_dep_install {
     if ! mkl_resolve_static_libs "$name" "${ddir}/usr"; then
         # No static libraries found, set up dynamic linker path
         mkl_mkvar_prepend LDFLAGS LDFLAGS "-L${ddir}/usr/lib64 -L${ddir}/usr/lib"
-        mkl_mkvar_prepend PKG_CONFIG_PATH PKG_CONFIG_PATH "${ddir}/usr/lib/pkgconfig" ":"
+    fi
+
+    # Add the deps destdir to various build flags so that tools can pick
+    # up the artifacts (.pc files, includes, libs, etc) they need.
+    if [[ $MKL_DESTDIR_ADDED == n ]]; then
+	# Add environment variables so that later built dependencies
+	# can find this one.
+	mkl_env_prepend LDFLAGS "-L${ddir}/usr/lib64 -L${ddir}/usr/lib"
+	mkl_env_prepend CPPFLAGS "-I${ddir}/usr/include"
+        mkl_env_prepend PKG_CONFIG_PATH "${ddir}/usr/lib/pkgconfig" ":"
+        # And tell pkg-config to get static linker flags.
+	mkl_env_set PKG_CONFIG "${PKG_CONFIG} --static"
+	MKL_DESTDIR_ADDED=y
     fi
 
     # Append the package's install path to compiler and linker flags.
     mkl_dbg "$name: Adding install-deps paths ($ddir) to compiler and linker flags"
-    mkl_mkvar_prepend CFLAGS CFLAGS "-I${ddir}/usr/include"
+    mkl_mkvar_prepend CPPFLAGS CPPFLAGS "-I${ddir}/usr/include"
 
     return $retcode
 }
 
+
+# Apply patch to a source dependency.
+#
+# Param 1: config name (e.g. libssl)
+# Param 2: patch number (optional, else all)
+#
+# Returns 0 on success or 1 on error.
+function mkl_patch {
+    local name=$1
+    local patchnr="$2"
+
+    if [[ -z $patchnr ]]; then
+        patchnr="????"
+    fi
+
+    local patchfile=
+    local cnt=0
+    for patchfile in $(echo ${MKLOVE_DIR}/modules/patches/${name}.${patchnr}-*.patch | sort); do
+        mkl_dbg "$1: applying patch $patchfile"
+        patch -p1 < $patchfile
+        local retcode=$?
+        if [[ $retcode != 0 ]]; then
+            mkl_err "mkl_patch: $1: failed to apply patch $patchfile: see source dep build log for details"
+            return 1
+        fi
+        cnt=$(($cnt + 1))
+    done
+
+    if [[ $cnt -lt 1 ]]; then
+        mkl_err "mkl_patch: $1: no patches matchign $patchnr found"
+        return 1
+    fi
+
+    return 0
+}
 
 
 ###########################################################################
@@ -821,7 +872,7 @@ function mkl_generate {
     # Generate a built-in options define based on WITH_..=y
     local with_y=
     for n in $MKL_MKVARS ; do
-        if [[ $n == WITH_* ]] && [[ ${!n} == y ]]; then
+        if [[ $n == WITH_* ]] && [[ $n != WITH_STATIC_LIB_* ]] && [[ ${!n} == y ]]; then
             with_y="$with_y ${n#WITH_}"
         fi
     done
@@ -1343,7 +1394,7 @@ function mkl_compile_check {
 int main () { return 0; }
 " >> $srcfile
 
-    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $srcfile -o ${srcfile}.o $ldf $(mkl_mkvar_get LDFLAGS) $5";
+    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $srcfile -o ${srcfile}.o $ldf $(mkl_mkvar_get LDFLAGS) $5 $(mkl_mkvar_get LIBS)";
     mkl_dbg "Compile check $1 ($2) (sub=$sub): $cmd"
 
     local output
@@ -2358,23 +2409,38 @@ function mkl_toggle_option_lib {
 #
 # Arguments:
 #  url       Archive URL
-#  checksum_type  The ${checksum_type}sum tool will be used to verify the checksum. E.g., "sha256".
+#  shabits  The SHA algorithm bit count used to verify the checksum. E.g., "256".
 #  checksum  Expected checksum of archive (use "" to not perform check)
 function mkl_download_archive {
     local url="$1"
-    local checksum_tool="${2}sum"
+    local shabits="$2"
     local exp_checksum="$3"
 
     local tmpfile=$(mktemp _mkltmpXXXXXX)
 
-    if ! curl -fLs -o "$tmpfile" "$url" ; then
-        rm -f "$tmpfile"
-        echo -e "ERROR: Download of $url failed" 1>&2
-        return 1
+    # Try both wget and curl
+    if ! wget -nv -O "$tmpfile" "$url" ; then
+        if ! curl -fLsS -o "$tmpfile" "$url" ; then
+            rm -f "$tmpfile"
+            echo -e "ERROR: Download of $url failed" 1>&2
+            return 1
+        fi
     fi
 
     if [[ -n $exp_checksum ]]; then
         # Verify checksum
+
+        local checksum_tool=""
+
+        # OSX has shasum by default, on Linux it is typically in
+        # some Perl package that may or may not be installed.
+        if $(which shasum >/dev/null 2>&1); then
+            checksum_tool="shasum -b -a ${shabits}"
+        else
+            # shaXsum is available in Linux coreutils
+            checksum_tool="sha${shabits}sum"
+        fi
+
         local checksum=$($checksum_tool "$tmpfile" | cut -d' ' -f1)
         if [[ $? -ne 0 ]]; then
             rm -f "$tmpfile"

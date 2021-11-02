@@ -117,6 +117,8 @@ set(
     0123-connections_max_idle.c
     0124-openssl_invalid_engine.c
     0125-immediate_flush.c
+    0126-oauthbearer_oidc.c
+    0128-sasl_callback_queue.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

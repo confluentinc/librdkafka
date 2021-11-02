@@ -40,13 +40,12 @@ extern "C" {
  */
 
 
-static void do_test_consumer_close (bool do_subscribe,
-                                    bool do_unsubscribe,
-                                    bool do_close) {
-  Test::Say(tostr() << _C_MAG << "[ Test C++ KafkaConsumer close " <<
-            "subscribe=" << do_subscribe <<
-            ", unsubscribe=" << do_unsubscribe <<
-            ", close=" << do_close << " ]\n");
+static void do_test_consumer_close(bool do_subscribe,
+                                   bool do_unsubscribe,
+                                   bool do_close) {
+  Test::Say(tostr() << _C_MAG << "[ Test C++ KafkaConsumer close "
+                    << "subscribe=" << do_subscribe << ", unsubscribe="
+                    << do_unsubscribe << ", close=" << do_close << " ]\n");
 
   rd_kafka_mock_cluster_t *mcluster;
   const char *bootstraps;
@@ -63,10 +62,11 @@ static void do_test_consumer_close (bool do_subscribe,
   Test::conf_set(pconf, "bootstrap.servers", bootstraps);
   RdKafka::Producer *p = RdKafka::Producer::create(pconf, errstr);
   if (!p)
-    Test::Fail(tostr() << __FUNCTION__ << ": Failed to create producer: " <<
-               errstr);
+    Test::Fail(tostr() << __FUNCTION__
+                       << ": Failed to create producer: " << errstr);
   delete pconf;
-  Test::produce_msgs(p, "some_topic", 0, msgs_per_partition, 10, true/*flush*/);
+  Test::produce_msgs(p, "some_topic", 0, msgs_per_partition, 10,
+                     true /*flush*/);
   delete p;
 
   /* Create consumer */
@@ -125,18 +125,18 @@ static void do_test_consumer_close (bool do_subscribe,
 }
 
 extern "C" {
-  int main_0116_kafkaconsumer_close (int argc, char **argv) {
-    /* Parameters:
-     *  subscribe, unsubscribe, close */
-    do_test_consumer_close(true, true, true);
-    do_test_consumer_close(true, true, false);
-    do_test_consumer_close(true, false, true);
-    do_test_consumer_close(true, false, false);
-    do_test_consumer_close(false, true, true);
-    do_test_consumer_close(false, true, false);
-    do_test_consumer_close(false, false, true);
-    do_test_consumer_close(false, false, false);
+int main_0116_kafkaconsumer_close(int argc, char **argv) {
+  /* Parameters:
+   *  subscribe, unsubscribe, close */
+  do_test_consumer_close(true, true, true);
+  do_test_consumer_close(true, true, false);
+  do_test_consumer_close(true, false, true);
+  do_test_consumer_close(true, false, false);
+  do_test_consumer_close(false, true, true);
+  do_test_consumer_close(false, true, false);
+  do_test_consumer_close(false, false, true);
+  do_test_consumer_close(false, false, false);
 
-    return 0;
-  }
+  return 0;
+}
 }

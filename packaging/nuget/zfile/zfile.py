@@ -5,6 +5,7 @@ import tarfile
 import zipfile
 import rpmfile
 
+
 class ZFile (object):
     def __init__(self, path, mode='r', ext=None):
         super(ZFile, self).__init__()
@@ -49,8 +50,8 @@ class ZFile (object):
             return dict()
 
     def extract_to(self, member, path):
-        """ Extract compress file's \p member to \p path
-            If \p path is a directory the member's basename will used as
+        """ Extract compress file's \\p member to \\p path
+            If \\p path is a directory the member's basename will used as
             filename, otherwise path is considered the full file path name. """
 
         if not os.path.isdir(os.path.dirname(path)):
@@ -66,7 +67,7 @@ class ZFile (object):
                 zf = self.f.extractfile(member)
 
             while True:
-                b = zf.read(1024*100)
+                b = zf.read(1024 * 100)
                 if b:
                     of.write(b)
                 else:
@@ -74,9 +75,8 @@ class ZFile (object):
 
             zf.close()
 
-
     @classmethod
-    def extract (cls, zpath, member, outpath):
+    def extract(cls, zpath, member, outpath):
         """
         Extract file member (full internal path) to output from
         archive zpath.
@@ -85,11 +85,10 @@ class ZFile (object):
         with ZFile(zpath) as zf:
             zf.extract_to(member, outpath)
 
-
     @classmethod
-    def compress (cls, zpath, paths, stripcnt=0, ext=None):
+    def compress(cls, zpath, paths, stripcnt=0, ext=None):
         """
-        Create new compressed file \p zpath containing files in \p paths
+        Create new compressed file \\p zpath containing files in \\p paths
         """
 
         with ZFile(zpath, 'w', ext=ext) as zf:
@@ -97,4 +96,3 @@ class ZFile (object):
                 outp = os.path.sep.join(p.split(os.path.sep)[stripcnt:])
                 print('zip %s to %s (stripcnt %d)' % (p, outp, stripcnt))
                 zf.f.write(p, outp)
-

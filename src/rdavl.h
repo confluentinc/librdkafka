@@ -49,13 +49,13 @@ typedef enum {
  * provide it as the 'field' argument in the API below.
  */
 typedef struct rd_avl_node_s {
-        struct rd_avl_node_s *ran_p[2];    /* RD_AVL_LEFT and RD_AVL_RIGHT */
-        int                   ran_height;  /* Sub-tree height */
-        void                 *ran_elm;     /* Backpointer to the containing
-                                            * element. This could be considered
-                                            * costly but is convenient for the
-                                            * caller: RAM is cheap,
-                                            * development time isn't*/
+        struct rd_avl_node_s *ran_p[2]; /* RD_AVL_LEFT and RD_AVL_RIGHT */
+        int ran_height;                 /* Sub-tree height */
+        void *ran_elm;                  /* Backpointer to the containing
+                                         * element. This could be considered
+                                         * costly but is convenient for the
+                                         * caller: RAM is cheap,
+                                         * development time isn't*/
 } rd_avl_node_t;
 
 
@@ -63,21 +63,20 @@ typedef struct rd_avl_node_s {
 /**
  * Per-AVL application-provided element comparator.
  */
-typedef int (*rd_avl_cmp_t) (const void *, const void *);
+typedef int (*rd_avl_cmp_t)(const void *, const void *);
 
 
 /**
  * AVL tree
  */
 typedef struct rd_avl_s {
-        rd_avl_node_t *ravl_root;   /* Root node */
-        rd_avl_cmp_t   ravl_cmp;    /* Comparator */
-        int            ravl_flags;  /* Flags */
-#define RD_AVL_F_LOCKS      0x1     /* Enable thread-safeness */
-#define RD_AVL_F_OWNER      0x2     /* internal: rd_avl_init() allocated ravl */
-        rwlock_t       ravl_rwlock; /* Mutex when .._F_LOCKS is set. */
+        rd_avl_node_t *ravl_root; /* Root node */
+        rd_avl_cmp_t ravl_cmp;    /* Comparator */
+        int ravl_flags;           /* Flags */
+#define RD_AVL_F_LOCKS 0x1        /* Enable thread-safeness */
+#define RD_AVL_F_OWNER 0x2        /* internal: rd_avl_init() allocated ravl */
+        rwlock_t ravl_rwlock;     /* Mutex when .._F_LOCKS is set. */
 } rd_avl_t;
-
 
 
 
@@ -94,21 +93,18 @@ typedef struct rd_avl_s {
  * In case of collision the previous entry is overwritten by the
  * new one and the previous element is returned, else NULL.
  */
-#define RD_AVL_INSERT(ravl,elm,field)           \
-        rd_avl_insert(ravl, elm, &(elm)->field)
+#define RD_AVL_INSERT(ravl, elm, field) rd_avl_insert(ravl, elm, &(elm)->field)
 
 
 /**
  * Remove element by matching value 'elm' using compare function.
  */
-#define RD_AVL_REMOVE_ELM(ravl,elm)     \
-        rd_avl_remove_elm(ravl, elm)
+#define RD_AVL_REMOVE_ELM(ravl, elm) rd_avl_remove_elm(ravl, elm)
 
 /**
  * Search for (by value using compare function) and return matching elm.
  */
-#define RD_AVL_FIND(ravl,elm)           \
-        rd_avl_find(ravl, elm, 1)
+#define RD_AVL_FIND(ravl, elm) rd_avl_find(ravl, elm, 1)
 
 
 /**
@@ -118,7 +114,7 @@ typedef struct rd_avl_s {
  *
  * NOTE: rd_avl_wrlock() must be held.
  */
-#define RD_AVL_FIND_NL(ravl,elm)                \
+#define RD_AVL_FIND_NL(ravl, elm)                                              \
         rd_avl_find_node(ravl, (ravl)->ravl_root, elm, 0)
 
 
@@ -127,32 +123,31 @@ typedef struct rd_avl_s {
  *
  * NOTE: rd_avl_wrlock() must be held.
  */
-#define RD_AVL_FIND_NODE_NL(ravl,elm)           \
-        rd_avl_find(ravl, elm, 0)
+#define RD_AVL_FIND_NODE_NL(ravl, elm) rd_avl_find(ravl, elm, 0)
 
 
 /**
  * Changes the element pointer for an existing AVL node in the tree.
- * The new element must be identical (according to the comparator) 
+ * The new element must be identical (according to the comparator)
  * to the previous element.
  *
  * NOTE: rd_avl_wrlock() must be held.
  */
-#define RD_AVL_ELM_SET_NL(ran,elm)  ((ran)->ran_elm = (elm))
+#define RD_AVL_ELM_SET_NL(ran, elm) ((ran)->ran_elm = (elm))
 
 /**
  * Returns the current element pointer for an existing AVL node in the tree
- * 
+ *
  * NOTE: rd_avl_*lock() must be held.
  */
-#define RD_AVL_ELM_GET_NL(ran)      ((ran)->ran_elm)
+#define RD_AVL_ELM_GET_NL(ran) ((ran)->ran_elm)
 
 
 
 /**
  * Destroy previously initialized (by rd_avl_init()) AVL tree.
  */
-void      rd_avl_destroy (rd_avl_t *ravl);
+void rd_avl_destroy(rd_avl_t *ravl);
 
 /**
  * Initialize (and optionally allocate if 'ravl' is NULL) AVL tree.
@@ -162,7 +157,7 @@ void      rd_avl_destroy (rd_avl_t *ravl);
  *
  * For thread-safe AVL trees supply RD_AVL_F_LOCKS in 'flags'.
  */
-rd_avl_t *rd_avl_init (rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags);
+rd_avl_t *rd_avl_init(rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags);
 
 
 /**
@@ -173,26 +168,25 @@ rd_avl_t *rd_avl_init (rd_avl_t *ravl, rd_avl_cmp_t cmp, int flags);
  *
  * rdavl utilizes rwlocks to allow multiple concurrent read threads.
  */
-static RD_INLINE RD_UNUSED void rd_avl_rdlock (rd_avl_t *ravl) {
+static RD_INLINE RD_UNUSED void rd_avl_rdlock(rd_avl_t *ravl) {
         if (ravl->ravl_flags & RD_AVL_F_LOCKS)
                 rwlock_rdlock(&ravl->ravl_rwlock);
 }
 
-static RD_INLINE RD_UNUSED void rd_avl_wrlock (rd_avl_t *ravl) {
+static RD_INLINE RD_UNUSED void rd_avl_wrlock(rd_avl_t *ravl) {
         if (ravl->ravl_flags & RD_AVL_F_LOCKS)
                 rwlock_wrlock(&ravl->ravl_rwlock);
 }
 
-static RD_INLINE RD_UNUSED void rd_avl_rdunlock (rd_avl_t *ravl) {
+static RD_INLINE RD_UNUSED void rd_avl_rdunlock(rd_avl_t *ravl) {
         if (ravl->ravl_flags & RD_AVL_F_LOCKS)
                 rwlock_rdunlock(&ravl->ravl_rwlock);
 }
 
-static RD_INLINE RD_UNUSED void rd_avl_wrunlock (rd_avl_t *ravl) {
+static RD_INLINE RD_UNUSED void rd_avl_wrunlock(rd_avl_t *ravl) {
         if (ravl->ravl_flags & RD_AVL_F_LOCKS)
                 rwlock_wrunlock(&ravl->ravl_rwlock);
 }
-
 
 
 
@@ -200,44 +194,44 @@ static RD_INLINE RD_UNUSED void rd_avl_wrunlock (rd_avl_t *ravl) {
  * Private API, dont use directly.
  */
 
-rd_avl_node_t *rd_avl_insert_node (rd_avl_t *ravl,
-                                   rd_avl_node_t *parent,
-                                   rd_avl_node_t *ran,
-                                   rd_avl_node_t **existing);
+rd_avl_node_t *rd_avl_insert_node(rd_avl_t *ravl,
+                                  rd_avl_node_t *parent,
+                                  rd_avl_node_t *ran,
+                                  rd_avl_node_t **existing);
 
-static RD_UNUSED void *rd_avl_insert (rd_avl_t *ravl, void *elm,
-                            rd_avl_node_t *ran) {
+static RD_UNUSED void *
+rd_avl_insert(rd_avl_t *ravl, void *elm, rd_avl_node_t *ran) {
         rd_avl_node_t *existing = NULL;
 
         memset(ran, 0, sizeof(*ran));
         ran->ran_elm = elm;
 
         rd_avl_wrlock(ravl);
-        ravl->ravl_root = rd_avl_insert_node(ravl, ravl->ravl_root,
-                                             ran, &existing);
+        ravl->ravl_root =
+            rd_avl_insert_node(ravl, ravl->ravl_root, ran, &existing);
         rd_avl_wrunlock(ravl);
 
         return existing ? existing->ran_elm : NULL;
 }
 
-rd_avl_node_t *rd_avl_remove_elm0 (rd_avl_t *ravl, rd_avl_node_t *parent,
-                                   const void *elm);
+rd_avl_node_t *
+rd_avl_remove_elm0(rd_avl_t *ravl, rd_avl_node_t *parent, const void *elm);
 
-static RD_INLINE RD_UNUSED
-void rd_avl_remove_elm (rd_avl_t *ravl, const void *elm) {
+static RD_INLINE RD_UNUSED void rd_avl_remove_elm(rd_avl_t *ravl,
+                                                  const void *elm) {
         rd_avl_wrlock(ravl);
         ravl->ravl_root = rd_avl_remove_elm0(ravl, ravl->ravl_root, elm);
         rd_avl_wrunlock(ravl);
 }
 
 
-rd_avl_node_t *rd_avl_find_node (const rd_avl_t *ravl,
-                                 const rd_avl_node_t *begin,
-                                 const void *elm);
+rd_avl_node_t *rd_avl_find_node(const rd_avl_t *ravl,
+                                const rd_avl_node_t *begin,
+                                const void *elm);
 
 
-static RD_INLINE RD_UNUSED void *rd_avl_find (rd_avl_t *ravl, const void *elm,
-                                              int dolock) {
+static RD_INLINE RD_UNUSED void *
+rd_avl_find(rd_avl_t *ravl, const void *elm, int dolock) {
         const rd_avl_node_t *ran;
         void *ret;
 

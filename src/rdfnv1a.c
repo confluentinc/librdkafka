@@ -34,14 +34,15 @@
 /* FNV-1a by Glenn Fowler, Landon Curt Noll, and Kiem-Phong Vo
  *
  * Based on http://www.isthe.com/chongo/src/fnv/hash_32a.c
- * with librdkafka modifications to match the Sarama default Producer implementation,
- * as seen here: https://github.com/Shopify/sarama/blob/master/partitioner.go#L203
- * Note that this implementation is only compatible with Sarama's default
+ * with librdkafka modifications to match the Sarama default Producer
+ * implementation, as seen here:
+ * https://github.com/Shopify/sarama/blob/master/partitioner.go#L203 Note that
+ * this implementation is only compatible with Sarama's default
  * NewHashPartitioner and not NewReferenceHashPartitioner.
  */
-uint32_t rd_fnv1a (const void *key, size_t len) {
-        const uint32_t prime  = 0x01000193; // 16777619
-        const uint32_t offset = 0x811C9DC5; // 2166136261
+uint32_t rd_fnv1a(const void *key, size_t len) {
+        const uint32_t prime  = 0x01000193;  // 16777619
+        const uint32_t offset = 0x811C9DC5;  // 2166136261
         size_t i;
         int32_t h = offset;
 
@@ -52,7 +53,8 @@ uint32_t rd_fnv1a (const void *key, size_t len) {
                 h *= prime;
         }
 
-        /* Take absolute value to match the Sarama NewHashPartitioner implementation */
+        /* Take absolute value to match the Sarama NewHashPartitioner
+         * implementation */
         if (h < 0) {
                 h = -h;
         }
@@ -64,45 +66,44 @@ uint32_t rd_fnv1a (const void *key, size_t len) {
 /**
  * @brief Unittest for rd_fnv1a()
  */
-int unittest_fnv1a (void) {
+int unittest_fnv1a(void) {
         const char *short_unaligned = "1234";
-        const char *unaligned = "PreAmbleWillBeRemoved,ThePrePartThatIs";
-        const char *keysToTest[] = {
-                "kafka",
-                "giberish123456789",
-                short_unaligned,
-                short_unaligned+1,
-                short_unaligned+2,
-                short_unaligned+3,
-                unaligned,
-                unaligned+1,
-                unaligned+2,
-                unaligned+3,
-                "",
-                NULL,
+        const char *unaligned       = "PreAmbleWillBeRemoved,ThePrePartThatIs";
+        const char *keysToTest[]    = {
+            "kafka",
+            "giberish123456789",
+            short_unaligned,
+            short_unaligned + 1,
+            short_unaligned + 2,
+            short_unaligned + 3,
+            unaligned,
+            unaligned + 1,
+            unaligned + 2,
+            unaligned + 3,
+            "",
+            NULL,
         };
 
         // Acquired via https://play.golang.org/p/vWIhw3zJINA
         const int32_t golang_hashfnv_results[] = {
-                0xd33c4e1,  // kafka
-                0x77a58295, // giberish123456789
-                0x23bdd03,  // short_unaligned
-                0x2dea3cd2, // short_unaligned+1
-                0x740fa83e, // short_unaligned+2
-                0x310ca263, // short_unaligned+3
-                0x65cbd69c, // unaligned
-                0x6e49c79a, // unaligned+1
-                0x69eed356, // unaligned+2
-                0x6abcc023, // unaligned+3
-                0x7ee3623b, // ""
-                0x7ee3623b, // NULL
+            0xd33c4e1,   // kafka
+            0x77a58295,  // giberish123456789
+            0x23bdd03,   // short_unaligned
+            0x2dea3cd2,  // short_unaligned+1
+            0x740fa83e,  // short_unaligned+2
+            0x310ca263,  // short_unaligned+3
+            0x65cbd69c,  // unaligned
+            0x6e49c79a,  // unaligned+1
+            0x69eed356,  // unaligned+2
+            0x6abcc023,  // unaligned+3
+            0x7ee3623b,  // ""
+            0x7ee3623b,  // NULL
         };
 
         size_t i;
         for (i = 0; i < RD_ARRAYSIZE(keysToTest); i++) {
-                uint32_t h = rd_fnv1a(keysToTest[i],
-                                        keysToTest[i] ?
-                                        strlen(keysToTest[i]) : 0);
+                uint32_t h = rd_fnv1a(
+                    keysToTest[i], keysToTest[i] ? strlen(keysToTest[i]) : 0);
                 RD_UT_ASSERT((int32_t)h == golang_hashfnv_results[i],
                              "Calculated FNV-1a hash 0x%x for \"%s\", "
                              "expected 0x%x",

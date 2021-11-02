@@ -41,10 +41,12 @@
  *        in the child process, but it should not crash on destruction: #1674
  */
 
-int main_0079_fork (int argc, char **argv) {
+int main_0079_fork(int argc, char **argv) {
 
 #if __SANITIZE_ADDRESS__
-        TEST_SKIP("AddressSanitizer is enabled: this test leaks memory (due to fork())\n");
+        TEST_SKIP(
+            "AddressSanitizer is enabled: this test leaks memory (due to "
+            "fork())\n");
         return 0;
 #endif
 #ifdef _WIN32
@@ -57,10 +59,8 @@ int main_0079_fork (int argc, char **argv) {
 
         rk = test_create_producer();
 
-        rd_kafka_producev(rk,
-                          RD_KAFKA_V_TOPIC("atopic"),
-                          RD_KAFKA_V_VALUE("hi", 2),
-                          RD_KAFKA_V_END);
+        rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("atopic"),
+                          RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
 
         pid = fork();
         TEST_ASSERT(pid != 1, "fork() failed: %s", strerror(errno));
@@ -70,10 +70,8 @@ int main_0079_fork (int argc, char **argv) {
 
                 /* This call will enqueue the message on a queue
                  * which is not served by any thread, but it should not crash */
-                rd_kafka_producev(rk,
-                                  RD_KAFKA_V_TOPIC("atopic"),
-                                  RD_KAFKA_V_VALUE("hello", 5),
-                                  RD_KAFKA_V_END);
+                rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("atopic"),
+                                  RD_KAFKA_V_VALUE("hello", 5), RD_KAFKA_V_END);
 
                 /* Don't crash on us */
                 rd_kafka_destroy(rk);
@@ -85,8 +83,7 @@ int main_0079_fork (int argc, char **argv) {
         if (waitpid(pid, &status, 0) == -1)
                 TEST_FAIL("waitpid(%d) failed: %s", (int)pid, strerror(errno));
 
-        if (!WIFEXITED(status) ||
-            WEXITSTATUS(status) != 0)
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
                 TEST_FAIL("child exited with status %d", WEXITSTATUS(status));
 
         rd_kafka_destroy(rk);

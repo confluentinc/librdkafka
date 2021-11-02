@@ -1,3 +1,89 @@
+# librdkafka v1.9.0
+
+librdkafka v1.9.0 is a feature release:
+
+
+## Enhancements
+
+ * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
+   on librdkafka's background thread. This solves the problem where an
+   application has a custom SASL OAUTHBEARER refresh callback and thus needs to
+   call `rd_kafka_poll()` (et.al.) at least once to trigger the
+   refresh callback before being able to connect to brokers.
+   With the new `rd_kafka_conf_enable_sasl_queue()` configuration API and
+   `rd_kafka_sasl_background_callbacks_enable()` the refresh callbacks
+   can now be triggered automatically on the librdkafka background thread.
+ * `rd_kafka_queue_get_background()` now creates the background thread
+   if not already created.
+
+
+## Fixes
+
+### General fixes
+
+ * Windows: some applications would crash with an error message like
+   `no OPENSSL_Applink()` written to the console if `ssl.keystore.location`
+   was configured.
+   This regression was introduced in v1.8.0 due to use of vcpkgs and how
+   keystore file was read. #3554.
+
+
+
+# librdkafka v1.8.2
+
+librdkafka v1.8.2 is a maintenance release.
+
+## Enhancements
+
+ * Added `ssl.ca.pem` to add CA certificate by PEM string. (#2380)
+ * Prebuilt binaries for Mac OSX now contain statically linked OpenSSL v1.1.1l.
+   Previously the OpenSSL version was either v1.1.1 or v1.0.2 depending on
+   build type.
+
+## Fixes
+
+ * The `librdkafka.redist` 1.8.0 package had two flaws:
+   - the linux-arm64 .so build was a linux-x64 build.
+   - the included Windows MSVC 140 runtimes for x64 were infact x86.
+   The release script has been updated to verify the architectures of
+   provided artifacts to avoid this happening in the future.
+ * Prebuilt binaries for Mac OSX Sierra (10.12) and older are no longer provided.
+   This affects [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go).
+ * Some of the prebuilt binaries for Linux were built on Ubuntu 14.04,
+   these builds are now performed on Ubuntu 16.04 instead.
+   This may affect users on ancient Linux distributions.
+ * It was not possible to configure `ssl.ca.location` on OSX, the property
+   would automatically revert back to `probe` (default value).
+   This regression was introduced in v1.8.0. (#3566)
+ * librdkafka's internal timers would not start if the timeout was set to 0,
+   which would result in some timeout operations not being enforced correctly,
+   e.g., the transactional producer API timeouts.
+   These timers are now started with a timeout of 1 microsecond.
+
+### Transactional producer fixes
+
+ * Upon quick repeated leader changes the transactional producer could receive
+   an `OUT_OF_ORDER_SEQUENCE` error from the broker, which triggered an
+   Epoch bump on the producer resulting in an InitProducerIdRequest being sent
+   to the transaction coordinator in the middle of a transaction.
+   This request would start a new transaction on the coordinator, but the
+   producer would still think (erroneously) it was in current transaction.
+   Any messages produced in the current transaction prior to this event would
+   be silently lost when the application committed the transaction, leading
+   to message loss.
+   This has been fixed by setting the Abortable transaction error state
+   in the producer. #3575.
+ * The transactional producer could stall during a transaction if the transaction
+   coordinator changed while adding offsets to the transaction (send_offsets_to_transaction()).
+   This stall lasted until the coordinator connection went down, the
+   transaction timed out, transaction was aborted, or messages were produced
+   to a new partition, whichever came first. #3571.
+
+
+
+*Note: there was no v1.8.1 librdkafka release*
+
+
 # librdkafka v1.8.0
 
 librdkafka v1.8.0 is a security release:

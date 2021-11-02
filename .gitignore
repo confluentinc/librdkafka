@@ -32,3 +32,4 @@ gdbrun*.gdb
 TAGS
 nbproject
 .vscode
+vcpkg_installed

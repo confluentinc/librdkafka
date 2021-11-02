@@ -40,12 +40,12 @@ static char jmx_cmd[512];
  * @brief Verify that the expected software name and version is reported
  *        in JMX metrics.
  */
-static void jmx_verify (const char *exp_swname, const char *exp_swversion) {
+static void jmx_verify(const char *exp_swname, const char *exp_swversion) {
 #if _WIN32
         return;
 #else
         int r;
-        char cmd[512+256];
+        char cmd[512 + 256];
 
         if (!*jmx_cmd)
                 return;
@@ -53,32 +53,39 @@ static void jmx_verify (const char *exp_swname, const char *exp_swversion) {
         rd_snprintf(cmd, sizeof(cmd),
                     "%s | "
                     "grep -F 'clientSoftwareName=%s,clientSoftwareVersion=%s'",
-                    jmx_cmd,
-                    exp_swname, exp_swversion ? exp_swversion : "");
+                    jmx_cmd, exp_swname, exp_swversion ? exp_swversion : "");
         r = system(cmd);
         if (WEXITSTATUS(r) == 1)
-                TEST_FAIL("Expected software name and version not found in "
-                          "JMX metrics with command \"%s\"", cmd);
+                TEST_FAIL(
+                    "Expected software name and version not found in "
+                    "JMX metrics with command \"%s\"",
+                    cmd);
         else if (r == -1 || WIFSIGNALED(r) || WEXITSTATUS(r))
-                TEST_FAIL("Failed to execute JmxTool command \"%s\": "
-                          "exit code %d", cmd, r);
+                TEST_FAIL(
+                    "Failed to execute JmxTool command \"%s\": "
+                    "exit code %d",
+                    cmd, r);
 
-        TEST_SAY("Expected software name \"%s\" and version \"%s\" "
-                 "found in JMX metrics\n",
-                 exp_swname, exp_swversion);
+        TEST_SAY(
+            "Expected software name \"%s\" and version \"%s\" "
+            "found in JMX metrics\n",
+            exp_swname, exp_swversion);
 #endif /* !_WIN32 */
 }
 
 
-static void do_test_swname (const char *broker,
-                            const char *swname, const char *swversion,
-                            const char *exp_swname, const char *exp_swversion) {
+static void do_test_swname(const char *broker,
+                           const char *swname,
+                           const char *swversion,
+                           const char *exp_swname,
+                           const char *exp_swversion) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const rd_kafka_metadata_t *md;
         rd_kafka_resp_err_t err;
 
-        TEST_SAY(_C_MAG "[ Test client.software.name=%s, "
+        TEST_SAY(_C_MAG
+                 "[ Test client.software.name=%s, "
                  "client.software.version=%s ]\n",
                  swname ? swname : "NULL", swversion ? swversion : "NULL");
 
@@ -101,12 +108,13 @@ static void do_test_swname (const char *broker,
 
         rd_kafka_destroy(rk);
 
-        TEST_SAY(_C_GRN "[ Test client.software.name=%s, "
+        TEST_SAY(_C_GRN
+                 "[ Test client.software.name=%s, "
                  "client.software.version=%s: PASS ]\n",
                  swname ? swname : "NULL", swversion ? swversion : "NULL");
 }
 
-int main_0016_client_swname (int argc, char **argv) {
+int main_0016_client_swname(int argc, char **argv) {
         const char *broker;
         const char *kafka_path;
         const char *jmx_port;
@@ -115,16 +123,19 @@ int main_0016_client_swname (int argc, char **argv) {
         /* If available, use the Kafka JmxTool to query software name
          * in broker JMX metrics */
         if (!(broker = test_getenv("BROKER_ADDRESS_2", NULL)))
-                reason = "Env var BROKER_ADDRESS_2 missing "
-                        "(not running in trivup or trivup too old?)";
-        else if (test_broker_version < TEST_BRKVER(2,5,0,0))
-                reason = "Client software JMX metrics not exposed prior to "
-                        "Apache Kafka 2.5.0.0";
+                reason =
+                    "Env var BROKER_ADDRESS_2 missing "
+                    "(not running in trivup or trivup too old?)";
+        else if (test_broker_version < TEST_BRKVER(2, 5, 0, 0))
+                reason =
+                    "Client software JMX metrics not exposed prior to "
+                    "Apache Kafka 2.5.0.0";
         else if (!(kafka_path = test_getenv("KAFKA_PATH", NULL)))
                 reason = "Env var KAFKA_PATH missing (not running in trivup?)";
         else if (!(jmx_port = test_getenv("BROKER_JMX_PORT_2", NULL)))
-                reason = "Env var BROKER_JMX_PORT_2 missing "
-                        "(not running in trivup or trivup too old?)";
+                reason =
+                    "Env var BROKER_JMX_PORT_2 missing "
+                    "(not running in trivup or trivup too old?)";
         else
                 rd_snprintf(jmx_cmd, sizeof(jmx_cmd),
                             "%s/bin/kafka-run-class.sh kafka.tools.JmxTool "
@@ -144,14 +155,12 @@ int main_0016_client_swname (int argc, char **argv) {
          * protocol safe. */
         do_test_swname(broker, NULL, NULL, "librdkafka", NULL);
         /* Properly formatted */
-        do_test_swname(broker,
-                       "my-little-version", "1.2.3.4",
+        do_test_swname(broker, "my-little-version", "1.2.3.4",
                        "my-little-version", "1.2.3.4");
-        /* Containing invalid characters, verify that safing the strings works */
-        do_test_swname(broker,
-                       "?1?this needs! ESCAPING?", "--v99.11 ~b~",
+        /* Containing invalid characters, verify that safing the strings works
+         */
+        do_test_swname(broker, "?1?this needs! ESCAPING?", "--v99.11 ~b~",
                        "1-this-needs--ESCAPING", "v99.11--b");
 
         return 0;
 }
-

@@ -30,14 +30,14 @@
 #ifndef _RDSTRING_H_
 #define _RDSTRING_H_
 
-static RD_INLINE RD_UNUSED
-void rd_strlcpy (char *dst, const char *src, size_t dstsize) {
+static RD_INLINE RD_UNUSED void
+rd_strlcpy(char *dst, const char *src, size_t dstsize) {
 #if HAVE_STRLCPY
         (void)strlcpy(dst, src, dstsize);
 #else
         if (likely(dstsize > 0)) {
-                size_t srclen = strlen(src);
-                size_t copylen = RD_MIN(srclen, dstsize-1);
+                size_t srclen  = strlen(src);
+                size_t copylen = RD_MIN(srclen, dstsize - 1);
                 memcpy(dst, src, copylen);
                 dst[copylen] = '\0';
         }
@@ -46,12 +46,12 @@ void rd_strlcpy (char *dst, const char *src, size_t dstsize) {
 
 
 
-char *rd_string_render (const char *templ,
-                        char *errstr, size_t errstr_size,
-                        ssize_t (*callback) (const char *key,
-                                             char *buf, size_t size,
-                                             void *opaque),
-                        void *opaque);
+char *rd_string_render(
+    const char *templ,
+    char *errstr,
+    size_t errstr_size,
+    ssize_t (*callback)(const char *key, char *buf, size_t size, void *opaque),
+    void *opaque);
 
 
 
@@ -61,25 +61,31 @@ char *rd_string_render (const char *templ,
  */
 typedef struct rd_strtup_s {
         char *value;
-        char  name[1];  /* Actual allocation of name + val here */
+        char name[1]; /* Actual allocation of name + val here */
 } rd_strtup_t;
 
-void rd_strtup_destroy (rd_strtup_t *strtup);
-void rd_strtup_free (void *strtup);
-rd_strtup_t *rd_strtup_new0 (const char *name, ssize_t name_len,
-                             const char *value, ssize_t value_len);
-rd_strtup_t *rd_strtup_new (const char *name, const char *value);
-rd_strtup_t *rd_strtup_dup (const rd_strtup_t *strtup);
-void *rd_strtup_list_copy (const void *elem, void *opaque);
+void rd_strtup_destroy(rd_strtup_t *strtup);
+void rd_strtup_free(void *strtup);
+rd_strtup_t *rd_strtup_new0(const char *name,
+                            ssize_t name_len,
+                            const char *value,
+                            ssize_t value_len);
+rd_strtup_t *rd_strtup_new(const char *name, const char *value);
+rd_strtup_t *rd_strtup_dup(const rd_strtup_t *strtup);
+void *rd_strtup_list_copy(const void *elem, void *opaque);
 
-char *rd_flags2str (char *dst, size_t size,
-                    const char **desc, int flags);
+char *rd_flags2str(char *dst, size_t size, const char **desc, int flags);
 
-unsigned int rd_string_hash (const char *str, ssize_t len);
+unsigned int rd_string_hash(const char *str, ssize_t len);
 
-int rd_strcmp (const char *a, const char *b);
+int rd_strcmp(const char *a, const char *b);
 
-char *_rd_strcasestr (const char *haystack, const char *needle);
+char *_rd_strcasestr(const char *haystack, const char *needle);
+
+char **rd_string_split(const char *input,
+                       char sep,
+                       rd_bool_t skip_empty,
+                       size_t *cntp);
 
 /** @returns "true" if EXPR is true, else "false" */
 #define RD_STR_ToF(EXPR) ((EXPR) ? "true" : "false")

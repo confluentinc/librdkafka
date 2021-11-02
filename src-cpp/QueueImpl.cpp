@@ -30,18 +30,15 @@
 
 #include "rdkafkacpp_int.h"
 
-RdKafka::Queue::~Queue () {
-
+RdKafka::Queue::~Queue() {
 }
 
-RdKafka::Queue *RdKafka::Queue::create (Handle *base) {
-  RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
-  queueimpl->queue_ = rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_);
-  return queueimpl;
+RdKafka::Queue *RdKafka::Queue::create(Handle *base) {
+  return new RdKafka::QueueImpl(
+      rd_kafka_queue_new(dynamic_cast<HandleImpl *>(base)->rk_));
 }
 
-RdKafka::ErrorCode
-RdKafka::QueueImpl::forward (Queue *queue) {
+RdKafka::ErrorCode RdKafka::QueueImpl::forward(Queue *queue) {
   if (!queue) {
     rd_kafka_queue_forward(queue_, NULL);
   } else {
@@ -51,7 +48,7 @@ RdKafka::QueueImpl::forward (Queue *queue) {
   return RdKafka::ERR_NO_ERROR;
 }
 
-RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
+RdKafka::Message *RdKafka::QueueImpl::consume(int timeout_ms) {
   rd_kafka_message_t *rkmessage;
   rkmessage = rd_kafka_consume_queue(queue_, timeout_ms);
 
@@ -62,11 +59,12 @@ RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
   return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, rkmessage);
 }
 
-int RdKafka::QueueImpl::poll (int timeout_ms) {
-        return rd_kafka_queue_poll_callback(queue_, timeout_ms);
+int RdKafka::QueueImpl::poll(int timeout_ms) {
+  return rd_kafka_queue_poll_callback(queue_, timeout_ms);
 }
 
-void RdKafka::QueueImpl::io_event_enable (int fd, const void *payload,
-                                          size_t size) {
-        rd_kafka_queue_io_event_enable(queue_, fd, payload, size);
+void RdKafka::QueueImpl::io_event_enable(int fd,
+                                         const void *payload,
+                                         size_t size) {
+  rd_kafka_queue_io_event_enable(queue_, fd, payload, size);
 }

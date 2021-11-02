@@ -37,7 +37,7 @@
  * @brief Verify #1478: The internal shared rkt reference was not destroyed
  *        when producev() failed.
  */
-static void do_test_srkt_leak (void) {
+static void do_test_srkt_leak(void) {
         rd_kafka_conf_t *conf;
         char buf[2000];
         rd_kafka_t *rk;
@@ -50,28 +50,27 @@ static void do_test_srkt_leak (void) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        err = rd_kafka_producev(rk,
-                                RD_KAFKA_V_TOPIC("test"),
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("test"),
                                 RD_KAFKA_V_VALUE(buf, sizeof(buf)),
                                 RD_KAFKA_V_END);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
                     "expected MSG_SIZE_TOO_LARGE, not %s",
                     rd_kafka_err2str(err));
 
-        vus[0].vtype = RD_KAFKA_VTYPE_TOPIC;
-        vus[0].u.cstr = "test";
-        vus[1].vtype = RD_KAFKA_VTYPE_VALUE;
-        vus[1].u.mem.ptr = buf;
-        vus[1].u.mem.size = sizeof(buf);
-        vus[2].vtype = RD_KAFKA_VTYPE_HEADER;
+        vus[0].vtype         = RD_KAFKA_VTYPE_TOPIC;
+        vus[0].u.cstr        = "test";
+        vus[1].vtype         = RD_KAFKA_VTYPE_VALUE;
+        vus[1].u.mem.ptr     = buf;
+        vus[1].u.mem.size    = sizeof(buf);
+        vus[2].vtype         = RD_KAFKA_VTYPE_HEADER;
         vus[2].u.header.name = "testheader";
-        vus[2].u.header.val = "test value";
+        vus[2].u.header.val  = "test value";
         vus[2].u.header.size = -1;
 
         error = rd_kafka_produceva(rk, vus, 3);
         TEST_ASSERT(error, "expected failure");
         TEST_ASSERT(rd_kafka_error_code(error) ==
-                    RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+                        RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
                     "expected MSG_SIZE_TOO_LARGE, not %s",
                     rd_kafka_error_string(error));
         TEST_SAY("produceva() error (expected): %s\n",
@@ -82,7 +81,7 @@ static void do_test_srkt_leak (void) {
 }
 
 
-int main_0074_producev (int argc, char **argv) {
+int main_0074_producev(int argc, char **argv) {
         do_test_srkt_leak();
         return 0;
 }

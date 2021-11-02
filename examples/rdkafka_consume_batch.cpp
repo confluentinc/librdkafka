@@ -68,7 +68,7 @@
 
 static volatile sig_atomic_t run = 1;
 
-static void sigterm (int sig) {
+static void sigterm(int sig) {
   run = 0;
 }
 
@@ -77,11 +77,11 @@ static void sigterm (int sig) {
 /**
  * @returns the current wall-clock time in milliseconds
  */
-static int64_t now () {
+static int64_t now() {
 #ifndef _WIN32
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        return ((int64_t)tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return ((int64_t)tv.tv_sec * 1000) + (tv.tv_usec / 1000);
 #else
 #error "now() not implemented for Windows, please submit a PR"
 #endif
@@ -93,13 +93,14 @@ static int64_t now () {
  * @brief Accumulate a batch of \p batch_size messages, but wait
  *        no longer than \p batch_tmout milliseconds.
  */
-static std::vector<RdKafka::Message *>
-consume_batch (RdKafka::KafkaConsumer *consumer, size_t batch_size, int batch_tmout) {
-
+static std::vector<RdKafka::Message *> consume_batch(
+    RdKafka::KafkaConsumer *consumer,
+    size_t batch_size,
+    int batch_tmout) {
   std::vector<RdKafka::Message *> msgs;
   msgs.reserve(batch_size);
 
-  int64_t end = now() + batch_tmout;
+  int64_t end           = now() + batch_tmout;
   int remaining_timeout = batch_tmout;
 
   while (msgs.size() < batch_size) {
@@ -130,17 +131,18 @@ consume_batch (RdKafka::KafkaConsumer *consumer, size_t batch_size, int batch_tm
 }
 
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
   std::string errstr;
   std::string topic_str;
   std::vector<std::string> topics;
-  int batch_size = 100;
+  int batch_size  = 100;
   int batch_tmout = 1000;
 
   /* Create configuration objects */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
-  if (conf->set("enable.partition.eof", "false", errstr) != RdKafka::Conf::CONF_OK) {
+  if (conf->set("enable.partition.eof", "false", errstr) !=
+      RdKafka::Conf::CONF_OK) {
     std::cerr << errstr << std::endl;
     exit(1);
   }
@@ -150,7 +152,7 @@ int main (int argc, char **argv) {
   while ((opt = getopt(argc, argv, "g:B:T:b:X:")) != -1) {
     switch (opt) {
     case 'g':
-      if (conf->set("group.id",  optarg, errstr) != RdKafka::Conf::CONF_OK) {
+      if (conf->set("group.id", optarg, errstr) != RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
       }
@@ -165,32 +167,30 @@ int main (int argc, char **argv) {
       break;
 
     case 'b':
-      if (conf->set("bootstrap.servers", optarg, errstr) != RdKafka::Conf::CONF_OK) {
+      if (conf->set("bootstrap.servers", optarg, errstr) !=
+          RdKafka::Conf::CONF_OK) {
         std::cerr << errstr << std::endl;
         exit(1);
       }
       break;
 
-    case 'X':
-      {
-        char *name, *val;
+    case 'X': {
+      char *name, *val;
 
-        name = optarg;
-        if (!(val = strchr(name, '='))) {
-          std::cerr << "%% Expected -X property=value, not " <<
-              name << std::endl;
-          exit(1);
-        }
-
-        *val = '\0';
-        val++;
-
-        if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK) {
-          std::cerr << errstr << std::endl;
-          exit(1);
-        }
+      name = optarg;
+      if (!(val = strchr(name, '='))) {
+        std::cerr << "%% Expected -X property=value, not " << name << std::endl;
+        exit(1);
       }
-      break;
+
+      *val = '\0';
+      val++;
+
+      if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK) {
+        std::cerr << errstr << std::endl;
+        exit(1);
+      }
+    } break;
 
     default:
       goto usage;
@@ -198,26 +198,27 @@ int main (int argc, char **argv) {
   }
 
   /* Topics to consume */
-  for (; optind < argc ; optind++)
+  for (; optind < argc; optind++)
     topics.push_back(std::string(argv[optind]));
 
   if (topics.empty() || optind != argc) {
   usage:
-    fprintf(stderr,
-            "Usage: %s -g <group-id> -B <batch-size> [options] topic1 topic2..\n"
-            "\n"
-            "librdkafka version %s (0x%08x)\n"
-            "\n"
-            " Options:\n"
-            "  -g <group-id>    Consumer group id\n"
-            "  -B <batch-size>  How many messages to batch (default: 100).\n"
-            "  -T <batch-tmout> How long to wait for batch-size to accumulate in milliseconds. (default 1000 ms)\n"
-            "  -b <brokers>    Broker address (localhost:9092)\n"
-            "  -X <prop=name>  Set arbitrary librdkafka configuration property\n"
-            "\n",
-            argv[0],
-            RdKafka::version_str().c_str(), RdKafka::version());
-        exit(1);
+    fprintf(
+        stderr,
+        "Usage: %s -g <group-id> -B <batch-size> [options] topic1 topic2..\n"
+        "\n"
+        "librdkafka version %s (0x%08x)\n"
+        "\n"
+        " Options:\n"
+        "  -g <group-id>    Consumer group id\n"
+        "  -B <batch-size>  How many messages to batch (default: 100).\n"
+        "  -T <batch-tmout> How long to wait for batch-size to accumulate in "
+        "milliseconds. (default 1000 ms)\n"
+        "  -b <brokers>    Broker address (localhost:9092)\n"
+        "  -X <prop=name>  Set arbitrary librdkafka configuration property\n"
+        "\n",
+        argv[0], RdKafka::version_str().c_str(), RdKafka::version());
+    exit(1);
   }
 
 
@@ -225,7 +226,8 @@ int main (int argc, char **argv) {
   signal(SIGTERM, sigterm);
 
   /* Create consumer */
-  RdKafka::KafkaConsumer *consumer = RdKafka::KafkaConsumer::create(conf, errstr);
+  RdKafka::KafkaConsumer *consumer =
+      RdKafka::KafkaConsumer::create(conf, errstr);
   if (!consumer) {
     std::cerr << "Failed to create consumer: " << errstr << std::endl;
     exit(1);
@@ -236,8 +238,8 @@ int main (int argc, char **argv) {
   /* Subscribe to topics */
   RdKafka::ErrorCode err = consumer->subscribe(topics);
   if (err) {
-    std::cerr << "Failed to subscribe to " << topics.size() << " topics: "
-              << RdKafka::err2str(err) << std::endl;
+    std::cerr << "Failed to subscribe to " << topics.size()
+              << " topics: " << RdKafka::err2str(err) << std::endl;
     exit(1);
   }
 
@@ -247,7 +249,9 @@ int main (int argc, char **argv) {
     std::cout << "Accumulated " << msgs.size() << " messages:" << std::endl;
 
     for (auto &msg : msgs) {
-      std::cout << " Message in " << msg->topic_name() << " [" << msg->partition() << "] at offset " << msg->offset() << std::endl;
+      std::cout << " Message in " << msg->topic_name() << " ["
+                << msg->partition() << "] at offset " << msg->offset()
+                << std::endl;
       delete msg;
     }
   }

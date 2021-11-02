@@ -43,13 +43,13 @@
  *  * Verify that there were no duplicate messages.
  */
 
-int main_0051_assign_adds (int argc, char **argv) {
+int main_0051_assign_adds(int argc, char **argv) {
         rd_kafka_t *rk;
-        #define TOPIC_CNT 3
+#define TOPIC_CNT 3
         char *topic[TOPIC_CNT] = {
-                rd_strdup(test_mk_topic_name("0051_assign_adds_1", 1)),
-                rd_strdup(test_mk_topic_name("0051_assign_adds_2", 1)),
-                rd_strdup(test_mk_topic_name("0051_assign_adds_3", 1)),
+            rd_strdup(test_mk_topic_name("0051_assign_adds_1", 1)),
+            rd_strdup(test_mk_topic_name("0051_assign_adds_2", 1)),
+            rd_strdup(test_mk_topic_name("0051_assign_adds_3", 1)),
         };
         uint64_t testid;
         int msgcnt = test_quick ? 100 : 1000;
@@ -64,13 +64,12 @@ int main_0051_assign_adds (int argc, char **argv) {
         testid = test_id_generate();
 
         rk = test_create_producer();
-        for (i = 0 ; i < TOPIC_CNT ; i++) {
+        for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_t *rkt;
 
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
 
-                test_produce_msgs(rk, rkt, testid, 0,
-                                  (msgcnt / TOPIC_CNT) * i,
+                test_produce_msgs(rk, rkt, testid, 0, (msgcnt / TOPIC_CNT) * i,
                                   (msgcnt / TOPIC_CNT), NULL, 100);
 
                 rd_kafka_topic_destroy(rkt);
@@ -84,14 +83,13 @@ int main_0051_assign_adds (int argc, char **argv) {
         rk = test_create_consumer(topic[0], NULL, conf, tconf);
 
         tlist = rd_kafka_topic_partition_list_new(TOPIC_CNT);
-        for (i = 0 ; i < TOPIC_CNT ; i++) {
+        for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_partition_list_add(tlist, topic[i], 0);
                 TEST_SAY("Assign %d topic(s):\n", tlist->cnt);
                 test_print_partition_list(tlist);
 
                 err = rd_kafka_assign(rk, tlist);
-                TEST_ASSERT(!err, "assign() failed: %s",
-                            rd_kafka_err2str(err));
+                TEST_ASSERT(!err, "assign() failed: %s", rd_kafka_err2str(err));
         }
 
         test_msgver_init(&mv, testid);
@@ -104,13 +102,13 @@ int main_0051_assign_adds (int argc, char **argv) {
         /* Now remove T2 */
         rd_kafka_topic_partition_list_del(tlist, topic[1], 0);
         err = rd_kafka_assign(rk, tlist);
-        TEST_ASSERT(!err, "assign() failed: %s",
-                    rd_kafka_err2str(err));
+        TEST_ASSERT(!err, "assign() failed: %s", rd_kafka_err2str(err));
 
-        TEST_SAY("Should not see any messages for session.timeout.ms+some more\n");
-        test_consumer_poll_no_msgs("consume", rk, testid, (int)(6000*1.5));
+        TEST_SAY(
+            "Should not see any messages for session.timeout.ms+some more\n");
+        test_consumer_poll_no_msgs("consume", rk, testid, (int)(6000 * 1.5));
 
-        test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
+        test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
                            0, msgcnt);
 
         test_msgver_clear(&mv);
@@ -120,7 +118,7 @@ int main_0051_assign_adds (int argc, char **argv) {
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        for (i = 0 ; i < TOPIC_CNT ; i++)
+        for (i = 0; i < TOPIC_CNT; i++)
                 rd_free(topic[i]);
 
         return 0;

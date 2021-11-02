@@ -45,51 +45,49 @@
  * - Wait for DRs
  * - Close
  */
- 
-static void test_producer_partition_cnt_change (void) {
-	rd_kafka_t *rk;
-	rd_kafka_conf_t *conf;
-	rd_kafka_topic_t *rkt;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-	const int partition_cnt = 4;
-	int msgcnt = test_quick ? 500 : 100000;
-	test_timing_t t_destroy;
-	int produced = 0;
 
-	test_conf_init(&conf, NULL, 20);
+static void test_producer_partition_cnt_change(void) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_t *rkt;
+        const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
+        const int partition_cnt = 4;
+        int msgcnt              = test_quick ? 500 : 100000;
+        test_timing_t t_destroy;
+        int produced = 0;
+
+        test_conf_init(&conf, NULL, 20);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(rk, topic, partition_cnt/2, 1);
+        test_create_topic(rk, topic, partition_cnt / 2, 1);
 
-	rkt = test_create_topic_object(rk, __FUNCTION__,
-				       "message.timeout.ms",
-                                       tsprintf("%d", tmout_multip(10000)),
-                                       NULL);
+        rkt =
+            test_create_topic_object(rk, __FUNCTION__, "message.timeout.ms",
+                                     tsprintf("%d", tmout_multip(10000)), NULL);
 
-	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt/2,
-				 NULL, 100, 0, &produced);
+        test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
+                                 msgcnt / 2, NULL, 100, 0, &produced);
 
         test_create_partitions(rk, topic, partition_cnt);
 
-	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA,
-				 msgcnt/2, msgcnt/2,
-				 NULL, 100, 0, &produced);
+        test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, msgcnt / 2,
+                                 msgcnt / 2, NULL, 100, 0, &produced);
 
-	test_wait_delivery(rk, &produced);
+        test_wait_delivery(rk, &produced);
 
-	rd_kafka_topic_destroy(rkt);
+        rd_kafka_topic_destroy(rkt);
 
-	TIMING_START(&t_destroy, "rd_kafka_destroy()");
-	rd_kafka_destroy(rk);
-	TIMING_STOP(&t_destroy);
+        TIMING_START(&t_destroy, "rd_kafka_destroy()");
+        rd_kafka_destroy(rk);
+        TIMING_STOP(&t_destroy);
 }
 
-int main_0044_partition_cnt (int argc, char **argv) {
-	if (!test_can_create_topics(1))
-		return 0;
+int main_0044_partition_cnt(int argc, char **argv) {
+        if (!test_can_create_topics(1))
+                return 0;
 
-	test_producer_partition_cnt_change();
+        test_producer_partition_cnt_change();
 
         return 0;
 }

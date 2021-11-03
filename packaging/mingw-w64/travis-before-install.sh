@@ -21,6 +21,9 @@ case $TRAVIS_OS_NAME in
         $msys2 pacman -Sy --noconfirm pacman
         choco upgrade --no-progress -y msys2
 
+        ## Let's see what happens
+        $msys2 pacman -Syu
+
         ## Install more MSYS2 packages from https://packages.msys2.org/base here
         $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd
 

@@ -16,13 +16,10 @@ case $TRAVIS_OS_NAME in
         export mingw64="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
         export msys2+=" -msys2 -c "\"\$@"\" --"
 
-        # Have to update pacman first or choco upgrade will failure due to migration
-        # to zstd instead of xz compression
-        $msys2 pacman -Sy --noconfirm pacman
         choco upgrade --no-progress -y msys2
 
         ## Let's see what happens
-        $msys2 pacman -Syu
+        $msys2 pacman -Syu --noconfirm
 
         ## Install more MSYS2 packages from https://packages.msys2.org/base here
         $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-lz4 mingw-w64-x86_64-zstd

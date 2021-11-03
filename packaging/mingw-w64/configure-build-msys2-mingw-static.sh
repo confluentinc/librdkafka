@@ -66,5 +66,9 @@ dumpbin /dependents test-runner.exe || echo "nope"
 ldd test-runner.exe
 ./test-runner.exe -l -Q -p1 0000 || echo "failed to call test-runner"
 ./test-runner.exe --help 2>&1
+
+file ./test-runner.exe
+pacman -Qs mingw-w64
+
 echo exit $?
 

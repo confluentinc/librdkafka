@@ -7,6 +7,7 @@ cmake \
     -G "MinGW Makefiles" \
     -D CMAKE_INSTALL_PREFIX="$PWD/dest/" \
     -D RDKAFKA_BUILD_STATIC=ON \
+    -D CMAKE_VERBOSE_MAKEFILE:BOOL=ON \
     .
 
 $mingw64 mingw32-make

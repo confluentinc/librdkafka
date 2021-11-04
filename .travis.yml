@@ -27,6 +27,8 @@ matrix:
     - source ./packaging/mingw-w64/travis-before-install.sh
    before_script:
     - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
+   after_script:
+    - ./packaging/mingw-w64/run-tests.sh
 
 install:
  - ccache -s || echo "CCache is not available."

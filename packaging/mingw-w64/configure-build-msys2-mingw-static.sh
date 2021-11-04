@@ -50,6 +50,3 @@ cp ./librdkafkacpp-static.a ../dest/lib/librdkafka++-static.a
 popd
 rm -rf ./mergescratch
 
-export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
-cd tests
-./test-runner.exe -l -Q -p1 0000

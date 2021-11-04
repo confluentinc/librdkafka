@@ -83,6 +83,7 @@ matrix:
     - source ./packaging/mingw-w64/travis-before-install.sh
    before_script:
     - ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh
+    - ./packaging/mingw-w64/run-tests.sh
 
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov +c99 +c++98"
    os: linux

@@ -35,6 +35,7 @@
 #if WITH_LZ4_EXT
 #include <lz4frame.h>
 #else
+#define LZ4F_STATIC_LINKING_ONLY
 #include "lz4frame.h"
 #endif
 
@@ -323,6 +324,7 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
                 void *out;
                 size_t out_size;
                 size_t maxsz = (64 * (1 << 10));
+                int retries  = 0;
                 // LZ4F_compressBound(chunk_size, &compr->rkcompr_lz4.prefs);
                 if (0)
                         printf("maxsz %zu for chunk_size %zu, tot %zu\n", maxsz,
@@ -338,6 +340,7 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
                         compr->rkcompr_soft_size_limit;
 #endif
 
+        retry:
                 out_size = rd_buf_ensure_writable_contig(
                     output_rbuf, maxsz,
                     RD_MIN(153600 /*overalloc*/,
@@ -349,9 +352,52 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
 
                 r = LZ4F_compressUpdate(compr->rkcompr_lz4.cctx, out, out_size,
                                         chunk, chunk_size, NULL);
-                printf("wrote %zu for %zu\n", r, chunk_size);
+                if (0)
+                        printf(
+                            "wrote %zu for chunk_size %zu, maxsz %zu out_size "
+                            "%zu: "
+                            "insize %zu, written size %zu, unwritten %zd, "
+                            "soft %zu, retries %d\n",
+                            r, chunk_size, maxsz, out_size,
+                            compr->rkcompr_insize, rd_buf_len(output_rbuf),
+                            compr->rkcompr_insize - rd_buf_len(output_rbuf),
+                            compr->rkcompr_soft_size_limit, retries);
 
-                if (unlikely(LZ4F_isError(r)))
+                if (unlikely(LZ4F_isError(r))) {
+                        if (LZ4F_getErrorCode(r) ==
+                                LZ4F_ERROR_dstMaxSize_tooSmall &&
+                            retries++ == 0) {
+                                /* If we're nearing the maximum compressor size
+                                 * we need to flush LZ4's internal block buffers
+                                 * for each call to avoid overflowing the output
+                                 * buffer (which is not really overflowed, just
+                                 * written past this compressor's soft limit).
+                                 */
+
+                                /* Get pointer (and size) of output buffer,
+                                 * which is already big enough for the flush
+                                 * bytes thanks to the compressBound() call
+                                 * above. */
+
+                                r = LZ4F_flush(compr->rkcompr_lz4.cctx, out,
+                                               out_size, NULL);
+
+                                if (unlikely(LZ4F_isError(r)))
+                                        return rd_kafka_error_new(
+                                            RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                                            "LZ4 compression flush failed "
+                                            "(%" PRIusz
+                                            " output buffer bytes available, "
+                                            "maxsz %" PRIusz "): %s",
+                                            out_size, maxsz,
+                                            LZ4F_getErrorName(r));
+
+                                /* Update written length */
+                                rd_buf_write(output_rbuf, NULL, r);
+
+                                goto retry;
+                        }
+
                         return rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
                             "LZ4 compression for %" PRIusz
@@ -360,6 +406,7 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_write(rd_kafka_compressor_t *compr,
                             " output buffer bytes available, "
                             "maxsz %" PRIusz "): %s",
                             chunk_size, out_size, maxsz, LZ4F_getErrorName(r));
+                }
 
                 /* Update written length */
                 rd_buf_write(output_rbuf, NULL, r);
@@ -401,10 +448,16 @@ rd_kafka_error_t *rd_kafka_compressor_lz4_init(rd_kafka_compressor_t *compr,
         LZ4F_errorCode_t r;
         void *out;
         size_t out_size;
+        const size_t block_size = 64 * (1 << 10);
 
-        compr->rkcompr_lz4.prefs.frameInfo.blockMode = LZ4F_blockIndependent;
-        compr->rkcompr_lz4.prefs.compressionLevel    = compression_level;
-        compr->rkcompr_soft_size_limit -= 64 * (1 << 10);
+        compr->rkcompr_lz4.prefs.frameInfo.blockSizeID = LZ4F_max64KB;
+        compr->rkcompr_lz4.prefs.frameInfo.blockMode   = LZ4F_blockIndependent;
+        compr->rkcompr_lz4.prefs.compressionLevel      = compression_level;
+        // FIXME: make sure this does not underflow
+        compr->rkcompr_soft_size_limit -= block_size;
+        if (compr->rkcompr_soft_size_limit < block_size + LZ4F_HEADER_SIZE_MAX)
+                compr->rkcompr_soft_size_limit =
+                    block_size + LZ4F_HEADER_SIZE_MAX;
 
         r = LZ4F_createCompressionContext(&compr->rkcompr_lz4.cctx,
                                           LZ4F_VERSION);

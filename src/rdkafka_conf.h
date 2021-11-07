@@ -487,6 +487,7 @@ struct rd_kafka_conf_s {
          */
         struct {
                 int broker_cnt; /**< Number of mock brokers */
+                int broker_rtt; /**< Broker RTT */
         } mock;
 
         /*

@@ -39,6 +39,7 @@ librdkafka v1.9.0 is a feature release:
    if not already created.
  * `compratio` metric added to the topic statistics output, representing
    the producer batch compression ratio in percentages.
+ * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.
 
 
 ## Fixes

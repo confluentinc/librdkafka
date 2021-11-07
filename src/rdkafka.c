@@ -2332,6 +2332,14 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_assert(!"failed to reset mock security.protocol");
 
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
+
+                if (rk->rk_conf.mock.broker_rtt) {
+                        int i;
+                        for (i = 1; i <= rk->rk_conf.mock.broker_cnt; i++)
+                                rd_kafka_mock_broker_set_rtt(
+                                    rk->rk_mock.cluster, (int32_t)i,
+                                    rk->rk_conf.mock.broker_rtt);
+                }
         }
 
 

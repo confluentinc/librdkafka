@@ -264,6 +264,9 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief Disconnects the broker and disallows any new connections.
  *        This does NOT trigger leader change.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
@@ -272,6 +275,9 @@ rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief Makes the broker accept connections again.
  *        This does NOT trigger leader change.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_up(rd_kafka_mock_cluster_t *mcluster,
@@ -280,6 +286,9 @@ rd_kafka_mock_broker_set_up(rd_kafka_mock_cluster_t *mcluster,
 
 /**
  * @brief Set broker round-trip-time delay in milliseconds.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_rtt(rd_kafka_mock_cluster_t *mcluster,
@@ -288,6 +297,9 @@ rd_kafka_mock_broker_set_rtt(rd_kafka_mock_cluster_t *mcluster,
 
 /**
  * @brief Sets the broker's rack as reported in Metadata to the client.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,

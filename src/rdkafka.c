@@ -2312,6 +2312,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         /* Create Mock cluster */
         rd_atomic32_init(&rk->rk_mock.cluster_cnt, 0);
         if (rk->rk_conf.mock.broker_cnt > 0) {
+                const char *mock_bootstraps;
                 rk->rk_mock.cluster =
                     rd_kafka_mock_cluster_new(rk, rk->rk_conf.mock.broker_cnt);
 
@@ -2323,16 +2324,18 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         goto fail;
                 }
 
+                mock_bootstraps =
+                    rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
                 rd_kafka_log(rk, LOG_NOTICE, "MOCK",
                              "Mock cluster enabled: "
                              "original bootstrap.servers and security.protocol "
-                             "ignored and replaced");
+                             "ignored and replaced with %s",
+                             mock_bootstraps);
 
                 /* Overwrite bootstrap.servers and connection settings */
-                if (rd_kafka_conf_set(
-                        &rk->rk_conf, "bootstrap.servers",
-                        rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
-                        NULL, 0) != RD_KAFKA_CONF_OK)
+                if (rd_kafka_conf_set(&rk->rk_conf, "bootstrap.servers",
+                                      mock_bootstraps, NULL,
+                                      0) != RD_KAFKA_CONF_OK)
                         rd_assert(!"failed to replace mock bootstrap.servers");
 
                 if (rd_kafka_conf_set(&rk->rk_conf, "security.protocol",
@@ -2344,8 +2347,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 /* Apply default RTT to brokers */
                 if (rk->rk_conf.mock.broker_rtt)
                         rd_kafka_mock_broker_set_rtt(
-                            rk->rk_mock.cluster, -1 /*all brokers*/,
-                            rk->rk_conf.mock.broker_rtt);
+                                rk->rk_mock.cluster,
+                                -1/*all brokers*/,
+                                rk->rk_conf.mock.broker_rtt);
         }
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||

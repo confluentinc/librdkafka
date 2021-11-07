@@ -2340,6 +2340,12 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_assert(!"failed to reset mock security.protocol");
 
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
+
+                /* Apply default RTT to brokers */
+                if (rk->rk_conf.mock.broker_rtt)
+                        rd_kafka_mock_broker_set_rtt(
+                            rk->rk_mock.cluster, -1 /*all brokers*/,
+                            rk->rk_conf.mock.broker_rtt);
         }
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||

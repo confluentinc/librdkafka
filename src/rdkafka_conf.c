@@ -1027,6 +1027,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This will automatically overwrite `bootstrap.servers` with the "
      "mock broker list.",
      0, 10000, 0},
+    {_RK_GLOBAL | _RK_HIDDEN, "test.mock.broker.rtt", _RK_C_INT,
+     _RK(mock.broker_rtt), "Simulated mock broker latency in milliseconds.", 0,
+     60 * 60 * 1000 /*1h*/, 0},
 
     /* Unit test interfaces.
      * These are not part of the public API and may change at any time.

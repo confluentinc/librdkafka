@@ -43,6 +43,7 @@ librdkafka v1.9.0 is a feature release:
    if not already created.
  * Bundled zlib upgraded to version 1.2.12.
  * Bundled OpenSSL upgraded to 1.1.1n.
+ * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.
 
 
 ## Fixes

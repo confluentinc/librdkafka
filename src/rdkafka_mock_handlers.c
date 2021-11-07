@@ -438,7 +438,8 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
 
                 while (PartitionCnt-- > 0) {
                         int32_t Partition, CurrentLeaderEpoch;
-                        int64_t Timestamp, MaxNumOffsets, Offset = -1;
+                        int64_t Timestamp, Offset = -1;
+                        int32_t MaxNumOffsets;
                         rd_kafka_mock_partition_t *mpart = NULL;
                         rd_kafka_resp_err_t err          = all_err;
 

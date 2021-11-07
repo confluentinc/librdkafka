@@ -536,7 +536,7 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
         struct {
                 int64_t Offset;      /* MessageSet header */
                 int32_t MessageSize; /* MessageSet header */
-                uint32_t Crc;
+                int32_t Crc;
                 int8_t MagicByte; /* MsgVersion */
                 int8_t Attributes;
                 int64_t Timestamp; /* v1 */
@@ -600,7 +600,7 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
                 calc_crc = rd_slice_crc32(&crc_slice);
                 rd_dassert(rd_slice_remains(&crc_slice) == 0);
 
-                if (unlikely(hdr.Crc != calc_crc)) {
+                if (unlikely(hdr.Crc != (int32_t)calc_crc)) {
                         /* Propagate CRC error to application and
                          * continue with next message. */
                         rd_kafka_consumer_err(

@@ -185,6 +185,7 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int8_t MagicByte;
         int32_t RecordCount;
+        int16_t Attributes;
         rd_kafka_mock_msgset_t *mset;
 
         /* Partially parse the MessageSet in \p bytes to get
@@ -201,10 +202,13 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
 
         rd_kafka_buf_peek_i32(rkbuf, RD_KAFKAP_MSGSET_V2_OF_RecordCount,
                               &RecordCount);
+        rd_kafka_buf_peek_i16(rkbuf, RD_KAFKAP_MSGSET_V2_OF_Attributes,
+                              &Attributes);
 
         if (RecordCount < 1 ||
-            (size_t)RecordCount > RD_KAFKAP_BYTES_LEN(bytes) /
-                                      RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD) {
+            (!(Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK) &&
+             (size_t)RecordCount > RD_KAFKAP_BYTES_LEN(bytes) /
+                                       RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD)) {
                 err = RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
                 goto err;
         }

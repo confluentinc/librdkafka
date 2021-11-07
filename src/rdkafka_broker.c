@@ -2852,6 +2852,7 @@ void rd_kafka_dr_implicit_ack(rd_kafka_broker_t *rkb,
 
         rd_kafka_msgq_move_acked(&acked, &rktp->rktp_xmit_msgq, last_msgid,
                                  status);
+        // FIXME: check
         rd_kafka_msgq_move_acked(&acked2, &rktp->rktp_msgq, last_msgid, status);
 
         /* Insert acked2 into acked in correct order */
@@ -3230,6 +3231,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
                 /* Insert xmitq(broker-local) messages to the msgq(global)
                  * at their sorted position to maintain ordering. */
+                // FIXME: check
                 rd_kafka_msgq_insert_msgq(
                     &rktp->rktp_msgq, &rktp->rktp_xmit_msgq,
                     rktp->rktp_rkt->rkt_conf.msg_order_cmp);
@@ -3266,6 +3268,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                    rd_kafka_msgq_len(&rktp->rktp_msgq));
                         rd_kafka_assert(NULL, rd_kafka_msgq_len(
                                                   &rktp->rktp_xmit_msgq) == 0);
+                        // FIXME: CHECK
                         rd_kafka_dr_msgq(
                             rktp->rktp_rkt, &rktp->rktp_msgq,
                             rd_kafka_terminating(rkb->rkb_rk)
@@ -3504,6 +3507,7 @@ static int rd_kafka_broker_toppar_msgq_scan(rd_kafka_broker_t *rkb,
         if (next && next < *abs_next_timeout)
                 *abs_next_timeout = next;
 
+        // FIXME: check
         qcnt = rd_kafka_msgq_age_scan(rktp, &rktp->rktp_msgq, &qtimedout, now,
                                       &next);
         if (next && (!*abs_next_timeout || next < *abs_next_timeout))
@@ -3660,6 +3664,8 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         int reqcnt;
         int inflight              = 0;
         uint64_t epoch_base_msgid = 0;
+        rd_bool_t batch_ready     = rd_false;
+        rd_ts_t wait_max          = 0;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
          * provide a backpressure mechanism to the producer loop
@@ -3733,10 +3739,59 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         } else if (max_requests > 0) {
                 /* Move messages from locked partition produce queue
                  * to broker-local xmit queue. */
-                if ((move_cnt = rktp->rktp_msgq.rkmq_msg_cnt) > 0)
+                if ((move_cnt = rktp->rktp_msgq.rkmq_msg_cnt) > 0) {
+
                         rd_kafka_msgq_insert_msgq(
                             &rktp->rktp_xmit_msgq, &rktp->rktp_msgq,
                             rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+
+                        /* Calculate maximum wait-time to honour
+                         * queue.buffering.max.ms contract.
+                         * Unless flushing in which case immediate
+                         * wakeups are allowed. */
+                        if (!flushing)
+                                wait_max =
+                                    rd_kafka_msg_enq_time(rd_kafka_msgq_first(
+                                        &rktp->rktp_xmit_msgq)) +
+                                    rkb->rkb_rk->rk_conf.buffering_max_us;
+                        else
+                                wait_max = now;
+
+                        rd_rkb_dbg(rkb, QUEUE, "X",
+                                   "batch_size %lld, msgq_size %lld",
+                                   (int64_t)rkb->rkb_rk->rk_conf.batch_size,
+                                   rd_kafka_msgq_size(&rktp->rktp_xmit_msgq));
+
+                        batch_ready = rd_kafka_msgq_allow_wakeup_at(
+                            &rktp->rktp_msgq, wait_max, now,
+                            /* Batch message count threshold */
+                            rkb->rkb_rk->rk_conf.batch_num_messages,
+                            /* Batch size threshold.
+                             * When compression is enabled the
+                             * threshold is increased by x8. */
+                            // FIXME: base this on the avg
+                            //    compratio * 1.25
+                            (rktp->rktp_rkt->rkt_conf.compression_codec ? 1
+                                                                        : 8) *
+                                (int64_t)rkb->rkb_rk->rk_conf.batch_size,
+                            /* Current message count */
+                            rd_kafka_msgq_len(&rktp->rktp_xmit_msgq),
+                            /* Current byte count */
+                            rd_kafka_msgq_size(&rktp->rktp_xmit_msgq));
+
+                } else if (flushing ||
+                           rktp->rktp_msgq.rkmq_wakeup.abstime <= now) {
+                        rd_rkb_dbg(rkb, QUEUE, "EXP",
+                                   "%s [%d] linger.ms abstime %" PRIu64
+                                   " expired %" PRId64
+                                   "us ago with %d msgs enqueued",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition,
+                                   rktp->rktp_msgq.rkmq_wakeup.abstime,
+                                   now - rktp->rktp_msgq.rkmq_wakeup.abstime,
+                                   rd_kafka_msgq_len(&rktp->rktp_xmit_msgq));
+                        batch_ready = rd_true;
+                }
         }
 
         rd_kafka_toppar_unlock(rktp);
@@ -3871,23 +3926,22 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
 
         /* Attempt to fill the batch size, but limit our waiting
          * to queue.buffering.max.ms, batch.num.messages, and batch.size. */
-        if (!flushing && r < rkb->rkb_rk->rk_conf.batch_num_messages &&
-            rktp->rktp_xmit_msgq.rkmq_msg_bytes <
-                (int64_t)rkb->rkb_rk->rk_conf.batch_size) {
-                rd_ts_t wait_max;
+        if (!batch_ready) {
+                /* Wait for more messages or queue.buffering.max.ms
+                 * to expire. */
 
-                /* Calculate maximum wait-time to honour
-                 * queue.buffering.max.ms contract. */
-                wait_max = rd_kafka_msg_enq_time(rkm) +
-                           rkb->rkb_rk->rk_conf.buffering_max_us;
+                if (wait_max > 0)
+                        *next_wakeup = wait_max;
 
-                if (wait_max > now) {
-                        /* Wait for more messages or queue.buffering.max.ms
-                         * to expire. */
-                        if (wait_max < *next_wakeup)
-                                *next_wakeup = wait_max;
-                        return 0;
-                }
+                rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                           "%.*s [%" PRId32 "]: wait_max %.2fms, or %d/%d msgs",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           wait_max ? (float)(wait_max - rd_clock()) / 1000.0
+                                    : -1.0,
+                           r, rkb->rkb_rk->rk_conf.batch_num_messages);
+
+                return 0;
         }
 
         /* Honour retry.backoff.ms. */
@@ -3908,6 +3962,19 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                         break;
         }
 
+        // FIXME MAGNUS:
+        /*
+if after ProduceRequest():ing there are still messages in the queue then
+maybe the wakeup signalling is off:
+If before ProduceRequest the xmit_msgq size > thresholds then signalling
+will have been disabled until the next spin.
+But if after ProduceRequest the xmit_msgq size is non-empty (and possibly below
+thresholds then wakeups need to be enabled).
+        */
+        rd_rkb_dbg(
+            rkb, QUEUE, "XXX",
+            "AFTER: %d ProduceRequests created: %d messages remain in queue",
+            reqcnt, rd_kafka_msgq_len(&rktp->rktp_xmit_msgq));
         /* If there are messages still in the queue, make the next
          * wakeup immediate. */
         if (rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) > 0)
@@ -3971,6 +4038,9 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
                     may_send, flushing);
 
+                rd_rkb_dbg(rkb, QUEUE, "NEXT",
+                           "this_next_wakeup %" PRId64 "us, ret_next %" PRId64,
+                           this_next_wakeup, ret_next_wakeup);
                 if (this_next_wakeup < ret_next_wakeup)
                         ret_next_wakeup = this_next_wakeup;
 

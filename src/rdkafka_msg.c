@@ -776,7 +776,7 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *app_rkt,
                                                 continue;
                                         }
                                 }
-                                rd_kafka_toppar_enq_msg(rktp, rkm);
+                                rd_kafka_toppar_enq_msg(rktp, rkm, now);
 
                                 if (rd_kafka_is_transactional(rkt->rkt_rk)) {
                                         /* Add partition to transaction */
@@ -796,7 +796,7 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *app_rkt,
 
                 } else {
                         /* Single destination partition. */
-                        rd_kafka_toppar_enq_msg(rktp, rkm);
+                        rd_kafka_toppar_enq_msg(rktp, rkm, now);
                 }
 
                 rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -1244,7 +1244,7 @@ int rd_kafka_msg_partitioner(rd_kafka_topic_t *rkt,
                 rkm->rkm_partition = partition;
 
         /* Partition is available: enqueue msg on partition's queue */
-        rd_kafka_toppar_enq_msg(rktp_new, rkm);
+        rd_kafka_toppar_enq_msg(rktp_new, rkm, rd_clock());
         if (do_lock)
                 rd_kafka_topic_rdunlock(rkt);
 

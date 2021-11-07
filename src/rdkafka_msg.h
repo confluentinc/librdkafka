@@ -194,6 +194,14 @@ typedef struct rd_kafka_msgq_s {
         struct rd_kafka_msgs_head_s rkmq_msgs; /* TAILQ_HEAD */
         int32_t rkmq_msg_cnt;
         int64_t rkmq_msg_bytes;
+        struct {
+                rd_ts_t abstime; /**< Allow wake-ups after this point in time.*/
+                int32_t msg_cnt; /**< Signal wake-up when this message count
+                                  *   is reached. */
+                int64_t msg_bytes;   /**< .. or when this byte count is
+                                      *   reached. */
+                rd_bool_t signalled; /**< Wake-up (already) signalled. */
+        } rkmq_wakeup;
 } rd_kafka_msgq_t;
 
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq)                                        \
@@ -237,6 +245,75 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_init(rd_kafka_msgq_t *rkmq) {
         rkmq->rkmq_msg_cnt   = 0;
         rkmq->rkmq_msg_bytes = 0;
 }
+
+
+/**
+ * @brief Allow queue wakeups after \p abstime, or when the
+ *        given \p msg_cnt or \p msg_bytes have been reached.
+ *
+ * @remark Must only be called on an empty \p rkmq.
+ *
+ * @returns true if the wakeup conditions are already met, else false.
+ */
+static RD_UNUSED rd_bool_t
+rd_kafka_msgq_allow_wakeup_at(rd_kafka_msgq_t *rkmq,
+                              rd_ts_t abstime,
+                              rd_ts_t now,
+                              int32_t batch_msg_cnt,
+                              int64_t batch_msg_bytes,
+                              int32_t msg_cnt,
+                              int64_t msg_bytes) {
+        rd_dassert(rkmq->rkmq_msg_cnt == 0);
+
+        rkmq->rkmq_wakeup.abstime = abstime;
+
+#if 0
+        if (1)
+        printf("ALLOW in %"PRId64"us: or %d and %lld\n",
+               (int64_t)abstime - (int64_t)now,
+               msg_cnt, msg_bytes);
+#endif
+        /*
+         * If there are more messages or bytes in queue than the batch limits,
+         * or the linger time has been exceeded,
+         * then there is no need for wakeup since the broker thread will
+         * produce those messages as quickly as it can.
+         */
+        if (msg_cnt >= batch_msg_cnt || msg_bytes >= batch_msg_bytes ||
+            now >= abstime) {
+                /* Prevent further signalling */
+                rkmq->rkmq_wakeup.signalled = rd_true;
+
+                /* Batch is ready */
+                return rd_true;
+        }
+
+        /* If the current msg or byte count is less than the batch limit
+         * then set the rkmq count to the remaining count or size to
+         * reach the batch limits.
+         * This is for the case where the producer is waiting for more
+         * messages to accumulate into a batch. The wakeup should only
+         * occur once a threshold is reached.
+         */
+        rkmq->rkmq_wakeup.signalled = rd_false;
+        rkmq->rkmq_wakeup.msg_cnt   = batch_msg_cnt - msg_cnt;
+        rkmq->rkmq_wakeup.msg_bytes = batch_msg_bytes - msg_bytes;
+
+        return rd_false;
+}
+
+
+/**
+ * @returns true if msgq may be awoken.
+ */
+static RD_UNUSED RD_INLINE rd_bool_t
+rd_kafka_msgq_may_wakeup(const rd_kafka_msgq_t *rkmq, rd_ts_t now) {
+        return !rkmq->rkmq_wakeup.signalled &&
+               (now >= rkmq->rkmq_wakeup.abstime ||
+                rkmq->rkmq_msg_cnt >= rkmq->rkmq_wakeup.msg_cnt ||
+                rkmq->rkmq_msg_bytes > rkmq->rkmq_wakeup.msg_bytes);
+}
+
 
 #if ENABLE_DEVEL
 #define rd_kafka_msgq_verify_order(rktp, rkmq, exp_first_msgid, gapless)       \

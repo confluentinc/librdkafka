@@ -922,6 +922,7 @@ static void rd_kafka_topic_assign_uas(rd_kafka_topic_t *rkt,
                              rkt->rkt_partition_cnt);
         }
 
+        // FIXME: check
         rd_kafka_msgq_move(&uas, &rktp_ua->rktp_msgq);
         cnt = uas.rkmq_msg_cnt;
         rd_kafka_toppar_unlock(rktp_ua);
@@ -1284,6 +1285,7 @@ void rd_kafka_topic_partitions_remove(rd_kafka_topic_t *rkt) {
 
         RD_LIST_FOREACH(rktp, partitions, i) {
                 rd_kafka_toppar_lock(rktp);
+                // FIXME: check
                 rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
                 rd_kafka_toppar_purge_and_disable_queues(rktp);
                 rd_kafka_toppar_unlock(rktp);
@@ -1481,6 +1483,7 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
                                          * timeouts.
                                          * Proper partitions are scanned by
                                          * their toppar broker thread. */
+                                        // FIXME: check
                                         rd_kafka_msgq_age_scan(
                                             rktp, &rktp->rktp_msgq, &timedout,
                                             now, NULL);

@@ -670,8 +670,9 @@ void rd_kafka_toppar_desired_del(rd_kafka_toppar_t *rktp) {
 /**
  * Append message at tail of 'rktp' message queue.
  */
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-        int queue_len;
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now) {
         rd_kafka_q_t *wakeup_q = NULL;
 
         rd_kafka_toppar_lock(rktp);
@@ -683,18 +684,50 @@ void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
             rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
                 /* No need for enq_sorted(), this is the oldest message. */
-                queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         } else {
-                queue_len = rd_kafka_msgq_enq_sorted(rktp->rktp_rkt,
-                                                     &rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq_sorted(rktp->rktp_rkt, &rktp->rktp_msgq, rkm);
         }
 
-        if (unlikely(queue_len == 1 && (wakeup_q = rktp->rktp_msgq_wakeup_q)))
+        if (unlikely(rd_kafka_msgq_may_wakeup(&rktp->rktp_msgq, now) &&
+                     (wakeup_q = rktp->rktp_msgq_wakeup_q))) {
+                static int wakeup_cnt = 0;
+                wakeup_cnt++;
+                rd_kafka_dbg(
+                    rktp->rktp_rkt->rkt_rk, QUEUE, "WAKEUP",
+                    "%s [%" PRId32 "]: Wake-up because ts %" PRId64
+                    "us, "
+                    "msg_cnt %d/%d, bytes %lld/%lld: "
+                    "%d wakeups in total",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    (int64_t)rktp->rktp_msgq.rkmq_wakeup.abstime - (int64_t)now,
+                    rktp->rktp_msgq.rkmq_msg_cnt,
+                    rktp->rktp_msgq.rkmq_wakeup.msg_cnt,
+                    rktp->rktp_msgq.rkmq_msg_bytes,
+                    rktp->rktp_msgq.rkmq_wakeup.msg_bytes, wakeup_cnt);
+
+                if (0)
+                        printf("%s [%" PRId32 "]: Wake-up because ts %" PRId64
+                               "us, "
+                               "msg_cnt %d/%d, bytes %lld/%lld: "
+                               "%d wakeups in total\n",
+                               rktp->rktp_rkt->rkt_topic->str,
+                               rktp->rktp_partition,
+                               (int64_t)rktp->rktp_msgq.rkmq_wakeup.abstime -
+                                   (int64_t)now,
+                               rktp->rktp_msgq.rkmq_msg_cnt,
+                               rktp->rktp_msgq.rkmq_wakeup.msg_cnt,
+                               rktp->rktp_msgq.rkmq_msg_bytes,
+                               rktp->rktp_msgq.rkmq_wakeup.msg_bytes,
+                               wakeup_cnt);
+
+                rktp->rktp_msgq.rkmq_wakeup.signalled = rd_true;
                 rd_kafka_q_keep(wakeup_q);
+        }
 
         rd_kafka_toppar_unlock(rktp);
 
-        if (wakeup_q) {
+        if (unlikely(wakeup_q != NULL)) {
                 rd_kafka_q_yield(wakeup_q);
                 rd_kafka_q_destroy(wakeup_q);
         }
@@ -933,6 +966,7 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                 return 1;
 
         rd_kafka_toppar_lock(rktp);
+        // FIXME: check
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
                                 rk->rk_conf.max_retries, backoff, status,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp);
@@ -949,6 +983,7 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_insert_msgq(rd_kafka_toppar_t *rktp,
                                  rd_kafka_msgq_t *rkmq) {
         rd_kafka_toppar_lock(rktp);
+        // FIXME: check
         rd_kafka_msgq_insert_msgq(&rktp->rktp_msgq, rkmq,
                                   rktp->rktp_rkt->rkt_conf.msg_order_cmp);
         rd_kafka_toppar_unlock(rktp);
@@ -4248,6 +4283,7 @@ int rd_kafka_toppar_purge_queues(rd_kafka_toppar_t *rktp,
         }
 
         rd_kafka_toppar_lock(rktp);
+        // FIXME: check
         rd_kafka_msgq_concat(&rkmq, &rktp->rktp_msgq);
         cnt = rd_kafka_msgq_len(&rkmq);
 

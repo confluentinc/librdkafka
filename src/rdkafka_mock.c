@@ -1980,6 +1980,82 @@ rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
 }
 
 
+/**
+ * @brief Apply command to specific broker.
+ *
+ * @locality mcluster thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
+                         rd_kafka_mock_broker_t *mrkb,
+                         rd_kafka_op_t *rko) {
+        switch (rko->rko_u.mock.cmd) {
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
+                mrkb->up = (rd_bool_t)rko->rko_u.mock.lo;
+
+                if (!mrkb->up)
+                        rd_kafka_mock_broker_close_all(mrkb, "Broker down");
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
+                mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
+
+                /* Check if there is anything to send now that the RTT
+                 * has changed or if a timer is to be started. */
+                rd_kafka_mock_broker_connections_write_out(mrkb);
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+                if (mrkb->rack)
+                        rd_free(mrkb->rack);
+
+                if (rko->rko_u.mock.name)
+                        mrkb->rack = rd_strdup(rko->rko_u.mock.name);
+                else
+                        mrkb->rack = NULL;
+                break;
+
+        default:
+                RD_BUG("Unhandled mock cmd %d", rko->rko_u.mock.cmd);
+                break;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Apply command to to one or all brokers, depending on the value of
+ *        broker_id, where -1 means all, and != -1 means a specific broker.
+ *
+ * @locality mcluster thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_brokers_cmd(rd_kafka_mock_cluster_t *mcluster,
+                          rd_kafka_op_t *rko) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        if (rko->rko_u.mock.broker_id != -1) {
+                /* Specific broker */
+                mrkb = rd_kafka_mock_broker_find(mcluster,
+                                                 rko->rko_u.mock.broker_id);
+                if (!mrkb)
+                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+
+                return rd_kafka_mock_broker_cmd(mcluster, mrkb, rko);
+        }
+
+        /* All brokers */
+        TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                rd_kafka_resp_err_t err;
+
+                if ((err = rd_kafka_mock_broker_cmd(mcluster, mrkb, rko)))
+                        return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 
 /**
  * @brief Handle command op
@@ -2081,45 +2157,11 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 }
                 break;
 
+                /* Broker commands */
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                mrkb->up = (rd_bool_t)rko->rko_u.mock.lo;
-
-                if (!mrkb->up)
-                        rd_kafka_mock_broker_close_all(mrkb, "Broker down");
-                break;
-
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
-
-                /* Check if there is anything to send now that the RTT
-                 * has changed or if a timer is to be started. */
-                rd_kafka_mock_broker_connections_write_out(mrkb);
-                break;
-
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                if (mrkb->rack)
-                        rd_free(mrkb->rack);
-
-                if (rko->rko_u.mock.name)
-                        mrkb->rack = rd_strdup(rko->rko_u.mock.name);
-                else
-                        mrkb->rack = NULL;
-                break;
+                return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,

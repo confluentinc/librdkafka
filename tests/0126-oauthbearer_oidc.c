@@ -65,7 +65,7 @@ static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *conf) {
         test_consumer_subscribe(c1, topic);
 
         /* If token valid time is less than 3s, it will fresh the toke. */
-        rd_usleep(3 * 1000, NULL);
+        rd_usleep(3 * 1000 * 1000, NULL);
         test_consumer_poll("OIDC.C1", c1, testid, 1, -1, 1, NULL);
 
         test_consumer_close(c1);

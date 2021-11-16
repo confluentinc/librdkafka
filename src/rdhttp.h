@@ -70,7 +70,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                                           const struct curl_slist *headers,
                                           const char *data_to_token,
                                           size_t data_to_token_size,
-                                          rd_ts_t timeout,
+                                          int timeout,
                                           int retry,
                                           int retry_ms,
                                           cJSON **jsonp);

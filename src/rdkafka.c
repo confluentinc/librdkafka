@@ -2342,25 +2342,6 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
         }
 
-        /* Create background thread and queue if background_event_cb()
-         * RD_KAFKA_EVENT_BACKGROUND has been enabled.
-         * Do this before creating the main thread since after
-         * the main thread is created it is no longer trivial to error
-         * out from rd_kafka_new(). */
-
-        if (rk->rk_conf.background_event_cb ||
-            (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
-                rd_kafka_resp_err_t err;
-                rd_kafka_wrlock(rk);
-                err =
-                    rd_kafka_background_thread_create(rk, errstr, errstr_size);
-                rd_kafka_wrunlock(rk);
-                if (err)
-                        goto fail;
-        }
-
-        mtx_lock(&rk->rk_init_lock);
-
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
                 /* Select SASL provider */
@@ -2426,6 +2407,25 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         }
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
+
+        /* Create background thread and queue if background_event_cb()
+         * RD_KAFKA_EVENT_BACKGROUND has been enabled.
+         * Do this before creating the main thread since after
+         * the main thread is created it is no longer trivial to error
+         * out from rd_kafka_new(). */
+        if (rk->rk_conf.background_event_cb ||
+            (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
+                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                rd_kafka_wrlock(rk);
+                if (!rk->rk_background.q)
+                        err = rd_kafka_background_thread_create(rk, errstr,
+                                                                errstr_size);
+                rd_kafka_wrunlock(rk);
+                if (err)
+                        goto fail;
+        }
+
+        mtx_lock(&rk->rk_init_lock);
 
         /* Lock handle here to synchronise state, i.e., hold off
          * the thread until we've finalized the handle. */

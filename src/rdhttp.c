@@ -299,7 +299,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                                           const struct curl_slist *headers,
                                           const char *post_fields,
                                           size_t post_fields_size,
-                                          rd_ts_t timeout_s,
+                                          int timeout_s,
                                           int retries,
                                           int retry_ms,
                                           cJSON **jsonp) {
@@ -351,12 +351,6 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
         }
 
         herr = rd_http_parse_json(&hreq, jsonp);
-
-        if (!cJSON_HasObjectItem(*jsonp, "access_token")) {
-                rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__AUTHENTICATION,
-                                "Expected JSON response with "
-                                "\"access_token\" field");
-        }
 
         rd_http_req_destroy(&hreq);
 

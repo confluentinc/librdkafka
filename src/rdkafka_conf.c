@@ -3690,30 +3690,30 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (!conf->sasl.oauthbearer.client_id)
                                 return "`sasl.oauthbearer.client.id` is "
                                        "mandatory when "
-                                       "`sasl.oauthbearer.method` is set";
+                                       "`sasl.oauthbearer.method=oidc` is set";
 
                         if (!conf->sasl.oauthbearer.client_secret) {
                                 return "`sasl.oauthbearer.client.secret` is "
                                        "mandatory when "
-                                       "`sasl.oauthbearer.method` is set";
+                                       "`sasl.oauthbearer.method=oidc` is set";
                         }
 
                         if (!conf->sasl.oauthbearer.token_endpoint_url) {
                                 return "`sasl.oauthbearer.token.endpoint.url` "
                                        "is mandatory when "
-                                       "`sasl.oauthbearer.method` is set";
+                                       "`sasl.oauthbearer.method=oidc` is set";
                         }
 
                         if (!conf->sasl.oauthbearer.scope) {
                                 return "`sasl.oauthbearer.scope` "
                                        "is mandatory when "
-                                       "`sasl.oauthbearer.method` is set";
+                                       "`sasl.oauthbearer.method=oidc` is set";
                         }
 
                         if (!conf->sasl.oauthbearer.extensions_str) {
                                 return "`sasl.oauthbearer.extensions` "
                                        "is mandatory when "
-                                       "`sasl.oauthbearer.method` is set";
+                                       "`sasl.oauthbearer.method=oidc` is set";
                         }
                 }
 

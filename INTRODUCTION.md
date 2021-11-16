@@ -54,7 +54,7 @@ librdkafka also provides a native C++ interface.
         - [Threads and callbacks](#threads-and-callbacks)
         - [Brokers](#brokers)
             - [SSL](#ssl)
-            - [OAUTHBEARER with Support for OIDC](#oauthbearer-oidc)
+            - [OAUTHBEARER with Support for OIDC](#oauthbearer-with-support-for-oidc)
             - [Sparse connections](#sparse-connections)
                 - [Random broker selection](#random-broker-selection)
                 - [Persistent broker connections](#persistent-broker-connections)
@@ -1124,27 +1124,27 @@ For example, to read both intermediate and root CAs, set
 
 #### OAUTHBEARER with Support for OIDC
 
-Oauthbearer with OIDC is another way for client to connect to a broker's
-SSL endpoints/listeners. If this way is used, the client needs to be
+Oauthbearer with OIDC is another way for the client to connect to a broker's
+SASL endpoints/listeners. To use this method the client needs to be
 configured with `security.protocol=SASL_SSL` for SASL authentication
-and SSL transport, `sasl.oauthbearer.method=OIDC` to use the
-OAUTHBEARER with OIDC method.
+and SSL transport, and `sasl.oauthbearer.method=OIDC` to use
+OIDC with OAUTHBEARER.
 
-The OAUTHBEARER with OIDC will also require the configuration of the
-following:
+OAUTHBEARER with OIDC will also require configuration of the
+following configuration properties:
 
   * `sasl.oauthbearer.token.endpoint.url` - OAUTH issuer token endpoint HTTP(S)
-    URI used to retrieve the token
-  * `sasl.oauthbearer.client.id` - A public identifier for the application
-    It must be unique across all clients that the authorization server handles
+    URI used to retrieve the token.
+  * `sasl.oauthbearer.client.id` - A public identifier for the application.
+    It must be unique across all clients that the authorization server handles.
   * `sasl.oauthbearer.client.secret` - This is only known to the application
     and the authorization server. This should be a sufficiently random string
-    that are not guessable
+    that is not guessable.
   * `sasl.oauthbearer.scope` - Client use this to specify the scope of the
-    access request to the broker
+    access request to the broker.
   * `sasl.oauthbearer.extensions` - Allow additional information to be provided
-    to the broker. "It's comma-separated list of key=value pairs.
-    The example of the input is
+    to the broker. It's a comma-separated list of key=value pairs.
+    For example:
     `supportFeatureX=true,organizationId=sales-emea`
 
 

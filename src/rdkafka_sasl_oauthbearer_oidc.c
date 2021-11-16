@@ -35,35 +35,49 @@
 #include "rdunittest.h"
 #include "cJSON.h"
 #include <curl/curl.h>
+#include <math.h>
 #include "rdhttp.h"
 #include "rdkafka_sasl_oauthbearer_oidc.h"
+
+/* define isnan for ANSI C, if in C99 or above, isnan has
+ * been defined in math.h */
+#ifndef isnan
+#define isnan(d) (d != d)
+#endif
+
+static const unsigned char pr2six[256] = {
+    /* ASCII table */
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 62, 64, 64, 64, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+    61, 64, 64, 64, 64, 64, 64, 64, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64,
+    64, 64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+    43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 64, 64, 64, 64, 64, 64};
 
 /**
  * @brief Base64 encode binary input \p in, and write base64-encoded string
  *        and it's size to \p out
- * @returns return rd_true if encode succeed, else return rd_false.
- *          The base64-encoded string will be returned at \p out with it's
- *          size.
  */
-static rd_bool_t rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
+static void rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
         size_t max_len;
 
         max_len  = (((in->size + 2) / 3) * 4) + 1;
         out->ptr = rd_malloc(max_len);
-        if (out->ptr == NULL)
-                return rd_false;
+        rd_assert(out->ptr);
 
         out->size = EVP_EncodeBlock((uint8_t *)out->ptr, (uint8_t *)in->ptr,
                                     (int)in->size);
 
-        if (out->size > max_len) {
-                rd_free(out->ptr);
-                return rd_false;
-        }
-
-        rd_assert(out->size < max_len);
+        rd_assert(out->size <= max_len);
         out->ptr[out->size] = 0;
-        return rd_true;
 }
 
 
@@ -71,21 +85,19 @@ static rd_bool_t rd_base64_encode(const rd_chariov_t *in, rd_chariov_t *out) {
  * @brief Generate Authorization field for HTTP header.
  *        The field contains base64-encoded string which
  *        is generated from \p client_id and \p client_secret.
- *        The authorization field will be returned in
- *        \p *authorization_base64_headerp.
  *
+ * @returns Return the authorization field.
  *
  * @locality Any thread.
  */
-static void
-rd_kafka_oidc_build_auth_header(const char *client_id,
-                                const char *client_secret,
-                                char **authorization_base64_headerp) {
+static char *rd_kafka_oidc_build_auth_header(const char *client_id,
+                                             const char *client_secret) {
 
         rd_chariov_t client_authorization_in;
         rd_chariov_t client_authorization_out;
 
         size_t authorization_base64_header_size;
+        char *authorization_base64_header;
 
         client_authorization_in.size =
             strlen(client_id) + strlen(client_secret) + 2;
@@ -93,38 +105,36 @@ rd_kafka_oidc_build_auth_header(const char *client_id,
         rd_snprintf(client_authorization_in.ptr, client_authorization_in.size,
                     "%s:%s", client_id, client_secret);
 
-        client_authorization_in.size = client_authorization_in.size - 1;
-        rd_assert(rd_base64_encode(&client_authorization_in,
-                                   &client_authorization_out));
+        client_authorization_in.size--;
+        rd_base64_encode(&client_authorization_in, &client_authorization_out);
 
         authorization_base64_header_size =
             strlen("Authorization: Basic ") + client_authorization_out.size + 1;
-        *authorization_base64_headerp =
+        authorization_base64_header =
             rd_malloc(authorization_base64_header_size);
-        rd_snprintf(*authorization_base64_headerp,
+        rd_snprintf(authorization_base64_header,
                     authorization_base64_header_size, "Authorization: Basic %s",
                     client_authorization_out.ptr);
 
         rd_free(client_authorization_in.ptr);
         rd_free(client_authorization_out.ptr);
+        return authorization_base64_header;
 }
 
 
 /**
  * @brief Build headers for HTTP(S) requests based on \p client_id
- *        and \p client_secret. The result will be returned in \p *headers.
- *
- * @returns If succeed, return NULL, else return the error message.
+ *        and \p client_secret. The result will be returned in \p *headersp.
  *
  * @locality Any thread.
  */
-static char *rd_kafka_oidc_build_headers(const char *client_id,
-                                         const char *client_secret,
-                                         struct curl_slist **headersp) {
-        char *authorization_base64_header = NULL;
+static void rd_kafka_oidc_build_headers(const char *client_id,
+                                        const char *client_secret,
+                                        struct curl_slist **headersp) {
+        char *authorization_base64_header;
 
-        rd_kafka_oidc_build_auth_header(client_id, client_secret,
-                                        &authorization_base64_header);
+        authorization_base64_header =
+            rd_kafka_oidc_build_auth_header(client_id, client_secret);
 
         *headersp = curl_slist_append(*headersp, "Accept: application/json");
         *headersp = curl_slist_append(*headersp, authorization_base64_header);
@@ -133,7 +143,104 @@ static char *rd_kafka_oidc_build_headers(const char *client_id,
             *headersp, "Content-Type: application/x-www-form-urlencoded");
 
         rd_free(authorization_base64_header);
-        return NULL;
+}
+
+/**
+ * @brief The format of JWT is Header.Payload.Signature.
+ *        Extract and decode payloads from JWT \p bufcoded.
+ *
+ * @returns The decoded payloads will be returned.
+ */
+static char *rd_kafka_extract_and_decode_jwt_payloads(const char *bufcoded) {
+        unsigned char *payloads_start;
+        unsigned char *payloads_end;
+        unsigned char *bufout;
+
+        char *bufplain;
+
+        int nprbytes;
+        int nbytesdecoded;
+
+        payloads_start = (unsigned char *)bufcoded;
+
+        while (pr2six[*(payloads_start++)] <= 63)
+                ;
+
+        payloads_end = payloads_start;
+
+        while (pr2six[*(payloads_end++)] <= 63)
+                ;
+
+        nprbytes      = payloads_end - payloads_start;
+        nbytesdecoded = ((nprbytes + 3) / 4) * 3;
+        bufplain      = rd_malloc(nbytesdecoded + 1);
+
+        bufout = (unsigned char *)bufplain;
+
+        while (nprbytes > 4) {
+                *(bufout++) = (unsigned char)(pr2six[*payloads_start] << 2 |
+                                              pr2six[payloads_start[1]] >> 4);
+                *(bufout++) = (unsigned char)(pr2six[payloads_start[1]] << 4 |
+                                              pr2six[payloads_start[2]] >> 2);
+                *(bufout++) = (unsigned char)(pr2six[payloads_start[2]] << 6 |
+                                              pr2six[payloads_start[3]]);
+                payloads_start += 4;
+                nprbytes -= 4;
+        }
+
+        /* (nprbytes == 1) would be an error*/
+        rd_assert(nprbytes != 1);
+        if (nprbytes > 1)
+                *(bufout++) = (unsigned char)(pr2six[*payloads_start] << 2 |
+                                              pr2six[payloads_start[1]] >> 4);
+        if (nprbytes > 2)
+                *(bufout++) = (unsigned char)(pr2six[payloads_start[1]] << 4 |
+                                              pr2six[payloads_start[2]] >> 2);
+        if (nprbytes > 3)
+                *(bufout++) = (unsigned char)(pr2six[payloads_start[2]] << 6 |
+                                              pr2six[payloads_start[3]]);
+
+        *(bufout++) = '\0';
+        nbytesdecoded -= (4 - nprbytes) & 3;
+
+        return bufplain;
+}
+
+
+static char *rd_kafka_jwt_b64_decode(const char *src) {
+        char *buf;
+        char *new;
+        int i, padding, len;
+
+        len = (int)strlen(src);
+        new = rd_malloc(len + 4);
+        if (!new)
+                return NULL;
+
+        for (i = 0; i < len; i++) {
+                switch (src[i]) {
+                case '-':
+                        new[i] = '+';
+                        break;
+
+                case '_':
+                        new[i] = '/';
+                        break;
+
+                default:
+                        new[i] = src[i];
+                }
+        }
+        padding = 4 - (i % 4);
+        if (padding < 4) {
+                while (padding--)
+                        new[i++] = '=';
+        }
+        new[i] = '\0';
+
+        buf = rd_kafka_extract_and_decode_jwt_payloads(new);
+        rd_free(new);
+        return buf;
 }
 
 
@@ -146,41 +253,42 @@ static char *rd_kafka_oidc_build_headers(const char *client_id,
 void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                                     const char *oauthbearer_config,
                                     void *opaque) {
-        static const rd_ts_t timeout_s = 20;
-        static const int retry         = 3;
-        static const int retry_ms      = 30 * 1000;
+        const int timeout_s = 20;
+        const int retry     = 4;
+        const int retry_ms  = 5 * 1000;
+
+        double exp;
 
         cJSON *json = NULL;
-        cJSON *parsed_token;
+        cJSON *parsed_token, *payloads, *jwt_exp, *jwt_sub;
+
         rd_http_error_t *herr;
+
         char *jwt_token;
-        struct curl_slist *headers = NULL;
         char *post_fields;
-        size_t post_fields_size;
-        char *errstr;
+        char *decoded_payloads = NULL;
+
+        struct curl_slist *headers = NULL;
+
         const char *token_url;
+        const char *extension_str;
+        const char *sub;
+
+        size_t post_fields_size;
+        size_t extension_cnt;
+        size_t extension_key_value_cnt;
 
         char set_token_errstr[512];
 
-        const char *extension_str;
-        size_t extension_cnt;
-        char **extension;
+        char **extensions;
         char **extension_key_value;
-        size_t extension_key_value_cnt;
 
         if (rd_kafka_terminating(rk))
                 return;
 
-        errstr = rd_kafka_oidc_build_headers(
-            rk->rk_conf.sasl.oauthbearer.client_id,
-            rk->rk_conf.sasl.oauthbearer.client_secret, &headers);
-        if (errstr != NULL) {
-                rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__AUTHENTICATION,
-                                         "Failed to build OAUTHBEARER "
-                                         "OIDC headers: %s",
-                                         errstr);
-                return;
-        }
+        rd_kafka_oidc_build_headers(rk->rk_conf.sasl.oauthbearer.client_id,
+                                    rk->rk_conf.sasl.oauthbearer.client_secret,
+                                    &headers);
 
         /* Build post fields */
         post_fields_size = strlen("grant_type=client_credentials&scope=") +
@@ -206,23 +314,78 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
+        if (!cJSON_HasObjectItem(json, "access_token")) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON response with "
+                    "\"access_token\" field");
+                goto done;
+        }
+
         parsed_token = cJSON_GetObjectItem(json, "access_token");
 
-        jwt_token     = parsed_token->valuestring;
+        jwt_token = cJSON_GetStringValue(parsed_token);
+        if (jwt_token == NULL) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON "
+                    "response as a value string");
+                goto done;
+        }
+
+        decoded_payloads = rd_kafka_jwt_b64_decode(jwt_token);
+        payloads         = cJSON_Parse(decoded_payloads);
+
+        if (!cJSON_HasObjectItem(payloads, "exp")) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON response with "
+                    "\"exp\" field");
+                goto done;
+        }
+        jwt_exp = cJSON_GetObjectItem(payloads, "exp");
+        exp     = cJSON_GetNumberValue(jwt_exp);
+        if (isnan(exp)) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON response with "
+                    "valid \"exp\" field");
+                goto done;
+        }
+
+        if (!cJSON_HasObjectItem(payloads, "sub")) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON response with "
+                    "\"sub\" field");
+                goto done;
+        }
+        jwt_sub = cJSON_GetObjectItem(payloads, "sub");
+        sub     = cJSON_GetStringValue(jwt_sub);
+        if (sub == NULL) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk,
+                    "Expected JSON response with "
+                    "valid \"sub\" field");
+                goto done;
+        }
+
         extension_str = rk->rk_conf.sasl.oauthbearer.extensions_str;
-        extension =
+        extensions =
             rd_string_split(extension_str, ',', rd_true, &extension_cnt);
 
         extension_key_value = rd_kafka_conf_kv_split(
-            (const char **)extension, extension_cnt, &extension_key_value_cnt);
+            (const char **)extensions, extension_cnt, &extension_key_value_cnt);
 
         if (rd_kafka_oauthbearer_set_token(
-                rk, jwt_token, rd_uclock(), "",
+                rk, jwt_token, (int64_t)exp * 1000, sub,
                 (const char **)extension_key_value, extension_key_value_cnt,
-                set_token_errstr, sizeof(set_token_errstr)) == -1)
+                set_token_errstr,
+                sizeof(set_token_errstr)) != RD_KAFKA_RESP_ERR_NO_ERROR)
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
 
 done:
+        RD_IF_FREE(decoded_payloads, rd_free);
         RD_IF_FREE(post_fields, rd_free);
         RD_IF_FREE(json, cJSON_Delete);
         RD_IF_FREE(headers, curl_slist_free_all);
@@ -237,9 +400,18 @@ done:
  *        This function mocks up the rd_http_req_t.hreq_buf using an dummy
  *        jwt. The rd_http_parse_json will extract the jwt from rd_http_req_t
  *        and make sure the extracted jwt is same with the dummy one.
- *
  */
 static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
+        /* Generate a token in the https://jwt.io/ website by using the
+         * following steps:
+         * 1. Select the algorithm RS256 from the Algorithm drop-down menu.
+         * 2. Enter the header and the payload.
+         *    payload should contains "exp", "iat", "sub", for example:
+         *    payloads = {"exp": 1636532769,
+                          "iat": 1516239022,
+                          "sub": "sub"}
+              header should contains "kid", for example:
+              headers={"kid": "abcedfg"} */
         static const char *expected_jwt_token =
             "eyJhbGciOiJIUzI1NiIsInR5"
             "cCI6IkpXVCIsImtpZCI6ImFiY2VkZmcifQ"
@@ -265,7 +437,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
                      "but failed with error code: %d, error string: %s",
                      herr->code, herr->errstr);
 
-        token_len = strlen("access_token") + strlen(expected_jwt_token) + 12;
+        token_len = strlen("access_token") + strlen(expected_jwt_token) + 8;
 
         expected_token_value = rd_malloc(token_len);
         rd_snprintf(expected_token_value, token_len, "{\"%s\":\"%s\"}",
@@ -274,7 +446,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
 
         herr = rd_http_parse_json(&hreq, &json);
         RD_UT_ASSERT(!herr,
-                     "Failed to parse JSON token with error code: %d, "
+                     "Failed to parse JSON token: error code: %d, "
                      "error string: %s",
                      herr->code, herr->errstr);
 
@@ -282,7 +454,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
 
         parsed_token = cJSON_GetObjectItem(json, "access_token");
 
-        RD_UT_ASSERT(parsed_token, "Expected non-empty JSON response.");
+        RD_UT_ASSERT(parsed_token, "Expected access_token in JSON response.");
         token = parsed_token->valuestring;
 
         RD_UT_ASSERT(!strcmp(expected_jwt_token, token),
@@ -334,7 +506,8 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
 
         parsed_token = cJSON_GetObjectItem(json, "access_token");
 
-        RD_UT_ASSERT(!parsed_token, "Expected empty JSON response");
+        RD_UT_ASSERT(!parsed_token,
+                     "Did not expected access_token in JSON response");
 
         rd_http_req_destroy(&hreq);
         rd_http_error_destroy(herr);

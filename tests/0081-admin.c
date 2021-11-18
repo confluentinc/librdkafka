@@ -1111,6 +1111,8 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         const rd_kafka_acl_result_t **acl_res_acls;
         unsigned int i;
 
+        SUB_TEST_QUICK();
+
         if (version == 0)
                 pattern_type_first_topic = RD_KAFKA_RESOURCE_PATTERN_LITERAL;
 
@@ -1155,23 +1157,23 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                 TEST_ASSERT(err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
                             "Expected unsupported feature, not: %s",
                             rd_kafka_err2name(err));
-                TEST_ASSERT(
-                    0 == strcmp(errstr2,
-                                "ACLs Admin API (KIP-140) not supported by "
-                                "broker, requires broker version >= 0.11.0.0"),
-                    "Expected a different message, not: %s", errstr2);
-                goto err_handle;
+                TEST_ASSERT(!strcmp(errstr2,
+                                    "ACLs Admin API (KIP-140) not supported "
+                                    "by broker, requires broker "
+                                    "version >= 0.11.0.0"),
+                            "Expected a different message, not: %s", errstr2);
+                TEST_FAIL("Unexpected error: %s", rd_kafka_err2name(err));
         }
 
         if (version > 0 && test_broker_version < TEST_BRKVER(2, 0, 0, 0)) {
                 TEST_ASSERT(err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
                             "Expected unsupported feature, not: %s",
                             rd_kafka_err2name(err));
-                TEST_ASSERT(0 == strcmp(errstr2,
-                                        "Version 0 only supports LITERAL "
-                                        "resource pattern types"),
+                TEST_ASSERT(!strcmp(errstr2,
+                                    "Broker only supports LITERAL "
+                                    "resource pattern types"),
                             "Expected a different message, not: %s", errstr2);
-                goto err_handle;
+                TEST_FAIL("Unexpected error: %s", rd_kafka_err2name(err));
         }
 
         TEST_ASSERT(!err, "Expected success, not %s: %s",
@@ -1189,19 +1191,14 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         for (i = 0; i < resacl_cnt; i++) {
                 const rd_kafka_acl_result_t *acl_res_acl = *(acl_res_acls + i);
-                rd_kafka_resp_err_t acl_result_error_code =
-                    rd_kafka_acl_result_error_code(acl_res_acl);
-                const char *acl_result_error_message =
-                    rd_kafka_acl_result_error_message(acl_res_acl);
+                const rd_kafka_error_t *error =
+                    rd_kafka_acl_result_error(acl_res_acl);
 
-                TEST_ASSERT(acl_result_error_code == 0,
+                TEST_ASSERT(!error,
                             "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
-                            rd_kafka_err2str(acl_result_error_code));
-                TEST_ASSERT(acl_result_error_message == NULL,
-                            "Expected NULL, not %s", acl_result_error_message);
+                            rd_kafka_error_string(error));
         }
 
-err_handle:
         rd_kafka_AdminOptions_destroy(admin_options);
         rd_kafka_event_destroy(rkev_acl_create);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
@@ -1209,6 +1206,8 @@ err_handle:
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1238,9 +1237,12 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         rd_kafka_resp_err_t create_err;
         rd_kafka_AdminOptions_t *admin_options;
         rd_kafka_event_t *rkev_acl_describe;
+        const rd_kafka_error_t *error;
+
+        SUB_TEST_QUICK();
 
         if (test_broker_version < TEST_BRKVER(0, 11, 0, 0)) {
-                TEST_WARN(
+                SUB_TEST_SKIP(
                     "Skipping DESCRIBE_ACLS test on unsupported "
                     "broker version\n");
                 return;
@@ -1301,7 +1303,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                     "expected RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE, not %s",
                     rd_kafka_err2str(err));
                 TEST_ASSERT(strcmp(errstr2,
-                                   "Version 0 only supports LITERAL and ANY "
+                                   "Broker only supports LITERAL and ANY "
                                    "resource pattern types") == 0,
                             "expected another message, not %s", errstr2);
         } else {
@@ -1310,6 +1312,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         }
 
         if (!err) {
+
                 acl_describe_result =
                     rd_kafka_event_DescribeAcls_result(rkev_acl_describe);
 
@@ -1383,19 +1386,10 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                                         rd_kafka_AclBinding_permission_type(
                                             acl)));
 
-                                TEST_ASSERT(
-                                    rd_kafka_AclBinding_error_code(acl) ==
-                                        RD_KAFKA_RESP_ERR_UNKNOWN,
-                                    "acl->err should be %s, not %s",
-                                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_UNKNOWN),
-                                    rd_kafka_err2str(
-                                        rd_kafka_AclBinding_error_code(acl)));
-
-                                TEST_ASSERT(
-                                    rd_kafka_AclBinding_error_message(acl) ==
-                                        NULL,
-                                    "acl->errstr should be NULL, not %s",
-                                    rd_kafka_AclBinding_error_message(acl));
+                                error = rd_kafka_AclBinding_error(acl);
+                                TEST_ASSERT(!error,
+                                            "acl->error should be NULL, not %s",
+                                            rd_kafka_error_string(error));
 
                         } else {
                                 TEST_ASSERT(
@@ -1453,19 +1447,11 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                                         rd_kafka_AclBinding_permission_type(
                                             acl)));
 
-                                TEST_ASSERT(
-                                    rd_kafka_AclBinding_error_code(acl) ==
-                                        RD_KAFKA_RESP_ERR_UNKNOWN,
-                                    "acl->err should be %s, not %s",
-                                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_UNKNOWN),
-                                    rd_kafka_err2str(
-                                        rd_kafka_AclBinding_error_code(acl)));
 
-                                TEST_ASSERT(
-                                    rd_kafka_AclBinding_error_message(acl) ==
-                                        NULL,
-                                    "acl->errstr should be NULL, not %s",
-                                    rd_kafka_AclBinding_error_message(acl));
+                                error = rd_kafka_AclBinding_error(acl);
+                                TEST_ASSERT(!error,
+                                            "acl->error should be NULL, not %s",
+                                            rd_kafka_error_string(error));
                         }
                 }
         }
@@ -1541,15 +1527,9 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             rd_kafka_AclPermissionType_name(
                 rd_kafka_AclBinding_permission_type(acl)));
 
-        TEST_ASSERT(rd_kafka_AclBinding_error_code(acl) ==
-                        RD_KAFKA_RESP_ERR_UNKNOWN,
-                    "acl->err should be %s, not %s",
-                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_UNKNOWN),
-                    rd_kafka_err2str(rd_kafka_AclBinding_error_code(acl)));
-
-        TEST_ASSERT(rd_kafka_AclBinding_error_message(acl) == NULL,
-                    "acl->errstr should be NULL, not %s",
-                    rd_kafka_AclBinding_error_message(acl));
+        error = rd_kafka_AclBinding_error(acl);
+        TEST_ASSERT(!error, "acl->error should be NULL, not %s",
+                    rd_kafka_error_string(error));
 
         rd_kafka_AclBinding_destroy(acl_bindings_describe);
         rd_kafka_event_destroy(rkev_acl_describe);
@@ -1559,6 +1539,8 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1617,10 +1599,8 @@ static void
 do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
         test_timing_t timing;
-        rd_kafka_resp_err_t err;
         uint32_t i;
         char errstr[128];
-        const char *errstr2;
         const char *user_test1 = "User:test1";
         const char *user_test2 = "User:test2";
         const char *any_host   = "*";
@@ -1639,8 +1619,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         const rd_kafka_DeleteAcls_result_response_t *
             *DeleteAcls_result_responses;
         const rd_kafka_DeleteAcls_result_response_t *DeleteAcls_result_response;
-        rd_kafka_AclBinding_t **matching_acls;
-        rd_kafka_AclBinding_t *matching_acl;
+        const rd_kafka_AclBinding_t **matching_acls;
+        const rd_kafka_AclBinding_t *matching_acl;
         rd_kafka_ResourcePatternType_t pattern_type_first_topic_create;
         rd_kafka_ResourcePatternType_t pattern_type_delete;
         rd_bool_t broker_version1 =
@@ -1652,9 +1632,12 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         rd_kafka_AclPermissionType_t permission_type;
         const char *name;
         const char *principal;
+        const rd_kafka_error_t *error;
+
+        SUB_TEST_QUICK();
 
         if (test_broker_version < TEST_BRKVER(0, 11, 0, 0)) {
-                TEST_WARN(
+                SUB_TEST_SKIP(
                     "Skipping DELETE_ACLS test on unsupported "
                     "broker version\n");
                 return;
@@ -1738,13 +1721,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         DeleteAcls_result_response = DeleteAcls_result_responses[0];
 
-        err = rd_kafka_DeleteAcls_result_response_error_code(
-            DeleteAcls_result_response);
-        errstr2 = rd_kafka_DeleteAcls_result_response_error_message(
-            DeleteAcls_result_response);
-
-        TEST_ASSERT(!err, "expected RD_KAFKA_RESP_ERR_NO_ERROR not %s",
-                    errstr2);
+        TEST_CALL_ERROR__(rd_kafka_DeleteAcls_result_response_error(
+            DeleteAcls_result_response));
 
         matching_acls = rd_kafka_DeleteAcls_result_response_matching_acls(
             DeleteAcls_result_response, &matching_acls_cntp);
@@ -1762,8 +1740,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                 const char *principal;
 
                 matching_acl = matching_acls[i];
-                err          = rd_kafka_AclBinding_error_code(matching_acl);
-                errstr2      = rd_kafka_AclBinding_error_message(matching_acl);
+                error        = rd_kafka_AclBinding_error(matching_acl);
                 restype      = rd_kafka_AclBinding_restype(matching_acl);
                 name         = rd_kafka_AclBinding_name(matching_acl);
                 resource_pattern_type =
@@ -1773,9 +1750,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                 permission_type =
                     rd_kafka_AclBinding_permission_type(matching_acl);
 
-                TEST_ASSERT(!err, "expected RD_KAFKA_RESP_ERR_NO_ERROR not %s",
-                            errstr2);
-                TEST_ASSERT(!errstr2, "expected NULL not %s", errstr2);
+                TEST_ASSERT(!error, "expected success, not %s",
+                            rd_kafka_error_string(error));
                 TEST_ASSERT(restype == RD_KAFKA_RESOURCE_TOPIC,
                             "expected RD_KAFKA_RESOURCE_TOPIC not %s",
                             rd_kafka_ResourceType_name(restype));
@@ -1861,13 +1837,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         DeleteAcls_result_response = DeleteAcls_result_responses[0];
 
-        err = rd_kafka_DeleteAcls_result_response_error_code(
-            DeleteAcls_result_response);
-        errstr2 = rd_kafka_DeleteAcls_result_response_error_message(
-            DeleteAcls_result_response);
-
-        TEST_ASSERT(!err, "expected RD_KAFKA_RESP_ERR_NO_ERROR not %s",
-                    errstr2);
+        TEST_CALL_ERROR__(rd_kafka_DeleteAcls_result_response_error(
+            DeleteAcls_result_response));
 
         matching_acls = rd_kafka_DeleteAcls_result_response_matching_acls(
             DeleteAcls_result_response, &matching_acls_cntp);
@@ -1877,8 +1848,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                     matching_acls_cntp);
 
         matching_acl = matching_acls[0];
-        err          = rd_kafka_AclBinding_error_code(matching_acl);
-        errstr2      = rd_kafka_AclBinding_error_message(matching_acl);
+        error        = rd_kafka_AclBinding_error(matching_acl);
         restype      = rd_kafka_AclBinding_restype(matching_acl);
         name         = rd_kafka_AclBinding_name(matching_acl);
         resource_pattern_type =
@@ -1887,9 +1857,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         operation       = rd_kafka_AclBinding_operation(matching_acl);
         permission_type = rd_kafka_AclBinding_permission_type(matching_acl);
 
-        TEST_ASSERT(!err, "expected RD_KAFKA_RESP_ERR_NO_ERROR not %s",
-                    errstr2);
-        TEST_ASSERT(!errstr2, "expected NULL not %s", errstr2);
+        TEST_ASSERT(!error, "expected RD_KAFKA_RESP_ERR_NO_ERROR not %s",
+                    rd_kafka_error_string(error));
         TEST_ASSERT(restype == RD_KAFKA_RESOURCE_TOPIC,
                     "expected RD_KAFKA_RESOURCE_TOPIC not %s",
                     rd_kafka_ResourceType_name(restype));
@@ -1929,6 +1898,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
 }
 
 /**

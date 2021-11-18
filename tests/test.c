@@ -5580,8 +5580,9 @@ rd_kafka_event_t *test_wait_admin_result(rd_kafka_queue_t *q,
  *        - DeleteGroups
  *        - DeleteRecords
  *        - DeleteTopics
- *        * DeleteConsumerGroupOffsets
+ *        - DeleteConsumerGroupOffsets
  *        - DescribeConfigs
+ *        - CreateAcls
  */
 rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                                  rd_kafka_event_type_t evtype,
@@ -5715,7 +5716,20 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                             rd_kafka_ConfigResource_name(cres[i]),
                             rd_kafka_ConfigResource_error_string(cres[i]));
                         if (!(errcnt++))
-                                err = rd_kafka_acl_result_error_code(aclres[i]);
+                                err = rd_kafka_ConfigResource_error(cres[i]);
+                }
+        }
+
+        /* Check ACL errors */
+        for (i = 0; i < aclres_cnt; i++) {
+                const rd_kafka_error_t *error =
+                    rd_kafka_acl_result_error(aclres[i]);
+                if (error) {
+                        TEST_WARN("AclResult error: %s: %s\n",
+                                  rd_kafka_error_name(error),
+                                  rd_kafka_error_string(error));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(error);
                 }
         }
 
@@ -5774,6 +5788,8 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
 
         return err;
 }
+
+
 
 /**
  * @brief Topic Admin API helpers

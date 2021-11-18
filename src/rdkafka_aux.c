@@ -185,39 +185,24 @@ void rd_kafka_group_result_free(void *ptr) {
         rd_kafka_group_result_destroy((rd_kafka_group_result_t *)ptr);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_acl_result_error_code(const rd_kafka_acl_result_t *aclres) {
-        return aclres->error_code;
-}
 
-const char *
-rd_kafka_acl_result_error_message(const rd_kafka_acl_result_t *aclres) {
-        return aclres->error_message;
+const rd_kafka_error_t *
+rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres) {
+        return aclres->error;
 }
 
 /**
- * @brief Allocates and return an acl result,
- *        initialized with the specified \p error_code
- *        and \p error_message.
+ * @brief Allocates and return an acl result, takes ownership of \p error
+ *        (unless NULL).
  *
  * @returns The new acl result.
  */
-rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_resp_err_t error_code,
-                                               const char *error_message) {
+rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_error_t *error) {
         rd_kafka_acl_result_t *acl_res;
-        size_t elen = error_message ? strlen(error_message) : 0;
 
-        acl_res = rd_malloc(sizeof(*acl_res) + elen);
+        acl_res = rd_calloc(1, sizeof(*acl_res));
 
-        acl_res->error_code = error_code;
-
-        if (error_message) {
-                acl_res->error_message = acl_res->data;
-                memcpy(acl_res->error_message, error_message, elen);
-                acl_res->error_message[elen] = '\0';
-        } else {
-                acl_res->error_message = NULL;
-        }
+        acl_res->error = error;
 
         return acl_res;
 }
@@ -226,8 +211,8 @@ rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_resp_err_t error_code,
  * @brief Destroy acl_result
  */
 void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res) {
-        if (acl_res->error_message)
-                rd_free(acl_res->error_message);
+        if (acl_res->error)
+                rd_kafka_error_destroy(acl_res->error);
         rd_free(acl_res);
 }
 

@@ -844,7 +844,7 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
         do {                                                                   \
                 test_timing_t _timing;                                         \
                 const char *_desc = RD_STRINGIFY(FUNC_W_ARGS);                 \
-                rd_kafka_error_t *_error;                                      \
+                const rd_kafka_error_t *_error;                                \
                 TIMING_START(&_timing, "%s", _desc);                           \
                 TEST_SAYL(3, "Begin call %s\n", _desc);                        \
                 _error = FUNC_W_ARGS;                                          \

@@ -4008,6 +4008,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
 /**
  * @brief Construct and send DeleteGroupsRequest to \p rkb
  *        with the groups (DeleteGroup_t *) in \p del_groups, using
@@ -4069,16 +4070,13 @@ rd_kafka_DeleteGroupsRequest(rd_kafka_broker_t *rkb,
  *
  * @returns and int16_t with the request size in bytes.
  */
-int16_t rd_kafka_AclBinding_request_size(const rd_kafka_AclBinding_t *acl,
-                                         int ApiVersion) {
-        int16_t len = 0;
-        len += 1 + (acl->name == NULL ? 2 : strlen(acl->name) + 2) +
-               (acl->principal == NULL ? 2 : strlen(acl->principal) + 2) +
-               (acl->host == NULL ? 2 : strlen(acl->host) + 2) + 1 + 1;
-        if (ApiVersion > 0)
-                len += 1;
-
-        return len;
+static RD_INLINE size_t
+rd_kafka_AclBinding_request_size(const rd_kafka_AclBinding_t *acl,
+                                 int ApiVersion) {
+        return 1 + 2 + (acl->name ? strlen(acl->name) : 0) + 2 +
+               (acl->principal ? strlen(acl->principal) : 0) + 2 +
+               (acl->host ? strlen(acl->host) : 0) + 1 + 1 +
+               (ApiVersion > 0 ? 1 : 0);
 }
 
 /**
@@ -4103,9 +4101,9 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque) {
         rd_kafka_buf_t *rkbuf;
-        int16_t ApiVersion = 0;
-        int i              = 0;
-        int len            = 0;
+        int16_t ApiVersion;
+        int i;
+        size_t len;
         int op_timeout;
         rd_kafka_AclBinding_t *new_acl;
 
@@ -4130,7 +4128,7 @@ rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
                         if (new_acl->resource_pattern_type !=
                             RD_KAFKA_RESOURCE_PATTERN_LITERAL) {
                                 rd_snprintf(errstr, errstr_size,
-                                            "Version 0 only supports LITERAL "
+                                            "Broker only supports LITERAL "
                                             "resource pattern types");
                                 rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
@@ -4250,7 +4248,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeAclsRequest(
                     acl->resource_pattern_type !=
                         RD_KAFKA_RESOURCE_PATTERN_ANY) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Version 0 only supports LITERAL and ANY "
+                                    "Broker only supports LITERAL and ANY "
                                     "resource pattern types");
                         rd_kafka_replyq_destroy(&replyq);
                         return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
@@ -4330,7 +4328,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         const rd_kafka_AclBindingFilter_t *acl;
         int op_timeout;
         int i;
-        int len;
+        size_t len;
 
         if (rd_list_cnt(del_acls) == 0) {
                 rd_snprintf(errstr, errstr_size,
@@ -4349,6 +4347,8 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
+        len = 4;
+
         RD_LIST_FOREACH(acl, del_acls, i) {
                 if (ApiVersion == 0) {
                         if (acl->resource_pattern_type !=
@@ -4356,7 +4356,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                             acl->resource_pattern_type !=
                                 RD_KAFKA_RESOURCE_PATTERN_ANY) {
                                 rd_snprintf(errstr, errstr_size,
-                                            "Version 0 only supports LITERAL "
+                                            "Broker only supports LITERAL "
                                             "and ANY resource pattern types");
                                 rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
@@ -4370,10 +4370,7 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
                         }
                 }
-        }
 
-        len = 4;
-        RD_LIST_FOREACH(acl, del_acls, i) {
                 len += rd_kafka_AclBinding_request_size(acl, ApiVersion);
         }
 

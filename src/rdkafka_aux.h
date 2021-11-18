@@ -86,16 +86,13 @@ rd_kafka_group_result_new(const char *group,
  * @remark Single allocation.
  */
 struct rd_kafka_acl_result_s {
-        rd_kafka_resp_err_t error_code; /**< Error code */
-        char *error_message;            /**< Points to data, unless NULL */
-        char data[1];                   /**< error_message */
+        rd_kafka_error_t *error; /**< Error object, or NULL on success. */
 };
 
 void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res);
 void rd_kafka_acl_result_free(void *ptr);
 
-rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_resp_err_t error_code,
-                                               const char *error_message);
+rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_error_t *error);
 
 rd_kafka_group_result_t *
 rd_kafka_group_result_copy(const rd_kafka_group_result_t *groupres);

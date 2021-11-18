@@ -7432,32 +7432,24 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
     size_t *cntp);
 
 /**
- * @brief used to create access control lists.
+ * @brief ACL Binding is used to create access control lists.
  *
  *
  */
 typedef struct rd_kafka_AclBinding_s rd_kafka_AclBinding_t;
 
 /**
- * @brief  used to filter access control lists.
+ * @brief ACL Binding filter is used to filter access control lists.
  *
  */
 typedef rd_kafka_AclBinding_t rd_kafka_AclBindingFilter_t;
 
 /**
- * @returns the error code for the given acl result.
+ * @returns the error object for the given acl result, or NULL on success.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_acl_result_error_code(const rd_kafka_acl_result_t *aclres);
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres);
 
-/**
- * @returns the human readable error message for the given acl result,
- *          or NULL if there was no error.
- *
- * @remark lifetime of the returned string is the same as the \p aclres.
- */
-RD_EXPORT const char *
-rd_kafka_acl_result_error_message(const rd_kafka_acl_result_t *aclres);
 
 /**
  * @name AclOperation
@@ -7593,57 +7585,56 @@ RD_EXPORT rd_kafka_AclBindingFilter_t *rd_kafka_AclBindingFilter_new(
  * @returns the resource type for the given acl binding.
  */
 RD_EXPORT rd_kafka_ResourceType_t
-rd_kafka_AclBinding_restype(rd_kafka_AclBinding_t *acl);
+rd_kafka_AclBinding_restype(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the resource name for the given acl binding.
  *
  * @remark lifetime of the returned string is the same as the \p acl.
  */
-RD_EXPORT const char *rd_kafka_AclBinding_name(rd_kafka_AclBinding_t *acl);
+RD_EXPORT const char *
+rd_kafka_AclBinding_name(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the principal for the given acl binding.
  *
  * @remark lifetime of the returned string is the same as the \p acl.
  */
-RD_EXPORT const char *rd_kafka_AclBinding_principal(rd_kafka_AclBinding_t *acl);
+RD_EXPORT const char *
+rd_kafka_AclBinding_principal(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the host for the given acl binding.
  *
  * @remark lifetime of the returned string is the same as the \p acl.
  */
-RD_EXPORT const char *rd_kafka_AclBinding_host(rd_kafka_AclBinding_t *acl);
+RD_EXPORT const char *
+rd_kafka_AclBinding_host(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the acl operation for the given acl binding.
  */
 RD_EXPORT rd_kafka_AclOperation_t
-rd_kafka_AclBinding_operation(rd_kafka_AclBinding_t *acl);
+rd_kafka_AclBinding_operation(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the permission type for the given acl binding.
  */
 RD_EXPORT rd_kafka_AclPermissionType_t
-rd_kafka_AclBinding_permission_type(rd_kafka_AclBinding_t *acl);
+rd_kafka_AclBinding_permission_type(const rd_kafka_AclBinding_t *acl);
 
 /**
  * @returns the resource pattern type for the given acl binding.
  */
 RD_EXPORT rd_kafka_ResourcePatternType_t
-rd_kafka_AclBinding_resource_pattern_type(rd_kafka_AclBinding_t *acl);
+rd_kafka_AclBinding_resource_pattern_type(const rd_kafka_AclBinding_t *acl);
 
 /**
- * @returns the error code for the given acl binding.
+ * @returns the error object for the given acl binding, or NULL on success.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AclBinding_error_code(rd_kafka_AclBinding_t *acl);
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_AclBinding_error(const rd_kafka_AclBinding_t *acl);
 
-/**
- * @returns error message for the given acl binding.
- */
-RD_EXPORT char *rd_kafka_AclBinding_error_message(rd_kafka_AclBinding_t *acl);
 
 /**
  * @brief Destroy and free an AclBinding object previously created with
@@ -7673,7 +7664,7 @@ rd_kafka_CreateAcls_result_acls(const rd_kafka_CreateAcls_result_t *result,
  * @param rkqu Queue to emit result on.
  *
  * Supported admin options:
- *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_CREATEACLS_RESULT
@@ -7741,19 +7732,12 @@ rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
                                      size_t *cntp);
 
 /**
- * @returns the error code for the given DeleteAcls result response.
+ * @returns the error object for the given DeleteAcls result response,
+ *          or NULL on success.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_DeleteAcls_result_response_error_code(
+RD_EXPORT const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
     const rd_kafka_DeleteAcls_result_response_t *result_response);
 
-/**
- * @returns the error message for the given DeleteAcls result response.
- *
- * @remark lifetime of the returned string is the same as the \p
- * result_response.
- */
-RD_EXPORT char *rd_kafka_DeleteAcls_result_response_error_message(
-    const rd_kafka_DeleteAcls_result_response_t *result_response);
 
 /**
  * @returns the matching acls array for the given DeleteAcls result response.
@@ -7761,7 +7745,7 @@ RD_EXPORT char *rd_kafka_DeleteAcls_result_response_error_message(
  * @remark lifetime of the returned acl bindings is the same as the \p
  * result_response.
  */
-RD_EXPORT rd_kafka_AclBinding_t **
+RD_EXPORT const rd_kafka_AclBinding_t **
 rd_kafka_DeleteAcls_result_response_matching_acls(
     const rd_kafka_DeleteAcls_result_response_t *result_response,
     size_t *matching_acls_cntp);

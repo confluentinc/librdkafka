@@ -2,6 +2,8 @@
 
 librdkafka v1.9.0 is a feature release:
 
+ * ACL support added to the Admin API (by @emasab, #2676).
+
 
 ## Enhancements
 

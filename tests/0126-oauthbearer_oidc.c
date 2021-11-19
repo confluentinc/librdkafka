@@ -31,22 +31,30 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
 
-static rd_bool_t expected_failure;
+static rd_bool_t error_seen;
 /**
  * @brief After config OIDC, make sure the producer and consumer
  *        can work successfully.
  *
  */
-static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *conf) {
+static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *base_conf) {
         const char *topic;
         uint64_t testid;
         rd_kafka_t *p1;
         rd_kafka_t *c1;
+        rd_kafka_conf_t *conf;
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
 
         SUB_TEST("Test producer and consumer with oidc configuration");
 
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      rd_getenv("VALID_OIDC_URL", NULL));
+        if (!url) {
+                TEST_SKIP("VALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
 
         testid = test_id_generate();
 
@@ -58,7 +66,7 @@ static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *conf) {
         test_create_topic(p1, topic, 1, 3);
         TEST_SAY("Topic: %s is created\n", topic);
 
-        test_produce_msgs2(p1, topic, testid, 0, 0, 5, NULL, 0);
+        test_produce_msgs2(p1, topic, testid, 0, 0, 1, NULL, 0);
 
         test_conf_set(conf, "auto.offset.reset", "earliest");
         c1 = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
@@ -82,7 +90,7 @@ auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
                 TEST_SAY("Expected error: %s: %s\n", rd_kafka_err2str(err),
                          reason);
-                expected_failure = rd_true;
+                error_seen = rd_true;
         } else
                 TEST_FAIL("Unexpected error: %s: %s", rd_kafka_err2str(err),
                           reason);
@@ -96,25 +104,34 @@ auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
  *
  */
 static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
-    rd_kafka_conf_t *conf) {
+    rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
+        rd_kafka_conf_t *conf;
+
+        const char *url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
 
         SUB_TEST("Test OAUTHBEARER/OIDC failing with expired JWT");
 
-        expected_failure = rd_false;
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      rd_getenv("EXPIRED_TOKEN_OIDC_URL", NULL));
+        if (!url) {
+                TEST_SKIP(
+                    "EXPIRED_TOKEN_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
 
         rd_kafka_conf_set_error_cb(conf, auth_error_cb);
 
         testid = test_id_generate();
 
-        c1 = test_create_consumer("OIDC.fail.C1", NULL, rd_kafka_conf_dup(conf),
-                                  NULL);
+        c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
 
-        rd_kafka_consumer_poll(c1, 10 * 1000);
-        TEST_ASSERT(expected_failure);
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
+        TEST_ASSERT(error_seen);
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
@@ -128,13 +145,23 @@ static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
  *
  */
 static void
-do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *conf) {
+do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
+        rd_kafka_conf_t *conf;
+
+        const char *url = test_getenv("INVALID_OIDC_URL", NULL);
 
         SUB_TEST("Test OAUTHBEARER/OIDC failing with invalid JWT");
 
-        expected_failure = rd_false;
+        if (!url) {
+                TEST_SKIP("INVALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
 
         test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
                       rd_getenv("INVALID_OIDC_URL", NULL));
@@ -143,12 +170,11 @@ do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *conf) {
 
         testid = test_id_generate();
 
-        c1 = test_create_consumer("OIDC.fail.C1", NULL, rd_kafka_conf_dup(conf),
-                                  NULL);
+        c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
 
-        rd_kafka_consumer_poll(c1, 10 * 1000);
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
 
-        TEST_ASSERT(expected_failure);
+        TEST_ASSERT(error_seen);
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
@@ -159,20 +185,27 @@ do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *conf) {
 int main_0126_oauthbearer_oidc(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         const char *sec;
+        const char *oidc;
 
         test_conf_init(&conf, NULL, 60);
 
         sec = test_conf_get(conf, "security.protocol");
         if (strcmp(sec, "sasl_plaintext")) {
-                TEST_SKIP("Mock cluster does not config SSL/SASL\n");
+                TEST_SKIP("Apache Kafka cluster does not config SSL/SASL\n");
                 return 0;
         }
 
-        do_test_produce_consumer_with_OIDC(rd_kafka_conf_dup(conf));
-        do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_dup(conf));
-        do_test_produce_consumer_with_OIDC_expired_token_should_fail(
-            rd_kafka_conf_dup(conf));
+        oidc = test_conf_get(conf, "sasl.oauthbearer.method");
+        if (strcmp(oidc, "oidc")) {
+                TEST_SKIP("`sasl.oauthbearer.method=OIDC` is required\n");
+                return 0;
+        }
+
+        do_test_produce_consumer_with_OIDC(conf);
+        do_test_produce_consumer_with_OIDC_should_fail(conf);
+        do_test_produce_consumer_with_OIDC_expired_token_should_fail(conf);
 
         rd_kafka_conf_destroy(conf);
+
         return 0;
 }

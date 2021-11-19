@@ -320,22 +320,32 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                          post_fields_size);
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
 
-        for (i = 0; i <= retries && !rd_kafka_terminating(rk); i++) {
+        for (i = 0; i <= retries; i++) {
+                if (rd_kafka_terminating(rk)) {
+                        rd_http_req_destroy(&hreq);
+                        return rd_http_error_new(-1, "Terminating");
+                }
+
                 herr = rd_http_req_perform_sync(&hreq);
                 len  = rd_buf_len(hreq.hreq_buf);
 
-                /* Retry if HTTP(S) request returns temporary error. */
-                if (i < retries && herr &&
-                    rd_http_is_failure_temporary(herr->code)) {
-                        rd_http_error_destroy(herr);
-                        rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
-                } else
-                        break;
-        }
+                if (!herr) {
+                        if (len > 0)
+                                break; /* Success */
+                        /* Empty response */
+                        rd_http_req_destroy(&hreq);
+                        return NULL;
+                }
+                /* Retry if HTTP(S) request returns temporary error and there
+                 * are remaining retries, else fail. */
+                if (i == retries || !rd_http_is_failure_temporary(herr->code)) {
+                        rd_http_req_destroy(&hreq);
+                        return herr;
+                }
 
-        if (herr || len == 0) {
-                rd_http_req_destroy(&hreq);
-                return herr;
+                /* Retry */
+                rd_http_error_destroy(herr);
+                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
         }
 
         content_type = rd_http_req_get_content_type(&hreq);

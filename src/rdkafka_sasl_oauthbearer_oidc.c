@@ -221,7 +221,8 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         double exp;
 
         cJSON *json = NULL;
-        cJSON *parsed_token, *payloads, *jwt_exp, *jwt_sub;
+        cJSON *payloads = NULL;
+        cJSON *parsed_token, *jwt_exp, *jwt_sub;
 
         rd_http_error_t *herr;
 

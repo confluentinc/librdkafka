@@ -11,7 +11,6 @@ from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
-from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 from trivup.apps.SslApp import SslApp
 
 from cluster_testing import read_scenario_conf
@@ -42,9 +41,6 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
     print('## Test version %s' % version)
 
     cluster = Cluster('LibrdkafkaTestCluster', root_path, debug=debug)
-
-    if args.conf.get('oidc_method') == 'OIDC':
-        oidcapp = OauthbearerOIDCApp(cluster)
 
     # Enable SSL if desired
     if 'SSL' in conf.get('security.protocol', ''):
@@ -122,10 +118,6 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                 os.write(
                     fd, ('sasl.oauthbearer.scope=test\n'.encode(
                          'ascii')))
-                cmd_env['VALID_OIDC_URL'] = oidcapp.conf.get('valid_url')
-                cmd_env['INVALID_OIDC_URL'] = oidcapp.conf.get('badformat_url')
-                cmd_env['EXPIRED_TOKEN_OIDC_URL'] = oidcapp.conf.get(
-                    'expired_url')
             else:
                 os.write(
                     fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode(

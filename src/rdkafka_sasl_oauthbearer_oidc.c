@@ -129,11 +129,12 @@ static void rd_kafka_oidc_build_headers(const char *client_id,
  *
  * @returns Return error message while decoding the payload.
  */
-static char *rd_kafka_jwt_b64_decode_payload(const char *src,
-                                             char **bufplainp) {
+static const char *rd_kafka_jwt_b64_decode_payload(const char *src,
+                                                   char **bufplainp) {
         char *converted_src;
         char *payload = NULL;
-        char *errstr  = NULL;
+
+        const char *errstr = NULL;
 
         int i, padding, len;
 
@@ -168,6 +169,7 @@ static char *rd_kafka_jwt_b64_decode_payload(const char *src,
                                 }
                                 payloads_end = i;
                         }
+                        /* FALLTHRU */
 
                 default:
                         converted_src[i] = src[i];
@@ -188,7 +190,6 @@ static char *rd_kafka_jwt_b64_decode_payload(const char *src,
                 while (padding--)
                         payload[payload_len++] = '=';
         }
-        payload[payload_len] = '\0';
 
         nbytesdecoded = ((payload_len + 3) / 4) * 3;
         *bufplainp    = rd_malloc(nbytesdecoded + 1);
@@ -220,7 +221,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
 
         double exp;
 
-        cJSON *json = NULL;
+        cJSON *json     = NULL;
         cJSON *payloads = NULL;
         cJSON *parsed_token, *jwt_exp, *jwt_sub;
 
@@ -229,18 +230,19 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         char *jwt_token;
         char *post_fields;
         char *decoded_payloads = NULL;
-        char *errstr;
 
         struct curl_slist *headers = NULL;
 
         const char *token_url;
         const char *sub;
+        const char *errstr;
 
         size_t post_fields_size;
         size_t extension_cnt;
         size_t extension_key_value_cnt;
 
         char set_token_errstr[512];
+        char decode_payload_errstr[512];
 
         char **extensions          = NULL;
         char **extension_key_value = NULL;
@@ -297,15 +299,18 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
 
         errstr = rd_kafka_jwt_b64_decode_payload(jwt_token, &decoded_payloads);
         if (errstr != NULL) {
-                rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Failed to decode payload");
+                rd_snprintf(decode_payload_errstr,
+                            sizeof(decode_payload_errstr),
+                            "Failed to decode JWT payload: %s", errstr);
+                rd_kafka_oauthbearer_set_token_failure(rk,
+                                                       decode_payload_errstr);
                 goto done;
         }
 
         payloads = cJSON_Parse(decoded_payloads);
         if (payloads == NULL) {
                 rd_kafka_oauthbearer_set_token_failure(
-                    rk, "Expected JSON JWT is valid JSON");
+                    rk, "Failed to parse JSON JWT payload");
                 goto done;
         }
 

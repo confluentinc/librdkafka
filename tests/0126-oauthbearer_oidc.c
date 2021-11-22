@@ -37,7 +37,8 @@ static rd_bool_t error_seen;
  *        can work successfully.
  *
  */
-static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *base_conf) {
+static void
+do_test_produce_consumer_with_OIDC(const rd_kafka_conf_t *base_conf) {
         const char *topic;
         uint64_t testid;
         rd_kafka_t *p1;
@@ -49,7 +50,8 @@ static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *base_conf) {
         SUB_TEST("Test producer and consumer with oidc configuration");
 
         if (!url) {
-                TEST_SKIP("VALID_OIDC_URL environment variable is not set\n");
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set\n");
                 return;
         }
 
@@ -72,8 +74,8 @@ static void do_test_produce_consumer_with_OIDC(rd_kafka_conf_t *base_conf) {
         c1 = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
         test_consumer_subscribe(c1, topic);
 
-        /* If token valid time is less than 3s, it will fresh the toke. */
-        rd_usleep(3 * 1000 * 1000, NULL);
+        /* Give it some time to trigger the token refresh. */
+        rd_usleep(5 * 1000 * 1000, NULL);
         test_consumer_poll("OIDC.C1", c1, testid, 1, -1, 1, NULL);
 
         test_consumer_close(c1);
@@ -104,17 +106,17 @@ auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
  *
  */
 static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
-    rd_kafka_conf_t *base_conf) {
+    const rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
         rd_kafka_conf_t *conf;
 
-        const char *url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
+        const char *expired_url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
 
         SUB_TEST("Test OAUTHBEARER/OIDC failing with expired JWT");
 
-        if (!url) {
-                TEST_SKIP(
+        if (!expired_url) {
+                SUB_TEST_SKIP(
                     "EXPIRED_TOKEN_OIDC_URL environment variable is not set\n");
                 return;
         }
@@ -122,7 +124,7 @@ static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
         conf = rd_kafka_conf_dup(base_conf);
 
         error_seen = rd_false;
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", expired_url);
 
         rd_kafka_conf_set_error_cb(conf, auth_error_cb);
 
@@ -144,18 +146,19 @@ static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
  *        authentication fail as expected.
  *
  */
-static void
-do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *base_conf) {
+static void do_test_produce_consumer_with_OIDC_should_fail(
+    const rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
         rd_kafka_conf_t *conf;
 
-        const char *url = test_getenv("INVALID_OIDC_URL", NULL);
+        const char *invalid_url = test_getenv("INVALID_OIDC_URL", NULL);
 
         SUB_TEST("Test OAUTHBEARER/OIDC failing with invalid JWT");
 
-        if (!url) {
-                TEST_SKIP("INVALID_OIDC_URL environment variable is not set\n");
+        if (!invalid_url) {
+                SUB_TEST_SKIP(
+                    "INVALID_OIDC_URL environment variable is not set\n");
                 return;
         }
 
@@ -163,8 +166,7 @@ do_test_produce_consumer_with_OIDC_should_fail(rd_kafka_conf_t *base_conf) {
 
         error_seen = rd_false;
 
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      rd_getenv("INVALID_OIDC_URL", NULL));
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", invalid_url);
 
         rd_kafka_conf_set_error_cb(conf, auth_error_cb);
 
@@ -196,7 +198,7 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         }
 
         oidc = test_conf_get(conf, "sasl.oauthbearer.method");
-        if (strcmp(oidc, "oidc")) {
+        if (rd_strcasecmp(oidc, "OIDC")) {
                 TEST_SKIP("`sasl.oauthbearer.method=OIDC` is required\n");
                 return 0;
         }

@@ -100,12 +100,31 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                 break
         elif mech == 'OAUTHBEARER':
             security_protocol = 'SASL_PLAINTEXT'
-            os.write(
-                fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode(
-                    'ascii')))
-            os.write(fd, ('sasl.oauthbearer.config=%s\n' %
-                          'scope=requiredScope principal=admin').encode(
-                              'ascii'))
+            if defconf.get('oauthbearer_method') == 'OIDC':
+                os.write(
+                    fd, ('sasl.oauthbearer.method=OIDC\n'.encode(
+                         'ascii')))
+                os.write(
+                    fd, ('sasl.oauthbearer.client.id=123\n'.encode(
+                         'ascii')))
+                os.write(
+                    fd, ('sasl.oauthbearer.client.secret=abc\n'.encode(
+                         'ascii')))
+                os.write(
+                    fd, ('sasl.oauthbearer.extensions=\
+                         ExtensionworkloadIdentity=develC348S,\
+                         Extensioncluster=lkc123\n'.encode(
+                         'ascii')))
+                os.write(
+                    fd, ('sasl.oauthbearer.scope=test\n'.encode(
+                         'ascii')))
+            else:
+                os.write(
+                    fd, ('enable.sasl.oauthbearer.unsecure.jwt=true\n'.encode(
+                         'ascii')))
+                os.write(fd, ('sasl.oauthbearer.config=%s\n' %
+                         'scope=requiredScope principal=admin').encode(
+                         'ascii'))
         else:
             print(
                 '# FIXME: SASL %s client config not written to %s' %
@@ -283,6 +302,13 @@ if __name__ == '__main__':
         type=str,
         default=None,
         help='SASL mechanism (PLAIN, SCRAM-SHA-nnn, GSSAPI, OAUTHBEARER)')
+    parser.add_argument(
+        '--oauthbearer-method',
+        dest='oauthbearer_method',
+        type=str,
+        default=None,
+        help='OAUTHBEARER/OIDC method (DEFAULT, OIDC), \
+             must config SASL mechanism to OAUTHBEARER')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -303,10 +329,18 @@ if __name__ == '__main__':
                 != -1) and 'sasl_users' not in args.conf:
             args.conf['sasl_users'] = 'testuser=testpass'
         args.conf['sasl_mechanisms'] = args.sasl
+    retcode = 0
+    if args.oauthbearer_method:
+        if args.oauthbearer_method == "OIDC" and \
+           args.conf['sasl_mechanisms'] != 'OAUTHBEARER':
+            print('If config `--oauthbearer-method=OIDC`, '
+                  '`--sasl` must be set to `OAUTHBEARER`')
+            retcode = 3
+            sys.exit(retcode)
+        args.conf['oauthbearer_method'] = args.oauthbearer_method
 
     args.conf.get('conf', list()).append("log.retention.bytes=1000000000")
 
-    retcode = 0
     for version in args.versions:
         r = test_version(version, cmd=args.cmd, deploy=args.deploy,
                          conf=args.conf, debug=args.debug,

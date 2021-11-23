@@ -224,6 +224,151 @@ rd_http_error_t *rd_http_get(const char *url, rd_buf_t **rbufp) {
 
 
 /**
+ * @brief Extract the JSON object from \p hreq and return it in \p *jsonp.
+ *
+ * @returns Returns NULL on success, or an JSON parsing error - this
+ *          error object must be destroyed by calling rd_http_error_destroy().
+ */
+rd_http_error_t *rd_http_parse_json(rd_http_req_t *hreq, cJSON **jsonp) {
+        size_t len;
+        char *raw_json;
+        const char *end = NULL;
+        rd_slice_t slice;
+        rd_http_error_t *herr = NULL;
+
+        /* cJSON requires the entire input to parse in contiguous memory. */
+        rd_slice_init_full(&slice, hreq->hreq_buf);
+        len = rd_buf_len(hreq->hreq_buf);
+
+        raw_json = rd_malloc(len + 1);
+        rd_slice_read(&slice, raw_json, len);
+        raw_json[len] = '\0';
+
+        /* Parse JSON */
+        *jsonp = cJSON_ParseWithOpts(raw_json, &end, 0);
+
+        if (!*jsonp)
+                herr = rd_http_error_new(hreq->hreq_code,
+                                         "Failed to parse JSON response "
+                                         "at %" PRIusz "/%" PRIusz,
+                                         (size_t)(end - raw_json), len);
+        rd_free(raw_json);
+        return herr;
+}
+
+
+/**
+ * @brief Check if the error returned from HTTP(S) is temporary or not.
+ *
+ * @returns If the \p error_code is temporary, return rd_true,
+ *          otherwise return rd_false.
+ *
+ * @locality Any thread.
+ */
+static rd_bool_t rd_http_is_failure_temporary(int error_code) {
+        switch (error_code) {
+        case 408: /**< Request timeout */
+        case 425: /**< Too early */
+        case 500: /**< Internal server error */
+        case 502: /**< Bad gateway */
+        case 503: /**< Service unavailable */
+        case 504: /**< Gateway timeout */
+                return rd_true;
+
+        default:
+                return rd_false;
+        }
+}
+
+
+/**
+ * @brief Perform a blocking HTTP(S) request to \p url with
+ *        HTTP(S) headers and data with \p timeout_s.
+ *        If the HTTP(S) request fails, will retry another \p retries times
+ *        with multiplying backoff \p retry_ms.
+ *
+ * @returns The result will be returned in \p *jsonp.
+ *          Returns NULL on success (HTTP response code < 400), or an error
+ *          object on transport, HTTP error or a JSON parsing error - this
+ *          error object must be destroyed by calling rd_http_error_destroy().
+ *
+ * @locality Any thread.
+ */
+rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
+                                          const char *url,
+                                          const struct curl_slist *headers,
+                                          const char *post_fields,
+                                          size_t post_fields_size,
+                                          int timeout_s,
+                                          int retries,
+                                          int retry_ms,
+                                          cJSON **jsonp) {
+        rd_http_error_t *herr;
+        rd_http_req_t hreq;
+        int i;
+        size_t len;
+        const char *content_type;
+
+        herr = rd_http_req_init(&hreq, url);
+        if (unlikely(herr != NULL))
+                return herr;
+
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
+                         post_fields_size);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
+
+        for (i = 0; i <= retries; i++) {
+                if (rd_kafka_terminating(rk)) {
+                        rd_http_req_destroy(&hreq);
+                        return rd_http_error_new(-1, "Terminating");
+                }
+
+                herr = rd_http_req_perform_sync(&hreq);
+                len  = rd_buf_len(hreq.hreq_buf);
+
+                if (!herr) {
+                        if (len > 0)
+                                break; /* Success */
+                        /* Empty response */
+                        rd_http_req_destroy(&hreq);
+                        return NULL;
+                }
+                /* Retry if HTTP(S) request returns temporary error and there
+                 * are remaining retries, else fail. */
+                if (i == retries || !rd_http_is_failure_temporary(herr->code)) {
+                        rd_http_req_destroy(&hreq);
+                        return herr;
+                }
+
+                /* Retry */
+                rd_http_error_destroy(herr);
+                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
+        }
+
+        content_type = rd_http_req_get_content_type(&hreq);
+
+        if (!content_type || rd_strncasecmp(content_type, "application/json",
+                                            strlen("application/json"))) {
+                if (!herr)
+                        herr = rd_http_error_new(
+                            hreq.hreq_code, "Response is not JSON encoded: %s",
+                            content_type ? content_type : "(n/a)");
+                rd_http_req_destroy(&hreq);
+                return herr;
+        }
+
+        herr = rd_http_parse_json(&hreq, jsonp);
+
+        rd_http_req_destroy(&hreq);
+
+        return herr;
+}
+
+
+/**
  * @brief Same as rd_http_get() but requires a JSON response.
  *        The response is parsed and a JSON object is returned in \p *jsonp.
  *

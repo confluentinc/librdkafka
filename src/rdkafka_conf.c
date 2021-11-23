@@ -3577,8 +3577,7 @@ static void rd_kafka_sw_str_sanitize_inplace(char *str) {
  *          on success. The array count is returned in \p cntp.
  *          The returned pointer must be freed with rd_free().
  */
-static RD_UNUSED char **
-rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp) {
+char **rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp) {
         size_t i;
         char **out, *p;
         size_t lens   = 0;
@@ -3686,12 +3685,46 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                "`sasl.oauthbearer.method=oidc` are "
                                "mutually exclusive";
 
+                if (conf->sasl.oauthbearer.method ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC) {
+                        if (!conf->sasl.oauthbearer.client_id)
+                                return "`sasl.oauthbearer.client.id` is "
+                                       "mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+
+                        if (!conf->sasl.oauthbearer.client_secret) {
+                                return "`sasl.oauthbearer.client.secret` is "
+                                       "mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+                        }
+
+                        if (!conf->sasl.oauthbearer.token_endpoint_url) {
+                                return "`sasl.oauthbearer.token.endpoint.url` "
+                                       "is mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+                        }
+
+                        if (!conf->sasl.oauthbearer.scope) {
+                                return "`sasl.oauthbearer.scope` "
+                                       "is mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+                        }
+
+                        if (!conf->sasl.oauthbearer.extensions_str) {
+                                return "`sasl.oauthbearer.extensions` "
+                                       "is mandatory when "
+                                       "`sasl.oauthbearer.method=oidc` is set";
+                        }
+                }
+
                 /* Enable background thread for the builtin OIDC handler,
                  * unless a refresh callback has been set. */
                 if (conf->sasl.oauthbearer.method ==
                         RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
-                    !conf->sasl.oauthbearer.token_refresh_cb)
+                    !conf->sasl.oauthbearer.token_refresh_cb) {
                         conf->enabled_events |= RD_KAFKA_EVENT_BACKGROUND;
+                        conf->sasl.enable_callback_queue = 1;
+                }
         }
 
 #endif

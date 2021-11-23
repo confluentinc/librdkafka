@@ -102,6 +102,10 @@ if(WITH_SASL_OAUTHBEARER)
   list(APPEND sources rdkafka_sasl_oauthbearer.c)
 endif()
 
+if(WITH_CURL)
+  list(APPEND sources rdkafka_sasl_oauthbearer_oidc.c)
+endif()
+
 if(WITH_ZLIB)
   list(APPEND sources rdgz.c)
 endif()

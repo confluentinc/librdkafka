@@ -599,6 +599,7 @@ struct rd_kafka_topic_conf_s {
 };
 
 
+char **rd_kafka_conf_kv_split(const char **input, size_t incnt, size_t *cntp);
 
 void rd_kafka_anyconf_destroy(int scope, void *conf);
 

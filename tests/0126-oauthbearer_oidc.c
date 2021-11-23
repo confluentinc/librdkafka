@@ -31,66 +31,183 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
 
-
+static rd_bool_t error_seen;
 /**
- * @brief After config OIDC fields, make sure the producer gets created
- *        successfully.
+ * @brief After config OIDC, make sure the producer and consumer
+ *        can work successfully.
  *
  */
-static void do_test_create_producer() {
+static void
+do_test_produce_consumer_with_OIDC(const rd_kafka_conf_t *base_conf) {
         const char *topic;
         uint64_t testid;
-        rd_kafka_t *rk;
+        rd_kafka_t *p1;
+        rd_kafka_t *c1;
         rd_kafka_conf_t *conf;
-        rd_kafka_conf_res_t res;
-        char errstr[512];
 
-        SUB_TEST("Test producer with oidc configuration");
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
 
-        test_conf_init(&conf, NULL, 60);
+        SUB_TEST("Test producer and consumer with oidc configuration");
 
-        res = rd_kafka_conf_set(conf, "sasl.oauthbearer.method", "oidc", errstr,
-                                sizeof(errstr));
-
-        if (res == RD_KAFKA_CONF_INVALID) {
-                rd_kafka_conf_destroy(conf);
-                TEST_SKIP("%s\n", errstr);
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set\n");
                 return;
         }
 
-        if (res != RD_KAFKA_CONF_OK)
-                TEST_FAIL("%s", errstr);
-
-        test_conf_set(conf, "sasl.oauthbearer.client.id", "randomuniqclientid");
-        test_conf_set(conf, "sasl.oauthbearer.client.secret",
-                      "randomuniqclientsecret");
-        test_conf_set(conf, "sasl.oauthbearer.client.secret",
-                      "randomuniqclientsecret");
-        test_conf_set(conf, "sasl.oauthbearer.extensions",
-                      "supportFeatureX=true");
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      "https://localhost:1/token");
+        conf = rd_kafka_conf_dup(base_conf);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
 
         testid = test_id_generate();
+
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
         topic = test_mk_topic_name("0126-oauthbearer_oidc", 1);
-        test_create_topic(rk, topic, 1, 1);
+        test_create_topic(p1, topic, 1, 3);
+        TEST_SAY("Topic: %s is created\n", topic);
 
-        /* Produce messages */
-        test_produce_msgs2(rk, topic, testid, 1, 0, 0, NULL, 0);
+        test_produce_msgs2(p1, topic, testid, 0, 0, 1, NULL, 0);
 
-        /* Verify messages were actually produced by consuming them back. */
-        test_consume_msgs_easy(topic, topic, 0, 1, 1, NULL);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        c1 = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        test_consumer_subscribe(c1, topic);
 
-        rd_kafka_destroy(rk);
+        /* Give it some time to trigger the token refresh. */
+        rd_usleep(5 * 1000 * 1000, NULL);
+        test_consumer_poll("OIDC.C1", c1, testid, 1, -1, 1, NULL);
 
+        test_consumer_close(c1);
+
+        rd_kafka_destroy(p1);
+        rd_kafka_destroy(c1);
+        SUB_TEST_PASS();
+}
+
+
+static void
+auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
+        if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                TEST_SAY("Expected error: %s: %s\n", rd_kafka_err2str(err),
+                         reason);
+                error_seen = rd_true;
+        } else
+                TEST_FAIL("Unexpected error: %s: %s", rd_kafka_err2str(err),
+                          reason);
+        rd_kafka_yield(rk);
+}
+
+
+/**
+ * @brief After config OIDC, if the token is expired, make sure
+ *        the authentication fail as expected.
+ *
+ */
+static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_t *c1;
+        uint64_t testid;
+        rd_kafka_conf_t *conf;
+
+        const char *expired_url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
+
+        SUB_TEST("Test OAUTHBEARER/OIDC failing with expired JWT");
+
+        if (!expired_url) {
+                SUB_TEST_SKIP(
+                    "EXPIRED_TOKEN_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", expired_url);
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        testid = test_id_generate();
+
+        c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
+
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
+        TEST_ASSERT(error_seen);
+
+        test_consumer_close(c1);
+        rd_kafka_destroy(c1);
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief After config OIDC, if the token is not valid, make sure the
+ *        authentication fail as expected.
+ *
+ */
+static void do_test_produce_consumer_with_OIDC_should_fail(
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_t *c1;
+        uint64_t testid;
+        rd_kafka_conf_t *conf;
+
+        const char *invalid_url = test_getenv("INVALID_OIDC_URL", NULL);
+
+        SUB_TEST("Test OAUTHBEARER/OIDC failing with invalid JWT");
+
+        if (!invalid_url) {
+                SUB_TEST_SKIP(
+                    "INVALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
+
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", invalid_url);
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        testid = test_id_generate();
+
+        c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
+
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
+
+        TEST_ASSERT(error_seen);
+
+        test_consumer_close(c1);
+        rd_kafka_destroy(c1);
         SUB_TEST_PASS();
 }
 
 
 int main_0126_oauthbearer_oidc(int argc, char **argv) {
-        do_test_create_producer();
+        rd_kafka_conf_t *conf;
+        const char *sec;
+        const char *oidc;
+
+        test_conf_init(&conf, NULL, 60);
+
+        sec = test_conf_get(conf, "security.protocol");
+        if (strcmp(sec, "sasl_plaintext")) {
+                TEST_SKIP("Apache Kafka cluster does not config SSL/SASL\n");
+                return 0;
+        }
+
+        oidc = test_conf_get(conf, "sasl.oauthbearer.method");
+        if (rd_strcasecmp(oidc, "OIDC")) {
+                TEST_SKIP("`sasl.oauthbearer.method=OIDC` is required\n");
+                return 0;
+        }
+
+        do_test_produce_consumer_with_OIDC(conf);
+        do_test_produce_consumer_with_OIDC_should_fail(conf);
+        do_test_produce_consumer_with_OIDC_expired_token_should_fail(conf);
+
+        rd_kafka_conf_destroy(conf);
+
         return 0;
 }

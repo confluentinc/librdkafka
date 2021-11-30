@@ -209,6 +209,7 @@
     <ClCompile Include="..\..\tests\0125-immediate_flush.c" />
     <ClCompile Include="..\..\tests\0126-oauthbearer_oidc.c" />
     <ClCompile Include="..\..\tests\0128-sasl_callback_queue.cpp" />
+    <ClCompile Include="..\..\tests\0129-fetch_aborted_msgs.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

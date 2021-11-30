@@ -235,6 +235,7 @@ _TEST_DECL(0124_openssl_invalid_engine);
 _TEST_DECL(0125_immediate_flush);
 _TEST_DECL(0126_oauthbearer_oidc);
 _TEST_DECL(0128_sasl_callback_queue);
+_TEST_DECL(0129_fetch_aborted_msgs);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -471,6 +472,7 @@ struct test tests[] = {
     _TEST(0125_immediate_flush, 0),
     _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 0, 0, 0)),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
+    _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -4542,11 +4544,15 @@ void test_kafka_topics(const char *fmt, ...) {
 
 /**
  * @brief Create topic using Topic Admin API
+ *
+ * @param configs is an optional key-value tuple array of
+ *                   topic configs (or NULL).
  */
-static void test_admin_create_topic(rd_kafka_t *use_rk,
-                                    const char *topicname,
-                                    int partition_cnt,
-                                    int replication_factor) {
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs) {
         rd_kafka_t *rk;
         rd_kafka_NewTopic_t *newt[1];
         const size_t newt_cnt = 1;
@@ -4570,6 +4576,14 @@ static void test_admin_create_topic(rd_kafka_t *use_rk,
             rd_kafka_NewTopic_new(topicname, partition_cnt, replication_factor,
                                   errstr, sizeof(errstr));
         TEST_ASSERT(newt[0] != NULL, "%s", errstr);
+
+        if (configs) {
+                int i;
+
+                for (i = 0; configs[i] && configs[i + 1]; i += 2)
+                        TEST_CALL_ERR__(rd_kafka_NewTopic_set_config(
+                            newt[0], configs[i], configs[i + 1]));
+        }
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
         err     = rd_kafka_AdminOptions_set_operation_timeout(
@@ -4651,7 +4665,7 @@ void test_create_topic(rd_kafka_t *use_rk,
                                      replication_factor);
         else
                 test_admin_create_topic(use_rk, topicname, partition_cnt,
-                                        replication_factor);
+                                        replication_factor, NULL);
 }
 
 

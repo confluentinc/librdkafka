@@ -30,6 +30,20 @@ librdkafka v1.9.0 is a feature release:
    keystore file was read. #3554.
 
 
+### Consumer fixes
+
+ * A `ERR_MSG_SIZE_TOO_LARGE` consumer error would previously be raised
+   if the consumer received a maximum sized FetchResponse only containing
+   (transaction) aborted messages with no control messages. The fetching did
+   not stop, but some applications would terminate upon receiving this error.
+   No error is now raised in this case. (#2993)
+   Thanks to @jacobmikesell for providing an application to reproduce the
+   issue.
+ * The consumer no longer backs off the next fetch request (default 500ms) when
+   the parsed fetch response is truncated (which is a valid case).
+   This should speed up the message fetch rate in case of maximum sized
+   fetch responses.
+
 
 # librdkafka v1.8.2
 

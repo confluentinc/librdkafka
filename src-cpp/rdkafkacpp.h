@@ -2820,7 +2820,7 @@ class RD_EXPORT KafkaConsumer : public virtual Handle {
    *
    * This call triggers a fetch queue barrier flush.
    *
-   * @remark Consumtion for the given partition must have started for the
+   * @remark Consumption for the given partition must have started for the
    *         seek to work. Use assign() to set the starting offset.
    *
    * @returns an ErrorCode to indicate success or failure.

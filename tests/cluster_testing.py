@@ -12,6 +12,7 @@ from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
+from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 
 import os
 import sys
@@ -69,6 +70,10 @@ class LibrdkafkaTestCluster(Cluster):
             # Kerberos needs to be started prior to Kafka so that principals
             # and keytabs are available at the time of Kafka config generation.
             kdc.start()
+
+        if 'OAUTHBEARER' in defconf.get('sasl_mechanisms', []) and \
+                'OIDC' in defconf.get('sasl.oauthbearer.method', []):
+            self.oidc = OauthbearerOIDCApp(self)
 
         # Brokers
         defconf.update({'replication_factor': min(num_brokers, 3),

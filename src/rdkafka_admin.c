@@ -4229,6 +4229,14 @@ static void rd_kafka_AclBinding_free(void *ptr) {
         rd_kafka_AclBinding_destroy(ptr);
 }
 
+
+void rd_kafka_AclBinding_destroy_array(rd_kafka_AclBinding_t **acl_bindings,
+                                       size_t acl_bindings_cnt) {
+        size_t i;
+        for (i = 0; i < acl_bindings_cnt; i++)
+                rd_kafka_AclBinding_destroy(acl_bindings[i]);
+}
+
 /**
  * @brief Parse CreateAclsResponse and create ADMIN_RESULT op.
  */

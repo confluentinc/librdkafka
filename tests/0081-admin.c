@@ -1201,9 +1201,7 @@ do_test_CreateAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         rd_kafka_AdminOptions_destroy(admin_options);
         rd_kafka_event_destroy(rkev_acl_create);
-        rd_kafka_AclBinding_destroy(acl_bindings[0]);
-        rd_kafka_AclBinding_destroy(acl_bindings[1]);
-
+        rd_kafka_AclBinding_destroy_array(acl_bindings, 2);
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
@@ -1534,8 +1532,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         rd_kafka_AclBinding_destroy(acl_bindings_describe);
         rd_kafka_event_destroy(rkev_acl_describe);
         rd_kafka_AdminOptions_destroy(admin_options);
-        rd_kafka_AclBinding_destroy(acl_bindings_create[0]);
-        rd_kafka_AclBinding_destroy(acl_bindings_create[1]);
+        rd_kafka_AclBinding_destroy_array(acl_bindings_create, 2);
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
@@ -1892,9 +1889,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         rd_kafka_event_destroy(rkev_acl_delete);
         rd_kafka_AdminOptions_destroy(admin_options_delete);
 
-        rd_kafka_AclBinding_destroy(acl_bindings_create[0]);
-        rd_kafka_AclBinding_destroy(acl_bindings_create[1]);
-        rd_kafka_AclBinding_destroy(acl_bindings_create[2]);
+        rd_kafka_AclBinding_destroy_array(acl_bindings_create, 3);
 
         if (!useq)
                 rd_kafka_queue_destroy(q);

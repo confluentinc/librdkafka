@@ -4071,6 +4071,36 @@ rd_kafka_AclBinding_new(rd_kafka_ResourceType_t restype,
                 return NULL;
         }
 
+        if (restype == RD_KAFKA_RESOURCE_ANY ||
+            restype <= RD_KAFKA_RESOURCE_UNKNOWN ||
+            restype >= RD_KAFKA_RESOURCE__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid resource type");
+                return NULL;
+        }
+
+        if (resource_pattern_type == RD_KAFKA_RESOURCE_PATTERN_ANY ||
+            resource_pattern_type == RD_KAFKA_RESOURCE_PATTERN_MATCH ||
+            resource_pattern_type <= RD_KAFKA_RESOURCE_PATTERN_UNKNOWN ||
+            resource_pattern_type >= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT) {
+                rd_snprintf(errstr, errstr_size,
+                            "Invalid resource pattern type");
+                return NULL;
+        }
+
+        if (operation == RD_KAFKA_ACL_OPERATION_ANY ||
+            operation <= RD_KAFKA_ACL_OPERATION_UNKNOWN ||
+            operation >= RD_KAFKA_ACL_OPERATION__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid operation");
+                return NULL;
+        }
+
+        if (permission_type == RD_KAFKA_ACL_PERMISSION_TYPE_ANY ||
+            permission_type <= RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN ||
+            permission_type >= RD_KAFKA_ACL_PERMISSION_TYPE__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid permission type");
+                return NULL;
+        }
+
         return rd_kafka_AclBinding_new0(
             restype, name, resource_pattern_type, principal, host, operation,
             permission_type, RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
@@ -4086,6 +4116,33 @@ rd_kafka_AclBindingFilter_t *rd_kafka_AclBindingFilter_new(
     rd_kafka_AclPermissionType_t permission_type,
     char *errstr,
     size_t errstr_size) {
+
+
+        if (restype <= RD_KAFKA_RESOURCE_UNKNOWN ||
+            restype >= RD_KAFKA_RESOURCE__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid resource type");
+                return NULL;
+        }
+
+        if (resource_pattern_type <= RD_KAFKA_RESOURCE_PATTERN_UNKNOWN ||
+            resource_pattern_type >= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT) {
+                rd_snprintf(errstr, errstr_size,
+                            "Invalid resource pattern type");
+                return NULL;
+        }
+
+        if (operation <= RD_KAFKA_ACL_OPERATION_UNKNOWN ||
+            operation >= RD_KAFKA_ACL_OPERATION__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid operation");
+                return NULL;
+        }
+
+        if (permission_type <= RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN ||
+            permission_type >= RD_KAFKA_ACL_PERMISSION_TYPE__CNT) {
+                rd_snprintf(errstr, errstr_size, "Invalid permission type");
+                return NULL;
+        }
+
         return rd_kafka_AclBinding_new0(
             restype, name, resource_pattern_type, principal, host, operation,
             permission_type, RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
@@ -4346,6 +4403,16 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_i8(reply, &resource_pattern_type);
                 }
 
+                if (res_type <= RD_KAFKA_RESOURCE_UNKNOWN ||
+                    res_type >= RD_KAFKA_RESOURCE__CNT)
+                        res_type = RD_KAFKA_RESOURCE_UNKNOWN;
+                if (resource_pattern_type <=
+                        RD_KAFKA_RESOURCE_PATTERN_UNKNOWN ||
+                    resource_pattern_type >=
+                        RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT)
+                        resource_pattern_type =
+                            RD_KAFKA_RESOURCE_PATTERN_UNKNOWN;
+
                 /* #resources */
                 rd_kafka_buf_read_arraycnt(reply, &acl_cnt, 100000);
 
@@ -4365,6 +4432,16 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_i8(reply, &permission_type);
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
+
+                        if (operation <= RD_KAFKA_ACL_OPERATION_UNKNOWN ||
+                            operation >= RD_KAFKA_ACL_OPERATION__CNT)
+                                operation = RD_KAFKA_ACL_OPERATION_UNKNOWN;
+                        if (permission_type <=
+                                RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN ||
+                            permission_type >=
+                                RD_KAFKA_ACL_PERMISSION_TYPE__CNT)
+                                permission_type =
+                                    RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
 
                         acl = rd_kafka_AclBinding_new(
                             res_type, res_name, resource_pattern_type,
@@ -4595,6 +4672,25 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                         RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
+
+                        if (res_type <= RD_KAFKA_RESOURCE_UNKNOWN ||
+                            res_type >= RD_KAFKA_RESOURCE__CNT)
+                                res_type = RD_KAFKA_RESOURCE_UNKNOWN;
+                        if (resource_pattern_type <=
+                                RD_KAFKA_RESOURCE_PATTERN_UNKNOWN ||
+                            resource_pattern_type >=
+                                RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT)
+                                resource_pattern_type =
+                                    RD_KAFKA_RESOURCE_PATTERN_UNKNOWN;
+                        if (operation <= RD_KAFKA_ACL_OPERATION_UNKNOWN ||
+                            operation >= RD_KAFKA_ACL_OPERATION__CNT)
+                                operation = RD_KAFKA_ACL_OPERATION_UNKNOWN;
+                        if (permission_type <=
+                                RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN ||
+                            permission_type >=
+                                RD_KAFKA_ACL_PERMISSION_TYPE__CNT)
+                                permission_type =
+                                    RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
 
                         matching_acl = rd_kafka_AclBinding_new0(
                             res_type, res_name, resource_pattern_type,

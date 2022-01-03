@@ -1,10 +1,3 @@
-# Introduction to librdkafka - the Apache Kafka C/C++ client library
-
-
-librdkafka is a high performance C implementation of the Apache
-Kafka client, providing a reliable and performant client for production use.
-librdkafka also provides a native C++ interface.
-
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
@@ -98,6 +91,12 @@ librdkafka also provides a native C++ interface.
 
 <!-- markdown-toc end -->
 
+# Introduction to librdkafka - the Apache Kafka C/C++ client library
+
+
+librdkafka is a high performance C implementation of the Apache
+Kafka client, providing a reliable and performant client for production use.
+librdkafka also provides a native C++ interface.
 
 ## Performance
 

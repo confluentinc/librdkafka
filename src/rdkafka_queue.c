@@ -769,6 +769,10 @@ rd_kafka_queue_t *rd_kafka_queue_get_background(rd_kafka_t *rk) {
 rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
                                            rd_kafka_queue_t *rkqu) {
         rd_kafka_q_t *rkq;
+
+        if (!rk->rk_logq)
+                return RD_KAFKA_RESP_ERR__NOT_CONFIGURED;
+
         if (!rkqu)
                 rkq = rk->rk_rep;
         else

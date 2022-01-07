@@ -3404,7 +3404,8 @@ void rd_kafka_queue_forward(rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
  *
  * @remark librdkafka maintains its own reference to the provided queue.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error,
+ * eg RD_KAFKA_RESP_ERR__NOT_CONFIGURED when log.queue is not set to true.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,

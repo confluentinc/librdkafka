@@ -518,11 +518,19 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 
-#define rd_kafka_buf_read_i16a(rkbuf, dst) do {				\
-                int16_t _v;                                             \
-		rd_kafka_buf_read(rkbuf, &_v, 2);			\
-                dst = (int16_t)be16toh(_v);				\
-	} while (0)
+#define rd_kafka_buf_peek_i16(rkbuf, of, dstptr)                               \
+        do {                                                                   \
+                int16_t _v;                                                    \
+                rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));                 \
+                *(dstptr) = be16toh(_v);                                       \
+        } while (0)
+
+#define rd_kafka_buf_read_i16a(rkbuf, dst)                                     \
+        do {                                                                   \
+                int16_t _v;                                                    \
+                rd_kafka_buf_read(rkbuf, &_v, 2);                              \
+                dst = (int16_t)be16toh(_v);                                    \
+        } while (0)
 
 #define rd_kafka_buf_read_i8(rkbuf, dst) rd_kafka_buf_read(rkbuf, dst, 1)
 

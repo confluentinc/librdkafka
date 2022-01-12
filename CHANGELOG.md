@@ -1,3 +1,37 @@
+# librdkafka v1.6.3
+
+librdkafka v1.6.3 is a limited maintenance release with the following backported fixes:
+
+ * Fix message loss in idempotent/transactional producer.
+   A corner case has been identified that may cause idempotent/transactional
+   messages to be lost despite being reported as successfully delivered:
+   During cluster instability a restarting broker may report existing topics
+   as non-existent for some time before it is able to acquire up to date
+   cluster and topic metadata.
+   If an idempotent/transactional producer updates its topic metadata cache
+   from such a broker the producer will consider the topic to be removed from
+   the cluster and thus remove its local partition objects for the given topic.
+   This also removes the internal message sequence number counter for the given
+   partitions.
+   If the producer later receives proper topic metadata for the cluster the
+   previously "removed" topics will be rediscovered and new partition objects
+   will be created in the producer. These new partition objects, with no
+   knowledge of previous incarnations, would start counting partition messages
+   at zero again.
+   If new messages were produced for these partitions by the same producer
+   instance, the same message sequence numbers would be sent to the broker.
+   If the broker still maintains state for the producer's PID and Epoch it could
+   deem that these messages with reused sequence numbers had already been
+   written to the log and treat them as legit duplicates.
+   This would seem to the producer that these new messages were successfully
+   written to the partition log by the broker when they were in fact discarded
+   as duplicates, leading to silent message loss.
+   The fix included in this release is to save the per-partition idempotency
+   state when a partition is removed, and then recover and use that saved
+   state if the partition comes back at a later time.
+
+
+
 # librdkafka v1.6.2
 
 librdkafka v1.6.2 is a maintenance release with the following backported fixes:

@@ -113,7 +113,8 @@ static int rd_kafka_mock_handle_Produce (rd_kafka_mock_connection_t *mconn,
                         /* Append to partition log */
                         if (!err)
                                 err = rd_kafka_mock_partition_log_append(
-                                        mpart, &records, &BaseOffset);
+                                    mpart, &records, &TransactionalId,
+                                    &BaseOffset);
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
@@ -814,6 +815,10 @@ rd_kafka_mock_buf_write_Metadata_Topic (rd_kafka_buf_t *resp,
                                         const rd_kafka_mock_topic_t *mtopic,
                                         rd_kafka_resp_err_t err) {
         int i;
+        int partition_cnt =
+            (!mtopic || err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+                ? 0
+                : mtopic->partition_cnt;
 
         /* Response: Topics.ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
@@ -824,11 +829,10 @@ rd_kafka_mock_buf_write_Metadata_Topic (rd_kafka_buf_t *resp,
                 rd_kafka_buf_write_bool(resp, rd_false);
         }
         /* Response: Topics.#Partitions */
-        rd_kafka_buf_write_i32(resp, mtopic ? mtopic->partition_cnt : 0);
+        rd_kafka_buf_write_i32(resp, partition_cnt);
 
-        for (i = 0 ; mtopic && i < mtopic->partition_cnt ; i++) {
-                const rd_kafka_mock_partition_t *mpart =
-                        &mtopic->partitions[i];
+        for (i = 0; mtopic && i < partition_cnt; i++) {
+                const rd_kafka_mock_partition_t *mpart = &mtopic->partitions[i];
                 int r;
 
                 /* Response: ..Partitions.ErrorCode */
@@ -954,9 +958,8 @@ static int rd_kafka_mock_handle_Metadata (rd_kafka_mock_connection_t *mconn,
 
                 TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
                         rd_kafka_mock_buf_write_Metadata_Topic(
-                                resp, rkbuf->rkbuf_reqhdr.ApiVersion,
-                                mtopic->name, mtopic,
-                                RD_KAFKA_RESP_ERR_NO_ERROR);
+                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, mtopic->name,
+                            mtopic, mtopic->err);
                 }
 
         } else if (requested_topics) {
@@ -978,8 +981,8 @@ static int rd_kafka_mock_handle_Metadata (rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
                         rd_kafka_mock_buf_write_Metadata_Topic(
-                                resp, rkbuf->rkbuf_reqhdr.ApiVersion,
-                                rktpar->topic, mtopic, err);
+                            resp, rkbuf->rkbuf_reqhdr.ApiVersion, rktpar->topic,
+                            mtopic, err ? err : mtopic->err);
                 }
 
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8) {
@@ -1473,10 +1476,121 @@ rd_kafka_mock_handle_SyncGroup (rd_kafka_mock_connection_t *mconn,
 /**
  * @brief Generate a unique ProducerID
  */
-static void rd_kafka_mock_pid_generate (rd_kafka_mock_cluster_t *mcluster,
-                                        rd_kafka_pid_t *pid) {
-        pid->id = rd_jitter(1, 900000) * 1000;
-        pid->epoch = 0;
+static const rd_kafka_pid_t
+rd_kafka_mock_pid_new(rd_kafka_mock_cluster_t *mcluster,
+                      const rd_kafkap_str_t *TransactionalId) {
+        size_t tidlen =
+            TransactionalId ? RD_KAFKAP_STR_LEN(TransactionalId) : 0;
+        rd_kafka_mock_pid_t *mpid = rd_malloc(sizeof(*mpid) + tidlen);
+        rd_kafka_pid_t ret;
+
+        mpid->pid.id    = rd_jitter(1, 900000) * 1000;
+        mpid->pid.epoch = 0;
+
+        if (tidlen > 0)
+                memcpy(mpid->TransactionalId, TransactionalId->str, tidlen);
+        mpid->TransactionalId[tidlen] = '\0';
+
+        mtx_lock(&mcluster->lock);
+        rd_list_add(&mcluster->pids, mpid);
+        ret = mpid->pid;
+        mtx_unlock(&mcluster->lock);
+
+        return ret;
+}
+
+
+/**
+ * @brief Finds a matching mcluster mock PID for the given \p pid.
+ *
+ * @locks_required mcluster->lock
+ */
+rd_kafka_resp_err_t
+rd_kafka_mock_pid_find(rd_kafka_mock_cluster_t *mcluster,
+                       const rd_kafkap_str_t *TransactionalId,
+                       const rd_kafka_pid_t pid,
+                       rd_kafka_mock_pid_t **mpidp) {
+        rd_kafka_mock_pid_t *mpid;
+        rd_kafka_mock_pid_t skel = {pid};
+
+        *mpidp = NULL;
+        mpid = rd_list_find(&mcluster->pids, &skel, rd_kafka_mock_pid_cmp_pid);
+
+        if (!mpid)
+                return RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID;
+        else if (((TransactionalId != NULL) !=
+                  (*mpid->TransactionalId != '\0')) ||
+                 (TransactionalId &&
+                  rd_kafkap_str_cmp_str(TransactionalId,
+                                        mpid->TransactionalId)))
+                return RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING;
+
+        *mpidp = mpid;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Checks if the given pid is known, else returns an error.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_pid_check(rd_kafka_mock_cluster_t *mcluster,
+                        const rd_kafkap_str_t *TransactionalId,
+                        const rd_kafka_pid_t check_pid) {
+        rd_kafka_mock_pid_t *mpid;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        mtx_lock(&mcluster->lock);
+        err =
+            rd_kafka_mock_pid_find(mcluster, TransactionalId, check_pid, &mpid);
+        if (!err && check_pid.epoch != mpid->pid.epoch)
+                err = RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH;
+        mtx_unlock(&mcluster->lock);
+
+        if (unlikely(err))
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "PID check failed for TransactionalId=%.*s: "
+                             "expected %s, not %s: %s",
+                             RD_KAFKAP_STR_PR(TransactionalId),
+                             mpid ? rd_kafka_pid2str(mpid->pid) : "none",
+                             rd_kafka_pid2str(check_pid),
+                             rd_kafka_err2name(err));
+        return err;
+}
+
+
+/**
+ * @brief Bump the epoch for an existing pid, or return an error
+ *        if the current_pid does not match an existing pid.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_pid_bump(rd_kafka_mock_cluster_t *mcluster,
+                       const rd_kafkap_str_t *TransactionalId,
+                       rd_kafka_pid_t *current_pid) {
+        rd_kafka_mock_pid_t *mpid;
+        rd_kafka_resp_err_t err;
+
+        mtx_lock(&mcluster->lock);
+        err = rd_kafka_mock_pid_find(mcluster, TransactionalId, *current_pid,
+                                     &mpid);
+        if (err) {
+                mtx_unlock(&mcluster->lock);
+                return err;
+        }
+
+        if (current_pid->epoch != mpid->pid.epoch) {
+                mtx_unlock(&mcluster->lock);
+                return RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH;
+        }
+
+        mpid->pid.epoch++;
+        *current_pid = mpid->pid;
+        mtx_unlock(&mcluster->lock);
+
+        rd_kafka_dbg(mcluster->rk, MOCK, "MOCK", "Bumped PID %s",
+                     rd_kafka_pid2str(*current_pid));
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
@@ -1507,15 +1621,33 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_i32(resp, 0);
 
         /* Inject error */
-        err = rd_kafka_mock_next_request_error(mconn,
-                                               rkbuf->rkbuf_reqhdr.ApiKey);
+        err = rd_kafka_mock_next_request_error(mconn, resp);
 
-        if (!err &&
-            !RD_KAFKAP_STR_IS_NULL(&TransactionalId) &&
-            rd_kafka_mock_cluster_get_coord(mcluster,
-                                            RD_KAFKA_COORD_TXN,
-                                            &TransactionalId) != mconn->broker)
-                err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+        if (!err && !RD_KAFKAP_STR_IS_NULL(&TransactionalId)) {
+                if (RD_KAFKAP_STR_LEN(&TransactionalId) == 0)
+                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+                else if (rd_kafka_mock_cluster_get_coord(
+                             mcluster, RD_KAFKA_COORD_TXN, &TransactionalId) !=
+                         mconn->broker)
+                        err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+        }
+
+        if (!err) {
+                if (rd_kafka_pid_valid(current_pid)) {
+                        /* Producer is asking for the transactional coordinator
+                         * to bump the epoch (KIP-360).
+                         * Verify that current_pid matches and then
+                         * bump the epoch. */
+                        err = rd_kafka_mock_pid_bump(mcluster, &TransactionalId,
+                                                     &current_pid);
+                        if (!err)
+                                pid = current_pid;
+
+                } else {
+                        /* Generate a new pid */
+                        pid = rd_kafka_mock_pid_new(mcluster, &TransactionalId);
+                }
+        }
 
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
@@ -1579,6 +1711,10 @@ rd_kafka_mock_handle_AddPartitionsToTxn (rd_kafka_mock_connection_t *mconn,
                                             RD_KAFKA_COORD_TXN,
                                             &TransactionalId) != mconn->broker)
                 all_err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
+        if (!all_err)
+                all_err =
+                    rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -1662,6 +1798,9 @@ rd_kafka_mock_handle_AddOffsetsToTxn (rd_kafka_mock_connection_t *mconn,
                                             &TransactionalId) != mconn->broker)
                 err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
 
+        if (!err)
+                err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
+
         /* Response: ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -1715,6 +1854,9 @@ rd_kafka_mock_handle_TxnOffsetCommit (rd_kafka_mock_connection_t *mconn,
                                             RD_KAFKA_COORD_GROUP,
                                             &GroupId) != mconn->broker)
                 err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
+        if (!err)
+                err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -1808,6 +1950,9 @@ rd_kafka_mock_handle_EndTxn (rd_kafka_mock_connection_t *mconn,
                                             RD_KAFKA_COORD_TXN,
                                             &TransactionalId) != mconn->broker)
                 err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+
+        if (!err)
+                err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);

@@ -2620,6 +2620,115 @@ static void do_test_out_of_order_seq(void) {
 }
 
 
+/**
+ * @brief Verify lossless delivery if topic disappears from Metadata for awhile.
+ *
+ * If a topic is removed from metadata inbetween transactions, the producer
+ * will remove its partition state for the topic's partitions.
+ * If later the same topic comes back (same topic instance, not a new creation)
+ * then the producer must restore the previously used msgid/BaseSequence
+ * in case the same Epoch is still used, or messages will be silently lost
+ * as they would seem like legit duplicates to the broker.
+ *
+ * Reproduction:
+ *   1. produce msgs to topic, commit transaction.
+ *   2. remove topic from metadata
+ *   3. make sure client updates its metadata, which removes the partition
+ *      objects.
+ *   4. restore the topic in metadata
+ *   5. produce new msgs to topic, commit transaction.
+ *   6. consume topic. All messages should be accounted for.
+ */
+static void do_test_topic_disappears_for_awhile(void) {
+        rd_kafka_t *rk, *c;
+        rd_kafka_conf_t *c_conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = "mytopic";
+        const char *txnid = "myTxnId";
+        test_timing_t timing;
+        int i;
+        int msgcnt              = 0;
+        const int partition_cnt = 10;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(
+            &mcluster, txnid, 1, NULL, "batch.num.messages", "3", "linger.ms",
+            "100", "topic.metadata.refresh.interval.ms", "2000", NULL);
+
+        rd_kafka_mock_topic_create(mcluster, topic, partition_cnt, 1);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        for (i = 0; i < 2; i++) {
+                int cnt                = 3 * 2 * partition_cnt;
+                rd_bool_t remove_topic = (i % 2) == 0;
+                /*
+                 * Start a transaction
+                 */
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+
+                while (cnt-- >= 0) {
+                        TEST_CALL_ERR__(rd_kafka_producev(
+                            rk, RD_KAFKA_V_TOPIC(topic),
+                            RD_KAFKA_V_PARTITION(cnt % partition_cnt),
+                            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+                        msgcnt++;
+                }
+
+                /* Commit the transaction */
+                TIMING_START(&timing, "commit_transaction(-1)");
+                TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+                TIMING_STOP(&timing);
+
+
+
+                if (remove_topic) {
+                        /* Make it seem the topic is removed, refresh metadata,
+                         * and then make the topic available again. */
+                        const rd_kafka_metadata_t *md;
+
+                        TEST_SAY("Marking topic as non-existent\n");
+
+                        rd_kafka_mock_topic_set_error(
+                            mcluster, topic,
+                            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+
+                        TEST_CALL_ERR__(rd_kafka_metadata(rk, 0, NULL, &md,
+                                                          tmout_multip(5000)));
+
+                        rd_kafka_metadata_destroy(md);
+
+                        rd_sleep(2);
+
+                        TEST_SAY("Bringing topic back to life\n");
+                        rd_kafka_mock_topic_set_error(
+                            mcluster, topic, RD_KAFKA_RESP_ERR_NO_ERROR);
+                }
+        }
+
+        TEST_SAY("Verifying messages by consumtion\n");
+        test_conf_init(&c_conf, NULL, 0);
+        test_conf_set(c_conf, "security.protocol", "PLAINTEXT");
+        test_conf_set(c_conf, "bootstrap.servers",
+                      rd_kafka_mock_cluster_bootstraps(mcluster));
+        test_conf_set(c_conf, "enable.partition.eof", "true");
+        test_conf_set(c_conf, "auto.offset.reset", "earliest");
+        c = test_create_consumer("mygroup", NULL, c_conf, NULL);
+
+        test_consumer_subscribe(c, topic);
+        test_consumer_poll_exact("consume", c, 0, partition_cnt, 0, msgcnt,
+                                 rd_true /*exact*/, NULL);
+        rd_kafka_destroy(c);
+
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -2689,6 +2798,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_switch_coordinator_refresh();
 
         do_test_out_of_order_seq();
+
+        do_test_topic_disappears_for_awhile();
 
         return 0;
 }

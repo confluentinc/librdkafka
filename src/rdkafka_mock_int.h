@@ -113,6 +113,62 @@ typedef struct rd_kafka_mock_cgrp_s {
         rd_kafka_mock_cgrp_member_t *leader; /**< Elected leader */
 } rd_kafka_mock_cgrp_t;
 
+
+/**
+ * @struct TransactionalId + PID (+ optional sequence state)
+ */
+typedef struct rd_kafka_mock_pid_s {
+        rd_kafka_pid_t pid;
+
+        /* BaseSequence tracking (partition) */
+        int8_t window;  /**< increases up to 5 */
+        int8_t lo;      /**< Window low bucket: oldest */
+        int8_t hi;      /**< Window high bucket: most recent */
+        int32_t seq[5]; /**< Next expected BaseSequence for each bucket */
+
+        char TransactionalId[1]; /**< Allocated after this structure */
+} rd_kafka_mock_pid_t;
+
+/**
+ * @brief rd_kafka_mock_pid_t.pid Pid (not epoch) comparator
+ */
+static RD_UNUSED int rd_kafka_mock_pid_cmp_pid(const void *_a, const void *_b) {
+        const rd_kafka_mock_pid_t *a = _a, *b = _b;
+
+        if (a->pid.id < b->pid.id)
+                return -1;
+        else if (a->pid.id > b->pid.id)
+                return 1;
+
+        return 0;
+}
+
+/**
+ * @brief rd_kafka_mock_pid_t.pid TransactionalId,Pid,epoch comparator
+ */
+static RD_UNUSED int rd_kafka_mock_pid_cmp(const void *_a, const void *_b) {
+        const rd_kafka_mock_pid_t *a = _a, *b = _b;
+        int r;
+
+        r = strcmp(a->TransactionalId, b->TransactionalId);
+        if (r)
+                return r;
+
+        if (a->pid.id < b->pid.id)
+                return -1;
+        else if (a->pid.id > b->pid.id)
+                return 1;
+
+        if (a->pid.epoch < b->pid.epoch)
+                return -1;
+        if (a->pid.epoch > b->pid.epoch)
+                return 1;
+
+        return 0;
+}
+
+
+
 /**
  * @struct A real TCP connection from the client to a mock broker.
  */
@@ -208,6 +264,8 @@ typedef struct rd_kafka_mock_partition_s {
         rd_kafka_mock_broker_t **replicas;
         int replica_cnt;
 
+        rd_list_t pidstates; /**< PID states */
+
         int32_t follower_id; /**< Preferred replica/follower */
 
         struct rd_kafka_mock_topic_s *topic;
@@ -286,7 +344,7 @@ struct rd_kafka_mock_cluster_s {
         TAILQ_HEAD(, rd_kafka_mock_coord_s) coords;
 
         /** Current transactional producer PIDs.
-         *  Element type is a malloced rd_kafka_pid_t*. */
+         *  Element type is a malloced rd_kafka_mock_pid_t*. */
         rd_list_t pids;
 
         char *bootstraps; /**< bootstrap.servers */
@@ -384,7 +442,8 @@ rd_kafka_mock_next_request_error(rd_kafka_mock_connection_t *mconn,
 
 rd_kafka_resp_err_t
 rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
-                                   const rd_kafkap_bytes_t *bytes,
+                                   const rd_kafkap_bytes_t *records,
+                                   const rd_kafkap_str_t *TransactionalId,
                                    int64_t *BaseOffset);
 
 
@@ -398,6 +457,13 @@ rd_kafka_mock_cluster_ApiVersion_check(const rd_kafka_mock_cluster_t *mcluster,
         return (ApiVersion >= mcluster->api_handlers[ApiKey].MinVersion &&
                 ApiVersion <= mcluster->api_handlers[ApiKey].MaxVersion);
 }
+
+
+rd_kafka_resp_err_t
+rd_kafka_mock_pid_find(rd_kafka_mock_cluster_t *mcluster,
+                       const rd_kafkap_str_t *TransactionalId,
+                       const rd_kafka_pid_t pid,
+                       rd_kafka_mock_pid_t **mpidp);
 
 
 /**

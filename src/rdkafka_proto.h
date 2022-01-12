@@ -542,11 +542,15 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
 /* Byte offsets for MessageSet fields */
 #define RD_KAFKAP_MSGSET_V2_OF_Length          (8)
+#define RD_KAFKAP_MSGSET_V2_OF_MagicByte       (8 + 4 + 4)
 #define RD_KAFKAP_MSGSET_V2_OF_CRC             (8 + 4 + 4 + 1)
 #define RD_KAFKAP_MSGSET_V2_OF_Attributes      (8 + 4 + 4 + 1 + 4)
 #define RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta (8 + 4 + 4 + 1 + 4 + 2)
 #define RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp   (8 + 4 + 4 + 1 + 4 + 2 + 4)
 #define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp    (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8)
+#define RD_KAFKAP_MSGSET_V2_OF_ProducerId      (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8)
+#define RD_KAFKAP_MSGSET_V2_OF_ProducerEpoch                                   \
+        (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8)
 #define RD_KAFKAP_MSGSET_V2_OF_BaseSequence                                    \
         (8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8 + 2)
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount                                     \
@@ -596,21 +600,6 @@ static RD_UNUSED int rd_kafka_pid_cmp(const void *_a, const void *_b) {
                 return 1;
 
         return (int)a->epoch - (int)b->epoch;
-}
-
-
-/**
- * @brief Pid (not epoch) comparator
- */
-static RD_UNUSED int rd_kafka_pid_cmp_pid(const void *_a, const void *_b) {
-        const rd_kafka_pid_t *a = _a, *b = _b;
-
-        if (a->id < b->id)
-                return -1;
-        else if (a->id > b->id)
-                return 1;
-
-        return 0;
 }
 
 

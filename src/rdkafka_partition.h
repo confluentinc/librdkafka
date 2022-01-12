@@ -152,8 +152,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                             *   base msgid.
                                             *   When a new epoch is
                                             *   acquired, or on transaction
-                                            * abort, the base_seq is set to the
-                                            *   current rktp_msgid so that
+                                            *   abort, the base_seq is set to
+                                            *   the current rktp_msgid so that
                                             *   sub-sequent produce
                                             *   requests will have
                                             *   a sequence number series
@@ -165,8 +165,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                             *   Used when draining outstanding
                                             *   issues.
                                             *   This value will be the same
-                                            *   as next_ack_seq until a drainable
-                                            *   error occurs, in which case it
+                                            *   as next_ack_seq until a
+                                            *   drainable error occurs,
+                                            *   in which case it
                                             *   will advance past next_ack_seq.
                                             *   next_ack_seq can never be larger
                                             *   than next_err_seq.

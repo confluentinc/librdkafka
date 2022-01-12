@@ -44,8 +44,8 @@
 int main_0129_fetch_aborted_msgs(int argc, char **argv) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
-        const char *topic = test_mk_topic_name("0129_fetch_aborted_msgs", 1);
-        const int msgcnt  = 1000;
+        const char *topic    = test_mk_topic_name("0129_fetch_aborted_msgs", 1);
+        const int msgcnt     = 1000;
         const size_t msgsize = 1000;
 
         test_conf_init(&conf, NULL, 30);
@@ -57,10 +57,9 @@ int main_0129_fetch_aborted_msgs(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         test_admin_create_topic(rk, topic, 1, 1,
-                                (const char *[]){
-                                        "max.message.bytes", "10000",
-                                                "segment.bytes", "20000",
-                                                NULL });
+                                (const char *[]) {"max.message.bytes", "10000",
+                                                  "segment.bytes", "20000",
+                                                  NULL});
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));

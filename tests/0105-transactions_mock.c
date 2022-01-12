@@ -227,6 +227,8 @@ static void do_test_txn_recoverable_errors(void) {
             rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
             RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
 
+        rd_kafka_flush(rk, -1);
+
         /*
          * Produce a message, let it fail with a non-idempo/non-txn
          * retryable error

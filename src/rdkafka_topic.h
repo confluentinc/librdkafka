@@ -84,6 +84,21 @@ void rd_kafka_lwtopic_keep (rd_kafka_lwtopic_t *lrkt) {
 
 
 
+/**
+ * @struct Holds partition + transactional PID + base sequence msgid.
+ *
+ * Used in rkt_saved_partmsgids to restore transactional/idempotency state
+ * for a partition that is lost from metadata for some time and then returns.
+ */
+typedef struct rd_kafka_partition_msgid_s {
+        TAILQ_ENTRY(rd_kafka_partition_msgid_s) link;
+        int32_t partition;
+        rd_kafka_pid_t pid;
+        uint64_t msgid;
+        uint64_t epoch_base_msgid;
+        rd_ts_t ts;
+} rd_kafka_partition_msgid_t;
+
 
 /*
  * @struct Internal representation of a topic.
@@ -142,7 +157,11 @@ struct rd_kafka_topic_s {
         rd_avg_t          rkt_avg_batchsize; /**< Average batch size */
         rd_avg_t          rkt_avg_batchcnt;  /**< Average batch message count */
 
-	rd_kafka_topic_conf_t rkt_conf;
+        rd_kafka_topic_conf_t rkt_conf;
+
+        /** Idempotent/Txn producer:
+         *  The PID,Epoch,base Msgid state for removed partitions. */
+        TAILQ_HEAD(, rd_kafka_partition_msgid_s) rkt_saved_partmsgids;
 };
 
 #define rd_kafka_topic_rdlock(rkt)     rwlock_rdlock(&(rkt)->rkt_lock)

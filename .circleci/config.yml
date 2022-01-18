@@ -1,6 +1,7 @@
 version: 2.1
 
 orbs:
+  # cimg/base-stable?
   python: circleci/python@1.2
   win: circleci/windows@2.2.0
 

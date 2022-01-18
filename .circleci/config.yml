@@ -1,0 +1,124 @@
+version: 2.1
+
+orbs:
+  python: circleci/python@1.2
+  win: circleci/windows@2.2.0
+
+common_params: &COMMON_PARAMS
+  parameters:
+    fixme:
+      type: string
+      default: v1.8.2
+
+commands:
+  install-librdkafka:
+    <<: *COMMON_PARAMS
+    steps:
+      - restore_cache:
+          keys:
+            - v2-librdkafka-builddir-<<parameters.librdkafka_version>>
+      - run:
+          name: Install librdkafka
+          command: tools/bootstrap-librdkafka.sh --require-ssl <<parameters.librdkafka_version>> destdir librdkafka-<<parameters.librdkafka_version>>
+      - save_cache:
+          key: v2-librdkafka-builddir-<<parameters.librdkafka_version>>
+          paths:
+            - librdkafka-<<parameters.librdkafka_version>>
+
+  install-interceptors:
+    steps:
+      - run:
+          name: Install interceptors
+          command: tools/install-interceptors.sh
+
+  build-wheels:
+    <<: *COMMON_PARAMS
+    steps:
+      - run:
+          name: Build wheels
+          command: tools/wheels/build-wheels.sh <<parameters.librdkafka_version>> wheelhouse
+          shell: bash
+      - store_artifacts:
+          path: wheelhouse
+
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/python:3.8
+    environment:
+      LD_LIBRARY_PATH: ~/destdir/lib
+    steps:
+      - run:
+         name: Print envs
+         command: env | grep LD_LIBRARY
+      - checkout
+      - run:
+          name: Build
+          command: ./configure && make -j && make -C tests -j build
+      - run:
+          name: Run tests
+          # FIXME: Skip integration tests for now as Docker networking is a bit of an issue with trivup
+          #  TODO: Look into port-forwarding in trivup&docker.
+          command: make -C tests run_local_quick
+
+  build-wheels-linux:
+    docker:
+      - image: cimg/python:3.8
+    steps:
+      - checkout
+      # Wheels are built using manylinux docker images
+      - setup_remote_docker:
+          version: 19.03.13
+      - build-wheels
+
+  build-wheels-windows:
+    <<: *COMMON_PARAMS
+    executor: win/default
+    steps:
+      - checkout
+      - run:
+          name: "Install choco"
+          command: choco install python --version 3.8.0
+          shell: bash
+      - run:
+          name: "Link python"
+          command: ln -s /c/Python38/python.exe /c/Python38/python3.exe
+          shell: bash
+      - run:
+          name: "Install librdkafka (wheel)"
+          command: tools/wheels/install-librdkafka.sh <<parameters.librdkafka_version>> destdir
+          shell: bash
+      - run:
+          name: "Build wheels (windows)"
+          command: tools\wheels\build-wheels.bat x64 win_amd64 destdir wheelhouse
+          shell: cmd.exe
+      - store_artifacts:
+          path: wheelhouse
+
+  build-wheels-osx:
+    macos:
+      xcode: 12.5.1
+    steps:
+      - checkout
+      - build-wheels
+
+tag_only: &TAG_ONLY
+  filters:
+    tags:
+      only: /^v.*/
+    branches:
+      ignore: /.*/
+
+workflows:
+  build:
+    jobs:
+      - build-and-test
+#  build-wheels-all:
+#    jobs:
+#      - build-wheels-linux:
+#          <<: *TAG_ONLY
+#      - build-wheels-windows:
+#          <<: *TAG_ONLY
+#      - build-wheels-osx:
+#          <<: *TAG_ONLY

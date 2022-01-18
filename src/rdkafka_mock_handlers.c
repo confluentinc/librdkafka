@@ -455,7 +455,9 @@ static int rd_kafka_mock_handle_ListOffset (rd_kafka_mock_connection_t *mconn,
                                                       &CurrentLeaderEpoch);
 
                         rd_kafka_buf_read_i64(rkbuf, &Timestamp);
-                        rd_kafka_buf_read_i32(rkbuf, &MaxNumOffsets);
+
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion == 0)
+                                rd_kafka_buf_read_i32(rkbuf, &MaxNumOffsets);
 
                         if (mtopic)
                                 mpart = rd_kafka_mock_partition_find(mtopic,
@@ -493,14 +495,11 @@ static int rd_kafka_mock_handle_ListOffset (rd_kafka_mock_connection_t *mconn,
                                 if (Offset != -1)
                                         rd_kafka_buf_write_i64(resp, Offset);
                         } else {
-                                /* Response: Offset */
-                                rd_kafka_buf_write_i64(resp, Offset);
-                        }
-
-
-                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                                 /* Response: Timestamp (FIXME) */
                                 rd_kafka_buf_write_i64(resp, -1);
+
+                                /* Response: Offset */
+                                rd_kafka_buf_write_i64(resp, Offset);
                         }
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4) {
@@ -1604,7 +1603,8 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafkap_str_t TransactionalId;
-        rd_kafka_pid_t pid;
+        rd_kafka_pid_t pid = RD_KAFKA_PID_INITIALIZER;
+        rd_kafka_pid_t current_pid = RD_KAFKA_PID_INITIALIZER;
         int32_t TxnTimeoutMs;
         rd_kafka_resp_err_t err;
 
@@ -1612,6 +1612,13 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &TransactionalId);
         /* TransactionTimeoutMs */
         rd_kafka_buf_read_i32(rkbuf, &TxnTimeoutMs);
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
+                /* ProducerId */
+                rd_kafka_buf_read_i64(rkbuf, &current_pid.id);
+                /* ProducerEpoch */
+                rd_kafka_buf_read_i16(rkbuf, &current_pid.epoch);
+        }
 
         /*
          * Construct response
@@ -1621,7 +1628,8 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_i32(resp, 0);
 
         /* Inject error */
-        err = rd_kafka_mock_next_request_error(mconn, resp);
+        err = rd_kafka_mock_next_request_error(mconn,
+                                               rkbuf->rkbuf_reqhdr.ApiKey);
 
         if (!err && !RD_KAFKAP_STR_IS_NULL(&TransactionalId)) {
                 if (RD_KAFKAP_STR_LEN(&TransactionalId) == 0)
@@ -1651,11 +1659,6 @@ rd_kafka_mock_handle_InitProducerId (rd_kafka_mock_connection_t *mconn,
 
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
-
-        if (!err)
-                rd_kafka_mock_pid_generate(mcluster, &pid);
-        else
-                rd_kafka_pid_reset(&pid);
 
         /* ProducerId */
         rd_kafka_buf_write_i64(resp, pid.id);

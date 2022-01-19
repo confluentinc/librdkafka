@@ -12,35 +12,6 @@ common_params: &COMMON_PARAMS
       default: v1.8.2
 
 commands:
-  install-librdkafka:
-    <<: *COMMON_PARAMS
-    steps:
-      - restore_cache:
-          keys:
-            - v2-librdkafka-builddir-<<parameters.librdkafka_version>>
-      - run:
-          name: Install librdkafka
-          command: tools/bootstrap-librdkafka.sh --require-ssl <<parameters.librdkafka_version>> destdir librdkafka-<<parameters.librdkafka_version>>
-      - save_cache:
-          key: v2-librdkafka-builddir-<<parameters.librdkafka_version>>
-          paths:
-            - librdkafka-<<parameters.librdkafka_version>>
-
-  install-interceptors:
-    steps:
-      - run:
-          name: Install interceptors
-          command: tools/install-interceptors.sh
-
-  build-wheels:
-    <<: *COMMON_PARAMS
-    steps:
-      - run:
-          name: Build wheels
-          command: tools/wheels/build-wheels.sh <<parameters.librdkafka_version>> wheelhouse
-          shell: bash
-      - store_artifacts:
-          path: wheelhouse
 
 
 jobs:
@@ -63,7 +34,7 @@ jobs:
           #  TODO: Look into port-forwarding in trivup&docker.
           command: make -C tests run_local_quick
 
-  build-wheels-linux:
+  build-linux:
     docker:
       - image: cimg/python:3.8
     steps:
@@ -71,31 +42,116 @@ jobs:
       # Wheels are built using manylinux docker images
       - setup_remote_docker:
           version: 19.03.13
-      - build-wheels
 
-  build-wheels-windows:
+  # Windows: Visual Studio project builder
+  build-windows-vs:
     <<: *COMMON_PARAMS
+    parameters:
+      platform:
+        type: string
+        default: x64
+      runtime:
+        type: string
+        default: v140
     executor: win/default
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - v1-windows-vcpkg-installed
       - run:
-          name: "Install choco"
-          command: choco install python --version 3.8.0
-          shell: bash
+          name: "Install CoApp"
+          command: .\win32\install-coapp.ps1
+          shell: powershell.exe
       - run:
-          name: "Link python"
-          command: ln -s /c/Python38/python.exe /c/Python38/python3.exe
-          shell: bash
-      - run:
-          name: "Install librdkafka (wheel)"
-          command: tools/wheels/install-librdkafka.sh <<parameters.librdkafka_version>> destdir
-          shell: bash
-      - run:
-          name: "Build wheels (windows)"
-          command: tools\wheels\build-wheels.bat x64 win_amd64 destdir wheelhouse
+          name: "Update vcpkg: FIXME"
+          command: vcpkg help
           shell: cmd.exe
+      - run:
+          name: "Install vcpkgs"
+          command: vcpkg --feature-flags=versions install --triplet <<parameters.platform>>-windows
+          shell: cmd.exe
+      - save_cache:
+          key: v1-windows-vcpkg-installed
+          paths:
+            - c:\tools\vcpkg\installed
+            - c:\Users\appveyor\AppData\Local\vcpkg\archives
+            - c:\Users\appveyor\AppData\Local\vcpkg\installed
+      - run:
+          name: "Clean librdkafka (msbuild)"
+          command: msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=<<parameters.platform>> /target:Clean
+          shell: cmd.exe
+      - run:
+          name: "Build librdkafka (<<parameters.platform>>, msbuild)"
+          command: msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=<<parameters.platform>>
+      - run:
+          name: "Test"
+          command: cd tests &&  ..\win32\outdir\<<parameters.runtime>>\<<parameters.platform>>\Release\tests.exe -l -Q -p1 && cd ..
+          shell: cmd.exe
+      - run:
+          name: "Creating nuget packages"
+          command: win32\build-package.bat
+      - run:
+          name: "Collect artifacts"
+          command: mkdir -p artifacts && cp -v win32/outdir/<<parameters.runtime>>/<<parameters.platform>>/Release\*.{dll,lib,pdb} *.nupkg artifacts/
+          shell: bash.exe
       - store_artifacts:
-          path: wheelhouse
+          path: artifacts
+
+  # Windows: MinGW builder
+  build-windows-mingw:
+    <<: *COMMON_PARAMS
+    parameters:
+      platform:
+        type: string
+        default: x64
+      runtime:
+        type: string
+        default: v140
+    executor: win/default
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-windows-vcpkg-installed
+      - run:
+          name: "Install CoApp"
+          command: .\win32\install-coapp.ps1
+          shell: powershell.exe
+      - run:
+          name: "Update vcpkg: FIXME"
+          command: vcpkg help
+          shell: cmd.exe
+      - run:
+          name: "Install vcpkgs"
+          command: vcpkg --feature-flags=versions install --triplet <<parameters.platform>>-windows
+          shell: cmd.exe
+      - save_cache:
+          key: v1-windows-vcpkg-installed
+          paths:
+            - c:\tools\vcpkg\installed
+            - c:\Users\appveyor\AppData\Local\vcpkg\archives
+            - c:\Users\appveyor\AppData\Local\vcpkg\installed
+      - run:
+          name: "Clean librdkafka (msbuild)"
+          command: msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=<<parameters.platform>> /target:Clean
+          shell: cmd.exe
+      - run:
+          name: "Build librdkafka (<<parameters.platform>>, msbuild)"
+          command: msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=<<parameters.platform>>
+      - run:
+          name: "Test"
+          command: cd tests &&  ..\win32\outdir\<<parameters.runtime>>\<<parameters.platform>>\Release\tests.exe -l -Q -p1 && cd ..
+          shell: cmd.exe
+      - run:
+          name: "Creating nuget packages"
+          command: win32\build-package.bat
+      - run:
+          name: "Collect artifacts"
+          command: mkdir -p artifacts && cp -v win32/outdir/<<parameters.runtime>>/<<parameters.platform>>/Release\*.{dll,lib,pdb} *.nupkg artifacts/
+          shell: bash.exe
+      - store_artifacts:
+          path: artifacts
 
   build-wheels-osx:
     macos:
@@ -115,6 +171,9 @@ workflows:
   build:
     jobs:
       - build-and-test
+      - build-windows-vs
+      - build-windows-mingw
+
 #  build-wheels-all:
 #    jobs:
 #      - build-wheels-linux:

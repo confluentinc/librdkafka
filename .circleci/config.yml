@@ -58,21 +58,25 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-windows-vcpkg-installed
+            - v1-windows-vcpkg
+      - run:
+          name: "Install vcpkg"
+          command: win32\install-vcpkg.bat c:\tools
+          shell: cmd.exe
       - run:
           name: "Install CoApp"
           command: .\win32\install-coapp.ps1
           shell: powershell.exe
       - run:
           name: "Update vcpkg: FIXME"
-          command: vcpkg help
+          command: c:\tools\vcpkg\vcpkg help
           shell: cmd.exe
       - run:
           name: "Install vcpkgs"
-          command: vcpkg --feature-flags=versions install --triplet <<parameters.platform>>-windows
+          command: c:\tools\vcpkg\vcpkg --feature-flags=versions install --triplet <<parameters.platform>>-windows
           shell: cmd.exe
       - save_cache:
-          key: v1-windows-vcpkg-installed
+          key: v1-windows-vcpkg
           paths:
             - c:\tools\vcpkg\installed
             - c:\Users\appveyor\AppData\Local\vcpkg\archives
@@ -170,9 +174,9 @@ tag_only: &TAG_ONLY
 workflows:
   build:
     jobs:
-      - build-and-test
+#      - build-and-test
       - build-windows-vs
-      - build-windows-mingw
+#      - build-windows-mingw
 
 #  build-wheels-all:
 #    jobs:

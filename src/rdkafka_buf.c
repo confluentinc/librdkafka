@@ -184,6 +184,9 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
  * @remark \p free_cb (possibly NULL) will be used to free \p ptr when
  *         buffer refcount reaches 0.
  * @remark the buffer may only be read from, not written to.
+ *
+ * @warning If the caller has log_decode_errors > 0 then it must set up
+ *          \c rkbuf->rkbuf_rkb to a refcnt-increased broker object.
  */
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *)) {

@@ -286,7 +286,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         void (*rkbuf_free_make_opaque_cb)(void *); /**< Free function for
                                                     *   rkbuf_make_opaque. */
 
-        struct rd_kafka_broker_s *rkbuf_rkb;
+        struct rd_kafka_broker_s *rkbuf_rkb; /**< Optional broker object
+                                              *   with refcnt increased used
+                                              *   for logging decode errors
+                                              *   if log_decode_errors is > 0 */
 
         rd_refcnt_t rkbuf_refcnt;
         void *rkbuf_opaque;
@@ -409,8 +412,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
 #define rd_kafka_buf_parse_fail(rkbuf, ...)                                    \
         do {                                                                   \
-                if (log_decode_errors > 0) {                                   \
-                        rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);               \
+                if (log_decode_errors > 0 && rkbuf->rkbuf_rkb) {               \
                         rd_rkb_log(                                            \
                             rkbuf->rkbuf_rkb, log_decode_errors, "PROTOERR",   \
                             "Protocol parse failure for %s v%hd%s "            \
@@ -437,8 +439,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
  */
 #define rd_kafka_buf_underflow_fail(rkbuf, wantedlen, ...)                     \
         do {                                                                   \
-                if (log_decode_errors > 0) {                                   \
-                        rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);               \
+                if (log_decode_errors > 0 && rkbuf->rkbuf_rkb) {               \
                         char __tmpstr[256];                                    \
                         rd_snprintf(__tmpstr, sizeof(__tmpstr),                \
                                     ": " __VA_ARGS__);                         \

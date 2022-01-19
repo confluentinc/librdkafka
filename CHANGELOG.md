@@ -43,6 +43,8 @@ librdkafka v1.9.0 is a feature release:
    the parsed fetch response is truncated (which is a valid case).
    This should speed up the message fetch rate in case of maximum sized
    fetch responses.
+ * Fix consumer crash (`assert: rkbuf->rkbuf_rkb`) when parsing
+   malformed JoinGroupResponse consumer group metadata state.
 
 
 ### Producer fixes

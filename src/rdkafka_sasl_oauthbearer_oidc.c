@@ -239,7 +239,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
 
         size_t post_fields_size;
         size_t extension_cnt;
-        size_t extension_key_value_cnt;
+        size_t extension_key_value_cnt = 0;
 
         char set_token_errstr[512];
         char decode_payload_errstr[512];
@@ -350,12 +350,15 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                 goto done;
         }
 
-        extensions =
-            rd_string_split(rk->rk_conf.sasl.oauthbearer.extensions_str, ',',
-                            rd_true, &extension_cnt);
+        if (rk->rk_conf.sasl.oauthbearer.extensions_str) {
+                extensions = rd_string_split(
+                        rk->rk_conf.sasl.oauthbearer.extensions_str, ',',
+                        rd_true, &extension_cnt);
 
-        extension_key_value = rd_kafka_conf_kv_split(
-            (const char **)extensions, extension_cnt, &extension_key_value_cnt);
+                extension_key_value = rd_kafka_conf_kv_split(
+                        (const char **)extensions, extension_cnt,
+                        &extension_key_value_cnt);
+        }
 
         if (rd_kafka_oauthbearer_set_token(
                 rk, jwt_token, (int64_t)exp * 1000, sub,

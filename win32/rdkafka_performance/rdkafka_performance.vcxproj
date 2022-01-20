@@ -4,7 +4,7 @@
     <ProjectGuid>{82A67CAA-44B5-4F7D-BAC4-D126CC81FBEC}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>rdkafka_performance</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(SolutionDir)common.vcxproj" />
   <PropertyGroup Label="Configuration">

@@ -4,7 +4,7 @@
     <ProjectGuid>{88B682AB-5082-49D5-A672-9904C5F43ABB}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>rdkafka_complex_consumer_example_cpp</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(SolutionDir)common.vcxproj"/>
   <PropertyGroup Label="Configuration">

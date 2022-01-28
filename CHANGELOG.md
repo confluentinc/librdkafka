@@ -2,11 +2,15 @@
 
 librdkafka v1.9.0 is a feature release:
 
- * ACL support added to the Admin API (by @emasab, #2676).
+ * Added KIP-768 OUATHBEARER OIDC support (by @jliunyu, #3560)
+ * Added KIP-140 Admin API ACL support (by @emasab, #2676)
 
 
 ## Enhancements
 
+ * Windows: Added native Win32 IO/Queue scheduling. This removes the
+   internal TCP loopback connections that were previously used for timely
+   queue wakeups.
  * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
    on librdkafka's background thread. This solves the problem where an
    application has a custom SASL OAUTHBEARER refresh callback and thus needs to

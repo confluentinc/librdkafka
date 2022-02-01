@@ -155,7 +155,10 @@ if __name__ == '__main__':
             versions.append(
                 (v, ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']))
     else:
-        versions = [('2.1.0', ['OAUTHBEARER', 'GSSAPI']),
+        versions = [('3.1.0',
+                     ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']),
+                    ('2.1.0',
+                     ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']),
                     ('0.10.2.0', ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI']),
                     ('0.9.0.1', ['GSSAPI']),
                     ('0.8.2.2', [])]

@@ -11,7 +11,8 @@ environment:
   - platform: win32
     arch: x86
 install:
-- ps: ".\\win32\\enable-tls12.ps"
+- ps: Write-Host "Testing"
+- ps: ./win32/enable-tls12.ps
 - ps: "& .\\win32\\install-coapp.ps1"
   # Update vcpkg (is outdated on the VS 2015 image)
 - cmd: |

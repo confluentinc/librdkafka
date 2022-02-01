@@ -4504,7 +4504,7 @@ void test_kafka_topics(const char *fmt, ...) {
         TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
 #else
         char cmd[512];
-        int r;
+        int r, bytes_left;
         va_list ap;
         test_timing_t t_cmd;
         const char *kpath, *bootstrap_env, *flag, *bootstrap_srvs;
@@ -4527,11 +4527,14 @@ void test_kafka_topics(const char *fmt, ...) {
         r = rd_snprintf(cmd, sizeof(cmd),
                         "%s/bin/kafka-topics.sh %s %s ",
                         kpath, flag, bootstrap_srvs);
-        TEST_ASSERT(r < (int)sizeof(cmd));
+        TEST_ASSERT(r > 0 && r < (int)sizeof(cmd));
+
+        bytes_left = sizeof(cmd) - r;
 
         va_start(ap, fmt);
-        rd_vsnprintf(cmd + r, sizeof(cmd) - r, fmt, ap);
+        r = rd_vsnprintf(cmd + r, bytes_left, fmt, ap);
         va_end(ap);
+        TEST_ASSERT(r > 0 && r < bytes_left);
 
         TEST_SAY("Executing: %s\n", cmd);
         TIMING_START(&t_cmd, "exec");

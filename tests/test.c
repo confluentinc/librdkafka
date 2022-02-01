@@ -4503,7 +4503,7 @@ void test_kafka_topics(const char *fmt, ...) {
 #ifdef _WIN32
         TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
 #else
-        char cmd[512];
+        char cmd[1024];
         int r, bytes_left;
         va_list ap;
         test_timing_t t_cmd;

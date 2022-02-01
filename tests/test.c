@@ -4507,17 +4507,18 @@ void test_kafka_topics(const char *fmt, ...) {
         int r;
         va_list ap;
         test_timing_t t_cmd;
-        const char *kpath, *zk;
+        const char *kpath, *brokers;
 
         kpath = test_getenv("KAFKA_PATH", NULL);
-        zk    = test_getenv("ZK_ADDRESS", NULL);
+        brokers = test_getenv("BROKERS", NULL);
 
-        if (!kpath || !zk)
-                TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
+        if (!kpath || !brokers)
+                TEST_FAIL("%s: KAFKA_PATH and BROKERS must be set",
                           __FUNCTION__);
 
         r = rd_snprintf(cmd, sizeof(cmd),
-                        "%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
+                        "%s/bin/kafka-topics.sh --bootstrap-server %s ",
+                        kpath, brokers);
         TEST_ASSERT(r < (int)sizeof(cmd));
 
         va_start(ap, fmt);
@@ -5164,7 +5165,7 @@ void test_report_add(struct test *test, const char *fmt, ...) {
 }
 
 /**
- * Returns 1 if KAFKA_PATH and ZK_ADDRESS is set to se we can use the
+ * Returns 1 if KAFKA_PATH and BROKERS is set to se we can use the
  * kafka-topics.sh script to manually create topics.
  *
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
@@ -5181,11 +5182,11 @@ int test_can_create_topics(int skip) {
 #else
 
         if (!test_getenv("KAFKA_PATH", NULL) ||
-            !test_getenv("ZK_ADDRESS", NULL)) {
+            !test_getenv("BROKERS", NULL)) {
                 if (skip)
                         TEST_SKIP(
                             "Cannot create topics "
-                            "(set KAFKA_PATH and ZK_ADDRESS)\n");
+                            "(set KAFKA_PATH and BROKERS)\n");
                 return 0;
         }
 

@@ -1,3 +1,6 @@
+$ErrorActionPreference = "Stop";
+Write-Host 'Disabling\n';
+
 function disable-ssl-2.0
 {
     New-Item 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server' -Force

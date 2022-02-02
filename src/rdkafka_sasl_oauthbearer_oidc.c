@@ -240,6 +240,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         size_t post_fields_size;
         size_t extension_cnt;
         size_t extension_key_value_cnt = 0;
+        size_t scope_size = 0;
 
         char set_token_errstr[512];
         char decode_payload_errstr[512];
@@ -255,12 +256,20 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                                     &headers);
 
         /* Build post fields */
-        post_fields_size = strlen("grant_type=client_credentials&scope=") +
-                           strlen(rk->rk_conf.sasl.oauthbearer.scope) + 1;
-        post_fields = rd_malloc(post_fields_size);
-        rd_snprintf(post_fields, post_fields_size,
-                    "grant_type=client_credentials&scope=%s",
-                    rk->rk_conf.sasl.oauthbearer.scope);
+        if (rk->rk_conf.sasl.oauthbearer.scope)
+                scope_size = strlen(rk->rk_conf.sasl.oauthbearer.scope);
+        if (scope_size == 0) {
+                post_fields = rd_strdup("grant_type=client_credentials");
+                post_fields_size = strlen("grant_type=client_credentials");
+        } else {
+                post_fields_size = strlen(
+                                   "grant_type=client_credentials&scope=") +
+                                   scope_size;
+                post_fields = rd_malloc(post_fields_size + 1);
+                rd_snprintf(post_fields, post_fields_size,
+                            "grant_type=client_credentials&scope=%s",
+                            rk->rk_conf.sasl.oauthbearer.scope);
+        }
 
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
 

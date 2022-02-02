@@ -952,7 +952,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "is used. If set it to \"oidc\", OAuth/OIDC login method will "
      "be used. "
      "sasl.oauthbearer.client.id, sasl.oauthbearer.client.secret, "
-     "sasl.oauthbearer.scope, "
      "and sasl.oauthbearer.token.endpoint.url are needed if "
      "sasl.oauthbearer.method is set to \"oidc\".",
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
@@ -3700,12 +3699,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
                         if (!conf->sasl.oauthbearer.token_endpoint_url) {
                                 return "`sasl.oauthbearer.token.endpoint.url` "
-                                       "is mandatory when "
-                                       "`sasl.oauthbearer.method=oidc` is set";
-                        }
-
-                        if (!conf->sasl.oauthbearer.scope) {
-                                return "`sasl.oauthbearer.scope` "
                                        "is mandatory when "
                                        "`sasl.oauthbearer.method=oidc` is set";
                         }

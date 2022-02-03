@@ -72,9 +72,9 @@ class LibrdkafkaTestCluster(Cluster):
             kdc.start()
 
         if 'OAUTHBEARER'.casefold() == \
-            defconf.get('sasl_mechanisms', None).casefold() and \
+            defconf.get('sasl_mechanisms', "").casefold() and \
                 'OIDC'.casefold() == \
-                defconf.get('sasl_oauthbearer_method').casefold():
+                defconf.get('sasl_oauthbearer_method', "").casefold():
             self.oidc = OauthbearerOIDCApp(self)
 
         # Brokers

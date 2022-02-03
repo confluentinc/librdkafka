@@ -35,6 +35,8 @@ librdkafka v1.9.0 is a feature release:
  * `rd_kafka_clusterid()` would previously fail with timeout if
    called on cluster with no visible topics (#3620).
    The clusterid is now returned as soon as metadata has been retrieved.
+ * Fix hang in `rd_kafka_list_groups()` if there are no available brokers
+   to connect to (#3705).
 
 
 ### Consumer fixes

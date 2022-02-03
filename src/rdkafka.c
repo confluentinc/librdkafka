@@ -4656,22 +4656,27 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         int rkb_cnt                    = 0;
         struct list_groups_state state = RD_ZERO_INIT;
         rd_ts_t ts_end                 = rd_timeout_init(timeout_ms);
-        int state_version              = rd_kafka_brokers_get_state_version(rk);
 
         /* Wait until metadata has been fetched from cluster so
          * that we have a full broker list.
          * This state only happens during initial client setup, after that
          * there'll always be a cached metadata copy. */
-        rd_kafka_rdlock(rk);
-        while (!rk->rk_ts_metadata) {
+        while (1) {
+                int state_version = rd_kafka_brokers_get_state_version(rk);
+                rd_bool_t has_metadata;
+
+                rd_kafka_rdlock(rk);
+                has_metadata = rk->rk_ts_metadata != 0;
                 rd_kafka_rdunlock(rk);
+
+                if (has_metadata)
+                        break;
 
                 if (!rd_kafka_brokers_wait_state_change(
                         rk, state_version, rd_timeout_remains(ts_end)))
                         return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-                rd_kafka_rdlock(rk);
         }
+
 
         state.q             = rd_kafka_q_new(rk);
         state.desired_group = group;
@@ -4682,6 +4687,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
             rd_malloc(state.grplist_size * sizeof(*state.grplist->groups));
 
         /* Query each broker for its list of groups */
+        rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {

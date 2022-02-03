@@ -146,7 +146,7 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
 
 
 
-int main_0019_list_groups(int argc, char **argv) {
+static void do_test_list_groups(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 #define _CONS_CNT 2
         char *groups[_CONS_CNT];
@@ -158,6 +158,8 @@ int main_0019_list_groups(int argc, char **argv) {
         int groups_seen;
         rd_kafka_topic_t *rkt;
         const struct rd_kafka_group_list *grplist;
+
+        SUB_TEST();
 
         /* Handle for group listings */
         rk = test_create_producer();
@@ -244,5 +246,44 @@ int main_0019_list_groups(int argc, char **argv) {
 
         rd_kafka_destroy(rk);
 
+        SUB_TEST_PASS();
+}
+
+
+
+/**
+ * @brief #3705: Verify that list_groups() doesn't hang if unable to
+ *        connect to the cluster.
+ */
+static void do_test_list_groups_hang(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        const struct rd_kafka_group_list *grplist;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+
+        SUB_TEST();
+        test_conf_init(&conf, NULL, 20);
+
+        /* An unavailable broker */
+        test_conf_set(conf, "bootstrap.servers", "127.0.0.1:65531");
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        TIMING_START(&timing, "list_groups");
+        err = rd_kafka_list_groups(rk, NULL, &grplist, 5 * 1000);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected ERR__TIMED_OUT, not %s", rd_kafka_err2name(err));
+        TIMING_ASSERT(&timing, 5 * 1000, 7 * 1000);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+int main_0019_list_groups(int argc, char **argv) {
+        do_test_list_groups();
+        do_test_list_groups_hang();
         return 0;
 }

@@ -23,6 +23,10 @@ target_link_libraries(rdkafka_complex_consumer_example_cpp PUBLIC rdkafka++)
 add_executable(openssl_engine_example_cpp openssl_engine_example.cpp ${win32_sources})
 target_link_libraries(openssl_engine_example_cpp PUBLIC rdkafka++)
 
+add_executable(misc misc.c ${win32_sources})
+target_link_libraries(misc PUBLIC rdkafka)
+
+
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)

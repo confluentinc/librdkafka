@@ -176,12 +176,8 @@ if __name__ == '__main__':
                              'sasl_oauthbearer_config':
                              'scope=requiredScope principal=admin'}
     sasl_oauth_oidc_conf = {'sasl_mechanisms': 'OAUTHBEARER',
-                            'sasl.oauthbearer.method': 'OIDC',
-                            'sasl.oauthbearer.client.id': 'abc123',
-                            'sasl.oauthbearer.client.secret': 'S3cr3t!',
-                            'sasl.oauthbearer.scope': 'test',
-                            'sasl.oauthbearer.extensions': 'ExtensionworkloadIdentity=develC348S,\
-                                Extensioncluster=lkc123'}
+                            'sasl_oauthbearer_method': 'OIDC',
+                            }
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
@@ -223,9 +219,10 @@ if __name__ == '__main__':
                'expect_fail': ['all']},
               {'name': 'OAuth/OIDC',
                'run': args.oidc,
-               'tests': ['0126'],
+               'tests': ['0001', '0126'],
                'conf': sasl_oauth_oidc_conf,
-               'expect_fail': ['2.1.0', '0.10.2.0', '0.9.0.1', '0.8.2.2']},
+               'expect_fail': ['2.8.1', '2.1.0', '0.10.2.0',
+                               '0.9.0.1', '0.8.2.2']},
               {'name': 'SASL Kerberos',
                'run': args.sasl,
                'conf': sasl_kerberos_conf,

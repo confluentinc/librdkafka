@@ -68,20 +68,22 @@ class LibrdkafkaTestApp(App):
             elif mech == 'OAUTHBEARER':
                 self.security_protocol = 'SASL_PLAINTEXT'
                 oidc = cluster.find_app(OauthbearerOIDCApp)
-                if oidc:
+                if oidc is not None:
                     conf_blob.append('sasl.oauthbearer.method=%s\n' %
-                                     self.conf.get('sasl.oauthbearer.method'))
+                                     oidc.conf.get('sasl_oauthbearer_method'))
                     conf_blob.append('sasl.oauthbearer.client.id=%s\n' %
-                                     self.conf.get(
-                                         'sasl.oauthbearer.client.id'))
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_client_id'))
                     conf_blob.append('sasl.oauthbearer.client.secret=%s\n' %
-                                     self.conf.get(
-                                         'sasl.oauthbearer.client.secret'))
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_client_secret'))
                     conf_blob.append('sasl.oauthbearer.extensions=%s\n' %
-                                     self.conf.get(
-                                         'sasl.oauthbearer.extensions'))
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_extensions'))
                     conf_blob.append('sasl.oauthbearer.scope=%s\n' %
-                                     self.conf.get('sasl.oauthbearer.scope'))
+                                     oidc.conf.get('sasl_oauthbearer_scope'))
+                    conf_blob.append('sasl.oauthbearer.token.endpoint.url=%s\n'
+                                     % oidc.conf.get('valid_url'))
                     self.env_add('VALID_OIDC_URL', oidc.conf.get('valid_url'))
                     self.env_add(
                         'INVALID_OIDC_URL',

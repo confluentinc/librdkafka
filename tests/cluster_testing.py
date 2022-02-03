@@ -71,8 +71,10 @@ class LibrdkafkaTestCluster(Cluster):
             # and keytabs are available at the time of Kafka config generation.
             kdc.start()
 
-        if 'OAUTHBEARER' in defconf.get('sasl_mechanisms', []) and \
-                'OIDC' in defconf.get('sasl.oauthbearer.method', []):
+        if 'OAUTHBEARER'.casefold() == \
+            defconf.get('sasl_mechanisms', None).casefold() and \
+                'OIDC'.casefold() == \
+                defconf.get('sasl_oauthbearer_method').casefold():
             self.oidc = OauthbearerOIDCApp(self)
 
         # Brokers

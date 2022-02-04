@@ -1,18 +1,16 @@
 version: 1.9.0-R-post{build}
 pull_requests:
   do_not_increment_build_number: true
-image: Visual Studio 2015
+image: Visual Studio 2019
 configuration: Release
 environment:
-  runtime: v140
+  runtime: v142
   matrix:
   - platform: x64
     arch: x64
   - platform: win32
     arch: x86
 install:
-- ps: Write-Host "Testing"
-- ps: ./win32/enable-tls12.ps
 - ps: "& .\\win32\\install-coapp.ps1"
   # Update vcpkg (is outdated on the VS 2015 image)
 - cmd: |

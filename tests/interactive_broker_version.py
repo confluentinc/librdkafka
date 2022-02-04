@@ -43,8 +43,8 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
 
     cluster = Cluster('LibrdkafkaTestCluster', root_path, debug=debug)
 
-    if args.conf.get('oauthbearer_method') == 'OIDC':
-        oidcapp = OauthbearerOIDCApp(cluster)
+    if conf.get('sasl_oauthbearer_method') == 'OIDC':
+        oidc = OauthbearerOIDCApp(cluster)
 
     # Enable SSL if desired
     if 'SSL' in conf.get('security.protocol', ''):
@@ -104,7 +104,7 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                 break
         elif mech == 'OAUTHBEARER':
             security_protocol = 'SASL_PLAINTEXT'
-            if defconf.get('oauthbearer_method') == 'OIDC':
+            if defconf.get('sasl_oauthbearer_method') == 'OIDC':
                 os.write(
                     fd, ('sasl.oauthbearer.method=OIDC\n'.encode(
                          'ascii')))
@@ -122,9 +122,9 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                 os.write(
                     fd, ('sasl.oauthbearer.scope=test\n'.encode(
                          'ascii')))
-                cmd_env['VALID_OIDC_URL'] = oidcapp.conf.get('valid_url')
-                cmd_env['INVALID_OIDC_URL'] = oidcapp.conf.get('badformat_url')
-                cmd_env['EXPIRED_TOKEN_OIDC_URL'] = oidcapp.conf.get(
+                cmd_env['VALID_OIDC_URL'] = oidc.conf.get('valid_url')
+                cmd_env['INVALID_OIDC_URL'] = oidc.conf.get('badformat_url')
+                cmd_env['EXPIRED_TOKEN_OIDC_URL'] = oidc.conf.get(
                     'expired_url')
 
             else:
@@ -313,7 +313,7 @@ if __name__ == '__main__':
         help='SASL mechanism (PLAIN, SCRAM-SHA-nnn, GSSAPI, OAUTHBEARER)')
     parser.add_argument(
         '--oauthbearer-method',
-        dest='oauthbearer_method',
+        dest='sasl_oauthbearer_method',
         type=str,
         default=None,
         help='OAUTHBEARER/OIDC method (DEFAULT, OIDC), \
@@ -339,14 +339,15 @@ if __name__ == '__main__':
             args.conf['sasl_users'] = 'testuser=testpass'
         args.conf['sasl_mechanisms'] = args.sasl
     retcode = 0
-    if args.oauthbearer_method:
-        if args.oauthbearer_method == "OIDC" and \
+    if args.sasl_oauthbearer_method:
+        if args.sasl_oauthbearer_method == "OIDC" and \
            args.conf['sasl_mechanisms'] != 'OAUTHBEARER':
             print('If config `--oauthbearer-method=OIDC`, '
                   '`--sasl` must be set to `OAUTHBEARER`')
             retcode = 3
             sys.exit(retcode)
-        args.conf['oauthbearer_method'] = args.oauthbearer_method
+        args.conf['sasl_oauthbearer_method'] = \
+            args.sasl_oauthbearer_method
 
     args.conf.get('conf', list()).append("log.retention.bytes=1000000000")
 

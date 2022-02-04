@@ -176,8 +176,7 @@ if __name__ == '__main__':
                              'sasl_oauthbearer_config':
                              'scope=requiredScope principal=admin'}
     sasl_oauth_oidc_conf = {'sasl_mechanisms': 'OAUTHBEARER',
-                            'sasl_oauthbearer_method': 'OIDC',
-                            }
+                            'sasl_oauthbearer_method': 'OIDC'}
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',

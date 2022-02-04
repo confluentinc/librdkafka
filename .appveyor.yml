@@ -35,21 +35,21 @@ build:
   include_nuget_references: true
   parallel: true
   verbosity: normal
-test_script:
-- cmd: cd tests && ..\win32\outdir\%runtime%\%PLATFORM%\%CONFIGURATION%\tests.exe -l -Q -p1 && cd ..
-artifacts:
-- path: test_report*.json
-  name: Test report
-- path: '*.nupkg'
-  name: Packages
-- path: '**\*.dll'
-  name: Libraries
-- path: '**\*.lib'
-  name: Libraries
-- path: '**\*.pdb'
-  name: Libraries
-- path: '**\*.exe'
-  name: Executables
+#test_script:
+#- cmd: cd tests && ..\win32\outdir\%runtime%\%PLATFORM%\%CONFIGURATION%\tests.exe -l -Q -p1 && cd ..
+#artifacts:
+#- path: test_report*.json
+#  name: Test report
+#- path: '*.nupkg'
+#  name: Packages
+#- path: '**\*.dll'
+#  name: Libraries
+#- path: '**\*.lib'
+#  name: Libraries
+#- path: '**\*.pdb'
+#  name: Libraries
+#- path: '**\*.exe'
+#  name: Executables
 #before_deploy:
 after_test:
 - ps: >-

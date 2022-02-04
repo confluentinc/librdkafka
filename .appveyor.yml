@@ -94,8 +94,8 @@ deploy:
   folder: librdkafka/p-librdkafka__bld-appveyor__plat-windows__arch-$(platform)__bldtype-$(configuration)__tag-$(APPVEYOR_REPO_TAG_NAME)__sha-$(APPVEYOR_REPO_COMMIT)__bid-$(APPVEYOR_BUILD_ID)
   artifact: /.*\.(nupkg)/
   max_error_retry: 3
-  on:
-    APPVEYOR_REPO_TAG: true
+#  on:
+#    APPVEYOR_REPO_TAG: true
 notifications:
 - provider: Email
   to:

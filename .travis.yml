@@ -145,7 +145,7 @@ script:
 - if [[ -n $TRAVIS_TAG ]]; then for distro in $ADDITIONAL_BUILDS ; do packaging/tools/distro-build.sh $distro --enable-strip || travis_terminate 1 ; done ; fi
 - if [[ $COPYRIGHT_CHECK == y ]]; then make copyright-check || travis_terminate 1; fi
 - if [[ $DOC_CHECK == y ]]; then make docs || travis_terminate 1 ; fi
-- if [[ -z $TRAVIS_TAG && $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.7.0) || travis_terminate 1 ; fi
+- if [[ -z $TRAVIS_TAG && $RUN_INTEGRATION_TESTS == y ]]; then (cd tests && travis_retry ./interactive_broker_version.py -c "make quick" 2.8.1) || travis_terminate 1 ; fi
 - if [[ -f tests/core ]] && (which gdb >/dev/null); then (cd tests && LD_LIBRARY_PATH=../src:../src-cpp gdb ./test-runner core < backtrace.gdb) ; fi
 - sha256sum artifacts/* || true
 

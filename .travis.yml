@@ -88,12 +88,16 @@ matrix:
  - name: "Linux GCC: +integration-tests +copyright-check +doc-check +devel +code-cov +c99 +c++98"
    os: linux
    dist: xenial
+   language: python
+   python: 3.8
    compiler: gcc
    env: NO_ARTIFACTS=y RUN_INTEGRATION_TESTS=y COPYRIGHT_CHECK=y DOC_CHECK=y
    before_script:
     - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
     - sudo dpkg -i rapidjson-dev.deb
-    - sudo pip3 install -r tests/requirements.txt
+    - python -m pip install -U pip
+    - python -m pip -V
+    - python -m pip install -r tests/requirements.txt
     - sudo apt update
     - sudo apt install -y doxygen graphviz gdb
     - ./configure --CFLAGS="-std=c99" --CXXFLAGS="-std=c++98" --install-deps --enable-devel --disable-lz4-ext --prefix="$PWD/dest"

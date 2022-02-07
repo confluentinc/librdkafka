@@ -156,7 +156,7 @@ Commercial support is available from [Confluent Inc](https://www.confluent.io/)
 
 ## Community support
 
-**Only the [last official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
+**Only the [latest official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
 
 File bug reports and feature requests using [GitHub Issues](https://github.com/edenhill/librdkafka/issues).
 

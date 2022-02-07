@@ -51,7 +51,7 @@
 const char *argv0;
 
 
-static void usage (const char *reason, ...) {
+static void usage(const char *reason, ...) {
 
         fprintf(stderr,
                 "Miscellaneous librdkafka usage examples\n"
@@ -71,11 +71,7 @@ static void usage (const char *reason, ...) {
                 "                   See CONFIGURATION.md for full list.\n"
                 "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
                 "\n",
-                argv0,
-                argv0,
-                argv0,
-                rd_kafka_get_debug_contexts()
-                );
+                argv0, argv0, argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -92,23 +88,23 @@ static void usage (const char *reason, ...) {
 }
 
 
-#define fatal(...) do {                         \
-        fprintf(stderr, "ERROR: ");             \
-        fprintf(stderr, __VA_ARGS__);           \
-        fprintf(stderr, "\n");                  \
-        exit(2);                                \
+#define fatal(...)                                                             \
+        do {                                                                   \
+                fprintf(stderr, "ERROR: ");                                    \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\n");                                         \
+                exit(2);                                                       \
         } while (0)
 
 
 /**
  * @brief Set config property. Exit on failure.
  */
-static void conf_set (rd_kafka_conf_t *conf,
-                      const char *name, const char *val) {
+static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
         char errstr[512];
 
-        if (rd_kafka_conf_set(conf, name, val,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
                 fatal("Failed to set %s=%s: %s", name, val, errstr);
 }
 
@@ -121,7 +117,7 @@ static void conf_set (rd_kafka_conf_t *conf,
 /**
  * @brief Just print the librdkafka version
  */
-static void cmd_version (rd_kafka_conf_t *conf, int argc, char **argv) {
+static void cmd_version(rd_kafka_conf_t *conf, int argc, char **argv) {
         if (argc)
                 usage("version command takes no arguments");
 
@@ -133,7 +129,7 @@ static void cmd_version (rd_kafka_conf_t *conf, int argc, char **argv) {
 /**
  * @brief Call rd_kafka_list_groups() with an optional groupid argument.
  */
-static void cmd_list_groups (rd_kafka_conf_t *conf, int argc, char **argv) {
+static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
         const char *groupid = NULL;
         char errstr[512];
@@ -161,7 +157,7 @@ static void cmd_list_groups (rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * List groups
          */
-        err = rd_kafka_list_groups(rk, groupid, &grplist, 10*1000 /*10s*/);
+        err = rd_kafka_list_groups(rk, groupid, &grplist, 10 * 1000 /*10s*/);
         if (err)
                 fatal("rd_kafka_list_groups(%s) failed: %s", groupid,
                       rd_kafka_err2str(err));
@@ -178,25 +174,27 @@ static void cmd_list_groups (rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Print group information
          */
-        for (i = 0 ; grplist->group_cnt ; i++) {
+        for (i = 0; grplist->group_cnt; i++) {
                 int j;
                 const struct rd_kafka_group_info *grp = &grplist->groups[i];
 
-                printf("Group \"%s\" protocol-type %s, protocol %s, "
-                       "state %s, with %d member(s))",
-                       grp->group, grp->protocol_type, grp->protocol,
-                       grp->state, grp->member_cnt);
+                printf(
+                    "Group \"%s\" protocol-type %s, protocol %s, "
+                    "state %s, with %d member(s))",
+                    grp->group, grp->protocol_type, grp->protocol, grp->state,
+                    grp->member_cnt);
                 if (grp->err)
                         printf(" error: %s", rd_kafka_err2str(grp->err));
                 printf("\n");
-                for (j = 0 ; j < grp->member_cnt ; j++) {
+                for (j = 0; j < grp->member_cnt; j++) {
                         const struct rd_kafka_group_member_info *mb =
-                                &grp->members[j];
-                        printf("  Member \"%s\" with client-id %s, host %s, "
-                               "%d bytes of metadat, %d bytes of assignment\n",
-                               mb->member_id, mb->client_id, mb->client_host,
-                               mb->member_metadata_size,
-                               mb->member_assignment_size);
+                            &grp->members[j];
+                        printf(
+                            "  Member \"%s\" with client-id %s, host %s, "
+                            "%d bytes of metadat, %d bytes of assignment\n",
+                            mb->member_id, mb->client_id, mb->client_host,
+                            mb->member_metadata_size,
+                            mb->member_assignment_size);
                 }
         }
 
@@ -210,20 +208,17 @@ static void cmd_list_groups (rd_kafka_conf_t *conf, int argc, char **argv) {
 
 
 
-
-
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt, i;
         const char *cmd;
         static const struct {
                 const char *cmd;
-                void (*func) (rd_kafka_conf_t *conf,
-                              int argc, char **argv);
+                void (*func)(rd_kafka_conf_t *conf, int argc, char **argv);
         } cmds[] = {
-                { "version", cmd_version },
-                { "list_groups", cmd_list_groups },
-                { NULL },
+            {"version", cmd_version},
+            {"list_groups", cmd_list_groups},
+            {NULL},
         };
 
         argv0 = argv[0];
@@ -241,8 +236,7 @@ int main(int argc, char **argv) {
          * Parse common options
          */
         while ((opt = getopt(argc, argv, "b:X:d:")) != -1) {
-                switch (opt)
-                {
+                switch (opt) {
                 case 'b':
                         conf_set(conf, "bootstrap.servers", optarg);
                         break;
@@ -279,7 +273,7 @@ int main(int argc, char **argv) {
         /*
          * Find matching command and run it
          */
-        for (i = 0 ; cmds[i].cmd ; i++) {
+        for (i = 0; cmds[i].cmd; i++) {
                 if (!strcmp(cmds[i].cmd, cmd)) {
                         cmds[i].func(conf, argc - optind, &argv[optind]);
                         exit(0);

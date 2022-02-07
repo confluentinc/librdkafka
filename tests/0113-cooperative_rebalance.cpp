@@ -694,6 +694,7 @@ static void a_assign_rapid() {
   RdKafka::Conf *pconf;
   Test::conf_init(&pconf, NULL, 10);
   Test::conf_set(pconf, "bootstrap.servers", bootstraps);
+  Test::conf_set(pconf, "security.protocol", "plaintext");
   std::string errstr;
   RdKafka::Producer *p = RdKafka::Producer::create(pconf, errstr);
   if (!p)
@@ -722,6 +723,7 @@ static void a_assign_rapid() {
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 20);
   Test::conf_set(conf, "bootstrap.servers", bootstraps);
+  Test::conf_set(conf, "security.protocol", "plaintext");
   Test::conf_set(conf, "client.id", __FUNCTION__);
   Test::conf_set(conf, "group.id", group_id);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
@@ -1978,6 +1980,11 @@ static void n_wildcard() {
 static void o_java_interop() {
   SUB_TEST();
 
+  if (*test_conf_get(NULL, "sasl.mechanism") != '\0')
+    SUB_TEST_SKIP(
+        "Cluster is set up for SASL: we won't bother with that "
+        "for the Java client\n");
+
   std::string topic_name_1 = Test::mk_topic_name("0113_o_2", 1);
   std::string topic_name_2 = Test::mk_topic_name("0113_o_6", 1);
   std::string group_name   = Test::mk_unique_group_name("0113_o");
@@ -2665,7 +2672,8 @@ static void p_lost_partitions_heartbeat_illegal_generation_test() {
 
   /* Seed the topic with messages */
   test_produce_msgs_easy_v(topic, 0, 0, 0, 100, 10, "bootstrap.servers",
-                           bootstraps, "batch.num.messages", "10", NULL);
+                           bootstraps, "batch.num.messages", "10",
+                           "security.protocol", "plaintext", NULL);
 
   test_conf_init(&conf, NULL, 30);
   test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -2740,11 +2748,13 @@ static void q_lost_partitions_illegal_generation_test(
 
   /* Seed the topic1 with messages */
   test_produce_msgs_easy_v(topic1, 0, 0, 0, 100, 10, "bootstrap.servers",
-                           bootstraps, "batch.num.messages", "10", NULL);
+                           bootstraps, "batch.num.messages", "10",
+                           "security.protocol", "plaintext", NULL);
 
   /* Seed the topic2 with messages */
   test_produce_msgs_easy_v(topic2, 0, 0, 0, 100, 10, "bootstrap.servers",
-                           bootstraps, "batch.num.messages", "10", NULL);
+                           bootstraps, "batch.num.messages", "10",
+                           "security.protocol", "plaintext", NULL);
 
   test_conf_init(&conf, NULL, 30);
   test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -2827,7 +2837,8 @@ static void r_lost_partitions_commit_illegal_generation_test_local() {
 
   /* Seed the topic with messages */
   test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 10, "bootstrap.servers",
-                           bootstraps, "batch.num.messages", "10", NULL);
+                           bootstraps, "batch.num.messages", "10",
+                           "security.protocol", "plaintext", NULL);
 
   test_conf_init(&conf, NULL, 30);
   test_conf_set(conf, "bootstrap.servers", bootstraps);

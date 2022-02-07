@@ -192,8 +192,8 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         test_conf_init(&conf, NULL, 60);
 
         sec = test_conf_get(conf, "security.protocol");
-        if (strcmp(sec, "sasl_plaintext")) {
-                TEST_SKIP("Apache Kafka cluster does not config SSL/SASL\n");
+        if (!strstr(sec, "sasl")) {
+                TEST_SKIP("Apache Kafka cluster not configured for SASL\n");
                 return 0;
         }
 

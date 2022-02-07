@@ -470,7 +470,7 @@ struct test tests[] = {
     _TEST(0123_connections_max_idle, 0),
     _TEST(0124_openssl_invalid_engine, TEST_F_LOCAL),
     _TEST(0125_immediate_flush, 0),
-    _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 0, 0, 0)),
+    _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
     _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
 

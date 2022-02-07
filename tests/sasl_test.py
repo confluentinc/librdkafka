@@ -133,6 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', dest='debug',
                         default=False,
                         help='Enable trivup debugging')
+    parser.add_argument('--suite', type=str, default=None,
+                        help='Only run matching suite(s) (substring match)')
     parser.add_argument('versions', type=str, default=None,
                         nargs='*', help='Limit broker versions to these')
     args = parser.parse_args()
@@ -220,6 +222,7 @@ if __name__ == '__main__':
                'run': args.oidc,
                'tests': ['0001', '0126'],
                'conf': sasl_oauth_oidc_conf,
+               'minver': '3.1.0',
                'expect_fail': ['2.8.1', '2.1.0', '0.10.2.0',
                                '0.9.0.1', '0.8.2.2']},
               {'name': 'SASL Kerberos',
@@ -237,6 +240,19 @@ if __name__ == '__main__':
         for suite in suites:
             if not suite.get('run', True):
                 continue
+
+            if args.suite is not None and suite['name'].find(args.suite) == -1:
+                print(
+                    f'# Skipping {suite["name"]} due to --suite {args.suite}')
+                continue
+
+            if 'minver' in suite:
+                minver = [int(x) for x in suite['minver'].split('.')][:3]
+                this_version = [int(x) for x in version.split('.')][:3]
+                if this_version < minver:
+                    print(
+                        f'# Skipping {suite["name"]} due to version {version} < minimum required version {suite["minver"]}')  # noqa: E501
+                    continue
 
             _conf = conf.copy()
             _conf.update(suite.get('conf', {}))

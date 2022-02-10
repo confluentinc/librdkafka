@@ -3894,7 +3894,8 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
  *         and then start fetching messages. This cycle may take up to
  *         \c session.timeout.ms * 2 or more to complete.
  *
- * @remark A consumer error will be raised for each unavailable topic in the
+ * @remark After this call returns a consumer error will be returned by
+ *         rd_kafka_consumer_poll (et.al) for each unavailable topic in the
  *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
  *         for non-existent topics, and
  *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.

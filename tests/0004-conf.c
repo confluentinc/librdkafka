@@ -425,6 +425,80 @@ static void do_test_default_topic_conf(void) {
 }
 
 
+/**
+ * @brief Verify behaviour of checking that message.timeout.ms fits within
+ *        configured linger.ms. By larry-cdn77.
+ */
+static void do_message_timeout_linger_checks(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_conf_t *tconf;
+        rd_kafka_t *rk;
+        char errstr[512];
+        int i;
+        const char values[7][3][40] = {
+            {"-", "-", "default and L and M"},
+            {"100", "-", "set L such that L<M"},
+            {"-", "300000", "set M such that L<M"},
+            {"100", "300000", "set L and M such that L<M"},
+            {"500000", "-", "!set L such that L>=M"},
+            {"-", "10", "set M such that L>=M"},
+            {"500000", "10", "!set L and M such that L>=M"}};
+
+        SUB_TEST_QUICK();
+
+        for (i = 0; i < 7; i++) {
+                const char *linger     = values[i][0];
+                const char *msgtimeout = values[i][1];
+                const char *desc       = values[i][2];
+                rd_bool_t expect_fail  = *desc == '!';
+
+                if (expect_fail)
+                        desc++; /* Push past the '!' */
+
+                conf  = rd_kafka_conf_new();
+                tconf = rd_kafka_topic_conf_new();
+
+                if (*linger != '-')
+                        test_conf_set(conf, "linger.ms", linger);
+
+                if (*msgtimeout != '-')
+                        test_topic_conf_set(tconf, "message.timeout.ms",
+                                            msgtimeout);
+
+                rd_kafka_conf_set_default_topic_conf(conf, tconf);
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+
+                if (!rk)
+                        TEST_SAY("#%d \"%s\": rd_kafka_new() failed: %s\n", i,
+                                 desc, errstr);
+                else
+                        TEST_SAY("#%d \"%s\": rd_kafka_new() succeeded\n", i,
+                                 desc);
+
+                if (!expect_fail) {
+                        TEST_ASSERT(rk != NULL,
+                                    "Expected success: "
+                                    "message timeout linger: %s: %s",
+                                    desc, errstr);
+
+                        rd_kafka_destroy(rk);
+
+                } else {
+                        TEST_ASSERT(rk == NULL,
+                                    "Expected failure: "
+                                    "message timeout linger: %s",
+                                    desc);
+
+                        rd_kafka_conf_destroy(conf);
+                }
+        }
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0004_conf(int argc, char **argv) {
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
@@ -783,6 +857,8 @@ int main_0004_conf(int argc, char **argv) {
         do_test_instance_conf();
 
         do_test_default_topic_conf();
+
+        do_message_timeout_linger_checks();
 
         return 0;
 }

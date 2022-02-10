@@ -85,7 +85,12 @@ librdkafka v1.9.0 is a feature release:
    The fix included in this release is to save the per-partition idempotency
    state when a partition is removed, and then recover and use that saved
    state if the partition comes back at a later time.
-
+ * The logic for enforcing that `message.timeout.ms` is greather than
+   an explicitly configured `linger.ms` was incorrect and instead of
+   erroring out early the lingering time was automatically adjusted to the
+   message timeout, ignoring the configured `linger.ms`.
+   This has now been fixed so that an error is returned when instantiating the
+   producer. Thanks to @larry-cdn77 for analysis and test-cases. (#3709)
 
 
 # librdkafka v1.8.2

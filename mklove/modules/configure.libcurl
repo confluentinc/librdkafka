@@ -49,8 +49,15 @@ function install_source {
             tar xzf - --strip-components 1
     fi
 
-    # Clear out LIBS to not interfer with lib detection process.
-    LIBS="" ./configure \
+    # curl's configure has a runtime check where a program is built
+    # with all libs linked and then executed, since mklove's destdir
+    # is outside the standard ld.so search path this runtime check will
+    # fail due to missing libraries. We circumvent this by passing
+    # a modified LD_LIBRARY_PATH with our destdir lib dirs prepended.
+    #
+    # Also clear out LIBS to not interfer with lib detection process.
+    LD_LIBRARY_PATH="${destdir}/usr/lib:${destdir}/usr/lib64:$LD_LIBRARY_PATH" \
+      LIBS="" ./configure \
 	--with-openssl \
 	--enable-static \
 	--disable-shared \

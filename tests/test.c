@@ -4503,26 +4503,38 @@ void test_kafka_topics(const char *fmt, ...) {
 #ifdef _WIN32
         TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
 #else
-        char cmd[512];
-        int r;
+        char cmd[1024];
+        int r, bytes_left;
         va_list ap;
         test_timing_t t_cmd;
-        const char *kpath, *zk;
+        const char *kpath, *bootstrap_env, *flag, *bootstrap_srvs;
+
+        if (test_broker_version >= TEST_BRKVER(3, 0, 0, 0)) {
+                bootstrap_env = "BROKERS";
+                flag = "--bootstrap-server";
+        }  else {
+                bootstrap_env = "ZK_ADDRESS";
+                flag = "--zookeeper";
+        }
 
         kpath = test_getenv("KAFKA_PATH", NULL);
-        zk    = test_getenv("ZK_ADDRESS", NULL);
+        bootstrap_srvs = test_getenv(bootstrap_env, NULL);
 
-        if (!kpath || !zk)
-                TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
-                          __FUNCTION__);
+        if (!kpath || !bootstrap_srvs)
+                TEST_FAIL("%s: KAFKA_PATH and %s must be set",
+                          __FUNCTION__, bootstrap_env);
 
         r = rd_snprintf(cmd, sizeof(cmd),
-                        "%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
-        TEST_ASSERT(r < (int)sizeof(cmd));
+                        "%s/bin/kafka-topics.sh %s %s ",
+                        kpath, flag, bootstrap_srvs);
+        TEST_ASSERT(r > 0 && r < (int)sizeof(cmd));
+
+        bytes_left = sizeof(cmd) - r;
 
         va_start(ap, fmt);
-        rd_vsnprintf(cmd + r, sizeof(cmd) - r, fmt, ap);
+        r = rd_vsnprintf(cmd + r, bytes_left, fmt, ap);
         va_end(ap);
+        TEST_ASSERT(r > 0 && r < bytes_left);
 
         TEST_SAY("Executing: %s\n", cmd);
         TIMING_START(&t_cmd, "exec");
@@ -5164,12 +5176,14 @@ void test_report_add(struct test *test, const char *fmt, ...) {
 }
 
 /**
- * Returns 1 if KAFKA_PATH and ZK_ADDRESS is set to se we can use the
- * kafka-topics.sh script to manually create topics.
+ * Returns 1 if KAFKA_PATH and BROKERS (or ZK_ADDRESS) is set to se we can use
+ * the kafka-topics.sh script to manually create topics.
  *
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
 int test_can_create_topics(int skip) {
+        const char *bootstrap;
+
         /* Has AdminAPI */
         if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))
                 return 1;
@@ -5180,12 +5194,15 @@ int test_can_create_topics(int skip) {
         return 0;
 #else
 
+        bootstrap = test_broker_version >= TEST_BRKVER(3, 0, 0, 0)
+                        ? "BROKERS" : "ZK_ADDRESS";
+
         if (!test_getenv("KAFKA_PATH", NULL) ||
-            !test_getenv("ZK_ADDRESS", NULL)) {
+            !test_getenv(bootstrap, NULL)) {
                 if (skip)
                         TEST_SKIP(
                             "Cannot create topics "
-                            "(set KAFKA_PATH and ZK_ADDRESS)\n");
+                            "(set KAFKA_PATH and %s)\n", bootstrap);
                 return 0;
         }
 

@@ -718,43 +718,49 @@ static void do_test_AclBinding() {
         const char *principal = "User:test";
         const char *host      = "*";
 
-        SUB_TEST_QUICK("AclBinding");
+        SUB_TEST_QUICK();
 
         // Valid acl binding
+        *errstr = '\0';
         new_acl = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(new_acl, "expected AclBinding");
         rd_kafka_AclBinding_destroy(new_acl);
 
+        *errstr = '\0';
         new_acl = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, NULL, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid resource name"),
                     "expected error string \"Invalid resource name\", not %s",
                     errstr);
+
+        *errstr = '\0';
         new_acl = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             NULL, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid principal"),
                     "expected error string \"Invalid principal\", not %s",
                     errstr);
+
+        *errstr = '\0';
         new_acl = rd_kafka_AclBinding_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, NULL, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid host"),
                     "expected error string \"Invalid host\", not %s", errstr);
 
         for (i = -1; i <= RD_KAFKA_RESOURCE__CNT; i++) {
-                errstr[0] = 0;
-                new_acl   = rd_kafka_AclBinding_new(
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
                     i, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal,
                     host, RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_resource_types[i]) {
                         TEST_ASSERT(new_acl, "expected AclBinding");
                         rd_kafka_AclBinding_destroy(new_acl);
@@ -767,11 +773,11 @@ static void do_test_AclBinding() {
                             errstr);
         }
         for (i = -1; i <= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT; i++) {
-                errstr[0] = 0;
-                new_acl   = rd_kafka_AclBinding_new(
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic, i, principal, host,
                     RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_resource_pattern_types[i]) {
                         TEST_ASSERT(new_acl, "expected AclBinding");
                         rd_kafka_AclBinding_destroy(new_acl);
@@ -785,11 +791,11 @@ static void do_test_AclBinding() {
                             errstr);
         }
         for (i = -1; i <= RD_KAFKA_ACL_OPERATION__CNT; i++) {
-                errstr[0] = 0;
-                new_acl   = rd_kafka_AclBinding_new(
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host, i,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_acl_operation[i]) {
                         TEST_ASSERT(new_acl, "expected AclBinding");
                         rd_kafka_AclBinding_destroy(new_acl);
@@ -801,11 +807,11 @@ static void do_test_AclBinding() {
                                     errstr);
         }
         for (i = -1; i <= RD_KAFKA_ACL_PERMISSION_TYPE__CNT; i++) {
-                errstr[0] = 0;
-                new_acl   = rd_kafka_AclBinding_new(
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
-                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, 512);
+                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, sizeof(errstr));
                 if (i >= 0 && valid_acl_permission_type[i]) {
                         TEST_ASSERT(new_acl, "expected AclBinding");
                         rd_kafka_AclBinding_destroy(new_acl);
@@ -844,43 +850,47 @@ static void do_test_AclBindingFilter() {
         const char *principal = "User:test";
         const char *host      = "*";
 
-        SUB_TEST_QUICK("AclBindingFilter");
+        SUB_TEST_QUICK();
 
         // Valid acl binding
+        *errstr        = '\0';
         new_acl_filter = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
         rd_kafka_AclBinding_destroy(new_acl_filter);
 
+        *errstr        = '\0';
         new_acl_filter = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, NULL, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
         rd_kafka_AclBinding_destroy(new_acl_filter);
 
+        *errstr        = '\0';
         new_acl_filter = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             NULL, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
         rd_kafka_AclBinding_destroy(new_acl_filter);
 
+        *errstr        = '\0';
         new_acl_filter = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
             principal, NULL, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
         rd_kafka_AclBinding_destroy(new_acl_filter);
 
         for (i = -1; i <= RD_KAFKA_RESOURCE__CNT; i++) {
-                errstr[0]      = 0;
+                *errstr        = '\0';
                 new_acl_filter = rd_kafka_AclBindingFilter_new(
                     i, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal,
                     host, RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_resource_types[i]) {
                         TEST_ASSERT(new_acl_filter,
                                     "expected AclBindingFilter");
@@ -894,11 +904,11 @@ static void do_test_AclBindingFilter() {
                             errstr);
         }
         for (i = -1; i <= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT; i++) {
-                errstr[0]      = 0;
+                *errstr        = '\0';
                 new_acl_filter = rd_kafka_AclBindingFilter_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic, i, principal, host,
                     RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_resource_pattern_types[i]) {
                         TEST_ASSERT(new_acl_filter,
                                     "expected AclBindingFilter");
@@ -913,11 +923,11 @@ static void do_test_AclBindingFilter() {
                             errstr);
         }
         for (i = -1; i <= RD_KAFKA_ACL_OPERATION__CNT; i++) {
-                errstr[0]      = 0;
+                *errstr        = '\0';
                 new_acl_filter = rd_kafka_AclBindingFilter_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host, i,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
                 if (i >= 0 && valid_acl_operation[i]) {
                         TEST_ASSERT(new_acl_filter,
                                     "expected AclBindingFilter");
@@ -930,11 +940,11 @@ static void do_test_AclBindingFilter() {
                                     errstr);
         }
         for (i = -1; i <= RD_KAFKA_ACL_PERMISSION_TYPE__CNT; i++) {
-                errstr[0]      = 0;
+                *errstr        = '\0';
                 new_acl_filter = rd_kafka_AclBindingFilter_new(
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
-                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, 512);
+                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, sizeof(errstr));
                 if (i >= 0 && valid_acl_permission_type[i]) {
                         TEST_ASSERT(new_acl_filter,
                                     "expected AclBindingFilter");
@@ -994,7 +1004,7 @@ static void do_test_CreateAcls(const char *what,
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
                     RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         }
 
         if (with_options) {
@@ -1107,7 +1117,7 @@ static void do_test_DescribeAcls(const char *what,
         describe_acls     = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_PREFIXED,
             principal, host, RD_KAFKA_ACL_OPERATION_ALL,
-            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
@@ -1222,7 +1232,7 @@ static void do_test_DeleteAcls(const char *what,
                     RD_KAFKA_RESOURCE_TOPIC, topic,
                     RD_KAFKA_RESOURCE_PATTERN_PREFIXED, principal, host,
                     RD_KAFKA_ACL_OPERATION_ALL,
-                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, 512);
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
         }
 
         if (with_options) {

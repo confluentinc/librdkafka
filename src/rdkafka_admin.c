@@ -4397,10 +4397,10 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                      rd_kafka_AclBinding_free);
 
         for (i = 0; i < (int)res_cnt; i++) {
-                rd_kafka_ResourceType_t res_type = RD_KAFKA_RESOURCE_UNKNOWN;
+                int8_t res_type = RD_KAFKA_RESOURCE_UNKNOWN;
                 rd_kafkap_str_t kres_name;
                 char *res_name;
-                rd_kafka_ResourcePatternType_t resource_pattern_type =
+                int8_t resource_pattern_type =
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL;
                 int32_t acl_cnt;
 
@@ -4438,9 +4438,9 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                 for (j = 0; j < (int)acl_cnt; j++) {
                         rd_kafkap_str_t kprincipal;
                         rd_kafkap_str_t khost;
-                        rd_kafka_AclOperation_t operation =
+                        int8_t operation =
                             RD_KAFKA_ACL_OPERATION_UNKNOWN;
-                        rd_kafka_AclPermissionType_t permission_type =
+                        int8_t permission_type =
                             RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
                         char *principal;
                         char *host;
@@ -4658,19 +4658,19 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                 /* #maching_acls */
                 rd_kafka_buf_read_arraycnt(reply, &matching_acls_cnt, 100000);
                 for (j = 0; j < (int)matching_acls_cnt; j++) {
-                        rd_kafka_resp_err_t acl_error_code;
-                        rd_kafka_ResourceType_t res_type =
+                        int16_t acl_error_code;
+                        int8_t res_type =
                             RD_KAFKA_RESOURCE_UNKNOWN;
                         rd_kafkap_str_t acl_error_msg =
                             RD_KAFKAP_STR_INITIALIZER;
                         rd_kafkap_str_t kres_name;
                         rd_kafkap_str_t khost;
                         rd_kafkap_str_t kprincipal;
-                        rd_kafka_ResourcePatternType_t resource_pattern_type =
+                        int8_t resource_pattern_type =
                             RD_KAFKA_RESOURCE_PATTERN_LITERAL;
-                        rd_kafka_AclOperation_t operation =
+                        int8_t operation =
                             RD_KAFKA_ACL_OPERATION_UNKNOWN;
-                        rd_kafka_AclPermissionType_t permission_type =
+                        int8_t permission_type =
                             RD_KAFKA_ACL_PERMISSION_TYPE_UNKNOWN;
                         rd_kafka_AclBinding_t *matching_acl;
                         char *acl_errstr = NULL;

@@ -323,6 +323,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_kafka_resp_err_t err; /**< Last error code */
                 int cnt;                 /**< Number of identical errors */
         } rkb_last_err;
+
+        struct {
+                rd_kafka_bufq_t rkb_req_during_auth; /*Did not get sent due to reauth*/
+                rd_kafka_bufq_t rkb_recv_reauth_buf; /*Responses received during reauth*/
+                int64_t session_lifetime_ms; /*Lifetime of the current token*/
+                int auth_in_progress; /*1 if auth is ongoing, 0 if auth is complete*/
+        } rkb_sasl;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

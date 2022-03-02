@@ -2400,6 +2400,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                             rk->rk_conf.mock.broker_rtt);
         }
 
+        if (rk->rk_conf.sasl.enable_refresh)
+            rd_kafka_features_sasl_authenticate_update_kip368();
+
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
                 /* Select SASL provider */

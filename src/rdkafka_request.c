@@ -2255,6 +2255,9 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
 
         rd_kafka_buf_read_bytes(rkbuf, &auth_data);
 
+        if (rk->rk_conf.sasl.enable_refresh)
+            rd_kafka_prepare_SaslReauth(rk, rkb, err, rkbuf);
+
         /* Pass SASL auth frame to SASL handler */
         if (rd_kafka_sasl_recv(rkb->rkb_transport, auth_data.data,
                                (size_t)RD_KAFKAP_BYTES_LEN(&auth_data), errstr,
@@ -2277,6 +2280,59 @@ err:
                              errstr);
 }
 
+/**
+ * @brief Prepare for Sasl Reauthentication (KIP-368)
+ */
+void rd_kafka_prepare_SaslReauth(rd_kafka_t *rk,
+                                 rd_kafka_broker_t *rkb,
+                                 rd_kafka_resp_err_t err,
+                                 rd_kafka_buf_t *rkbuf) {
+        const int log_decode_errors = LOG_ERR;
+        char errstr[512];
+
+        /* get the API version here and see if it is >= 1 */
+        rd_rkb_dbg(rkb, SECURITY, "SASL", "SASL request API version: %d \n",
+                   rkbuf->rkbuf_reqhdr.ApiVersion);
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
+                int64_t session_lifetime_ms;
+                int64_t token_lifetime_ms = 0;
+                rd_ts_t now_wallclock;
+
+                rd_kafka_buf_read_i64(rkbuf, &session_lifetime_ms);
+
+                if (session_lifetime_ms == 0) {
+                        rkb->rkb_sasl.session_lifetime_ms = 0;
+                } else {
+                        now_wallclock = rd_uclock();
+
+                        /*this is in milliseconds, we are using microseconds so
+                        we need to convert, and take 80 percent of the returned connection lifetime*/
+                        session_lifetime_ms = session_lifetime_ms * 800;
+
+                        rkb->rkb_sasl.session_lifetime_ms =
+                            now_wallclock + session_lifetime_ms;
+
+                        rd_rkb_dbg(rkb, SECURITY, "SASL",
+                                   "Session lifetime communicated from broker "
+                                   "in microseconds: %" PRId64 "\n",
+                                   session_lifetime_ms);
+
+                        rd_rkb_dbg(rkb, SECURITY, "SASL",
+                                   "Reauth time in microseconds from the "
+                                   "beginning of the epoch: %" PRId64 "\n",
+                                   rkb->rkb_sasl.session_lifetime_ms);
+                }
+        }
+
+        return;
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+        rd_snprintf(errstr, sizeof(errstr),
+                    "SaslAuthenticateResponse parsing failed: %s",
+                    rd_kafka_err2str(err));
+}
 
 /**
  * @brief Send SaslAuthenticateRequest (KIP-152)
@@ -2301,6 +2357,17 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+       
+        // Set the api version
+        if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
+                int16_t ApiVersion;
+                int features;
+
+                ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                    rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
+
+                rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        }
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb,

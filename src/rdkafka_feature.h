@@ -96,6 +96,7 @@ void rd_kafka_ApiVersions_copy(const struct rd_kafka_ApiVersion *src,
 int rd_kafka_features_check(rd_kafka_broker_t *rkb,
                             struct rd_kafka_ApiVersion *broker_apis,
                             size_t broker_api_cnt);
+void rd_kafka_features_sasl_authenticate_update_kip368();
 
 const char *rd_kafka_features2str(int features);
 

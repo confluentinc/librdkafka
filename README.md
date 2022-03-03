@@ -44,6 +44,7 @@ affiliation with and is not endorsed by The Apache Software Foundation.
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
  * Statistics metrics in [STATISTICS.md](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md).
  * [Frequently asked questions](https://github.com/edenhill/librdkafka/wiki).
+ * Step-by-step tutorial [Getting Started with Apache Kafka and C/C++](https://developer.confluent.io/get-started/c/).
 
 **NOTE**: The `master` branch is actively developed, use latest [release](https://github.com/edenhill/librdkafka/releases) for production use.
 
@@ -138,11 +139,13 @@ If the version is out of date, please [create an issue or pull request](https://
 
 ## Usage in code
 
+See [getting Started with Apache Kafka and C/C++](https://developer.confluent.io/get-started/c/) for a basic tutorial.
+
 1. Refer to the [examples directory](examples/) for code using:
 
-* Producers: basic producers, idempotent producers, transactional producers.
-* Consumers: basic consumers, reading batches of messages.
-* Performance and latency testing tools.
+    * Producers: basic producers, idempotent producers, transactional producers.
+    * Consumers: basic consumers, reading batches of messages.
+    * Performance and latency testing tools.
 
 2. Refer to the [examples GitHub repo](https://github.com/confluentinc/examples/tree/master/clients/cloud/c) for code connecting to a cloud streaming data service based on Apache Kafka
 

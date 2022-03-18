@@ -151,7 +151,7 @@ static struct ut_tq *ut_tq_find_prev_pos(const struct ut_tq_head *head,
 static int ut_tq_test(const struct ut_tq_args *args) {
         int totcnt = 0;
         int fails  = 0;
-        struct ut_tq_head *tqh[3];
+        struct ut_tq_head *tqh[3] = {NULL, NULL, NULL};
         struct ut_tq *e, *insert_after;
         int i, qi;
 

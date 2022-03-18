@@ -778,7 +778,7 @@ restart:
                 rd_kafka_bufq_deq(rkbq, rkbuf);
 
                 if (now && cnt < log_first_n) {
-                        char holbstr[128];
+                        char holbstr[256];
                         /* Head of line blocking:
                          * If this is not the first request in queue, but the
                          * initial first request did not time out,

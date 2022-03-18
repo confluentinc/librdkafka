@@ -313,14 +313,16 @@ redo:
                             rd_kafka_handle_InitProducerId, NULL);
                 }
 
-                rd_kafka_broker_destroy(rkb);
-
                 if (err) {
                         rd_rkb_dbg(rkb, EOS, "GETPID",
                                    "Can't acquire ProducerId from "
                                    "this broker: %s",
                                    errstr);
+                }
 
+                rd_kafka_broker_destroy(rkb);
+
+                if (err) {
                         if (rd_kafka_idemp_check_error(rk, err, errstr,
                                                        is_fatal))
                                 return; /* Fatal error */

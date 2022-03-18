@@ -1763,6 +1763,7 @@ void rd_kafka_mock_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
         va_start(ap, cnt);
         for (i = 0; i < cnt; i++)
                 errors[i] = va_arg(ap, rd_kafka_resp_err_t);
+        va_end(ap);
 
         rd_kafka_mock_push_request_errors_array(mcluster, ApiKey, cnt, errors);
 }

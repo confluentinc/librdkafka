@@ -636,6 +636,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *app_rkt,
                                           int64_t offset) {
         rd_kafka_topic_t *rkt = rd_kafka_topic_proper(app_rkt);
         rd_kafka_toppar_t *rktp;
+        rd_kafka_resp_err_t err;
 
         /* Find toppar */
         rd_kafka_topic_rdlock(rkt);
@@ -645,11 +646,12 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *app_rkt,
         }
         rd_kafka_topic_rdunlock(rkt);
 
-        rd_kafka_offset_store0(rktp, offset + 1, 1 /*lock*/);
+        err = rd_kafka_offset_store0(rktp, offset + 1,
+                                     rd_false /* Don't force */, RD_DO_LOCK);
 
         rd_kafka_toppar_destroy(rktp);
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return err;
 }
 
 
@@ -657,7 +659,8 @@ rd_kafka_resp_err_t
 rd_kafka_offsets_store(rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t *offsets) {
         int i;
-        int ok_cnt = 0;
+        int ok_cnt                   = 0;
+        rd_kafka_resp_err_t last_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         if (rk->rk_conf.enable_auto_offset_store)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -670,19 +673,23 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
                     rd_kafka_topic_partition_get_toppar(rk, rktpar, rd_false);
                 if (!rktp) {
                         rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        last_err    = rktpar->err;
                         continue;
                 }
 
-                rd_kafka_offset_store0(rktp, rktpar->offset, 1 /*lock*/);
+                rktpar->err = rd_kafka_offset_store0(rktp, rktpar->offset,
+                                                     rd_false /* don't force */,
+                                                     RD_DO_LOCK);
                 rd_kafka_toppar_destroy(rktp);
 
-                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
-                ok_cnt++;
+                if (rktpar->err)
+                        last_err = rktpar->err;
+                else
+                        ok_cnt++;
         }
 
-        return offsets->cnt > 0 && ok_cnt == 0
-                   ? RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION
-                   : RD_KAFKA_RESP_ERR_NO_ERROR;
+        return offsets->cnt > 0 && ok_cnt == 0 ? last_err
+                                               : RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
@@ -1044,7 +1051,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop(rd_kafka_toppar_t *rktp) {
             rktp->rktp_stored_offset == RD_KAFKA_OFFSET_INVALID &&
             rktp->rktp_offsets_fin.eof_offset > 0)
                 rd_kafka_offset_store0(rktp, rktp->rktp_offsets_fin.eof_offset,
-                                       0 /*no lock*/);
+                                       rd_true /* force */, RD_DONT_LOCK);
 
         /* Commit offset to backing store.
          * This might be an async operation. */

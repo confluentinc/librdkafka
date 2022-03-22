@@ -120,6 +120,7 @@ set(
     0126-oauthbearer_oidc.c
     0128-sasl_callback_queue.cpp
     0129-fetch_aborted_msgs.c
+    0130-store_offsets.c
     8000-idle.cpp
     test.c
     testcpp.cpp

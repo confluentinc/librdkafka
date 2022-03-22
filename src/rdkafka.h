@@ -3824,6 +3824,11 @@ int rd_kafka_consume_callback_queue(
  * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
@@ -3841,18 +3846,23 @@ rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
  * to \c `auto.commit.interval.ms` or manual offset-less commit().
  *
  * Per-partition success/error status propagated through each partition's
- * \c .err field.
+ * \c .err for all return values (even NO_ERROR) except INVALID_ARG.
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
  *
  * @remark The \c .offset field is stored as is, it will NOT be + 1.
  *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
- *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
- *          offsets could be stored, or
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on (partial) success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
- *          is true.
+ *          is true, or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or RD_KAFKA_RESP_ERR__STATE
+ *          if none of the offsets could be stored.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_store(rd_kafka_t *rk,

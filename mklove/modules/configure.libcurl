@@ -41,12 +41,15 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=7.78.0
+    local ver=7.82.0
+    local checksum="910cc5fe279dc36e2cca534172c94364cf3fcf7d6494ba56e6c61a390881ddce"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
-        curl -fL https://curl.se/download/curl-${ver}.tar.gz | \
-            tar xzf - --strip-components 1
+        mkl_download_archive \
+            "https://curl.se/download/curl-${ver}.tar.gz" \
+            256 \
+            $checksum || return 1
     fi
 
     # curl's configure has a runtime check where a program is built
@@ -54,10 +57,11 @@ function install_source {
     # is outside the standard ld.so search path this runtime check will
     # fail due to missing libraries. We circumvent this by passing
     # a modified LD_LIBRARY_PATH with our destdir lib dirs prepended.
-    #
+    local _save_ldp="$LD_LIBRARY_PATH"
+    export LD_LIBRARY_PATH="${destdir}/usr/lib:${destdir}/usr/lib64:$LD_LIBRARY_PATH"
+
     # Also clear out LIBS to not interfer with lib detection process.
-    LD_LIBRARY_PATH="${destdir}/usr/lib:${destdir}/usr/lib64:$LD_LIBRARY_PATH" \
-      LIBS="" ./configure \
+    LIBS="" ./configure \
 	--with-openssl \
 	--enable-static \
 	--disable-shared \
@@ -82,6 +86,10 @@ function install_source {
         --without-{librtmp,libidn2,winidn,nghttp2,nghttp3,ngtcp2,quiche,brotli} &&
 	time make -j &&
 	make DESTDIR="${destdir}" prefix=/usr install
+    local ret=$?
 
-    return $?
+    # Restore
+    export LD_LIBRARY_PATH="$_save_ldp"
+
+    return $ret
 }

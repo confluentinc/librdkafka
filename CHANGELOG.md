@@ -6,6 +6,26 @@ librdkafka v1.9.0 is a feature release:
  * Added KIP-140 Admin API ACL support (by @emasab, #2676)
 
 
+## Upgrade considerations
+
+ * Consumer:
+   `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   This prevents a race condition where an application would store offsets
+   after the assigned partitions had been revoked (which resets the stored
+   offset), that could cause these old stored offsets to be committed later
+   when the same partitions were assigned to this consumer again - effectively
+   overwriting any committed offsets by any consumers that were assigned the
+   same partitions previously. This would typically result in the offsets
+   rewinding and messages to be reprocessed.
+   As an extra effort to avoid this situation the stored offset is now
+   also reset when partitions are assigned (through `rd_kafka_*assign()`).
+   Applications that explicitly call `..offset*_store()` will now need
+   to handle the case where `RD_KAFKA_RESP_ERR__STATE` is returned
+   in the per-partition `.err` field - meaning the partition is no longer
+   assigned to this consumer and the offset could not be stored for commit.
+
+
 ## Enhancements
 
  * Windows: Added native Win32 IO/Queue scheduling. This removes the
@@ -43,6 +63,11 @@ librdkafka v1.9.0 is a feature release:
 
 ### Consumer fixes
 
+ * `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   See **Upgrade considerations** above for more information.
+ * `rd_kafka_*assign()` will now reset/clear the stored offset.
+   See **Upgrade considerations** above for more information.
  * A `ERR_MSG_SIZE_TOO_LARGE` consumer error would previously be raised
    if the consumer received a maximum sized FetchResponse only containing
    (transaction) aborted messages with no control messages. The fetching did

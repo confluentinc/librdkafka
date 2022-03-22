@@ -344,6 +344,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ON_DESP 0x400  /**< On rkt_desp list */
 #define RD_KAFKA_TOPPAR_F_ON_CGRP 0x800  /**< On rkcg_toppars list */
 #define RD_KAFKA_TOPPAR_F_ON_RKB  0x1000 /**< On rkb_toppars list */
+#define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
+        0x2000 /**< Toppar is part of the consumer                             \
+                *   assignment. */
 
         /*
          * Timers

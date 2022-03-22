@@ -41,12 +41,15 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=7.78.0
+    local ver=7.81.0
+    local checksum="ac8e1087711084548d788ef18b9b732c8de887457b81f616fc681d1044b32f98"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
-        curl -fL https://curl.se/download/curl-${ver}.tar.gz | \
-            tar xzf - --strip-components 1
+        mkl_download_archive \
+            "https://curl.se/download/curl-${ver}.tar.gz" \
+            256 \
+            $checksum || return 1
     fi
 
     # curl's configure has a runtime check where a program is built

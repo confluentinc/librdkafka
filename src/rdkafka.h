@@ -7643,6 +7643,16 @@ rd_kafka_AclBinding_error(const rd_kafka_AclBinding_t *acl);
  */
 RD_EXPORT void rd_kafka_AclBinding_destroy(rd_kafka_AclBinding_t *acl_binding);
 
+
+/**
+ * @brief Helper function to destroy all AclBinding objects in
+ *        the \p acl_bindings array (of \p acl_bindings_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_AclBinding_destroy_array(rd_kafka_AclBinding_t **acl_bindings,
+                                  size_t acl_bindings_cnt);
+
 /**
  * @brief Get an array of acl results from a CreateAcls result.
  *

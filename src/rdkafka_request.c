@@ -824,6 +824,8 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
 				/* Update toppar's committed offset */
 				rd_kafka_toppar_lock(rktp);
 				rktp->rktp_committed_offset = rktpar->offset;
+                                /** Update toppar's stored offset to INVALID, issue #3745 */
+                                rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
 				rd_kafka_toppar_unlock(rktp);
 			}
 

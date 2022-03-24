@@ -107,6 +107,11 @@ static void do_test(bool use_background_queue) {
 
 extern "C" {
 int main_0128_sasl_callback_queue(int argc, char **argv) {
+  if (!test_check_builtin("sasl_oauthbearer")) {
+    Test::Skip("Test requires OAUTHBEARER support\n");
+    return 0;
+  }
+
   do_test(true);
   do_test(false);
 

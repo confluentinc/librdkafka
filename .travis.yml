@@ -63,21 +63,21 @@ matrix:
    before_script:
     - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
 
- - name: "Windows MinGW-w64 Dynamic [DISABLED]"
-   # Disable for now because msys2 libstdc++ is not compiled with gcc 11,
-   # while gcc 11 is used for building librdkafka, and gcc 11 brings in
-   # a new _ZSt28__throw_bad_array_new_lengthv symbol that won't be found
-   # when trying to run the resulting binary since it using the older libstdc++.
-   if: DISABLED__tag IS PRESENT
-   os: windows
-   env:
-    - LINKAGE=std
-    - SKIP_MAKE=y
-   before_install:
-    - source ./packaging/mingw-w64/travis-before-install.sh
-   before_script:
-    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
-
+# - name: "Windows MinGW-w64 Dynamic"
+#   # Disable for now because msys2 libstdc++ is not compiled with gcc 11,
+#   # while gcc 11 is used for building librdkafka, and gcc 11 brings in
+#   # a new _ZSt28__throw_bad_array_new_lengthv symbol that won't be found
+#   # when trying to run the resulting binary since it using the older libstdc++.
+#   if: tag IS PRESENT
+#   os: windows
+#   env:
+#    - LINKAGE=std
+#    - SKIP_MAKE=y
+#   before_install:
+#    - source ./packaging/mingw-w64/travis-before-install.sh
+#   before_script:
+#    - ./packaging/mingw-w64/configure-build-msys2-mingw.sh
+#
  - name: "Windows MinGW-w64 Static"
    os: windows
    env:

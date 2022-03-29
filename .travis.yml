@@ -22,7 +22,10 @@ matrix:
    if: tag IS present
    os: linux
    compiler: gcc
-   env: ADDITIONAL_BUILDS="debian" LINKAGE=std
+   env:
+     - ADDITIONAL_BUILDS="debian"
+     - ADDITIONAL_BUILD_FLAGS="--source-deps-only"
+     - LINKAGE=std
    before_script:
     - ./configure --install-deps --disable-lz4-ext --disable-regex-ext --prefix="$PWD/dest" --enable-strip
 

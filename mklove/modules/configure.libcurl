@@ -22,7 +22,10 @@ function manual_checks {
     mkl_meta_set "libcurl" "apk" "curl-dev curl-static"
     mkl_meta_set "libcurl" "deb" "libcurl4-openssl-dev"
     mkl_meta_set "libcurl" "static" "libcurl.a"
-    mkl_lib_check "libcurl" "WITH_CURL" $action CC "-lcurl" \
+    if [[ $MKL_DISTRO == "osx" && $WITH_STATIC_LINKING ]]; then
+        mkl_env_append LDFLAGS "-framework CoreFoundation -framework SystemConfiguration"
+    fi
+    mkl_lib_check "libcurl" "WITH_CURL" $action CC curl_ldflags \
                   "
 #include <curl/curl.h>
 
@@ -90,6 +93,10 @@ function install_source {
 
     # Restore
     export LD_LIBRARY_PATH="$_save_ldp"
+
+    if [[ $MKL_DISTRO == osx ]]; then
+        mkl_mkvar_append "libcurl" LIBS "-framework CoreFoundation -framework SystemConfiguration"
+    fi
 
     return $ret
 }

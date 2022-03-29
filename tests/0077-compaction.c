@@ -190,7 +190,8 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "--config segment.bytes=10000 "
             "--config min.cleanable.dirty.ratio=0.01 "
             "--config delete.retention.ms=86400 "
-            "--config file.delete.delay.ms=10000",
+            "--config file.delete.delay.ms=10000"
+            "--config max.compaction.lag.ms=100",
             topic, partition + 1);
 
         test_conf_init(&conf, NULL, 120);

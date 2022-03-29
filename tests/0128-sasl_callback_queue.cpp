@@ -32,7 +32,7 @@
  * a non-polling API after client creation.
  */
 #include "testcpp.h"
-
+#include "rdatomic.h"
 
 namespace {
 /* Provide our own token refresh callback */

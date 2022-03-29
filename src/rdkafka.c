@@ -3858,7 +3858,15 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 break;
 
         default:
-                rd_kafka_assert(rk, !*"cant handle op type");
+                /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
+                 * call it. */
+                if (rko->rko_type & RD_KAFKA_OP_CB) {
+                        res = rd_kafka_op_call(rk, rkq, rko);
+                        break;
+                }
+
+                RD_BUG("Can't handle op type %s (0x%x)",
+                       rd_kafka_op2str(rko->rko_type), rko->rko_type);
                 break;
         }
 

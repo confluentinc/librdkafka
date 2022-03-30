@@ -64,7 +64,6 @@ matrix:
     - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
 
  - name: "Windows MinGW-w64 Dynamic"
-   if: tag IS PRESENT
    os: windows
    env:
     - LINKAGE=std

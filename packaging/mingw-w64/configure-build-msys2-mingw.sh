@@ -19,6 +19,7 @@ cmake \
 $mingw64 mingw32-make
 $mingw64 mingw32-make install
 
-export PATH="$PWD/dest/bin:/mingw64/bin/:${PATH}"
 cd tests
+cp ../dest/bin/librdkafka.dll ./
+cp ../dest/bin/librdkafka++.dll ./
 ./test-runner.exe -l -Q -p1 0000

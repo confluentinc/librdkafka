@@ -1748,6 +1748,7 @@ $cflags"
         # If attempting static linking and we're using source-only
         # dependencies, then there is no need for pkg-config since
         # the source installer will have set the required flags.
+        mkl_check_failed "$cname" "" "ignore" "pkg-config ignored for static build"
         return 1
     fi
 

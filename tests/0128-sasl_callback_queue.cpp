@@ -32,13 +32,18 @@
  * a non-polling API after client creation.
  */
 #include "testcpp.h"
-
+#include "rdatomic.h"
 
 namespace {
 /* Provide our own token refresh callback */
 class MyCb : public RdKafka::OAuthBearerTokenRefreshCb {
  public:
-  MyCb() : called(false) {
+  MyCb() {
+    rd_atomic32_init(&called_, 0);
+  }
+
+  bool called () {
+    return rd_atomic32_get(&called_) > 0;
   }
 
   void oauthbearer_token_refresh_cb(RdKafka::Handle *handle,
@@ -46,11 +51,11 @@ class MyCb : public RdKafka::OAuthBearerTokenRefreshCb {
     handle->oauthbearer_set_token_failure(
         "Not implemented by this test, "
         "but that's okay");
-    called = true;
+    rd_atomic32_add(&called_, 1);
     Test::Say("Callback called!\n");
   }
 
-  bool called;
+  rd_atomic32_t called_;
 };
 };  // namespace
 
@@ -94,10 +99,10 @@ static void do_test(bool use_background_queue) {
               "Expected clusterid() to fail since the token was not set");
 
   if (expect_called)
-    TEST_ASSERT(mycb.called,
+    TEST_ASSERT(mycb.called(),
                 "Expected refresh callback to have been called by now");
   else
-    TEST_ASSERT(!mycb.called,
+    TEST_ASSERT(!mycb.called(),
                 "Did not expect refresh callback to have been called");
 
   delete p;
@@ -107,6 +112,11 @@ static void do_test(bool use_background_queue) {
 
 extern "C" {
 int main_0128_sasl_callback_queue(int argc, char **argv) {
+  if (!test_check_builtin("sasl_oauthbearer")) {
+    Test::Skip("Test requires OAUTHBEARER support\n");
+    return 0;
+  }
+
   do_test(true);
   do_test(false);
 

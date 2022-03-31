@@ -21,6 +21,8 @@ librdkafka v1.9.0 is a feature release:
    can now be triggered automatically on the librdkafka background thread.
  * `rd_kafka_queue_get_background()` now creates the background thread
    if not already created.
+ * Bundled zlib upgraded to version 1.2.12.
+ * Bundled OpenSSL upgraded to 1.1.1n.
 
 
 ## Fixes
@@ -54,6 +56,9 @@ librdkafka v1.9.0 is a feature release:
    fetch responses.
  * Fix consumer crash (`assert: rkbuf->rkbuf_rkb`) when parsing
    malformed JoinGroupResponse consumer group metadata state.
+ * Fix crash (`cant handle op type`) when using `consume_batch_queue()` (et.al)
+   and an OAUTHBEARER refresh callback was set.
+   The callback is now triggered by the consume call. (#3263)
 
 
 ### Producer fixes

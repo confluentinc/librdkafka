@@ -3630,9 +3630,12 @@ rd_kafka_broker_outbufs_space(rd_kafka_broker_t *rkb) {
 /**
  * @brief Serve a toppar for producing.
  *
+ * @param now is current time used for detecting timed-out messages
  * @param next_wakeup will be updated to when the next wake-up/attempt is
  *                    desired, only lower (sooner) values will be set.
  * @param do_timeout_scan perform msg timeout scan
+ * @param timeout_cnt number of timed-out messages found, variable incremented
+ *                    not set
  * @param may_send if set to false there is something on the global level
  *                 that prohibits sending messages, such as a transactional
  *                 state.
@@ -3649,6 +3652,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                           rd_ts_t now,
                                           rd_ts_t *next_wakeup,
                                           rd_bool_t do_timeout_scan,
+                                          int *timeout_cnt,
                                           rd_bool_t may_send,
                                           rd_bool_t flushing) {
         int cnt = 0;
@@ -3678,12 +3682,12 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         }
 
         if (unlikely(do_timeout_scan)) {
-                int timeoutcnt;
+                int cnt;
                 rd_ts_t next;
 
                 /* Scan queues for msg timeouts */
-                timeoutcnt =
-                    rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now, &next);
+                cnt = rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now, &next);
+                *timeout_cnt += cnt;
 
                 if (next && next < *next_wakeup)
                         *next_wakeup = next;
@@ -3695,22 +3699,9 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                 rd_kafka_toppar_unlock(rktp);
                                 return 0;
 
-                        } else if (timeoutcnt > 0) {
-                                /* Message timeouts will lead to gaps the in
-                                 * the message sequence and thus trigger
-                                 * OutOfOrderSequence errors from the broker.
-                                 * Bump the epoch to reset the base msgid after
-                                 * draining all partitions. */
-
-                                /* Must not hold toppar lock */
+                        } else if (cnt > 0) {
+                                /* Allow drain and bump of this producer */
                                 rd_kafka_toppar_unlock(rktp);
-
-                                rd_kafka_idemp_drain_epoch_bump(
-                                    rkb->rkb_rk, RD_KAFKA_RESP_ERR__TIMED_OUT,
-                                    "%d message(s) timed out "
-                                    "on %s [%" PRId32 "]",
-                                    timeoutcnt, rktp->rktp_rkt->rkt_topic->str,
-                                    rktp->rktp_partition);
                                 return 0;
                         }
                 }
@@ -3920,8 +3911,10 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
 /**
  * @brief Produce from all toppars assigned to this broker.
  *
+ * @param now is current time used for detecting timed-out messages
  * @param next_wakeup is updated if the next IO/ops timeout should be
  *                    less than the input value.
+ * @param do_timeout_scan perform msg timeout scan
  *
  * @returns the total number of messages produced.
  */
@@ -3935,6 +3928,7 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
         rd_bool_t flushing      = rd_false;
+        int timeout_cnt         = 0;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
@@ -3968,7 +3962,7 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
-                    may_send, flushing);
+                    &timeout_cnt, may_send, flushing);
 
                 if (this_next_wakeup < ret_next_wakeup)
                         ret_next_wakeup = this_next_wakeup;
@@ -3983,6 +3977,23 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
             CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars, rktp, rktp_activelink));
 
         *next_wakeup = ret_next_wakeup;
+
+        if (rd_kafka_is_idempotent(rkb->rkb_rk) && rd_kafka_pid_valid(pid) &&
+            timeout_cnt > 0) {
+                /* Message timeouts will lead to gaps the in
+                 * the message sequence and thus trigger
+                 * OutOfOrderSequence errors from the broker.
+                 * Bump the epoch to reset the base msgid after
+                 * draining all partitions. */
+
+                rd_kafka_idemp_drain_epoch_bump(rkb->rkb_rk,
+                                                RD_KAFKA_RESP_ERR__TIMED_OUT,
+                                                "%d message(s) timed out "
+                                                "on %s [%"PRId32"]",
+                                                timeout_cnt,
+                                                rktp->rktp_rkt->rkt_topic->str,
+                                                rktp->rktp_partition);
+        }
 
         return cnt;
 }

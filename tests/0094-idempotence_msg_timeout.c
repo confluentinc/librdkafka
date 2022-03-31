@@ -185,6 +185,9 @@ static void do_test_produce_timeout(const char *topic, const int msgrate) {
 
         test_flush(rk, 3 * 5000);
 
+        TEST_ASSERT(counters.dr_fail, "no delivery reports with error: "
+                    "timeout not detected?");
+
         TEST_SAY("%d/%d messages produced, %d delivered, %d failed\n",
                  msgcounter, msgcnt, counters.dr_ok, counters.dr_fail);
 

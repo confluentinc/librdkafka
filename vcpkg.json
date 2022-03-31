@@ -1,6 +1,6 @@
 {
     "name": "librdkafka",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "dependencies": [
         {
             "name": "zstd",
@@ -8,16 +8,16 @@
         },
         {
             "name": "zlib",
-            "version>=": "1.2.11"
+            "version>=": "1.2.11#13"
         },
         {
             "name": "openssl",
-            "version>=": "1.1.1l"
+            "version>=": "1.1.1n"
         },
         {
             "name": "curl",
-            "version>=": "7.74.0#8"
+            "version>=": "7.82.0"
         }
     ],
-    "builtin-baseline": "dd3d6df5001d49f954bc39b73a4c49ae3c9e8d15"
+    "builtin-baseline": "773516ecf6014d89cc69b11bb54605ad4be56694"
 }

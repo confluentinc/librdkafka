@@ -125,6 +125,7 @@ _TEST_DECL(0019_list_groups);
 _TEST_DECL(0020_destroy_hang);
 _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
+_TEST_DECL(0022_consume_batch_local);
 _TEST_DECL(0025_timers);
 _TEST_DECL(0026_consume_pause);
 _TEST_DECL(0028_long_topicnames);
@@ -299,6 +300,7 @@ struct test tests[] = {
     _TEST(0020_destroy_hang, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0021_rkt_destroy, 0),
     _TEST(0022_consume_batch, 0),
+    _TEST(0022_consume_batch_local, TEST_F_LOCAL),
     _TEST(0025_timers, TEST_F_LOCAL),
     _TEST(0026_consume_pause,
           TEST_F_KNOWN_ISSUE,

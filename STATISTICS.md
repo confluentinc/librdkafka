@@ -106,7 +106,7 @@ rxidle | int | | Microseconds since last socket receive (or -1 if no receives ye
 req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
-wakeups | int | | Broker thread poll wakeups
+wakeups | int | | Broker thread poll loop wakeups
 connects | int | | Number of connection attempts, including successful and failed, and name resolution failures.
 disconnects | int | | Number of disconnects (triggered by broker, network, load-balancer, etc.).
 int_latency | object | | Internal producer queue latency in microseconds. See *Window stats* below

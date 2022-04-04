@@ -3429,6 +3429,8 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
         wakeup =
             rd_kafka_broker_ops_serve(rkb, rd_timeout_remains_us(abs_timeout));
 
+        rd_atomic64_add(&rkb->rkb_c.wakeups, 1);
+
         /* An op might have triggered the need for a connection, if so
          * transition to TRY_CONNECT state. */
         if (unlikely(rd_kafka_broker_needs_connection(rkb) &&

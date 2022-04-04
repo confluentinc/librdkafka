@@ -1240,8 +1240,6 @@ static int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         if (r <= 0)
                 return r;
 
-        rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
-
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
                 char buf[1024];

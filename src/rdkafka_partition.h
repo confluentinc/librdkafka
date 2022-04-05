@@ -449,7 +449,9 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
 void rd_kafka_toppar_purge_and_disable_queues(rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state);
 void rd_kafka_toppar_insert_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now);
 int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         rd_kafka_msgq_t *srcq,
                         int incr_retry,

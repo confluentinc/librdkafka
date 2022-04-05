@@ -5186,7 +5186,9 @@ void test_report_add(struct test *test, const char *fmt, ...) {
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
 int test_can_create_topics(int skip) {
+#ifndef _WIN32
         const char *bootstrap;
+#endif
 
         /* Has AdminAPI */
         if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))

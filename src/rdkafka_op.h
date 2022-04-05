@@ -376,6 +376,7 @@ struct rd_kafka_op_s {
 
                 struct {
                         int64_t offset;
+                        int32_t broker_id; /**< Originating broker, or -1 */
                         char *reason;
                 } offset_reset;
 

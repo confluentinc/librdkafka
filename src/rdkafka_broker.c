@@ -4235,7 +4235,8 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                 /* Application error */
                 err_offset = rktp->rktp_offsets.fetch_offset;
                 rktp->rktp_offsets.fetch_offset = RD_KAFKA_OFFSET_INVALID;
-                rd_kafka_offset_reset(rktp, err_offset, err,
+                rd_kafka_offset_reset(rktp, rd_kafka_broker_id(rkb), err_offset,
+                                      err,
                                       "fetch failed due to requested offset "
                                       "not available on the broker");
         } break;

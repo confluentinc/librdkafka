@@ -1224,7 +1224,7 @@ rd_kafka_mock_connection_new(rd_kafka_mock_broker_t *mrkb,
         char errstr[128];
 
         if (!mrkb->up) {
-                rd_close(fd);
+                rd_socket_close(fd);
                 return NULL;
         }
 
@@ -1235,7 +1235,7 @@ rd_kafka_mock_connection_new(rd_kafka_mock_broker_t *mrkb,
                              "Failed to create transport for new "
                              "mock connection: %s",
                              errstr);
-                rd_close(fd);
+                rd_socket_close(fd);
                 return NULL;
         }
 
@@ -1405,7 +1405,7 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         rd_kafka_mock_broker_close_all(mrkb, "Destroying broker");
 
         rd_kafka_mock_cluster_io_del(mrkb->cluster, mrkb->listen_s);
-        rd_close(mrkb->listen_s);
+        rd_socket_close(mrkb->listen_s);
 
         while ((errstack = TAILQ_FIRST(&mrkb->errstacks))) {
                 TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
@@ -1446,7 +1446,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                              "Failed to bind mock broker socket to %s: %s",
                              rd_socket_strerror(rd_socket_errno),
                              rd_sockaddr2str(&sin, RD_SOCKADDR2STR_F_PORT));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
 
@@ -1455,7 +1455,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to get mock broker socket name: %s",
                              rd_socket_strerror(rd_socket_errno));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
         rd_assert(sin.sin_family == AF_INET);
@@ -1464,7 +1464,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to listen on mock broker socket: %s",
                              rd_socket_strerror(rd_socket_errno));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
 
@@ -2281,8 +2281,8 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_free(mcluster->bootstraps);
 
-        rd_close(mcluster->wakeup_fds[0]);
-        rd_close(mcluster->wakeup_fds[1]);
+        rd_socket_close(mcluster->wakeup_fds[0]);
+        rd_socket_close(mcluster->wakeup_fds[1]);
 }
 
 

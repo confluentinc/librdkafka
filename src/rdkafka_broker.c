@@ -5442,9 +5442,9 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
                 rd_kafka_sasl_broker_term(rkb);
 
         if (rkb->rkb_wakeup_fd[0] != -1)
-                rd_close(rkb->rkb_wakeup_fd[0]);
+                rd_socket_close(rkb->rkb_wakeup_fd[0]);
         if (rkb->rkb_wakeup_fd[1] != -1)
-                rd_close(rkb->rkb_wakeup_fd[1]);
+                rd_socket_close(rkb->rkb_wakeup_fd[1]);
 
         if (rkb->rkb_recv_buf)
                 rd_kafka_buf_destroy(rkb->rkb_recv_buf);

@@ -776,7 +776,7 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *app_rkt,
                                                 continue;
                                         }
                                 }
-                                rd_kafka_toppar_enq_msg(rktp, rkm);
+                                rd_kafka_toppar_enq_msg(rktp, rkm, now);
 
                                 if (rd_kafka_is_transactional(rkt->rkt_rk)) {
                                         /* Add partition to transaction */
@@ -796,7 +796,7 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *app_rkt,
 
                 } else {
                         /* Single destination partition. */
-                        rd_kafka_toppar_enq_msg(rktp, rkm);
+                        rd_kafka_toppar_enq_msg(rktp, rkm, now);
                 }
 
                 rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -1244,7 +1244,7 @@ int rd_kafka_msg_partitioner(rd_kafka_topic_t *rkt,
                 rkm->rkm_partition = partition;
 
         /* Partition is available: enqueue msg on partition's queue */
-        rd_kafka_toppar_enq_msg(rktp_new, rkm);
+        rd_kafka_toppar_enq_msg(rktp_new, rkm, rd_clock());
         if (do_lock)
                 rd_kafka_topic_rdunlock(rkt);
 
@@ -1665,6 +1665,155 @@ void rd_kafka_msgbatch_ready_produce(rd_kafka_msgbatch_t *rkmb) {
             rd_kafka_is_idempotent(rk))
                 rd_kafka_idemp_inflight_toppar_add(rk, rktp);
 }
+
+
+
+/**
+ * @brief Allow queue wakeups after \p abstime, or when the
+ *        given \p batch_msg_cnt or \p batch_msg_bytes have been reached.
+ *
+ * @param rkmq Queue to monitor and set wakeup parameters on.
+ * @param dest_rkmq Destination queue used to meter current queue depths
+ *                  and oldest message. May be the same as \p rkmq but is
+ *                  typically the rktp_xmit_msgq.
+ * @param next_wakeup If non-NULL: update the caller's next scheduler wakeup
+ *                    according to the wakeup time calculated by this function.
+ * @param now The current time.
+ * @param linger_us The configured queue linger / batching time.
+ * @param batch_msg_cnt Queue threshold before signalling.
+ * @param batch_msg_bytes Queue threshold before signalling.
+ *
+ * @returns true if the wakeup conditions are already met and messages are ready
+ *          to be sent, else false.
+ *
+ * @locks_required rd_kafka_toppar_lock()
+ *
+ *
+ * Producer queue and broker thread wake-up behaviour.
+ *
+ * There are contradicting requirements at play here:
+ *  - Latency: queued messages must be batched and sent according to
+ *             batch size and linger.ms configuration.
+ *  - Wakeups: keep the number of thread wake-ups to a minimum to avoid
+ *             high CPU utilization and context switching.
+ *
+ * The message queue (rd_kafka_msgq_t) has functionality for the writer (app)
+ * to wake up the reader (broker thread) when there's a new message added.
+ * This wakeup is done thru a combination of cndvar signalling and IO writes
+ * to make sure a thread wakeup is triggered regardless if the broker thread
+ * is blocking on cnd_timedwait() or on IO poll.
+ * When the broker thread is woken up it will scan all the partitions it is
+ * the leader for to check if there are messages to be sent - all according
+ * to the configured batch size and linger.ms - and then decide its next
+ * wait time depending on the lowest remaining linger.ms setting of any
+ * partition with messages enqueued.
+ *
+ * This wait time must also be set as a threshold on the message queue, telling
+ * the writer (app) that it must not trigger a wakeup until the wait time
+ * has expired, or the batch sizes have been exceeded.
+ *
+ * The message queue wakeup time is per partition, while the broker thread
+ * wakeup time is the lowest of all its partitions' wakeup times.
+ *
+ * The per-partition wakeup constraints are calculated and set by
+ * rd_kafka_msgq_allow_wakeup_at() which is called from the broker thread's
+ * per-partition handler.
+ * This function is called each time there are changes to the broker-local
+ * partition transmit queue (rktp_xmit_msgq), such as:
+ *  - messages are moved from the partition queue (rktp_msgq) to rktp_xmit_msgq
+ *  - messages are moved to a ProduceRequest
+ *  - messages are timed out from the rktp_xmit_msgq
+ *  - the flushing state changed (rd_kafka_flush() is called or returned).
+ *
+ * If none of these things happen, the broker thread will simply read the
+ * last stored wakeup time for each partition and use that for calculating its
+ * minimum wait time.
+ *
+ *
+ * On the writer side, namely the application calling rd_kafka_produce(), the
+ * followings checks are performed to see if it may trigger a wakeup when
+ * it adds a new message to the partition queue:
+ *  - the current time has reached the wakeup time (e.g., remaining linger.ms
+ *    has expired), or
+ *  - with the new message(s) being added, either the batch.size or
+ *    batch.num.messages thresholds have been exceeded, or
+ *  - the application is calling rd_kafka_flush(),
+ *  - and no wakeup has been signalled yet. This is critical since it may take
+ *    some time for the broker thread to do its work we'll want to avoid
+ *    flooding it with wakeups. So a wakeup is only sent once per
+ *    wakeup period.
+ */
+rd_bool_t rd_kafka_msgq_allow_wakeup_at(rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msgq_t *dest_rkmq,
+                                        rd_ts_t *next_wakeup,
+                                        rd_ts_t now,
+                                        rd_ts_t linger_us,
+                                        int32_t batch_msg_cnt,
+                                        int64_t batch_msg_bytes) {
+        int32_t msg_cnt   = rd_kafka_msgq_len(dest_rkmq);
+        int64_t msg_bytes = rd_kafka_msgq_size(dest_rkmq);
+
+        if (RD_KAFKA_MSGQ_EMPTY(dest_rkmq)) {
+                rkmq->rkmq_wakeup.on_first = rd_true;
+                rkmq->rkmq_wakeup.abstime  = now + linger_us;
+                /* Leave next_wakeup untouched since the queue is empty */
+                msg_cnt   = 0;
+                msg_bytes = 0;
+        } else {
+                const rd_kafka_msg_t *rkm = rd_kafka_msgq_first(dest_rkmq);
+
+                rkmq->rkmq_wakeup.on_first = rd_false;
+
+                if (unlikely(rkm->rkm_u.producer.ts_backoff > now)) {
+                        /* Honour retry.backoff.ms:
+                         * wait for backoff to expire */
+                        rkmq->rkmq_wakeup.abstime =
+                            rkm->rkm_u.producer.ts_backoff;
+                } else {
+                        /* Use message's produce() time + linger.ms */
+                        rkmq->rkmq_wakeup.abstime =
+                            rd_kafka_msg_enq_time(rkm) + linger_us;
+                        if (rkmq->rkmq_wakeup.abstime <= now)
+                                rkmq->rkmq_wakeup.abstime = now;
+                }
+
+                /* Update the caller's scheduler wakeup time */
+                if (next_wakeup && rkmq->rkmq_wakeup.abstime < *next_wakeup)
+                        *next_wakeup = rkmq->rkmq_wakeup.abstime;
+
+                msg_cnt   = rd_kafka_msgq_len(dest_rkmq);
+                msg_bytes = rd_kafka_msgq_size(dest_rkmq);
+        }
+
+        /*
+         * If there are more messages or bytes in queue than the batch limits,
+         * or the linger time has been exceeded,
+         * then there is no need for wakeup since the broker thread will
+         * produce those messages as quickly as it can.
+         */
+        if (msg_cnt >= batch_msg_cnt || msg_bytes >= batch_msg_bytes ||
+            (msg_cnt > 0 && now >= rkmq->rkmq_wakeup.abstime)) {
+                /* Prevent further signalling */
+                rkmq->rkmq_wakeup.signalled = rd_true;
+
+                /* Batch is ready */
+                return rd_true;
+        }
+
+        /* If the current msg or byte count is less than the batch limit
+         * then set the rkmq count to the remaining count or size to
+         * reach the batch limits.
+         * This is for the case where the producer is waiting for more
+         * messages to accumulate into a batch. The wakeup should only
+         * occur once a threshold is reached or the abstime has expired.
+         */
+        rkmq->rkmq_wakeup.signalled = rd_false;
+        rkmq->rkmq_wakeup.msg_cnt   = batch_msg_cnt - msg_cnt;
+        rkmq->rkmq_wakeup.msg_bytes = batch_msg_bytes - msg_bytes;
+
+        return rd_false;
+}
+
 
 
 /**

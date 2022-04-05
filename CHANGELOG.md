@@ -28,6 +28,8 @@ librdkafka v1.9.0 is a feature release:
 
 ## Enhancements
 
+ * Improved producer queue scheduling. Fixes the performance regression
+   introduced in v1.7.0 for some produce patterns. (#3538, #2912)
  * Windows: Added native Win32 IO/Queue scheduling. This removes the
    internal TCP loopback connections that were previously used for timely
    queue wakeups.
@@ -121,7 +123,10 @@ librdkafka v1.9.0 is a feature release:
    broker (added in Apache Kafka 2.8), which could cause the producer to
    seemingly hang.
    This error code is now correctly handled by raising a fatal error.
- * The logic for enforcing that `message.timeout.ms` is greater than
+ * Improved producer queue wakeup scheduling. This should significantly
+   decrease the number of wakeups and thus syscalls for high message rate
+   producers. (#3538, #2912)
+ * The logic for enforcing that `message.timeout.ms` is greather than
    an explicitly configured `linger.ms` was incorrect and instead of
    erroring out early the lingering time was automatically adjusted to the
    message timeout, ignoring the configured `linger.ms`.

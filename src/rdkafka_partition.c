@@ -670,8 +670,9 @@ void rd_kafka_toppar_desired_del(rd_kafka_toppar_t *rktp) {
 /**
  * Append message at tail of 'rktp' message queue.
  */
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-        int queue_len;
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now) {
         rd_kafka_q_t *wakeup_q = NULL;
 
         rd_kafka_toppar_lock(rktp);
@@ -683,18 +684,22 @@ void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
             rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
                 /* No need for enq_sorted(), this is the oldest message. */
-                queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         } else {
-                queue_len = rd_kafka_msgq_enq_sorted(rktp->rktp_rkt,
-                                                     &rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq_sorted(rktp->rktp_rkt, &rktp->rktp_msgq, rkm);
         }
 
-        if (unlikely(queue_len == 1 && (wakeup_q = rktp->rktp_msgq_wakeup_q)))
+        if (unlikely(rktp->rktp_partition != RD_KAFKA_PARTITION_UA &&
+                     rd_kafka_msgq_may_wakeup(&rktp->rktp_msgq, now) &&
+                     (wakeup_q = rktp->rktp_msgq_wakeup_q))) {
+                /* Wake-up broker thread */
+                rktp->rktp_msgq.rkmq_wakeup.signalled = rd_true;
                 rd_kafka_q_keep(wakeup_q);
+        }
 
         rd_kafka_toppar_unlock(rktp);
 
-        if (wakeup_q) {
+        if (unlikely(wakeup_q != NULL)) {
                 rd_kafka_q_yield(wakeup_q);
                 rd_kafka_q_destroy(wakeup_q);
         }

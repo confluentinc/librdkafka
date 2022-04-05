@@ -52,6 +52,10 @@ librdkafka v1.9.0 is a feature release:
 
 ### General fixes
 
+ * Fix various 1 second delays due to internal broker threads blocking on IO
+   even though there are events to handle.
+   These delays could be seen randomly in any of the non produce/consume
+   request APIs, such as `commit_transaction()`, `list_groups()`, etc.
  * Windows: some applications would crash with an error message like
    `no OPENSSL_Applink()` written to the console if `ssl.keystore.location`
    was configured.

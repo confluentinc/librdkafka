@@ -3417,7 +3417,13 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
                  *
                  * The return value indicates if ops_serve() below should
                  * use a timeout or not.
+                 *
+                 * If there are ops enqueued cut the timeout short so
+                 * that they're processed as soon as possible.
                  */
+                if (abs_timeout > 0 && rd_kafka_q_len(rkb->rkb_ops) > 0)
+                        abs_timeout = RD_POLL_NOWAIT;
+
                 if (rd_kafka_transport_io_serve(
                         rkb->rkb_transport, rkb->rkb_ops,
                         rd_timeout_remains(abs_timeout)))

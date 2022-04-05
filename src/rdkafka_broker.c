@@ -4047,7 +4047,7 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
                (abs_timeout > (now = rd_clock()))) {
                 rd_bool_t do_timeout_scan;
                 rd_ts_t next_wakeup = abs_timeout;
-                int overshoot;
+                rd_bool_t overshot;
 
                 rd_kafka_broker_unlock(rkb);
 
@@ -4055,8 +4055,8 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
                  * on each state change, to make sure messages in
                  * partition rktp_xmit_msgq are timed out before
                  * being attempted to re-transmit. */
-                overshoot = rd_interval(&timeout_scan, 1000 * 1000, now);
-                do_timeout_scan = cnt++ == 0 || overshoot >= 0;
+                overshot = rd_interval(&timeout_scan, 1000 * 1000, now) >= 0;
+                do_timeout_scan = cnt++ == 0 || overshot;
 
                 rd_kafka_broker_produce_toppars(rkb, now, &next_wakeup,
                                                 do_timeout_scan);

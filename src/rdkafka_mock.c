@@ -281,7 +281,7 @@ rd_kafka_mock_validate_records(rd_kafka_mock_partition_t *mpart,
         else
                 mpidstate->lo = (mpidstate->lo + 1) % mpidstate->window;
         mpidstate->hi                 = (mpidstate->hi + 1) % mpidstate->window;
-        mpidstate->seq[mpidstate->hi] = BaseSequence + RecordCount;
+        mpidstate->seq[mpidstate->hi] = (int32_t)(BaseSequence + RecordCount);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 

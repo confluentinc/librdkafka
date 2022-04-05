@@ -180,6 +180,8 @@ static void test_producer_latency(const char *topic, struct latconf *latconf) {
         rd_kafka_resp_err_t err;
         int i;
         size_t sz;
+        rd_bool_t with_transactions = rd_false;
+
         SUB_TEST("%s (linger.ms=%d)", latconf->name);
 
         test_conf_init(&conf, NULL, 60);
@@ -194,12 +196,19 @@ static void test_producer_latency(const char *topic, struct latconf *latconf) {
                 TEST_SAY("%s:  set conf %s = %s\n", latconf->name,
                          latconf->conf[i], latconf->conf[i + 1]);
                 test_conf_set(conf, latconf->conf[i], latconf->conf[i + 1]);
+                if (!strcmp(latconf->conf[i], "transactional.id"))
+                        with_transactions = rd_true;
         }
 
         sz = sizeof(latconf->linger_ms_conf);
         rd_kafka_conf_get(conf, "linger.ms", latconf->linger_ms_conf, &sz);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        if (with_transactions) {
+                TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 10 * 1000));
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        }
 
         TEST_SAY("%s: priming producer\n", latconf->name);
         /* Send a priming message to make sure everything is up
@@ -227,6 +236,8 @@ static void test_producer_latency(const char *topic, struct latconf *latconf) {
                 int64_t *ts_send;
                 int pre_cnt = latconf->cnt;
 
+                if (with_transactions)
+                        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
                 ts_send  = malloc(sizeof(*ts_send));
                 *ts_send = test_clock();
@@ -244,6 +255,13 @@ static void test_producer_latency(const char *topic, struct latconf *latconf) {
                 while (latconf->cnt == pre_cnt)
                         rd_kafka_poll(rk, 5000);
 
+                if (with_transactions) {
+                        test_timing_t timing;
+                        TIMING_START(&timing, "commit_transaction");
+                        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+                        TIMING_ASSERT_LATER(&timing, 0,
+                                            (int)(latconf->rtt + 50.0));
+                }
         }
 
         while (tot_wakeups == 0)
@@ -306,6 +324,14 @@ int main_0055_producer_latency(int argc, char **argv) {
               NULL},
              0,
              0},
+            {"idempotence (10ms)",
+             {"linger.ms", "10", "enable.idempotence", "true", NULL},
+             10,
+             10},
+            {"transactions (35ms)",
+             {"linger.ms", "35", "transactional.id", topic, NULL},
+             35,
+             50 + 35 /* extra time for AddPartitions..*/},
             {NULL}};
         struct latconf *latconf;
 

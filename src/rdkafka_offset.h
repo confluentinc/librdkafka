@@ -62,6 +62,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop(rd_kafka_toppar_t *rktp);
 void rd_kafka_offset_store_init(rd_kafka_toppar_t *rktp);
 
 void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
+                           int32_t broker_id,
                            int64_t err_offset,
                            rd_kafka_resp_err_t err,
                            const char *reason);

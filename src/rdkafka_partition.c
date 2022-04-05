@@ -1209,8 +1209,8 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
                  * See issue #2105. */
                 rktp->rktp_next_offset = Offset;
 
-                rd_kafka_offset_reset(rktp, Offset, RD_KAFKA_RESP_ERR_NO_ERROR,
-                                      "update");
+                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, Offset,
+                                      RD_KAFKA_RESP_ERR_NO_ERROR, "update");
                 return;
         }
 
@@ -1376,8 +1376,8 @@ static void rd_kafka_toppar_handle_Offset(rd_kafka_t *rk,
                         /* Permanent error. Trigger auto.offset.reset policy
                          * and signal error back to application. */
 
-                        rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
-                                              err,
+                        rd_kafka_offset_reset(rktp, rkb->rkb_nodeid,
+                                              rktp->rktp_query_offset, err,
                                               "failed to query logical offset");
 
                         rd_kafka_consumer_err(
@@ -1608,7 +1608,7 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
                 rd_kafka_offset_store_init(rktp);
 
         } else if (offset == RD_KAFKA_OFFSET_INVALID) {
-                rd_kafka_offset_reset(rktp, offset,
+                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, offset,
                                       RD_KAFKA_RESP_ERR__NO_OFFSET,
                                       "no previously committed offset "
                                       "available");
@@ -2237,7 +2237,7 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
                 if (offset >= 0)
                         rd_kafka_toppar_next_offset_handle(rktp, offset);
                 else
-                        rd_kafka_offset_reset(rktp, offset,
+                        rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, offset,
                                               RD_KAFKA_RESP_ERR__NO_OFFSET,
                                               "no previously committed offset "
                                               "available");

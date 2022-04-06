@@ -494,8 +494,12 @@ static void do_test_txn_slow_reinit(rd_bool_t with_sleep) {
  *        transaction errors, but let the broker-side bumping of the
  *        producer PID fail with a fencing error.
  *        Should raise a fatal error.
+ *
+ * @param error_code Which error code InitProducerIdRequest should fail with.
+ *                   Either RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH (older)
+ *                   or RD_KAFKA_RESP_ERR_PRODUCER_FENCED (newer).
  */
-static void do_test_txn_fenced_reinit(void) {
+static void do_test_txn_fenced_reinit(rd_kafka_resp_err_t error_code) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_error_t *error;
@@ -504,7 +508,7 @@ static void do_test_txn_fenced_reinit(void) {
         char errstr[512];
         rd_kafka_resp_err_t fatal_err;
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("With error %s", rd_kafka_err2name(error_code));
 
         rk = create_txn_producer(&mcluster, txnid, 3, "batch.num.messages", "1",
                                  NULL);
@@ -533,8 +537,7 @@ static void do_test_txn_fenced_reinit(void) {
 
         /* Fail the PID reinit */
         rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, txn_coord, RD_KAFKAP_InitProducerId, 1,
-            RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH, 0);
+            mcluster, txn_coord, RD_KAFKAP_InitProducerId, 1, error_code, 0);
 
         /* Produce a message, let it fail with a fatal idempo error. */
         rd_kafka_mock_push_request_errors(
@@ -684,6 +687,16 @@ static void do_test_txn_endtxn_errors(void) {
                 rd_false /* !retriable */,
                 rd_true /* abortable */,
                 rd_false /* !fatal */,
+            },
+            {
+                /* #11 */
+                1,
+                {RD_KAFKA_RESP_ERR_PRODUCER_FENCED},
+                /* This error is normalized */
+                RD_KAFKA_RESP_ERR__FENCED,
+                rd_false /* !retriable */,
+                rd_false /* !abortable */,
+                rd_true /* fatal */
             },
             {0},
         };
@@ -2739,7 +2752,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txn_fatal_idempo_errors();
 
-        do_test_txn_fenced_reinit();
+        do_test_txn_fenced_reinit(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH);
+        do_test_txn_fenced_reinit(RD_KAFKA_RESP_ERR_PRODUCER_FENCED);
 
         do_test_txn_req_cnt();
 

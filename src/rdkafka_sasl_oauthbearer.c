@@ -442,7 +442,8 @@ rd_kafka_oauthbearer_set_token0(rd_kafka_t *rk,
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                      "Waking up waiting broker threads after "
                      "setting OAUTHBEARER token");
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT,
+                                    "OAUTHBEARER token update");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

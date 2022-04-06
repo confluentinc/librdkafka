@@ -1244,7 +1244,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
 
         /* Wake-up broker thread which might be idling on IO */
         if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker);
+                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1620,7 +1620,8 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 /* Wake-up broker thread which might be idling on IO */
                 if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker);
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
@@ -1772,7 +1773,7 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
 
                 /* Wake-up broker thread which might be idling on IO */
                 if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker);
+                        rd_kafka_broker_wakeup(rktp->rktp_broker, "seek done");
         }
 
         /* Signal back to caller thread that seek has commenced, or err */

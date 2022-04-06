@@ -4222,7 +4222,7 @@ rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms) {
         /* Wake up all broker threads to trigger the produce_serve() call.
          * If this flush() call finishes before the broker wakes up
          * then no flushing will be performed by that broker thread. */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP, "flushing");
 
         if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                 /* Application wants delivery reports as events rather

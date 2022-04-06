@@ -115,7 +115,12 @@ librdkafka v1.9.0 is a feature release:
    The fix included in this release is to save the per-partition idempotency
    state when a partition is removed, and then recover and use that saved
    state if the partition comes back at a later time.
- * The logic for enforcing that `message.timeout.ms` is greather than
+ * The transactional producer would retry (re)initializing its PID if a
+   `PRODUCER_FENCED` error was returned from the
+   broker (added in Apache Kafka 2.8), which could cause the producer to
+   seemingly hang.
+   This error code is now correctly handled by raising a fatal error.
+ * The logic for enforcing that `message.timeout.ms` is greater than
    an explicitly configured `linger.ms` was incorrect and instead of
    erroring out early the lingering time was automatically adjusted to the
    message timeout, ignoring the configured `linger.ms`.

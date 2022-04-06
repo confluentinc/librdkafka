@@ -165,6 +165,7 @@ rd_bool_t rd_kafka_idemp_check_error(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
+        case RD_KAFKA_RESP_ERR_PRODUCER_FENCED:
                 is_fatal = rd_true;
                 /* Normalize error */
                 err     = RD_KAFKA_RESP_ERR__FENCED;

@@ -238,7 +238,8 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
                              "First kinit command finished: waking up "
                              "broker threads");
-                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                            "Kerberos ticket refresh");
         }
 
         if (r == -1) {

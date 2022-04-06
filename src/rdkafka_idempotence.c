@@ -495,7 +495,8 @@ void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
 
         /* Wake up all broker threads (that may have messages to send
          * that were waiting for a Producer ID). */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                    "PID updated");
 }
 
 
@@ -551,7 +552,8 @@ static void rd_kafka_idemp_drain_done(rd_kafka_t *rk) {
         /* Wake up all broker threads (that may have messages to send
          * that were waiting for a Producer ID). */
         if (wakeup_brokers)
-                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                            "message drain done");
 }
 
 /**

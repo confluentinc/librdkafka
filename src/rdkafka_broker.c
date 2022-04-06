@@ -6153,11 +6153,11 @@ const char *rd_kafka_broker_name(rd_kafka_broker_t *rkb) {
  * @locality any
  * @locks any
  */
-void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb) {
+void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb, const char *reason) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_WAKEUP);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
-        rd_rkb_dbg(rkb, QUEUE, "WAKEUP", "Wake-up");
+        rd_rkb_dbg(rkb, QUEUE, "WAKEUP", "Wake-up: %s", reason);
 }
 
 /**
@@ -6168,7 +6168,9 @@ void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb) {
  *
  * @returns the number of broker threads woken up
  */
-int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk, int min_state) {
+int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk,
+                                int min_state,
+                                const char *reason) {
         int cnt = 0;
         rd_kafka_broker_t *rkb;
 
@@ -6181,11 +6183,18 @@ int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk, int min_state) {
                 rd_kafka_broker_unlock(rkb);
 
                 if (do_wakeup) {
-                        rd_kafka_broker_wakeup(rkb);
+                        rd_kafka_broker_wakeup(rkb, reason);
                         cnt += 1;
                 }
         }
         rd_kafka_rdunlock(rk);
+
+        if (cnt > 0)
+                rd_kafka_dbg(rk, BROKER | RD_KAFKA_DBG_QUEUE, "WAKEUP",
+                             "Wake-up sent to %d broker thread%s in "
+                             "state >= %s: %s",
+                             cnt, cnt > 1 ? "s" : "",
+                             rd_kafka_broker_state_names[min_state], reason);
 
         return cnt;
 }

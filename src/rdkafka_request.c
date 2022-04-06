@@ -1409,9 +1409,9 @@ rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
  * @brief Write "consumer" protocol type MemberState for SyncGroupRequest to
  *        enveloping buffer \p rkbuf.
  */
-static void
-rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
-                                          const rd_kafka_group_member_t *rkgm) {
+static void rd_kafka_group_MemberState_consumer_write(
+    rd_kafka_buf_t *env_rkbuf,
+    const rd_kafka_group_member_internal_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
         rd_slice_t slice;
 
@@ -1438,16 +1438,17 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
 /**
  * Send SyncGroupRequest
  */
-void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
-                               const rd_kafkap_str_t *group_id,
-                               int32_t generation_id,
-                               const rd_kafkap_str_t *member_id,
-                               const rd_kafkap_str_t *group_instance_id,
-                               const rd_kafka_group_member_t *assignments,
-                               int assignment_cnt,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque) {
+void rd_kafka_SyncGroupRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    int32_t generation_id,
+    const rd_kafkap_str_t *member_id,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafka_group_member_internal_t *assignments,
+    int assignment_cnt,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int i;
         int16_t ApiVersion;
@@ -1471,7 +1472,7 @@ void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_i32(rkbuf, assignment_cnt);
 
         for (i = 0; i < assignment_cnt; i++) {
-                const rd_kafka_group_member_t *rkgm = &assignments[i];
+                const rd_kafka_group_member_internal_t *rkgm = &assignments[i];
 
                 rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
                 rd_kafka_group_MemberState_consumer_write(rkbuf, rkgm);
@@ -1534,15 +1535,31 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
         RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
+                rd_kafka_member_userdata_serialized_t *member_userdata = NULL;
                 rd_kafkap_bytes_t *member_metadata;
+                char *member_id_str;
+
                 if (!rkas->rkas_enabled)
                         continue;
+                RD_KAFKAP_STR_DUPA(&member_id_str, member_id);
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
-                member_metadata = rkas->rkas_get_metadata_cb(
-                    rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                    rk->rk_cgrp->rkcg_group_assignment);
+                if (rkas->rkas_get_user_metadata_cb != NULL) {
+                        member_userdata = rkas->rkas_get_user_metadata_cb(
+                            rkas->rkas_opaque, member_id_str,
+                            rk->rk_cgrp->rkcg_group_assignment,
+                            rk->rk_cgrp->rkcg_generation_id);
+                }
+                if (member_userdata == NULL) {
+                        member_userdata =
+                            rd_kafka_member_userdata_serialized_new(NULL, 0);
+                }
+                member_metadata =
+                    rd_kafka_consumer_protocol_member_metadata_new(
+                        topics, member_userdata->data, member_userdata->len,
+                        rk->rk_cgrp->rkcg_group_assignment);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
+                rd_kafka_member_userdata_serialized_destroy(member_userdata);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

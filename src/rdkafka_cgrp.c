@@ -221,12 +221,12 @@ static void rd_kafka_cgrp_clear_wait_resp(rd_kafka_cgrp_t *rkcg,
  * @struct Auxillary glue type used for COOPERATIVE rebalance set operations.
  */
 typedef struct PartitionMemberInfo_s {
-        const rd_kafka_group_member_t *member;
+        const rd_kafka_group_member_internal_t *member;
         rd_bool_t members_match;
 } PartitionMemberInfo_t;
 
 static PartitionMemberInfo_t *
-PartitionMemberInfo_new(const rd_kafka_group_member_t *member,
+PartitionMemberInfo_new(const rd_kafka_group_member_internal_t *member,
                         rd_bool_t members_match) {
         PartitionMemberInfo_t *pmi;
 
@@ -369,9 +369,6 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
-        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb)
-                rkcg->rkcg_assignor->rkas_destroy_state_cb(
-                    rkcg->rkcg_assignor_state);
         rd_free(rkcg);
 }
 
@@ -1226,7 +1223,7 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
  *        else rkgm_assignment partitions will be collected.
  */
 static map_toppar_member_info_t *
-rd_kafka_collect_partitions(const rd_kafka_group_member_t *members,
+rd_kafka_collect_partitions(const rd_kafka_group_member_internal_t *members,
                             size_t member_cnt,
                             size_t par_cnt,
                             rd_bool_t collect_owned) {
@@ -1240,7 +1237,7 @@ rd_kafka_collect_partitions(const rd_kafka_group_member_t *members,
 
         for (i = 0; i < member_cnt; i++) {
                 size_t j;
-                const rd_kafka_group_member_t *rkgm = &members[i];
+                const rd_kafka_group_member_internal_t *rkgm = &members[i];
                 const rd_kafka_topic_partition_list_t *toppars =
                     collect_owned ? rkgm->rkgm_owned : rkgm->rkgm_assignment;
 
@@ -1289,9 +1286,9 @@ rd_kafka_member_partitions_intersect(map_toppar_member_info_t *a,
                 if (b_v == NULL)
                         continue;
 
-                members_match =
-                    a_v->member && b_v->member &&
-                    rd_kafka_group_member_cmp(a_v->member, b_v->member) == 0;
+                members_match = a_v->member && b_v->member &&
+                                rd_kafka_group_member_internal_cmp(
+                                    a_v->member, b_v->member) == 0;
 
                 RD_MAP_SET(intersection, rd_kafka_topic_partition_copy(key),
                            PartitionMemberInfo_new(b_v->member, members_match));
@@ -1343,7 +1340,7 @@ rd_kafka_member_partitions_subtract(map_toppar_member_info_t *a,
  */
 static void rd_kafka_cooperative_protocol_adjust_assignment(
     rd_kafka_cgrp_t *rkcg,
-    rd_kafka_group_member_t *members,
+    rd_kafka_group_member_internal_t *members,
     int member_cnt) {
 
         /* https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafk\
@@ -1394,7 +1391,7 @@ static void rd_kafka_cooperative_protocol_adjust_assignment(
             (int)(RD_MAP_CNT(assigned) / member_cnt) + 4;
 
         for (i = 0; i < member_cnt; i++) {
-                rd_kafka_group_member_t *rkgm = &members[i];
+                rd_kafka_group_member_internal_t *rkgm = &members[i];
                 rd_kafka_topic_partition_list_destroy(rkgm->rkgm_assignment);
 
                 rkgm->rkgm_assignment = rd_kafka_topic_partition_list_new(
@@ -1512,21 +1509,6 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
 
 done:
         rd_kafka_cgrp_update_session_timeout(rkcg, rd_true /*reset timeout*/);
-
-        rd_assert(rkcg->rkcg_assignor);
-        if (rkcg->rkcg_assignor->rkas_on_assignment_cb) {
-                char *member_id;
-                RD_KAFKAP_STR_DUPA(&member_id, rkcg->rkcg_member_id);
-                rd_kafka_consumer_group_metadata_t *cgmd =
-                    rd_kafka_consumer_group_metadata_new_with_genid(
-                        rkcg->rkcg_rk->rk_conf.group_id_str,
-                        rkcg->rkcg_generation_id, member_id,
-                        rkcg->rkcg_rk->rk_conf.group_instance_id);
-                rkcg->rkcg_assignor->rkas_on_assignment_cb(
-                    rkcg->rkcg_assignor, &(rkcg->rkcg_assignor_state),
-                    assignment, &UserData, cgmd);
-                rd_kafka_consumer_group_metadata_destroy(cgmd);
-        }
 
         // FIXME: Remove when we're done debugging.
         rd_kafka_topic_partition_list_log(rkcg->rkcg_rk, "ASSIGNMENT",
@@ -1656,12 +1638,13 @@ err_parse:
 /**
  * @brief Run group assignment.
  */
-static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
-                                       rd_kafka_assignor_t *rkas,
-                                       rd_kafka_resp_err_t err,
-                                       rd_kafka_metadata_t *metadata,
-                                       rd_kafka_group_member_t *members,
-                                       int member_cnt) {
+static void
+rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
+                           rd_kafka_assignor_t *rkas,
+                           rd_kafka_resp_err_t err,
+                           rd_kafka_metadata_t *metadata,
+                           rd_kafka_group_member_internal_t *members,
+                           int member_cnt) {
         char errstr[512];
 
         if (err) {
@@ -1760,7 +1743,7 @@ rd_kafka_cgrp_assignor_handle_Metadata_op(rd_kafka_t *rk,
  */
 static int rd_kafka_group_MemberMetadata_consumer_read(
     rd_kafka_broker_t *rkb,
-    rd_kafka_group_member_t *rkgm,
+    rd_kafka_group_member_internal_t *rkgm,
     const rd_kafkap_bytes_t *MemberMetadata) {
 
         rd_kafka_buf_t *rkbuf;
@@ -1893,12 +1876,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                                      "Unsupported assignment strategy \"%s\"",
                                      protocol_name);
                         if (rkcg->rkcg_assignor) {
-                                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
-                                        rkcg->rkcg_assignor
-                                            ->rkas_destroy_state_cb(
-                                                rkcg->rkcg_assignor_state);
-                                rkcg->rkcg_assignor_state = NULL;
-                                rkcg->rkcg_assignor       = NULL;
+                                rkcg->rkcg_assignor = NULL;
                         }
                         ErrorCode = RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
                 }
@@ -1930,16 +1908,10 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 goto err;
         }
 
-        if (rkcg->rkcg_assignor && rkcg->rkcg_assignor != rkas) {
-                if (rkcg->rkcg_assignor->rkas_destroy_state_cb)
-                        rkcg->rkcg_assignor->rkas_destroy_state_cb(
-                            rkcg->rkcg_assignor_state);
-                rkcg->rkcg_assignor_state = NULL;
-        }
         rkcg->rkcg_assignor = rkas;
 
         if (i_am_leader) {
-                rd_kafka_group_member_t *members;
+                rd_kafka_group_member_internal_t *members;
                 int i;
                 int sub_cnt = 0;
                 rd_list_t topics;
@@ -1961,7 +1933,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 for (i = 0; i < member_cnt; i++) {
                         rd_kafkap_str_t MemberId;
                         rd_kafkap_bytes_t MemberMetadata;
-                        rd_kafka_group_member_t *rkgm;
+                        rd_kafka_group_member_internal_t *rkgm;
                         rd_kafkap_str_t GroupInstanceId =
                             RD_KAFKAP_STR_INITIALIZER;
 
@@ -3894,7 +3866,7 @@ static void rd_kafka_cgrp_group_leader_reset(rd_kafka_cgrp_t *rkcg,
                 int i;
 
                 for (i = 0; i < rkcg->rkcg_group_leader.member_cnt; i++)
-                        rd_kafka_group_member_clear(
+                        rd_kafka_group_member_internal_clear(
                             &rkcg->rkcg_group_leader.members[i]);
                 rkcg->rkcg_group_leader.member_cnt = 0;
                 rd_free(rkcg->rkcg_group_leader.members);
@@ -5714,8 +5686,8 @@ static int unittest_set_intersect(void) {
         char *id            = "id";
         rd_kafkap_str_t id1 = RD_KAFKAP_STR_INITIALIZER;
         rd_kafkap_str_t id2 = RD_KAFKAP_STR_INITIALIZER;
-        rd_kafka_group_member_t *gm1;
-        rd_kafka_group_member_t *gm2;
+        rd_kafka_group_member_internal_t *gm1;
+        rd_kafka_group_member_internal_t *gm2;
 
         id1.len = 2;
         id1.str = id;

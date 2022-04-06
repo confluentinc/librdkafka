@@ -626,7 +626,7 @@ void rd_kafka_topic_partition_list_add_list(
              (RKTPAR) >= &(TPLIST)->elems[0]; RKTPAR--)
 
 int rd_kafka_topic_partition_match(rd_kafka_t *rk,
-                                   const rd_kafka_group_member_t *rkgm,
+                                   const char *group_member_id,
                                    const rd_kafka_topic_partition_t *rktpar,
                                    const char *topic,
                                    int *matched_by_regex);

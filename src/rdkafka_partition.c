@@ -3145,7 +3145,7 @@ int rd_kafka_topic_partition_list_del(
  * On match, if rktpar is a regex pattern then 'matched_by_regex' is set to 1.
  */
 int rd_kafka_topic_partition_match(rd_kafka_t *rk,
-                                   const rd_kafka_group_member_t *rkgm,
+                                   const char *group_member_id,
                                    const rd_kafka_topic_partition_t *rktpar,
                                    const char *topic,
                                    int *matched_by_regex) {
@@ -3159,9 +3159,8 @@ int rd_kafka_topic_partition_match(rd_kafka_t *rk,
                 if (ret == -1) {
                         rd_kafka_dbg(rk, CGRP, "SUBMATCH",
                                      "Invalid regex for member "
-                                     "\"%.*s\" subscription \"%s\": %s",
-                                     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-                                     rktpar->topic, errstr);
+                                     "\"%s\" subscription \"%s\": %s",
+                                     group_member_id, rktpar->topic, errstr);
                         return 0;
                 }
 

@@ -175,16 +175,17 @@ void rd_kafka_handle_LeaveGroup(rd_kafka_t *rk,
                                 rd_kafka_buf_t *request,
                                 void *opaque);
 
-void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
-                               const rd_kafkap_str_t *group_id,
-                               int32_t generation_id,
-                               const rd_kafkap_str_t *member_id,
-                               const rd_kafkap_str_t *group_instance_id,
-                               const rd_kafka_group_member_t *assignments,
-                               int assignment_cnt,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque);
+void rd_kafka_SyncGroupRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    int32_t generation_id,
+    const rd_kafkap_str_t *member_id,
+    const rd_kafkap_str_t *group_instance_id,
+    const rd_kafka_group_member_internal_t *assignments,
+    int assignment_cnt,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
 void rd_kafka_handle_SyncGroup(rd_kafka_t *rk,
                                rd_kafka_broker_t *rkb,
                                rd_kafka_resp_err_t err,

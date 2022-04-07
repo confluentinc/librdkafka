@@ -104,7 +104,7 @@ for f in $*; do
 
         # Check style
         if [[ $lang == c ]]; then
-            if ! clang-format --style="$style" --dry-run "$f" ; then
+            if ! clang-format --style="$style" --Werror --dry-run "$f" ; then
                 echo "$f: had style errors ($stylename): see clang-format output above"
                 ret=1
             fi

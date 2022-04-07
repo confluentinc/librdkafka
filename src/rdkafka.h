@@ -3588,9 +3588,14 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  * @brief Seek consumer for topic+partition to \p offset which is either an
  *        absolute or logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seek to be performed. If the timeout is reached the internal state
- * will be unknown and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
  *
@@ -3621,11 +3626,13 @@ rd_kafka_resp_err_t rd_kafka_seek(rd_kafka_topic_t *rkt,
  *
  * The offset may be either absolute (>= 0) or a logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seeks to be performed. If the timeout is reached the internal state
- * will be unknown for the remaining partitions to seek and this function
- * will return an error with the error code set to
- * `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
  *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).

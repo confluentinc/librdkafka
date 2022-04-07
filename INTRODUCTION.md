@@ -50,6 +50,7 @@ librdkafka also provides a native C++ interface.
         - [Termination](#termination)
             - [High-level KafkaConsumer](#high-level-kafkaconsumer)
             - [Producer](#producer)
+            - [Admin API client](#admin-api-client)
             - [Speeding up termination](#speeding-up-termination)
         - [Threads and callbacks](#threads-and-callbacks)
         - [Brokers](#brokers)
@@ -68,10 +69,12 @@ librdkafka also provides a native C++ interface.
             - [Offset management](#offset-management)
                 - [Auto offset commit](#auto-offset-commit)
                 - [At-least-once processing](#at-least-once-processing)
+                - [Auto offset reset](#auto-offset-reset)
         - [Consumer groups](#consumer-groups)
             - [Static consumer groups](#static-consumer-groups)
         - [Topics](#topics)
             - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
+            - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
             - [Topic auto creation](#topic-auto-creation)
         - [Metadata](#metadata)
             - [< 0.9.3](#-093)
@@ -1931,7 +1934,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-651 - Support PEM format for SSL certs and keys                      | 2.7.0                       | Supported                                                                                     |
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
-| KIP-768 - SASL/OAUTHBEARER OIDC support                                  | WIP                         | Not supported                                                                                 |
+| KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 
 
 

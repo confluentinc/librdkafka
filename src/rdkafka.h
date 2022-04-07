@@ -5618,6 +5618,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_plugin_f_conf_init_t)(
  * @brief on_conf_set() is called from rd_kafka_*_conf_set() in the order
  *        the interceptors were added.
  *
+ * @param conf Configuration object.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  * @param name The configuration property to set.
  * @param val The configuration value to set, or NULL for reverting to default
@@ -5651,6 +5652,11 @@ typedef rd_kafka_conf_res_t(rd_kafka_interceptor_f_on_conf_set_t)(
  *        \p old_conf being copied to \p new_conf.
  *
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ * @param new_conf New configuration object.
+ * @param old_conf Old configuration object to copy properties from.
+ * @param filter_cnt Number of property names to filter in \p filter.
+ * @param filter Property names to filter out (ignore) when setting up
+ *               \p new_conf.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code
  *          on failure (which is logged but otherwise ignored).
@@ -5795,6 +5801,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_consume_t)(
  * @param offsets List of topic+partition+offset+error that were committed.
  *                The error message of each partition should be checked for
  *                error.
+ * @param err The commit error, if any.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
  * @remark This interceptor is only used by consumer instances.
@@ -5824,7 +5831,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_commit_t)(
  * @param brokerid Broker request is being sent to.
  * @param ApiKey Kafka protocol request type.
  * @param ApiVersion Kafka protocol request type version.
- * @param Corrid Kafka protocol request correlation id.
+ * @param CorrId Kafka protocol request correlation id.
  * @param size Size of request.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
@@ -5859,7 +5866,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_request_sent_t)(
  * @param brokerid Broker response was received from.
  * @param ApiKey Kafka protocol request type or -1 on error.
  * @param ApiVersion Kafka protocol request type version or -1 on error.
- * @param Corrid Kafka protocol request correlation id, possibly -1 on error.
+ * @param CorrId Kafka protocol request correlation id, possibly -1 on error.
  * @param size Size of response, possibly 0 on error.
  * @param rtt Request round-trip-time in microseconds, possibly -1 on error.
  * @param err Receive error.

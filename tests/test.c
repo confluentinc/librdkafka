@@ -4515,21 +4515,20 @@ void test_kafka_topics(const char *fmt, ...) {
 
         if (test_broker_version >= TEST_BRKVER(3, 0, 0, 0)) {
                 bootstrap_env = "BROKERS";
-                flag = "--bootstrap-server";
-        }  else {
+                flag          = "--bootstrap-server";
+        } else {
                 bootstrap_env = "ZK_ADDRESS";
-                flag = "--zookeeper";
+                flag          = "--zookeeper";
         }
 
-        kpath = test_getenv("KAFKA_PATH", NULL);
+        kpath          = test_getenv("KAFKA_PATH", NULL);
         bootstrap_srvs = test_getenv(bootstrap_env, NULL);
 
         if (!kpath || !bootstrap_srvs)
-                TEST_FAIL("%s: KAFKA_PATH and %s must be set",
-                          __FUNCTION__, bootstrap_env);
+                TEST_FAIL("%s: KAFKA_PATH and %s must be set", __FUNCTION__,
+                          bootstrap_env);
 
-        r = rd_snprintf(cmd, sizeof(cmd),
-                        "%s/bin/kafka-topics.sh %s %s ",
+        r = rd_snprintf(cmd, sizeof(cmd), "%s/bin/kafka-topics.sh %s %s ",
                         kpath, flag, bootstrap_srvs);
         TEST_ASSERT(r > 0 && r < (int)sizeof(cmd));
 
@@ -5201,14 +5200,15 @@ int test_can_create_topics(int skip) {
 #else
 
         bootstrap = test_broker_version >= TEST_BRKVER(3, 0, 0, 0)
-                        ? "BROKERS" : "ZK_ADDRESS";
+                        ? "BROKERS"
+                        : "ZK_ADDRESS";
 
-        if (!test_getenv("KAFKA_PATH", NULL) ||
-            !test_getenv(bootstrap, NULL)) {
+        if (!test_getenv("KAFKA_PATH", NULL) || !test_getenv(bootstrap, NULL)) {
                 if (skip)
                         TEST_SKIP(
                             "Cannot create topics "
-                            "(set KAFKA_PATH and %s)\n", bootstrap);
+                            "(set KAFKA_PATH and %s)\n",
+                            bootstrap);
                 return 0;
         }
 

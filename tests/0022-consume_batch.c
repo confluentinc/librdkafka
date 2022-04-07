@@ -152,9 +152,8 @@ static void do_test_consume_batch(void) {
 
 static rd_bool_t refresh_called = rd_false;
 
-static void refresh_cb (rd_kafka_t *rk,
-                        const char *oauthbearer_config,
-                        void *opaque) {
+static void
+refresh_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
         TEST_SAY("Refresh callback called\n");
         TEST_ASSERT(!refresh_called);
         refresh_called = rd_true;

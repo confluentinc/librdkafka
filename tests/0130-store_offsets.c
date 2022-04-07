@@ -33,7 +33,7 @@
  * Verify that offsets_store() is not allowed for unassigned partitions,
  * and that those offsets are not committed.
  */
-static void do_test_store_unassigned (void) {
+static void do_test_store_unassigned(void) {
         const char *topic = test_mk_topic_name("0130_store_unassigned", 1);
         rd_kafka_conf_t *conf;
         rd_kafka_t *c;
@@ -61,18 +61,18 @@ static void do_test_store_unassigned (void) {
         test_consumer_poll_once(c, NULL, tmout_multip(3000));
 
         parts->elems[0].offset = proper_offset;
-        TEST_SAY("Storing offset %"PRId64" while assigned: should succeed\n",
+        TEST_SAY("Storing offset %" PRId64 " while assigned: should succeed\n",
                  parts->elems[0].offset);
         TEST_CALL_ERR__(rd_kafka_offsets_store(c, parts));
 
         TEST_SAY("Committing\n");
-        TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false/*sync*/));
+        TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false /*sync*/));
 
         TEST_SAY("Unassigning partitions and trying to store again\n");
         TEST_CALL_ERR__(rd_kafka_assign(c, NULL));
 
         parts->elems[0].offset = bad_offset;
-        TEST_SAY("Storing offset %"PRId64" while unassigned: should fail\n",
+        TEST_SAY("Storing offset %" PRId64 " while unassigned: should fail\n",
                  parts->elems[0].offset);
         err = rd_kafka_offsets_store(c, parts);
         TEST_ASSERT_LATER(err != RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -80,13 +80,14 @@ static void do_test_store_unassigned (void) {
         TEST_ASSERT(parts->cnt == 1);
 
         TEST_ASSERT(parts->elems[0].err == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected %s [%"PRId32"] to fail with "
+                    "Expected %s [%" PRId32
+                    "] to fail with "
                     "_STATE, not %s",
                     parts->elems[0].topic, parts->elems[0].partition,
                     rd_kafka_err2name(parts->elems[0].err));
 
         TEST_SAY("Committing: should fail\n");
-        err = rd_kafka_commit(c, NULL, rd_false/*sync*/);
+        err = rd_kafka_commit(c, NULL, rd_false /*sync*/);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NO_OFFSET,
                     "Expected commit() to fail with NO_OFFSET, not %s",
                     rd_kafka_err2name(err));
@@ -98,13 +99,13 @@ static void do_test_store_unassigned (void) {
         TEST_SAY("Consuming message to verify committed offset\n");
         rkmessage = rd_kafka_consumer_poll(c, tmout_multip(3000));
         TEST_ASSERT(rkmessage != NULL, "Expected message");
-        TEST_SAY("Consumed message with offset %"PRId64"\n",
+        TEST_SAY("Consumed message with offset %" PRId64 "\n",
                  rkmessage->offset);
         TEST_ASSERT(!rkmessage->err, "Expected proper message, not error %s",
                     rd_kafka_message_errstr(rkmessage));
         TEST_ASSERT(rkmessage->offset == proper_offset,
                     "Expected first message to be properly stored "
-                    "offset %"PRId64", not %"PRId64,
+                    "offset %" PRId64 ", not %" PRId64,
                     proper_offset, rkmessage->offset);
 
         rd_kafka_message_destroy(rkmessage);

@@ -949,49 +949,45 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "sasl.oauthbearer.method", _RK_C_S2I,
      _RK(sasl.oauthbearer.method),
      "Set to \"default\" or \"oidc\" to control which login method "
-     "is used. If set it to \"oidc\", OAuth/OIDC login method will "
-     "be used. "
-     "sasl.oauthbearer.client.id, sasl.oauthbearer.client.secret, "
-     "and sasl.oauthbearer.token.endpoint.url are needed if "
-     "sasl.oauthbearer.method is set to \"oidc\".",
+     "to be used. If set to \"oidc\", the following properties must also be "
+     "be specified: "
+     "`sasl.oauthbearer.client.id`, `sasl.oauthbearer.client.secret`, "
+     "and `sasl.oauthbearer.token.endpoint.url`.",
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
      .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default"},
              {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
      _RK(sasl.oauthbearer.client_id),
-     "It's a public identifier for the application. "
-     "It must be unique across all clients that the "
+     "Public identifier for the application. "
+     "Must be unique across all clients that the "
      "authorization server handles. "
-     "This is only used when sasl.oauthbearer.method is set to oidc.",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.secret", _RK_C_STR,
      _RK(sasl.oauthbearer.client_secret),
-     "A client secret only known to the application and the "
+     "Client secret only known to the application and the "
      "authorization server. This should be a sufficiently random string "
-     "that are not guessable. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "that is not guessable. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.scope", _RK_C_STR,
      _RK(sasl.oauthbearer.scope),
      "Client use this to specify the scope of the access request to the "
      "broker. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.extensions", _RK_C_STR,
      _RK(sasl.oauthbearer.extensions_str),
      "Allow additional information to be provided to the broker. "
-     "It's comma-separated list of key=value pairs. "
-     "The example of the input is "
-     "\"supportFeatureX=true,organizationId=sales-emea\"."
-     " This is only used when sasl.oauthbearer.method is set "
-     "to \"oidc\".",
+     "Comma-separated list of key=value pairs. "
+     "E.g., \"supportFeatureX=true,organizationId=sales-emea\"."
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token.endpoint.url", _RK_C_STR,
      _RK(sasl.oauthbearer.token_endpoint_url),
-     "OAUTH issuer token endpoint HTTP(S) URI used to retrieve the "
-     "token. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
 
     /* Plugins */

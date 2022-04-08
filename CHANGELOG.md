@@ -66,6 +66,8 @@ librdkafka v1.9.0 is a feature release:
    The clusterid is now returned as soon as metadata has been retrieved.
  * Fix hang in `rd_kafka_list_groups()` if there are no available brokers
    to connect to (#3705).
+ * Millisecond timeouts (`timeout_ms`) in various APIs, such as `rd_kafka_poll()`,
+   was limited to roughly 36 hours before wrapping. (#3034)
 
 
 ### Consumer fixes

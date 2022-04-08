@@ -1946,13 +1946,21 @@ int rd_kafka_socket_cb_generic(int domain,
                                int type,
                                int protocol,
                                void *opaque) {
-        int s;
-        int on = 1;
-        s      = (int)socket(domain, type, protocol);
+        int s = (int)socket(domain, type, protocol);
+#ifdef FD_CLOEXEC
+        int flags;
+#endif
+
         if (s == -1)
                 return -1;
+
 #ifdef FD_CLOEXEC
-        if (fcntl(s, F_SETFD, FD_CLOEXEC, &on) == -1)
+        if ((flags = fcntl(s, F_GETFD)) == -1)
+                fprintf(stderr,
+                        "WARNING: librdkafka: %s: "
+                        "fnctl(F_GETFD) for FD_CLOEXEC failed: %s: ignoring\n",
+                        __FUNCTION__, rd_strerror(errno));
+        else if (fcntl(s, F_SETFD, flags | FD_CLOEXEC) == -1)
                 fprintf(stderr,
                         "WARNING: librdkafka: %s: "
                         "fcntl(FD_CLOEXEC) failed: %s: ignoring\n",

@@ -263,7 +263,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                            * application + 1.
                                            * Is reset to INVALID_OFFSET
                                            * when partition is
-                                           * unassigned/stopped. */
+                                           * unassigned/stopped/seeked. */
         int64_t rktp_stored_offset;       /* Last stored offset, but
                                            * maybe not committed yet. */
         int64_t rktp_committing_offset;   /* Offset currently being

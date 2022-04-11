@@ -3837,6 +3837,10 @@ int rd_kafka_consume_callback_queue(
  *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
  *          Since v1.9.0.
  *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
+ *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
@@ -3860,6 +3864,10 @@ rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
  *          assigned.
  *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
  *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
  *
  * @remark The \c .offset field is stored as is, it will NOT be + 1.
  *

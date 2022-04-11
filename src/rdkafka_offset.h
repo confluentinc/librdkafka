@@ -36,19 +36,71 @@ const char *rd_kafka_offset2str(int64_t offset);
 
 
 /**
- * Stores the offset for the toppar 'rktp'.
- * The actual commit of the offset to backing store is usually
- * performed at a later time (time or threshold based).
+ * @brief Stores the offset for the toppar 'rktp'.
+ *        The actual commit of the offset to backing store is usually
+ *        performed at a later time (time or threshold based).
+ *
+ * For the high-level consumer (assign()), this function will reject absolute
+ * offsets if the partition is not currently assigned, unless \p force is set.
+ * This check was added to avoid a race condition where an application
+ * would call offsets_store() after the partitions had been revoked, forcing
+ * a future auto-committer on the next assignment to commit this old offset and
+ * overwriting whatever newer offset was committed by another consumer.
+ *
+ * The \p force flag is useful for internal calls to offset_store0() which
+ * do not need the protection described above.
+ *
+ *
+ * There is one situation where the \p force flag is troublesome:
+ * If the application is using any of the consumer batching APIs,
+ * e.g., consume_batch() or the event-based consumption, then it's possible
+ * that while the batch is being accumulated or the application is picking off
+ * messages from the event a rebalance occurs (in the background) which revokes
+ * the current assignment. This revokal will remove all queued messages, but
+ * not the ones the application already has accumulated in the event object.
+ * Enforcing assignment for store in this state is tricky with a bunch of
+ * corner cases, so instead we let those places forcibly store the offset, but
+ * then in assign() we reset the stored offset to .._INVALID, just like we do
+ * on revoke.
+ * Illustrated (with fix):
+ *   1. ev = rd_kafka_queue_poll();
+ *   2. background rebalance revoke unassigns the partition and sets the
+ *      stored offset to _INVALID.
+ *   3. application calls message_next(ev) which forcibly sets the
+ *      stored offset.
+ *   4. background rebalance assigns the partition again, but forcibly sets
+ *      the stored offset to .._INVALID to provide a clean state.
+ *
+ * @param offset Offset to set, may be an absolute offset or .._INVALID.
+ * @param force Forcibly set \p offset regardless of assignment state.
+ * @param do_lock Whether to lock the \p rktp or not (already locked by caller).
  *
  * See head of rdkafka_offset.c for more information.
+ *
+ * @returns RD_KAFKA_RESP_ERR__STATE if the partition is not currently assigned,
+ *          unless \p force is set.
  */
-static RD_INLINE RD_UNUSED void
-rd_kafka_offset_store0(rd_kafka_toppar_t *rktp, int64_t offset, int lock) {
-        if (lock)
+static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
+rd_kafka_offset_store0(rd_kafka_toppar_t *rktp,
+                       int64_t offset,
+                       rd_bool_t force,
+                       rd_dolock_t do_lock) {
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        if (do_lock)
                 rd_kafka_toppar_lock(rktp);
-        rktp->rktp_stored_offset = offset;
-        if (lock)
+
+        if (unlikely(!force && !RD_KAFKA_OFFSET_IS_LOGICAL(offset) &&
+                     !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED) &&
+                     !rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk)))
+                err = RD_KAFKA_RESP_ERR__STATE;
+        else
+                rktp->rktp_stored_offset = offset;
+
+        if (do_lock)
                 rd_kafka_toppar_unlock(rktp);
+
+        return err;
 }
 
 rd_kafka_resp_err_t
@@ -62,6 +114,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop(rd_kafka_toppar_t *rktp);
 void rd_kafka_offset_store_init(rd_kafka_toppar_t *rktp);
 
 void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
+                           int32_t broker_id,
                            int64_t err_offset,
                            rd_kafka_resp_err_t err,
                            const char *reason);

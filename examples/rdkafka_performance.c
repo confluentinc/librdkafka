@@ -216,17 +216,23 @@ static void msg_delivered(rd_kafka_t *rk,
             !last || msgs_wait_cnt < 5 || !(msgs_wait_cnt % dr_disp_div) ||
             (now - last) >= dispintvl * 1000 || verbosity >= 3) {
                 if (rkmessage->err && verbosity >= 2)
-                        printf("%% Message delivery failed: %s [%" PRId32
+                        printf("%% Message delivery failed (broker %" PRId32
+                               "): "
+                               "%s [%" PRId32
                                "]: "
                                "%s (%li remain)\n",
+                               rd_kafka_message_broker_id(rkmessage),
                                rd_kafka_topic_name(rkmessage->rkt),
                                rkmessage->partition,
                                rd_kafka_err2str(rkmessage->err), msgs_wait_cnt);
                 else if (verbosity > 2)
                         printf("%% Message delivered (offset %" PRId64
+                               ", broker %" PRId32
                                "): "
                                "%li remain\n",
-                               rkmessage->offset, msgs_wait_cnt);
+                               rkmessage->offset,
+                               rd_kafka_message_broker_id(rkmessage),
+                               msgs_wait_cnt);
                 if (verbosity >= 3 && do_seq)
                         printf(" --> \"%.*s\"\n", (int)rkmessage->len,
                                (const char *)rkmessage->payload);
@@ -1485,7 +1491,7 @@ int main(int argc, char **argv) {
                                             (int)RD_MAX(0, (next - rd_clock()) /
                                                                1000));
                                 } while (next > rd_clock());
-                        } else {
+                        } else if (cnt.msgs % 1000 == 0) {
                                 rd_kafka_poll(rk, 0);
                         }
 

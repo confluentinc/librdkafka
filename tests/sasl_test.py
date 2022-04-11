@@ -121,6 +121,9 @@ if __name__ == '__main__':
     parser.add_argument('--no-sasl', action='store_false', dest='sasl',
                         default=True,
                         help='Don\'t run SASL tests')
+    parser.add_argument('--no-oidc', action='store_false', dest='oidc',
+                        default=True,
+                        help='Don\'t run OAuth/OIDC tests')
     parser.add_argument('--no-plaintext', action='store_false',
                         dest='plaintext', default=True,
                         help='Don\'t run PLAINTEXT tests')
@@ -130,6 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', dest='debug',
                         default=False,
                         help='Enable trivup debugging')
+    parser.add_argument('--suite', type=str, default=None,
+                        help='Only run matching suite(s) (substring match)')
     parser.add_argument('versions', type=str, default=None,
                         nargs='*', help='Limit broker versions to these')
     args = parser.parse_args()
@@ -155,7 +160,10 @@ if __name__ == '__main__':
             versions.append(
                 (v, ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']))
     else:
-        versions = [('2.1.0', ['OAUTHBEARER', 'GSSAPI']),
+        versions = [('3.1.0',
+                     ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']),
+                    ('2.1.0',
+                     ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI', 'OAUTHBEARER']),
                     ('0.10.2.0', ['SCRAM-SHA-512', 'PLAIN', 'GSSAPI']),
                     ('0.9.0.1', ['GSSAPI']),
                     ('0.8.2.2', [])]
@@ -169,6 +177,8 @@ if __name__ == '__main__':
     sasl_oauthbearer_conf = {'sasl_mechanisms': 'OAUTHBEARER',
                              'sasl_oauthbearer_config':
                              'scope=requiredScope principal=admin'}
+    sasl_oauth_oidc_conf = {'sasl_mechanisms': 'OAUTHBEARER',
+                            'sasl_oauthbearer_method': 'OIDC'}
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
@@ -208,6 +218,13 @@ if __name__ == '__main__':
                'rdkconf': {'sasl_oauthbearer_config': 'scope=wrongScope'},
                'tests': ['0001'],
                'expect_fail': ['all']},
+              {'name': 'OAuth/OIDC',
+               'run': args.oidc,
+               'tests': ['0001', '0126'],
+               'conf': sasl_oauth_oidc_conf,
+               'minver': '3.1.0',
+               'expect_fail': ['2.8.1', '2.1.0', '0.10.2.0',
+                               '0.9.0.1', '0.8.2.2']},
               {'name': 'SASL Kerberos',
                'run': args.sasl,
                'conf': sasl_kerberos_conf,
@@ -223,6 +240,19 @@ if __name__ == '__main__':
         for suite in suites:
             if not suite.get('run', True):
                 continue
+
+            if args.suite is not None and suite['name'].find(args.suite) == -1:
+                print(
+                    f'# Skipping {suite["name"]} due to --suite {args.suite}')
+                continue
+
+            if 'minver' in suite:
+                minver = [int(x) for x in suite['minver'].split('.')][:3]
+                this_version = [int(x) for x in version.split('.')][:3]
+                if this_version < minver:
+                    print(
+                        f'# Skipping {suite["name"]} due to version {version} < minimum required version {suite["minver"]}')  # noqa: E501
+                    continue
 
             _conf = conf.copy()
             _conf.update(suite.get('conf', {}))

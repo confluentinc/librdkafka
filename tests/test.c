@@ -125,6 +125,7 @@ _TEST_DECL(0019_list_groups);
 _TEST_DECL(0020_destroy_hang);
 _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
+_TEST_DECL(0022_consume_batch_local);
 _TEST_DECL(0025_timers);
 _TEST_DECL(0026_consume_pause);
 _TEST_DECL(0028_long_topicnames);
@@ -235,6 +236,8 @@ _TEST_DECL(0124_openssl_invalid_engine);
 _TEST_DECL(0125_immediate_flush);
 _TEST_DECL(0126_oauthbearer_oidc);
 _TEST_DECL(0128_sasl_callback_queue);
+_TEST_DECL(0129_fetch_aborted_msgs);
+_TEST_DECL(0130_store_offsets);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -298,6 +301,7 @@ struct test tests[] = {
     _TEST(0020_destroy_hang, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0021_rkt_destroy, 0),
     _TEST(0022_consume_batch, 0),
+    _TEST(0022_consume_batch_local, TEST_F_LOCAL),
     _TEST(0025_timers, TEST_F_LOCAL),
     _TEST(0026_consume_pause,
           TEST_F_KNOWN_ISSUE,
@@ -469,8 +473,10 @@ struct test tests[] = {
     _TEST(0123_connections_max_idle, 0),
     _TEST(0124_openssl_invalid_engine, TEST_F_LOCAL),
     _TEST(0125_immediate_flush, 0),
-    _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 0, 0, 0)),
+    _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
+    _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0130_store_offsets, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -4501,26 +4507,37 @@ void test_kafka_topics(const char *fmt, ...) {
 #ifdef _WIN32
         TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
 #else
-        char cmd[512];
-        int r;
+        char cmd[1024];
+        int r, bytes_left;
         va_list ap;
         test_timing_t t_cmd;
-        const char *kpath, *zk;
+        const char *kpath, *bootstrap_env, *flag, *bootstrap_srvs;
 
-        kpath = test_getenv("KAFKA_PATH", NULL);
-        zk    = test_getenv("ZK_ADDRESS", NULL);
+        if (test_broker_version >= TEST_BRKVER(3, 0, 0, 0)) {
+                bootstrap_env = "BROKERS";
+                flag          = "--bootstrap-server";
+        } else {
+                bootstrap_env = "ZK_ADDRESS";
+                flag          = "--zookeeper";
+        }
 
-        if (!kpath || !zk)
-                TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
-                          __FUNCTION__);
+        kpath          = test_getenv("KAFKA_PATH", NULL);
+        bootstrap_srvs = test_getenv(bootstrap_env, NULL);
 
-        r = rd_snprintf(cmd, sizeof(cmd),
-                        "%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
-        TEST_ASSERT(r < (int)sizeof(cmd));
+        if (!kpath || !bootstrap_srvs)
+                TEST_FAIL("%s: KAFKA_PATH and %s must be set", __FUNCTION__,
+                          bootstrap_env);
+
+        r = rd_snprintf(cmd, sizeof(cmd), "%s/bin/kafka-topics.sh %s %s ",
+                        kpath, flag, bootstrap_srvs);
+        TEST_ASSERT(r > 0 && r < (int)sizeof(cmd));
+
+        bytes_left = sizeof(cmd) - r;
 
         va_start(ap, fmt);
-        rd_vsnprintf(cmd + r, sizeof(cmd) - r, fmt, ap);
+        r = rd_vsnprintf(cmd + r, bytes_left, fmt, ap);
         va_end(ap);
+        TEST_ASSERT(r > 0 && r < bytes_left);
 
         TEST_SAY("Executing: %s\n", cmd);
         TIMING_START(&t_cmd, "exec");
@@ -4542,11 +4559,15 @@ void test_kafka_topics(const char *fmt, ...) {
 
 /**
  * @brief Create topic using Topic Admin API
+ *
+ * @param configs is an optional key-value tuple array of
+ *                   topic configs (or NULL).
  */
-static void test_admin_create_topic(rd_kafka_t *use_rk,
-                                    const char *topicname,
-                                    int partition_cnt,
-                                    int replication_factor) {
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs) {
         rd_kafka_t *rk;
         rd_kafka_NewTopic_t *newt[1];
         const size_t newt_cnt = 1;
@@ -4570,6 +4591,14 @@ static void test_admin_create_topic(rd_kafka_t *use_rk,
             rd_kafka_NewTopic_new(topicname, partition_cnt, replication_factor,
                                   errstr, sizeof(errstr));
         TEST_ASSERT(newt[0] != NULL, "%s", errstr);
+
+        if (configs) {
+                int i;
+
+                for (i = 0; configs[i] && configs[i + 1]; i += 2)
+                        TEST_CALL_ERR__(rd_kafka_NewTopic_set_config(
+                            newt[0], configs[i], configs[i + 1]));
+        }
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
         err     = rd_kafka_AdminOptions_set_operation_timeout(
@@ -4651,7 +4680,7 @@ void test_create_topic(rd_kafka_t *use_rk,
                                      replication_factor);
         else
                 test_admin_create_topic(use_rk, topicname, partition_cnt,
-                                        replication_factor);
+                                        replication_factor, NULL);
 }
 
 
@@ -5150,12 +5179,16 @@ void test_report_add(struct test *test, const char *fmt, ...) {
 }
 
 /**
- * Returns 1 if KAFKA_PATH and ZK_ADDRESS is set to se we can use the
- * kafka-topics.sh script to manually create topics.
+ * Returns 1 if KAFKA_PATH and BROKERS (or ZK_ADDRESS) is set to se we can use
+ * the kafka-topics.sh script to manually create topics.
  *
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
 int test_can_create_topics(int skip) {
+#ifndef _WIN32
+        const char *bootstrap;
+#endif
+
         /* Has AdminAPI */
         if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))
                 return 1;
@@ -5166,12 +5199,16 @@ int test_can_create_topics(int skip) {
         return 0;
 #else
 
-        if (!test_getenv("KAFKA_PATH", NULL) ||
-            !test_getenv("ZK_ADDRESS", NULL)) {
+        bootstrap = test_broker_version >= TEST_BRKVER(3, 0, 0, 0)
+                        ? "BROKERS"
+                        : "ZK_ADDRESS";
+
+        if (!test_getenv("KAFKA_PATH", NULL) || !test_getenv(bootstrap, NULL)) {
                 if (skip)
                         TEST_SKIP(
                             "Cannot create topics "
-                            "(set KAFKA_PATH and ZK_ADDRESS)\n");
+                            "(set KAFKA_PATH and %s)\n",
+                            bootstrap);
                 return 0;
         }
 
@@ -5569,8 +5606,6 @@ rd_kafka_event_t *test_wait_admin_result(rd_kafka_queue_t *q,
         return NULL;
 }
 
-
-
 /**
  * @brief Wait for up to \p tmout for an admin API result and return the
  *        distilled error code.
@@ -5582,8 +5617,9 @@ rd_kafka_event_t *test_wait_admin_result(rd_kafka_queue_t *q,
  *        - DeleteGroups
  *        - DeleteRecords
  *        - DeleteTopics
- *        * DeleteConsumerGroupOffsets
+ *        - DeleteConsumerGroupOffsets
  *        - DescribeConfigs
+ *        - CreateAcls
  */
 rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                                  rd_kafka_event_type_t evtype,
@@ -5595,6 +5631,8 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
         size_t terr_cnt                        = 0;
         const rd_kafka_ConfigResource_t **cres = NULL;
         size_t cres_cnt                        = 0;
+        const rd_kafka_acl_result_t **aclres   = NULL;
+        size_t aclres_cnt                      = 0;
         int errcnt                             = 0;
         rd_kafka_resp_err_t err;
         const rd_kafka_group_result_t **gres           = NULL;
@@ -5653,6 +5691,15 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
 
                 cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_CREATEACLS_RESULT) {
+                const rd_kafka_CreateAcls_result_t *res;
+
+                if (!(res = rd_kafka_event_CreateAcls_result(rkev)))
+                        TEST_FAIL("Expected a CreateAcls result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                aclres = rd_kafka_CreateAcls_result_acls(res, &aclres_cnt);
+
         } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
                 const rd_kafka_DeleteGroups_result_t *res;
                 if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))
@@ -5707,6 +5754,19 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                             rd_kafka_ConfigResource_error_string(cres[i]));
                         if (!(errcnt++))
                                 err = rd_kafka_ConfigResource_error(cres[i]);
+                }
+        }
+
+        /* Check ACL errors */
+        for (i = 0; i < aclres_cnt; i++) {
+                const rd_kafka_error_t *error =
+                    rd_kafka_acl_result_error(aclres[i]);
+                if (error) {
+                        TEST_WARN("AclResult error: %s: %s\n",
+                                  rd_kafka_error_name(error),
+                                  rd_kafka_error_string(error));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(error);
                 }
         }
 
@@ -6237,7 +6297,55 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
         return err;
 }
 
+/**
+ * @brief Topic Admin API helpers
+ *
+ * @param useq Makes the call async and posts the response in this queue.
+ *             If NULL this call will be synchronous and return the error
+ *             result.
+ *
+ * @remark Fails the current test on failure.
+ */
 
+rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
+                                           rd_kafka_queue_t *useq,
+                                           rd_kafka_AclBinding_t **acls,
+                                           size_t acl_cnt,
+                                           void *opaque) {
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30 * 1000;
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATEACLS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Creating %" PRIusz " acls\n", acl_cnt);
+
+        rd_kafka_CreateAcls(rk, acls, acl_cnt, options, q);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q, RD_KAFKA_EVENT_CREATEACLS_RESULT,
+                                           NULL, tmout + 5000);
+
+        rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to create %d acl(s): %s", (int)acl_cnt,
+                          rd_kafka_err2str(err));
+
+        return err;
+}
 
 static void test_free_string_array(char **strs, size_t cnt) {
         size_t i;
@@ -6583,9 +6691,6 @@ int test_sub_start(const char *func,
         if (!is_quick && test_quick)
                 return 0;
 
-        if (subtests_to_run && !strstr(func, subtests_to_run))
-                return 0;
-
         if (fmt && *fmt) {
                 va_list ap;
                 char buf[256];
@@ -6599,6 +6704,11 @@ int test_sub_start(const char *func,
         } else {
                 rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
                             "%s:%d", func, line);
+        }
+
+        if (subtests_to_run && !strstr(test_curr->subtest, subtests_to_run)) {
+                *test_curr->subtest = '\0';
+                return 0;
         }
 
         TIMING_START(&test_curr->subtest_duration, "SUBTEST");

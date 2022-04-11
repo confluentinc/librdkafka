@@ -211,7 +211,8 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                      "Waking up waiting broker threads after "
                      "setting AWS_MSK_IAM credential");
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT,
+                                        "AWS_MSK_IAM credential refresh");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

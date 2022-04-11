@@ -50,10 +50,12 @@ librdkafka also provides a native C++ interface.
         - [Termination](#termination)
             - [High-level KafkaConsumer](#high-level-kafkaconsumer)
             - [Producer](#producer)
+            - [Admin API client](#admin-api-client)
             - [Speeding up termination](#speeding-up-termination)
         - [Threads and callbacks](#threads-and-callbacks)
         - [Brokers](#brokers)
             - [SSL](#ssl)
+            - [OAUTHBEARER with support for OIDC](#oauthbearer-with-support-for-oidc)
             - [Sparse connections](#sparse-connections)
                 - [Random broker selection](#random-broker-selection)
                 - [Persistent broker connections](#persistent-broker-connections)
@@ -67,10 +69,12 @@ librdkafka also provides a native C++ interface.
             - [Offset management](#offset-management)
                 - [Auto offset commit](#auto-offset-commit)
                 - [At-least-once processing](#at-least-once-processing)
+                - [Auto offset reset](#auto-offset-reset)
         - [Consumer groups](#consumer-groups)
             - [Static consumer groups](#static-consumer-groups)
         - [Topics](#topics)
             - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
+            - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
             - [Topic auto creation](#topic-auto-creation)
         - [Metadata](#metadata)
             - [< 0.9.3](#-093)
@@ -1121,6 +1125,31 @@ For example, to read both intermediate and root CAs, set
 `ssl.ca.certificate.stores=CA,Root`.
 
 
+#### OAUTHBEARER with support for OIDC
+
+OAUTHBEARER with OIDC provides a method for the client to authenticate to the
+Kafka cluster by requesting an authentication token from an issuing server
+and passing the retrieved token to brokers during connection setup.
+
+To use this authentication method the client needs to be configured as follows:
+
+  * `security.protocol` - set to `SASL_SSL` or `SASL_PLAINTEXT`.
+  * `sasl.mechanism` - set to `OAUTHBEARER`.
+  * `sasl.oauthbearer.method` - set to `OIDC`.
+  * `sasl.oauthbearer.token.endpoint.url` - OAUTH issuer token
+     endpoint HTTP(S) URI used to retrieve the token.
+  * `sasl.oauthbearer.client.id` - public identifier for the application.
+    It must be unique across all clients that the authorization server handles.
+  * `sasl.oauthbearer.client.secret` - secret known only to the
+    application and the authorization server.
+    This should be a sufficiently random string that is not guessable.
+  * `sasl.oauthbearer.scope` - clients use this to specify the scope of the
+    access request to the broker.
+  * `sasl.oauthbearer.extensions` - (optional) additional information to be
+    provided to the broker. A comma-separated list of key=value pairs.
+    For example:
+    `supportFeatureX=true,organizationId=sales-emea`
+
 
 #### Sparse connections
 
@@ -1905,7 +1934,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-651 - Support PEM format for SSL certs and keys                      | 2.7.0                       | Supported                                                                                     |
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
-| KIP-768 - SASL/OAUTHBEARER OIDC support                                  | WIP                         | Not supported                                                                                 |
+| KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 
 
 

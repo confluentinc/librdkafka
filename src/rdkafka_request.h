@@ -348,6 +348,13 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
                                    rd_kafka_resp_cb_t *resp_cb,
                                    void *opaque);
 
+void rd_kafka_handle_InitProducerId(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque);
+
 rd_kafka_resp_err_t
 rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
                                 const char *transactional_id,
@@ -382,6 +389,36 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
                               rd_kafka_replyq_t replyq,
                               rd_kafka_resp_cb_t *resp_cb,
                               void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_CreateAclsRequest(rd_kafka_broker_t *rkb,
+                           const rd_list_t *new_acls /*(AclBinding_t*)*/,
+                           rd_kafka_AdminOptions_t *options,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_DescribeAclsRequest(rd_kafka_broker_t *rkb,
+                             const rd_list_t *acls /*(AclBinding*)*/,
+                             rd_kafka_AdminOptions_t *options,
+                             char *errstr,
+                             size_t errstr_size,
+                             rd_kafka_replyq_t replyq,
+                             rd_kafka_resp_cb_t *resp_cb,
+                             void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
+                           const rd_list_t *del_acls /*(AclBindingFilter*)*/,
+                           rd_kafka_AdminOptions_t *options,
+                           char *errstr,
+                           size_t errstr_size,
+                           rd_kafka_replyq_t replyq,
+                           rd_kafka_resp_cb_t *resp_cb,
+                           void *opaque);
 
 
 #endif /* _RDKAFKA_REQUEST_H_ */

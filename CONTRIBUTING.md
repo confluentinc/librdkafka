@@ -36,9 +36,10 @@ likely to happen.
 clang-format is used to check, and fix, the style for C/C++ files,
 while flake8 and autopep8 is used for the Python scripts.
 
-You should check the style before committing by running `make style-check`
+You should check the style before committing by running `make style-check-changed`
 from the top-level directory, and if any style errors are reported you can
-automatically fix them using `make style-fix`.
+automatically fix them using `make style-fix-changed` (or just run
+that command directly).
 
 The Python code may need some manual fixing since autopep8 is unable to fix
 all warnings reported by flake8, in particular it will not split long lines,

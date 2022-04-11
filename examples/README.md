@@ -16,6 +16,7 @@ Begin with the following examples:
  * [transactions-older-broker.c](transactions-older-broker.c) - Same as
    `transactions.c` but for Apache Kafka versions 2.4.x and older which
    lack KIP-447 support.
+ * [misc.c](misc.c) - a collection of miscellaneous usage examples.
 
 
 For more complex uses, see:

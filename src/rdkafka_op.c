@@ -84,6 +84,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DELETEGROUPS]     = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
+            [RD_KAFKA_OP_CREATEACLS]          = "REPLY:CREATEACLS",
+            [RD_KAFKA_OP_DESCRIBEACLS]        = "REPLY:DESCRIBEACLS",
+            [RD_KAFKA_OP_DELETEACLS]          = "REPLY:DELETEACLS",
             [RD_KAFKA_OP_ADMIN_FANOUT]        = "REPLY:ADMIN_FANOUT",
             [RD_KAFKA_OP_ADMIN_RESULT]        = "REPLY:ADMIN_RESULT",
             [RD_KAFKA_OP_PURGE]               = "REPLY:PURGE",
@@ -224,6 +227,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DELETEGROUPS]     = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBEACLS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETEACLS]   = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ADMIN_FANOUT] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
             [RD_KAFKA_OP_PURGE]        = sizeof(rko->rko_u.purge),
@@ -373,6 +379,9 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_CREATEACLS:
+        case RD_KAFKA_OP_DESCRIBEACLS:
+        case RD_KAFKA_OP_DELETEACLS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
@@ -380,6 +389,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_ADMIN_RESULT:
+                rd_list_destroy(&rko->rko_u.admin_result.args);
                 rd_list_destroy(&rko->rko_u.admin_result.results);
                 RD_IF_FREE(rko->rko_u.admin_result.errstr, rd_free);
                 rd_assert(!rko->rko_u.admin_result.fanout_parent);
@@ -889,6 +899,8 @@ void rd_kafka_op_offset_store(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_app_offset = offset;
         if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, offset, 0 /*no lock*/);
+                rd_kafka_offset_store0(rktp, offset,
+                                       /* force: ignore assignment state */
+                                       rd_true, RD_DONT_LOCK);
         rd_kafka_toppar_unlock(rktp);
 }

@@ -165,6 +165,7 @@ rd_bool_t rd_kafka_idemp_check_error(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH:
+        case RD_KAFKA_RESP_ERR_PRODUCER_FENCED:
                 is_fatal = rd_true;
                 /* Normalize error */
                 err     = RD_KAFKA_RESP_ERR__FENCED;
@@ -313,14 +314,16 @@ redo:
                             rd_kafka_handle_InitProducerId, NULL);
                 }
 
-                rd_kafka_broker_destroy(rkb);
-
                 if (err) {
                         rd_rkb_dbg(rkb, EOS, "GETPID",
                                    "Can't acquire ProducerId from "
                                    "this broker: %s",
                                    errstr);
+                }
 
+                rd_kafka_broker_destroy(rkb);
+
+                if (err) {
                         if (rd_kafka_idemp_check_error(rk, err, errstr,
                                                        is_fatal))
                                 return; /* Fatal error */
@@ -492,7 +495,8 @@ void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
 
         /* Wake up all broker threads (that may have messages to send
          * that were waiting for a Producer ID). */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                    "PID updated");
 }
 
 
@@ -548,7 +552,8 @@ static void rd_kafka_idemp_drain_done(rd_kafka_t *rk) {
         /* Wake up all broker threads (that may have messages to send
          * that were waiting for a Producer ID). */
         if (wakeup_brokers)
-                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                            "message drain done");
 }
 
 /**

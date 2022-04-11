@@ -62,9 +62,20 @@ typedef struct rd_http_req_s {
                                                  *   write to. */
 } rd_http_req_t;
 
-static void rd_http_req_destroy(rd_http_req_t *hreq);
 rd_http_error_t *rd_http_req_init(rd_http_req_t *hreq, const char *url);
 rd_http_error_t *rd_http_req_perform_sync(rd_http_req_t *hreq);
+rd_http_error_t *rd_http_parse_json(rd_http_req_t *hreq, cJSON **jsonp);
+rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
+                                          const char *url,
+                                          const struct curl_slist *headers,
+                                          const char *data_to_token,
+                                          size_t data_to_token_size,
+                                          int timeout_s,
+                                          int retry,
+                                          int retry_ms,
+                                          cJSON **jsonp);
+void rd_http_req_destroy(rd_http_req_t *hreq);
+
 #endif
 
 

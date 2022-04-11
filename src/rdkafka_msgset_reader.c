@@ -194,6 +194,9 @@ typedef struct rd_kafka_msgset_reader_s {
         int msetr_ctrl_cnt; /**< Number of control messages
                              *   or MessageSets received. */
 
+        int msetr_aborted_cnt; /**< Number of aborted MessageSets
+                                *   encountered. */
+
         const char *msetr_srcname; /**< Optional message source string,
                                     *   used in debug logging to
                                     *   indicate messages were
@@ -536,7 +539,7 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
         struct {
                 int64_t Offset;      /* MessageSet header */
                 int32_t MessageSize; /* MessageSet header */
-                uint32_t Crc;
+                int32_t Crc;
                 int8_t MagicByte; /* MsgVersion */
                 int8_t Attributes;
                 int64_t Timestamp; /* v1 */
@@ -600,7 +603,7 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
                 calc_crc = rd_slice_crc32(&crc_slice);
                 rd_dassert(rd_slice_remains(&crc_slice) == 0);
 
-                if (unlikely(hdr.Crc != calc_crc)) {
+                if (unlikely(hdr.Crc != (int32_t)calc_crc)) {
                         /* Propagate CRC error to application and
                          * continue with next message. */
                         rd_kafka_consumer_err(
@@ -984,6 +987,7 @@ rd_kafka_msgset_reader_msgs_v2(rd_kafka_msgset_reader_t *msetr) {
                             msetr->msetr_rkbuf,
                             rd_slice_remains(
                                 &msetr->msetr_rkbuf->rkbuf_reader));
+                        msetr->msetr_aborted_cnt++;
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
         }
@@ -1341,9 +1345,18 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                  * This means the size limit perhaps was too tight,
                  * increase it automatically.
                  * If there was at least one control message there
-                 * is probably not a size limit and nothing is done. */
+                 * is probably not a size limit and nothing is done.
+                 * If there were aborted messagesets and no underflow then
+                 * there is no error either (#2993).
+                 *
+                 * Also; avoid propagating underflow errors, which cause
+                 * backoffs, since we'll want to continue fetching the
+                 * remaining truncated messages as soon as possible.
+                 */
                 if (msetr->msetr_ctrl_cnt > 0) {
                         /* Noop */
+                        if (err == RD_KAFKA_RESP_ERR__UNDERFLOW)
+                                err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 } else if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
                         rktp->rktp_fetch_msg_max_bytes *= 2;
@@ -1354,17 +1367,25 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                    rktp->rktp_rkt->rkt_topic->str,
                                    rktp->rktp_partition,
                                    rktp->rktp_fetch_msg_max_bytes);
-                } else if (!err) {
+
+                        if (err == RD_KAFKA_RESP_ERR__UNDERFLOW)
+                                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                } else if (!err && msetr->msetr_aborted_cnt == 0) {
                         rd_kafka_consumer_err(
                             &msetr->msetr_rkq, msetr->msetr_broker_id,
                             RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
                             msetr->msetr_tver->version, NULL, rktp,
                             rktp->rktp_offsets.fetch_offset,
                             "Message at offset %" PRId64
-                            " "
-                            "might be too large to fetch, try increasing "
+                            " might be too large to fetch, try increasing "
                             "receive.message.max.bytes",
                             rktp->rktp_offsets.fetch_offset);
+
+                } else if (msetr->msetr_aborted_cnt > 0) {
+                        /* Noop */
+                        if (err == RD_KAFKA_RESP_ERR__UNDERFLOW)
+                                err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
 
         } else {
@@ -1379,21 +1400,20 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
-        rd_rkb_dbg(
-            msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
-            "Enqueue %i %smessage(s) (%" PRId64
-            " bytes, %d ops) on "
-            "%s [%" PRId32
-            "] "
-            "fetch queue (qlen %d, v%d, last_offset %" PRId64
-            ", %d ctrl msgs, %s)",
-            msetr->msetr_msgcnt, msetr->msetr_srcname, msetr->msetr_msg_bytes,
-            rd_kafka_q_len(&msetr->msetr_rkq), rktp->rktp_rkt->rkt_topic->str,
-            rktp->rktp_partition, rd_kafka_q_len(msetr->msetr_par_rkq),
-            msetr->msetr_tver->version, last_offset, msetr->msetr_ctrl_cnt,
-            msetr->msetr_compression
-                ? rd_kafka_compression2str(msetr->msetr_compression)
-                : "uncompressed");
+        rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
+                   "Enqueue %i %smessage(s) (%" PRId64
+                   " bytes, %d ops) on %s [%" PRId32
+                   "] fetch queue (qlen %d, v%d, last_offset %" PRId64
+                   ", %d ctrl msgs, %d aborted msgsets, %s)",
+                   msetr->msetr_msgcnt, msetr->msetr_srcname,
+                   msetr->msetr_msg_bytes, rd_kafka_q_len(&msetr->msetr_rkq),
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                   rd_kafka_q_len(msetr->msetr_par_rkq),
+                   msetr->msetr_tver->version, last_offset,
+                   msetr->msetr_ctrl_cnt, msetr->msetr_aborted_cnt,
+                   msetr->msetr_compression
+                       ? rd_kafka_compression2str(msetr->msetr_compression)
+                       : "uncompressed");
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */

@@ -236,7 +236,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         int32_t controller_id      = -1;
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
         int broker_changes         = 0;
-        int topic_changes          = 0;
+        int cache_changes          = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -506,7 +506,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                 rd_kafka_wrlock(rk);
                                 rd_kafka_metadata_cache_topic_update(
                                     rk, mdt, rd_false /*propagate later*/);
-                                topic_changes++;
+                                cache_changes++;
                                 rd_kafka_wrunlock(rk);
                         }
                 }
@@ -571,6 +571,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 }
 
                 rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
+                /* rd_kafka_clusterid() waits for a cache update even though
+                 * the clusterid is not in the cache itself. (#3620) */
+                cache_changes++;
         }
 
         /* Update controller id. */
@@ -597,7 +600,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                            "%d broker(s) and %d topic(s): %s",
                            md->broker_cnt, md->topic_cnt, reason);
         } else {
-                if (topic_changes)
+                if (cache_changes)
                         rd_kafka_metadata_cache_propagate_changes(rk);
                 rd_kafka_metadata_cache_expiry_start(rk);
         }

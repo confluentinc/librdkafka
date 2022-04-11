@@ -68,6 +68,12 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "DeleteGroupsResult";
         case RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT:
                 return "DeleteConsumerGroupOffsetsResult";
+        case RD_KAFKA_EVENT_CREATEACLS_RESULT:
+                return "CreateAclsResult";
+        case RD_KAFKA_EVENT_DESCRIBEACLS_RESULT:
+                return "DescribeAclsResult";
+        case RD_KAFKA_EVENT_DELETEACLS_RESULT:
+                return "DeleteAclsResult";
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
                 return "SaslOAuthBearerTokenRefresh";
         case RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH:
@@ -350,4 +356,28 @@ rd_kafka_event_DeleteConsumerGroupOffsets_result(rd_kafka_event_t *rkev) {
         else
                 return (
                     const rd_kafka_DeleteConsumerGroupOffsets_result_t *)rkev;
+}
+
+const rd_kafka_CreateAcls_result_t *
+rd_kafka_event_CreateAcls_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_CREATEACLS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_CreateAcls_result_t *)rkev;
+}
+
+const rd_kafka_DescribeAcls_result_t *
+rd_kafka_event_DescribeAcls_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBEACLS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeAcls_result_t *)rkev;
+}
+
+const rd_kafka_DeleteAcls_result_t *
+rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DELETEACLS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DeleteAcls_result_t *)rkev;
 }

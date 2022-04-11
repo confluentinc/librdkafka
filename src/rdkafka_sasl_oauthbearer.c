@@ -36,6 +36,9 @@
 #include <openssl/evp.h>
 #include "rdunittest.h"
 
+#if WITH_CURL
+#include "rdkafka_sasl_oauthbearer_oidc.h"
+#endif
 
 
 /**
@@ -439,7 +442,8 @@ rd_kafka_oauthbearer_set_token0(rd_kafka_t *rk,
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                      "Waking up waiting broker threads after "
                      "setting OAUTHBEARER token");
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT,
+                                    "OAUTHBEARER token update");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -1321,17 +1325,15 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
                 handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
         }
 
+#if WITH_CURL
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
-#if FIXME /************************ FIXME  when .._oidc.c is added ****/
             rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==
-                rd_kafka_sasl_oauthbearer_oidc_token_refresh_cb
-#else
-            1
-#endif
-            ) /* move this paren up on the .._refresh_cb
-               * line when FIXME is fixed. */
+                rd_kafka_oidc_token_refresh_cb) {
                 handle->internal_refresh = rd_true;
+                rd_kafka_sasl_background_callbacks_enable(rk);
+        }
+#endif
 
         /* Otherwise enqueue a refresh callback for the application. */
         rd_kafka_oauthbearer_enqueue_token_refresh(handle);

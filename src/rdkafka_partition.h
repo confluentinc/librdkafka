@@ -152,8 +152,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                             *   base msgid.
                                             *   When a new epoch is
                                             *   acquired, or on transaction
-                                            * abort, the base_seq is set to the
-                                            *   current rktp_msgid so that
+                                            *   abort, the base_seq is set to
+                                            *   the current rktp_msgid so that
                                             *   sub-sequent produce
                                             *   requests will have
                                             *   a sequence number series
@@ -165,8 +165,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                             *   Used when draining outstanding
                                             *   issues.
                                             *   This value will be the same
-                                            *   as next_ack_seq until a drainable
-                                            *   error occurs, in which case it
+                                            *   as next_ack_seq until a
+                                            *   drainable error occurs,
+                                            *   in which case it
                                             *   will advance past next_ack_seq.
                                             *   next_ack_seq can never be larger
                                             *   than next_err_seq.
@@ -343,6 +344,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ON_DESP 0x400  /**< On rkt_desp list */
 #define RD_KAFKA_TOPPAR_F_ON_CGRP 0x800  /**< On rkcg_toppars list */
 #define RD_KAFKA_TOPPAR_F_ON_RKB  0x1000 /**< On rkb_toppars list */
+#define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
+        0x2000 /**< Toppar is part of the consumer                             \
+                *   assignment. */
 
         /*
          * Timers
@@ -445,7 +449,9 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
 void rd_kafka_toppar_purge_and_disable_queues(rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state);
 void rd_kafka_toppar_insert_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now);
 int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         rd_kafka_msgq_t *srcq,
                         int incr_retry,

@@ -184,3 +184,41 @@ void rd_kafka_group_result_destroy(rd_kafka_group_result_t *groupres) {
 void rd_kafka_group_result_free(void *ptr) {
         rd_kafka_group_result_destroy((rd_kafka_group_result_t *)ptr);
 }
+
+
+const rd_kafka_error_t *
+rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres) {
+        return aclres->error;
+}
+
+/**
+ * @brief Allocates and return an acl result, takes ownership of \p error
+ *        (unless NULL).
+ *
+ * @returns The new acl result.
+ */
+rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_error_t *error) {
+        rd_kafka_acl_result_t *acl_res;
+
+        acl_res = rd_calloc(1, sizeof(*acl_res));
+
+        acl_res->error = error;
+
+        return acl_res;
+}
+
+/**
+ * @brief Destroy acl_result
+ */
+void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res) {
+        if (acl_res->error)
+                rd_kafka_error_destroy(acl_res->error);
+        rd_free(acl_res);
+}
+
+/**
+ * @brief Destroy-variant suitable for rd_list free_cb use.
+ */
+void rd_kafka_acl_result_free(void *ptr) {
+        rd_kafka_acl_result_destroy((rd_kafka_acl_result_t *)ptr);
+}

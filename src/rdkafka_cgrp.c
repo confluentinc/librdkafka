@@ -1773,6 +1773,10 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         rkbuf = rd_kafka_buf_new_shadow(
             MemberMetadata->data, RD_KAFKAP_BYTES_LEN(MemberMetadata), NULL);
 
+        /* Protocol parser needs a broker handle to log errors on. */
+        rkbuf->rkbuf_rkb = rkb;
+        rd_kafka_broker_keep(rkb);
+
         rd_kafka_buf_read_i16(rkbuf, &Version);
         rd_kafka_buf_read_i32(rkbuf, &subscription_cnt);
 

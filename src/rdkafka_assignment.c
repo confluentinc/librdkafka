@@ -342,11 +342,15 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
                  * a manual offset-less commit() or the auto-committer
                  * will not commit a stored offset from a previous
                  * assignment (issue #2782). */
-                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID,
+                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID, rd_true,
                                        RD_DONT_LOCK);
 
                 /* Partition is no longer desired */
                 rd_kafka_toppar_desired_del(rktp);
+
+                rd_assert((rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED));
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ASSIGNED;
+
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_dbg(rk, CGRP, "REMOVE",
@@ -712,6 +716,28 @@ rd_kafka_assignment_add(rd_kafka_t *rk,
                  * assignment_clear() below. */
                 rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
         }
+
+        /* Mark all partition objects as assigned and reset the stored
+         * offsets back to invalid in case it was explicitly stored during
+         * the time the partition was not assigned. */
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
+
+                rd_kafka_toppar_lock(rktp);
+
+                rd_assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED));
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ASSIGNED;
+
+                /* Reset the stored offset to INVALID to avoid the race
+                 * condition described in rdkafka_offset.h */
+                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID,
+                                       rd_true /* force */, RD_DONT_LOCK);
+
+                rd_kafka_toppar_unlock(rktp);
+        }
+
 
         /* Add the new list of partitions to the current assignment.
          * Only need to sort the final assignment if it was non-empty

@@ -127,6 +127,7 @@
     <ClInclude Include="..\src\rdkafka_request.h" />
     <ClInclude Include="..\src\rdkafka_sasl.h" />
     <ClInclude Include="..\src\rdkafka_sasl_int.h" />
+    <ClInclude Include="..\src\rdkafka_sasl_oauthbearer_oidc.h" />
     <ClInclude Include="..\src\rdkafka_transport_int.h" />
     <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
@@ -202,6 +203,7 @@
     <ClCompile Include="..\src\rdkafka_sasl_plain.c" />
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
+    <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
@@ -252,4 +254,4 @@
     <None Include="..\README.win32" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-</Project>
+</Project>

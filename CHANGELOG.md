@@ -2,9 +2,37 @@
 
 librdkafka v1.9.0 is a feature release:
 
+ * Added KIP-768 OUATHBEARER OIDC support (by @jliunyu, #3560)
+ * Added KIP-140 Admin API ACL support (by @emasab, #2676)
+
+
+## Upgrade considerations
+
+ * Consumer:
+   `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   This prevents a race condition where an application would store offsets
+   after the assigned partitions had been revoked (which resets the stored
+   offset), that could cause these old stored offsets to be committed later
+   when the same partitions were assigned to this consumer again - effectively
+   overwriting any committed offsets by any consumers that were assigned the
+   same partitions previously. This would typically result in the offsets
+   rewinding and messages to be reprocessed.
+   As an extra effort to avoid this situation the stored offset is now
+   also reset when partitions are assigned (through `rd_kafka_*assign()`).
+   Applications that explicitly call `..offset*_store()` will now need
+   to handle the case where `RD_KAFKA_RESP_ERR__STATE` is returned
+   in the per-partition `.err` field - meaning the partition is no longer
+   assigned to this consumer and the offset could not be stored for commit.
+
 
 ## Enhancements
 
+ * Improved producer queue scheduling. Fixes the performance regression
+   introduced in v1.7.0 for some produce patterns. (#3538, #2912)
+ * Windows: Added native Win32 IO/Queue scheduling. This removes the
+   internal TCP loopback connections that were previously used for timely
+   queue wakeups.
  * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
    on librdkafka's background thread. This solves the problem where an
    application has a custom SASL OAUTHBEARER refresh callback and thus needs to
@@ -15,18 +43,99 @@ librdkafka v1.9.0 is a feature release:
    can now be triggered automatically on the librdkafka background thread.
  * `rd_kafka_queue_get_background()` now creates the background thread
    if not already created.
+ * Bundled zlib upgraded to version 1.2.12.
+ * Bundled OpenSSL upgraded to 1.1.1n.
+ * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.
 
 
 ## Fixes
 
 ### General fixes
 
+ * Fix various 1 second delays due to internal broker threads blocking on IO
+   even though there are events to handle.
+   These delays could be seen randomly in any of the non produce/consume
+   request APIs, such as `commit_transaction()`, `list_groups()`, etc.
  * Windows: some applications would crash with an error message like
    `no OPENSSL_Applink()` written to the console if `ssl.keystore.location`
    was configured.
    This regression was introduced in v1.8.0 due to use of vcpkgs and how
    keystore file was read. #3554.
+ * `rd_kafka_clusterid()` would previously fail with timeout if
+   called on cluster with no visible topics (#3620).
+   The clusterid is now returned as soon as metadata has been retrieved.
+ * Fix hang in `rd_kafka_list_groups()` if there are no available brokers
+   to connect to (#3705).
 
+
+### Consumer fixes
+
+ * `rd_kafka_offsets_store()` (et.al) will now return an error for any
+   partition that is not currently assigned (through `rd_kafka_*assign()`).
+   See **Upgrade considerations** above for more information.
+ * `rd_kafka_*assign()` will now reset/clear the stored offset.
+   See **Upgrade considerations** above for more information.
+ * A `ERR_MSG_SIZE_TOO_LARGE` consumer error would previously be raised
+   if the consumer received a maximum sized FetchResponse only containing
+   (transaction) aborted messages with no control messages. The fetching did
+   not stop, but some applications would terminate upon receiving this error.
+   No error is now raised in this case. (#2993)
+   Thanks to @jacobmikesell for providing an application to reproduce the
+   issue.
+ * The consumer no longer backs off the next fetch request (default 500ms) when
+   the parsed fetch response is truncated (which is a valid case).
+   This should speed up the message fetch rate in case of maximum sized
+   fetch responses.
+ * Fix consumer crash (`assert: rkbuf->rkbuf_rkb`) when parsing
+   malformed JoinGroupResponse consumer group metadata state.
+ * Fix crash (`cant handle op type`) when using `consume_batch_queue()` (et.al)
+   and an OAUTHBEARER refresh callback was set.
+   The callback is now triggered by the consume call. (#3263)
+
+
+### Producer fixes
+
+ * Fix message loss in idempotent/transactional producer.
+   A corner case has been identified that may cause idempotent/transactional
+   messages to be lost despite being reported as successfully delivered:
+   During cluster instability a restarting broker may report existing topics
+   as non-existent for some time before it is able to acquire up to date
+   cluster and topic metadata.
+   If an idempotent/transactional producer updates its topic metadata cache
+   from such a broker the producer will consider the topic to be removed from
+   the cluster and thus remove its local partition objects for the given topic.
+   This also removes the internal message sequence number counter for the given
+   partitions.
+   If the producer later receives proper topic metadata for the cluster the
+   previously "removed" topics will be rediscovered and new partition objects
+   will be created in the producer. These new partition objects, with no
+   knowledge of previous incarnations, would start counting partition messages
+   at zero again.
+   If new messages were produced for these partitions by the same producer
+   instance, the same message sequence numbers would be sent to the broker.
+   If the broker still maintains state for the producer's PID and Epoch it could
+   deem that these messages with reused sequence numbers had already been
+   written to the log and treat them as legit duplicates.
+   This would seem to the producer that these new messages were successfully
+   written to the partition log by the broker when they were in fact discarded
+   as duplicates, leading to silent message loss.
+   The fix included in this release is to save the per-partition idempotency
+   state when a partition is removed, and then recover and use that saved
+   state if the partition comes back at a later time.
+ * The transactional producer would retry (re)initializing its PID if a
+   `PRODUCER_FENCED` error was returned from the
+   broker (added in Apache Kafka 2.8), which could cause the producer to
+   seemingly hang.
+   This error code is now correctly handled by raising a fatal error.
+ * Improved producer queue wakeup scheduling. This should significantly
+   decrease the number of wakeups and thus syscalls for high message rate
+   producers. (#3538, #2912)
+ * The logic for enforcing that `message.timeout.ms` is greather than
+   an explicitly configured `linger.ms` was incorrect and instead of
+   erroring out early the lingering time was automatically adjusted to the
+   message timeout, ignoring the configured `linger.ms`.
+   This has now been fixed so that an error is returned when instantiating the
+   producer. Thanks to @larry-cdn77 for analysis and test-cases. (#3709)
 
 
 # librdkafka v1.8.2

@@ -194,6 +194,16 @@ typedef struct rd_kafka_msgq_s {
         struct rd_kafka_msgs_head_s rkmq_msgs; /* TAILQ_HEAD */
         int32_t rkmq_msg_cnt;
         int64_t rkmq_msg_bytes;
+        struct {
+                rd_ts_t abstime; /**< Allow wake-ups after this point in time.*/
+                int32_t msg_cnt; /**< Signal wake-up when this message count
+                                  *   is reached. */
+                int64_t msg_bytes;   /**< .. or when this byte count is
+                                      *   reached. */
+                rd_bool_t on_first;  /**< Wake-up on first message enqueued
+                                      *   regardless of .abstime. */
+                rd_bool_t signalled; /**< Wake-up (already) signalled. */
+        } rkmq_wakeup;
 } rd_kafka_msgq_t;
 
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq)                                        \
@@ -380,6 +390,43 @@ rd_kafka_msgq_first_msgid(const rd_kafka_msgq_t *rkmq) {
                 return rkm->rkm_u.producer.msgid;
         else
                 return 0;
+}
+
+
+
+rd_bool_t rd_kafka_msgq_allow_wakeup_at(rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msgq_t *dest_rkmq,
+                                        rd_ts_t *next_wakeup,
+                                        rd_ts_t now,
+                                        rd_ts_t linger_us,
+                                        int32_t batch_msg_cnt,
+                                        int64_t batch_msg_bytes);
+
+/**
+ * @returns true if msgq may be awoken.
+ */
+
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_msgq_may_wakeup(const rd_kafka_msgq_t *rkmq, rd_ts_t now) {
+        /* No: Wakeup already signalled */
+        if (rkmq->rkmq_wakeup.signalled)
+                return rd_false;
+
+        /* Yes: Wakeup linger time has expired */
+        if (now >= rkmq->rkmq_wakeup.abstime)
+                return rd_true;
+
+        /* Yes: First message enqueued may trigger wakeup */
+        if (rkmq->rkmq_msg_cnt == 1 && rkmq->rkmq_wakeup.on_first)
+                return rd_true;
+
+        /* Yes: batch.size or batch.num.messages exceeded */
+        if (rkmq->rkmq_msg_cnt >= rkmq->rkmq_wakeup.msg_cnt ||
+            rkmq->rkmq_msg_bytes > rkmq->rkmq_wakeup.msg_bytes)
+                return rd_true;
+
+        /* No */
+        return rd_false;
 }
 
 

@@ -306,4 +306,41 @@ struct rd_kafka_DeleteConsumerGroupOffsets_s {
 
 /**@}*/
 
+/**
+ * @name CreateAcls
+ * @{
+ */
+
+/**
+ * @brief AclBinding type, used with CreateAcls.
+ */
+struct rd_kafka_AclBinding_s {
+        rd_kafka_ResourceType_t restype; /**< Resource type */
+        char *name;                      /**< Resource name, points to .data */
+        rd_kafka_ResourcePatternType_t
+            resource_pattern_type; /**< Resource pattern type */
+        char *principal;           /**< Access Control Entry principal */
+        char *host;                /**< Access Control Entry host */
+        rd_kafka_AclOperation_t operation; /**< AclOperation enumeration */
+        rd_kafka_AclPermissionType_t
+            permission_type;     /**< AclPermissionType enumeration */
+        rd_kafka_error_t *error; /**< Response error, or NULL on success. */
+};
+/**@}*/
+
+/**
+ * @name DeleteAcls
+ * @{
+ */
+
+/**
+ * @brief DeleteAcls_result type, used with DeleteAcls.
+ */
+struct rd_kafka_DeleteAcls_result_response_s {
+        rd_kafka_error_t *error; /**< Response error object, or NULL */
+        rd_list_t matching_acls; /**< Type (rd_kafka_AclBinding_t *) */
+};
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

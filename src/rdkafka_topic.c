@@ -89,6 +89,7 @@ static void rd_kafka_topic_destroy_app(rd_kafka_topic_t *app_rkt) {
  * Final destructor for topic. Refcnt must be 0.
  */
 void rd_kafka_topic_destroy_final(rd_kafka_topic_t *rkt) {
+        rd_kafka_partition_msgid_t *partmsgid, *partmsgid_tmp;
 
         rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
 
@@ -96,6 +97,11 @@ void rd_kafka_topic_destroy_final(rd_kafka_topic_t *rkt) {
         TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
         rkt->rkt_rk->rk_topic_cnt--;
         rd_kafka_wrunlock(rkt->rkt_rk);
+
+        TAILQ_FOREACH_SAFE(partmsgid, &rkt->rkt_saved_partmsgids, link,
+                           partmsgid_tmp) {
+                rd_free(partmsgid);
+        }
 
         rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
         rd_list_destroy(&rkt->rkt_desp);
@@ -450,6 +456,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
 
         rd_list_init(&rkt->rkt_desp, 16, NULL);
         rd_interval_init(&rkt->rkt_desp_refresh_intvl);
+        TAILQ_INIT(&rkt->rkt_saved_partmsgids);
         rd_refcnt_init(&rkt->rkt_refcnt, 0);
         rd_refcnt_init(&rkt->rkt_app_refcnt, 0);
 
@@ -736,6 +743,62 @@ int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp) {
 }
 
 
+
+/**
+ * @brief Save idempotent producer state for a partition that is about to
+ *        be removed.
+ *
+ * @locks_required rd_kafka_wrlock(rkt), rd_kafka_toppar_lock(rktp)
+ */
+static void rd_kafka_toppar_idemp_msgid_save(rd_kafka_topic_t *rkt,
+                                             const rd_kafka_toppar_t *rktp) {
+        rd_kafka_partition_msgid_t *partmsgid = rd_malloc(sizeof(*partmsgid));
+        partmsgid->partition                  = rktp->rktp_partition;
+        partmsgid->msgid                      = rktp->rktp_msgid;
+        partmsgid->pid                        = rktp->rktp_eos.pid;
+        partmsgid->epoch_base_msgid           = rktp->rktp_eos.epoch_base_msgid;
+        partmsgid->ts                         = rd_clock();
+
+        TAILQ_INSERT_TAIL(&rkt->rkt_saved_partmsgids, partmsgid, link);
+}
+
+
+/**
+ * @brief Restore idempotent producer state for a new/resurfacing partition.
+ *
+ * @locks_required rd_kafka_wrlock(rkt), rd_kafka_toppar_lock(rktp)
+ */
+static void rd_kafka_toppar_idemp_msgid_restore(rd_kafka_topic_t *rkt,
+                                                rd_kafka_toppar_t *rktp) {
+        rd_kafka_partition_msgid_t *partmsgid;
+
+        TAILQ_FOREACH(partmsgid, &rkt->rkt_saved_partmsgids, link) {
+                if (partmsgid->partition == rktp->rktp_partition)
+                        break;
+        }
+
+        if (!partmsgid)
+                return;
+
+        rktp->rktp_msgid                = partmsgid->msgid;
+        rktp->rktp_eos.pid              = partmsgid->pid;
+        rktp->rktp_eos.epoch_base_msgid = partmsgid->epoch_base_msgid;
+
+        rd_kafka_dbg(rkt->rkt_rk, EOS | RD_KAFKA_DBG_TOPIC, "MSGID",
+                     "Topic %s [%" PRId32 "]: restored %s with MsgId %" PRIu64
+                     " and "
+                     "epoch base MsgId %" PRIu64
+                     " that was saved upon removal %dms ago",
+                     rkt->rkt_topic->str, rktp->rktp_partition,
+                     rd_kafka_pid2str(partmsgid->pid), partmsgid->msgid,
+                     partmsgid->epoch_base_msgid,
+                     (int)((rd_clock() - partmsgid->ts) / 1000));
+
+        TAILQ_REMOVE(&rkt->rkt_saved_partmsgids, partmsgid, link);
+        rd_free(partmsgid);
+}
+
+
 /**
  * @brief Update the number of partitions for a topic and takes actions
  *        accordingly.
@@ -749,6 +812,7 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
         rd_kafka_t *rk = rkt->rkt_rk;
         rd_kafka_toppar_t **rktps;
         rd_kafka_toppar_t *rktp;
+        rd_bool_t is_idempodent = rd_kafka_is_idempotent(rk);
         int32_t i;
 
         if (likely(rkt->rkt_partition_cnt == partition_cnt))
@@ -790,7 +854,6 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
                                 /* Remove from desp list since the
                                  * partition is now known. */
                                 rd_kafka_toppar_desired_unlink(rktp);
-                                rd_kafka_toppar_unlock(rktp);
                         } else {
                                 rktp = rd_kafka_toppar_new(rkt, i);
 
@@ -798,9 +861,16 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
                                 rktp->rktp_flags &=
                                     ~(RD_KAFKA_TOPPAR_F_UNKNOWN |
                                       RD_KAFKA_TOPPAR_F_REMOVE);
-                                rd_kafka_toppar_unlock(rktp);
                         }
                         rktps[i] = rktp;
+
+                        if (is_idempodent)
+                                /* Restore idempotent producer state for
+                                 * this partition, if any. */
+                                rd_kafka_toppar_idemp_msgid_restore(rkt, rktp);
+
+                        rd_kafka_toppar_unlock(rktp);
+
                 } else {
                         /* Existing partition, grab our own reference. */
                         rktps[i] = rd_kafka_toppar_keep(rkt->rkt_p[i]);
@@ -832,6 +902,24 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
                              rkt->rkt_topic->str, rktp->rktp_partition);
 
                 rd_kafka_toppar_lock(rktp);
+
+                /* Idempotent/Transactional producer:
+                 * We need to save each removed partition's base msgid for
+                 * the (rare) chance the partition comes back,
+                 * in which case we must continue with the correct msgid
+                 * in future ProduceRequests.
+                 *
+                 * These base msgsid are restored (above) if/when partitions
+                 * come back and the PID,Epoch hasn't changed.
+                 *
+                 * One situation where this might happen is if a broker goes
+                 * out of sync and starts to wrongfully report an existing
+                 * topic as non-existent, triggering the removal of partitions
+                 * on the producer client. When metadata is eventually correct
+                 * again and the topic is "re-created" on the producer, it
+                 * must continue with the next msgid/baseseq. */
+                if (is_idempodent && rd_kafka_pid_valid(rktp->rktp_eos.pid))
+                        rd_kafka_toppar_idemp_msgid_save(rkt, rktp);
 
                 rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 

@@ -10,6 +10,7 @@ from trivup.trivup import App, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
+from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 
 import json
 
@@ -66,10 +67,36 @@ class LibrdkafkaTestApp(App):
 
             elif mech == 'OAUTHBEARER':
                 self.security_protocol = 'SASL_PLAINTEXT'
-                conf_blob.append('enable.sasl.oauthbearer.unsecure.jwt=true\n')
-                conf_blob.append(
-                    'sasl.oauthbearer.config=%s\n' %
-                    self.conf.get('sasl_oauthbearer_config'))
+                oidc = cluster.find_app(OauthbearerOIDCApp)
+                if oidc is not None:
+                    conf_blob.append('sasl.oauthbearer.method=%s\n' %
+                                     oidc.conf.get('sasl_oauthbearer_method'))
+                    conf_blob.append('sasl.oauthbearer.client.id=%s\n' %
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_client_id'))
+                    conf_blob.append('sasl.oauthbearer.client.secret=%s\n' %
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_client_secret'))
+                    conf_blob.append('sasl.oauthbearer.extensions=%s\n' %
+                                     oidc.conf.get(
+                                         'sasl_oauthbearer_extensions'))
+                    conf_blob.append('sasl.oauthbearer.scope=%s\n' %
+                                     oidc.conf.get('sasl_oauthbearer_scope'))
+                    conf_blob.append('sasl.oauthbearer.token.endpoint.url=%s\n'
+                                     % oidc.conf.get('valid_url'))
+                    self.env_add('VALID_OIDC_URL', oidc.conf.get('valid_url'))
+                    self.env_add(
+                        'INVALID_OIDC_URL',
+                        oidc.conf.get('badformat_url'))
+                    self.env_add(
+                        'EXPIRED_TOKEN_OIDC_URL',
+                        oidc.conf.get('expired_url'))
+                else:
+                    conf_blob.append(
+                        'enable.sasl.oauthbearer.unsecure.jwt=true\n')
+                    conf_blob.append(
+                        'sasl.oauthbearer.config=%s\n' %
+                        self.conf.get('sasl_oauthbearer_config'))
 
             elif mech == 'GSSAPI':
                 self.security_protocol = 'SASL_PLAINTEXT'

@@ -55,6 +55,9 @@
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #include "rdkafka_sasl_aws_msk_iam.h"
+#if WITH_CURL
+#include "rdkafka_sasl_oauthbearer_oidc.h"
+#endif
 #if WITH_SSL
 #include "rdkafka_ssl.h"
 #endif
@@ -2239,7 +2242,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                     &rk->rk_conf, rd_kafka_oauthbearer_unsecured_token);
 
-        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
+        if (rk->rk_conf.sasl.oauthbearer.token_refresh_cb &&
+            rk->rk_conf.sasl.oauthbearer.method !=
+                RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC)
                 rk->rk_conf.enabled_events |=
                     RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif
@@ -2248,6 +2253,13 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH;
 #endif
 
+#if WITH_CURL
+        if (rk->rk_conf.sasl.oauthbearer.method ==
+                RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
+            !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
+                rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+                    &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
+#endif
         rk->rk_controllerid = -1;
 
         /* Admin client defaults */
@@ -2305,6 +2317,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         /* Create Mock cluster */
         rd_atomic32_init(&rk->rk_mock.cluster_cnt, 0);
         if (rk->rk_conf.mock.broker_cnt > 0) {
+                const char *mock_bootstraps;
                 rk->rk_mock.cluster =
                     rd_kafka_mock_cluster_new(rk, rk->rk_conf.mock.broker_cnt);
 
@@ -2316,16 +2329,18 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         goto fail;
                 }
 
+                mock_bootstraps =
+                    rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
                 rd_kafka_log(rk, LOG_NOTICE, "MOCK",
                              "Mock cluster enabled: "
                              "original bootstrap.servers and security.protocol "
-                             "ignored and replaced");
+                             "ignored and replaced with %s",
+                             mock_bootstraps);
 
                 /* Overwrite bootstrap.servers and connection settings */
-                if (rd_kafka_conf_set(
-                        &rk->rk_conf, "bootstrap.servers",
-                        rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
-                        NULL, 0) != RD_KAFKA_CONF_OK)
+                if (rd_kafka_conf_set(&rk->rk_conf, "bootstrap.servers",
+                                      mock_bootstraps, NULL,
+                                      0) != RD_KAFKA_CONF_OK)
                         rd_assert(!"failed to replace mock bootstrap.servers");
 
                 if (rd_kafka_conf_set(&rk->rk_conf, "security.protocol",
@@ -2333,8 +2348,13 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_assert(!"failed to reset mock security.protocol");
 
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
-        }
 
+                /* Apply default RTT to brokers */
+                if (rk->rk_conf.mock.broker_rtt)
+                        rd_kafka_mock_broker_set_rtt(
+                            rk->rk_mock.cluster, -1 /*all brokers*/,
+                            rk->rk_conf.mock.broker_rtt);
+        }
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
@@ -2409,22 +2429,22 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
          * out from rd_kafka_new(). */
         if (rk->rk_conf.background_event_cb ||
             (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_BACKGROUND)) {
-                rd_kafka_resp_err_t err;
+                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 rd_kafka_wrlock(rk);
-                err =
-                    rd_kafka_background_thread_create(rk, errstr, errstr_size);
+                if (!rk->rk_background.q)
+                        err = rd_kafka_background_thread_create(rk, errstr,
+                                                                errstr_size);
                 rd_kafka_wrunlock(rk);
                 if (err)
                         goto fail;
         }
-
-        mtx_lock(&rk->rk_init_lock);
 
         /* Lock handle here to synchronise state, i.e., hold off
          * the thread until we've finalized the handle. */
         rd_kafka_wrlock(rk);
 
         /* Create handler thread */
+        mtx_lock(&rk->rk_init_lock);
         rk->rk_init_wait_cnt++;
         if ((thrd_create(&rk->rk_thread, rd_kafka_thread_main, rk)) !=
             thrd_success) {
@@ -2435,8 +2455,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to create thread: %s (%i)",
                                     rd_strerror(errno), errno);
-                rd_kafka_wrunlock(rk);
                 mtx_unlock(&rk->rk_init_lock);
+                rd_kafka_wrunlock(rk);
 #ifndef _WIN32
                 /* Restore sigmask of caller */
                 pthread_sigmask(SIG_SETMASK, &oldset, NULL);
@@ -2444,8 +2464,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 goto fail;
         }
 
-        rd_kafka_wrunlock(rk);
         mtx_unlock(&rk->rk_init_lock);
+        rd_kafka_wrunlock(rk);
 
         /*
          * @warning `goto fail` is prohibited past this point
@@ -3821,6 +3841,9 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_ADMIN_FANOUT:
+        case RD_KAFKA_OP_CREATEACLS:
+        case RD_KAFKA_OP_DESCRIBEACLS:
+        case RD_KAFKA_OP_DELETEACLS:
                 /* Calls op_destroy() from worker callback,
                  * when the time comes. */
                 res = rd_kafka_op_call(rk, rkq, rko);
@@ -3848,7 +3871,15 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 break;
 
         default:
-                rd_kafka_assert(rk, !*"cant handle op type");
+                /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
+                 * call it. */
+                if (rko->rko_type & RD_KAFKA_OP_CB) {
+                        res = rd_kafka_op_call(rk, rkq, rko);
+                        break;
+                }
+
+                RD_BUG("Can't handle op type %s (0x%x)",
+                       rd_kafka_op2str(rko->rko_type), rko->rko_type);
                 break;
         }
 
@@ -4205,7 +4236,7 @@ rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms) {
         /* Wake up all broker threads to trigger the produce_serve() call.
          * If this flush() call finishes before the broker wakes up
          * then no flushing will be performed by that broker thread. */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP, "flushing");
 
         if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                 /* Application wants delivery reports as events rather
@@ -4646,22 +4677,27 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         int rkb_cnt                    = 0;
         struct list_groups_state state = RD_ZERO_INIT;
         rd_ts_t ts_end                 = rd_timeout_init(timeout_ms);
-        int state_version              = rd_kafka_brokers_get_state_version(rk);
 
         /* Wait until metadata has been fetched from cluster so
          * that we have a full broker list.
          * This state only happens during initial client setup, after that
          * there'll always be a cached metadata copy. */
-        rd_kafka_rdlock(rk);
-        while (!rk->rk_ts_metadata) {
+        while (1) {
+                int state_version = rd_kafka_brokers_get_state_version(rk);
+                rd_bool_t has_metadata;
+
+                rd_kafka_rdlock(rk);
+                has_metadata = rk->rk_ts_metadata != 0;
                 rd_kafka_rdunlock(rk);
+
+                if (has_metadata)
+                        break;
 
                 if (!rd_kafka_brokers_wait_state_change(
                         rk, state_version, rd_timeout_remains(ts_end)))
                         return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-                rd_kafka_rdlock(rk);
         }
+
 
         state.q             = rd_kafka_q_new(rk);
         state.desired_group = group;
@@ -4672,6 +4708,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
             rd_malloc(state.grplist_size * sizeof(*state.grplist->groups));
 
         /* Query each broker for its list of groups */
+        rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {

@@ -682,6 +682,11 @@ int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
                             rd_kafka_topic_partition_list_t *bl);
 
 void test_kafka_topics(const char *fmt, ...);
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs);
 void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,
@@ -790,8 +795,13 @@ rd_kafka_resp_err_t test_DeleteConsumerGroupOffsets_simple(
     const rd_kafka_topic_partition_list_t *offsets,
     void *opaque);
 
-rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
+rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
+                                           rd_kafka_queue_t *useq,
+                                           rd_kafka_AclBinding_t **acls,
+                                           size_t acl_cnt,
+                                           void *opaque);
 
+rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms);
 
 void test_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
@@ -839,7 +849,7 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
         do {                                                                   \
                 test_timing_t _timing;                                         \
                 const char *_desc = RD_STRINGIFY(FUNC_W_ARGS);                 \
-                rd_kafka_error_t *_error;                                      \
+                const rd_kafka_error_t *_error;                                \
                 TIMING_START(&_timing, "%s", _desc);                           \
                 TEST_SAYL(3, "Begin call %s\n", _desc);                        \
                 _error = FUNC_W_ARGS;                                          \

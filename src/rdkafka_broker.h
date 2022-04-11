@@ -528,8 +528,10 @@ void msghdr_print(rd_kafka_t *rk,
 
 int32_t rd_kafka_broker_id(rd_kafka_broker_t *rkb);
 const char *rd_kafka_broker_name(rd_kafka_broker_t *rkb);
-void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb);
-int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk, int min_state);
+void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb, const char *reason);
+int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk,
+                                int min_state,
+                                const char *reason);
 
 void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason);
 

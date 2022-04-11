@@ -172,27 +172,149 @@ rd_kafka_mock_msgset_find(const rd_kafka_mock_partition_t *mpart,
 
 
 /**
+ * @brief Looks up or creates a new pidstate for the given partition and PID.
+ *
+ * The pidstate is used to verify per-partition per-producer BaseSequences
+ * for the idempotent/txn producer.
+ */
+static rd_kafka_mock_pid_t *
+rd_kafka_mock_partition_pidstate_get(rd_kafka_mock_partition_t *mpart,
+                                     const rd_kafka_mock_pid_t *mpid) {
+        rd_kafka_mock_pid_t *pidstate;
+        size_t tidlen;
+
+        pidstate = rd_list_find(&mpart->pidstates, mpid, rd_kafka_mock_pid_cmp);
+        if (pidstate)
+                return pidstate;
+
+        tidlen        = strlen(mpid->TransactionalId);
+        pidstate      = rd_malloc(sizeof(*pidstate) + tidlen);
+        pidstate->pid = mpid->pid;
+        memcpy(pidstate->TransactionalId, mpid->TransactionalId, tidlen);
+        pidstate->TransactionalId[tidlen] = '\0';
+
+        pidstate->lo = pidstate->hi = pidstate->window = 0;
+        memset(pidstate->seq, 0, sizeof(pidstate->seq));
+
+        rd_list_add(&mpart->pidstates, pidstate);
+
+        return pidstate;
+}
+
+
+/**
+ * @brief Validate ProduceRequest records in \p rkbuf.
+ *
+ * @warning The \p rkbuf must not be read, just peek()ed.
+ *
+ * This is a very selective validation, currently only:
+ * - verify idempotency TransactionalId,PID,Epoch,Seq
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_validate_records(rd_kafka_mock_partition_t *mpart,
+                               rd_kafka_buf_t *rkbuf,
+                               size_t RecordCount,
+                               const rd_kafkap_str_t *TransactionalId,
+                               rd_bool_t *is_dupd) {
+        const int log_decode_errors       = LOG_ERR;
+        rd_kafka_mock_cluster_t *mcluster = mpart->topic->cluster;
+        rd_kafka_mock_pid_t *mpid;
+        rd_kafka_mock_pid_t *mpidstate = NULL;
+        rd_kafka_pid_t pid;
+        int32_t expected_BaseSequence = -1, BaseSequence = -1;
+        rd_kafka_resp_err_t err;
+
+        *is_dupd = rd_false;
+
+        if (!TransactionalId || RD_KAFKAP_STR_LEN(TransactionalId) < 1)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        rd_kafka_buf_peek_i64(rkbuf, RD_KAFKAP_MSGSET_V2_OF_ProducerId,
+                              &pid.id);
+        rd_kafka_buf_peek_i16(rkbuf, RD_KAFKAP_MSGSET_V2_OF_ProducerEpoch,
+                              &pid.epoch);
+        rd_kafka_buf_peek_i32(rkbuf, RD_KAFKAP_MSGSET_V2_OF_BaseSequence,
+                              &BaseSequence);
+
+        mtx_lock(&mcluster->lock);
+        err = rd_kafka_mock_pid_find(mcluster, TransactionalId, pid, &mpid);
+        mtx_unlock(&mcluster->lock);
+
+        if (likely(!err)) {
+
+                if (mpid->pid.epoch != pid.epoch)
+                        err = RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH;
+
+                /* Each partition tracks the 5 last Produce requests per PID.*/
+                mpidstate = rd_kafka_mock_partition_pidstate_get(mpart, mpid);
+
+                expected_BaseSequence = mpidstate->seq[mpidstate->hi];
+
+                /* A BaseSequence within the range of the last 5 requests is
+                 * considered a legal duplicate and will be successfully acked
+                 * but not written to the log. */
+                if (BaseSequence < mpidstate->seq[mpidstate->lo])
+                        err = RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER;
+                else if (BaseSequence > mpidstate->seq[mpidstate->hi])
+                        err = RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER;
+                else if (BaseSequence != expected_BaseSequence)
+                        *is_dupd = rd_true;
+        }
+
+        if (unlikely(err)) {
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Broker %" PRId32 ": Log append %s [%" PRId32
+                             "] failed: PID mismatch: TransactionalId=%.*s "
+                             "expected %s BaseSeq %" PRId32
+                             ", not %s BaseSeq %" PRId32 ": %s",
+                             mpart->leader->id, mpart->topic->name, mpart->id,
+                             RD_KAFKAP_STR_PR(TransactionalId),
+                             mpid ? rd_kafka_pid2str(mpid->pid) : "n/a",
+                             expected_BaseSequence, rd_kafka_pid2str(pid),
+                             BaseSequence, rd_kafka_err2name(err));
+                return err;
+        }
+
+        /* Update BaseSequence window */
+        if (unlikely(mpidstate->window < 5))
+                mpidstate->window++;
+        else
+                mpidstate->lo = (mpidstate->lo + 1) % mpidstate->window;
+        mpidstate->hi                 = (mpidstate->hi + 1) % mpidstate->window;
+        mpidstate->seq[mpidstate->hi] = (int32_t)(BaseSequence + RecordCount);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        return rkbuf->rkbuf_err;
+}
+
+/**
  * @brief Append the MessageSets in \p bytes to the \p mpart partition log.
  *
  * @param BaseOffset will contain the first assigned offset of the message set.
  */
 rd_kafka_resp_err_t
 rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
-                                   const rd_kafkap_bytes_t *bytes,
+                                   const rd_kafkap_bytes_t *records,
+                                   const rd_kafkap_str_t *TransactionalId,
                                    int64_t *BaseOffset) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_buf_t *rkbuf;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int8_t MagicByte;
         int32_t RecordCount;
+        int16_t Attributes;
         rd_kafka_mock_msgset_t *mset;
+        rd_bool_t is_dup = rd_false;
 
         /* Partially parse the MessageSet in \p bytes to get
          * the message count. */
-        rkbuf = rd_kafka_buf_new_shadow(bytes->data, RD_KAFKAP_BYTES_LEN(bytes),
-                                        NULL);
+        rkbuf = rd_kafka_buf_new_shadow(records->data,
+                                        RD_KAFKAP_BYTES_LEN(records), NULL);
 
-        rd_kafka_buf_peek_i8(rkbuf, 8 + 4 + 4, &MagicByte);
+        rd_kafka_buf_peek_i8(rkbuf, RD_KAFKAP_MSGSET_V2_OF_MagicByte,
+                             &MagicByte);
         if (MagicByte != 2) {
                 /* We only support MsgVersion 2 for now */
                 err = RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION;
@@ -201,17 +323,28 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
 
         rd_kafka_buf_peek_i32(rkbuf, RD_KAFKAP_MSGSET_V2_OF_RecordCount,
                               &RecordCount);
+        rd_kafka_buf_peek_i16(rkbuf, RD_KAFKAP_MSGSET_V2_OF_Attributes,
+                              &Attributes);
 
         if (RecordCount < 1 ||
-            (size_t)RecordCount > RD_KAFKAP_BYTES_LEN(bytes) /
-                                      RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD) {
+            (!(Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK) &&
+             (size_t)RecordCount > RD_KAFKAP_BYTES_LEN(records) /
+                                       RD_KAFKAP_MESSAGE_V2_MIN_OVERHEAD)) {
                 err = RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE;
                 goto err;
         }
 
+        if ((err = rd_kafka_mock_validate_records(
+                 mpart, rkbuf, (size_t)RecordCount, TransactionalId, &is_dup)))
+                goto err;
+
+        /* If this is a legit duplicate, don't write it to the log. */
+        if (is_dup)
+                goto err;
+
         rd_kafka_buf_destroy(rkbuf);
 
-        mset = rd_kafka_mock_msgset_new(mpart, bytes, (size_t)RecordCount);
+        mset = rd_kafka_mock_msgset_new(mpart, records, (size_t)RecordCount);
 
         *BaseOffset = mset->first_offset;
 
@@ -348,6 +481,8 @@ static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         TAILQ_FOREACH_SAFE(coff, &mpart->committed_offsets, link, tmpcoff)
         rd_kafka_mock_committed_offset_destroy(mpart, coff);
 
+        rd_list_destroy(&mpart->pidstates);
+
         rd_free(mpart->replicas);
 }
 
@@ -370,6 +505,8 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
         mpart->update_follower_end_offset   = rd_true;
 
         TAILQ_INIT(&mpart->committed_offsets);
+
+        rd_list_init(&mpart->pidstates, 0, rd_free);
 
         rd_kafka_mock_partition_assign_replicas(mpart);
 }
@@ -1087,7 +1224,7 @@ rd_kafka_mock_connection_new(rd_kafka_mock_broker_t *mrkb,
         char errstr[128];
 
         if (!mrkb->up) {
-                rd_close(fd);
+                rd_socket_close(fd);
                 return NULL;
         }
 
@@ -1098,7 +1235,7 @@ rd_kafka_mock_connection_new(rd_kafka_mock_broker_t *mrkb,
                              "Failed to create transport for new "
                              "mock connection: %s",
                              errstr);
-                rd_close(fd);
+                rd_socket_close(fd);
                 return NULL;
         }
 
@@ -1131,7 +1268,7 @@ static void rd_kafka_mock_cluster_op_io(rd_kafka_mock_cluster_t *mcluster,
                                         void *opaque) {
         /* Read wake-up fd data and throw away, just used for wake-ups*/
         char buf[1024];
-        while (rd_read(fd, buf, sizeof(buf)) > 0)
+        while (rd_socket_read(fd, buf, sizeof(buf)) > 0)
                 ; /* Read all buffered signalling bytes */
 }
 
@@ -1268,7 +1405,7 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         rd_kafka_mock_broker_close_all(mrkb, "Destroying broker");
 
         rd_kafka_mock_cluster_io_del(mrkb->cluster, mrkb->listen_s);
-        rd_close(mrkb->listen_s);
+        rd_socket_close(mrkb->listen_s);
 
         while ((errstack = TAILQ_FIRST(&mrkb->errstacks))) {
                 TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
@@ -1309,7 +1446,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                              "Failed to bind mock broker socket to %s: %s",
                              rd_socket_strerror(rd_socket_errno),
                              rd_sockaddr2str(&sin, RD_SOCKADDR2STR_F_PORT));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
 
@@ -1318,7 +1455,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to get mock broker socket name: %s",
                              rd_socket_strerror(rd_socket_errno));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
         rd_assert(sin.sin_family == AF_INET);
@@ -1327,7 +1464,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Failed to listen on mock broker socket: %s",
                              rd_socket_strerror(rd_socket_errno));
-                rd_close(listen_s);
+                rd_socket_close(listen_s);
                 return NULL;
         }
 
@@ -1630,6 +1767,7 @@ void rd_kafka_mock_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
         va_start(ap, cnt);
         for (i = 0; i < cnt; i++)
                 errors[i] = va_arg(ap, rd_kafka_resp_err_t);
+        va_end(ap);
 
         rd_kafka_mock_push_request_errors_array(mcluster, ApiKey, cnt, errors);
 }
@@ -1846,6 +1984,82 @@ rd_kafka_mock_set_apiversion(rd_kafka_mock_cluster_t *mcluster,
 }
 
 
+/**
+ * @brief Apply command to specific broker.
+ *
+ * @locality mcluster thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
+                         rd_kafka_mock_broker_t *mrkb,
+                         rd_kafka_op_t *rko) {
+        switch (rko->rko_u.mock.cmd) {
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
+                mrkb->up = (rd_bool_t)rko->rko_u.mock.lo;
+
+                if (!mrkb->up)
+                        rd_kafka_mock_broker_close_all(mrkb, "Broker down");
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
+                mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
+
+                /* Check if there is anything to send now that the RTT
+                 * has changed or if a timer is to be started. */
+                rd_kafka_mock_broker_connections_write_out(mrkb);
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+                if (mrkb->rack)
+                        rd_free(mrkb->rack);
+
+                if (rko->rko_u.mock.name)
+                        mrkb->rack = rd_strdup(rko->rko_u.mock.name);
+                else
+                        mrkb->rack = NULL;
+                break;
+
+        default:
+                RD_BUG("Unhandled mock cmd %d", rko->rko_u.mock.cmd);
+                break;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Apply command to to one or all brokers, depending on the value of
+ *        broker_id, where -1 means all, and != -1 means a specific broker.
+ *
+ * @locality mcluster thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_mock_brokers_cmd(rd_kafka_mock_cluster_t *mcluster,
+                          rd_kafka_op_t *rko) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        if (rko->rko_u.mock.broker_id != -1) {
+                /* Specific broker */
+                mrkb = rd_kafka_mock_broker_find(mcluster,
+                                                 rko->rko_u.mock.broker_id);
+                if (!mrkb)
+                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
+
+                return rd_kafka_mock_broker_cmd(mcluster, mrkb, rko);
+        }
+
+        /* All brokers */
+        TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                rd_kafka_resp_err_t err;
+
+                if ((err = rd_kafka_mock_broker_cmd(mcluster, mrkb, rko)))
+                        return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 
 /**
  * @brief Handle command op
@@ -1947,45 +2161,11 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 }
                 break;
 
+                /* Broker commands */
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                mrkb->up = (rd_bool_t)rko->rko_u.mock.lo;
-
-                if (!mrkb->up)
-                        rd_kafka_mock_broker_close_all(mrkb, "Broker down");
-                break;
-
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                mrkb->rtt = (rd_ts_t)rko->rko_u.mock.lo * 1000;
-
-                /* Check if there is anything to send now that the RTT
-                 * has changed or if a timer is to be started. */
-                rd_kafka_mock_broker_connections_write_out(mrkb);
-                break;
-
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
-                mrkb = rd_kafka_mock_broker_find(mcluster,
-                                                 rko->rko_u.mock.broker_id);
-                if (!mrkb)
-                        return RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE;
-
-                if (mrkb->rack)
-                        rd_free(mrkb->rack);
-
-                if (rko->rko_u.mock.name)
-                        mrkb->rack = rd_strdup(rko->rko_u.mock.name);
-                else
-                        mrkb->rack = NULL;
-                break;
+                return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,
@@ -2101,8 +2281,8 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_free(mcluster->bootstraps);
 
-        rd_close(mcluster->wakeup_fds[0]);
-        rd_close(mcluster->wakeup_fds[1]);
+        rd_socket_close(mcluster->wakeup_fds[0]);
+        rd_socket_close(mcluster->wakeup_fds[1]);
 }
 
 

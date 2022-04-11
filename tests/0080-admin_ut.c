@@ -694,6 +694,620 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief AclBinding tests
+ *
+ *
+ *
+ */
+static void do_test_AclBinding() {
+        int i;
+        char errstr[512];
+        rd_kafka_AclBinding_t *new_acl;
+
+        rd_bool_t valid_resource_types[]         = {rd_false, rd_false, rd_true,
+                                            rd_true,  rd_true,  rd_false};
+        rd_bool_t valid_resource_pattern_types[] = {
+            rd_false, rd_false, rd_false, rd_true, rd_true, rd_false};
+        rd_bool_t valid_acl_operation[] = {
+            rd_false, rd_false, rd_true, rd_true, rd_true, rd_true, rd_true,
+            rd_true,  rd_true,  rd_true, rd_true, rd_true, rd_true, rd_false};
+        rd_bool_t valid_acl_permission_type[] = {rd_false, rd_false, rd_true,
+                                                 rd_true, rd_false};
+        const char *topic     = test_mk_topic_name(__FUNCTION__, 1);
+        const char *principal = "User:test";
+        const char *host      = "*";
+
+        SUB_TEST_QUICK();
+
+        // Valid acl binding
+        *errstr = '\0';
+        new_acl = rd_kafka_AclBinding_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(new_acl, "expected AclBinding");
+        rd_kafka_AclBinding_destroy(new_acl);
+
+        *errstr = '\0';
+        new_acl = rd_kafka_AclBinding_new(
+            RD_KAFKA_RESOURCE_TOPIC, NULL, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid resource name"),
+                    "expected error string \"Invalid resource name\", not %s",
+                    errstr);
+
+        *errstr = '\0';
+        new_acl = rd_kafka_AclBinding_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            NULL, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid principal"),
+                    "expected error string \"Invalid principal\", not %s",
+                    errstr);
+
+        *errstr = '\0';
+        new_acl = rd_kafka_AclBinding_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, NULL, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(!new_acl && !strcmp(errstr, "Invalid host"),
+                    "expected error string \"Invalid host\", not %s", errstr);
+
+        for (i = -1; i <= RD_KAFKA_RESOURCE__CNT; i++) {
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
+                    i, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal,
+                    host, RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_resource_types[i]) {
+                        TEST_ASSERT(new_acl, "expected AclBinding");
+                        rd_kafka_AclBinding_destroy(new_acl);
+                } else
+                        TEST_ASSERT(
+                            !new_acl &&
+                                !strcmp(errstr, "Invalid resource type"),
+                            "expected error string \"Invalid resource type\", "
+                            "not %s",
+                            errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT; i++) {
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic, i, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_resource_pattern_types[i]) {
+                        TEST_ASSERT(new_acl, "expected AclBinding");
+                        rd_kafka_AclBinding_destroy(new_acl);
+                } else
+                        TEST_ASSERT(
+                            !new_acl &&
+                                !strcmp(errstr,
+                                        "Invalid resource pattern type"),
+                            "expected error string \"Invalid resource pattern "
+                            "type\", not %s",
+                            errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_ACL_OPERATION__CNT; i++) {
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host, i,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_acl_operation[i]) {
+                        TEST_ASSERT(new_acl, "expected AclBinding");
+                        rd_kafka_AclBinding_destroy(new_acl);
+                } else
+                        TEST_ASSERT(!new_acl &&
+                                        !strcmp(errstr, "Invalid operation"),
+                                    "expected error string \"Invalid "
+                                    "operation\", not %s",
+                                    errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_ACL_PERMISSION_TYPE__CNT; i++) {
+                *errstr = '\0';
+                new_acl = rd_kafka_AclBinding_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, sizeof(errstr));
+                if (i >= 0 && valid_acl_permission_type[i]) {
+                        TEST_ASSERT(new_acl, "expected AclBinding");
+                        rd_kafka_AclBinding_destroy(new_acl);
+                } else
+                        TEST_ASSERT(
+                            !new_acl &&
+                                !strcmp(errstr, "Invalid permission type"),
+                            "expected error string \"permission type\", not %s",
+                            errstr);
+        }
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief AclBindingFilter tests
+ *
+ *
+ *
+ */
+static void do_test_AclBindingFilter() {
+        int i;
+        char errstr[512];
+        rd_kafka_AclBindingFilter_t *new_acl_filter;
+
+        rd_bool_t valid_resource_types[]         = {rd_false, rd_true, rd_true,
+                                            rd_true,  rd_true, rd_false};
+        rd_bool_t valid_resource_pattern_types[] = {
+            rd_false, rd_true, rd_true, rd_true, rd_true, rd_false};
+        rd_bool_t valid_acl_operation[] = {
+            rd_false, rd_true, rd_true, rd_true, rd_true, rd_true, rd_true,
+            rd_true,  rd_true, rd_true, rd_true, rd_true, rd_true, rd_false};
+        rd_bool_t valid_acl_permission_type[] = {rd_false, rd_true, rd_true,
+                                                 rd_true, rd_false};
+        const char *topic     = test_mk_topic_name(__FUNCTION__, 1);
+        const char *principal = "User:test";
+        const char *host      = "*";
+
+        SUB_TEST_QUICK();
+
+        // Valid acl binding
+        *errstr        = '\0';
+        new_acl_filter = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
+        rd_kafka_AclBinding_destroy(new_acl_filter);
+
+        *errstr        = '\0';
+        new_acl_filter = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_TOPIC, NULL, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
+        rd_kafka_AclBinding_destroy(new_acl_filter);
+
+        *errstr        = '\0';
+        new_acl_filter = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            NULL, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
+        rd_kafka_AclBinding_destroy(new_acl_filter);
+
+        *errstr        = '\0';
+        new_acl_filter = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL,
+            principal, NULL, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        TEST_ASSERT(new_acl_filter, "expected AclBindingFilter");
+        rd_kafka_AclBinding_destroy(new_acl_filter);
+
+        for (i = -1; i <= RD_KAFKA_RESOURCE__CNT; i++) {
+                *errstr        = '\0';
+                new_acl_filter = rd_kafka_AclBindingFilter_new(
+                    i, topic, RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal,
+                    host, RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_resource_types[i]) {
+                        TEST_ASSERT(new_acl_filter,
+                                    "expected AclBindingFilter");
+                        rd_kafka_AclBinding_destroy(new_acl_filter);
+                } else
+                        TEST_ASSERT(
+                            !new_acl_filter &&
+                                !strcmp(errstr, "Invalid resource type"),
+                            "expected error string \"Invalid resource type\", "
+                            "not %s",
+                            errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_RESOURCE_PATTERN_TYPE__CNT; i++) {
+                *errstr        = '\0';
+                new_acl_filter = rd_kafka_AclBindingFilter_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic, i, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_resource_pattern_types[i]) {
+                        TEST_ASSERT(new_acl_filter,
+                                    "expected AclBindingFilter");
+                        rd_kafka_AclBinding_destroy(new_acl_filter);
+                } else
+                        TEST_ASSERT(
+                            !new_acl_filter &&
+                                !strcmp(errstr,
+                                        "Invalid resource pattern type"),
+                            "expected error string \"Invalid resource pattern "
+                            "type\", not %s",
+                            errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_ACL_OPERATION__CNT; i++) {
+                *errstr        = '\0';
+                new_acl_filter = rd_kafka_AclBindingFilter_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host, i,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+                if (i >= 0 && valid_acl_operation[i]) {
+                        TEST_ASSERT(new_acl_filter,
+                                    "expected AclBindingFilter");
+                        rd_kafka_AclBinding_destroy(new_acl_filter);
+                } else
+                        TEST_ASSERT(!new_acl_filter &&
+                                        !strcmp(errstr, "Invalid operation"),
+                                    "expected error string \"Invalid "
+                                    "operation\", not %s",
+                                    errstr);
+        }
+        for (i = -1; i <= RD_KAFKA_ACL_PERMISSION_TYPE__CNT; i++) {
+                *errstr        = '\0';
+                new_acl_filter = rd_kafka_AclBindingFilter_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL, i, errstr, sizeof(errstr));
+                if (i >= 0 && valid_acl_permission_type[i]) {
+                        TEST_ASSERT(new_acl_filter,
+                                    "expected AclBindingFilter");
+                        rd_kafka_AclBinding_destroy(new_acl_filter);
+                } else
+                        TEST_ASSERT(
+                            !new_acl_filter &&
+                                !strcmp(errstr, "Invalid permission type"),
+                            "expected error string \"permission type\", not %s",
+                            errstr);
+        }
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief CreateAcls tests
+ *
+ *
+ *
+ */
+static void do_test_CreateAcls(const char *what,
+                               rd_kafka_t *rk,
+                               rd_kafka_queue_t *useq,
+                               rd_bool_t with_background_event_cb,
+                               rd_bool_t with_options) {
+        rd_kafka_queue_t *q;
+#define MY_NEW_ACLS_CNT 2
+        rd_kafka_AclBinding_t *new_acls[MY_NEW_ACLS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_CreateAcls_result_t *res;
+        const rd_kafka_acl_result_t **resacls;
+        size_t resacls_cnt;
+        void *my_opaque       = NULL, *opaque;
+        const char *principal = "User:test";
+        const char *host      = "*";
+
+        SUB_TEST_QUICK("%s CreaetAcls with %s, timeout %dms", rd_kafka_name(rk),
+                       what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        /**
+         * Construct AclBinding array
+         */
+        for (i = 0; i < MY_NEW_ACLS_CNT; i++) {
+                const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+                new_acls[i]       = rd_kafka_AclBinding_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_LITERAL, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                my_opaque = (void *)123;
+                rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+        }
+
+        TIMING_START(&timing, "CreateAcls");
+        TEST_SAY("Call CreateAcls, timeout is %dms\n", exp_timeout);
+        rd_kafka_CreateAcls(rk, new_acls, MY_NEW_ACLS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (with_background_event_cb) {
+                /* Result event will be triggered by callback from
+                 * librdkafka background queue thread. */
+                TIMING_START(&timing, "CreateAcls.wait_background_event_cb");
+                rkev = wait_background_event_cb();
+        } else {
+                /* Poll result queue */
+                TIMING_START(&timing, "CreateAcls.queue_poll");
+                rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        }
+
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("CreateAcls: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_CreateAcls_result(rkev);
+        TEST_ASSERT(res, "expected CreateAcls_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected CreateAcls to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Attempt to extract acls results anyway, should return NULL. */
+        resacls = rd_kafka_CreateAcls_result_acls(res, &resacls_cnt);
+        TEST_ASSERT(!resacls && resacls_cnt == 0,
+                    "expected no acl result, got %p cnt %" PRIusz, resacls,
+                    resacls_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_AclBinding_destroy_array(new_acls, MY_NEW_ACLS_CNT);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+#undef MY_NEW_ACLS_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief DescribeAcls tests
+ *
+ *
+ *
+ */
+static void do_test_DescribeAcls(const char *what,
+                                 rd_kafka_t *rk,
+                                 rd_kafka_queue_t *useq,
+                                 rd_bool_t with_background_event_cb,
+                                 rd_bool_t with_options) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AclBindingFilter_t *describe_acls;
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DescribeAcls_result_t *res;
+        const rd_kafka_AclBinding_t **res_acls;
+        size_t res_acls_cnt;
+        void *my_opaque       = NULL, *opaque;
+        const char *principal = "User:test";
+        const char *host      = "*";
+
+        SUB_TEST_QUICK("%s DescribeAcls with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        /**
+         * Construct AclBindingFilter
+         */
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        describe_acls     = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_TOPIC, topic, RD_KAFKA_RESOURCE_PATTERN_PREFIXED,
+            principal, host, RD_KAFKA_ACL_OPERATION_ALL,
+            RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                my_opaque = (void *)123;
+                rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+        }
+
+        TIMING_START(&timing, "DescribeAcls");
+        TEST_SAY("Call DescribeAcls, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeAcls(rk, describe_acls, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (with_background_event_cb) {
+                /* Result event will be triggered by callback from
+                 * librdkafka background queue thread. */
+                TIMING_START(&timing, "DescribeAcls.wait_background_event_cb");
+                rkev = wait_background_event_cb();
+        } else {
+                /* Poll result queue */
+                TIMING_START(&timing, "DescribeAcls.queue_poll");
+                rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        }
+
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DescribeAcls: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeAcls_result(rkev);
+        TEST_ASSERT(res, "expected DescribeAcls_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected DescribeAcls to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Attempt to extract result acls anyway, should return NULL. */
+        res_acls = rd_kafka_DescribeAcls_result_acls(res, &res_acls_cnt);
+        TEST_ASSERT(!res_acls && res_acls_cnt == 0,
+                    "expected no result acls, got %p cnt %" PRIusz, res_acls,
+                    res_acls_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_AclBinding_destroy(describe_acls);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief DeleteAcls tests
+ *
+ *
+ *
+ */
+static void do_test_DeleteAcls(const char *what,
+                               rd_kafka_t *rk,
+                               rd_kafka_queue_t *useq,
+                               rd_bool_t with_background_event_cb,
+                               rd_bool_t with_options) {
+#define DELETE_ACLS_FILTERS_CNT 2
+        rd_kafka_queue_t *q;
+        rd_kafka_AclBindingFilter_t *delete_acls[DELETE_ACLS_FILTERS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DeleteAcls_result_t *res;
+        const rd_kafka_DeleteAcls_result_response_t **res_response;
+        size_t res_response_cnt;
+        void *my_opaque       = NULL, *opaque;
+        const char *principal = "User:test";
+        const char *host      = "*";
+
+        SUB_TEST_QUICK("%s DeleteAcls with %s, timeout %dms", rd_kafka_name(rk),
+                       what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        /**
+         * Construct AclBindingFilter array
+         */
+        for (i = 0; i < DELETE_ACLS_FILTERS_CNT; i++) {
+                const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+                delete_acls[i]    = rd_kafka_AclBindingFilter_new(
+                    RD_KAFKA_RESOURCE_TOPIC, topic,
+                    RD_KAFKA_RESOURCE_PATTERN_PREFIXED, principal, host,
+                    RD_KAFKA_ACL_OPERATION_ALL,
+                    RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, errstr, sizeof(errstr));
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                my_opaque = (void *)123;
+                rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+        }
+
+        TIMING_START(&timing, "DeleteAcls");
+        TEST_SAY("Call DeleteAcls, timeout is %dms\n", exp_timeout);
+        rd_kafka_DeleteAcls(rk, delete_acls, DELETE_ACLS_FILTERS_CNT, options,
+                            q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (with_background_event_cb) {
+                /* Result event will be triggered by callback from
+                 * librdkafka background queue thread. */
+                TIMING_START(&timing, "DeleteAcls.wait_background_event_cb");
+                rkev = wait_background_event_cb();
+        } else {
+                /* Poll result queue */
+                TIMING_START(&timing, "DeleteAcls.queue_poll");
+                rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        }
+
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DeleteAcls: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteAcls_result(rkev);
+        TEST_ASSERT(res, "expected DeleteAcls_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected DeleteAcls to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Attempt to extract result responses anyway, should return NULL. */
+        res_response =
+            rd_kafka_DeleteAcls_result_responses(res, &res_response_cnt);
+        TEST_ASSERT(!res_response && res_response_cnt == 0,
+                    "expected no result response, got %p cnt %" PRIusz,
+                    res_response, res_response_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_AclBinding_destroy_array(delete_acls, DELETE_ACLS_FILTERS_CNT);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+#undef DELETE_ACLS_FILTERS_CNT
+
+        SUB_TEST_PASS();
+}
+
 
 
 /**
@@ -946,11 +1560,14 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_DELETEGROUPS,                            \
                     RD_KAFKA_ADMIN_OP_DELETERECORDS,                           \
                     RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
+                    RD_KAFKA_ADMIN_OP_CREATEACLS,                              \
+                    RD_KAFKA_ADMIN_OP_DESCRIBEACLS,                            \
+                    RD_KAFKA_ADMIN_OP_DELETEACLS,                              \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */                   \
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[9];
+                const rd_kafka_admin_op_t valid_apis[12];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",
@@ -1120,6 +1737,26 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                            0);
         do_test_DeleteConsumerGroupOffsets("temp queue, options", rk, NULL, 1);
         do_test_DeleteConsumerGroupOffsets("main queue, options", rk, mainq, 1);
+
+        do_test_AclBinding();
+        do_test_AclBindingFilter();
+
+        do_test_CreateAcls("temp queue, no options", rk, NULL, rd_false,
+                           rd_false);
+        do_test_CreateAcls("temp queue, options", rk, NULL, rd_false, rd_true);
+        do_test_CreateAcls("main queue, options", rk, mainq, rd_false, rd_true);
+
+        do_test_DescribeAcls("temp queue, no options", rk, NULL, rd_false,
+                             rd_false);
+        do_test_DescribeAcls("temp queue, options", rk, NULL, rd_false,
+                             rd_true);
+        do_test_DescribeAcls("main queue, options", rk, mainq, rd_false,
+                             rd_true);
+
+        do_test_DeleteAcls("temp queue, no options", rk, NULL, rd_false,
+                           rd_false);
+        do_test_DeleteAcls("temp queue, options", rk, NULL, rd_false, rd_true);
+        do_test_DeleteAcls("main queue, options", rk, mainq, rd_false, rd_true);
 
         do_test_mix(rk, mainq);
 

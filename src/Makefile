@@ -19,6 +19,7 @@ SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
 SRCS_$(WITH_CURL) += rdhttp.c
+SRCS_$(WITH_CURL) += rdkafka_sasl_oauthbearer_oidc.c
 
 SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)

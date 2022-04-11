@@ -4,6 +4,8 @@ librdkafka v1.9.0 is a feature release:
 
  * Added KIP-768 OUATHBEARER OIDC support (by @jliunyu, #3560)
  * Added KIP-140 Admin API ACL support (by @emasab, #2676)
+ * Improved producer queue scheduling.
+   ![producerperf190](packaging/resources/lrk190perf.png)
 
 
 ## Upgrade considerations

@@ -116,8 +116,8 @@ const rd_kafka_message_t *rd_kafka_event_message_next(rd_kafka_event_t *rkev) {
                 if (unlikely(!rkmessage))
                         return NULL;
 
-                /* Store offset */
-                rd_kafka_op_offset_store(NULL, rko);
+                /* Store offset, etc. */
+                rd_kafka_fetch_op_app_prepare(NULL, rko);
 
                 return rkmessage;
 

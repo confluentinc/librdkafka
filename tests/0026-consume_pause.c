@@ -40,7 +40,7 @@
 
 
 
-static int consume_pause(void) {
+static void consume_pause(void) {
         const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
         const int partition_cnt = 3;
         rd_kafka_t *rk;
@@ -54,6 +54,8 @@ static int consume_pause(void) {
         int msg_base = 0;
         int fails    = 0;
         char group_id[32];
+
+        SUB_TEST();
 
         test_conf_init(&conf, &tconf,
                        60 + (test_session_timeout_ms * 3 / 1000));
@@ -220,7 +222,7 @@ static int consume_pause(void) {
         rd_kafka_conf_destroy(conf);
         rd_kafka_topic_conf_destroy(tconf);
 
-        return 0;
+        SUB_TEST_PASS();
 }
 
 
@@ -237,7 +239,7 @@ static int consume_pause(void) {
  * 6. Assign partitions again
  * 7. Verify that consumption starts at N/2 and not N/4
  */
-static int consume_pause_resume_after_reassign(void) {
+static void consume_pause_resume_after_reassign(void) {
         const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
         const int32_t partition = 0;
         const int msgcnt        = 4000;
@@ -251,6 +253,8 @@ static int consume_pause_resume_after_reassign(void) {
         int msg_base = 0;
         test_msgver_t mv;
         rd_kafka_topic_partition_t *toppar;
+
+        SUB_TEST();
 
         test_conf_init(&conf, NULL, 60);
 
@@ -269,6 +273,7 @@ static int consume_pause_resume_after_reassign(void) {
         /**
          * Create consumer.
          */
+        test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "enable.partition.eof", "true");
         rk = test_create_consumer(topic, NULL, conf, NULL);
 
@@ -355,7 +360,7 @@ static int consume_pause_resume_after_reassign(void) {
 
         rd_kafka_destroy(rk);
 
-        return 0;
+        SUB_TEST_PASS();
 }
 
 
@@ -396,7 +401,7 @@ static void rebalance_cb(rd_kafka_t *rk,
  * and relying on auto.offset.reset=latest (default) to catch the failure case
  * where the assigned offset was not honoured.
  */
-static int consume_subscribe_assign_pause_resume(void) {
+static void consume_subscribe_assign_pause_resume(void) {
         const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
         const int32_t partition = 0;
         const int msgcnt        = 1;
@@ -406,7 +411,7 @@ static int consume_subscribe_assign_pause_resume(void) {
         int r;
         test_msgver_t mv;
 
-        TEST_SAY(_C_CYA "[ %s ]\n", __FUNCTION__);
+        SUB_TEST();
 
         test_conf_init(&conf, NULL, 20);
 
@@ -438,21 +443,97 @@ static int consume_subscribe_assign_pause_resume(void) {
 
         rd_kafka_destroy(rk);
 
-        return 0;
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief seek() prior to pause() may overwrite the seek()ed offset
+ *        when later resume()ing. #3471
+ */
+static void consume_seek_pause_resume(void) {
+        const char *topic       = test_mk_topic_name(__FUNCTION__, 1);
+        const int32_t partition = 0;
+        const int msgcnt        = 1000;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        uint64_t testid;
+        int r;
+        test_msgver_t mv;
+        rd_kafka_topic_partition_list_t *parts;
+
+        SUB_TEST();
+
+        test_conf_init(&conf, NULL, 20);
+
+        test_create_topic(NULL, topic, (int)partition + 1, 1);
+
+        /* Produce messages */
+        testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
+
+        /**
+         * Create consumer.
+         */
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "enable.partition.eof", "true");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        rk = test_create_consumer(topic, NULL, conf, NULL);
+
+        parts = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(parts, topic, partition);
+
+        TEST_SAY("Assigning partition\n");
+        TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
+
+
+        TEST_SAY("Consuming messages 0..100\n");
+        test_msgver_init(&mv, testid);
+        r = test_consumer_poll("consume", rk, testid, 0, 0, 100, &mv);
+        TEST_ASSERT(r == 100, "expected %d messages, got %d", 100, r);
+
+        test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 0, 100);
+        test_msgver_clear(&mv);
+
+        parts = rd_kafka_topic_partition_list_new(1);
+        TEST_SAY("Seeking to offset 500\n");
+        rd_kafka_topic_partition_list_add(parts, topic, partition)->offset =
+            500;
+        TEST_CALL_ERROR__(rd_kafka_seek_partitions(rk, parts, -1));
+
+        TEST_SAY("Pausing\n");
+        TEST_CALL_ERR__(rd_kafka_pause_partitions(rk, parts));
+
+        TEST_SAY("Waiting a short while for things to settle\n");
+        rd_sleep(2);
+
+        TEST_SAY("Resuming\n");
+        TEST_CALL_ERR__(rd_kafka_resume_partitions(rk, parts));
+
+        TEST_SAY("Consuming remaining messages from offset 500.. hopefully\n");
+        r = test_consumer_poll("consume", rk, testid, 1 /*exp eof*/,
+                               500 /* base msgid */,
+                               -1 /* remaining messages */, &mv);
+        TEST_ASSERT_LATER(r == 500, "expected %d messages, got %d", 500, r);
+
+        test_msgver_verify("consumed", &mv, TEST_MSGVER_ALL_PART, 500, 500);
+        test_msgver_clear(&mv);
+
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        test_consumer_close(rk);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
 }
 
 
 int main_0026_consume_pause(int argc, char **argv) {
-        int fails = 0;
 
-        if (test_can_create_topics(1)) {
-                fails += consume_pause();
-                fails += consume_pause_resume_after_reassign();
-                fails += consume_subscribe_assign_pause_resume();
-        }
-
-        if (fails > 0)
-                TEST_FAIL("See %d previous error(s)\n", fails);
+        consume_pause();
+        consume_pause_resume_after_reassign();
+        consume_subscribe_assign_pause_resume();
+        consume_seek_pause_resume();
 
         return 0;
 }

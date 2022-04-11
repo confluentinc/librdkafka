@@ -645,9 +645,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 }
                 rd_dassert(res == RD_KAFKA_OP_RES_PASS);
 
-                /* Auto-store offset, if enabled. */
                 if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {
-                        rd_kafka_op_offset_store(rk, rko);
+                        /* Store offset, etc. */
+                        rd_kafka_fetch_op_app_prepare(rk, rko);
 
                         /* If this is a control messages, don't return
                          * message to application, only store the offset */

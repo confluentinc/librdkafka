@@ -1764,6 +1764,11 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_op_version_bump(rktp, version);
 
+        /* Reset app offsets since seek()ing is analogue to a (re)assign(),
+         * and we want to avoid using the current app offset on resume()
+         * following a seek (#3567). */
+        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+
         /* Abort pending offset lookups. */
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
                 rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,

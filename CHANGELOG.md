@@ -77,6 +77,11 @@ librdkafka v1.9.0 is a feature release:
    See **Upgrade considerations** above for more information.
  * `rd_kafka_*assign()` will now reset/clear the stored offset.
    See **Upgrade considerations** above for more information.
+ * `seek()` followed by `pause()` would overwrite the seeked offset when
+   later calling `resume()`. This is now fixed. (#3471).
+   **Note**: Avoid storing offsets (`offsets_store()`) after calling
+   `seek()` as this may later interfere with resuming a paused partition,
+   instead store offsets prior to calling seek.
  * A `ERR_MSG_SIZE_TOO_LARGE` consumer error would previously be raised
    if the consumer received a maximum sized FetchResponse only containing
    (transaction) aborted messages with no control messages. The fetching did

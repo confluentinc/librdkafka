@@ -2863,7 +2863,7 @@ static size_t rd_kafka_conf_flags2str(char *dest,
 
         /* Phase 1: scan for set flags, accumulate needed size.
          * Phase 2: write to dest */
-        for (j = 0; prop->s2i[j].str; j++) {
+        for (j = 0; j < (int)RD_ARRAYSIZE(prop->s2i) && prop->s2i[j].str; j++) {
                 if (prop->type == _RK_C_S2F && ival != -1 &&
                     (ival & prop->s2i[j].val) != prop->s2i[j].val)
                         continue;

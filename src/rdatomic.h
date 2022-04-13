@@ -188,7 +188,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra,
  */
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 #if defined(_WIN32) || defined(__SUNPRO_C)
-        return ra->val;
+        return InterlockedCompareExchange64(&ra->val, 0, 0);
 #elif !HAVE_ATOMICS_64
         int64_t r;
         mtx_lock(&ra->lock);

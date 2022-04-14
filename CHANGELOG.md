@@ -72,6 +72,11 @@ librdkafka v1.9.0 is a feature release:
    was configured.
    This regression was introduced in v1.8.0 due to use of vcpkgs and how
    keystore file was read. #3554.
+ * Windows 32-bit only: 64-bit atomic reads were in fact not atomic and could
+   in rare circumstances yield incorrect values.
+   One manifestation of this issue was the `max.poll.interval.ms` consumer
+   timer expiring even though the application was polling according to profile.
+   Fixed by @WhiteWind (#3815).
  * `rd_kafka_clusterid()` would previously fail with timeout if
    called on cluster with no visible topics (#3620).
    The clusterid is now returned as soon as metadata has been retrieved.

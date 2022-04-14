@@ -2124,6 +2124,8 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
                 return -1;
         }
 
+        rkb->rkb_ts_connect = rd_clock();
+
         return 1;
 }
 
@@ -5232,8 +5234,11 @@ static int rd_kafka_broker_thread_main(void *arg) {
         while (!rd_kafka_broker_terminating(rkb)) {
                 int backoff;
                 int r;
+                rd_kafka_broker_state_t orig_state;
 
         redo:
+                orig_state = rkb->rkb_state;
+
                 switch (rkb->rkb_state) {
                 case RD_KAFKA_BROKER_STATE_INIT:
                         /* Check if there is demand for a connection
@@ -5340,6 +5345,20 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             rd_kafka_broker_addresses_exhausted(rkb))
                                 rd_kafka_broker_update_reconnect_backoff(
                                     rkb, &rkb->rkb_rk->rk_conf, rd_clock());
+                        else if (
+                            rkb->rkb_state == orig_state &&
+                            rd_clock() >=
+                                (rkb->rkb_ts_connect +
+                                 (rd_ts_t)rk->rk_conf
+                                         .socket_connection_setup_timeout_ms *
+                                     1000))
+                                rd_kafka_broker_fail(
+                                    rkb, LOG_WARNING,
+                                    RD_KAFKA_RESP_ERR__TRANSPORT,
+                                    "Connection setup timed out in state %s",
+                                    rd_kafka_broker_state_names
+                                        [rkb->rkb_state]);
+
                         break;
 
                 case RD_KAFKA_BROKER_STATE_UPDATE:

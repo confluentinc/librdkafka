@@ -238,6 +238,7 @@ _TEST_DECL(0126_oauthbearer_oidc);
 _TEST_DECL(0128_sasl_callback_queue);
 _TEST_DECL(0129_fetch_aborted_msgs);
 _TEST_DECL(0130_store_offsets);
+_TEST_DECL(0131_connect_timeout);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -474,6 +475,7 @@ struct test tests[] = {
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
     _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0130_store_offsets, 0),
+    _TEST(0131_connect_timeout, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

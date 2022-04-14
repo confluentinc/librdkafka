@@ -249,6 +249,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /**< Absolute timestamp of next allowed reconnect. */
         rd_ts_t rkb_ts_reconnect;
 
+        /** Absolute time of last connection attempt. */
+        rd_ts_t rkb_ts_connect;
+
         /**< Persistent connection demand is tracked by
          *   an counter for each type of demand.
          *   The broker thread will maintain a persistent connection

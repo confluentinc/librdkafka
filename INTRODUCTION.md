@@ -1930,6 +1930,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-580 - Exponential backoff for Kafka clients                          | WIP                         | Partially supported                                                                           |
 | KIP-584 - Versioning scheme for features                                 | WIP                         | Not supported                                                                                 |
 | KIP-588 - Allow producers to recover gracefully from txn timeouts        | 2.8.0 (WIP)                 | Not supported                                                                                 |
+| KIP-601 - Configurable socket connection timeout                         | 2.7.0                       | Supported                                                                                     |
 | KIP-602 - Use all resolved addresses by default                          | 2.6.0                       | Supported                                                                                     |
 | KIP-651 - Support PEM format for SSL certs and keys                      | 2.7.0                       | Supported                                                                                     |
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |

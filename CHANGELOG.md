@@ -33,6 +33,17 @@ librdkafka v1.9.0 is a feature release:
  * Windows: Added native Win32 IO/Queue scheduling. This removes the
    internal TCP loopback connections that were previously used for timely
    queue wakeups.
+ * Added `socket.connection.setup.timeout.ms` (default 30s).
+   The maximum time allowed for broker connection setups (TCP connection as
+   well as SSL and SASL handshakes) is now limited to this value.
+   This fixes the issue with stalled broker connections in the case of network
+   or load balancer problems.
+   The Java clients has an exponential backoff to this timeout which is
+   limited by `socket.connection.setup.timeout.max.ms` - this was not
+   implemented in librdkafka due to differences in connection handling and
+   `ERR__ALL_BROKERS_DOWN` error reporting. Having a lower initial connection
+   setup timeout and then increase the timeout for the next attempt would
+   yield possibly false-positive `ERR__ALL_BROKERS_DOWN` too early.
  * SASL OAUTHBEARER refresh callbacks can now be scheduled for execution
    on librdkafka's background thread. This solves the problem where an
    application has a custom SASL OAUTHBEARER refresh callback and thus needs to

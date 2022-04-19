@@ -122,6 +122,7 @@ set(
     0129-fetch_aborted_msgs.c
     0130-store_offsets.c
     0131-connect_timeout.c
+    0132-strategy_ordering.c
     8000-idle.cpp
     test.c
     testcpp.cpp

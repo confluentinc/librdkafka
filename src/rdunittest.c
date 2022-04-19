@@ -426,6 +426,7 @@ extern int unittest_http(void);
 #if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
+extern int unittest_timer_backoff(void);
 
 int rd_unittest(void) {
         int fails = 0;
@@ -466,6 +467,7 @@ int rd_unittest(void) {
 #if WITH_OAUTHBEARER_OIDC
                 {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
+                {"timer_backoff", unittest_timer_backoff},
                 {NULL}
         };
         int i;

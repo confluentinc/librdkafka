@@ -539,13 +539,10 @@ static void rtrim(char *s) {
 }
 
 
-int compare(const void *ptr1, const void *ptr2) {
-        rd_kafka_assignor_t *rkas1 = (rd_kafka_assignor_t *)ptr1;
-        rd_kafka_assignor_t *rkas2 = (rd_kafka_assignor_t *)ptr2;
-        if (rkas1->rkas_index > rkas2->rkas_index)
-                return 1;
-        else
-                return -1;
+static int rd_kafka_assignor_cmp_idx(const void *ptr1, const void *ptr2) {
+        const rd_kafka_assignor_t *rkas1 = (const rd_kafka_assignor_t *)ptr1;
+        const rd_kafka_assignor_t *rkas2 = (const rd_kafka_assignor_t *)ptr2;
+        return rkas1->rkas_index - rkas2->rkas_index;
 }
 
 
@@ -555,8 +552,8 @@ int compare(const void *ptr1, const void *ptr2) {
 int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         char *wanted;
         char *s;
+        int idx = 0;
 
-        int index;
         rd_list_init(&rk->rk_conf.partition_assignors, 3,
                      (void *)rd_kafka_assignor_destroy);
 
@@ -567,8 +564,7 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
 
-        s     = wanted;
-        index = 0;
+        s = wanted;
         while (*s) {
                 rd_kafka_assignor_t *rkas = NULL;
                 char *t;
@@ -599,17 +595,23 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 if (!rkas->rkas_enabled) {
                         rkas->rkas_enabled = 1;
                         rk->rk_conf.enabled_assignor_cnt++;
-                        rkas->rkas_index = index;
-                        index++;
+                        rkas->rkas_index = idx;
+                        idx++;
                 }
 
                 s = t;
         }
-        rd_list_sort(&rk->rk_conf.partition_assignors, compare);
+
+        /* Sort the assignors according to the input strategy order
+         * since assignors will be scaned from the list continuously
+         * and the strategies earlier in the list have higher priority
+         * when retrieve the protocol. */
+        rd_list_sort(&rk->rk_conf.partition_assignors,
+                     rd_kafka_assignor_cmp_idx);
 
         /* Clear the SORTED flag because the list is sorted according to the
          * rkas_index, but will do the search using rkas_protocol_name. */
-        rk->rk_conf.partition_assignors.rl_flags ^= RD_LIST_F_SORTED;
+        rk->rk_conf.partition_assignors.rl_flags &= ~RD_LIST_F_SORTED;
 
         if (rd_kafka_assignor_rebalance_protocol_check(&rk->rk_conf)) {
                 rd_snprintf(errstr, errstr_size,

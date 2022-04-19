@@ -55,16 +55,16 @@ static void verify_roundrobin_assignment(rd_kafka_t *c[]) {
         TEST_ASSERT(assignment2->cnt == _PART_CNT / 2,
                     "Roundrobin: Assignment partitions for %s"
                     "is %d, but the expected is %d\n",
-                    rd_kafka_name(c[0]), assignment2->cnt, _PART_CNT / 2);
+                    rd_kafka_name(c[1]), assignment2->cnt, _PART_CNT / 2);
 
         TEST_ASSERT(assignment2->elems[0].partition == 1,
                     "Roundrobin: First assignment partition for %s"
                     "is %d, but the expectation is %d\n",
-                    rd_kafka_name(c[0]), assignment2->elems[0].partition, 1);
+                    rd_kafka_name(c[1]), assignment2->elems[0].partition, 1);
         TEST_ASSERT(assignment2->elems[1].partition == 3,
                     "Roundrobin: Second assignment partition for %s"
                     "is %d, but the expectation is %d\n",
-                    rd_kafka_name(c[0]), assignment2->elems[1].partition, 3);
+                    rd_kafka_name(c[1]), assignment2->elems[1].partition, 3);
 
         rd_kafka_topic_partition_list_destroy(assignment1);
         rd_kafka_topic_partition_list_destroy(assignment2);
@@ -94,16 +94,16 @@ static void verify_range_assignment(rd_kafka_t *c[]) {
         TEST_ASSERT(assignment2->cnt == _PART_CNT / 2,
                     "Range: Assignment partition for %s"
                     "is %d, but the expected is %d\n",
-                    rd_kafka_name(c[0]), assignment2->cnt, _PART_CNT / 2);
+                    rd_kafka_name(c[1]), assignment2->cnt, _PART_CNT / 2);
 
         TEST_ASSERT(assignment2->elems[0].partition == 2,
                     "Range: First assignment partition for %s"
                     "is %d, but the expectation is %d\n",
-                    rd_kafka_name(c[0]), assignment2->elems[0].partition, 2);
+                    rd_kafka_name(c[1]), assignment2->elems[0].partition, 2);
         TEST_ASSERT(assignment2->elems[1].partition == 3,
                     "Range: Second assignment partition for %s"
                     "is %d, but the expectation is %d\n",
-                    rd_kafka_name(c[0]), assignment2->elems[1].partition, 3);
+                    rd_kafka_name(c[1]), assignment2->elems[1].partition, 3);
 
         rd_kafka_topic_partition_list_destroy(assignment1);
         rd_kafka_topic_partition_list_destroy(assignment2);
@@ -112,7 +112,6 @@ static void verify_range_assignment(rd_kafka_t *c[]) {
 static void do_test_stragety_ordering(const char *assignor,
                                       const char *expected_assignor) {
         rd_kafka_conf_t *conf;
-        test_msgver_t mv;
 #define _C_CNT 2
         rd_kafka_t *c[_C_CNT];
 
@@ -125,15 +124,12 @@ static void do_test_stragety_ordering(const char *assignor,
 
         testid = test_id_generate();
 
-        test_msgver_init(&mv, testid);
-
         topic = test_mk_topic_name("0132-strategy_ordering", 1);
         test_create_topic(NULL, topic, _PART_CNT, 1);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "partition.assignment.strategy", assignor);
-        test_conf_set(conf, "group.id", assignor);
 
         for (i = 0; i < _C_CNT; i++) {
                 char name[16];
@@ -164,18 +160,11 @@ static void do_test_stragety_ordering(const char *assignor,
                 rd_kafka_destroy(c[i]);
         }
 
-        test_msgver_clear(&mv);
         SUB_TEST_PASS();
 }
 
 
 int main_0132_strategy_ordering(int argc, char **argv) {
-
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
-
         do_test_stragety_ordering("roundrobin,range", "roundrobin");
         do_test_stragety_ordering("range,roundrobin", "range");
         return 0;

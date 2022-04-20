@@ -114,9 +114,9 @@ librdkafka v1.9.0 is a feature release:
  * Fix crash (`cant handle op type`) when using `consume_batch_queue()` (et.al)
    and an OAUTHBEARER refresh callback was set.
    The callback is now triggered by the consume call. (#3263)
- * Fix the strategies ordering issue when multiple strategies are supported.
+ * Fix `partition.assignment.strategy` ordering when multiple strategies are configured.
    If there is more than one eligible strategy, preference is determined by the
-   order of strategies. The partitions are assigned to group members according
+   configured order of strategies. The partitions are assigned to group members according
    to the strategy order preference now. (#3818)
 
 

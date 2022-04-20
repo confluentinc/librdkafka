@@ -604,8 +604,7 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         /* Sort the assignors according to the input strategy order
          * since assignors will be scaned from the list sequentially
-         * and the strategies earlier in the list have higher priority
-         * when retrieve the protocol. */
+         * and the strategies earlier in the list have higher priority. */
         rd_list_sort(&rk->rk_conf.partition_assignors,
                      rd_kafka_assignor_cmp_idx);
 

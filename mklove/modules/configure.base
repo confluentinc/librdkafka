@@ -846,21 +846,32 @@ function mkl_generate_late_vars {
     done
 }
 
+
+# Generate MKL_DYNAMIC_LIBS and MKL_STATIC_LIBS for Makefile.config
+#
+# Params: $LIBS
+function mkl_generate_libs {
+    while [[ $# -gt 0 ]]; do
+        if [[ $1 == -l* ]]; then
+            mkl_mkvar_append "" MKL_DYNAMIC_LIBS $1
+        elif [[ $1 == *.a ]]; then
+            mkl_mkvar_append "" MKL_STATIC_LIBS $1
+        elif [[ $1 == -framework ]]; then
+            mkl_mkvar_append "" MKL_DYNAMIC_LIBS "$1 $2"
+            shift # two args
+        else
+            mkl_dbg "Ignoring arg $1 from LIBS while building STATIC and DYNAMIC lists"
+        fi
+        shift # remove arg
+    done
+}
+
 # Generate output files.
 # Must be called following a succesful configure run.
 function mkl_generate {
 
     # Generate MKL_STATIC_LIBS and MKL_DYNAMIC_LIBS from LIBS
-    local arg=
-    for arg in $LIBS ; do
-        if [[ $arg == -l* ]]; then
-            mkl_mkvar_append "" MKL_DYNAMIC_LIBS $arg
-        elif [[ $arg == *.a ]]; then
-            mkl_mkvar_append "" MKL_STATIC_LIBS $arg
-        else
-            mkl_dbg "Ignoring arg $arg from LIBS while building STATIC and DYNAMIC lists"
-        fi
-    done
+    mkl_generate_libs $LIBS
 
     local mf=
     for mf in $MKL_GENERATORS ; do

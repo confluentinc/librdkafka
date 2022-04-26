@@ -1841,7 +1841,7 @@ err:
                            rd_kafka_err2str(err),
                            (int)(request->rkbuf_ts_sent / 1000),
                            rd_kafka_actions2str(actions));
-                // enq callback event with metadata err and not retry
+                /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
                         rko->rko_err           = err;
                         rko->rko_u.metadata.md = NULL;

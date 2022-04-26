@@ -84,6 +84,9 @@ librdkafka v1.9.0 is a feature release:
    to connect to (#3705).
  * Millisecond timeouts (`timeout_ms`) in various APIs, such as `rd_kafka_poll()`,
    was limited to roughly 36 hours before wrapping. (#3034)
+ * If a metadata request triggered by `rd_kafka_metadata()` or consumer group rebalancing
+   encountered a non-retriable error it would not be propagated to the caller and thus
+   cause a stall or timeout, this has now been fixed. (@aiquestion, #3625)
 
 
 ### Consumer fixes

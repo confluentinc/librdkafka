@@ -41,6 +41,11 @@ pushd $BUILD_DIR
 DEST_DIR=$PWD/dest
 mkdir -p $DEST_DIR
 
+# Workaround for newer Git not allowing clone directory to be owned by
+# another user (which is a questionable limitation for the read-only archive
+# command..)
+git config --global --add safe.directory /v
+
 (cd $LRK_DIR ; git archive --format tar HEAD) | tar xf -
 
 ./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR $CONFIG_ARGS

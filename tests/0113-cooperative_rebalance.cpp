@@ -1214,21 +1214,25 @@ static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
 
 /* Check that use of consumer->assign() and consumer->unassign() is disallowed
  * when a COOPERATIVE assignor is in use.
+ *
+ * Except when the consumer is closing, where all forms of unassign are
+ * allowed and treated as a full unassign.
  */
 
 class FTestRebalanceCb : public RdKafka::RebalanceCb {
  public:
-  rd_bool_t assigned;
+  bool assigned;
+  bool closing;
 
-  FTestRebalanceCb() {
-    assigned = rd_false;
+  FTestRebalanceCb() : assigned(false), closing(false) {
   }
 
   void rebalance_cb(RdKafka::KafkaConsumer *consumer,
                     RdKafka::ErrorCode err,
                     std::vector<RdKafka::TopicPartition *> &partitions) {
     Test::Say(tostr() << "RebalanceCb: " << consumer->name() << " "
-                      << RdKafka::err2str(err) << "\n");
+                      << RdKafka::err2str(err) << (closing ? " (closing)" : "")
+                      << "\n");
 
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
       RdKafka::ErrorCode err_resp = consumer->assign(partitions);
@@ -1243,20 +1247,30 @@ class FTestRebalanceCb : public RdKafka::RebalanceCb {
         Test::Fail(tostr() << "consumer->incremental_unassign() failed: "
                            << error->str());
 
-      assigned = rd_true;
+      assigned = true;
 
     } else {
       RdKafka::ErrorCode err_resp = consumer->unassign();
       Test::Say(tostr() << "consumer->unassign() response code: " << err_resp
                         << "\n");
-      if (err_resp != RdKafka::ERR__STATE)
-        Test::Fail(tostr() << "Expected assign to fail with error code: "
-                           << RdKafka::ERR__STATE << "(ERR__STATE)");
 
-      RdKafka::Error *error = consumer->incremental_unassign(partitions);
-      if (error)
-        Test::Fail(tostr() << "consumer->incremental_unassign() failed: "
-                           << error->str());
+      if (!closing) {
+        if (err_resp != RdKafka::ERR__STATE)
+          Test::Fail(tostr() << "Expected assign to fail with error code: "
+                             << RdKafka::ERR__STATE << "(ERR__STATE)");
+
+        RdKafka::Error *error = consumer->incremental_unassign(partitions);
+        if (error)
+          Test::Fail(tostr() << "consumer->incremental_unassign() failed: "
+                             << error->str());
+
+      } else {
+        /* During termination (close()) any type of unassign*() is allowed. */
+        if (err_resp)
+          Test::Fail(tostr() << "Expected unassign to succeed during close, "
+                                "but got: "
+                             << RdKafka::ERR__STATE << "(ERR__STATE)");
+      }
     }
   }
 };
@@ -1285,6 +1299,7 @@ static void f_assign_call_cooperative() {
   while (!rebalance_cb.assigned)
     Test::poll_once(c, 500);
 
+  rebalance_cb.closing = true;
   c->close();
   delete c;
 
@@ -1299,10 +1314,10 @@ static void f_assign_call_cooperative() {
  */
 class GTestRebalanceCb : public RdKafka::RebalanceCb {
  public:
-  rd_bool_t assigned;
+  bool assigned;
+  bool closing;
 
-  GTestRebalanceCb() {
-    assigned = rd_false;
+  GTestRebalanceCb() : assigned(false), closing(false) {
   }
 
   void rebalance_cb(RdKafka::KafkaConsumer *consumer,
@@ -1327,23 +1342,35 @@ class GTestRebalanceCb : public RdKafka::RebalanceCb {
       if (err_resp)
         Test::Fail(tostr() << "consumer->assign() failed: " << err_resp);
 
-      assigned = rd_true;
+      assigned = true;
 
     } else {
       RdKafka::Error *error = consumer->incremental_unassign(partitions);
       Test::Say(tostr() << "consumer->incremental_unassign() response: "
                         << (!error ? "NULL" : error->str()) << "\n");
-      if (!error)
-        Test::Fail("Expected consumer->incremental_unassign() to fail");
-      if (error->code() != RdKafka::ERR__STATE)
-        Test::Fail(tostr() << "Expected consumer->incremental_unassign() to "
-                              "fail with error code "
-                           << RdKafka::ERR__STATE);
-      delete error;
 
-      RdKafka::ErrorCode err_resp = consumer->unassign();
-      if (err_resp)
-        Test::Fail(tostr() << "consumer->unassign() failed: " << err_resp);
+      if (!closing) {
+        if (!error)
+          Test::Fail("Expected consumer->incremental_unassign() to fail");
+        if (error->code() != RdKafka::ERR__STATE)
+          Test::Fail(tostr() << "Expected consumer->incremental_unassign() to "
+                                "fail with error code "
+                             << RdKafka::ERR__STATE);
+        delete error;
+
+        RdKafka::ErrorCode err_resp = consumer->unassign();
+        if (err_resp)
+          Test::Fail(tostr() << "consumer->unassign() failed: " << err_resp);
+
+      } else {
+        /* During termination (close()) any type of unassign*() is allowed. */
+        if (error)
+          Test::Fail(
+              tostr()
+              << "Expected incremental_unassign to succeed during close, "
+                 "but got: "
+              << RdKafka::ERR__STATE << "(ERR__STATE)");
+      }
     }
   }
 };
@@ -1370,6 +1397,7 @@ static void g_incremental_assign_call_eager() {
   while (!rebalance_cb.assigned)
     Test::poll_once(c, 500);
 
+  rebalance_cb.closing = true;
   c->close();
   delete c;
 

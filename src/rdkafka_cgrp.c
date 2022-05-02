@@ -4703,29 +4703,8 @@ static void rd_kafka_cgrp_handle_assign_op(rd_kafka_cgrp_t *rkcg,
                                            rd_kafka_op_t *rko) {
         rd_kafka_error_t *error = NULL;
 
-        if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
-                RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
-            !(rko->rko_u.assign.method == RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN ||
-              rko->rko_u.assign.method == RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN))
-                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                           "Changes to the current assignment "
-                                           "must be made using "
-                                           "incremental_assign() or "
-                                           "incremental_unassign() "
-                                           "when rebalance protocol type is "
-                                           "COOPERATIVE");
-
-        else if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
-                     RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
-                 !(rko->rko_u.assign.method == RD_KAFKA_ASSIGN_METHOD_ASSIGN))
-                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                           "Changes to the current assignment "
-                                           "must be made using "
-                                           "assign() when rebalance "
-                                           "protocol type is EAGER");
-
-        else if (rd_kafka_fatal_error_code(rkcg->rkcg_rk) ||
-                 rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+        if (rd_kafka_fatal_error_code(rkcg->rkcg_rk) ||
+            rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
                 /* Treat all assignments as unassign when a fatal error is
                  * raised or the cgrp is terminating. */
 
@@ -4744,7 +4723,29 @@ static void rd_kafka_cgrp_handle_assign_op(rd_kafka_cgrp_t *rkcg,
                         rko->rko_u.assign.partitions = NULL;
                 }
                 rko->rko_u.assign.method = RD_KAFKA_ASSIGN_METHOD_ASSIGN;
-        }
+
+        } else if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
+                       RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
+                   !(rko->rko_u.assign.method ==
+                         RD_KAFKA_ASSIGN_METHOD_INCR_ASSIGN ||
+                     rko->rko_u.assign.method ==
+                         RD_KAFKA_ASSIGN_METHOD_INCR_UNASSIGN))
+                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                           "Changes to the current assignment "
+                                           "must be made using "
+                                           "incremental_assign() or "
+                                           "incremental_unassign() "
+                                           "when rebalance protocol type is "
+                                           "COOPERATIVE");
+
+        else if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
+                     RD_KAFKA_REBALANCE_PROTOCOL_EAGER &&
+                 !(rko->rko_u.assign.method == RD_KAFKA_ASSIGN_METHOD_ASSIGN))
+                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                           "Changes to the current assignment "
+                                           "must be made using "
+                                           "assign() when rebalance "
+                                           "protocol type is EAGER");
 
         if (!error) {
                 switch (rko->rko_u.assign.method) {

@@ -121,6 +121,9 @@ librdkafka v1.9.0 is a feature release:
    If there is more than one eligible strategy, preference is determined by the
    configured order of strategies. The partitions are assigned to group members according
    to the strategy order preference now. (#3818)
+ * Any form of unassign*() (absolute or incremental) is now allowed during
+   consumer close rebalancing and they're all treated as absolute unassigns.
+   (@kevinconaway)
 
 
 ### Producer fixes

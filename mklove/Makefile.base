@@ -108,16 +108,16 @@ $(LIBNAME_LDS):
 $(LIBFILENAME): $(OBJS) $(LIBNAME_LDS)
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
 	$(CC_LD) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
-ifeq ($(WITH_STRIP),y)
 	cp $@ $(LIBFILENAMEDBG)
+ifeq ($(WITH_STRIP),y)
 	$(STRIP) -S $@
 endif
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
-ifeq ($(WITH_STRIP),y)
 	cp $@ $(LIBNAME)-dbg.a
+ifeq ($(WITH_STRIP),y)
 	$(STRIP) -S $@
 	$(RANLIB) $@
 endif

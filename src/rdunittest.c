@@ -47,7 +47,7 @@
 
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 #include "rdkafka_msgset.h"
@@ -422,6 +422,8 @@ extern int unittest_assignors(void);
 extern int unittest_map(void);
 #if WITH_CURL
 extern int unittest_http(void);
+#endif
+#if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
 
@@ -460,6 +462,8 @@ int rd_unittest(void) {
                 {"assignors", unittest_assignors},
 #if WITH_CURL
                 {"http", unittest_http},
+#endif
+#if WITH_OAUTHBEARER_OIDC
                 {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
                 {NULL}

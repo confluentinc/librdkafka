@@ -36,7 +36,7 @@
 #include <openssl/evp.h>
 #include "rdunittest.h"
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 
@@ -1325,7 +1325,7 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
                 handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
         }
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
             rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==

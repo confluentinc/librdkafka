@@ -102,7 +102,7 @@ if(WITH_SASL_OAUTHBEARER)
   list(APPEND sources rdkafka_sasl_oauthbearer.c)
 endif()
 
-if(WITH_CURL)
+if(WITH_OAUTHBEARER_OIDC)
   list(APPEND sources rdkafka_sasl_oauthbearer_oidc.c)
 endif()
 

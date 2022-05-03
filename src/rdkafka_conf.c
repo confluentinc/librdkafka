@@ -170,13 +170,17 @@ struct rd_kafka_property {
 
 #if WITH_CURL
 #define _UNSUPPORTED_HTTP .unsupported = NULL
-#define _UNSUPPORTED_OIDC .unsupported = NULL
 #else
 #define _UNSUPPORTED_HTTP .unsupported = "libcurl not available at build time"
+#endif
+
+#if WITH_OAUTHBEARER_OIDC
+#define _UNSUPPORTED_OIDC .unsupported = NULL
+#else
 #define _UNSUPPORTED_OIDC                                                      \
         .unsupported =                                                         \
-            "OAuth/OIDC depends on libcurl which was not available "           \
-            "at build time"
+            "OAuth/OIDC depends on libcurl and OpenSSL which were not "        \
+            "available at build time"
 #endif
 
 #ifdef _WIN32

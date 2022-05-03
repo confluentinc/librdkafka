@@ -54,7 +54,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 #if WITH_SSL
@@ -2248,13 +2248,14 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                     RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
             !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                     &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
 #endif
+
         rk->rk_controllerid = -1;
 
         /* Admin client defaults */

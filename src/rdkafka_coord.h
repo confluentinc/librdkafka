@@ -107,6 +107,8 @@ typedef struct rd_kafka_coord_req_s {
                               *   FindCoordinator requests. */
         rd_bool_t creq_done; /**< True if request was sent */
 
+        rd_kafka_broker_t *creq_rkb; /**< creq is waiting for this broker to
+                                      *   come up. */
 } rd_kafka_coord_req_t;
 
 

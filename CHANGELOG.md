@@ -87,6 +87,8 @@ librdkafka v1.9.0 is a feature release:
  * If a metadata request triggered by `rd_kafka_metadata()` or consumer group rebalancing
    encountered a non-retriable error it would not be propagated to the caller and thus
    cause a stall or timeout, this has now been fixed. (@aiquestion, #3625)
+ * Mock cluster `rd_kafka_mock_broker_set_down()` would previously
+   accept and then disconnect new connections, it now refuses new connections.
 
 
 ### Consumer fixes

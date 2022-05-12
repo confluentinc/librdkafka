@@ -1978,9 +1978,12 @@ static int rd_kafka_mock_handle_ApiVersion(rd_kafka_mock_connection_t *mconn,
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int i;
 
-        if (!rd_kafka_mock_cluster_ApiVersion_check(
-                mcluster, rkbuf->rkbuf_reqhdr.ApiKey,
-                rkbuf->rkbuf_reqhdr.ApiVersion))
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        if (!err && !rd_kafka_mock_cluster_ApiVersion_check(
+                        mcluster, rkbuf->rkbuf_reqhdr.ApiKey,
+                        rkbuf->rkbuf_reqhdr.ApiVersion))
                 err = RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION;
 
         /* ApiVersionRequest/Response with flexver (>=v3) has a mix

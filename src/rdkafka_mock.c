@@ -1404,8 +1404,12 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 
         rd_kafka_mock_broker_close_all(mrkb, "Destroying broker");
 
-        rd_kafka_mock_cluster_io_del(mrkb->cluster, mrkb->listen_s);
-        rd_socket_close(mrkb->listen_s);
+        if (mrkb->listen_s != -1) {
+                if (mrkb->up)
+                        rd_kafka_mock_cluster_io_del(mrkb->cluster,
+                                                     mrkb->listen_s);
+                rd_socket_close(mrkb->listen_s);
+        }
 
         while ((errstack = TAILQ_FIRST(&mrkb->errstacks))) {
                 TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
@@ -1419,14 +1423,47 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
 }
 
 
-static rd_kafka_mock_broker_t *
-rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
-        rd_kafka_mock_broker_t *mrkb;
-        rd_socket_t listen_s;
-        struct sockaddr_in sin = {
-            .sin_family = AF_INET,
-            .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)}};
-        socklen_t sin_len = sizeof(sin);
+/**
+ * @brief Starts listening on the mock broker socket.
+ *
+ * @returns 0 on success or -1 on error (logged).
+ */
+static int rd_kafka_mock_broker_start_listener(rd_kafka_mock_broker_t *mrkb) {
+        rd_assert(mrkb->listen_s != -1);
+
+        if (listen(mrkb->listen_s, 5) == RD_SOCKET_ERROR) {
+                rd_kafka_log(mrkb->cluster->rk, LOG_CRIT, "MOCK",
+                             "Failed to listen on mock broker socket: %s",
+                             rd_socket_strerror(rd_socket_errno));
+                return -1;
+        }
+
+        rd_kafka_mock_cluster_io_add(mrkb->cluster, mrkb->listen_s, POLLIN,
+                                     rd_kafka_mock_broker_listen_io, mrkb);
+
+        return 0;
+}
+
+
+/**
+ * @brief Creates a new listener socket for \p mrkb but does NOT starts
+ *        listening.
+ *
+ * @param sin is the address and port to bind. If the port is zero a random
+ *            port will be assigned (by the kernel) and the address and port
+ *            will be returned in this pointer.
+ *
+ * @returns listener socket on success or -1 on error (errors are logged).
+ */
+static int rd_kafka_mock_broker_new_listener(rd_kafka_mock_cluster_t *mcluster,
+                                             struct sockaddr_in *sinp) {
+        struct sockaddr_in sin = *sinp;
+        socklen_t sin_len      = sizeof(sin);
+        int listen_s;
+        int on = 1;
+
+        if (!sin.sin_family)
+                sin.sin_family = AF_INET;
 
         /*
          * Create and bind socket to any loopback port
@@ -1437,7 +1474,17 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                 rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
                              "Unable to create mock broker listen socket: %s",
                              rd_socket_strerror(rd_socket_errno));
-                return NULL;
+                return -1;
+        }
+
+        if (setsockopt(listen_s, SOL_SOCKET, SO_REUSEADDR, (void *)&on,
+                       sizeof(on)) == -1) {
+                rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
+                             "Failed to set SO_REUSEADDR on mock broker "
+                             "listen socket: %s",
+                             rd_socket_strerror(rd_socket_errno));
+                rd_socket_close(listen_s);
+                return -1;
         }
 
         if (bind(listen_s, (struct sockaddr *)&sin, sizeof(sin)) ==
@@ -1447,7 +1494,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                              rd_socket_strerror(rd_socket_errno),
                              rd_sockaddr2str(&sin, RD_SOCKADDR2STR_F_PORT));
                 rd_socket_close(listen_s);
-                return NULL;
+                return -1;
         }
 
         if (getsockname(listen_s, (struct sockaddr *)&sin, &sin_len) ==
@@ -1456,18 +1503,29 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
                              "Failed to get mock broker socket name: %s",
                              rd_socket_strerror(rd_socket_errno));
                 rd_socket_close(listen_s);
-                return NULL;
+                return -1;
         }
         rd_assert(sin.sin_family == AF_INET);
+        /* If a filled in sinp was passed make sure nothing changed. */
+        rd_assert(!sinp->sin_port || !memcmp(sinp, &sin, sizeof(sin)));
 
-        if (listen(listen_s, 5) == RD_SOCKET_ERROR) {
-                rd_kafka_log(mcluster->rk, LOG_CRIT, "MOCK",
-                             "Failed to listen on mock broker socket: %s",
-                             rd_socket_strerror(rd_socket_errno));
-                rd_socket_close(listen_s);
+        *sinp = sin;
+
+        return listen_s;
+}
+
+
+static rd_kafka_mock_broker_t *
+rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
+        rd_kafka_mock_broker_t *mrkb;
+        rd_socket_t listen_s;
+        struct sockaddr_in sin = {
+            .sin_family = AF_INET,
+            .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)}};
+
+        listen_s = rd_kafka_mock_broker_new_listener(mcluster, &sin);
+        if (listen_s == -1)
                 return NULL;
-        }
-
 
         /*
          * Create mock broker object
@@ -1478,6 +1536,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
         mrkb->cluster  = mcluster;
         mrkb->up       = rd_true;
         mrkb->listen_s = listen_s;
+        mrkb->sin      = sin;
         mrkb->port     = ntohs(sin.sin_port);
         rd_snprintf(mrkb->advertised_listener,
                     sizeof(mrkb->advertised_listener), "%s",
@@ -1489,8 +1548,10 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
         TAILQ_INSERT_TAIL(&mcluster->brokers, mrkb, link);
         mcluster->broker_cnt++;
 
-        rd_kafka_mock_cluster_io_add(mcluster, listen_s, POLLIN,
-                                     rd_kafka_mock_broker_listen_io, mrkb);
+        if (rd_kafka_mock_broker_start_listener(mrkb) == -1) {
+                rd_kafka_mock_broker_destroy(mrkb);
+                return NULL;
+        }
 
         return mrkb;
 }
@@ -1995,10 +2056,30 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                          rd_kafka_op_t *rko) {
         switch (rko->rko_u.mock.cmd) {
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
+                if ((rd_bool_t)rko->rko_u.mock.lo == mrkb->up)
+                        break;
+
                 mrkb->up = (rd_bool_t)rko->rko_u.mock.lo;
 
-                if (!mrkb->up)
+                if (!mrkb->up) {
+                        rd_kafka_mock_cluster_io_del(mcluster, mrkb->listen_s);
+                        rd_socket_close(mrkb->listen_s);
+                        /* Re-create the listener right away so we retain the
+                         * same port. The listener is not started until
+                         * the broker is set up (below). */
+                        mrkb->listen_s = rd_kafka_mock_broker_new_listener(
+                            mcluster, &mrkb->sin);
+                        rd_assert(mrkb->listen_s != -1 ||
+                                  !*"Failed to-create mock broker listener");
+
                         rd_kafka_mock_broker_close_all(mrkb, "Broker down");
+
+                } else {
+                        int r;
+                        rd_assert(mrkb->listen_s != -1);
+                        r = rd_kafka_mock_broker_start_listener(mrkb);
+                        rd_assert(r == 0 || !*"broker_start_listener() failed");
+                }
                 break;
 
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
@@ -2390,7 +2471,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         of                   = 0;
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
                 r = rd_snprintf(&mcluster->bootstraps[of], bootstraps_len - of,
-                                "%s%s:%d", of > 0 ? "," : "",
+                                "%s%s:%hu", of > 0 ? "," : "",
                                 mrkb->advertised_listener, mrkb->port);
                 of += r;
                 rd_assert(of < bootstraps_len);

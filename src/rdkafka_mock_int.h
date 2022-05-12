@@ -192,7 +192,8 @@ typedef struct rd_kafka_mock_broker_s {
         TAILQ_ENTRY(rd_kafka_mock_broker_s) link;
         int32_t id;
         char advertised_listener[128];
-        int port;
+        struct sockaddr_in sin; /**< Bound address:port */
+        uint16_t port;
         char *rack;
         rd_bool_t up;
         rd_ts_t rtt; /**< RTT in microseconds */

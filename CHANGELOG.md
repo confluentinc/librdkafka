@@ -87,6 +87,12 @@ librdkafka v1.9.0 is a feature release:
  * If a metadata request triggered by `rd_kafka_metadata()` or consumer group rebalancing
    encountered a non-retriable error it would not be propagated to the caller and thus
    cause a stall or timeout, this has now been fixed. (@aiquestion, #3625)
+ * AdminAPI `DeleteGroups()` and `DeleteConsumerGroupOffsets()`:
+   if the given coordinator connection was not up by the time these calls were
+   initiated and the first connection attempt failed then no further connection
+   attempts were performed, ulimately leading to the calls timing out.
+   This is now fixed by keep retrying to connect to the group coordinator
+   until the connection is successful or the call times out.
  * Mock cluster `rd_kafka_mock_broker_set_down()` would previously
    accept and then disconnect new connections, it now refuses new connections.
 
@@ -128,7 +134,7 @@ librdkafka v1.9.0 is a feature release:
    (@kevinconaway)
 
 
-### Producer fixes
+### Transactional producer fixes
 
  * Fix message loss in idempotent/transactional producer.
    A corner case has been identified that may cause idempotent/transactional
@@ -162,6 +168,17 @@ librdkafka v1.9.0 is a feature release:
    broker (added in Apache Kafka 2.8), which could cause the producer to
    seemingly hang.
    This error code is now correctly handled by raising a fatal error.
+ * If the given group coordinator connection was not up by the time
+   `send_offsets_to_transactions()` was called, and the first connection
+   attempt failed then no further connection attempts were performed, ulimately
+   leading to `send_offsets_to_transactions()` timing out, and possibly
+   also the transaction timing out on the transaction coordinator.
+   This is now fixed by keep retrying to connect to the group coordinator
+   until the connection is successful or the call times out.
+
+
+### Producer fixes
+
  * Improved producer queue wakeup scheduling. This should significantly
    decrease the number of wakeups and thus syscalls for high message rate
    producers. (#3538, #2912)

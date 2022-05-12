@@ -253,7 +253,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         rd_ts_t rkb_ts_connect;
 
         /**< Persistent connection demand is tracked by
-         *   an counter for each type of demand.
+         *   a counter for each type of demand.
          *   The broker thread will maintain a persistent connection
          *   if any of the counters are non-zero, and revert to
          *   on-demand mode when they all reach zero.
@@ -276,7 +276,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                  *   rdkafka main thread.
                  *
                  *   Producer: Broker is the transaction coordinator.
-                 *   Counter is maintained by rdkafka_idempotence.c. */
+                 *   Counter is maintained by rdkafka_idempotence.c.
+                 *
+                 *   All: A coord_req_t is waiting for this broker to come up.
+                 */
+
                 rd_atomic32_t coord;
         } rkb_persistconn;
 

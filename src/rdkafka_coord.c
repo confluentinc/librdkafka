@@ -504,7 +504,8 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                         if (creq->creq_rkb) {
                                 /* Clear previous */
                                 rd_kafka_broker_persistent_connection_del(
-                                    rkb, &rkb->rkb_persistconn.coord);
+                                    creq->creq_rkb,
+                                    &creq->creq_rkb->rkb_persistconn.coord);
                                 rd_kafka_broker_destroy(creq->creq_rkb);
                         }
 

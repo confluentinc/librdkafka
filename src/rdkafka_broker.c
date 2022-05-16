@@ -291,6 +291,8 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
  * @locality broker thread
  */
 void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
+        rd_bool_t trigger_monitors = rd_false;
+
         if ((int)rkb->rkb_state == state)
                 return;
 
@@ -334,7 +336,7 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         /* Up -> Down */
                         rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt, 1);
 
-                        rd_kafka_broker_trigger_monitors(rkb);
+                        trigger_monitors = rd_true;
 
                         if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 rd_atomic32_add(
@@ -345,16 +347,28 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         /* ~Down(!Up) -> Up */
                         rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt, 1);
 
-                        rd_kafka_broker_trigger_monitors(rkb);
+                        trigger_monitors = rd_true;
 
                         if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
                                 rd_atomic32_sub(
                                     &rkb->rkb_rk->rk_logical_broker_up_cnt, 1);
                 }
+
+                /* If the connection or connection attempt failed and there
+                 * are coord_reqs or cgrp awaiting this coordinator to come up
+                 * then trigger the monitors so that rd_kafka_coord_req_fsm()
+                 * is triggered, which in turn may trigger a new coordinator
+                 * query. */
+                if (state == RD_KAFKA_BROKER_STATE_DOWN &&
+                    rd_atomic32_get(&rkb->rkb_persistconn.coord) > 0)
+                        trigger_monitors = rd_true;
         }
 
         rkb->rkb_state    = state;
         rkb->rkb_ts_state = rd_clock();
+
+        if (trigger_monitors)
+                rd_kafka_broker_trigger_monitors(rkb);
 
         rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 }

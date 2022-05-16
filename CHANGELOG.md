@@ -93,6 +93,9 @@ librdkafka v1.9.0 is a feature release:
    attempts were performed, ulimately leading to the calls timing out.
    This is now fixed by keep retrying to connect to the group coordinator
    until the connection is successful or the call times out.
+   Additionally, the coordinator will be now re-queried once per second until
+   the coordinator comes up or the call times out, to detect change in
+   coordinators.
  * Mock cluster `rd_kafka_mock_broker_set_down()` would previously
    accept and then disconnect new connections, it now refuses new connections.
 
@@ -175,6 +178,9 @@ librdkafka v1.9.0 is a feature release:
    also the transaction timing out on the transaction coordinator.
    This is now fixed by keep retrying to connect to the group coordinator
    until the connection is successful or the call times out.
+   Additionally, the coordinator will be now re-queried once per second until
+   the coordinator comes up or the call times out, to detect change in
+   coordinators.
 
 
 ### Producer fixes

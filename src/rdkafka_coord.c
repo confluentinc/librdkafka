@@ -234,6 +234,7 @@ void rd_kafka_coord_req(rd_kafka_t *rk,
         creq->creq_reply_opaque = reply_opaque;
         creq->creq_refcnt       = 1;
         creq->creq_done         = rd_false;
+        rd_interval_init(&creq->creq_query_intvl);
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
 
@@ -480,7 +481,22 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                                            rd_true /*done*/);
                         }
 
-                } else if (creq->creq_rkb != rkb) {
+                } else if (creq->creq_rkb == rkb) {
+                        /* No change in coordinator, but it is still not up.
+                         * Query for coordinator if at least a second has
+                         * passed since this coord_req was created or the
+                         * last time we queried. */
+                        if (rd_interval(&creq->creq_query_intvl,
+                                        1000 * 1000 /* 1s */, 0) > 0) {
+                                rd_rkb_dbg(rkb, BROKER, "COORD",
+                                           "Coordinator connection is "
+                                           "still down: "
+                                           "querying for new coordinator");
+                                rd_kafka_broker_destroy(rkb);
+                                goto query_coord;
+                        }
+
+                } else {
                         /* No connection yet.
                          * Let broker thread know we need a connection.
                          * We'll be re-triggered on broker state broadcast. */
@@ -510,7 +526,7 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                 creq->creq_rkb = NULL;
         }
 
-
+query_coord:
         /* Get any usable broker to look up the coordinator */
         rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, RD_DO_LOCK,
                                          RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
@@ -554,9 +570,9 @@ void rd_kafka_coord_rkb_monitor_cb(rd_kafka_broker_t *rkb) {
         rd_kafka_coord_req_t *creq, *tmp;
 
         /* Run through all coord_req fsms */
-
-        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp)
-        rd_kafka_coord_req_fsm(rk, creq);
+        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp) {
+                rd_kafka_coord_req_fsm(rk, creq);
+        }
 }
 
 

@@ -166,7 +166,7 @@ Example using `linger.ms=1000`:
 ```
 
 
-The default setting of `linger.ms=0.1` is not suitable for
+The default setting of `linger.ms=5` is not suitable for
 high throughput, it is recommended to set this value to >50ms, with
 throughput leveling out somewhere around 100-1000ms depending on
 message produce pattern and sizes.

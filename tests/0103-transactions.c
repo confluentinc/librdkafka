@@ -1003,6 +1003,10 @@ static void do_test_empty_txn(rd_bool_t send_offsets, rd_bool_t do_commit) {
         else
                 TEST_CALL_ERROR__(rd_kafka_abort_transaction(p, -1));
 
+        /* Wait before checking the committed offsets (Kafka < 2.5.0) */
+        if (test_broker_version < TEST_BRKVER(2, 5, 0, 0))
+                rd_usleep(tmout_multip(5000 * 1000), NULL);
+
         /* Get the committed offsets */
         TEST_CALL_ERR__(rd_kafka_assignment(c, &committed));
         TEST_CALL_ERR__(rd_kafka_committed(c, committed, 10 * 1000));

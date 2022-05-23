@@ -105,7 +105,9 @@
 #define RD_KAFKAP_AlterIsr                     56
 #define RD_KAFKAP_UpdateFeatures               57
 #define RD_KAFKAP_Envelope                     58
-#define RD_KAFKAP__NUM                         59
+#define RD_KAFKAP_GetTelemetrySubscriptions    59
+#define RD_KAFKAP_PushTelemetry                60
+#define RD_KAFKAP__NUM                         61
 
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

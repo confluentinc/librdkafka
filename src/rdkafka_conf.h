@@ -74,6 +74,73 @@ rd_kafka_compression2str(rd_kafka_compression_t compr) {
         return names[compr];
 }
 
+
+/**
+ * @brief Convert a Kafka protocol compression type value to
+ *        to librdkafka's internal representation.
+ *
+ * @returns a compression type, or RD_KAFKA_COMPRESSION_NONE if there was
+ *          no matching compression type or if there was no built-in support
+ *          for the given compression type.
+ */
+static RD_UNUSED int
+rd_kafka_compression_type_convert (int in_val,
+                                   rd_bool_t to_protocol,
+                                   rd_bool_t only_supported) {
+        static const struct {
+                int proto; /**< Protocol value (RD_KAFKA_MSG_ATTR_..) */
+                int local; /**< rd_kafka_compression_t */
+                rd_bool_t supported; /**< Supported by this build */
+        } types[] = {
+                {
+                        RD_KAFKA_MSG_ATTR_GZIP,
+                        RD_KAFKA_COMPRESSION_GZIP,
+#if WITH_ZLIB
+                        rd_true
+#endif
+                },
+                {
+                        RD_KAFKA_MSG_ATTR_SNAPPY,
+                        RD_KAFKA_COMPRESSION_SNAPPY,
+                        rd_true
+                },
+                {
+                        RD_KAFKA_MSG_ATTR_LZ4,
+                        RD_KAFKA_COMPRESSION_LZ4,
+                        rd_true
+                },
+                {
+                        RD_KAFKA_MSG_ATTR_ZSTD,
+                        RD_KAFKA_COMPRESSION_ZSTD,
+#if WITH_ZSTD
+                        rd_true
+#endif
+                }
+        };
+        int i;
+
+        for (i = 0 ; i < RD_ARRAYSIZE(types) ; i++) {
+                int ret = 0;
+
+                if (from_protocol) {
+                        if (types[i].proto != in_val)
+                                continue;
+                        ret = types[i].local;
+                } else {
+                        if (types[i].local != in_val)
+                                continue;
+                        ret = types[i].proto;
+                }
+
+                if (only_supported && !types[i].supported)
+                        return 0;
+
+                return ret;
+        }
+
+        return 0;
+}
+
 /**
  * MessageSet compression levels
  */

@@ -825,6 +825,12 @@ const char *rd_kafka_purge_flags2str(int flags);
 
 /**
  * Debug contexts
+ *
+ * @remark When adding a new debug type, also update:
+ *  - rdkafka.h: RD_KAFKA_DEBUG_CONTEXTS
+ *  - rdkafka_conf.c: the "debug" property
+ *  - rdkafka_eent.c: rd_kafka_event_debug_contexts()
+ *  - INTRODUCTION.md: Debug Contexts chapter
  */
 #define RD_KAFKA_DBG_GENERIC     0x1
 #define RD_KAFKA_DBG_BROKER      0x2
@@ -845,6 +851,7 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_MOCK        0x10000
 #define RD_KAFKA_DBG_ASSIGNOR    0x20000
 #define RD_KAFKA_DBG_CONF        0x40000
+#define RD_KAFKA_DBG_TELEMTRY    0x80000
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 

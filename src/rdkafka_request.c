@@ -4761,6 +4761,242 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
 
 
 /**
+ * @brief Parses and handles a GetTelemetrySubscriptions reply.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+void rd_kafka_handle_GetTelemetrySubscriptionsRequest(rd_kafka_t *rk,
+                                                      rd_kafka_broker_t *rkb,
+                                                      rd_kafka_resp_err_t err,
+                                                      rd_kafka_buf_t *rkbuf,
+                                                      rd_kafka_buf_t *request,
+                                                      void *opaque) {
+        const int log_decode_errors = LOG_ERR;
+        int16_t error_code;
+        rd_kafka_pid_t pid;
+        rd_kafkap_bytes_t kClientInstanceId;
+        const rd_uuid_t *ClientInstanceId = NULL;
+        int32_t SubscriptionId;
+        int32_t CompressionTypesCnt;
+        rd_kafka_compression_t CompressionType = RD_KAFKA_COMPRESSION_NONE;
+        int32_t RequestedMetricsCnt;
+        rd_list_t metrics;
+        int actions;
+
+        rd_list_init(&metrics, 0, rd_free);
+
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &error_code);
+        if ((err = error_code))
+                goto err;
+
+        rd_kafka_buf_read_bytes(rkbuf, &kClientInstanceId);
+        if (RD_KAFKAP_BYTES_LEN(&kClientInstanceId) > 0) {
+                if (RD_KAFKAP_BYTES_LEN(&kClientInstanceId) !=
+                    sizeof(rd_uuid_t))
+                        rd_kafka_buf_parse_fail(rkbuf,
+                                                "Expected 16 bytes ClientInstanceId, not %"PRId32,
+                                                RD_KAFKAP_BYTES_LEN(&kClientInstanceId));
+
+                uuid = (const rd_uuid_t *)kClientInstanceId.data;
+        }
+
+
+        rd_kafka_buf_read_i32(rkbuf, &SubscriptionId);
+
+        /* Read array of broker's accepted compression types, use first
+         * common supported type but scan through remaining types to
+         * consume the response buffer. */
+        rd_kafka_buf_read_arraycnt(rkbuf, &CompressionTypesCnt, 100);
+        while (CompressionTypesCnt-- >= 0) {
+                int8_t kCompressionType;
+                rd_kafka_buf_read_int8(rkbuf, &kCompressionType);
+
+                if (CompressionType == RD_KAFKA_COMPRESSION_NONE)
+                        CompressionType = (rd_kafka_compression_t)
+                                rd_kafka_compression_type_convert(
+                                        (int)kCompressionType,
+                                        rd_false/*from protocol*/,
+                                        rd_true/*only supported*/);
+
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &PushIntervalMs);
+        rd_kafka_buf_read_bool(rkbuf, &DeltaTemporality);
+
+        /*
+         * Read array of requested metric prefixes and populate list.
+         */
+        rd_kafka_buf_read_arraycnt(rkbuf, &RequestedMetricCnt, 1000);
+
+        rd_list_grow(&metrics, (int)RequestedMetricCnt);
+
+        while (RequestedMetricCnt-- >= 0) {
+                rd_kafkap_str_t prefix;
+                rd_kafka_buf_read_str(rkbuf, &prefix);
+
+                if (RD_KAFKAP_STR_IS_NULL(&prefix))
+                        continue;
+
+                if (RD_KAFKAP_STR_LEN(&prefix) > 1000)
+                        rd_kafka_buf_parse_fail(
+                                rkbuf,
+                                "Oversized RequestedMetrics prefix: %"PRI16" bytes > reasonable 1000 bytes",
+                                RD_KAFKAP_STR_LEN(&prefix));
+
+                rd_list_add(&metrics, RD_KAFKAP_STR_DUP(&prefix));
+        }
+
+        /* Update the metrics subscription state */
+        rd_kafka_metrics_subscription_update(rkb, err, ClientInstanceId,
+                                             SubscriptionId,
+                                             CompressionType,
+                                             PushIntervalMs,
+                                             DeltaTemporality,
+                                             &metrics);
+        rd_list_destroy(&metrics);
+
+        return;
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+err:
+        rd_list_destroy(&metrics);
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
+        actions = rd_kafka_err_action(rkb, err, request,
+                                      /* FIXME */
+                                      RD_KAFKA_ERR_ACTION_END);
+
+        if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+            rd_kafka_buf_retry(rkb, request))
+                return;
+
+        rd_rkb_log(rkb, LOG_WARNING, "METRICS",
+                   "GetTelemetrySubscriptions request failed: %s: %s",
+                   rd_kafka_err2str(err),
+                   rd_kafka_actions2str(actions));
+
+        rd_kafka_metrics_subscription_update(rkb, err, NULL, -1,
+                                             RD_KAFKA_COMPRESSION_NONE,
+                                             rd_false,
+                                             NULL);
+}
+
+
+/**
+ * @brief Construct and send GetTelemetrySubscriptionsRequest to \p rkb.
+ *
+ * @param ClientInstanceId if known, else NULL.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
+                                          const rd_uuid_t *ClientInstanceId,
+                                          char *errstr,
+                                          size_t errstr_size,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_GetTelemetrySubscriptions, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "GetTelemetrySubscriptions (KIP-714) not "
+                                    "supported by "
+                                    "broker, requires broker version >= 3.4.0: "
+                                    "metrics push not possible");
+                        rd_kafka_replyq_destroy(&replyq);
+                        return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_GetTelemetrySubscriptions, 1,
+            sizeof(ClientInstanceId),
+            rd_true /*flexver*/);
+
+        /* uuid */
+        rd_kafka_buf_write_bytes(rkbuf, ClientInstanceId, ClientInstanceId);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief Construct and send PushTelemetryRequest to \p rkb.
+ *
+ * @param ClientInstanceId if known, else NULL.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
+                              const rd_uuid_t *ClientInstanceId,
+                              int32_t SubscriptionId,
+                              rd_bool_t Terminating,
+                              rd_kafka_compression_t compression_type,
+                              const void *payload,
+                              size_t size,
+                              char *errstr,
+                              size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_PushTelemetry, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "PushTelemetry (KIP-714) not "
+                                    "supported by "
+                                    "broker, requires broker version >= 3.4.0: "
+                                    "metrics push not possible");
+                        rd_kafka_replyq_destroy(&replyq);
+                        return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_PushTelemetry, 1,
+            sizeof(ClientInstanceId) + 4 + 1 + 1,
+            rd_true /*flexver*/);
+
+        rd_kafka_buf_write_bytes(rkbuf, ClientInstanceId, ClientInstanceId);
+        rd_kafka_buf_write_i32(rkbuf, SubscriptionId);
+        rd_kafka_buf_write_bool(rkbuf, Terminating);
+        rd_kafka_buf_write_i8(rkbuf, rd_kafka_compression_type_to_proto
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
  * @name Unit tests
  * @{
  *

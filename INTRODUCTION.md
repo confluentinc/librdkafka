@@ -1270,6 +1270,7 @@ eos           | producer | Idempotent Producer debugging.
 mock          | *        | Mock cluster functionality debugging.
 assignor      | consumer | Detailed consumer group partition assignor debugging.
 conf          | *        | Display set configuration properties on startup.
+telemetry     | *        | Telemetry and metric collection and propagation.
 all           | *        | All of the above.
 
 

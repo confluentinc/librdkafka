@@ -242,7 +242,7 @@ const char *rd_kafka_get_debug_contexts(void);
 #define RD_KAFKA_DEBUG_CONTEXTS                                                \
         "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,"   \
         "security,fetch,interceptor,plugin,consumer,admin,eos,mock,assignor,"  \
-        "conf"
+        "conf,telemetry"
 
 
 /* @cond NO_DOC */
@@ -2982,6 +2982,15 @@ char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms);
  */
 RD_EXPORT
 int32_t rd_kafka_controllerid(rd_kafka_t *rk, int timeout_ms);
+
+
+/**
+ * @brief FIXME
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_clientinstanceid(rd_kafka_t *rk,
+                                            char **clientinstanceidp,
+                                            int timeout_ms);
 
 
 /**

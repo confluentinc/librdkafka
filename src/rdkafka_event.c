@@ -237,7 +237,7 @@ int rd_kafka_event_debug_contexts(rd_kafka_event_t *rkev,
             "generic", "broker",      "topic",    "metadata", "feature",
             "queue",   "msg",         "protocol", "cgrp",     "security",
             "fetch",   "interceptor", "plugin",   "consumer", "admin",
-            "eos",     "mock",        NULL};
+            "eos",     "mock", "conf", "telemetry",   NULL};
         if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
                 return -1;
         rd_flags2str(dst, dstsize, names, rkev->rko_u.log.ctx);

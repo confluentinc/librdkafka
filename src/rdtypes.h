@@ -43,7 +43,10 @@
  */
 typedef int64_t rd_ts_t;
 
-#define RD_TS_MAX INT64_MAX
+#define RD_TS_MILLI   1000
+#define RD_TS_SECOND  (1000 * 1000)
+#define RD_TS_MINUTE  (60 * RD_TS_SECOND)
+#define RD_TS_MAX     INT64_MAX
 
 
 typedef uint8_t rd_bool_t;

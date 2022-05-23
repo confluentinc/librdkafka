@@ -537,6 +537,47 @@ char **rd_string_split(const char *input,
         return arr;
 }
 
+
+/**
+ * @returns the textual representation of the \p uuid.
+ *
+ * @remark Has a thread-local rotary buffer of 4 return values.
+ *         E.g., may be called up to four times from the same printf statement.
+ */
+const char *rd_uuid2str(const rd_uuid_t *uuid) {
+        static RD_TLS char ret[4][36+1];
+        static RD_TLS int reti;
+
+        reti = (reti + 1) % 4;
+
+        /*
+         * UUID string representation:
+         * 8-4-4-4-12 for a total of 36 characters (32 hex chars and 4 hyphens)
+         *
+         *  123e4567-e89b-12d3-a456-426614174000
+         *  xxxxxxxx-xxxx-Mxxx-Nxxx-xxxxxxxxxxxx
+         *
+         * M = UUID Version
+         * N = UUID Variant
+         */
+        rd_snprintf(ret[reti], sizeof(ret[reti]),
+                    "%02x%02x%02x%02x-%02x%02x-%02x%02x-"
+                    "%02x%02x-%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                    /* xxxxxxxx */
+                    uuid[0], uuid[1], uuid[2], uuid[3],
+                    /* xxxx */
+                    uuid[4], uuid[5],
+                    /* Mxxx */
+                    uuid[6], uuid[7],
+                    /* Nxxx */
+                    uuid[8], uuid[9],
+                    /* xxxxxxxxxxxx */
+                    uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+
+        return ret[reti];
+}
+
+
 /**
  * @brief Unittest for rd_string_split()
  */

@@ -69,6 +69,19 @@ typedef enum {
 } rd_dolock_t;
 
 
+/** UUID binary representation */
+typedef unsigned char rd_uuid_t[16];
+
+#define rd_uuid_init(uuid)  memset(uuid, 0, sizeof(rd_uuid_t))
+
+static RD_INLINE RD_UNUSED rd_bool_t rd_uuid_is_valid (const rd_uuid_t *uuid) {
+        static const uuid_zero = RD_ZERO_INIT;
+        return memcmp(uuid, &uuid_zero, sizeof(*uuid)) ? rd_true : rd_false;
+}
+
+const char *rd_uuid2str(const rd_uuid_t *uuid);
+
+
 /*
  * Helpers
  */

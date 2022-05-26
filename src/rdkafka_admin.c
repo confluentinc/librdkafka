@@ -4266,7 +4266,7 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
         rko_result = rd_kafka_admin_result_new(rko_req);
 
         rd_list_init(&rko_result->rko_u.admin_result.results, acl_cnt,
-                     rd_kafka_topic_result_free);
+                     rd_kafka_acl_result_free);
 
         for (i = 0; i < (int)acl_cnt; i++) {
                 int16_t error_code;

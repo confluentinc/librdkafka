@@ -1117,6 +1117,59 @@ class RD_EXPORT SslCertificateVerifyCb {
 
 
 /**
+ *@brief SSL broker certificate verification class.
+ *
+ * @remark Class instance must outlive the RdKafka client instance.
+ */
+class RD_EXPORT SslCertificateRefreshEngineDataCb {
+ public:
+  /**
+   * @brief Sets a callback that provides a client certificate
+   *
+   * This callback, if set, is triggered from internal librdkafka threads
+   * upon connecting to a broker. If returns a certificate ID that will be
+   * passed into the engine through the engine load ssl client certificate
+   * callback
+   *
+   * The pointer *certificate_buf_size initially contains the maximum
+   * amount of bytes that can be written to *certificate_buf; the callback
+   * is expected to overwrite these values with the actual length of the
+   * certificate data it wrote (which should be no larger than the initial
+   * value of the buffer size)
+   *
+   * If the callback is able to provide a client certificate/key to
+   * librdkafka, it should:
+   *   - Return RD_KAFKA_CERT_REFRESH_OK,
+   *   - write a certificate ID to certificate_buf,
+   *   - write the size of the certificate to certificate_buf_size,
+   *
+   * Otherwise, if the provided buffer is too small (i.e
+   * *certificate_buf_size), then the callback should:
+   *   - Return RD_KAFKA_CERT_REFRESH_MORE_BUFFER,
+   *   - write the desired certificate buffer size to
+   * *certitficate_buf_size,
+   *
+   * If the callback is not able to provide a cert ID, it should simply
+   * return RD_KAFKA_CERT_REFRESH_NONE.
+   *
+   * @returns RD_KAFKA_CONF_OK if SSL is supported in this build, else
+   *          RD_KAFKA_CONF_INVALID.
+   *
+   * @warning This callback will be called from internal librdkafka
+   * threads.
+   * */
+
+  virtual int ssl_cert_refresh_engine_data_cb(char *buf,
+                                            size_t *buf_size,
+                                            std::string &errstr) = 0;
+
+  virtual ~SslCertificateRefreshEngineDataCb() {
+  }
+};
+
+
+
+/**
  * @brief \b Portability: SocketCb callback class
  *
  */
@@ -1295,6 +1348,14 @@ class RD_EXPORT Conf {
                                SslCertificateVerifyCb *ssl_cert_verify_cb,
                                std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"ssl_cert_refresh_engine_data_cb\".
+   *  @returns CONF_OK on success or CONF_INVALID if SSL is
+   *           not supported in this build.
+   */
+  virtual Conf::ConfResult set(const std::string &name,
+                               SslCertificateRefreshEngineDataCb *ssl_cert_refresh_engine_data_cb,
+                               std::string &errstr) = 0;
+
   /**
    * @brief Set certificate/key \p cert_type from the \p cert_enc encoded
    *        memory at \p buffer of \p size bytes.
@@ -1398,6 +1459,10 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
   virtual Conf::ConfResult get(
       SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
+
+  /** @brief Use with \p name = \c \"ssl_cert_refresh_engine_data_cb\" */
+  virtual Conf::ConfResult get(
+      SslCertificateRefreshEngineDataCb *&ssl_cert_refresh_engine_data_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

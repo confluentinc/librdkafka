@@ -413,6 +413,123 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
         return 1; /* verification successful */
 }
 
+static int rd_kafka_transport_ssl_cert_refresh_engine_data_cb(SSL *ssl,
+                                                              void *arg) {
+        rd_kafka_transport_t *rktrans = rd_kafka_curr_transport;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_t *rk;
+        rd_bool_t check_pkey = rd_false;
+        SSL_CTX *ctx         = SSL_get_SSL_CTX(ssl);
+        char errstr[512];
+        int r;
+        int ret = 1;
+
+
+        rd_assert(rktrans != NULL);
+        rkb = rktrans->rktrans_rkb;
+        rk  = rkb->rkb_rk;
+
+        rd_kafka_cert_refresh_engine_data_cb_res_t cb_res;
+        size_t buf_size = 0;
+        char *buf       = NULL;
+
+        rd_kafka_dbg(rk, SECURITY, "SSL", "inside SSL callback");
+
+        do {
+                if (buf)
+                        rd_kafka_mem_free(rk, buf);
+                buf = rd_malloc(buf_size);
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "invoking user provided callback");
+                cb_res = rk->rk_conf.ssl.cert_refresh_engine_data_cb(
+                    buf, &buf_size, errstr, sizeof(errstr), rk->rk_conf.opaque);
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "user SSL callback returned %d", cb_res);
+        } while (cb_res == RD_KAFKA_CERT_REFRESH_MORE_BUFFER);
+
+        if (cb_res == RD_KAFKA_CERT_REFRESH_ERR) {
+                ret = 0;  // abort handshake, fatal internal error
+                goto out;
+        }
+
+        if (rk->rk_conf.ssl.engine) {
+                STACK_OF(X509_NAME) *cert_names = sk_X509_NAME_new_null();
+                STACK_OF(X509_OBJECT) *roots =
+                    X509_STORE_get0_objects(SSL_CTX_get_cert_store(ctx));
+                X509 *x509     = NULL;
+                EVP_PKEY *pkey = NULL;
+                int i          = 0;
+                for (i = 0; i < sk_X509_OBJECT_num(roots); i++) {
+                        x509 = X509_OBJECT_get0_X509(
+                            sk_X509_OBJECT_value(roots, i));
+                        if (x509)
+                                sk_X509_NAME_push(cert_names,
+                                                  X509_get_subject_name(x509));
+                }
+
+                x509 = NULL;
+                r    = ENGINE_load_ssl_client_cert(rk->rk_conf.ssl.engine, NULL,
+                                                cert_names, &x509, &pkey, NULL,
+                                                NULL, buf);
+
+                if (cert_names)
+                        sk_X509_NAME_free(cert_names);
+
+                if (r != 1 || !x509 || !pkey) {
+                        rd_snprintf(errstr, sizeof(errstr),
+                                    "ENGINE_load_ssl_client_cert failed");
+
+                        if (x509)
+                                X509_free(x509);
+
+                        if (pkey)
+                                EVP_PKEY_free(pkey);
+
+                        ret = 0;
+                        goto out;
+                }
+
+                r = SSL_use_certificate(ssl, x509);
+                X509_free(x509);
+                if (r != 1) {
+                        rd_snprintf(
+                            errstr, sizeof(errstr),
+                            "Failed to use SSL_use_certificate with engine");
+                        EVP_PKEY_free(pkey);
+                        ret = 0;
+                        goto out;
+                }
+
+                r = SSL_use_PrivateKey(ssl, pkey);
+                EVP_PKEY_free(pkey);
+                if (r != 1) {
+                        rd_snprintf(
+                            errstr, sizeof(errstr),
+                            "Failed to use SSL_use_PrivateKey with engine");
+                        ret = 0;
+                        goto out;
+                }
+
+                check_pkey = rd_true;
+        }
+
+        /* Check that a valid private/public key combo was set. */
+        if (check_pkey && SSL_check_private_key(ssl) != 1) {
+                rd_snprintf(errstr, sizeof(errstr),
+                            "Private key check failed: ");
+                ret = 0;
+                goto out;
+        }
+
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+                     "successfully loaded SSL certificate");
+
+out:
+        if (buf)
+                rd_kafka_mem_free(rk, buf);
+        return ret;
+}
+
 /**
  * @brief Set TLSEXT hostname for SNI and optionally enable
  *        SSL endpoint identification verification.
@@ -1339,7 +1456,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                     NULL, NULL, rk->rk_conf.ssl.engine_callback_data);
 
                 sk_X509_NAME_free(cert_names);
-                if (r == -1 || !x509 || !pkey) {
+                if (r != 1 || !x509 || !pkey) {
                         X509_free(x509);
                         EVP_PKEY_free(pkey);
                         if (r == -1)
@@ -1559,6 +1676,11 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                            rk->rk_conf.ssl.cert_verify_cb
                                ? rd_kafka_transport_ssl_cert_verify_cb
                                : NULL);
+
+        if (rk->rk_conf.ssl.cert_refresh_engine_data_cb) {
+                rd_kafka_dbg(rk, SECURITY, "SSL", "setting SSL client callback");
+                SSL_CTX_set_cert_cb(ctx, rd_kafka_transport_ssl_cert_refresh_engine_data_cb, NULL);
+        }
 
 #if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
         /* Curves */

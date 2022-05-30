@@ -84,10 +84,11 @@ rd_kafka_background_queue_serve(rd_kafka_t *rk,
         /*
          * Handle non-event:able ops through the standard poll_cb that
          * will trigger type-specific callbacks (and return OP_RES_HANDLED)
-         * or do no handling and return OP_RES_PASS
+         * or do no handling and return OP_RES_PASS.
+         * Also signal yield to q_serve() (which implies that op was handled).
          */
         res = rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_CALLBACK, opaque);
-        if (res == RD_KAFKA_OP_RES_HANDLED)
+        if (res == RD_KAFKA_OP_RES_HANDLED || res == RD_KAFKA_OP_RES_YIELD)
                 return res;
 
         /* Op was not handled, log and destroy it. */
@@ -96,10 +97,6 @@ rd_kafka_background_queue_serve(rd_kafka_t *rk,
                      "non-event op %s in background queue: discarding",
                      rd_kafka_op2str(rko->rko_type));
         rd_kafka_op_destroy(rko);
-
-        /* Signal yield to q_serve() (implies that the op was handled). */
-        if (res == RD_KAFKA_OP_RES_YIELD)
-                return res;
 
         /* Indicate that the op was handled. */
         return RD_KAFKA_OP_RES_HANDLED;

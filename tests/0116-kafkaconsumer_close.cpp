@@ -33,6 +33,8 @@
 #include "testcpp.h"
 extern "C" {
 #include "test.h"
+#include "tinycthread.h"
+#include "rdatomic.h"
 }
 
 /**
@@ -40,15 +42,55 @@ extern "C" {
  */
 
 
+struct args {
+  RdKafka::Queue *queue;
+  RdKafka::KafkaConsumer *c;
+};
+
+static int run_polling_thread(void *p) {
+  struct args *args = (struct args *)p;
+
+  while (!args->c->closed()) {
+    RdKafka::Message *msg;
+
+    /* We use a long timeout to also verify that the
+     * consume() call is yielded/woken by librdkafka
+     * when consumer_close_queue() finishes. */
+    msg = args->queue->consume(60 * 1000 /*60s*/);
+    if (msg)
+      delete msg;
+  }
+
+  return 0;
+}
+
+
+static void start_polling_thread(thrd_t *thrd, struct args *args) {
+  if (thrd_create(thrd, run_polling_thread, (void *)args) != thrd_success)
+    Test::Fail("Failed to create thread");
+}
+
+static void stop_polling_thread(thrd_t thrd, struct args *args) {
+  int ret;
+  if (thrd_join(thrd, &ret) != thrd_success)
+    Test::Fail("Thread join failed");
+}
+
+
 static void do_test_consumer_close(bool do_subscribe,
                                    bool do_unsubscribe,
-                                   bool do_close) {
-  Test::Say(tostr() << _C_MAG << "[ Test C++ KafkaConsumer close "
-                    << "subscribe=" << do_subscribe << ", unsubscribe="
-                    << do_unsubscribe << ", close=" << do_close << " ]\n");
+                                   bool do_close,
+                                   bool with_queue) {
+  std::string testname = tostr()
+                         << "Test C++ KafkaConsumer close "
+                         << "subscribe=" << do_subscribe
+                         << ", unsubscribe=" << do_unsubscribe
+                         << ", close=" << do_close << ", queue=" << with_queue;
+  SUB_TEST("%s", testname.c_str());
 
   rd_kafka_mock_cluster_t *mcluster;
   const char *bootstraps;
+
   mcluster = test_mock_cluster_new(3, &bootstraps);
 
   std::string errstr;
@@ -104,13 +146,42 @@ static void do_test_consumer_close(bool do_subscribe,
       Test::Fail("unsubscribe failed: " + RdKafka::err2str(err));
 
   if (do_close) {
-    if ((err = c->close()))
-      Test::Fail("close failed: " + RdKafka::err2str(err));
+    if (with_queue) {
+      RdKafka::Queue *queue = RdKafka::Queue::create(c);
+      struct args args      = {queue, c};
+      thrd_t thrd;
 
-    /* A second call should fail */
-    if ((err = c->close()) != RdKafka::ERR__DESTROY)
-      Test::Fail("Expected second close to fail with DESTROY, not " +
-                 RdKafka::err2str(err));
+      /* Serve queue in background thread until close() is done */
+      start_polling_thread(&thrd, &args);
+
+      RdKafka::Error *error;
+
+      Test::Say("Closing with queue\n");
+      if ((error = c->close(queue)))
+        Test::Fail("close(queue) failed: " + error->str());
+
+      stop_polling_thread(thrd, &args);
+
+      Test::Say("Attempting second close\n");
+      /* A second call should fail */
+      if (!(error = c->close(queue)))
+        Test::Fail("Expected second close(queue) to fail");
+      if (error->code() != RdKafka::ERR__DESTROY)
+        Test::Fail("Expected second close(queue) to fail with DESTROY, not " +
+                   error->str());
+      delete error;
+
+      delete queue;
+
+    } else {
+      if ((err = c->close()))
+        Test::Fail("close failed: " + RdKafka::err2str(err));
+
+      /* A second call should fail */
+      if ((err = c->close()) != RdKafka::ERR__DESTROY)
+        Test::Fail("Expected second close to fail with DESTROY, not " +
+                   RdKafka::err2str(err));
+    }
   }
 
   /* Call an async method that will do nothing but verify that we're not
@@ -122,20 +193,21 @@ static void do_test_consumer_close(bool do_subscribe,
   delete c;
 
   test_mock_cluster_destroy(mcluster);
+
+  SUB_TEST_PASS();
 }
 
 extern "C" {
 int main_0116_kafkaconsumer_close(int argc, char **argv) {
   /* Parameters:
-   *  subscribe, unsubscribe, close */
-  do_test_consumer_close(true, true, true);
-  do_test_consumer_close(true, true, false);
-  do_test_consumer_close(true, false, true);
-  do_test_consumer_close(true, false, false);
-  do_test_consumer_close(false, true, true);
-  do_test_consumer_close(false, true, false);
-  do_test_consumer_close(false, false, true);
-  do_test_consumer_close(false, false, false);
+   *  subscribe, unsubscribe, close, with_queue */
+  for (int i = 0; i < 1 << 4; i++) {
+    bool subscribe   = i & (1 << 0);
+    bool unsubscribe = i & (1 << 1);
+    bool do_close    = i & (1 << 2);
+    bool with_queue  = i & (1 << 3);
+    do_test_consumer_close(subscribe, unsubscribe, do_close, with_queue);
+  }
 
   return 0;
 }

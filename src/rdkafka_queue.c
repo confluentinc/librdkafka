@@ -130,6 +130,8 @@ void rd_kafka_q_fwd_set0(rd_kafka_q_t *srcq,
                          rd_kafka_q_t *destq,
                          int do_lock,
                          int fwd_app) {
+        if (unlikely(srcq == destq))
+                return;
 
         if (do_lock)
                 mtx_lock(&srcq->rkq_lock);

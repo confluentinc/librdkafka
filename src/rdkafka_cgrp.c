@@ -429,6 +429,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rd_interval_init(&rkcg->rkcg_join_intvl);
         rd_interval_init(&rkcg->rkcg_timeout_scan_intvl);
         rd_atomic32_init(&rkcg->rkcg_assignment_lost, rd_false);
+        rd_atomic32_init(&rkcg->rkcg_terminated, rd_false);
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
 
@@ -2573,7 +2574,7 @@ static void rd_kafka_cgrp_heartbeat(rd_kafka_cgrp_t *rkcg) {
  * Cgrp is now terminated: decommission it and signal back to application.
  */
 static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATED)
+        if (rd_atomic32_get(&rkcg->rkcg_terminated))
                 return; /* terminated() may be called multiple times,
                          * make sure to only terminate once. */
 
@@ -2605,6 +2606,12 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
                 rkcg->rkcg_coord = NULL;
         }
 
+        rd_atomic32_set(&rkcg->rkcg_terminated, rd_true);
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
+                     "Consumer group sub-system terminated%s",
+                     rkcg->rkcg_reply_rko ? " (will enqueue reply)" : "");
+
         if (rkcg->rkcg_reply_rko) {
                 /* Signal back to application. */
                 rd_kafka_replyq_enq(&rkcg->rkcg_reply_rko->rko_replyq,
@@ -2612,7 +2619,8 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
                 rkcg->rkcg_reply_rko = NULL;
         }
 
-        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATED;
+        /* Remove cgrp application queue forwarding, if any. */
+        rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
 }
 
 

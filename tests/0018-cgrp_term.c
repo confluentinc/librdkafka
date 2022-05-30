@@ -27,6 +27,7 @@
  */
 
 #include "test.h"
+#include "rdstring.h"
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -123,9 +124,54 @@ static void consume_all(rd_kafka_t **rk_c,
         }
 }
 
+struct args {
+        rd_kafka_t *c;
+        rd_kafka_queue_t *queue;
+};
+
+static int poller_thread_main(void *p) {
+        struct args *args = (struct args *)p;
+
+        while (!rd_kafka_consumer_closed(args->c)) {
+                rd_kafka_message_t *rkm;
+
+                /* Using a long timeout (1 minute) to verify that the
+                 * queue is woken when close is done. */
+                rkm = rd_kafka_consume_queue(args->queue, 60 * 1000);
+                if (rkm)
+                        rd_kafka_message_destroy(rkm);
+        }
+
+        return 0;
+}
+
+/**
+ * @brief Close consumer using async queue.
+ */
+static void consumer_close_queue(rd_kafka_t *c) {
+        /* Use the standard consumer queue rather than a temporary queue,
+         * the latter is covered by test 0116. */
+        rd_kafka_queue_t *queue = rd_kafka_queue_get_consumer(c);
+        struct args args        = {c, queue};
+        thrd_t thrd;
+        int ret;
+
+        /* Spin up poller thread */
+        if (thrd_create(&thrd, poller_thread_main, (void *)&args) !=
+            thrd_success)
+                TEST_FAIL("Failed to create thread");
+
+        TEST_SAY("Closing consumer %s using queue\n", rd_kafka_name(c));
+        TEST_CALL_ERROR__(rd_kafka_consumer_close_queue(c, queue));
+
+        if (thrd_join(thrd, &ret) != thrd_success)
+                TEST_FAIL("thrd_join failed");
+
+        rd_kafka_queue_destroy(queue);
+}
 
 
-int main_0018_cgrp_term(int argc, char **argv) {
+static void do_test(rd_bool_t with_queue) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 #define _CONS_CNT 2
         rd_kafka_t *rk_p, *rk_c[_CONS_CNT];
@@ -141,6 +187,8 @@ int main_0018_cgrp_term(int argc, char **argv) {
         test_timing_t t_assign, t_consume;
         char errstr[512];
         int i;
+
+        SUB_TEST("with_queue=%s", RD_STR_ToF(with_queue));
 
         testid = test_id_generate();
 
@@ -201,9 +249,11 @@ int main_0018_cgrp_term(int argc, char **argv) {
         /* Now close one of the consumers, this will cause a rebalance. */
         TEST_SAY("Closing down 1/%d consumer(s): %s\n", _CONS_CNT,
                  rd_kafka_name(rk_c[0]));
-        err = rd_kafka_consumer_close(rk_c[0]);
-        if (err)
-                TEST_FAIL("consumer_close failed: %s\n", rd_kafka_err2str(err));
+        if (with_queue)
+                consumer_close_queue(rk_c[0]);
+        else
+                TEST_CALL_ERR__(rd_kafka_consumer_close(rk_c[0]));
+
         rd_kafka_destroy(rk_c[0]);
         rk_c[0] = NULL;
 
@@ -250,11 +300,11 @@ int main_0018_cgrp_term(int argc, char **argv) {
 
                 TEST_SAY("Closing %s\n", rd_kafka_name(rk_c[i]));
                 TIMING_START(&t_close, "CONSUMER.CLOSE");
-                err = rd_kafka_consumer_close(rk_c[i]);
+                if (with_queue)
+                        consumer_close_queue(rk_c[i]);
+                else
+                        TEST_CALL_ERR__(rd_kafka_consumer_close(rk_c[i]));
                 TIMING_STOP(&t_close);
-                if (err)
-                        TEST_FAIL("consumer_close failed: %s\n",
-                                  rd_kafka_err2str(err));
 
                 rd_kafka_destroy(rk_c[i]);
                 rk_c[i] = NULL;
@@ -269,6 +319,14 @@ int main_0018_cgrp_term(int argc, char **argv) {
                     "At least %d/%d messages were consumed "
                     "multiple times\n",
                     consumed_msg_cnt - msg_cnt, msg_cnt);
+
+        SUB_TEST_PASS();
+}
+
+
+int main_0018_cgrp_term(int argc, char **argv) {
+        do_test(rd_false /* rd_kafka_consumer_close() */);
+        do_test(rd_true /*  rd_kafka_consumer_close_queue() */);
 
         return 0;
 }

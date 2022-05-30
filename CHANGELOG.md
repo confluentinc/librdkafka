@@ -54,6 +54,10 @@ librdkafka v1.9.0 is a feature release:
    can now be triggered automatically on the librdkafka background thread.
  * `rd_kafka_queue_get_background()` now creates the background thread
    if not already created.
+ * Added `rd_kafka_consumer_close_queue()` and `rd_kafka_consumer_closed()`.
+   This allow applications and language bindings to implement asynchronous
+   consumer close where an application thread is polling for rebalance events
+   while the main thread is calling `consumer_close_queue()`.
  * Bundled zlib upgraded to version 1.2.12.
  * Bundled OpenSSL upgraded to 1.1.1n.
  * Added `test.mock.broker.rtt` to simulate RTT/latency for mock brokers.

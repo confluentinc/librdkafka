@@ -1367,6 +1367,12 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 
   ErrorCode close();
 
+  Error *close(Queue *queue);
+
+  bool closed() {
+    return rd_kafka_consumer_closed(rk_) ? true : false;
+  };
+
   ErrorCode seek(const TopicPartition &partition, int timeout_ms);
 
   ErrorCode offsets_store(std::vector<TopicPartition *> &offsets) {

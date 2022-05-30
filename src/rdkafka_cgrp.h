@@ -125,8 +125,7 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t *rkcg_ops;          /* Manager ops queue */
         rd_kafka_q_t *rkcg_wait_coord_q; /* Ops awaiting coord */
         int rkcg_flags;
-#define RD_KAFKA_CGRP_F_TERMINATE  0x1 /* Terminate cgrp (async) */
-#define RD_KAFKA_CGRP_F_TERMINATED 0x2 /* Cgrp terminated */
+#define RD_KAFKA_CGRP_F_TERMINATE 0x1 /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE                                 \
         0x8 /* Send LeaveGroup when                                            \
              * unassign is done */
@@ -278,6 +277,8 @@ typedef struct rd_kafka_cgrp_s {
         rd_ts_t rkcg_ts_terminate; /* Timestamp of when
                                     * cgrp termination was
                                     * initiated. */
+
+        rd_atomic32_t rkcg_terminated; /**< Consumer has been closed */
 
         /* Protected by rd_kafka_*lock() */
         struct {

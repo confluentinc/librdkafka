@@ -280,6 +280,17 @@ RdKafka::ErrorCode RdKafka::KafkaConsumerImpl::close() {
 }
 
 
+RdKafka::Error *RdKafka::KafkaConsumerImpl::close(Queue *queue) {
+  QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+  rd_kafka_error_t *c_error;
+
+  c_error = rd_kafka_consumer_close_queue(rk_, queueimpl->queue_);
+  if (c_error)
+    return new ErrorImpl(c_error);
+
+  return NULL;
+}
+
 
 RdKafka::ConsumerGroupMetadata::~ConsumerGroupMetadata() {
 }

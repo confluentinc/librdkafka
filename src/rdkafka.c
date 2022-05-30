@@ -50,6 +50,7 @@
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
 #include "rdkafka_event.h"
+#include "rdkafka_error.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
@@ -876,6 +877,26 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
         }
 
         return 1;
+}
+
+
+/**
+ * @returns a copy of the current fatal error, if any, else NULL.
+ *
+ * @locks_acquired rd_kafka_rdlock(rk)
+ */
+rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+
+        if (!(err = rd_atomic32_get(&rk->rk_fatal.err)))
+                return NULL; /* No fatal error raised */
+
+        rd_kafka_rdlock(rk);
+        error = rd_kafka_error_new_fatal(err, "%s", rk->rk_fatal.errstr);
+        rd_kafka_rdunlock(rk);
+
+        return error;
 }
 
 
@@ -3181,30 +3202,58 @@ rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms) {
 }
 
 
-rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+/**
+ * @brief Consumer close.
+ *
+ * @param rebalance_rkq If specified; rebalance events (etc) will be forwarded
+ *                      to this queue which must be served by the application
+ *                      until this call to close_queue() returns.
+ *                      If the consumer is not in a joined state, no rebalance
+ *                      events will be emitted.
+ *                      If not specified; this function will serve the rebalance
+ *                      callbacks.
+ *
+ */
+static rd_kafka_error_t *
+rd_kafka_consumer_close_q(rd_kafka_t *rk, rd_kafka_q_t *rebalance_rkq) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_op_t *rko;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        rd_kafka_error_t *error = NULL;
         rd_kafka_q_t *rkq;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+                                          "Consume close called on non-group "
+                                          "consumer");
 
         /* If a fatal error has been raised and this is an
          * explicit consumer_close() from the application we return
          * a fatal error. Otherwise let the "silent" no_consumer_close
          * logic be performed to clean up properly. */
-        if (rd_kafka_fatal_error_code(rk) &&
-            !rd_kafka_destroy_flags_no_consumer_close(rk))
-                return RD_KAFKA_RESP_ERR__FATAL;
+        if (!rd_kafka_destroy_flags_no_consumer_close(rk) &&
+            (error = rd_kafka_get_fatal_error(rk)))
+                return error;
 
         rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Closing consumer");
 
-        /* Redirect cgrp queue to our temporary queue to make sure
-         * all posted ops (e.g., rebalance callbacks) are served by
-         * this function. */
+        /* Create a temporary reply queue to handle the TERMINATE reply op. */
         rkq = rd_kafka_q_new(rk);
-        rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
+
+        /* Redirect cgrp queue to the rebalance queue (or our temporary queue)
+         * to make sure all posted ops (e.g., rebalance callbacks) are either
+         * served by the application (in case of the rebalance_rkq) or else by
+         * this function (below). */
+        if (rebalance_rkq) {
+                /* Only need to forward the queue if it is not already the
+                 * consumer queue. */
+                if (rkcg->rkcg_q != rebalance_rkq)
+                        rd_kafka_q_fwd_set(rkcg->rkcg_q, rebalance_rkq);
+                /* Maintain a reference count in case the application destroys
+                 * this queue as part of closing the consumer. */
+                rd_kafka_q_keep(rebalance_rkq);
+        } else {
+                rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
+        }
 
         rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 
@@ -3226,10 +3275,15 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                         rd_kafka_op_res_t res;
                         if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
                             RD_KAFKA_OP_TERMINATE) {
-                                err = rko->rko_err;
+                                if (rko->rko_err)
+                                        error = rd_kafka_error_new(
+                                            rko->rko_err,
+                                            "Consumer closed with error: %s",
+                                            rd_kafka_err2str(rko->rko_err));
                                 rd_kafka_op_destroy(rko);
                                 break;
                         }
+                        /* Handle callbacks */
                         res = rd_kafka_poll_cb(rk, rkq, rko,
                                                RD_KAFKA_Q_CB_RETURN, NULL);
                         if (res == RD_KAFKA_OP_RES_PASS)
@@ -3238,15 +3292,61 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                 }
         }
 
+        if (rebalance_rkq) {
+                /* Wake up the application-provided rebalance queue so the
+                 * application can exit its poll loop. */
+                rd_kafka_q_yield(rebalance_rkq);
+
+                /* Drop our reference */
+                rd_kafka_q_destroy(rebalance_rkq);
+        }
+
+        /* Reset cgrp queue forwarding as no further events will/must be
+         * emitted. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
 
         rd_kafka_q_destroy_owner(rkq);
 
-        rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Consumer closed");
+        if (error)
+                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE", "%s",
+                             rd_kafka_error_string(error));
+        else
+                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
+                             "Consumer closed");
 
-        return err;
+        return error;
 }
 
+rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
+                                                rd_kafka_queue_t *rkqu) {
+        if (!rkqu)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Queue must be specified");
+        return rd_kafka_consumer_close_q(rk, rkqu->rkqu_q);
+}
+
+rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+        rd_kafka_error_t *error;
+
+        error = rd_kafka_consumer_close_q(rk, NULL);
+        if (error) {
+                rd_kafka_resp_err_t err = rd_kafka_error_is_fatal(error)
+                                              ? RD_KAFKA_RESP_ERR__FATAL
+                                              : rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+int rd_kafka_consumer_closed(rd_kafka_t *rk) {
+        if (unlikely(!rk->rk_cgrp))
+                return 0;
+
+        return rd_atomic32_get(&rk->rk_cgrp->rkcg_terminated);
+}
 
 
 rd_kafka_resp_err_t

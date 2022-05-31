@@ -968,6 +968,12 @@ static int rd_kafka_transport_io_serve_win32(rd_kafka_transport_t *rktrans,
         } else if (r != WSA_WAIT_TIMEOUT) {
                 r -= WSA_WAIT_EVENT_0;
 
+                /* Reset the cond events if any of them were triggered */
+                if (r < 2) {
+                        ResetEvent(rkq->rkq_cond.mEvents[0]);
+                        ResetEvent(rkq->rkq_cond.mEvents[1]);
+                }
+
                 /* Get the socket events. */
                 events = rd_kafka_transport_get_wsa_events(rktrans);
         }

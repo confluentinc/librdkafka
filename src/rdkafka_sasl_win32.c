@@ -114,7 +114,7 @@ static CredHandle *rd_kafka_sasl_sspi_cred_new(rd_kafka_transport_t *rktrans,
         SEC_WINNT_AUTH_IDENTITY_A *swai_auth_data = NULL;
 
         if (rk->rk_conf.sasl.win32gssapi.username && strlen(rk->rk_conf.sasl.win32gssapi.username)) {
-			    swai_auth_data = rd_calloc(1, sizeof(*swai_auth_data));
+                swai_auth_data = rd_calloc(1, sizeof(*swai_auth_data));
                 swai_auth_data->User = rk->rk_conf.sasl.win32gssapi.username;
                 swai_auth_data->Domain = rk->rk_conf.sasl.win32gssapi.domain;
                 swai_auth_data->Password = rk->rk_conf.sasl.win32gssapi.password;
@@ -127,8 +127,8 @@ static CredHandle *rd_kafka_sasl_sspi_cred_new(rd_kafka_transport_t *rktrans,
         sr = AcquireCredentialsHandle(NULL, __TEXT("Kerberos"),
                                       SECPKG_CRED_OUTBOUND, NULL, swai_auth_data, NULL,
                                       NULL, cred, &expiry);
-		if (swai_auth_data)
-			rd_free(swai_auth_data);
+        if (swai_auth_data)
+                rd_free(swai_auth_data);
 
         if (sr != SEC_E_OK) {
                 rd_free(cred);

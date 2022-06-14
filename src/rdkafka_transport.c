@@ -72,7 +72,7 @@ static void rd_kafka_transport_close0(rd_kafka_t *rk, rd_socket_t s) {
         if (rk->rk_conf.closesocket_cb)
                 rk->rk_conf.closesocket_cb((int)s, rk->rk_conf.opaque);
         else
-                rd_close(s);
+                rd_socket_close(s);
 }
 
 /**
@@ -968,6 +968,12 @@ static int rd_kafka_transport_io_serve_win32(rd_kafka_transport_t *rktrans,
         } else if (r != WSA_WAIT_TIMEOUT) {
                 r -= WSA_WAIT_EVENT_0;
 
+                /* Reset the cond events if any of them were triggered */
+                if (r < 2) {
+                        ResetEvent(rkq->rkq_cond.mEvents[0]);
+                        ResetEvent(rkq->rkq_cond.mEvents[1]);
+                }
+
                 /* Get the socket events. */
                 events = rd_kafka_transport_get_wsa_events(rktrans);
         }
@@ -1240,13 +1246,11 @@ static int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
         if (r <= 0)
                 return r;
 
-        rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
-
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
                 char buf[1024];
-                while (rd_read((int)rktrans->rktrans_pfd[1].fd, buf,
-                               sizeof(buf)) > 0)
+                while (rd_socket_read((int)rktrans->rktrans_pfd[1].fd, buf,
+                                      sizeof(buf)) > 0)
                         ; /* Read all buffered signalling bytes */
         }
 

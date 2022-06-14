@@ -77,6 +77,9 @@ else
         echo "Building $MOCK_CONFIG in $PWD"
         cat $cfg_file
 
+        echo "Setting git safe.directory"
+        git config --global --add safe.directory /io
+
         export MOCK_CONFIG=$MOCK_CONFIG
         make all
 

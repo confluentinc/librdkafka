@@ -179,7 +179,7 @@ static RD_INLINE rd_ts_t rd_timeout_init(int timeout_ms) {
         if (timeout_ms == RD_POLL_INFINITE || timeout_ms == RD_POLL_NOWAIT)
                 return timeout_ms;
 
-        return rd_clock() + (timeout_ms * 1000);
+        return rd_clock() + ((rd_ts_t)timeout_ms * 1000);
 }
 
 

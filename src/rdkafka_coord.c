@@ -234,6 +234,7 @@ void rd_kafka_coord_req(rd_kafka_t *rk,
         creq->creq_reply_opaque = reply_opaque;
         creq->creq_refcnt       = 1;
         creq->creq_done         = rd_false;
+        rd_interval_init(&creq->creq_query_intvl);
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
 
@@ -268,6 +269,15 @@ static rd_bool_t rd_kafka_coord_req_destroy(rd_kafka_t *rk,
                 return rd_false;
 
         rd_dassert(creq->creq_done);
+
+        /* Clear out coordinator we were waiting for. */
+        if (creq->creq_rkb) {
+                rd_kafka_broker_persistent_connection_del(
+                    creq->creq_rkb, &creq->creq_rkb->rkb_persistconn.coord);
+                rd_kafka_broker_destroy(creq->creq_rkb);
+                creq->creq_rkb = NULL;
+        }
+
         rd_kafka_replyq_destroy(&creq->creq_replyq);
         rd_free(creq->creq_coordkey);
         rd_free(creq);
@@ -447,6 +457,15 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                         /* Cached coordinator is up, send request */
                         rd_kafka_replyq_t replyq;
 
+                        /* Clear out previous coordinator we waited for. */
+                        if (creq->creq_rkb) {
+                                rd_kafka_broker_persistent_connection_del(
+                                    creq->creq_rkb,
+                                    &creq->creq_rkb->rkb_persistconn.coord);
+                                rd_kafka_broker_destroy(creq->creq_rkb);
+                                creq->creq_rkb = NULL;
+                        }
+
                         rd_kafka_replyq_copy(&replyq, &creq->creq_replyq);
                         err = creq->creq_send_req_cb(rkb, creq->creq_rko,
                                                      replyq, creq->creq_resp_cb,
@@ -462,16 +481,53 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                                            rd_true /*done*/);
                         }
 
+                } else if (creq->creq_rkb == rkb) {
+                        /* No change in coordinator, but it is still not up.
+                         * Query for coordinator if at least a second has
+                         * passed since this coord_req was created or the
+                         * last time we queried. */
+                        if (rd_interval(&creq->creq_query_intvl,
+                                        1000 * 1000 /* 1s */, 0) > 0) {
+                                rd_rkb_dbg(rkb, BROKER, "COORD",
+                                           "Coordinator connection is "
+                                           "still down: "
+                                           "querying for new coordinator");
+                                rd_kafka_broker_destroy(rkb);
+                                goto query_coord;
+                        }
+
                 } else {
-                        /* No connection yet. We'll be re-triggered on
-                         * broker state broadcast. */
-                        rd_kafka_broker_schedule_connection(rkb);
+                        /* No connection yet.
+                         * Let broker thread know we need a connection.
+                         * We'll be re-triggered on broker state broadcast. */
+
+                        if (creq->creq_rkb) {
+                                /* Clear previous */
+                                rd_kafka_broker_persistent_connection_del(
+                                    creq->creq_rkb,
+                                    &creq->creq_rkb->rkb_persistconn.coord);
+                                rd_kafka_broker_destroy(creq->creq_rkb);
+                        }
+
+                        rd_kafka_broker_keep(rkb);
+                        creq->creq_rkb = rkb;
+                        rd_kafka_broker_persistent_connection_add(
+                            rkb, &rkb->rkb_persistconn.coord);
                 }
 
                 rd_kafka_broker_destroy(rkb);
                 return;
+
+        } else if (creq->creq_rkb) {
+                /* No coordinator information, clear out the previous
+                 * coordinator we waited for. */
+                rd_kafka_broker_persistent_connection_del(
+                    creq->creq_rkb, &creq->creq_rkb->rkb_persistconn.coord);
+                rd_kafka_broker_destroy(creq->creq_rkb);
+                creq->creq_rkb = NULL;
         }
 
+query_coord:
         /* Get any usable broker to look up the coordinator */
         rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, RD_DO_LOCK,
                                          RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
@@ -515,9 +571,9 @@ void rd_kafka_coord_rkb_monitor_cb(rd_kafka_broker_t *rkb) {
         rd_kafka_coord_req_t *creq, *tmp;
 
         /* Run through all coord_req fsms */
-
-        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp)
-        rd_kafka_coord_req_fsm(rk, creq);
+        TAILQ_FOREACH_SAFE(creq, &rk->rk_coord_reqs, creq_link, tmp) {
+                rd_kafka_coord_req_fsm(rk, creq);
+        }
 }
 
 

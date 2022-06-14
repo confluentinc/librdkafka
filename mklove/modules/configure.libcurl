@@ -24,6 +24,7 @@ function manual_checks {
     mkl_meta_set "libcurl" "static" "libcurl.a"
     if [[ $MKL_DISTRO == "osx" && $WITH_STATIC_LINKING ]]; then
         mkl_env_append LDFLAGS "-framework CoreFoundation -framework SystemConfiguration"
+        mkl_mkvar_append "libcurl" MKL_PKGCONFIG_LIBS_PRIVATE "-framework CoreFoundation -framework SystemConfiguration"
     fi
     mkl_lib_check "libcurl" "WITH_CURL" $action CC "-lcurl" \
                   "

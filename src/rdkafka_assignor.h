@@ -98,6 +98,9 @@ typedef struct rd_kafka_assignor_s {
 
         int rkas_enabled;
 
+        /** Order for strategies. */
+        int rkas_index;
+
         rd_kafka_rebalance_protocol_t rkas_protocol;
 
         rd_kafka_resp_err_t (*rkas_assign_cb)(

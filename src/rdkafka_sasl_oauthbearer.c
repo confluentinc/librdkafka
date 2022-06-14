@@ -36,7 +36,7 @@
 #include <openssl/evp.h>
 #include "rdunittest.h"
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 
@@ -442,7 +442,8 @@ rd_kafka_oauthbearer_set_token0(rd_kafka_t *rk,
         rd_kafka_dbg(rk, SECURITY, "BRKMAIN",
                      "Waking up waiting broker threads after "
                      "setting OAUTHBEARER token");
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_TRY_CONNECT,
+                                    "OAUTHBEARER token update");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -1324,7 +1325,7 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
                 handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
         }
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
             rk->rk_conf.sasl.oauthbearer.token_refresh_cb ==

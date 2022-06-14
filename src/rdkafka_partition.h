@@ -263,7 +263,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                            * application + 1.
                                            * Is reset to INVALID_OFFSET
                                            * when partition is
-                                           * unassigned/stopped. */
+                                           * unassigned/stopped/seeked. */
         int64_t rktp_stored_offset;       /* Last stored offset, but
                                            * maybe not committed yet. */
         int64_t rktp_committing_offset;   /* Offset currently being
@@ -344,6 +344,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ON_DESP 0x400  /**< On rkt_desp list */
 #define RD_KAFKA_TOPPAR_F_ON_CGRP 0x800  /**< On rkcg_toppars list */
 #define RD_KAFKA_TOPPAR_F_ON_RKB  0x1000 /**< On rkb_toppars list */
+#define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
+        0x2000 /**< Toppar is part of the consumer                             \
+                *   assignment. */
 
         /*
          * Timers
@@ -446,7 +449,9 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
 void rd_kafka_toppar_purge_and_disable_queues(rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state);
 void rd_kafka_toppar_insert_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now);
 int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         rd_kafka_msgq_t *srcq,
                         int incr_retry,

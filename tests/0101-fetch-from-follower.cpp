@@ -303,6 +303,7 @@ static void do_fff_test(void) {
 
   if (get_broker_rack_count(replica_ids) != 3) {
     Test::Skip("unexpected broker.rack configuration: skipping test.\n");
+    return;
   }
 
   /* arrange for the consumer's client.rack to align with a broker that is not

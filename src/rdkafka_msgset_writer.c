@@ -989,7 +989,7 @@ static int rd_kafka_msgset_writer_compress_gzip(rd_kafka_msgset_writer_t *msetw,
                 strm.avail_in = (uInt)rlen;
 
                 /* Compress message */
-                if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
+                if ((r = deflate(&strm, Z_NO_FLUSH)) != Z_OK) {
                         rd_rkb_log(rkb, LOG_ERR, "GZIP",
                                    "Failed to gzip-compress "
                                    "%" PRIusz " bytes (%" PRIusz

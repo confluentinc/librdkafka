@@ -33,11 +33,12 @@
 #define _RD_WIN32_CONFIG_H_
 
 #ifndef WITHOUT_WIN32_CONFIG
-#define WITH_SSL    1
-#define WITH_ZLIB   1
-#define WITH_SNAPPY 1
-#define WITH_ZSTD   1
-#define WITH_CURL   1
+#define WITH_SSL              1
+#define WITH_ZLIB             1
+#define WITH_SNAPPY           1
+#define WITH_ZSTD             1
+#define WITH_CURL             1
+#define WITH_OAUTHBEARER_OIDC 1
 /* zstd is linked dynamically on Windows, but the dynamic library provides
  * the experimental/advanced API, just as the static builds on *nix */
 #define WITH_ZSTD_STATIC      1

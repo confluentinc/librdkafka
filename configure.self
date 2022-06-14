@@ -146,6 +146,10 @@ void foo (void) {
         # SASL OAUTHBEARER's default unsecured JWS implementation
         # requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
+
+        if [[ $WITH_CURL == y ]]; then
+            mkl_allvar_set WITH_OAUTHBEARER_OIDC WITH_OAUTHBEARER_OIDC y
+        fi
     fi
 
     # CRC32C: check for crc32 instruction support.

@@ -752,7 +752,8 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
 
         /* Since these partitions are now allowed to produce
          * we wake up all broker threads. */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                    "partitions added to transaction");
 
         goto done;
 
@@ -1418,7 +1419,8 @@ static rd_kafka_op_res_t rd_kafka_txn_op_begin_transaction(rd_kafka_t *rk,
         rd_kafka_wrunlock(rk);
 
         if (wakeup_brokers)
-                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT);
+                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                            "begin transaction");
 
         rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
                                           error);

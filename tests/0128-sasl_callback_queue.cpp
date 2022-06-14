@@ -42,7 +42,7 @@ class MyCb : public RdKafka::OAuthBearerTokenRefreshCb {
     rd_atomic32_init(&called_, 0);
   }
 
-  bool called () {
+  bool called() {
     return rd_atomic32_get(&called_) > 0;
   }
 

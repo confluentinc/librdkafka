@@ -670,8 +670,9 @@ void rd_kafka_toppar_desired_del(rd_kafka_toppar_t *rktp) {
 /**
  * Append message at tail of 'rktp' message queue.
  */
-void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-        int queue_len;
+void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
+                             rd_kafka_msg_t *rkm,
+                             rd_ts_t now) {
         rd_kafka_q_t *wakeup_q = NULL;
 
         rd_kafka_toppar_lock(rktp);
@@ -683,18 +684,22 @@ void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
             rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
                 /* No need for enq_sorted(), this is the oldest message. */
-                queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         } else {
-                queue_len = rd_kafka_msgq_enq_sorted(rktp->rktp_rkt,
-                                                     &rktp->rktp_msgq, rkm);
+                rd_kafka_msgq_enq_sorted(rktp->rktp_rkt, &rktp->rktp_msgq, rkm);
         }
 
-        if (unlikely(queue_len == 1 && (wakeup_q = rktp->rktp_msgq_wakeup_q)))
+        if (unlikely(rktp->rktp_partition != RD_KAFKA_PARTITION_UA &&
+                     rd_kafka_msgq_may_wakeup(&rktp->rktp_msgq, now) &&
+                     (wakeup_q = rktp->rktp_msgq_wakeup_q))) {
+                /* Wake-up broker thread */
+                rktp->rktp_msgq.rkmq_wakeup.signalled = rd_true;
                 rd_kafka_q_keep(wakeup_q);
+        }
 
         rd_kafka_toppar_unlock(rktp);
 
-        if (wakeup_q) {
+        if (unlikely(wakeup_q != NULL)) {
                 rd_kafka_q_yield(wakeup_q);
                 rd_kafka_q_destroy(wakeup_q);
         }
@@ -1209,8 +1214,8 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
                  * See issue #2105. */
                 rktp->rktp_next_offset = Offset;
 
-                rd_kafka_offset_reset(rktp, Offset, RD_KAFKA_RESP_ERR_NO_ERROR,
-                                      "update");
+                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, Offset,
+                                      RD_KAFKA_RESP_ERR_NO_ERROR, "update");
                 return;
         }
 
@@ -1244,7 +1249,7 @@ void rd_kafka_toppar_next_offset_handle(rd_kafka_toppar_t *rktp,
 
         /* Wake-up broker thread which might be idling on IO */
         if (rktp->rktp_broker)
-                rd_kafka_broker_wakeup(rktp->rktp_broker);
+                rd_kafka_broker_wakeup(rktp->rktp_broker, "ready to fetch");
 }
 
 
@@ -1376,8 +1381,8 @@ static void rd_kafka_toppar_handle_Offset(rd_kafka_t *rk,
                         /* Permanent error. Trigger auto.offset.reset policy
                          * and signal error back to application. */
 
-                        rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
-                                              err,
+                        rd_kafka_offset_reset(rktp, rkb->rkb_nodeid,
+                                              rktp->rktp_query_offset, err,
                                               "failed to query logical offset");
 
                         rd_kafka_consumer_err(
@@ -1608,7 +1613,7 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
                 rd_kafka_offset_store_init(rktp);
 
         } else if (offset == RD_KAFKA_OFFSET_INVALID) {
-                rd_kafka_offset_reset(rktp, offset,
+                rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, offset,
                                       RD_KAFKA_RESP_ERR__NO_OFFSET,
                                       "no previously committed offset "
                                       "available");
@@ -1620,7 +1625,8 @@ static void rd_kafka_toppar_fetch_start(rd_kafka_toppar_t *rktp,
 
                 /* Wake-up broker thread which might be idling on IO */
                 if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker);
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "fetch start");
         }
 
         rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
@@ -1758,6 +1764,11 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_op_version_bump(rktp, version);
 
+        /* Reset app offsets since seek()ing is analogue to a (re)assign(),
+         * and we want to avoid using the current app offset on resume()
+         * following a seek (#3567). */
+        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+
         /* Abort pending offset lookups. */
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
                 rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
@@ -1772,7 +1783,7 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
 
                 /* Wake-up broker thread which might be idling on IO */
                 if (rktp->rktp_broker)
-                        rd_kafka_broker_wakeup(rktp->rktp_broker);
+                        rd_kafka_broker_wakeup(rktp->rktp_broker, "seek done");
         }
 
         /* Signal back to caller thread that seek has commenced, or err */
@@ -2237,7 +2248,7 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
                 if (offset >= 0)
                         rd_kafka_toppar_next_offset_handle(rktp, offset);
                 else
-                        rd_kafka_offset_reset(rktp, offset,
+                        rd_kafka_offset_reset(rktp, RD_KAFKA_NODEID_UA, offset,
                                               RD_KAFKA_RESP_ERR__NO_OFFSET,
                                               "no previously committed offset "
                                               "available");

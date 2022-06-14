@@ -3404,7 +3404,8 @@ void rd_kafka_queue_forward(rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
  *
  * @remark librdkafka maintains its own reference to the provided queue.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error,
+ * eg RD_KAFKA_RESP_ERR__NOT_CONFIGURED when log.queue is not set to true.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
@@ -3588,9 +3589,14 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  * @brief Seek consumer for topic+partition to \p offset which is either an
  *        absolute or logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seek to be performed. If the timeout is reached the internal state
- * will be unknown and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
  *
@@ -3621,11 +3627,13 @@ rd_kafka_resp_err_t rd_kafka_seek(rd_kafka_topic_t *rkt,
  *
  * The offset may be either absolute (>= 0) or a logical offset.
  *
- * If \p timeout_ms is not 0 the call will wait this long for the
- * seeks to be performed. If the timeout is reached the internal state
- * will be unknown for the remaining partitions to seek and this function
- * will return an error with the error code set to
- * `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If \p timeout_ms is specified (not 0) the seek call will wait this long
+ * for the consumer to update its fetcher state for the given partition with
+ * the new offset. This guarantees that no previously fetched messages for the
+ * old offset (or fetch position) will be passed to the application.
+ *
+ * If the timeout is reached the internal state will be unknown to the caller
+ * and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
  *
  * If \p timeout_ms is 0 it will initiate the seek but return
  * immediately without any error reporting (e.g., async).
@@ -3824,6 +3832,15 @@ int rd_kafka_consume_callback_queue(
  * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
+ *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
@@ -3841,18 +3858,27 @@ rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
  * to \c `auto.commit.interval.ms` or manual offset-less commit().
  *
  * Per-partition success/error status propagated through each partition's
- * \c .err field.
+ * \c .err for all return values (even NO_ERROR) except INVALID_ARG.
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
  *
  * @remark The \c .offset field is stored as is, it will NOT be + 1.
  *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
- *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
- *          offsets could be stored, or
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on (partial) success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
- *          is true.
+ *          is true, or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or RD_KAFKA_RESP_ERR__STATE
+ *          if none of the offsets could be stored.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_store(rd_kafka_t *rk,
@@ -3969,12 +3995,12 @@ RD_EXPORT
 rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms);
 
 /**
- * @brief Close down the KafkaConsumer.
+ * @brief Close the consumer.
  *
- * @remark This call will block until the consumer has revoked its assignment,
- *         calling the \c rebalance_cb if it is configured, committed offsets
- *         to broker, and left the consumer group.
- *         The maximum blocking time is roughly limited to session.timeout.ms.
+ * This call will block until the consumer has revoked its assignment,
+ * calling the \c rebalance_cb if it is configured, committed offsets
+ * to broker, and left the consumer group (if applicable).
+ * The maximum blocking time is roughly limited to session.timeout.ms.
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.
@@ -3987,6 +4013,40 @@ rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms);
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk);
+
+
+/**
+ * @brief Asynchronously close the consumer.
+ *
+ * Performs the same actions as rd_kafka_consumer_close() but in a
+ * background thread.
+ *
+ * Rebalance events/callbacks (etc) will be forwarded to the
+ * application-provided \p rkqu. The application must poll/serve this queue
+ * until rd_kafka_consumer_closed() returns true.
+ *
+ * @remark Depending on consumer group join state there may or may not be
+ *         rebalance events emitted on \p rkqu.
+ *
+ * @returns an error object if the consumer close failed, else NULL.
+ *
+ * @sa rd_kafka_consumer_closed()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
+                                                rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @returns 1 if the consumer is closed, else 0.
+ *
+ * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
+ * when the consumer has been closed.
+ *
+ * @sa rd_kafka_consumer_close_queue()
+ */
+RD_EXPORT
+int rd_kafka_consumer_closed(rd_kafka_t *rk);
 
 
 /**
@@ -5601,6 +5661,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_plugin_f_conf_init_t)(
  * @brief on_conf_set() is called from rd_kafka_*_conf_set() in the order
  *        the interceptors were added.
  *
+ * @param conf Configuration object.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  * @param name The configuration property to set.
  * @param val The configuration value to set, or NULL for reverting to default
@@ -5634,6 +5695,11 @@ typedef rd_kafka_conf_res_t(rd_kafka_interceptor_f_on_conf_set_t)(
  *        \p old_conf being copied to \p new_conf.
  *
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ * @param new_conf New configuration object.
+ * @param old_conf Old configuration object to copy properties from.
+ * @param filter_cnt Number of property names to filter in \p filter.
+ * @param filter Property names to filter out (ignore) when setting up
+ *               \p new_conf.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code
  *          on failure (which is logged but otherwise ignored).
@@ -5778,6 +5844,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_consume_t)(
  * @param offsets List of topic+partition+offset+error that were committed.
  *                The error message of each partition should be checked for
  *                error.
+ * @param err The commit error, if any.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
  * @remark This interceptor is only used by consumer instances.
@@ -5807,7 +5874,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_commit_t)(
  * @param brokerid Broker request is being sent to.
  * @param ApiKey Kafka protocol request type.
  * @param ApiVersion Kafka protocol request type version.
- * @param Corrid Kafka protocol request correlation id.
+ * @param CorrId Kafka protocol request correlation id.
  * @param size Size of request.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
@@ -5842,7 +5909,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_request_sent_t)(
  * @param brokerid Broker response was received from.
  * @param ApiKey Kafka protocol request type or -1 on error.
  * @param ApiVersion Kafka protocol request type version or -1 on error.
- * @param Corrid Kafka protocol request correlation id, possibly -1 on error.
+ * @param CorrId Kafka protocol request correlation id, possibly -1 on error.
  * @param size Size of response, possibly 0 on error.
  * @param rtt Request round-trip-time in microseconds, possibly -1 on error.
  * @param err Receive error.

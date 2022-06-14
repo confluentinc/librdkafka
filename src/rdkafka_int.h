@@ -930,6 +930,8 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
 #define rd_kafka_set_fatal_error(rk, err, fmt, ...)                            \
         rd_kafka_set_fatal_error0(rk, RD_DO_LOCK, err, fmt, __VA_ARGS__)
 
+rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk);
+
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly

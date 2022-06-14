@@ -47,7 +47,7 @@
 
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 #include "rdkafka_msgset.h"
@@ -149,8 +149,8 @@ static struct ut_tq *ut_tq_find_prev_pos(const struct ut_tq_head *head,
 }
 
 static int ut_tq_test(const struct ut_tq_args *args) {
-        int totcnt = 0;
-        int fails  = 0;
+        int totcnt                = 0;
+        int fails                 = 0;
         struct ut_tq_head *tqh[3] = {NULL, NULL, NULL};
         struct ut_tq *e, *insert_after;
         int i, qi;
@@ -422,6 +422,8 @@ extern int unittest_assignors(void);
 extern int unittest_map(void);
 #if WITH_CURL
 extern int unittest_http(void);
+#endif
+#if WITH_OAUTHBEARER_OIDC
 extern int unittest_sasl_oauthbearer_oidc(void);
 #endif
 
@@ -460,6 +462,8 @@ int rd_unittest(void) {
                 {"assignors", unittest_assignors},
 #if WITH_CURL
                 {"http", unittest_http},
+#endif
+#if WITH_OAUTHBEARER_OIDC
                 {"sasl_oauthbearer_oidc", unittest_sasl_oauthbearer_oidc},
 #endif
                 {NULL}

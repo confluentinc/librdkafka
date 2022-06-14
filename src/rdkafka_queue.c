@@ -130,6 +130,8 @@ void rd_kafka_q_fwd_set0(rd_kafka_q_t *srcq,
                          rd_kafka_q_t *destq,
                          int do_lock,
                          int fwd_app) {
+        if (unlikely(srcq == destq))
+                return;
 
         if (do_lock)
                 mtx_lock(&srcq->rkq_lock);
@@ -645,9 +647,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 }
                 rd_dassert(res == RD_KAFKA_OP_RES_PASS);
 
-                /* Auto-store offset, if enabled. */
                 if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {
-                        rd_kafka_op_offset_store(rk, rko);
+                        /* Store offset, etc. */
+                        rd_kafka_fetch_op_app_prepare(rk, rko);
 
                         /* If this is a control messages, don't return
                          * message to application, only store the offset */
@@ -769,6 +771,10 @@ rd_kafka_queue_t *rd_kafka_queue_get_background(rd_kafka_t *rk) {
 rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
                                            rd_kafka_queue_t *rkqu) {
         rd_kafka_q_t *rkq;
+
+        if (!rk->rk_logq)
+                return RD_KAFKA_RESP_ERR__NOT_CONFIGURED;
+
         if (!rkqu)
                 rkq = rk->rk_rep;
         else

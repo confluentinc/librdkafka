@@ -50,11 +50,12 @@
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
 #include "rdkafka_event.h"
+#include "rdkafka_error.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
 #if WITH_SSL
@@ -876,6 +877,26 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
         }
 
         return 1;
+}
+
+
+/**
+ * @returns a copy of the current fatal error, if any, else NULL.
+ *
+ * @locks_acquired rd_kafka_rdlock(rk)
+ */
+rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+
+        if (!(err = rd_atomic32_get(&rk->rk_fatal.err)))
+                return NULL; /* No fatal error raised */
+
+        rd_kafka_rdlock(rk);
+        error = rd_kafka_error_new_fatal(err, "%s", rk->rk_fatal.errstr);
+        rd_kafka_rdunlock(rk);
+
+        return error;
 }
 
 
@@ -2248,13 +2269,14 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                     RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 #endif
 
-#if WITH_CURL
+#if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
             !rk->rk_conf.sasl.oauthbearer.token_refresh_cb)
                 rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                     &rk->rk_conf, rd_kafka_oidc_token_refresh_cb);
 #endif
+
         rk->rk_controllerid = -1;
 
         /* Admin client defaults */
@@ -2312,6 +2334,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         /* Create Mock cluster */
         rd_atomic32_init(&rk->rk_mock.cluster_cnt, 0);
         if (rk->rk_conf.mock.broker_cnt > 0) {
+                const char *mock_bootstraps;
                 rk->rk_mock.cluster =
                     rd_kafka_mock_cluster_new(rk, rk->rk_conf.mock.broker_cnt);
 
@@ -2323,16 +2346,18 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         goto fail;
                 }
 
+                mock_bootstraps =
+                    rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
                 rd_kafka_log(rk, LOG_NOTICE, "MOCK",
                              "Mock cluster enabled: "
                              "original bootstrap.servers and security.protocol "
-                             "ignored and replaced");
+                             "ignored and replaced with %s",
+                             mock_bootstraps);
 
                 /* Overwrite bootstrap.servers and connection settings */
-                if (rd_kafka_conf_set(
-                        &rk->rk_conf, "bootstrap.servers",
-                        rd_kafka_mock_cluster_bootstraps(rk->rk_mock.cluster),
-                        NULL, 0) != RD_KAFKA_CONF_OK)
+                if (rd_kafka_conf_set(&rk->rk_conf, "bootstrap.servers",
+                                      mock_bootstraps, NULL,
+                                      0) != RD_KAFKA_CONF_OK)
                         rd_assert(!"failed to replace mock bootstrap.servers");
 
                 if (rd_kafka_conf_set(&rk->rk_conf, "security.protocol",
@@ -2340,6 +2365,12 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_assert(!"failed to reset mock security.protocol");
 
                 rk->rk_conf.security_protocol = RD_KAFKA_PROTO_PLAINTEXT;
+
+                /* Apply default RTT to brokers */
+                if (rk->rk_conf.mock.broker_rtt)
+                        rd_kafka_mock_broker_set_rtt(
+                            rk->rk_mock.cluster, -1 /*all brokers*/,
+                            rk->rk_conf.mock.broker_rtt);
         }
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
@@ -2969,7 +3000,7 @@ static rd_kafka_op_res_t rd_kafka_consume_cb(rd_kafka_t *rk,
 
         rkmessage = rd_kafka_message_get(rko);
 
-        rd_kafka_op_offset_store(rk, rko);
+        rd_kafka_fetch_op_app_prepare(rk, rko);
 
         ctx->consume_cb(rkmessage, ctx->opaque);
 
@@ -3101,8 +3132,8 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
         /* Get rkmessage from rko */
         rkmessage = rd_kafka_message_get(rko);
 
-        /* Store offset */
-        rd_kafka_op_offset_store(rk, rko);
+        /* Store offset, etc */
+        rd_kafka_fetch_op_app_prepare(rk, rko);
 
         rd_kafka_set_last_error(0, 0);
 
@@ -3171,32 +3202,78 @@ rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms) {
 }
 
 
-rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+/**
+ * @brief Consumer close.
+ *
+ * @param rkq The consumer group queue will be forwarded to this queue, which
+ *            which must be served (rebalance events) by the application/caller
+ *            until rd_kafka_consumer_closed() returns true.
+ *            If the consumer is not in a joined state, no rebalance events
+ *            will be emitted.
+ */
+static rd_kafka_error_t *rd_kafka_consumer_close_q(rd_kafka_t *rk,
+                                                   rd_kafka_q_t *rkq) {
         rd_kafka_cgrp_t *rkcg;
-        rd_kafka_op_t *rko;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-        rd_kafka_q_t *rkq;
+        rd_kafka_error_t *error = NULL;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+                                          "Consume close called on non-group "
+                                          "consumer");
+
+        if (rd_atomic32_get(&rkcg->rkcg_terminated))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__DESTROY,
+                                          "Consumer already closed");
 
         /* If a fatal error has been raised and this is an
          * explicit consumer_close() from the application we return
          * a fatal error. Otherwise let the "silent" no_consumer_close
          * logic be performed to clean up properly. */
-        if (rd_kafka_fatal_error_code(rk) &&
-            !rd_kafka_destroy_flags_no_consumer_close(rk))
-                return RD_KAFKA_RESP_ERR__FATAL;
+        if (!rd_kafka_destroy_flags_no_consumer_close(rk) &&
+            (error = rd_kafka_get_fatal_error(rk)))
+                return error;
 
-        rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Closing consumer");
+        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
+                     "Closing consumer");
 
-        /* Redirect cgrp queue to our temporary queue to make sure
-         * all posted ops (e.g., rebalance callbacks) are served by
-         * this function. */
-        rkq = rd_kafka_q_new(rk);
+        /* Redirect cgrp queue to the rebalance queue to make sure all posted
+         * ops (e.g., rebalance callbacks) are served by
+         * the application/caller. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
 
+        /* Tell cgrp subsystem to terminate. A TERMINATE op will be posted
+         * on the rkq when done. */
         rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
+
+        return error;
+}
+
+rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
+                                                rd_kafka_queue_t *rkqu) {
+        if (!rkqu)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Queue must be specified");
+        return rd_kafka_consumer_close_q(rk, rkqu->rkqu_q);
+}
+
+rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        rd_kafka_q_t *rkq;
+
+        /* Create a temporary reply queue to handle the TERMINATE reply op. */
+        rkq = rd_kafka_q_new(rk);
+
+        /* Initiate the close (async) */
+        error = rd_kafka_consumer_close_q(rk, rkq);
+        if (error) {
+                err = rd_kafka_error_is_fatal(error)
+                          ? RD_KAFKA_RESP_ERR__FATAL
+                          : rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                rd_kafka_q_destroy_owner(rkq);
+                return err;
+        }
 
         /* Disable the queue if termination is immediate or the user
          * does not want the blocking consumer_close() behaviour, this will
@@ -3207,10 +3284,12 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
                              "Disabling and purging temporary queue to quench "
                              "close events");
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 rd_kafka_q_disable(rkq);
                 /* Purge ops already enqueued */
                 rd_kafka_q_purge(rkq);
         } else {
+                rd_kafka_op_t *rko;
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Waiting for close events");
                 while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
                         rd_kafka_op_res_t res;
@@ -3220,6 +3299,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                                 rd_kafka_op_destroy(rko);
                                 break;
                         }
+                        /* Handle callbacks */
                         res = rd_kafka_poll_cb(rk, rkq, rko,
                                                RD_KAFKA_Q_CB_RETURN, NULL);
                         if (res == RD_KAFKA_OP_RES_PASS)
@@ -3228,15 +3308,26 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                 }
         }
 
-        rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
-
         rd_kafka_q_destroy_owner(rkq);
 
-        rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Consumer closed");
+        if (err)
+                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
+                             "Consumer closed with error: %s",
+                             rd_kafka_err2str(err));
+        else
+                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
+                             "Consumer closed");
 
         return err;
 }
 
+
+int rd_kafka_consumer_closed(rd_kafka_t *rk) {
+        if (unlikely(!rk->rk_cgrp))
+                return 0;
+
+        return rd_atomic32_get(&rk->rk_cgrp->rkcg_terminated);
+}
 
 
 rd_kafka_resp_err_t
@@ -3817,6 +3908,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up */
+                res = RD_KAFKA_OP_RES_YIELD;
+                rd_kafka_op_destroy(rko);
                 break;
 
         case RD_KAFKA_OP_CREATETOPICS:
@@ -4222,7 +4315,7 @@ rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms) {
         /* Wake up all broker threads to trigger the produce_serve() call.
          * If this flush() call finishes before the broker wakes up
          * then no flushing will be performed by that broker thread. */
-        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP);
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_UP, "flushing");
 
         if (rk->rk_drmode == RD_KAFKA_DR_MODE_EVENT) {
                 /* Application wants delivery reports as events rather
@@ -4385,7 +4478,7 @@ const char *rd_kafka_version_str(void) {
         if (*LIBRDKAFKA_GIT_VERSION) {
                 of = rd_snprintf(ret, sizeof(ret), "%s",
                                  *LIBRDKAFKA_GIT_VERSION == 'v'
-                                     ? LIBRDKAFKA_GIT_VERSION + 1
+                                     ? &LIBRDKAFKA_GIT_VERSION[1]
                                      : LIBRDKAFKA_GIT_VERSION);
                 if (of > sizeof(ret))
                         of = sizeof(ret);

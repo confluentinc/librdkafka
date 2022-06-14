@@ -53,6 +53,19 @@ if(WITH_ZLIB)
 endif()
 # }
 
+# CURL {
+find_package(CURL QUIET)
+if(CURL_FOUND)
+  set(with_curl_default ON)
+else()
+  set(with_curl_default OFF)
+endif()
+option(WITH_CURL "With CURL" ${with_curl_default})
+if(WITH_CURL)
+  list(APPEND BUILT_WITH "CURL")
+endif()
+# }
+
 # ZSTD {
 find_package(ZSTD QUIET)
 if(ZSTD_FOUND)
@@ -147,6 +160,10 @@ if(WITH_SASL)
   endif()
 endif()
 # }
+
+if(WITH_SSL AND WITH_CURL)
+    set(WITH_OAUTHBEARER_OIDC ON)
+endif()
 
 # LZ4 {
 option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)

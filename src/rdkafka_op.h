@@ -376,6 +376,7 @@ struct rd_kafka_op_s {
 
                 struct {
                         int64_t offset;
+                        int32_t broker_id; /**< Originating broker, or -1 */
                         char *reason;
                 } offset_reset;
 
@@ -727,7 +728,7 @@ extern rd_atomic32_t rd_kafka_op_cnt;
 
 void rd_kafka_op_print(FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
-void rd_kafka_op_offset_store(rd_kafka_t *rk, rd_kafka_op_t *rko);
+void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \

@@ -439,7 +439,8 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
 
                 while (PartitionCnt-- > 0) {
                         int32_t Partition, CurrentLeaderEpoch;
-                        int64_t Timestamp, MaxNumOffsets, Offset = -1;
+                        int64_t Timestamp, Offset = -1;
+                        int32_t MaxNumOffsets;
                         rd_kafka_mock_partition_t *mpart = NULL;
                         rd_kafka_resp_err_t err          = all_err;
 
@@ -887,7 +888,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 /* Response: Brokers.Host */
                 rd_kafka_buf_write_str(resp, mrkb->advertised_listener, -1);
                 /* Response: Brokers.Port */
-                rd_kafka_buf_write_i32(resp, mrkb->port);
+                rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                         /* Response: Brokers.Rack (Matt's going to love this) */
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
@@ -1060,7 +1061,7 @@ rd_kafka_mock_handle_FindCoordinator(rd_kafka_mock_connection_t *mconn,
                 /* Response: NodeId, Host, Port */
                 rd_kafka_buf_write_i32(resp, mrkb->id);
                 rd_kafka_buf_write_str(resp, mrkb->advertised_listener, -1);
-                rd_kafka_buf_write_i32(resp, mrkb->port);
+                rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -1977,9 +1978,12 @@ static int rd_kafka_mock_handle_ApiVersion(rd_kafka_mock_connection_t *mconn,
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int i;
 
-        if (!rd_kafka_mock_cluster_ApiVersion_check(
-                mcluster, rkbuf->rkbuf_reqhdr.ApiKey,
-                rkbuf->rkbuf_reqhdr.ApiVersion))
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        if (!err && !rd_kafka_mock_cluster_ApiVersion_check(
+                        mcluster, rkbuf->rkbuf_reqhdr.ApiKey,
+                        rkbuf->rkbuf_reqhdr.ApiVersion))
                 err = RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION;
 
         /* ApiVersionRequest/Response with flexver (>=v3) has a mix

@@ -8,7 +8,7 @@
         },
         {
             "name": "zlib",
-            "version>=": "1.2.11#13"
+            "version>=": "1.2.12"
         },
         {
             "name": "openssl",
@@ -19,5 +19,5 @@
             "version>=": "7.82.0"
         }
     ],
-    "builtin-baseline": "773516ecf6014d89cc69b11bb54605ad4be56694"
+    "builtin-baseline": "01d6f6ff1e5332b926099f0c23bda996940ad4e8"
 }

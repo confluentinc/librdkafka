@@ -1841,6 +1841,13 @@ err:
                            rd_kafka_err2str(err),
                            (int)(request->rkbuf_ts_sent / 1000),
                            rd_kafka_actions2str(actions));
+                /* Respond back to caller on non-retriable errors */
+                if (rko && rko->rko_replyq.q) {
+                        rko->rko_err           = err;
+                        rko->rko_u.metadata.md = NULL;
+                        rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+                        rko = NULL;
+                }
         }
 
 

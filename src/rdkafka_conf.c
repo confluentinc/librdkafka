@@ -170,13 +170,17 @@ struct rd_kafka_property {
 
 #if WITH_CURL
 #define _UNSUPPORTED_HTTP .unsupported = NULL
-#define _UNSUPPORTED_OIDC .unsupported = NULL
 #else
 #define _UNSUPPORTED_HTTP .unsupported = "libcurl not available at build time"
+#endif
+
+#if WITH_OAUTHBEARER_OIDC
+#define _UNSUPPORTED_OIDC .unsupported = NULL
+#else
 #define _UNSUPPORTED_OIDC                                                      \
         .unsupported =                                                         \
-            "OAuth/OIDC depends on libcurl which was not available "           \
-            "at build time"
+            "OAuth/OIDC depends on libcurl and OpenSSL which were not "        \
+            "available at build time"
 #endif
 
 #ifdef _WIN32
@@ -544,6 +548,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {AF_INET, "v4"},
              {AF_INET6, "v6"},
          }},
+    {_RK_GLOBAL | _RK_MED, "socket.connection.setup.timeout.ms", _RK_C_INT,
+     _RK(socket_connection_setup_timeout_ms),
+     "Maximum time allowed for broker connection setup "
+     "(TCP connection setup as well SSL and SASL handshake). "
+     "If the connection to the broker is not fully functional after this "
+     "the connection will be closed and retried.",
+     1000, INT_MAX, 30 * 1000 /* 30s */},
     {_RK_GLOBAL | _RK_MED, "connections.max.idle.ms", _RK_C_INT,
      _RK(connections_max_idle_ms),
      "Close broker connections after the specified time of "
@@ -621,7 +632,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "log.connection.close", _RK_C_BOOL, _RK(log_connection_close),
      "Log broker disconnects. "
      "It might be useful to turn this off when interacting with "
-     "0.9 brokers with an aggressive `connection.max.idle.ms` value.",
+     "0.9 brokers with an aggressive `connections.max.idle.ms` value.",
      0, 1, 1},
     {_RK_GLOBAL, "background_event_cb", _RK_C_PTR, _RK(background_event_cb),
      "Background queue event callback "
@@ -959,49 +970,45 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "sasl.oauthbearer.method", _RK_C_S2I,
      _RK(sasl.oauthbearer.method),
      "Set to \"default\" or \"oidc\" to control which login method "
-     "is used. If set it to \"oidc\", OAuth/OIDC login method will "
-     "be used. "
-     "sasl.oauthbearer.client.id, sasl.oauthbearer.client.secret, "
-     "and sasl.oauthbearer.token.endpoint.url are needed if "
-     "sasl.oauthbearer.method is set to \"oidc\".",
+     "to be used. If set to \"oidc\", the following properties must also be "
+     "be specified: "
+     "`sasl.oauthbearer.client.id`, `sasl.oauthbearer.client.secret`, "
+     "and `sasl.oauthbearer.token.endpoint.url`.",
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
      .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default"},
              {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
      _RK(sasl.oauthbearer.client_id),
-     "It's a public identifier for the application. "
-     "It must be unique across all clients that the "
+     "Public identifier for the application. "
+     "Must be unique across all clients that the "
      "authorization server handles. "
-     "This is only used when sasl.oauthbearer.method is set to oidc.",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.secret", _RK_C_STR,
      _RK(sasl.oauthbearer.client_secret),
-     "A client secret only known to the application and the "
+     "Client secret only known to the application and the "
      "authorization server. This should be a sufficiently random string "
-     "that are not guessable. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "that is not guessable. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.scope", _RK_C_STR,
      _RK(sasl.oauthbearer.scope),
      "Client use this to specify the scope of the access request to the "
      "broker. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.extensions", _RK_C_STR,
      _RK(sasl.oauthbearer.extensions_str),
      "Allow additional information to be provided to the broker. "
-     "It's comma-separated list of key=value pairs. "
-     "The example of the input is "
-     "\"supportFeatureX=true,organizationId=sales-emea\"."
-     " This is only used when sasl.oauthbearer.method is set "
-     "to \"oidc\".",
+     "Comma-separated list of key=value pairs. "
+     "E.g., \"supportFeatureX=true,organizationId=sales-emea\"."
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.token.endpoint.url", _RK_C_STR,
      _RK(sasl.oauthbearer.token_endpoint_url),
-     "OAUTH issuer token endpoint HTTP(S) URI used to retrieve the "
-     "token. "
-     "This is only used when sasl.oauthbearer.method is set to \"oidc\".",
+     "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
 
     /* Plugins */
@@ -1037,6 +1044,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This will automatically overwrite `bootstrap.servers` with the "
      "mock broker list.",
      0, 10000, 0},
+    {_RK_GLOBAL | _RK_HIDDEN, "test.mock.broker.rtt", _RK_C_INT,
+     _RK(mock.broker_rtt), "Simulated mock broker latency in milliseconds.", 0,
+     60 * 60 * 1000 /*1h*/, 0},
 
     /* Unit test interfaces.
      * These are not part of the public API and may change at any time.
@@ -2874,7 +2884,7 @@ static size_t rd_kafka_conf_flags2str(char *dest,
 
         /* Phase 1: scan for set flags, accumulate needed size.
          * Phase 2: write to dest */
-        for (j = 0; prop->s2i[j].str; j++) {
+        for (j = 0; j < (int)RD_ARRAYSIZE(prop->s2i) && prop->s2i[j].str; j++) {
                 if (prop->type == _RK_C_S2F && ival != -1 &&
                     (ival & prop->s2i[j].val) != prop->s2i[j].val)
                         continue;

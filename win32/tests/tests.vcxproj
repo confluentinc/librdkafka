@@ -210,6 +210,9 @@
     <ClCompile Include="..\..\tests\0126-oauthbearer_oidc.c" />
     <ClCompile Include="..\..\tests\0128-sasl_callback_queue.cpp" />
     <ClCompile Include="..\..\tests\0129-fetch_aborted_msgs.c" />
+    <ClCompile Include="..\..\tests\0130-store_offsets.c" />
+    <ClCompile Include="..\..\tests\0131-connect_timeout.c" />
+    <ClCompile Include="..\..\tests\0132-strategy_ordering.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

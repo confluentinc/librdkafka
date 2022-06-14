@@ -2790,13 +2790,13 @@ class RD_EXPORT KafkaConsumer : public virtual Handle {
 
 
   /**
-   * @brief Close and shut down the proper.
+   * @brief Close and shut down the consumer.
    *
    * This call will block until the following operations are finished:
-   *  - Trigger a local rebalance to void the current assignment
-   *  - Stop consumption for current assignment
-   *  - Commit offsets
-   *  - Leave group
+   *  - Trigger a local rebalance to void the current assignment (if any).
+   *  - Stop consumption for current assignment (if any).
+   *  - Commit offsets (if any).
+   *  - Leave group (if applicable).
    *
    * The maximum blocking time is roughly limited to session.timeout.ms.
    *
@@ -2931,6 +2931,32 @@ class RD_EXPORT KafkaConsumer : public virtual Handle {
    */
   virtual Error *incremental_unassign(
       const std::vector<TopicPartition *> &partitions) = 0;
+
+  /**
+   * @brief Close and shut down the consumer.
+   *
+   * Performs the same actions as RdKafka::KafkaConsumer::close() but in a
+   * background thread.
+   *
+   * Rebalance events/callbacks (etc) will be forwarded to the
+   * application-provided \p queue. The application must poll this queue until
+   * RdKafka::KafkaConsumer::closed() returns true.
+   *
+   * @remark Depending on consumer group join state there may or may not be
+   *         rebalance events emitted on \p rkqu.
+   *
+   * @returns an error object if the consumer close failed, else NULL.
+   *
+   * @sa RdKafka::KafkaConsumer::closed()
+   */
+  virtual Error *close(Queue *queue) = 0;
+
+
+  /** @returns true if the consumer is closed, else 0.
+   *
+   * @sa RdKafka::KafkaConsumer::close()
+   */
+  virtual bool closed() = 0;
 };
 
 

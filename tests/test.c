@@ -237,6 +237,9 @@ _TEST_DECL(0125_immediate_flush);
 _TEST_DECL(0126_oauthbearer_oidc);
 _TEST_DECL(0128_sasl_callback_queue);
 _TEST_DECL(0129_fetch_aborted_msgs);
+_TEST_DECL(0130_store_offsets);
+_TEST_DECL(0131_connect_timeout);
+_TEST_DECL(0132_strategy_ordering);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -302,10 +305,7 @@ struct test tests[] = {
     _TEST(0022_consume_batch, 0),
     _TEST(0022_consume_batch_local, TEST_F_LOCAL),
     _TEST(0025_timers, TEST_F_LOCAL),
-    _TEST(0026_consume_pause,
-          TEST_F_KNOWN_ISSUE,
-          TEST_BRKVER(0, 9, 0, 0),
-          .extra = "Fragile test due to #2190"),
+    _TEST(0026_consume_pause, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0028_long_topicnames,
           TEST_F_KNOWN_ISSUE,
           TEST_BRKVER(0, 9, 0, 0),
@@ -475,6 +475,9 @@ struct test tests[] = {
     _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
     _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0130_store_offsets, 0),
+    _TEST(0131_connect_timeout, TEST_F_LOCAL),
+    _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -663,7 +666,7 @@ void test_timeout_set(int timeout) {
         TEST_SAY("Setting test timeout to %ds * %.1f\n", timeout,
                  test_timeout_multiplier);
         timeout            = (int)((double)timeout * test_timeout_multiplier);
-        test_curr->timeout = test_clock() + (timeout * 1000000);
+        test_curr->timeout = test_clock() + ((int64_t)timeout * 1000000);
         TEST_UNLOCK();
 }
 
@@ -4013,7 +4016,7 @@ void test_consumer_poll_no_msgs(const char *what,
                                 rd_kafka_t *rk,
                                 uint64_t testid,
                                 int timeout_ms) {
-        int64_t tmout = test_clock() + timeout_ms * 1000;
+        int64_t tmout = test_clock() + ((int64_t)timeout_ms * 1000);
         int cnt       = 0;
         test_timing_t t_cons;
         test_msgver_t mv;
@@ -4083,7 +4086,7 @@ void test_consumer_poll_expect_err(rd_kafka_t *rk,
                                    uint64_t testid,
                                    int timeout_ms,
                                    rd_kafka_resp_err_t err) {
-        int64_t tmout = test_clock() + timeout_ms * 1000;
+        int64_t tmout = test_clock() + ((int64_t)timeout_ms * 1000);
 
         TEST_SAY("%s: expecting error %s within %dms\n", rd_kafka_name(rk),
                  rd_kafka_err2name(err), timeout_ms);
@@ -4513,21 +4516,20 @@ void test_kafka_topics(const char *fmt, ...) {
 
         if (test_broker_version >= TEST_BRKVER(3, 0, 0, 0)) {
                 bootstrap_env = "BROKERS";
-                flag = "--bootstrap-server";
-        }  else {
+                flag          = "--bootstrap-server";
+        } else {
                 bootstrap_env = "ZK_ADDRESS";
-                flag = "--zookeeper";
+                flag          = "--zookeeper";
         }
 
-        kpath = test_getenv("KAFKA_PATH", NULL);
+        kpath          = test_getenv("KAFKA_PATH", NULL);
         bootstrap_srvs = test_getenv(bootstrap_env, NULL);
 
         if (!kpath || !bootstrap_srvs)
-                TEST_FAIL("%s: KAFKA_PATH and %s must be set",
-                          __FUNCTION__, bootstrap_env);
+                TEST_FAIL("%s: KAFKA_PATH and %s must be set", __FUNCTION__,
+                          bootstrap_env);
 
-        r = rd_snprintf(cmd, sizeof(cmd),
-                        "%s/bin/kafka-topics.sh %s %s ",
+        r = rd_snprintf(cmd, sizeof(cmd), "%s/bin/kafka-topics.sh %s %s ",
                         kpath, flag, bootstrap_srvs);
         TEST_ASSERT(r > 0 && r < (int)sizeof(cmd));
 
@@ -4873,7 +4875,7 @@ int test_get_partition_count(rd_kafka_t *rk,
         rd_kafka_t *use_rk;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_t *rkt;
-        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+        int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
         int ret             = -1;
 
         if (!rk)
@@ -4930,7 +4932,7 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt(rd_kafka_t *rk,
         const struct rd_kafka_metadata *metadata;
         rd_kafka_resp_err_t err;
         test_timing_t t;
-        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+        int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
 
         do {
                 TIMING_START(&t, "auto_create_topic");
@@ -5184,7 +5186,9 @@ void test_report_add(struct test *test, const char *fmt, ...) {
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
 int test_can_create_topics(int skip) {
+#ifndef _WIN32
         const char *bootstrap;
+#endif
 
         /* Has AdminAPI */
         if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))
@@ -5197,14 +5201,15 @@ int test_can_create_topics(int skip) {
 #else
 
         bootstrap = test_broker_version >= TEST_BRKVER(3, 0, 0, 0)
-                        ? "BROKERS" : "ZK_ADDRESS";
+                        ? "BROKERS"
+                        : "ZK_ADDRESS";
 
-        if (!test_getenv("KAFKA_PATH", NULL) ||
-            !test_getenv(bootstrap, NULL)) {
+        if (!test_getenv("KAFKA_PATH", NULL) || !test_getenv(bootstrap, NULL)) {
                 if (skip)
                         TEST_SKIP(
                             "Cannot create topics "
-                            "(set KAFKA_PATH and %s)\n", bootstrap);
+                            "(set KAFKA_PATH and %s)\n",
+                            bootstrap);
                 return 0;
         }
 
@@ -5221,7 +5226,7 @@ rd_kafka_event_t *test_wait_event(rd_kafka_queue_t *eventq,
                                   rd_kafka_event_type_t event_type,
                                   int timeout_ms) {
         test_timing_t t_w;
-        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+        int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
 
         TIMING_START(&t_w, "wait_event");
         while (test_clock() < abs_timeout) {
@@ -5519,7 +5524,7 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
-        abs_timeout = test_clock() + (tmout * 1000);
+        abs_timeout = test_clock() + ((int64_t)tmout * 1000);
 
         TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
 
@@ -6432,7 +6437,7 @@ rd_kafka_resp_err_t test_delete_all_test_topics(int timeout_ms) {
         rd_kafka_AdminOptions_t *options;
         rd_kafka_queue_t *q;
         char errstr[256];
-        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+        int64_t abs_timeout = test_clock() + ((int64_t)timeout_ms * 1000);
 
         rk = test_create_producer();
 
@@ -6687,9 +6692,6 @@ int test_sub_start(const char *func,
         if (!is_quick && test_quick)
                 return 0;
 
-        if (subtests_to_run && !strstr(func, subtests_to_run))
-                return 0;
-
         if (fmt && *fmt) {
                 va_list ap;
                 char buf[256];
@@ -6703,6 +6705,11 @@ int test_sub_start(const char *func,
         } else {
                 rd_snprintf(test_curr->subtest, sizeof(test_curr->subtest),
                             "%s:%d", func, line);
+        }
+
+        if (subtests_to_run && !strstr(test_curr->subtest, subtests_to_run)) {
+                *test_curr->subtest = '\0';
+                return 0;
         }
 
         TIMING_START(&test_curr->subtest_duration, "SUBTEST");

@@ -364,7 +364,7 @@ int test_sub_start(const char *func,
                    const char *fmt,
                    ...);
 void test_sub_pass(void);
-void test_sub_skip(const char *fmt, ...);
+void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 #define SUB_TEST0(IS_QUICK, ...)                                               \
         do {                                                                   \

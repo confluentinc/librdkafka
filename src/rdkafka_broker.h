@@ -249,8 +249,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /**< Absolute timestamp of next allowed reconnect. */
         rd_ts_t rkb_ts_reconnect;
 
+        /** Absolute time of last connection attempt. */
+        rd_ts_t rkb_ts_connect;
+
         /**< Persistent connection demand is tracked by
-         *   an counter for each type of demand.
+         *   a counter for each type of demand.
          *   The broker thread will maintain a persistent connection
          *   if any of the counters are non-zero, and revert to
          *   on-demand mode when they all reach zero.
@@ -273,7 +276,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                  *   rdkafka main thread.
                  *
                  *   Producer: Broker is the transaction coordinator.
-                 *   Counter is maintained by rdkafka_idempotence.c. */
+                 *   Counter is maintained by rdkafka_idempotence.c.
+                 *
+                 *   All: A coord_req_t is waiting for this broker to come up.
+                 */
+
                 rd_atomic32_t coord;
         } rkb_persistconn;
 
@@ -528,8 +535,10 @@ void msghdr_print(rd_kafka_t *rk,
 
 int32_t rd_kafka_broker_id(rd_kafka_broker_t *rkb);
 const char *rd_kafka_broker_name(rd_kafka_broker_t *rkb);
-void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb);
-int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk, int min_state);
+void rd_kafka_broker_wakeup(rd_kafka_broker_t *rkb, const char *reason);
+int rd_kafka_all_brokers_wakeup(rd_kafka_t *rk,
+                                int min_state,
+                                const char *reason);
 
 void rd_kafka_connect_any(rd_kafka_t *rk, const char *reason);
 

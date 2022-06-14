@@ -915,13 +915,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.username", _RK_C_STR,
      _RK(sasl.win32gssapi.username),
      "SASL username for use with the GSSAPI mechanism on Windows. "
-     "If empty will use default credentials"},
+     "If empty will use default credentials."},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.domain", _RK_C_STR,
      _RK(sasl.win32gssapi.domain),
-     "SASL domain for use with the GSSAPI mechanism on Windows"},
+     "SASL domain for use with the GSSAPI mechanism on Windows."},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.password", _RK_C_STR,
      _RK(sasl.win32gssapi.password),
-     "SASL password for use with the GSSAPI mechanism on Windows"},
+     "SASL password for use with the GSSAPI mechanism on Windows."},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "

@@ -182,7 +182,7 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
         if (ApiKey != 0)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        mtx_lock(&produce_disconnect_lock);
+        rdk_thread_mutex_lock(&produce_disconnect_lock);
         if (produce_disconnects == 0) {
                 char buf[512];
                 ssize_t r;
@@ -203,7 +203,7 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
                                __FILE__, __LINE__, r);
                 produce_disconnects = 1;
         }
-        mtx_unlock(&produce_disconnect_lock);
+        rdk_thread_mutex_unlock(&produce_disconnect_lock);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -258,7 +258,7 @@ static void do_test_produce_retries_disconnect (const char *topic,
                         test_conf_set(conf, "retries", "0");
         }
 
-        mtx_init(&produce_disconnect_lock, mtx_plain);
+    rdk_thread_mutex_init(&produce_disconnect_lock, mtx_plain);
         produce_disconnects = 0;
 
         rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
@@ -283,10 +283,10 @@ static void do_test_produce_retries_disconnect (const char *topic,
                         TEST_SAY("Produced message delivered\n");
         }
 
-        mtx_lock(&produce_disconnect_lock);
+        rdk_thread_mutex_lock(&produce_disconnect_lock);
         TEST_ASSERT(produce_disconnects == 1,
                     "expected %d disconnects, not %d", 1, produce_disconnects);
-        mtx_unlock(&produce_disconnect_lock);
+        rdk_thread_mutex_unlock(&produce_disconnect_lock);
 
 
         partition_cnt = test_get_partition_count(rk, topic, tmout_multip(5000));

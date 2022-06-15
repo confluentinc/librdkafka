@@ -421,8 +421,8 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp);
 
 
 
-#define rd_kafka_toppar_lock(rktp)     mtx_lock(&(rktp)->rktp_lock)
-#define rd_kafka_toppar_unlock(rktp)   mtx_unlock(&(rktp)->rktp_lock)
+#define rd_kafka_toppar_lock(rktp)     rdk_thread_mutex_lock(&(rktp)->rktp_lock)
+#define rd_kafka_toppar_unlock(rktp)   rdk_thread_mutex_unlock(&(rktp)->rktp_lock)
 
 static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp)
 	RD_UNUSED;

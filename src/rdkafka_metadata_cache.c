@@ -540,9 +540,9 @@ void rd_kafka_metadata_cache_init (rd_kafka_t *rk) {
         rd_avl_init(&rk->rk_metadata_cache.rkmc_avl,
                     rd_kafka_metadata_cache_entry_cmp, 0);
         TAILQ_INIT(&rk->rk_metadata_cache.rkmc_expiry);
-        mtx_init(&rk->rk_metadata_cache.rkmc_full_lock, mtx_plain);
-        mtx_init(&rk->rk_metadata_cache.rkmc_cnd_lock, mtx_plain);
-        cnd_init(&rk->rk_metadata_cache.rkmc_cnd);
+    rdk_thread_mutex_init(&rk->rk_metadata_cache.rkmc_full_lock, mtx_plain);
+    rdk_thread_mutex_init(&rk->rk_metadata_cache.rkmc_cnd_lock, mtx_plain);
+    rdk_thread_cond_init(&rk->rk_metadata_cache.rkmc_cnd);
         rd_list_init(&rk->rk_metadata_cache.rkmc_observers, 8,
                      rd_kafka_enq_once_trigger_destroy);
 }
@@ -557,9 +557,9 @@ void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk) {
         rd_kafka_timer_stop(&rk->rk_timers,
                             &rk->rk_metadata_cache.rkmc_query_tmr, 1/*lock*/);
         rd_kafka_metadata_cache_purge(rk, rd_true/*observers too*/);
-        mtx_destroy(&rk->rk_metadata_cache.rkmc_full_lock);
-        mtx_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
-        cnd_destroy(&rk->rk_metadata_cache.rkmc_cnd);
+    rdk_thread_mutex_destroy(&rk->rk_metadata_cache.rkmc_full_lock);
+    rdk_thread_mutex_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
+    rdk_thread_cond_destroy(&rk->rk_metadata_cache.rkmc_cnd);
         rd_avl_destroy(&rk->rk_metadata_cache.rkmc_avl);
 }
 
@@ -590,11 +590,11 @@ int rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms) {
 #if ENABLE_DEVEL
         rd_ts_t ts_start = rd_clock();
 #endif
-        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        rdk_thread_mutex_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
         r = cnd_timedwait_ms(&rk->rk_metadata_cache.rkmc_cnd,
                              &rk->rk_metadata_cache.rkmc_cnd_lock,
                              timeout_ms);
-        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        rdk_thread_mutex_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
 
 #if ENABLE_DEVEL
         rd_kafka_dbg(rk, METADATA, "CACHEWAIT",
@@ -628,9 +628,9 @@ rd_kafka_metadata_cache_propagate_changes_trigger_eonce (void *elem,
  * @locality any
  */
 void rd_kafka_metadata_cache_propagate_changes (rd_kafka_t *rk) {
-        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
-        cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
-        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        rdk_thread_mutex_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+    rdk_thread_cond_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
+        rdk_thread_mutex_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
 
         /* Trigger observers */
         rd_list_apply(&rk->rk_metadata_cache.rkmc_observers,

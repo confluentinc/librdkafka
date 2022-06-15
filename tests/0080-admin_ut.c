@@ -48,23 +48,23 @@ static rd_kafka_event_t *last_event = NULL;
  */
 static void background_event_cb (rd_kafka_t *rk, rd_kafka_event_t *rkev,
                                  void *opaque) {
-        mtx_lock(&last_event_lock);
+        rdk_thread_mutex_lock(&last_event_lock);
         TEST_ASSERT(!last_event, "Multiple events seen in background_event_cb "
                     "(existing %s, new %s)",
                     rd_kafka_event_name(last_event), rd_kafka_event_name(rkev));
         last_event = rkev;
-        mtx_unlock(&last_event_lock);
-        cnd_broadcast(&last_event_cnd);
+        rdk_thread_mutex_unlock(&last_event_lock);
+        rdk_thread_cond_broadcast(&last_event_cnd);
         rd_sleep(1);
 }
 
 static rd_kafka_event_t *wait_background_event_cb (void) {
         rd_kafka_event_t *rkev;
-        mtx_lock(&last_event_lock);
+        rdk_thread_mutex_lock(&last_event_lock);
         while (!(rkev = last_event))
-                cnd_wait(&last_event_cnd, &last_event_lock);
+            rdk_thread_cond_wait(&last_event_cnd, &last_event_lock);
         last_event = NULL;
-        mtx_unlock(&last_event_lock);
+        rdk_thread_mutex_unlock(&last_event_lock);
 
         return rkev;
 }
@@ -1091,8 +1091,8 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         rd_kafka_queue_t *mainq, *backgroundq;
 
-        mtx_init(&last_event_lock, mtx_plain);
-        cnd_init(&last_event_cnd);
+    rdk_thread_mutex_init(&last_event_lock, mtx_plain);
+    rdk_thread_cond_init(&last_event_cnd);
 
         do_test_unclean_destroy(cltype, 0/*tempq*/);
         do_test_unclean_destroy(cltype, 1/*mainq*/);
@@ -1155,8 +1155,8 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
 
         /* Done */
-        mtx_destroy(&last_event_lock);
-        cnd_destroy(&last_event_cnd);
+        rdk_thread_mutex_destroy(&last_event_lock);
+    rdk_thread_cond_destroy(&last_event_cnd);
 }
 
 

@@ -115,7 +115,7 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
 
         rk = rktp->rktp_rkt->rkt_rk;
 
-        mtx_lock(&rk->rk_eos.txn_pending_lock);
+        rdk_thread_mutex_lock(&rk->rk_eos.txn_pending_lock);
         schedule = TAILQ_EMPTY(&rk->rk_eos.txn_pending_rktps);
 
         /* List is sorted by topic name since AddPartitionsToTxnRequest()
@@ -124,7 +124,7 @@ void rd_kafka_txn_add_partition (rd_kafka_toppar_t *rktp) {
                             rd_kafka_toppar_t *, rktp_txnlink,
                             rd_kafka_toppar_topic_cmp);
         rd_kafka_toppar_keep(rktp);
-        mtx_unlock(&rk->rk_eos.txn_pending_lock);
+        rdk_thread_mutex_unlock(&rk->rk_eos.txn_pending_lock);
 
         rd_kafka_dbg(rk, EOS, "ADDPARTS",
                      "Marked %.*s [%"PRId32"] as part of transaction: "

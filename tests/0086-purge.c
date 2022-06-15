@@ -84,10 +84,10 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
         TEST_SAY("ProduceRequest sent to %s (%"PRId32")\n",
                  brokername, brokerid);
 
-        mtx_lock(&produce_req_lock);
+        rdk_thread_mutex_lock(&produce_req_lock);
         produce_req_cnt++;
-        cnd_broadcast(&produce_req_cnd);
-        mtx_unlock(&produce_req_lock);
+    rdk_thread_cond_broadcast(&produce_req_cnd);
+        rdk_thread_mutex_unlock(&produce_req_lock);
 
         /* Stall the connection */
         test_socket_sockem_set(sockfd, "delay", 5000);
@@ -218,8 +218,8 @@ static void do_test_purge (const char *what, int remote,
                 if (idempotence && !gapless)
                         test_curr->is_fatal_cb = gapless_is_not_fatal_cb;
 
-                mtx_init(&produce_req_lock, mtx_plain);
-                cnd_init(&produce_req_cnd);
+            rdk_thread_mutex_init(&produce_req_lock, mtx_plain);
+            rdk_thread_cond_init(&produce_req_cnd);
         } else {
                 test_conf_set(conf, "bootstrap.servers", NULL);
         }
@@ -260,11 +260,11 @@ static void do_test_purge (const char *what, int remote,
 
         if (remote) {
                 /* Wait for ProduceRequest to be sent */
-                mtx_lock(&produce_req_lock);
+                rdk_thread_mutex_lock(&produce_req_lock);
                 cnd_timedwait_ms(&produce_req_cnd, &produce_req_lock, 15*1000);
                 TEST_ASSERT(produce_req_cnt > 0,
                             "First Produce request should've been sent by now");
-                mtx_unlock(&produce_req_lock);
+                rdk_thread_mutex_unlock(&produce_req_lock);
 
                 purge_and_expect(what, __LINE__, rk, RD_KAFKA_PURGE_F_QUEUE,
                                  &waitmsgs, 10,

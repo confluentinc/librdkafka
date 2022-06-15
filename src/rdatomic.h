@@ -60,10 +60,10 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v
 	return InterlockedAdd((LONG *)&ra->val, v);
 #elif !HAVE_ATOMICS_32
 	int32_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	ra->val += v;
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP32(add, fetch, &ra->val, v);
@@ -77,10 +77,10 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v)
 	return InterlockedAdd((LONG *)&ra->val, -v);
 #elif !HAVE_ATOMICS_32
 	int32_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	ra->val -= v;
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP32(sub, fetch, &ra->val, v);
@@ -100,9 +100,9 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 	return ra->val;
 #elif !HAVE_ATOMICS_32
 	int32_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP32(fetch, add, &ra->val, 0);
@@ -114,9 +114,9 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v)
 	return InterlockedExchange((LONG *)&ra->val, v);
 #elif !HAVE_ATOMICS_32
 	int32_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	r = ra->val = v;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #elif HAVE_ATOMICS_32_ATOMIC
         __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);
@@ -145,10 +145,10 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v
 	return InterlockedAdd64(&ra->val, v);
 #elif !HAVE_ATOMICS_64
 	int64_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	ra->val += v;
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP64(add, fetch, &ra->val, v);
@@ -162,10 +162,10 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v)
 	return InterlockedAdd64(&ra->val, -v);
 #elif !HAVE_ATOMICS_64
 	int64_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	ra->val -= v;
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP64(sub, fetch, &ra->val, v);
@@ -186,9 +186,9 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 	return ra->val;
 #elif !HAVE_ATOMICS_64
 	int64_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #else
 	return ATOMIC_OP64(fetch, add, &ra->val, 0);
@@ -201,10 +201,10 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v)
 	return InterlockedExchange64(&ra->val, v);
 #elif !HAVE_ATOMICS_64
 	int64_t r;
-	mtx_lock(&ra->lock);
+	rdk_thread_mutex_lock(&ra->lock);
 	ra->val = v;
 	r = ra->val;
-	mtx_unlock(&ra->lock);
+	rdk_thread_mutex_unlock(&ra->lock);
 	return r;
 #elif HAVE_ATOMICS_64_ATOMIC
         __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);

@@ -76,9 +76,9 @@ static int run_producer (void *arg) {
         while (1) {
                 rd_kafka_resp_err_t err;
 
-                mtx_lock(&value_mtx);
+                rdk_thread_mutex_lock(&value_mtx);
                 if (!strcmp(value, "end")) {
-                        mtx_unlock(&value_mtx);
+                        rdk_thread_mutex_unlock(&value_mtx);
                         break;
                 } else if (strcmp(value, "before")) {
                         /* Ignore Delivery report errors after topic
@@ -103,7 +103,7 @@ static int run_producer (void *arg) {
                         TEST_ASSERT(!err, "producev() failed: %s",
                                     rd_kafka_err2name(err));
 
-                mtx_unlock(&value_mtx);
+                rdk_thread_mutex_unlock(&value_mtx);
 
                 rd_usleep(1000000 / msg_rate, NULL);
 
@@ -197,22 +197,22 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_true);
 
-        mtx_lock(&value_mtx);
+        rdk_thread_mutex_lock(&value_mtx);
         value = "before";
-        mtx_unlock(&value_mtx);
+        rdk_thread_mutex_unlock(&value_mtx);
 
         /* Create producer thread */
-        if (thrd_create(&producer_thread, run_producer,
-                        (void *)topic) != thrd_success)
-                TEST_FAIL("thrd_create failed");
+        if (rdk_thread_create(&producer_thread, run_producer,
+                              (void *) topic) != thrd_success)
+                TEST_FAIL("rdk_thread_create failed");
 
         /* Consume messages for 5s */
         expect_messages(consumer, msg_rate * 5, value);
 
         /* Delete topic */
-        mtx_lock(&value_mtx);
+        rdk_thread_mutex_lock(&value_mtx);
         value = "during";
-        mtx_unlock(&value_mtx);
+        rdk_thread_mutex_unlock(&value_mtx);
 
         test_delete_topic(consumer, topic);
         rd_sleep(5);
@@ -220,9 +220,9 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
         /* Re-create topic */
         test_create_topic(consumer, topic, part_cnt_2, 3);
 
-        mtx_lock(&value_mtx);
+        rdk_thread_mutex_lock(&value_mtx);
         value = "after";
-        mtx_unlock(&value_mtx);
+        rdk_thread_mutex_unlock(&value_mtx);
 
         /* Consume for 5 more seconds, should see new messages */
         expect_messages(consumer, msg_rate * 5, value);
@@ -230,11 +230,11 @@ static void do_test_create_delete_create (int part_cnt_1, int part_cnt_2) {
         rd_kafka_destroy(consumer);
 
         /* Wait for producer to exit */
-        mtx_lock(&value_mtx);
+        rdk_thread_mutex_lock(&value_mtx);
         value = "end";
-        mtx_unlock(&value_mtx);
+        rdk_thread_mutex_unlock(&value_mtx);
 
-        if (thrd_join(producer_thread, &ret) != thrd_success || ret != 0)
+        if (rdk_thread_join(producer_thread, &ret) != thrd_success || ret != 0)
                 TEST_FAIL("Producer failed: see previous errors");
 
         TEST_SAY(_C_GRN
@@ -250,7 +250,7 @@ int main_0107_topic_recreate (int argc, char **argv) {
 
         this_test->is_fatal_cb = is_error_fatal;
 
-        mtx_init(&value_mtx, mtx_plain);
+    rdk_thread_mutex_init(&value_mtx, mtx_plain);
 
         test_conf_init(NULL, NULL, 60);
 

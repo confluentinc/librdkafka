@@ -81,8 +81,8 @@ extern int  test_idempotent_producer;
 
 extern mtx_t test_mtx;
 
-#define TEST_LOCK()   mtx_lock(&test_mtx)
-#define TEST_UNLOCK() mtx_unlock(&test_mtx)
+#define TEST_LOCK()   rdk_thread_mutex_lock(&test_mtx)
+#define TEST_UNLOCK() rdk_thread_mutex_unlock(&test_mtx)
 
 
 /* Forward decl */

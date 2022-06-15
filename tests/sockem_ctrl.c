@@ -39,7 +39,7 @@
 static int sockem_ctrl_thrd_main (void *arg) {
         sockem_ctrl_t *ctrl = (sockem_ctrl_t *)arg;
         int64_t next_wakeup = 0;
-        mtx_lock(&ctrl->lock);
+        rdk_thread_mutex_lock(&ctrl->lock);
 
         test_curr = ctrl->test;
 
@@ -57,7 +57,7 @@ static int sockem_ctrl_thrd_main (void *arg) {
                 /* Ack last command */
                 if (ctrl->cmd_ack != ctrl->cmd_seq) {
                         ctrl->cmd_ack = ctrl->cmd_seq;
-                        cnd_signal(&ctrl->cnd); /* signal back to caller */
+                    rdk_thread_cond_signal(&ctrl->cnd); /* signal back to caller */
                 }
 
                 /* Serve expired commands */
@@ -81,7 +81,7 @@ static int sockem_ctrl_thrd_main (void *arg) {
                         free(cmd);
                 }
         }
-        mtx_unlock(&ctrl->lock);
+        rdk_thread_mutex_unlock(&ctrl->lock);
 
         return 0;
 }
@@ -101,45 +101,45 @@ void sockem_ctrl_set_delay (sockem_ctrl_t *ctrl, int after, int delay) {
         cmd->ts_at = test_clock() + (after*1000);
         cmd->delay = delay;
 
-        mtx_lock(&ctrl->lock);
+        rdk_thread_mutex_lock(&ctrl->lock);
         wait_seq = ++ctrl->cmd_seq;
         TAILQ_INSERT_TAIL(&ctrl->cmds, cmd, link);
-        cnd_broadcast(&ctrl->cnd);
+    rdk_thread_cond_broadcast(&ctrl->cnd);
 
         /* Wait for ack from sockem thread */
         while (ctrl->cmd_ack < wait_seq) {
                 TEST_SAY("Waiting for sockem control ack\n");
                 cnd_timedwait_ms(&ctrl->cnd, &ctrl->lock, 1000);
         }
-        mtx_unlock(&ctrl->lock);
+        rdk_thread_mutex_unlock(&ctrl->lock);
 }
 
 
 void sockem_ctrl_init (sockem_ctrl_t *ctrl) {
         memset(ctrl, 0, sizeof(*ctrl));
-        mtx_init(&ctrl->lock, mtx_plain);
-        cnd_init(&ctrl->cnd);
+    rdk_thread_mutex_init(&ctrl->lock, mtx_plain);
+    rdk_thread_cond_init(&ctrl->cnd);
         TAILQ_INIT(&ctrl->cmds);
         ctrl->test = test_curr;
 
-        mtx_lock(&ctrl->lock);
-        if (thrd_create(&ctrl->thrd, sockem_ctrl_thrd_main,
-                        ctrl) != thrd_success)
+        rdk_thread_mutex_lock(&ctrl->lock);
+        if (rdk_thread_create(&ctrl->thrd, sockem_ctrl_thrd_main,
+                              ctrl) != thrd_success)
                 TEST_FAIL("Failed to create sockem ctrl thread");
-        mtx_unlock(&ctrl->lock);
+        rdk_thread_mutex_unlock(&ctrl->lock);
 }
 
 void sockem_ctrl_term (sockem_ctrl_t *ctrl) {
         int res;
 
         /* Join controller thread */
-        mtx_lock(&ctrl->lock);
+        rdk_thread_mutex_lock(&ctrl->lock);
         ctrl->term = 1;
-        cnd_broadcast(&ctrl->cnd);
-        mtx_unlock(&ctrl->lock);
+    rdk_thread_cond_broadcast(&ctrl->cnd);
+        rdk_thread_mutex_unlock(&ctrl->lock);
 
-        thrd_join(ctrl->thrd, &res);
+    rdk_thread_join(ctrl->thrd, &res);
 
-        cnd_destroy(&ctrl->cnd);
-        mtx_destroy(&ctrl->lock);
+    rdk_thread_cond_destroy(&ctrl->cnd);
+    rdk_thread_mutex_destroy(&ctrl->lock);
 }

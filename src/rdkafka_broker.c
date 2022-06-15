@@ -1148,9 +1148,9 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
  */
 int rd_kafka_brokers_get_state_version (rd_kafka_t *rk) {
 	int version;
-	mtx_lock(&rk->rk_broker_state_change_lock);
+	rdk_thread_mutex_lock(&rk->rk_broker_state_change_lock);
 	version = rk->rk_broker_state_change_version;
-	mtx_unlock(&rk->rk_broker_state_change_lock);
+	rdk_thread_mutex_unlock(&rk->rk_broker_state_change_lock);
 	return version;
 }
 
@@ -1175,14 +1175,14 @@ int rd_kafka_brokers_get_state_version (rd_kafka_t *rk) {
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 					int timeout_ms) {
 	int r;
-	mtx_lock(&rk->rk_broker_state_change_lock);
+	rdk_thread_mutex_lock(&rk->rk_broker_state_change_lock);
 	if (stored_version != rk->rk_broker_state_change_version)
 		r = 1;
 	else
 		r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
 				     &rk->rk_broker_state_change_lock,
 				     timeout_ms) == thrd_success;
-	mtx_unlock(&rk->rk_broker_state_change_lock);
+	rdk_thread_mutex_unlock(&rk->rk_broker_state_change_lock);
 	return r;
 }
 
@@ -1203,7 +1203,7 @@ int rd_kafka_brokers_wait_state_change_async (rd_kafka_t *rk,
                                               int stored_version,
                                               rd_kafka_enq_once_t *eonce) {
         int r = 1;
-        mtx_lock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_lock(&rk->rk_broker_state_change_lock);
 
         if (stored_version != rk->rk_broker_state_change_version)
                 r = 0;
@@ -1212,7 +1212,7 @@ int rd_kafka_brokers_wait_state_change_async (rd_kafka_t *rk,
                 rd_list_add(&rk->rk_broker_state_change_waiters, eonce);
         }
 
-        mtx_unlock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_unlock(&rk->rk_broker_state_change_lock);
         return r;
 }
 
@@ -1240,7 +1240,7 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
         rd_kafka_dbg(rk, GENERIC, "BROADCAST",
                      "Broadcasting state change");
 
-        mtx_lock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_lock(&rk->rk_broker_state_change_lock);
 
         /* Bump version */
         rk->rk_broker_state_change_version++;
@@ -1250,9 +1250,9 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
                       rd_kafka_broker_state_change_trigger_eonce, NULL);
 
         /* Broadcast to listeners */
-        cnd_broadcast(&rk->rk_broker_state_change_cnd);
+    rdk_thread_cond_broadcast(&rk->rk_broker_state_change_cnd);
 
-        mtx_unlock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_unlock(&rk->rk_broker_state_change_lock);
 }
 
 
@@ -2915,11 +2915,11 @@ static int rd_kafka_broker_cmp_by_id (const void *_a, const void *_b) {
  */
 static void rd_kafka_broker_set_logname (rd_kafka_broker_t *rkb,
                                          const char *logname) {
-        mtx_lock(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_lock(&rkb->rkb_logname_lock);
         if (rkb->rkb_logname)
                 rd_free(rkb->rkb_logname);
         rkb->rkb_logname = rd_strdup(logname);
-        mtx_unlock(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_unlock(&rkb->rkb_logname_lock);
 }
 
 
@@ -5355,13 +5355,13 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
 
-        mtx_lock(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
         rkb->rkb_logname = NULL;
-        mtx_unlock(&rkb->rkb_logname_lock);
-        mtx_destroy(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_unlock(&rkb->rkb_logname_lock);
+    rdk_thread_mutex_destroy(&rkb->rkb_logname_lock);
 
-	mtx_destroy(&rkb->rkb_lock);
+    rdk_thread_mutex_destroy(&rkb->rkb_lock);
 
         rd_refcnt_destroy(&rkb->rkb_refcnt);
 
@@ -5375,11 +5375,11 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk) {
 	rd_kafka_broker_t *rkb;
 
-        mtx_lock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_lock(&rk->rk_internal_rkb_lock);
 	rkb = rk->rk_internal_rkb;
 	if (rkb)
 		rd_kafka_broker_keep(rkb);
-        mtx_unlock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_unlock(&rk->rk_internal_rkb_lock);
 
 	return rkb;
 }
@@ -5427,8 +5427,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_port = port;
         rkb->rkb_origname = rd_strdup(name);
 
-	mtx_init(&rkb->rkb_lock, mtx_plain);
-        mtx_init(&rkb->rkb_logname_lock, mtx_plain);
+    rdk_thread_mutex_init(&rkb->rkb_lock, mtx_plain);
+    rdk_thread_mutex_init(&rkb->rkb_logname_lock, mtx_plain);
         rkb->rkb_logname = rd_strdup(rkb->rkb_name);
 	TAILQ_INIT(&rkb->rkb_toppars);
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
@@ -5513,8 +5513,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	 * the broker thread until we've finalized the rkb. */
 	rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
-	if (thrd_create(&rkb->rkb_thread,
-			rd_kafka_broker_thread_main, rkb) != thrd_success) {
+	if (rdk_thread_create(&rkb->rkb_thread,
+                          rd_kafka_broker_thread_main, rkb) != thrd_success) {
 		rd_kafka_broker_unlock(rkb);
 
                 rd_kafka_log(rk, LOG_CRIT, "THREAD",
@@ -6062,9 +6062,9 @@ const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb) {
         static RD_TLS int reti = 0;
 
         reti = (reti + 1) % 4;
-        mtx_lock(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_lock(&rkb->rkb_logname_lock);
         rd_snprintf(ret[reti], sizeof(ret[reti]), "%s", rkb->rkb_logname);
-        mtx_unlock(&rkb->rkb_logname_lock);
+        rdk_thread_mutex_unlock(&rkb->rkb_logname_lock);
 
         return ret[reti];
 }
@@ -6146,10 +6146,10 @@ void rd_kafka_connect_any (rd_kafka_t *rk, const char *reason) {
             rd_atomic32_get(&rk->rk_broker_cnt) == 0)
                 return;
 
-        mtx_lock(&rk->rk_suppress.sparse_connect_lock);
+        rdk_thread_mutex_lock(&rk->rk_suppress.sparse_connect_lock);
         suppr = rd_interval(&rk->rk_suppress.sparse_connect_random,
                             rk->rk_conf.sparse_connect_intvl*1000, 0);
-        mtx_unlock(&rk->rk_suppress.sparse_connect_lock);
+        rdk_thread_mutex_unlock(&rk->rk_suppress.sparse_connect_lock);
 
         if (suppr <= 0) {
                 rd_kafka_dbg(rk, BROKER|RD_KAFKA_DBG_GENERIC, "CONNECT",
@@ -6513,11 +6513,11 @@ void rd_kafka_broker_monitor_del (rd_kafka_broker_monitor_t *rkbmon) {
         if (!rkb)
                 return;
 
-        rd_kafka_broker_lock(rkb);
+    rd_kafka_broker_lock(rkb);
         rkbmon->rkbmon_rkb = NULL;
         rd_kafka_q_destroy(rkbmon->rkbmon_q);
         TAILQ_REMOVE(&rkb->rkb_monitors, rkbmon, rkbmon_link);
-        rd_kafka_broker_unlock(rkb);
+    rd_kafka_broker_unlock(rkb);
 
         rd_kafka_broker_destroy(rkb);
 }

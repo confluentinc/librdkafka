@@ -1071,7 +1071,7 @@ static int run_test0 (struct run_args *run_args) {
         }
         TEST_UNLOCK();
 
-        cnd_broadcast(&test_cnd);
+    rdk_thread_cond_broadcast(&test_cnd);
 
 #if WITH_SOCKEM
         test_socket_close_all(test, 0);
@@ -1103,7 +1103,7 @@ static int run_test0 (struct run_args *run_args) {
 static int run_test_from_thread (void *arg) {
         struct run_args *run_args = arg;
 
-	thrd_detach(thrd_current());
+    rdk_thread_detach(rdk_thread_current());
 
 	run_test0(run_args);
 
@@ -1183,7 +1183,7 @@ static int run_test (struct test *test, int argc, char **argv) {
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 
-        if (thrd_create(&test->thrd, run_test_from_thread, run_args) !=
+        if (rdk_thread_create(&test->thrd, run_test_from_thread, run_args) !=
             thrd_success) {
                 TEST_LOCK();
                 tests_running_cnt--;
@@ -1561,8 +1561,8 @@ int main(int argc, char **argv) {
 	int a,b,c,d;
         const char *tmpver;
 
-	mtx_init(&test_mtx, mtx_plain);
-        cnd_init(&test_cnd);
+    rdk_thread_mutex_init(&test_mtx, mtx_plain);
+    rdk_thread_cond_init(&test_cnd);
 
         test_init();
 
@@ -6274,7 +6274,7 @@ void test_fail0 (const char *file, int line, const char *function,
         if (test_assert_on_fail || !is_thrd)
                 assert(0);
         else
-                thrd_exit(0);
+            rdk_thread_exit(0);
 }
 
 

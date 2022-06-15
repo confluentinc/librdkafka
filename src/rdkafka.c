@@ -129,7 +129,7 @@ void rd_kafka_set_thread_sysname (const char *fmt, ...) {
 }
 
 static void rd_kafka_global_init0 (void) {
-	mtx_init(&rd_kafka_global_lock, mtx_plain);
+    rdk_thread_mutex_init(&rd_kafka_global_lock, mtx_plain);
 #if ENABLE_DEVEL
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
@@ -146,7 +146,7 @@ static void rd_kafka_global_init0 (void) {
  * @brief Initialize once per process
  */
 void rd_kafka_global_init (void) {
-        call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
+        rdk_thread_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
 }
 
 
@@ -167,9 +167,9 @@ static void rd_kafka_global_srand (void) {
  */
 static int rd_kafka_global_cnt_get (void) {
 	int r;
-	mtx_lock(&rd_kafka_global_lock);
+	rdk_thread_mutex_lock(&rd_kafka_global_lock);
 	r = rd_kafka_global_cnt;
-	mtx_unlock(&rd_kafka_global_lock);
+	rdk_thread_mutex_unlock(&rd_kafka_global_lock);
 	return r;
 }
 
@@ -179,7 +179,7 @@ static int rd_kafka_global_cnt_get (void) {
  * If this is the first instance the global constructors will be called, if any.
  */
 static void rd_kafka_global_cnt_incr (void) {
-	mtx_lock(&rd_kafka_global_lock);
+	rdk_thread_mutex_lock(&rd_kafka_global_lock);
 	rd_kafka_global_cnt++;
 	if (rd_kafka_global_cnt == 1) {
 		rd_kafka_transport_init();
@@ -188,7 +188,7 @@ static void rd_kafka_global_cnt_incr (void) {
 #endif
                 rd_kafka_sasl_global_init();
 	}
-	mtx_unlock(&rd_kafka_global_lock);
+	rdk_thread_mutex_unlock(&rd_kafka_global_lock);
 }
 
 /**
@@ -196,7 +196,7 @@ static void rd_kafka_global_cnt_incr (void) {
  * If this counter reaches 0 the global destructors will be called, if any.
  */
 static void rd_kafka_global_cnt_decr (void) {
-	mtx_lock(&rd_kafka_global_lock);
+	rdk_thread_mutex_lock(&rd_kafka_global_lock);
 	rd_kafka_assert(NULL, rd_kafka_global_cnt > 0);
 	rd_kafka_global_cnt--;
 	if (rd_kafka_global_cnt == 0) {
@@ -205,7 +205,7 @@ static void rd_kafka_global_cnt_decr (void) {
                 rd_kafka_ssl_term();
 #endif
 	}
-	mtx_unlock(&rd_kafka_global_lock);
+	rdk_thread_mutex_unlock(&rd_kafka_global_lock);
 }
 
 
@@ -976,8 +976,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         }
 
         if (rk->rk_type == RD_KAFKA_PRODUCER) {
-		cnd_destroy(&rk->rk_curr_msgs.cnd);
-		mtx_destroy(&rk->rk_curr_msgs.lock);
+            rdk_thread_cond_destroy(&rk->rk_curr_msgs.cnd);
+            rdk_thread_mutex_destroy(&rk->rk_curr_msgs.lock);
 	}
 
         if (rk->rk_fatal.errstr) {
@@ -985,13 +985,13 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                 rk->rk_fatal.errstr = NULL;
         }
 
-	cnd_destroy(&rk->rk_broker_state_change_cnd);
-	mtx_destroy(&rk->rk_broker_state_change_lock);
+    rdk_thread_cond_destroy(&rk->rk_broker_state_change_cnd);
+    rdk_thread_mutex_destroy(&rk->rk_broker_state_change_lock);
 
-        mtx_destroy(&rk->rk_suppress.sparse_connect_lock);
+    rdk_thread_mutex_destroy(&rk->rk_suppress.sparse_connect_lock);
 
-        cnd_destroy(&rk->rk_init_cnd);
-        mtx_destroy(&rk->rk_init_lock);
+    rdk_thread_cond_destroy(&rk->rk_init_cnd);
+    rdk_thread_mutex_destroy(&rk->rk_init_lock);
 
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
@@ -1112,7 +1112,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Joining internal main thread");
 
-        if (thrd_join(thrd, &res) != thrd_success)
+        if (rdk_thread_join(thrd, &res) != thrd_success)
                 rd_kafka_log(rk, LOG_ERR, "DESTROY",
                              "Failed to join internal main thread: %s "
                              "(was process forked?)",
@@ -1161,7 +1161,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, ALL, "DESTROY",
                              "Waiting for background queue thread "
                              "to terminate");
-                thrd_join(rk->rk_background.thread, &res);
+            rdk_thread_join(rk->rk_background.thread, &res);
                 rd_kafka_q_destroy_owner(rk->rk_background.q);
         }
 
@@ -1234,10 +1234,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_wrunlock(rk);
 
-        mtx_lock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_lock(&rk->rk_broker_state_change_lock);
         /* Purge broker state change waiters */
         rd_list_destroy(&rk->rk_broker_state_change_waiters);
-        mtx_unlock(&rk->rk_broker_state_change_lock);
+        rdk_thread_mutex_unlock(&rk->rk_broker_state_change_lock);
 
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
                 if (rk->rk_consumer.q)
@@ -1252,7 +1252,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	rd_kafka_q_purge(rk->rk_rep);
 
 	/* Loose our special reference to the internal broker. */
-        mtx_lock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_lock(&rk->rk_internal_rkb_lock);
 	if ((rkb = rk->rk_internal_rkb)) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                              "Decommissioning internal broker");
@@ -1266,7 +1266,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
         }
-        mtx_unlock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_unlock(&rk->rk_internal_rkb_lock);
 	if (rkb)
 		rd_kafka_broker_destroy(rkb);
 
@@ -1277,7 +1277,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         /* Join broker threads */
         RD_LIST_FOREACH(thrd, &wait_thrds, i) {
                 int res;
-                if (thrd_join(*thrd, &res) != thrd_success)
+                if (rdk_thread_join(*thrd, &res) != thrd_success)
                         ;
                 free(thrd);
         }
@@ -1952,13 +1952,13 @@ static int rd_kafka_init_wait (rd_kafka_t *rk, int timeout_ms) {
 
         rd_timeout_init_timespec(&tspec, timeout_ms);
 
-        mtx_lock(&rk->rk_init_lock);
+        rdk_thread_mutex_lock(&rk->rk_init_lock);
         while (rk->rk_init_wait_cnt > 0 &&
                cnd_timedwait_abs(&rk->rk_init_cnd, &rk->rk_init_lock,
                                  &tspec) == thrd_success)
                 ;
         ret = rk->rk_init_wait_cnt;
-        mtx_unlock(&rk->rk_init_lock);
+        rdk_thread_mutex_unlock(&rk->rk_init_lock);
 
         return ret;
 }
@@ -2004,10 +2004,10 @@ static int rd_kafka_thread_main (void *arg) {
         if (rd_kafka_is_idempotent(rk))
                 rd_kafka_idemp_init(rk);
 
-        mtx_lock(&rk->rk_init_lock);
+        rdk_thread_mutex_lock(&rk->rk_init_lock);
         rk->rk_init_wait_cnt--;
-        cnd_broadcast(&rk->rk_init_cnd);
-        mtx_unlock(&rk->rk_init_lock);
+    rdk_thread_cond_broadcast(&rk->rk_init_cnd);
+        rdk_thread_mutex_unlock(&rk->rk_init_lock);
 
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(rk->rk_ops) ||
@@ -2120,26 +2120,26 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
         /* Seed PRNG, don't bother about HAVE_RAND_R, since it is pretty cheap. */
         if (rk->rk_conf.enable_random_seed)
-                call_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
+                rdk_thread_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
 
         /* Call on_new() interceptors */
         rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
 
 	rwlock_init(&rk->rk_lock);
-        mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
+    rdk_thread_mutex_init(&rk->rk_internal_rkb_lock, mtx_plain);
 
-	cnd_init(&rk->rk_broker_state_change_cnd);
-	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
+    rdk_thread_cond_init(&rk->rk_broker_state_change_cnd);
+    rdk_thread_mutex_init(&rk->rk_broker_state_change_lock, mtx_plain);
         rd_list_init(&rk->rk_broker_state_change_waiters, 8,
                      rd_kafka_enq_once_trigger_destroy);
 
-        cnd_init(&rk->rk_init_cnd);
-        mtx_init(&rk->rk_init_lock, mtx_plain);
+    rdk_thread_cond_init(&rk->rk_init_cnd);
+    rdk_thread_mutex_init(&rk->rk_init_lock, mtx_plain);
 
         rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
         rd_interval_init(&rk->rk_suppress.broker_metadata_refresh);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
-        mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
+    rdk_thread_mutex_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rd_clock());
 
@@ -2219,8 +2219,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.api_version_request = 1;
 
         if (rk->rk_type == RD_KAFKA_PRODUCER) {
-                mtx_init(&rk->rk_curr_msgs.lock, mtx_plain);
-                cnd_init(&rk->rk_curr_msgs.cnd);
+            rdk_thread_mutex_init(&rk->rk_curr_msgs.lock, mtx_plain);
+            rdk_thread_cond_init(&rk->rk_curr_msgs.cnd);
                 rk->rk_curr_msgs.max_cnt =
                         rk->rk_conf.queue_buffering_max_msgs;
                 if ((unsigned long long)rk->rk_conf.
@@ -2345,7 +2345,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-        mtx_lock(&rk->rk_init_lock);
+        rdk_thread_mutex_lock(&rk->rk_init_lock);
 
         /* Create background thread and queue if background_event_cb()
          * has been configured.
@@ -2353,15 +2353,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
          * the main thread is created it is no longer trivial to error
          * out from rd_kafka_new(). */
         if (rk->rk_conf.background_event_cb) {
-                /* Hold off background thread until thrd_create() is done. */
+                /* Hold off background thread until rdk_thread_create() is done. */
                 rd_kafka_wrlock(rk);
 
                 rk->rk_background.q = rd_kafka_q_new(rk);
 
                 rk->rk_init_wait_cnt++;
 
-                if ((thrd_create(&rk->rk_background.thread,
-                                 rd_kafka_background_thread_main, rk)) !=
+                if ((rdk_thread_create(&rk->rk_background.thread,
+                                       rd_kafka_background_thread_main, rk)) !=
                     thrd_success) {
                         rk->rk_init_wait_cnt--;
                         ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
@@ -2372,7 +2372,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                             "thread: %s (%i)",
                                             rd_strerror(errno), errno);
                         rd_kafka_wrunlock(rk);
-                        mtx_unlock(&rk->rk_init_lock);
+                        rdk_thread_mutex_unlock(&rk->rk_init_lock);
 
 #ifndef _WIN32
                         /* Restore sigmask of caller */
@@ -2392,8 +2392,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
 	/* Create handler thread */
         rk->rk_init_wait_cnt++;
-	if ((thrd_create(&rk->rk_thread,
-			 rd_kafka_thread_main, rk)) != thrd_success) {
+	if ((rdk_thread_create(&rk->rk_thread,
+                           rd_kafka_thread_main, rk)) != thrd_success) {
                 rk->rk_init_wait_cnt--;
                 ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 ret_errno = errno;
@@ -2402,7 +2402,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 				    "Failed to create thread: %s (%i)",
 				    rd_strerror(errno), errno);
 		rd_kafka_wrunlock(rk);
-                mtx_unlock(&rk->rk_init_lock);
+                rdk_thread_mutex_unlock(&rk->rk_init_lock);
 #ifndef _WIN32
                 /* Restore sigmask of caller */
                 pthread_sigmask(SIG_SETMASK, &oldset, NULL);
@@ -2411,17 +2411,17 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         rd_kafka_wrunlock(rk);
-        mtx_unlock(&rk->rk_init_lock);
+        rdk_thread_mutex_unlock(&rk->rk_init_lock);
 
         /*
          * @warning `goto fail` is prohibited past this point
          */
 
-        mtx_lock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
 						  RD_KAFKA_PROTO_PLAINTEXT,
 						  "", 0, RD_KAFKA_NODEID_UA);
-        mtx_unlock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_unlock(&rk->rk_internal_rkb_lock);
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist) {
@@ -2444,7 +2444,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                  * Either case there is no point in handling this gracefully
                  * in the current state since the thread joins are likely
                  * to hang as well. */
-                mtx_lock(&rk->rk_init_lock);
+                rdk_thread_mutex_lock(&rk->rk_init_lock);
                 rd_kafka_log(rk, LOG_CRIT, "INIT",
                              "Failed to initialize %s: "
                              "%d background thread(s) did not initialize "
@@ -2455,7 +2455,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                     "Timed out waiting for "
                                     "%d background thread(s) to initialize",
                                     rk->rk_init_wait_cnt);
-                mtx_unlock(&rk->rk_init_lock);
+                rdk_thread_mutex_unlock(&rk->rk_init_lock);
 
                 rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
                                         EDEADLK);
@@ -2517,7 +2517,7 @@ fail:
 
         if (rk->rk_background.thread) {
                 int res;
-                thrd_join(rk->rk_background.thread, &res);
+            rdk_thread_join(rk->rk_background.thread, &res);
                 rd_kafka_q_destroy_owner(rk->rk_background.q);
         }
 
@@ -3981,11 +3981,11 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 
 	fprintf(fp, " brokers:\n");
         if (locks)
-                mtx_lock(&rk->rk_internal_rkb_lock);
+                rdk_thread_mutex_lock(&rk->rk_internal_rkb_lock);
         if (rk->rk_internal_rkb)
                 rd_kafka_broker_dump(fp, rk->rk_internal_rkb, locks);
         if (locks)
-                mtx_unlock(&rk->rk_internal_rkb_lock);
+                rdk_thread_mutex_unlock(&rk->rk_internal_rkb_lock);
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_dump(fp, rkb, locks);
@@ -4256,10 +4256,10 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
         rd_kafka_rdunlock(rk);
 
         /* The internal broker handler may hold unassigned partitions */
-        mtx_lock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_lock(&rk->rk_internal_rkb_lock);
         rd_kafka_broker_purge_queues(rk->rk_internal_rkb, purge_flags,
                                      RD_KAFKA_REPLYQ(tmpq, 0));
-        mtx_unlock(&rk->rk_internal_rkb_lock);
+        rdk_thread_mutex_unlock(&rk->rk_internal_rkb_lock);
         waitcnt++;
 
 

@@ -51,9 +51,9 @@ static struct {
 static void event_cb(rd_kafka_t *rk_p, void *opaque) {
         TEST_ASSERT(opaque == (void*)0x1234,
                     "Opaque pointer is not as expected (got: %p)", opaque);
-        mtx_lock(&event_receiver.lock);
+        rdk_thread_mutex_lock(&event_receiver.lock);
         event_receiver.count += 1;
-        mtx_unlock(&event_receiver.lock);
+        rdk_thread_mutex_unlock(&event_receiver.lock);
 }
 
 /**
@@ -62,10 +62,10 @@ static void event_cb(rd_kafka_t *rk_p, void *opaque) {
 static int wait_event_cb(int timeout_secs) {
         int event_count = 0;
         for (; timeout_secs >= 0; timeout_secs--) {
-                mtx_lock(&event_receiver.lock);
+                rdk_thread_mutex_lock(&event_receiver.lock);
                 event_count = event_receiver.count;
                 event_receiver.count = 0;
-                mtx_unlock(&event_receiver.lock);
+                rdk_thread_mutex_unlock(&event_receiver.lock);
                 if (event_count > 0 || timeout_secs == 0)
                         return event_count;
                 rd_sleep(1);
@@ -95,7 +95,7 @@ int main_0083_cb_event (int argc, char **argv) {
         rd_kafka_event_t *rkev;
         int eventcnt = 0;
 
-        mtx_init(&event_receiver.lock, mtx_plain);
+    rdk_thread_mutex_init(&event_receiver.lock, mtx_plain);
 
         testid = test_id_generate();
         topic = test_mk_topic_name(__FUNCTION__, 1);
@@ -208,7 +208,7 @@ int main_0083_cb_event (int argc, char **argv) {
         rd_kafka_consumer_close(rk_c);
         rd_kafka_destroy(rk_c);
 
-        mtx_destroy(&event_receiver.lock);
+    rdk_thread_mutex_destroy(&event_receiver.lock);
 
         return 0;
 }

@@ -75,9 +75,9 @@ typedef struct rd_avg_s {
  * @brief Add value \p v to averager \p ra.
  */
 static RD_UNUSED void rd_avg_add (rd_avg_t *ra, int64_t v) {
-        mtx_lock(&ra->ra_lock);
+        rdk_thread_mutex_lock(&ra->ra_lock);
         if (!ra->ra_enabled) {
-                mtx_unlock(&ra->ra_lock);
+                rdk_thread_mutex_unlock(&ra->ra_lock);
                 return;
         }
 	if (v > ra->ra_v.maxv)
@@ -89,7 +89,7 @@ static RD_UNUSED void rd_avg_add (rd_avg_t *ra, int64_t v) {
 #if WITH_HDRHISTOGRAM
         rd_hdr_histogram_record(ra->ra_hdr, v);
 #endif
-        mtx_unlock(&ra->ra_lock);
+        rdk_thread_mutex_unlock(&ra->ra_lock);
 }
 
 
@@ -140,15 +140,15 @@ rd_avg_quantile (const rd_avg_t *ra, double q) {
 static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
         rd_ts_t now;
 
-        mtx_lock(&src->ra_lock);
+        rdk_thread_mutex_lock(&src->ra_lock);
         if (!src->ra_enabled) {
                 memset(dst, 0, sizeof(*dst));
                 dst->ra_type = src->ra_type;
-                mtx_unlock(&src->ra_lock);
+                rdk_thread_mutex_unlock(&src->ra_lock);
                 return;
         }
 
-        mtx_init(&dst->ra_lock, mtx_plain);
+    rdk_thread_mutex_init(&dst->ra_lock, mtx_plain);
         dst->ra_type = src->ra_type;
 	dst->ra_v    = src->ra_v;
 #if WITH_HDRHISTOGRAM
@@ -217,7 +217,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
         }
 #endif
 
-        mtx_unlock(&src->ra_lock);
+        rdk_thread_mutex_unlock(&src->ra_lock);
 
         rd_avg_calc(dst, now);
 }
@@ -230,7 +230,7 @@ static RD_UNUSED void rd_avg_init (rd_avg_t *ra, int type,
                                    int64_t exp_min, int64_t exp_max,
                                    int sigfigs, int enable) {
         memset(ra, 0, sizeof(*ra));
-        mtx_init(&ra->ra_lock, 0);
+    rdk_thread_mutex_init(&ra->ra_lock, 0);
         ra->ra_enabled = enable;
         if (!enable)
                 return;
@@ -252,7 +252,7 @@ static RD_UNUSED void rd_avg_destroy (rd_avg_t *ra) {
         if (ra->ra_hdr)
                 rd_hdr_histogram_destroy(ra->ra_hdr);
 #endif
-        mtx_destroy(&ra->ra_lock);
+    rdk_thread_mutex_destroy(&ra->ra_lock);
 }
 
 #endif /* _RDAVG_H_ */

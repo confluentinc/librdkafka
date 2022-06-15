@@ -1415,9 +1415,9 @@ int rd_kafka_ssl_ctx_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 static RD_UNUSED void
 rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
         if (mode & CRYPTO_LOCK)
-                mtx_lock(&rd_kafka_ssl_locks[i]);
+                rdk_thread_mutex_lock(&rd_kafka_ssl_locks[i]);
         else
-                mtx_unlock(&rd_kafka_ssl_locks[i]);
+                rdk_thread_mutex_unlock(&rd_kafka_ssl_locks[i]);
 }
 #endif
 
@@ -1425,10 +1425,10 @@ static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 #ifdef _WIN32
         /* Windows makes a distinction between thread handle
          * and thread id, which means we can't use the
-         * thrd_current() API that returns the handle. */
+         * rdk_thread_current() API that returns the handle. */
         return (unsigned long)GetCurrentThreadId();
 #else
-        return (unsigned long)(intptr_t)thrd_current();
+        return (unsigned long)(intptr_t) rdk_thread_current();
 #endif
 }
 

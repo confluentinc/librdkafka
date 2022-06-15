@@ -221,12 +221,12 @@ typedef pthread_mutex_t mtx_t;
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int mtx_init(mtx_t *mtx, int type);
+int rdk_thread_mutex_init(mtx_t *mtx, int type);
 
 /** Release any resources used by the given mutex.
 * @param mtx A mutex object.
 */
-void mtx_destroy(mtx_t *mtx);
+void rdk_thread_mutex_destroy(mtx_t *mtx);
 
 /** Lock the given mutex.
 * Blocks until the given mutex can be locked. If the mutex is non-recursive, and
@@ -236,11 +236,11 @@ void mtx_destroy(mtx_t *mtx);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int mtx_lock(mtx_t *mtx);
+int rdk_thread_mutex_lock(mtx_t *mtx);
 
 /** NOT YET IMPLEMENTED.
 */
-int mtx_timedlock(mtx_t *mtx, const struct timespec *ts);
+int rdk_thread_mutex_timedlock(mtx_t *mtx, const struct timespec *ts);
 
 /** Try to lock the given mutex.
 * The specified mutex shall support either test and return or timeout. If the
@@ -250,14 +250,14 @@ int mtx_timedlock(mtx_t *mtx, const struct timespec *ts);
 * requested is already in use, or @ref thrd_error if the request could not be
 * honored.
 */
-int mtx_trylock(mtx_t *mtx);
+int rdk_thread_mutex_trylock(mtx_t *mtx);
 
 /** Unlock the given mutex.
 * @param mtx A mutex object.
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int mtx_unlock(mtx_t *mtx);
+int rdk_thread_mutex_unlock(mtx_t *mtx);
 
 /* Condition variable */
 #if defined(_TTHREAD_WIN32_)
@@ -275,12 +275,12 @@ typedef pthread_cond_t cnd_t;
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int cnd_init(cnd_t *cond);
+int rdk_thread_cond_init(cnd_t *cond);
 
 /** Release any resources used by the given condition variable.
 * @param cond A condition variable object.
 */
-void cnd_destroy(cnd_t *cond);
+void rdk_thread_cond_destroy(cnd_t *cond);
 
 /** Signal a condition variable.
 * Unblocks one of the threads that are blocked on the given condition variable
@@ -290,7 +290,7 @@ void cnd_destroy(cnd_t *cond);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int cnd_signal(cnd_t *cond);
+int rdk_thread_cond_signal(cnd_t *cond);
 
 /** Broadcast a condition variable.
 * Unblocks all of the threads that are blocked on the given condition variable
@@ -300,24 +300,24 @@ int cnd_signal(cnd_t *cond);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int cnd_broadcast(cnd_t *cond);
+int rdk_thread_cond_broadcast(cnd_t *cond);
 
 /** Wait for a condition variable to become signaled.
 * The function atomically unlocks the given mutex and endeavors to block until
-* the given condition variable is signaled by a call to cnd_signal or to
-* cnd_broadcast. When the calling thread becomes unblocked it locks the mutex
+* the given condition variable is signaled by a call to rdk_thread_cond_signal or to
+* rdk_thread_cond_broadcast. When the calling thread becomes unblocked it locks the mutex
 * before it returns.
 * @param cond A condition variable object.
 * @param mtx A mutex object.
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int cnd_wait(cnd_t *cond, mtx_t *mtx);
+int rdk_thread_cond_wait(cnd_t *cond, mtx_t *mtx);
 
 /** Wait for a condition variable to become signaled.
 * The function atomically unlocks the given mutex and endeavors to block until
-* the given condition variable is signaled by a call to cnd_signal or to
-* cnd_broadcast, or until after the specified time. When the calling thread
+* the given condition variable is signaled by a call to rdk_thread_cond_signal or to
+* rdk_thread_cond_broadcast, or until after the specified time. When the calling thread
 * becomes unblocked it locks the mutex before it returns.
 * @param cond A condition variable object.
 * @param mtx A mutex object.
@@ -326,7 +326,7 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 * specified in the call was reached without acquiring the requested resource, or
 * @ref thrd_error if the request could not be honored.
 */
-int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
+int rdk_thread_cond_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
 #if defined(_TTHREAD_WIN32_)
 int _cnd_timedwait_win32(cnd_t *cond, mtx_t *mtx, DWORD timeout);
@@ -340,12 +340,12 @@ typedef pthread_t thrd_t;
 #endif
 
 /** Thread start function.
-* Any thread that is started with the @ref thrd_create() function must be
+* Any thread that is started with the @ref rdk_thread_create() function must be
 * started through a function of this type.
 * @param arg The thread argument (the @c arg argument of the corresponding
-*        @ref thrd_create() call).
+*        @ref rdk_thread_create() call).
 * @return The thread return value, which can be obtained by another thread
-* by using the @ref thrd_join() function.
+* by using the @ref rdk_thread_join() function.
 */
 typedef int (*thrd_start_t)(void *arg);
 
@@ -361,30 +361,30 @@ typedef int (*thrd_start_t)(void *arg);
 * original thread has exited and either been detached or joined to another
 * thread.
 */
-int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
+int rdk_thread_create(thrd_t *thr, thrd_start_t func, void *arg);
 
 /** Identify the calling thread.
 * @return The identifier of the calling thread.
 */
-thrd_t thrd_current(void);
+thrd_t rdk_thread_current(void);
 
 
 /** Dispose of any resources allocated to the thread when that thread exits.
  * @return thrd_success, or thrd_error on error
 */
-int thrd_detach(thrd_t thr);
+int rdk_thread_detach(thrd_t thr);
 
 /** Compare two thread identifiers.
 * The function determines if two thread identifiers refer to the same thread.
 * @return Zero if the two thread identifiers refer to different threads.
 * Otherwise a nonzero value is returned.
 */
-int thrd_equal(thrd_t thr0, thrd_t thr1);
+int rdk_thread_equal(thrd_t thr0, thrd_t thr1);
 
 /** Terminate execution of the calling thread.
 * @param res Result code of the calling thread.
 */
-TTHREAD_NORETURN void thrd_exit(int res);
+TTHREAD_NORETURN void rdk_thread_exit(int res);
 
 /** Wait for a thread to terminate.
 * The function joins the given thread with the current thread by blocking
@@ -395,7 +395,7 @@ TTHREAD_NORETURN void thrd_exit(int res);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int thrd_join(thrd_t thr, int *res);
+int rdk_thread_join(thrd_t thr, int *res);
 
 /** Put the calling thread to sleep.
 * Suspend execution of the calling thread.
@@ -408,13 +408,13 @@ int thrd_join(thrd_t thr, int *res);
 * @return 0 (zero) on successful sleep, -1 if an interrupt occurred,
 *         or a negative value if the operation fails.
 */
-int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
+int rdk_thread_sleep(const struct timespec *duration, struct timespec *remaining);
 
 /** Yield execution to another thread.
 * Permit other threads to run, even if the current thread would ordinarily
 * continue to run.
 */
-void thrd_yield(void);
+void rdk_thread_yield(void);
 
 /* Thread local storage */
 #if defined(_TTHREAD_WIN32_)
@@ -435,26 +435,26 @@ typedef void (*tss_dtor_t)(void *val);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 * @note On Windows, the @c dtor will definitely be called when
-* appropriate for threads created with @ref thrd_create.  It will be
+* appropriate for threads created with @ref rdk_thread_create.  It will be
 * called for other threads in most cases, the possible exception being
 * for DLLs loaded with LoadLibraryEx.  In order to be certain, you
-* should use @ref thrd_create whenever possible.
+* should use @ref rdk_thread_create whenever possible.
 */
-int tss_create(tss_t *key, tss_dtor_t dtor);
+int rdk_thread_key_create(tss_t *key, tss_dtor_t dtor);
 
 /** Delete a thread-specific storage.
 * The function releases any resources used by the given thread-specific
 * storage.
 * @param key The key that shall be deleted.
 */
-void tss_delete(tss_t key);
+void rdk_thread_key_delete(tss_t key);
 
 /** Get the value for a thread-specific storage.
 * @param key The thread-specific storage identifier.
 * @return The value for the current thread held in the given thread-specific
 * storage.
 */
-void *tss_get(tss_t key);
+void *rdk_thread_getspecific(tss_t key);
 
 /** Set the value for a thread-specific storage.
 * @param key The thread-specific storage identifier.
@@ -463,7 +463,7 @@ void *tss_get(tss_t key);
 * @return @ref thrd_success on success, or @ref thrd_error if the request could
 * not be honored.
 */
-int tss_set(tss_t key, void *val);
+int rdk_thread_setspecific(tss_t key, void *val);
 
 #if defined(_TTHREAD_WIN32_)
   typedef struct {
@@ -482,9 +482,9 @@ int tss_set(tss_t key, void *val);
  * @param func Callback to invoke.
  */
 #if defined(_TTHREAD_WIN32_)
-  void call_once(once_flag *flag, void (*func)(void));
+  void rdk_thread_once(once_flag *flag, void (*func)(void));
 #else
-  #define call_once(flag,func) pthread_once(flag,func)
+  #define rdk_thread_once(flag,func) pthread_once(flag,func)
 #endif
 
 

@@ -322,8 +322,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
 #define rd_kafka_broker_keep_fl(FUNC,LINE,RKB)  \
         rd_refcnt_add_fl(FUNC, LINE, &(RKB)->rkb_refcnt)
-#define rd_kafka_broker_lock(rkb)   mtx_lock(&(rkb)->rkb_lock)
-#define rd_kafka_broker_unlock(rkb) mtx_unlock(&(rkb)->rkb_lock)
+#define rd_kafka_broker_lock(rkb)   rdk_thread_mutex_lock(&(rkb)->rkb_lock)
+#define rd_kafka_broker_unlock(rkb) rdk_thread_mutex_unlock(&(rkb)->rkb_lock)
 
 
 /**

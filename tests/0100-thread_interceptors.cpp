@@ -37,36 +37,36 @@ extern "C" {
 class myThreadCb {
  public:
   myThreadCb(): startCnt_(0), exitCnt_(0) {
-    mtx_init(&lock_, mtx_plain);
+      rdk_thread_mutex_init(&lock_, mtx_plain);
   }
   ~myThreadCb() {
-    mtx_destroy(&lock_);
+    rdk_thread_mutex_destroy(&lock_);
   }
   int startCount () {
     int cnt;
-    mtx_lock(&lock_);
+    rdk_thread_mutex_lock(&lock_);
     cnt = startCnt_;
-    mtx_unlock(&lock_);
+    rdk_thread_mutex_unlock(&lock_);
     return cnt;
   }
   int exitCount () {
     int cnt;
-    mtx_lock(&lock_);
+    rdk_thread_mutex_lock(&lock_);
     cnt = exitCnt_;
-    mtx_unlock(&lock_);
+    rdk_thread_mutex_unlock(&lock_);
     return cnt;
   }
   virtual void thread_start_cb (const char *threadname) {
     Test::Say(tostr() << "Started thread: " << threadname << "\n");
-    mtx_lock(&lock_);
+    rdk_thread_mutex_lock(&lock_);
     startCnt_++;
-    mtx_unlock(&lock_);
+    rdk_thread_mutex_unlock(&lock_);
   }
   virtual void thread_exit_cb (const char *threadname) {
     Test::Say(tostr() << "Exiting from thread: " << threadname << "\n");
-    mtx_lock(&lock_);
+    rdk_thread_mutex_lock(&lock_);
     exitCnt_++;
-    mtx_unlock(&lock_);
+    rdk_thread_mutex_unlock(&lock_);
   }
 
  private:

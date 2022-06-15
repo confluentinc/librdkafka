@@ -84,11 +84,11 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
   mtx_t lock;
 
   TestVerifyCb(bool verify_ok): verify_ok(verify_ok), cnt(0) {
-    mtx_init(&lock, mtx_plain);
+      rdk_thread_mutex_init(&lock, mtx_plain);
   }
 
   ~TestVerifyCb() {
-    mtx_destroy(&lock);
+    rdk_thread_mutex_destroy(&lock);
   }
 
   bool ssl_cert_verify_cb (const std::string &broker_name,
@@ -98,7 +98,7 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
                            const char *buf, size_t size,
                            std::string &errstr) {
 
-    mtx_lock(&lock);
+    rdk_thread_mutex_lock(&lock);
 
     Test::Say(tostr() << "ssl_cert_verify_cb #" << cnt <<
               ": broker_name=" << broker_name <<
@@ -108,7 +108,7 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
               ", buf size=" << size << ", verify_ok=" << verify_ok << "\n");
 
     cnt++;
-    mtx_unlock(&lock);
+    rdk_thread_mutex_unlock(&lock);
 
     if (verify_ok)
       return true;
@@ -279,17 +279,17 @@ static void do_test_verify (const int line, bool verify_ok,
   for (int i = 0 ; run && i < 10 ; i++) {
     p->poll(1000);
 
-    mtx_lock(&verifyCb.lock);
+    rdk_thread_mutex_lock(&verifyCb.lock);
     if ((verify_ok && verifyCb.cnt > 0) ||
         (!verify_ok && verifyCb.cnt > 3))
       run = false;
-    mtx_unlock(&verifyCb.lock);
+    rdk_thread_mutex_unlock(&verifyCb.lock);
   }
 
-  mtx_lock(&verifyCb.lock);
+  rdk_thread_mutex_lock(&verifyCb.lock);
   if (!verifyCb.cnt)
       Test::Fail("Expected at least one verifyCb invocation");
-  mtx_unlock(&verifyCb.lock);
+  rdk_thread_mutex_unlock(&verifyCb.lock);
 
   /* Retrieving the clusterid allows us to easily check if a
    * connection could be made. Match this to the expected outcome of

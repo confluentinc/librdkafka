@@ -45,11 +45,11 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
                                           RD_KAFKA_RESP_ERR__DESTROY);
                 if (rkbuf->rkbuf_u.Metadata.decr) {
                         /* Decrease metadata cache's full_.._sent state. */
-                        mtx_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                        rdk_thread_mutex_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
                         rd_kafka_assert(NULL,
                                         (*rkbuf->rkbuf_u.Metadata.decr) > 0);
                         (*rkbuf->rkbuf_u.Metadata.decr)--;
-                        mtx_unlock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                        rdk_thread_mutex_unlock(rkbuf->rkbuf_u.Metadata.decr_lock);
                 }
                 break;
 

@@ -62,7 +62,7 @@ static struct {
 static int ctrl_thrd_main (void *arg) {
 
 
-        mtx_lock(&ctrl.lock);
+        rdk_thread_mutex_lock(&ctrl.lock);
         while (!ctrl.term) {
                 int64_t now;
 
@@ -90,10 +90,10 @@ static int ctrl_thrd_main (void *arg) {
                                __FILE__, ctrl.next.delay);
                         sockem_set(ctrl.skm, "delay", ctrl.next.delay, NULL);
                         ctrl.next.ts_at = 0;
-                        cnd_signal(&ctrl.cnd); /* signal back to caller */
+                        rdk_thread_cond_signal(&ctrl.cnd); /* signal back to caller */
                 }
         }
-        mtx_unlock(&ctrl.lock);
+        rdk_thread_mutex_unlock(&ctrl.lock);
 
         return 0;
 }
@@ -105,18 +105,18 @@ static int ctrl_thrd_main (void *arg) {
  */
 static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
 
-        mtx_lock(&ctrl.lock);
+        rdk_thread_mutex_lock(&ctrl.lock);
         if (ctrl.skm) {
                 /* Reject all but the first connect */
-                mtx_unlock(&ctrl.lock);
+                rdk_thread_mutex_unlock(&ctrl.lock);
                 return ECONNREFUSED;
         }
 
         ctrl.skm = skm;
 
         /* signal wakeup to main thread */
-        cnd_broadcast(&ctrl.cnd);
-        mtx_unlock(&ctrl.lock);
+        rdk_thread_cond_broadcast(&ctrl.cnd);
+        rdk_thread_mutex_unlock(&ctrl.lock);
 
         return 0;
 }
@@ -142,18 +142,18 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 static void set_delay (int after, int delay) {
         TEST_SAY("Set delay to %dms (after %dms)\n", delay, after);
 
-        mtx_lock(&ctrl.lock);
+        rdk_thread_mutex_lock(&ctrl.lock);
         ctrl.cmd.ts_at = test_clock() + (after*1000);
         ctrl.cmd.delay = delay;
         ctrl.cmd.ack = 0;
-        cnd_broadcast(&ctrl.cnd);
+        rdk_thread_cond_broadcast(&ctrl.cnd);
 
         /* Wait for ack from sockem thread */
         while (!ctrl.cmd.ack) {
                 TEST_SAY("Waiting for sockem control ack\n");
                 cnd_timedwait_ms(&ctrl.cnd, &ctrl.lock, 1000);
         }
-        mtx_unlock(&ctrl.lock);
+        rdk_thread_mutex_unlock(&ctrl.lock);
 }
 
 /**
@@ -168,8 +168,8 @@ static void do_test_low_socket_timeout (const char *topic) {
         const struct rd_kafka_metadata *md;
         int res;
 
-        mtx_init(&ctrl.lock, mtx_plain);
-        cnd_init(&ctrl.cnd);
+    rdk_thread_mutex_init(&ctrl.lock, mtx_plain);
+    rdk_thread_cond_init(&ctrl.cnd);
 
         TEST_SAY("Test Metadata request retries on timeout\n");
 
@@ -188,10 +188,10 @@ static void do_test_low_socket_timeout (const char *topic) {
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         TEST_SAY("Waiting for sockem connect..\n");
-        mtx_lock(&ctrl.lock);
+        rdk_thread_mutex_lock(&ctrl.lock);
         while (!ctrl.skm)
-                cnd_wait(&ctrl.cnd, &ctrl.lock);
-        mtx_unlock(&ctrl.lock);
+            rdk_thread_cond_wait(&ctrl.cnd, &ctrl.lock);
+        rdk_thread_mutex_unlock(&ctrl.lock);
 
         TEST_SAY("Connected, fire off a undelayed metadata() to "
                  "make sure connection is up\n");
@@ -201,7 +201,7 @@ static void do_test_low_socket_timeout (const char *topic) {
                     rd_kafka_err2str(err));
         rd_kafka_metadata_destroy(md);
 
-        if (thrd_create(&ctrl.thrd, ctrl_thrd_main, NULL) != thrd_success)
+        if (rdk_thread_create(&ctrl.thrd, ctrl_thrd_main, NULL) != thrd_success)
                 TEST_FAIL("Failed to create sockem ctrl thread");
 
         set_delay(0, 3000); /* Takes effect immediately */
@@ -226,13 +226,13 @@ static void do_test_low_socket_timeout (const char *topic) {
         rd_kafka_destroy(rk);
 
         /* Join controller thread */
-        mtx_lock(&ctrl.lock);
+        rdk_thread_mutex_lock(&ctrl.lock);
         ctrl.term = 1;
-        mtx_unlock(&ctrl.lock);
-        thrd_join(ctrl.thrd, &res);
+        rdk_thread_mutex_unlock(&ctrl.lock);
+    rdk_thread_join(ctrl.thrd, &res);
 
-        cnd_destroy(&ctrl.cnd);
-        mtx_destroy(&ctrl.lock);
+    rdk_thread_cond_destroy(&ctrl.cnd);
+    rdk_thread_mutex_destroy(&ctrl.lock);
 }
 
 int main_0075_retry (int argc, char **argv) {

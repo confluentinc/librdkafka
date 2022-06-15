@@ -262,7 +262,7 @@
    fun:_dl_allocate_tls
    fun:allocate_stack
    fun:pthread_create@@GLIBC_2.2.5
-   fun:thrd_create
+   fun:rdk_thread_create
 }
 {
    more_tls1
@@ -311,7 +311,7 @@
 {
    false_tls
    Helgrind:Race
-   fun:thrd_detach
+   fun:rdk_thread_detach
 }
 
 
@@ -390,14 +390,14 @@
    fun:_GLOBAL__sub_I_eh_alloc.cc
 }
 {
-   mtx_unlock_plus_destroy
+   rdk_thread_mutex_unlock_plus_destroy
    Helgrind:Race
    obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
    obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
    fun:rd_kafka_q_destroy_final
 }
 {
-   mtx_unlock_plus_destroy2
+   rdk_thread_mutex_unlock_plus_destroy2
    Helgrind:Race
    obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
    obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so

@@ -230,7 +230,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_topic_t *rkt,
         rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
-	mtx_init(&rktp->rktp_lock, mtx_plain);
+    rdk_thread_mutex_init(&rktp->rktp_lock, mtx_plain);
 
         rd_refcnt_init(&rktp->rktp_refcnt, 0);
 	rktp->rktp_fetchq = rd_kafka_q_new(rkt->rkt_rk);
@@ -323,7 +323,7 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 
 	rd_kafka_topic_destroy0(rktp->rktp_rkt);
 
-	mtx_destroy(&rktp->rktp_lock);
+    rdk_thread_mutex_destroy(&rktp->rktp_lock);
 
         if (rktp->rktp_leader)
                 rd_kafka_broker_destroy(rktp->rktp_leader);

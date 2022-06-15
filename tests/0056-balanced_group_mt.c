@@ -56,9 +56,9 @@ typedef struct part_consume_info_s {
 
 static int is_consuming () {
         int result;
-        mtx_lock(&lock);
+        rdk_thread_mutex_lock(&lock);
         result = consumers_running;
-        mtx_unlock(&lock);
+        rdk_thread_mutex_unlock(&lock);
         return result;
 }
 
@@ -83,31 +83,31 @@ static int partition_consume (void *args) {
                 else if (rkmsg->err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
                         running = 0;
                 else if (rkmsg->err) {
-                        mtx_lock(&lock);
+                        rdk_thread_mutex_lock(&lock);
                         TEST_FAIL("Message error "
                                   "(at offset %" PRId64 " after "
                                   "%d/%d messages and %dms): %s",
                                   rkmsg->offset, consumed_msg_cnt, exp_msg_cnt,
                                   (int)(test_clock() - ts_start) / 1000,
                                   rd_kafka_message_errstr(rkmsg));
-                        mtx_unlock(&lock);
+                        rdk_thread_mutex_unlock(&lock);
                 } else {
                         if (rkmsg->partition != partition) {
-                                mtx_lock(&lock);
+                                rdk_thread_mutex_lock(&lock);
                                 TEST_FAIL("Message consumed has partition %d "
                                           "but we expected partition %d.",
                                           rkmsg->partition, partition);
-                                mtx_unlock(&lock);
+                                rdk_thread_mutex_unlock(&lock);
                         }
                 }
                 rd_kafka_message_destroy(rkmsg);
 
-                mtx_lock(&lock);
+                rdk_thread_mutex_lock(&lock);
                 if (running && ++consumed_msg_cnt >= exp_msg_cnt) {
                         TEST_SAY("All messages consumed\n");
                         running = 0;
                 }
-                mtx_unlock(&lock);
+                rdk_thread_mutex_unlock(&lock);
         }
 
         rd_kafka_queue_destroy(rkqu);
@@ -122,7 +122,7 @@ static thrd_t spawn_thread (rd_kafka_queue_t *rkqu, int partition) {
         info->rkqu = rkqu;
         info->partition = partition;
 
-        if (thrd_create(&thr, &partition_consume, info) != thrd_success) {
+        if (rdk_thread_create(&thr, &partition_consume, info) != thrd_success) {
                 TEST_FAIL("Failed to create consumer thread.");
         }
         return thr;
@@ -149,9 +149,9 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                 assign_cnt++;
 
                 rd_kafka_assign(rk, partitions);
-                mtx_lock(&lock);
+                rdk_thread_mutex_lock(&lock);
                 consumers_running = 1;
-                mtx_unlock(&lock);
+                rdk_thread_mutex_unlock(&lock);
 
                 for (i = 0; i < partitions->cnt && i < MAX_THRD_CNT; ++i) {
                         rd_kafka_topic_partition_t part = partitions->elems[i];
@@ -174,9 +174,9 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                         TEST_FAIL("asymetric rebalance_cb");
                 assign_cnt--;
                 rd_kafka_assign(rk, NULL);
-                mtx_lock(&lock);
+                rdk_thread_mutex_lock(&lock);
                 consumers_running = 0;
-                mtx_unlock(&lock);
+                rdk_thread_mutex_unlock(&lock);
 
                 break;
 
@@ -228,7 +228,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         rd_kafka_topic_destroy(rkt_p);
         rd_kafka_destroy(rk_p);
 
-        if (mtx_init(&lock, mtx_plain) != thrd_success)
+        if (rdk_thread_mutex_init(&lock, mtx_plain) != thrd_success)
                 TEST_FAIL("Cannot create mutex.");
 
         test_conf_init(&conf, &default_topic_conf,
@@ -261,7 +261,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         for (i = 0; i < MAX_THRD_CNT; ++i) {
                 int res;
                 if (tids[i] != 0)
-                        thrd_join(tids[i], &res);
+                    rdk_thread_join(tids[i], &res);
         }
         TIMING_STOP(&t_consume);
 
@@ -301,7 +301,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
                          "multiple times\n",
                          consumed_msg_cnt - exp_msg_cnt, exp_msg_cnt);
 
-        mtx_destroy(&lock);
+        rdk_thread_mutex_destroy(&lock);
 
         return 0;
 }

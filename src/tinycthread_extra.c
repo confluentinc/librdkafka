@@ -60,7 +60,7 @@ int thrd_is_current(thrd_t thr) {
 
 int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
         if (timeout_ms == -1 /* INFINITE*/)
-                return cnd_wait(cnd, mtx);
+                return rdk_thread_cond_wait(cnd, mtx);
 #if defined(_TTHREAD_WIN32_)
         return _cnd_timedwait_win32(cnd, mtx, (DWORD)timeout_ms);
 #else
@@ -79,7 +79,7 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
                 ts.tv_nsec -= 1000000000;
         }
 
-        return cnd_timedwait(cnd, mtx, &ts);
+        return rdk_thread_cond_timedwait(cnd, mtx, &ts);
 #endif
 }
 
@@ -96,11 +96,11 @@ int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
 
 int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
         if (tspec->tv_sec == RD_POLL_INFINITE)
-                return cnd_wait(cnd, mtx);
+                return rdk_thread_cond_wait(cnd, mtx);
         else if (tspec->tv_sec == RD_POLL_NOWAIT)
                 return thrd_timedout;
 
-        return cnd_timedwait(cnd, mtx, tspec);
+        return rdk_thread_cond_timedwait(cnd, mtx, tspec);
 }
 
 

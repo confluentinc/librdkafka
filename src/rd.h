@@ -275,9 +275,9 @@ typedef rd_atomic32_t rd_refcnt_t;
 static RD_INLINE RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
         int r;
         mtx_init(&R->lock, mtx_plain);
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         r = R->v = v;
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
         return r;
 }
 #else
@@ -286,9 +286,9 @@ static RD_INLINE RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
 
 #ifdef RD_REFCNT_USE_LOCKS
 static RD_INLINE RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         rd_assert(R->v == 0);
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
 
         mtx_destroy(&R->lock);
 }
@@ -300,9 +300,9 @@ static RD_INLINE RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
 #ifdef RD_REFCNT_USE_LOCKS
 static RD_INLINE RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
         int r;
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         r = R->v = v;
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
         return r;
 }
 #else
@@ -313,9 +313,9 @@ static RD_INLINE RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
 #ifdef RD_REFCNT_USE_LOCKS
 static RD_INLINE RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
         int r;
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         r = ++(R->v);
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
         return r;
 }
 #else
@@ -325,9 +325,9 @@ static RD_INLINE RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
 static RD_INLINE RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
         int r;
 #ifdef RD_REFCNT_USE_LOCKS
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         r = --(R->v);
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
 #else
         r = rd_atomic32_sub(R, 1);
 #endif
@@ -339,9 +339,9 @@ static RD_INLINE RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
 #ifdef RD_REFCNT_USE_LOCKS
 static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
         int r;
-        mtx_lock(&R->lock);
+        rdk_thread_mutex_lock(&R->lock);
         r = R->v;
-        mtx_unlock(&R->lock);
+        rdk_thread_mutex_unlock(&R->lock);
         return r;
 }
 #else

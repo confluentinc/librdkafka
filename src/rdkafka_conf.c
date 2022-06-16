@@ -4050,7 +4050,7 @@ static int rd_kafka_anyconf_warn_deprecated(rd_kafka_t *rk,
  * @locks none
  */
 int rd_kafka_conf_warn(rd_kafka_t *rk) {
-        int cnt = 0;
+        int cnt         = 0;
         char is_windows = 0;
 #ifdef _WIN32
         is_windows = 1;
@@ -4102,13 +4102,15 @@ int rd_kafka_conf_warn(rd_kafka_t *rk) {
                              "applies when `sasl.mechanism` is set to "
                              "PLAIN or SCRAM-SHA-..");
 
-        if (rd_kafka_conf_is_modified(&rk->rk_conf, "sasl.win32gssapi.username") &&
+        if (rd_kafka_conf_is_modified(&rk->rk_conf,
+                                      "sasl.win32gssapi.username") &&
             (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI") || !is_windows))
-                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
-                            "Configuration property `sasl.win32gssapi.username` only "
-                            "applies on Windows operating systems and when "
-                            "`sasl.mechanism` is set to GSSAPI");
-        
+                rd_kafka_log(
+                    rk, LOG_WARNING, "CONFWARN",
+                    "Configuration property `sasl.win32gssapi.username` only "
+                    "applies on Windows operating systems and when "
+                    "`sasl.mechanism` is set to GSSAPI");
+
         if (rd_kafka_conf_is_modified(&rk->rk_conf, "client.software.name") &&
             !rd_kafka_sw_str_is_safe(rk->rk_conf.sw_name))
                 rd_kafka_log(rk, LOG_WARNING, "CONFWARN",

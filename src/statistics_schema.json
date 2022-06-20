@@ -7,50 +7,47 @@
           "title": "Rolling window statistics",
           "description": "The values are in microseconds unless otherwise stated.",
           "properties": {
-              "type": "object",
-              "properties": {
-                  "min": {
-                      "type": "integer"
-                  },
-                  "max": {
-                      "type": "integer"
-                  },
-                  "avg": {
-                      "type": "integer"
-                  },
-                  "sum": {
-                      "type": "integer"
-                  },
-                  "stddev": {
-                      "type": "integer"
-                  },
-                  "p50": {
-                      "type": "integer"
-                  },
-                  "p75": {
-                      "type": "integer"
-                  },
-                  "p90": {
-                      "type": "integer"
-                  },
-                  "p95": {
-                      "type": "integer"
-                  },
-                  "p99": {
-                      "type": "integer"
-                  },
-                  "p99_99": {
-                      "type": "integer"
-                  },
-                  "outofrange": {
-                      "type": "integer"
-                  },
-                  "hdrsize": {
-                      "type": "integer"
-                  },
-                  "cnt": {
-                      "type": "integer"
-                  }
+              "min": {
+                  "type": "integer"
+              },
+              "max": {
+                  "type": "integer"
+              },
+              "avg": {
+                  "type": "integer"
+              },
+              "sum": {
+                  "type": "integer"
+              },
+              "stddev": {
+                  "type": "integer"
+              },
+              "p50": {
+                  "type": "integer"
+              },
+              "p75": {
+                  "type": "integer"
+              },
+              "p90": {
+                  "type": "integer"
+              },
+              "p95": {
+                  "type": "integer"
+              },
+              "p99": {
+                  "type": "integer"
+              },
+              "p99_99": {
+                  "type": "integer"
+              },
+              "outofrange": {
+                  "type": "integer"
+              },
+              "hdrsize": {
+                  "type": "integer"
+              },
+              "cnt": {
+                  "type": "integer"
               }
           }
       }

@@ -1,3 +1,15 @@
+# librdkafka v1.9.1
+
+librdkafka v1.9.1 is a maintenance release.
+
+
+## Fixes
+
+ * Self-contained static libraries can now be built on OSX M1 too, thanks to
+   disabling curl's configure runtime check.
+
+
+
 # librdkafka v1.9.0
 
 librdkafka v1.9.0 is a feature release:

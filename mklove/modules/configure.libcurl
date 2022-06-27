@@ -59,12 +59,13 @@ function install_source {
     # curl's configure has a runtime check where a program is built
     # with all libs linked and then executed, since mklove's destdir
     # is outside the standard ld.so search path this runtime check will
-    # fail due to missing libraries. We circumvent this by passing
-    # a modified LD_LIBRARY_PATH with our destdir lib dirs prepended.
-    local _save_ldp="$LD_LIBRARY_PATH"
-    export LD_LIBRARY_PATH="${destdir}/usr/lib:${destdir}/usr/lib64:$LD_LIBRARY_PATH"
+    # fail due to missing libraries.
+    # We patch curl's configure file to skip this check altogether.
+    if ! mkl_patch libcurl 0000 ; then
+        return 1
+    fi
 
-    # Also clear out LIBS to not interfer with lib detection process.
+    # Clear out LIBS to not interfer with lib detection process.
     LIBS="" ./configure \
 	--with-openssl \
 	--enable-static \
@@ -75,7 +76,6 @@ function install_source {
 	--disable-file \
 	--disable-gopher \
 	--disable-imap \
-	--disable-imaps \
 	--disable-mqtt \
 	--disable-pop3 \
 	--disable-rtsp \
@@ -83,7 +83,6 @@ function install_source {
 	--disable-smtp \
 	--disable-telnet \
 	--disable-tftp \
-	--disable-ssh \
 	--disable-manual \
 	--disable-ldap{,s} \
 	--disable-libcurl-option \
@@ -91,9 +90,6 @@ function install_source {
 	time make -j &&
 	make DESTDIR="${destdir}" prefix=/usr install
     local ret=$?
-
-    # Restore
-    export LD_LIBRARY_PATH="$_save_ldp"
 
     if [[ $MKL_DISTRO == osx ]]; then
         mkl_mkvar_append "libcurl" LIBS "-framework CoreFoundation -framework SystemConfiguration"

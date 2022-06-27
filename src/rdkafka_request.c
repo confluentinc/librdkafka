@@ -1296,7 +1296,7 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
                 /* Offset */
                 rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
 
-                /* v6: KIP-101 CommittedLeaderEpoch */
+                /* v6: KIP-320 CommittedLeaderEpoch */
                 if (ApiVersion >= 6)
                         rd_kafka_buf_write_i32(rkbuf, -1);
 
@@ -1898,7 +1898,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 4, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 7, &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
                                          4 + (50 * topic_cnt) + 1);

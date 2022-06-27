@@ -224,6 +224,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         size_t rkb_namelen;
         const int log_decode_errors       = LOG_ERR;
         rd_list_t *missing_topics         = NULL;
+        int32_t **leader_epochs           = NULL;
         const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
         rd_bool_t all_topics = request->rkbuf_u.Metadata.all_topics;
         rd_bool_t cgrp_update =
@@ -237,6 +238,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
         int broker_changes         = 0;
         int cache_changes          = 0;
+        int topic_cnt              = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -304,7 +306,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
 
         /* Read TopicMetadata */
-        rd_kafka_buf_read_i32a(rkbuf, md->topic_cnt);
+        rd_kafka_buf_read_i32a(rkbuf, topic_cnt);
+        md->topic_cnt = topic_cnt;
         rd_rkb_dbg(rkb, METADATA, "METADATA", "%i brokers, %i topics",
                    md->broker_cnt, md->topic_cnt);
 
@@ -317,6 +320,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                   rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics))))
                 rd_kafka_buf_parse_fail(
                     rkbuf, "%d topics: tmpabuf memory shortage", md->topic_cnt);
+
+        leader_epochs = rd_calloc(md->topic_cnt, sizeof(int32_t *));
 
         for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
@@ -346,6 +351,12 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                                 md->topics[i].topic,
                                                 md->topics[i].partition_cnt);
 
+                leader_epochs[i] = rd_malloc(sizeof(int32_t) *
+                        md->topics[i].partition_cnt);
+                for (j = 0; j < md->topics[i].partition_cnt; j++)
+                        leader_epochs[i][j] = RD_KAFKA_LEADER_EPOCH_UNSET;
+
+
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
                         rd_kafka_buf_read_i16a(rkbuf,
                                                md->topics[i].partitions[j].err);
@@ -353,6 +364,20 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                                md->topics[i].partitions[j].id);
                         rd_kafka_buf_read_i32a(
                             rkbuf, md->topics[i].partitions[j].leader);
+
+                        if (md->topics[i].partitions[j].id >=
+                            md->topics[i].partition_cnt)
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "TopicMetadata[%i]."
+                                    "PartitionMetadata[%i]."
+                                    "Id %i >= partition count %i",
+                                    i, j, md->topics[i].partitions[j].id,
+                                    md->topics[i].partition_cnt);
+
+                        if (ApiVersion >= 7)
+                                rd_kafka_buf_read_i32a(rkbuf, leader_epochs[i]
+                                        [md->topics[i].partitions[j].id]);
 
                         /* Replicas */
                         rd_kafka_buf_read_i32a(
@@ -427,6 +452,15 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                              k++)
                                 rd_kafka_buf_read_i32a(
                                     rkbuf, md->topics[i].partitions[j].isrs[k]);
+
+                        /* Offline Replicas */
+                        if (ApiVersion >= 5) {
+                                int offline_replica_cnt;
+                                rd_kafka_buf_read_i32a(rkbuf,
+                                        offline_replica_cnt);
+                                rd_kafka_buf_skip(rkbuf,
+                                        offline_replica_cnt * sizeof(int32_t));
+                        }
                 }
 
                 /* Sort partitions by partition id */
@@ -494,7 +528,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 } else {
                         /* Update local topic & partition state based
                          * on metadata */
-                        rd_kafka_topic_metadata_update2(rkb, mdt);
+                        rd_kafka_topic_metadata_update2(rkb, mdt,
+                                                        leader_epochs[i]);
                 }
 
                 if (requested_topics) {
@@ -544,7 +579,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         }
                 }
         }
-
 
         rd_kafka_wrlock(rkb->rkb_rk);
 
@@ -636,6 +670,10 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         }
 
 done:
+        for (i = 0; i<topic_cnt; i++)
+                rd_free(leader_epochs[i]);
+        rd_free(leader_epochs);
+
         if (missing_topics)
                 rd_list_destroy(missing_topics);
 
@@ -664,6 +702,12 @@ err:
                 rd_list_destroy(missing_topics);
 
         rd_tmpabuf_destroy(&tbuf);
+
+        for (i = 0; i<topic_cnt; i++)
+                if (leader_epochs[i])
+                        rd_free(leader_epochs[i]);
+        if (leader_epochs)
+                rd_free(leader_epochs);
 
         return err;
 }

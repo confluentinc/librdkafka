@@ -91,6 +91,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int32_t rktp_leader_id;              /**< Current leader id.
                                               *   This is updated directly
                                               *   from metadata. */
+        int32_t rktp_leader_epoch;           /**< Current leader epoch
+                                              *   This is updated directly
+                                              *   from metadata. */
         int32_t rktp_broker_id;              /**< Current broker id. */
         rd_kafka_broker_t *rktp_leader;      /**< Current leader broker.
                                               *   This updated simultaneously

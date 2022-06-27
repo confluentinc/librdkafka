@@ -3048,6 +3048,9 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
 #define RD_KAFKA_PARTITION_UA ((int32_t)-1)
 
 
+#define RD_KAFKA_LEADER_EPOCH_UNSET ((int32_t)-1)
+
+
 /**
  * @brief Polls the provided kafka handle for events.
  *

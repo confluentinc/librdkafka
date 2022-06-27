@@ -235,7 +235,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rktp->rktp_query_offset      = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_next_offset       = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_last_next_offset  = RD_KAFKA_OFFSET_INVALID;
-        rktp->rktp_app_offset        = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_app_offset.offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_stored_offset     = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committing_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committed_offset  = RD_KAFKA_OFFSET_INVALID;
@@ -1663,7 +1663,7 @@ void rd_kafka_toppar_fetch_stopped(rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPED);
 
-        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_app_offset.offset = RD_KAFKA_OFFSET_INVALID;
 
         if (rktp->rktp_cgrp) {
                 /* Detach toppar from cgrp */
@@ -1768,7 +1768,7 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
         /* Reset app offsets since seek()ing is analogue to a (re)assign(),
          * and we want to avoid using the current app offset on resume()
          * following a seek (#3567). */
-        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_app_offset.offset = RD_KAFKA_OFFSET_INVALID;
 
         /* Abort pending offset lookups. */
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
@@ -1846,8 +1846,10 @@ static void rd_kafka_toppar_pause_resume(rd_kafka_toppar_t *rktp,
                 if (rk->rk_type == RD_KAFKA_CONSUMER) {
                         /* Save offset of last consumed message+1 as the
                          * next message to fetch on resume. */
-                        if (rktp->rktp_app_offset != RD_KAFKA_OFFSET_INVALID) {
-                                rktp->rktp_next_offset = rktp->rktp_app_offset;
+                        if (rktp->rktp_app_offset.offset
+                            != RD_KAFKA_OFFSET_INVALID) {
+                                rktp->rktp_next_offset =
+                                        rktp->rktp_app_offset.offset;
                         }
 
                         rd_kafka_dbg(

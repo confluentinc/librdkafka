@@ -1500,7 +1500,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             0, (size_t)0, rd_kafka_q_len(rktp->rktp_fetchq),
             rd_kafka_q_size(rktp->rktp_fetchq),
             rd_kafka_fetch_states[rktp->rktp_fetch_state],
-            rktp->rktp_query_offset, offs.fetch_offset, rktp->rktp_app_offset,
+            rktp->rktp_query_offset, offs.fetch_offset,
+            rktp->rktp_app_offset.offset,
             rktp->rktp_stored_offset,
             rktp->rktp_committed_offset, /* FIXME: issue #80 */
             rktp->rktp_committed_offset, offs.eof_offset, rktp->rktp_lo_offset,
@@ -3416,7 +3417,7 @@ rd_kafka_position(rd_kafka_t *rk, rd_kafka_topic_partition_list_t *partitions) {
                 }
 
                 rd_kafka_toppar_lock(rktp);
-                rktpar->offset = rktp->rktp_app_offset;
+                rktpar->offset = rktp->rktp_app_offset.offset;
                 rktpar->err    = RD_KAFKA_RESP_ERR_NO_ERROR;
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(rktp);

@@ -776,11 +776,12 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
 
                         seen_cnt++;
 
-                        if (!(rktp = rktpar->_private)) {
+                        rktp = rd_kafka_topic_partition_get_toppar(rktpar);
+                        if (!rktp) {
                                 rktp = rd_kafka_toppar_get2(
                                     rkb->rkb_rk, topic_name, partition, 0, 0);
                                 /* May be NULL if topic is not locally known */
-                                rktpar->_private = rktp;
+                                rd_kafka_topic_partition_set_toppar(rktpar, rktp);
                         }
 
                         /* broker reports invalid offset as -1 */

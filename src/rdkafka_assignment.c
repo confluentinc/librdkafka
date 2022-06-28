@@ -135,7 +135,8 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
         rd_kafka_topic_partition_t *rktpar;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, offsets) {
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* May be NULL */
+                rd_kafka_toppar_t *rktp = rd_kafka_topic_partition_get_toppar(
+                        rktpar); /* May be NULL */
 
                 if (!rd_kafka_topic_partition_list_del(
                         rk->rk_consumer.assignment.queried, rktpar->topic,
@@ -302,7 +303,8 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
         int valid_offsets = 0;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, rk->rk_consumer.assignment.removed) {
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* Borrow ref */
+                rd_kafka_toppar_t *rktp = rd_kafka_topic_partition_get_toppar(
+                        rktpar); /* Borrow ref */
                 int was_pending, was_queried;
 
                 /* Remove partition from pending and querying lists,
@@ -407,6 +409,7 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
          *    avoid using a earlier queries response for a partition that
          *    is unassigned and then assigned again).
          */
+
         rd_kafka_broker_t *coord =
             rk->rk_cgrp ? rd_kafka_cgrp_get_coord(rk->rk_cgrp) : NULL;
         rd_bool_t can_query_offsets =
@@ -422,7 +425,9 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
         for (i = rk->rk_consumer.assignment.pending->cnt - 1; i >= 0; i--) {
                 rd_kafka_topic_partition_t *rktpar =
                     &rk->rk_consumer.assignment.pending->elems[i];
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* Borrow ref */
+
+                rd_kafka_toppar_t *rktp = rd_kafka_topic_partition_get_toppar(
+                        rktpar); /* Borrow ref */
 
                 rd_assert(!rktp->rktp_started);
 
@@ -509,7 +514,6 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                 rd_kafka_topic_partition_list_del_by_idx(
                     rk->rk_consumer.assignment.pending, i);
         }
-
 
         if (!can_query_offsets) {
                 if (coord)

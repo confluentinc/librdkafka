@@ -910,6 +910,15 @@ RD_EXPORT
 void rd_kafka_topic_partition_destroy(rd_kafka_topic_partition_t *rktpar);
 
 
+RD_EXPORT
+void rd_kafka_topic_partition_set_leader_epoch(
+                                        rd_kafka_topic_partition_t *rktpar,
+                                        int32_t leader_epoch);
+
+RD_EXPORT
+int32_t rd_kafka_topic_partition_get_leader_epoch(
+                                        rd_kafka_topic_partition_t *rktpar);
+
 /**
  * @brief A growable list of Topic+Partitions.
  *

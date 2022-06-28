@@ -52,6 +52,34 @@ static RD_UNUSED void rd_kafka_offset_stats_reset(struct offset_stats *offs) {
 }
 
 
+typedef struct rd_kafka_topic_partition_private_s {
+        rd_kafka_toppar_t *toppar;
+        int32_t leader_epoch;
+} rd_kafka_topic_partition_private_t;
+
+
+rd_kafka_topic_partition_private_t *rd_kafka_topic_partition_private_new();
+
+
+rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_private_clone(const char *func, int line,
+                                       rd_kafka_topic_partition_private_t
+                                       *private);
+
+
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_take_toppar(rd_kafka_topic_partition_t *rktpar);
+
+
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar(rd_kafka_topic_partition_t *rktpar);
+
+
+void
+rd_kafka_topic_partition_set_toppar(rd_kafka_topic_partition_t *rktpar,
+                                    rd_kafka_toppar_t *toppar);
+
+
 /**
  * @brief Store information about a partition error for future use.
  */
@@ -605,12 +633,10 @@ void rd_kafka_topic_partition_list_clear(
     rd_kafka_topic_partition_list_t *rktparlist);
 
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0(const char *func,
-                                   int line,
-                                   rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic,
-                                   int32_t partition,
-                                   rd_kafka_toppar_t *_private);
+rd_kafka_topic_partition_list_add0(rd_kafka_topic_partition_list_t *rktparlist,
+                                   const char *topic,int32_t partition,
+                                   rd_kafka_topic_partition_private_t
+                                   *_private);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -689,7 +715,7 @@ rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_t *rktpar,
                                        rd_bool_t create_on_miss);
 
-rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar(
+rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar_for(
     rd_kafka_t *rk,
     rd_kafka_topic_partition_t *rktpar,
     rd_bool_t create_on_miss) RD_WARN_UNUSED_RESULT;

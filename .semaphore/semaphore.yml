@@ -17,7 +17,7 @@ blocks:
             - export WORKSPACE=$SEM_WORKSPACE/librdkafka
             - cd $WORKSPACE
             - mkdir dest artifacts
-            - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$WORKSPACE/dest" --enable-strip
+            - ./configure --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$WORKSPACE/dest" --enable-strip
             - make -j2 all examples check
             - make -j2 -C tests build
             - make -C tests run_local_quick

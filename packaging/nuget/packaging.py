@@ -41,7 +41,8 @@ magic_patterns = {
     ('win', 'x86', '.lib'): re.compile('current ar archive'),
     ('linux', 'x64', '.so'): re.compile('ELF 64.* x86-64'),
     ('linux', 'arm64', '.so'): re.compile('ELF 64.* ARM aarch64'),
-    ('osx', 'x64', '.dylib'): re.compile('Mach-O 64.* x86_64')}
+    ('osx', 'x64', '.dylib'): re.compile('Mach-O 64.* x86_64'),
+    ('osx', 'arm64', '.dylib'): re.compile('Mach-O 64.*arm64')}
 
 magic = magic.Magic()
 
@@ -403,11 +404,16 @@ class NugetPackage (Package):
              './share/doc/librdkafka/LICENSES.txt',
              'LICENSES.txt'],
 
-            # Travis OSX build
+            # Travis OSX x64 build
             [{'arch': 'x64', 'plat': 'osx',
               'fname_glob': 'librdkafka-clang.tar.gz'},
              './lib/librdkafka.dylib',
              'runtimes/osx-x64/native/librdkafka.dylib'],
+            # Travis OSX arm64 build
+            [{'arch': 'arm64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/librdkafka.dylib',
+             'runtimes/osx-arm64/native/librdkafka.dylib'],
             # Travis Manylinux build
             [{'arch': 'x64',
               'plat': 'linux',
@@ -632,6 +638,7 @@ class NugetPackage (Package):
             "runtimes/linux-x64/native/librdkafka.so",
             "runtimes/linux-arm64/native/librdkafka.so",
             "runtimes/osx-x64/native/librdkafka.dylib",
+            "runtimes/osx-arm64/native/librdkafka.dylib",
             # win x64
             "runtimes/win-x64/native/librdkafka.dll",
             "runtimes/win-x64/native/librdkafkacpp.dll",
@@ -728,15 +735,25 @@ class StaticPackage (Package):
              'rdkafka-static.pc',
              'librdkafka_musl_linux.pc'],
 
-            # osx static lib and pkg-config file
-            [{'arch': 'x64',
-              'plat': 'osx',
-              'fname_glob': 'librdkafka-clang.tar.gz'},
-             './lib/librdkafka-static.a',
-             'librdkafka_darwin.a'],
+            # osx x64 static lib and pkg-config file
             [{'arch': 'x64', 'plat': 'osx',
               'fname_glob': 'librdkafka-clang.tar.gz'},
-                './lib/pkgconfig/rdkafka-static.pc', 'librdkafka_darwin.pc'],
+             './lib/librdkafka-static.a',
+             'librdkafka_darwin_amd64.a'],
+            [{'arch': 'x64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-clang.tar.gz'},
+             './lib/pkgconfig/rdkafka-static.pc',
+             'librdkafka_darwin_amd64.pc'],
+
+            # osx arm64 static lib and pkg-config file
+            [{'arch': 'arm64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/librdkafka-static.a',
+             'librdkafka_darwin_arm64.a'],
+            [{'arch': 'arm64', 'plat': 'osx',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/pkgconfig/rdkafka-static.pc',
+             'librdkafka_darwin_arm64.pc'],
 
             # win static lib and pkg-config file (mingw)
             [{'arch': 'x64', 'plat': 'win',
@@ -813,8 +830,10 @@ class StaticPackage (Package):
             "./librdkafka_glibc_linux.pc",
             "./librdkafka_musl_linux.a",
             "./librdkafka_musl_linux.pc",
-            "./librdkafka_darwin.a",
-            "./librdkafka_darwin.pc",
+            "./librdkafka_darwin_amd64.a",
+            "./librdkafka_darwin_arm64.a",
+            "./librdkafka_darwin_amd64.pc",
+            "./librdkafka_darwin_arm64.pc",
             "./librdkafka_windows.a",
             "./librdkafka_windows.pc"]
 

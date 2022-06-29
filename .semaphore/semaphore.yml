@@ -16,6 +16,8 @@ blocks:
             - checkout
             - export WORKSPACE=$SEM_WORKSPACE/librdkafka
             - cd $WORKSPACE
+            - xcodebuild -version
+            - libtool -V
             - mkdir dest artifacts
             - ./configure --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$WORKSPACE/dest" --enable-strip
             - make -j2 all examples check

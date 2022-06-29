@@ -22,6 +22,9 @@ blocks:
             - make -j2 -C tests build
             - make -C tests run_local_quick
             - make install
+            - which ar
+            - brew list
+            - brew list --cask
             - cd $WORKSPACE/dest
             - tar cvzf ${WORKSPACE}/artifacts/librdkafka-${CC}.tar.gz .
             - artifact push job ${WORKSPACE}/artifacts/librdkafka-${CC}.tar.gz

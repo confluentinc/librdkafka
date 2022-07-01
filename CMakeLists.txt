@@ -61,6 +61,9 @@ else()
   set(with_curl_default OFF)
 endif()
 option(WITH_CURL "With CURL" ${with_curl_default})
+if(WITH_CURL)
+  list(APPEND BUILT_WITH "CURL")
+endif()
 # }
 
 # ZSTD {

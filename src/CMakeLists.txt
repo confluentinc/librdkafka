@@ -206,6 +206,10 @@ if(WITH_ZLIB)
   target_link_libraries(rdkafka PUBLIC ZLIB::ZLIB)
 endif()
 
+if(WITH_CURL)
+  target_link_libraries(rdkafka PUBLIC CURL::libcurl)
+endif()
+
 if(WITH_ZSTD)
   target_link_libraries(rdkafka PRIVATE ${ZSTD_LIBRARY})
   target_include_directories(rdkafka PRIVATE ${ZSTD_INCLUDE_DIR})

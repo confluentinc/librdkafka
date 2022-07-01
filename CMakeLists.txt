@@ -54,11 +54,13 @@ endif()
 # }
 
 # CURL {
-option(WITH_CURL "With CURL" OFF)
-if(WITH_CURL)
-  list(APPEND BUILT_WITH "CURL")
-  find_package(CURL CONFIG REQUIRED)
+find_package(CURL QUIET)
+if(CURL_FOUND)
+  set(with_curl_default ON)
+else()
+  set(with_curl_default OFF)
 endif()
+option(WITH_CURL "With CURL" ${with_curl_default})
 # }
 
 # ZSTD {

@@ -207,6 +207,7 @@ if(WITH_ZLIB)
 endif()
 
 if(WITH_CURL)
+  find_package(CURL CONFIG REQUIRED)
   target_link_libraries(rdkafka PUBLIC CURL::libcurl)
 endif()
 

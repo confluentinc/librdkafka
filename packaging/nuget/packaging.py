@@ -412,7 +412,7 @@ class NugetPackage (Package):
             # Travis OSX arm64 build
             [{'arch': 'arm64', 'plat': 'osx',
               'fname_glob': 'librdkafka-gcc.tar.gz'},
-             './lib/librdkafka.dylib',
+             './lib/librdkafka.1.dylib',
              'runtimes/osx-arm64/native/librdkafka.dylib'],
             # Travis Manylinux build
             [{'arch': 'x64',

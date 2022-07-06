@@ -1,10 +1,8 @@
 # librdkafka v1.9.1
 
-librdkafka v1.9.1 is a maintenance release.
+librdkafka v1.9.1 is a maintenance release:
 
-
-## Fixes
-
+ * The librdkafka.redist NuGet package now contains OSX M1/arm64 builds.
  * Self-contained static libraries can now be built on OSX M1 too, thanks to
    disabling curl's configure runtime check.
 

@@ -85,8 +85,8 @@ if __name__ == '__main__':
     while True:
         if not args.no_s3:
             arts.collect_s3()
-        else:
-            arts.collect_local(arts.dlpath)
+
+        arts.collect_local(arts.dlpath)
 
         if len(arts.artifacts) == 0:
             raise ValueError('No artifacts found for %s' % match)

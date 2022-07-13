@@ -238,6 +238,10 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
+if(WITH_CURL)
+    target_link_libraries(rdkafka PUBLIC curl)
+endif()
+
 if(WITH_SASL_CYRUS)
   target_include_directories(rdkafka PRIVATE ${SASL_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})

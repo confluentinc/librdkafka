@@ -961,28 +961,36 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
-        int PartCnt = 0;
+        size_t parts_size = 4;
+        int PartCnt = -1;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_OffsetFetch, 0, 7, NULL);
 
+        if (parts) {
+                parts_size = parts->cnt * 32;
+        }
+
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
             RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) + 4 +
-                (parts->cnt * 32) + 1,
+                parts_size + 1,
             ApiVersion >= 6 /*flexver*/);
 
         /* ConsumerGroup */
         rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->rk_group_id);
 
-        /* Sort partitions by topic */
-        rd_kafka_topic_partition_list_sort_by_topic(parts);
-
-        /* Write partition list, filtering out partitions with valid offsets */
-        PartCnt = rd_kafka_buf_write_topic_partitions(
-            rkbuf, parts, rd_false /*include invalid offsets*/,
-            rd_false /*skip valid offsets */, rd_false /*don't write offsets*/,
-            rd_false /*don't write epoch */, rd_false /*don't write metadata*/);
+        if (parts) {
+                /* Sort partitions by topic */
+                rd_kafka_topic_partition_list_sort_by_topic(parts);
+                /* Write partition list, filtering out partitions with valid offsets */
+                PartCnt = rd_kafka_buf_write_topic_partitions(
+                rkbuf, parts, rd_false /*include invalid offsets*/,
+                rd_false /*skip valid offsets */, rd_false /*don't write offsets*/,
+                rd_false /*don't write epoch */, rd_false /*don't write metadata*/);
+        } else {
+                rd_kafka_buf_write_arraycnt_pos(rkbuf);
+        }
 
         if (ApiVersion >= 7) {
                 /* RequireStable */
@@ -991,9 +999,14 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
-        rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                   "OffsetFetchRequest(v%d) for %d/%d partition(s)", ApiVersion,
-                   PartCnt, parts->cnt);
+        if (parts) {
+                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                        "OffsetFetchRequest(v%d) for %d/%d partition(s)", ApiVersion,
+                        PartCnt, parts->cnt);
+        } else {
+                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                        "OffsetFetchRequest(v%d) for all the partitions", ApiVersion);
+        }
 
         if (PartCnt == 0) {
                 /* No partitions needs OffsetFetch, enqueue empty
@@ -1008,9 +1021,14 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
         /* Let handler decide if retries should be performed */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_MAX_RETRIES;
 
-        rd_rkb_dbg(rkb, CGRP | RD_KAFKA_DBG_CONSUMER, "OFFSET",
-                   "Fetch committed offsets for %d/%d partition(s)", PartCnt,
-                   parts->cnt);
+        if (parts) {
+                rd_rkb_dbg(rkb, CGRP | RD_KAFKA_DBG_CONSUMER, "OFFSET",
+                        "Fetch committed offsets for %d/%d partition(s)", PartCnt,
+                        parts->cnt);
+        } else {
+                rd_rkb_dbg(rkb, CGRP | RD_KAFKA_DBG_CONSUMER, "OFFSET",
+                        "Fetch committed offsets all the partitions");
+        }
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }

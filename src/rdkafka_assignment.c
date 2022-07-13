@@ -532,6 +532,7 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                     coord, partitions_to_query,
                     rk->rk_conf.isolation_level ==
                         RD_KAFKA_READ_COMMITTED /*require_stable*/,
+                    NULL,
                     RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                     rd_kafka_assignment_handle_OffsetFetch,
                     /* Must be freed by handler */

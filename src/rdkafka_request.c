@@ -952,33 +952,55 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  *
  * @param require_stable Whether broker should return unstable offsets
  *                       (not yet transaction-committed).
+ * @param rk_group_id Request offset for this group id.
+ *                       If NULL, defaults to the consumer group id.
+ *                       If consumer group id is NULL too, returns the
+ *                       @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
  */
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *parts,
                                  rd_bool_t require_stable,
+                                 rd_kafkap_str_t *rk_group_id,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
         size_t parts_size = 4;
+        size_t rk_group_id_size = 0;
         int PartCnt = -1;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_OffsetFetch, 0, 7, NULL);
 
+        const rd_kafkap_str_t *send_rk_group_id = rk_group_id == NULL ?
+                                                rkb->rkb_rk->rk_group_id :
+                                                rk_group_id;
         if (parts) {
                 parts_size = parts->cnt * 32;
+        }
+        if (send_rk_group_id) {
+                rk_group_id_size = RD_KAFKAP_STR_SIZE(send_rk_group_id);
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
-            RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) + 4 +
+            rk_group_id_size + 4 +
                 parts_size + 1,
             ApiVersion >= 6 /*flexver*/);
 
+        if (!send_rk_group_id) {
+                /* No consumer group passed and no consumer group found:
+                 * retry with an error. */
+                rkbuf->rkbuf_replyq = replyq;
+                rkbuf->rkbuf_cb     = resp_cb;
+                rkbuf->rkbuf_opaque = opaque;
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb, RD_KAFKA_RESP_ERR__UNKNOWN_GROUP, NULL, rkbuf);
+                return;
+        }
+
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->rk_group_id);
+        rd_kafka_buf_write_kstr(rkbuf, send_rk_group_id);
 
         if (parts) {
                 /* Sort partitions by topic */

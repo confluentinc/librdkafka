@@ -576,7 +576,7 @@ int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         if (r == 1) {
                 /* Connected, highly unlikely since this is a
                  * non-blocking operation. */
-#ifndef HAVE_KEYLOG_CALLBACK
+#ifndef HAVE_SSL_KEYLOG_CALLBACK
                 // if SSL_CTX_set_keylog_callback is not defined, dump
                 // the keys if SSL_connect claims connected.
                 rd_kafka_transport_ssl_dump_key(rktrans->rktrans_ssl);
@@ -669,7 +669,7 @@ int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
 
         r = SSL_do_handshake(rktrans->rktrans_ssl);
         if (r == 1) {
-#ifndef HAVE_KEYLOG_CALLBACK
+#ifndef HAVE_SSL_KEYLOG_CALLBACK
                 // if SSL_CTX_set_keylog_callback is not defined, dump
                 // the keys if SSL_do_handshake claims connected.
                 rd_kafka_transport_ssl_dump_key(rktrans->rktrans_ssl);

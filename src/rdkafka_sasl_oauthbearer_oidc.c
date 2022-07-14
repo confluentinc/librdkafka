@@ -205,6 +205,34 @@ done:
         return errstr;
 }
 
+/**
+ * @brief Build post_fields with \p scope.
+ *        The format of the post_fields is
+ *        `grant_type=client_credentials&scope=scope`
+ *        The post_fields will be returned in \p *post_fields.
+ *        The post_fields_size will be returned in \p post_fields_size.
+ *
+ */
+static void rd_kafka_oidc_build_post_fields(const char *scope,
+                                            char **post_fields,
+                                            size_t *post_fields_size) {
+        size_t scope_size = 0;
+
+        if (scope)
+                scope_size = strlen(scope);
+        if (scope_size == 0) {
+                *post_fields      = rd_strdup("grant_type=client_credentials");
+                *post_fields_size = strlen("grant_type=client_credentials");
+        } else {
+                *post_fields_size =
+                    strlen("grant_type=client_credentials&scope=") + scope_size;
+                *post_fields = rd_malloc(*post_fields_size + 1);
+                rd_snprintf(*post_fields, *post_fields_size + 1,
+                            "grant_type=client_credentials&scope=%s",
+                            scope);
+        }
+}
+
 
 /**
  * @brief Implementation of Oauth/OIDC token refresh callback function,
@@ -240,7 +268,6 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
         size_t post_fields_size;
         size_t extension_cnt;
         size_t extension_key_value_cnt = 0;
-        size_t scope_size              = 0;
 
         char set_token_errstr[512];
         char decode_payload_errstr[512];
@@ -256,19 +283,9 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                                     &headers);
 
         /* Build post fields */
-        if (rk->rk_conf.sasl.oauthbearer.scope)
-                scope_size = strlen(rk->rk_conf.sasl.oauthbearer.scope);
-        if (scope_size == 0) {
-                post_fields      = rd_strdup("grant_type=client_credentials");
-                post_fields_size = strlen("grant_type=client_credentials");
-        } else {
-                post_fields_size =
-                    strlen("grant_type=client_credentials&scope=") + scope_size;
-                post_fields = rd_malloc(post_fields_size + 1);
-                rd_snprintf(post_fields, post_fields_size,
-                            "grant_type=client_credentials&scope=%s",
-                            rk->rk_conf.sasl.oauthbearer.scope);
-        }
+        rd_kafka_oidc_build_post_fields(rk->rk_conf.sasl.oauthbearer.scope,
+                                        &post_fields,
+                                        &post_fields_size);
 
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
 
@@ -510,6 +527,72 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief Make sure the post_fields return correct with the scope.
+ */
+static int ut_sasl_oauthbearer_oidc_post_fields(void) {
+        static const char *scope = "test-scope";
+        static const char *expected_post_fields =
+                "grant_type=client_credentials&scope=test-scope";
+
+        size_t expected_post_fields_size =
+                strlen(expected_post_fields);
+
+        size_t post_fields_size;
+
+        char *post_fields;
+
+        RD_UT_BEGIN();
+
+        rd_kafka_oidc_build_post_fields(scope,
+                                        &post_fields,
+                                        &post_fields_size);
+
+        RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
+                     "Expected expected_post_fields_size is %zu"
+                     "received post_fields_size is %zu",
+                     expected_post_fields_size, post_fields_size);
+        RD_UT_ASSERT(!strcmp(expected_post_fields, post_fields),
+                     "Expected expected_post_fields is %s"
+                     "received post_fields is %s",
+                     expected_post_fields, post_fields);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Make sure the post_fields return correct with the empty scope.
+ */
+static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
+        static const char *scope = NULL;
+        static const char *expected_post_fields =
+                "grant_type=client_credentials";
+
+        size_t expected_post_fields_size =
+                strlen(expected_post_fields);
+
+        size_t post_fields_size;
+
+        char *post_fields;
+
+        RD_UT_BEGIN();
+
+        rd_kafka_oidc_build_post_fields(scope,
+                                        &post_fields,
+                                        &post_fields_size);
+
+        RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
+                     "Expected expected_post_fields_size is %zu"
+                     "received post_fields_size is %zu",
+                     expected_post_fields_size, post_fields_size);
+        RD_UT_ASSERT(!strcmp(expected_post_fields, post_fields),
+                     "Expected expected_post_fields is %s"
+                     "received post_fields is %s",
+                     expected_post_fields, post_fields);
+
+        RD_UT_PASS();
+}
+
 
 /**
  * @brief make sure the jwt is able to be extracted from HTTP(S) requests
@@ -519,5 +602,7 @@ int unittest_sasl_oauthbearer_oidc(void) {
         int fails = 0;
         fails += ut_sasl_oauthbearer_oidc_should_succeed();
         fails += ut_sasl_oauthbearer_oidc_with_empty_key();
+        fails += ut_sasl_oauthbearer_oidc_post_fields();
+        fails += ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope();
         return fails;
 }

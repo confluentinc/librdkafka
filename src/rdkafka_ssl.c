@@ -49,9 +49,11 @@
 #include <ctype.h>
 
 #if !_WIN32
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
 #endif
 
 
@@ -101,6 +103,7 @@ static void rd_kafka_transport_ssl_keylog_callback(const SSL *ssl,
 #else /* ! HAVE_SSL_KEYLOG_CALLBACK */
 #define KEYLOG_PREFIX     "CLIENT_RANDOM "
 #define KEYLOG_PREFIX_LEN (sizeof(KEYLOG_PREFIX) - 1)
+
 /**
  * Dump the connection keys to the keylog file. This function is called
  * explicitly when callback is not available (OpenSSL before 1.1.1, LibreSSL).
@@ -162,6 +165,7 @@ static void rd_kafka_transport_ssl_dump_key(const SSL *ssl) {
         // the output line is generated anyway, no need to fprintf
         fputs(line, rd_kafka_ssl_keylog_file);
 }
+
 #endif /* HAVE_SSL_KEYLOG_CALLBACK */
 
 /**
@@ -267,7 +271,6 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
 
         return errstr;
 }
-
 
 
 /**
@@ -752,7 +755,6 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
 }
 
 
-
 /**
  * @brief Parse a PEM-formatted string into an EVP_PKEY (PrivateKey) object.
  *
@@ -937,7 +939,6 @@ static int rd_kafka_ssl_win_load_cert_stores(rd_kafka_t *rk,
         return cert_cnt;
 }
 #endif /* MSC_VER */
-
 
 
 /**
@@ -1723,6 +1724,7 @@ fail:
 
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+
 static RD_UNUSED void
 rd_kafka_transport_ssl_lock_cb(int mode, int i, const char *file, int line) {
         if (mode & CRYPTO_LOCK)
@@ -1730,6 +1732,7 @@ rd_kafka_transport_ssl_lock_cb(int mode, int i, const char *file, int line) {
         else
                 mtx_unlock(&rd_kafka_ssl_locks[i]);
 }
+
 #endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb(void) {

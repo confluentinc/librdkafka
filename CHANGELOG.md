@@ -1,3 +1,11 @@
+# librdkafka v1.9.2
+
+librdkafka v1.9.2 is a maintenance release:
+
+ * The SASL OAUTHBEAR OIDC POST field was sometimes truncated by one byte (#3192).
+
+
+
 # librdkafka v1.9.1
 
 librdkafka v1.9.1 is a maintenance release:

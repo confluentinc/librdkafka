@@ -2729,11 +2729,11 @@ static void do_test_AlterConsumerGroupOffsets (const char *what,
         }
 
         /* Commit some offsets */
-        orig_offsets = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT * 2);
-        for (i = 0 ; i < MY_TOPIC_CNT * 2 ; i++)
+        orig_offsets = rd_kafka_topic_partition_list_new(MY_TOPIC_CNT * partitions_cnt);
+        for (i = 0 ; i < MY_TOPIC_CNT * partitions_cnt ; i++)
                 rd_kafka_topic_partition_list_add(
-                        orig_offsets, topics[i/2],
-                        i % MY_TOPIC_CNT)->offset = (i+1)*10;
+                        orig_offsets, topics[i/partitions_cnt],
+                        i % partitions_cnt)->offset = (i+1)*10;
 
         TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0/*sync*/));
 

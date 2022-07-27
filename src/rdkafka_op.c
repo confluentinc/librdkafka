@@ -903,7 +903,7 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_app_offset = offset;
         if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, offset,
+                rd_kafka_offset_store0(rktp, offset, NULL, 0,
                                        /* force: ignore assignment state */
                                        rd_true, RD_DONT_LOCK);
         rd_kafka_toppar_unlock(rktp);

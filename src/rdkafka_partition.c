@@ -338,6 +338,7 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
 
         rd_refcnt_destroy(&rktp->rktp_refcnt);
 
+        rd_free(rktp->rktp_stored_metadata);
         rd_free(rktp);
 }
 
@@ -3107,6 +3108,15 @@ int rd_kafka_topic_partition_list_set_offsets(
                             rktp->rktp_committed_offset) {
                                 verb           = "setting stored";
                                 rktpar->offset = rktp->rktp_stored_offset;
+                                rktpar->metadata_size =
+                                    rktp->rktp_stored_metadata_size;
+                                if (rktp->rktp_stored_metadata) {
+                                        rktpar->metadata = rd_malloc(
+                                            rktp->rktp_stored_metadata_size);
+                                        memcpy(rktpar->metadata,
+                                               rktp->rktp_stored_metadata,
+                                               rktpar->metadata_size);
+                                }
                         } else {
                                 rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                         }

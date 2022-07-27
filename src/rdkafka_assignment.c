@@ -335,15 +335,22 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
 
                 /* Save the currently stored offset on .removed
                  * so it will be committed below. */
-                rktpar->offset = rktp->rktp_stored_offset;
+                rktpar->offset        = rktp->rktp_stored_offset;
+                rktpar->metadata_size = rktp->rktp_stored_metadata_size;
+                if (rktp->rktp_stored_metadata) {
+                        rktpar->metadata =
+                            rd_malloc(rktp->rktp_stored_metadata_size);
+                        memcpy(rktpar->metadata, rktp->rktp_stored_metadata,
+                               rktp->rktp_stored_metadata_size);
+                }
                 valid_offsets += !RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset);
 
                 /* Reset the stored offset to invalid so that
                  * a manual offset-less commit() or the auto-committer
                  * will not commit a stored offset from a previous
                  * assignment (issue #2782). */
-                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID, rd_true,
-                                       RD_DONT_LOCK);
+                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID, NULL, 0,
+                                       rd_true, RD_DONT_LOCK);
 
                 /* Partition is no longer desired */
                 rd_kafka_toppar_desired_del(rktp);
@@ -732,7 +739,7 @@ rd_kafka_assignment_add(rd_kafka_t *rk,
 
                 /* Reset the stored offset to INVALID to avoid the race
                  * condition described in rdkafka_offset.h */
-                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID,
+                rd_kafka_offset_store0(rktp, RD_KAFKA_OFFSET_INVALID, NULL, 0,
                                        rd_true /* force */, RD_DONT_LOCK);
 
                 rd_kafka_toppar_unlock(rktp);

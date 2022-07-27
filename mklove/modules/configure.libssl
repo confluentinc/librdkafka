@@ -90,6 +90,11 @@ function libcrypto_install_source {
         conf_args="${conf_args} no-krb5"
     fi
 
+    # 1.1.1q tests fail to build on OSX/M1, so disable them.
+    if [[ $MKL_DISTRO == osx && $ver == 1.1.1q ]]; then
+        conf_args="${conf_args} no-tests"
+    fi
+
     echo "### Installing $name $ver from source ($url) to $destdir"
     if [[ ! -f config ]]; then
         echo "### Downloading"

@@ -6570,8 +6570,6 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                  char *errstr,
                                  size_t errstr_size);
 
-
-
 /**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
@@ -7714,6 +7712,7 @@ rd_kafka_ListConsumerGroupOffsets_t;
  */
 RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new (const char *group,
+                                       int require_stable,
                                        const rd_kafka_topic_partition_list_t
                                        *partitions);
 

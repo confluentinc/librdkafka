@@ -380,6 +380,7 @@ struct rd_kafka_ListConsumerGroupOffsets_result_s {
 
 struct rd_kafka_ListConsumerGroupOffsets_s {
         char *group;   /**< Points to data */
+        rd_bool_t require_stable;   /**< Require stable offsets */
         rd_kafka_topic_partition_list_t *partitions;
         char  data[1]; /**< The group name is allocated along with
                         *   the struct here. */

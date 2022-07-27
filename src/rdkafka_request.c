@@ -956,11 +956,13 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  *                       If NULL, defaults to the consumer group id.
  *                       If consumer group id is NULL too, returns the
  *                       @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
+ * @param timeout Optional timeout to set to the buffer
  */
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *parts,
                                  rd_bool_t require_stable,
                                  rd_kafkap_str_t *rk_group_id,
+                                 int timeout,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
@@ -1019,6 +1021,19 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_i8(rkbuf, require_stable);
         }
 
+        if (PartCnt == 0) {
+                /* No partitions needs OffsetFetch, enqueue empty
+                 * response right away. */
+                rkbuf->rkbuf_replyq = replyq;
+                rkbuf->rkbuf_cb     = resp_cb;
+                rkbuf->rkbuf_opaque = opaque;
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
+                return;
+        }
+
+        if (timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, timeout + 1000, 0);
+
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (parts) {
@@ -1028,16 +1043,6 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
         } else {
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                         "OffsetFetchRequest(v%d) for all the partitions", ApiVersion);
-        }
-
-        if (PartCnt == 0) {
-                /* No partitions needs OffsetFetch, enqueue empty
-                 * response right away. */
-                rkbuf->rkbuf_replyq = replyq;
-                rkbuf->rkbuf_cb     = resp_cb;
-                rkbuf->rkbuf_opaque = opaque;
-                rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
-                return;
         }
 
         /* Let handler decide if retries should be performed */

@@ -5142,8 +5142,9 @@ void rd_kafka_AlterConsumerGroupOffsets (
 
 rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new (const char *group,
-                                        const rd_kafka_topic_partition_list_t
-                                        *partitions) {
+                                       const int require_stable,
+                                       const rd_kafka_topic_partition_list_t
+                                       *partitions) {
         size_t tsize = strlen(group) + 1;
         rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets;
 
@@ -5151,6 +5152,7 @@ rd_kafka_ListConsumerGroupOffsets_new (const char *group,
 
         /* Single allocation */
         list_grpoffsets = rd_malloc(sizeof(*list_grpoffsets) + tsize);
+        list_grpoffsets->require_stable = require_stable;
         list_grpoffsets->group = list_grpoffsets->data;
         memcpy(list_grpoffsets->group, group, tsize);
         list_grpoffsets->partitions =
@@ -5186,6 +5188,7 @@ static rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_copy (
         const rd_kafka_ListConsumerGroupOffsets_t *src) {
         return rd_kafka_ListConsumerGroupOffsets_new(src->group,
+                                                     src->require_stable,
                                                      src->partitions);
 }
 
@@ -5205,75 +5208,18 @@ rd_kafka_ListConsumerGroupOffsetsRequest (
         rd_kafka_replyq_t replyq,
         rd_kafka_resp_cb_t *resp_cb,
         void *opaque) {
-        int16_t ApiVersion = 0;
+        int op_timeout;
+        rd_bool_t require_stable;
         const rd_kafka_ListConsumerGroupOffsets_t *grpoffsets =
                 rd_list_elem(list_grpoffsets, 0);
-        int partitions_cnt = grpoffsets->partitions == NULL ? 0 : grpoffsets->partitions->cnt;
-        rd_kafkap_str_t null_str = {-1, NULL};
 
         rd_assert(rd_list_cnt(list_grpoffsets) == 1);
 
-        rd_kafka_buf_t *rkbuf;
-        int PartCnt = -1;
-        int require_stable = rd_true;
-        const char* group_id = grpoffsets->group;
-
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-                rkb,
-                RD_KAFKAP_OffsetFetch,
-                0, 7, NULL);
-
-        rkbuf = rd_kafka_buf_new_flexver_request(
-                rkb, RD_KAFKAP_OffsetFetch, 1,
-                RD_KAFKAP_STR_SIZE0((int)strlen(group_id)) +
-                4 +
-                (partitions_cnt * 32) +
-                1,
-                ApiVersion >= 6 /*flexver*/);
-
-        /* ConsumerGroup */
-        rd_kafka_buf_write_str(rkbuf, group_id, -1);
-
-        if (grpoffsets->partitions == NULL) {
-                rd_kafka_buf_write_kstr(rkbuf, &null_str);
-        }
-        else {
-                /* Sort partitions by topic */
-                rd_kafka_topic_partition_list_sort_by_topic(grpoffsets->partitions);
-
-                /* Write partition list, filtering out partitions with valid offsets */
-                PartCnt = rd_kafka_buf_write_topic_partitions(
-                        rkbuf, grpoffsets->partitions,
-                        rd_false/*include invalid offsets*/,
-                        rd_false/*skip valid offsets */,
-                        rd_false/*don't write offsets*/,
-                        rd_false/*don't write epoch */,
-                        rd_false/*don't write metadata*/);
-        }
-
-        if (ApiVersion >= 7) {
-                /* RequireStable */
-                rd_kafka_buf_write_i8(rkbuf, require_stable);
-        }
-
-        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
-
-        if (PartCnt == 0) {
-                /* No partitions needs OffsetFetch, enqueue empty
-                * response right away. */
-                rkbuf->rkbuf_replyq = replyq;
-                rkbuf->rkbuf_cb     = resp_cb;
-                rkbuf->rkbuf_opaque = opaque;
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
-
-        /* Let handler decide if retries should be performed */
-        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_MAX_RETRIES;
-
-        fprintf(stderr, "Fetch committed offsets for %d/%d partition(s)\n", PartCnt, partitions_cnt);
-
-        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafkap_str_t *group_str = rd_kafkap_str_new(grpoffsets->group, -1);
+        require_stable = grpoffsets->require_stable;
+        rd_kafka_OffsetFetchRequest(rkb, grpoffsets->partitions, require_stable, group_str, op_timeout, replyq, resp_cb, opaque);
+        rd_kafkap_str_destroy(group_str);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -5284,92 +5230,30 @@ static rd_kafka_resp_err_t
 rd_kafka_ListConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
                                     rd_kafka_op_t **rko_resultp,
                                     rd_kafka_buf_t *reply,
-                                    char *errstr, size_t errstr_size)
-{
-        rd_kafka_op_t *rko_result;
-        const int log_decode_errors = LOG_ERR;
-        int32_t TopicArrayCnt;
-        int64_t offset = RD_KAFKA_OFFSET_INVALID;
-        int16_t ApiVersion = rd_kafka_buf_ApiVersion(reply);
-        rd_kafkap_str_t metadata;
-        int i;
-        int seen_cnt = 0;
+                                    char *errstr, size_t errstr_size) {
         const rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets =
                 rd_list_elem(&rko_req->rko_u.admin_request.args, 0);
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
         rd_kafka_topic_partition_list_t *offsets = NULL;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
 
-        if (ApiVersion >= 3)
-                rd_kafka_buf_read_throttle_time(reply);
+        rk = rko_req->rko_rk;
+        rkb = reply->rkbuf_rkb;
+        err = rd_kafka_handle_OffsetFetch(rk,
+                                    rkb,
+                                    RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    reply,
+                                    NULL,
+                                    &offsets,
+                                    rd_false,
+                                    rd_true,
+                                    rd_false);
 
-        if (!offsets)
-                offsets = rd_kafka_topic_partition_list_new(16);
-
-        rd_kafka_buf_read_arraycnt(reply, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
-        for (i = 0 ; i < TopicArrayCnt ; i++) {
-                rd_kafkap_str_t topic;
-                int32_t PartArrayCnt;
-                char *topic_name;
-                int j;
-
-                rd_kafka_buf_read_str(reply, &topic);
-
-                rd_kafka_buf_read_arraycnt(reply, &PartArrayCnt,
-                                           RD_KAFKAP_PARTITIONS_MAX);
-
-                RD_KAFKAP_STR_DUPA(&topic_name, &topic);
-
-                for (j = 0 ; j < PartArrayCnt ; j++) {
-                        int32_t partition;
-                        rd_kafka_topic_partition_t *rktpar;
-                        int32_t LeaderEpoch;
-                        int16_t err2;
-
-                        rd_kafka_buf_read_i32(reply, &partition);
-                        rd_kafka_buf_read_i64(reply, &offset);
-                        if (ApiVersion >= 5)
-                                rd_kafka_buf_read_i32(reply, &LeaderEpoch);
-                        rd_kafka_buf_read_str(reply, &metadata);
-                        rd_kafka_buf_read_i16(reply, &err2);
-                        rd_kafka_buf_skip_tags(reply);
-
-                        rktpar = rd_kafka_topic_partition_list_find(offsets,
-                                                                    topic_name,
-                                                                    partition);
-                        if (!rktpar)
-                                rktpar = rd_kafka_topic_partition_list_add(
-                                        offsets, topic_name, partition);
-
-                        seen_cnt++;
-
-                        /* broker reports invalid offset as -1 */
-                        if (offset == -1)
-                                rktpar->offset = RD_KAFKA_OFFSET_INVALID;
-                        else
-                                rktpar->offset = offset;
-                        rktpar->err = err2;
-
-                        if (rktpar->metadata)
-                                rd_free(rktpar->metadata);
-
-                        if (RD_KAFKAP_STR_IS_NULL(&metadata)) {
-                                rktpar->metadata = NULL;
-                                rktpar->metadata_size = 0;
-                        } else {
-                                rktpar->metadata = RD_KAFKAP_STR_DUP(&metadata);
-                                rktpar->metadata_size =
-                                        RD_KAFKAP_STR_LEN(&metadata);
-                        }
-                }
-
-                rd_kafka_buf_skip_tags(reply);
-        }
-
-        if (ApiVersion >= 2) {
-                int16_t ErrorCode;
-                rd_kafka_buf_read_i16(reply, &ErrorCode);
-                if (ErrorCode) {
-                        return ErrorCode;
-                }
+        if (unlikely(err != RD_KAFKA_RESP_ERR_NO_ERROR)) {
+                reply->rkbuf_err = err;
+                goto err;
         }
 
         /* Create result op and group_result_t */
@@ -5379,16 +5263,19 @@ rd_kafka_ListConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
         rd_list_add(&rko_result->rko_u.admin_result.results,
                     rd_kafka_group_result_new(list_grpoffsets->group, -1,
                                               offsets, NULL));
-        rd_kafka_topic_partition_list_destroy(offsets);
+
+        if (likely(offsets != NULL)) rd_kafka_topic_partition_list_destroy(offsets);
 
         *rko_resultp = rko_result;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+err:
+        if (likely(offsets != NULL)) rd_kafka_topic_partition_list_destroy(offsets);
 
- err_parse:
         rd_snprintf(errstr, errstr_size,
-                    "OffsetFetch response protocol parse failure: %s",
+                    "ListConsumerGroupOffsetsResponse response failure: %s",
                     rd_kafka_err2str(reply->rkbuf_err));
+
         return reply->rkbuf_err;
  }
 

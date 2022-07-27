@@ -59,6 +59,22 @@ static void stop(int sig) {
         rd_kafka_queue_yield(queue);
 }
 
+/**
+ * @brief Parse an integer or fail.
+ */
+int64_t parse_int(const char *what, const char *str) {
+        char *end;
+        unsigned long n = strtoull(str, &end, 0);
+
+        if (end != str + strlen(str)) {
+                fprintf(stderr, "%% Invalid input for %s: %s: not an integer\n",
+                        what, str);
+                exit(1);
+        }
+
+        return (int64_t)n;
+}
+
 static void
 print_partition_list(FILE *fp,
                      const rd_kafka_topic_partition_list_t *partitions) {
@@ -81,15 +97,21 @@ int main(int argc, char **argv) {
         rd_kafka_AdminOptions_t *options;      /* (Optional) Options for
                                                 * ListConsumerGroupOffsets() */
         rd_kafka_event_t *event;               /* ListConsumerGroupOffsets result event */
-        int exitcode = 0;
+        int exitcode = 0, print_usage = 0, require_stable = 0;
 
         /*
          * Argument validation
          */
-        if (argc < 3) {
+        print_usage = argc < 4;
+        if (!print_usage) {
+                require_stable = parse_int("require_stable", argv[3]);
+                print_usage = require_stable < 0 || require_stable > 1;
+        }
+        if (print_usage) {
                 fprintf(stderr,
                         "%% Usage: %s <bootstrap_servers> "
-                        "<group_id>"
+                        "<group_id> "
+                        "<require_stable>"
                         "\n",
                         argv[0]);
                 return 1;
@@ -147,7 +169,7 @@ int main(int argc, char **argv) {
         }
 
         /* Create argument */
-        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, NULL);
+        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, require_stable, NULL);
         /* Call ListConsumerGroupOffsets */
         rd_kafka_ListConsumerGroupOffsets(rk, &list_cgrp_offsets, 1, options, queue);
 

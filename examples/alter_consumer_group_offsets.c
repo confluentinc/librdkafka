@@ -98,23 +98,22 @@ int main(int argc, char **argv) {
         rd_kafka_AdminOptions_t *options;      /* (Optional) Options for
                                                 * AlterConsumerGroupOffsets() */
         rd_kafka_event_t *event;               /* AlterConsumerGroupOffsets result event */
+        const int min_argc = 4;
         int exitcode = 0;
         int num_partitions = 0;
 
         /*
          * Argument validation
          */
-        int print_usage = argc < 5;
+        int print_usage = argc < min_argc + 2;
         if (!print_usage) {
-                num_partitions = atoi(argv[4]);
-                print_usage = argc != 5 + 2 * num_partitions;
+                print_usage = (argc - min_argc) % 2 != 0;
         }
         if (print_usage) {
                 fprintf(stderr,
                         "%% Usage: %s <bootstrap_servers> "
                         "<group_id> "
                         "<topic> "
-                        "<num_partitions> "
                         "<partition1> "
                         "<offset1> "
                         "<partition2> "
@@ -125,6 +124,7 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        num_partitions = (argc - min_argc) / 2;
         bootstrap_servers = argv[1];
         const char *group = argv[2];
         const char *topic = argv[3];
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
                 rd_kafka_topic_partition_list_add(
                         partitions,
                         topic,
-                        parse_int("partition", argv[5 + i * 2]))->offset = parse_int("offset", argv[6 + i * 2]);
+                        parse_int("partition", argv[min_argc + i * 2]))->offset = parse_int("offset", argv[min_argc + 1 + i * 2]);
         }
 
         /* Create argument */

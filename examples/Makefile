@@ -3,6 +3,8 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
 	delete_records \
+	list_consumer_group_offsets \
+	alter_consumer_group_offsets \
 	openssl_engine_example_cpp \
 	misc
 
@@ -57,6 +59,14 @@ transactions-older-broker.c: ../src/librdkafka.a transactions-older-broker.c
 		../src/librdkafka.a $(LIBS)
 
 delete_records: ../src/librdkafka.a delete_records.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_consumer_group_offsets: ../src/librdkafka.a list_consumer_group_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+alter_consumer_group_offsets: ../src/librdkafka.a alter_consumer_group_offsets.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

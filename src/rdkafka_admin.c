@@ -4883,7 +4883,7 @@ rd_kafka_AlterConsumerGroupOffsetsRequest (
 
         rd_kafka_topic_partition_list_t *offsets = grpoffsets->partitions;
         rd_kafka_consumer_group_metadata_t *cgmetadata =
-                rd_kafka_consumer_group_metadata_new(grpoffsets->group); 
+                rd_kafka_consumer_group_metadata_new(grpoffsets->group);
 
         rd_kafka_buf_t *rkbuf;
         ssize_t of_TopicCnt = -1;

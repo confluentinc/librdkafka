@@ -528,8 +528,10 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 } else {
                         /* Update local topic & partition state based
                          * on metadata */
+                        fprintf(stderr, "###MH###: PARSE METADATA START\n");
                         rd_kafka_topic_metadata_update2(rkb, mdt,
                                                         leader_epochs[i]);
+                        fprintf(stderr, "###MH###: PARSE METADATA END\n");
                 }
 
                 if (requested_topics) {

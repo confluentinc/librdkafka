@@ -402,6 +402,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOOP = -141,
         /** No offset to automatically reset to */
         RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
+        /** Log truncation detected */
+        RD_KAFKA_RESP_ERR__LOG_TRUNCATION = -139,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,
@@ -422,7 +424,7 @@ typedef enum {
         /** Leader not available */
         RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE = 5,
         /** Not leader for partition */
-        RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION = 6,
+        RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER = 6,
         /** Request timed out */
         RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT = 7,
         /** Broker not available */

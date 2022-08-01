@@ -2566,8 +2566,8 @@ static void do_test_out_of_order_seq(void) {
          * Epoch bump. */
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 3,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER,
+            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER,
             RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER);
 
         /* Produce three messages that will be delayed

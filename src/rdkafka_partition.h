@@ -52,8 +52,35 @@ static RD_UNUSED void rd_kafka_offset_stats_reset(struct offset_stats *offs) {
 }
 
 
+
+/**
+ * Represents the position of a partition subscription.
+ */
+typedef struct rd_kafka_fetch_position_s {
+        int64_t offset;       /**< Last offset delivered to application + 1.
+                               *   Is reset to INVALID_OFFSET when partition
+                               *   is unassigned/stopped/seeked. */
+        int32_t offset_epoch; /**< The epoch of the leader at the time the
+                               *   record at offset-1 was written to the log.*/
+        int32_t leader;       /**< The leader at the time the batch was
+                               *   consumed. */
+        int32_t leader_epoch; /**< The leader epoch at the time the batch was
+                               *   consumed. */
+} rd_kafka_fetch_position_t;
+
+
+rd_kafka_fetch_position_t*
+rd_kafka_fetch_position_clone(rd_kafka_fetch_position_t *fetch_position);
+
+
+rd_bool_t
+rd_kafka_fetch_position_equals(rd_kafka_fetch_position_t *a,
+                               rd_kafka_fetch_position_t *b);
+
+
 typedef struct rd_kafka_topic_partition_private_s {
         rd_kafka_toppar_t *toppar;
+        rd_kafka_fetch_position_t *position;
         int32_t leader_epoch;
 } rd_kafka_topic_partition_private_t;
 
@@ -77,7 +104,17 @@ rd_kafka_topic_partition_get_toppar(rd_kafka_topic_partition_t *rktpar);
 
 void
 rd_kafka_topic_partition_set_toppar(rd_kafka_topic_partition_t *rktpar,
-                                    rd_kafka_toppar_t *toppar);
+                                    rd_kafka_toppar_t *toppar,
+                                    rd_bool_t keep);
+
+
+void
+rd_kafka_topic_partition_set_position(rd_kafka_topic_partition_t *rktpar,
+                                      rd_kafka_fetch_position_t *position);
+
+
+rd_kafka_fetch_position_t *
+rd_kafka_topic_partition_get_position(rd_kafka_topic_partition_t *rktpar);
 
 
 /**
@@ -93,22 +130,6 @@ struct rd_kafka_toppar_err {
         int32_t last_seq;        /**< Idempotent Producer:
                                   *   last msg sequence */
 };
-
-
-/**
- * Represents the position of a partition subscription.
- */
-typedef struct rd_kafka_fetch_position_s {
-        int64_t offset;       /**< Last offset delivered to application + 1.
-                               *   Is reset to INVALID_OFFSET when partition
-                               *   is unassigned/stopped/seeked. */
-        int32_t offset_epoch; /**< Leader epoch corresponding to the records
-                               *   in the batch taken from FetchResponse. */
-        int32_t leader;       /**< Leader at the time the batch was
-                               *   consumed. */
-        int32_t leader_epoch; /**< Leader epoch at the time the batch was
-                               *   consumed. */
-} rd_kafka_fetch_position_t;
 
 
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
@@ -395,6 +416,13 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
         0x2000 /**< Toppar is part of the consumer                             \
                 *   assignment. */
+#define RD_KAFKA_TOPPAR_F_FENCED_LEADER_EPOCH                                  \
+        0x4000 /**< Fetching from toppar is fenced due to out-of-date          \
+                *   metadata. Waiting for updated metadata. */
+#define RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION                                     \
+        0x8000 /**< Position validation is required for the toppar. */
+#define RD_KAFKA_TOPPAR_F_WAIT_TRUNCATION_CHECK                                \
+        0x10000 /**< Waiting for result of position validation. */
 
         /*
          * Timers

@@ -501,8 +501,10 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "Broker: Invalid message size"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
               "Broker: Leader not available"),
-    _ERR_DESC(RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
-              "Broker: Not leader for partition"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER,
+              "Broker: For requests intended for leader: Not leader for "
+              "partition. For requests intended for a replica: Not replica "
+              "for partition"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT, "Broker: Request timed out"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE,
               "Broker: Broker not available"),

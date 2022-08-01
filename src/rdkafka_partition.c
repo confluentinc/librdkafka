@@ -2618,8 +2618,8 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
                                         rd_kafka_resp_err_t err) {
         rd_kafka_topic_t *rkt = rktp->rktp_rkt;
 
-        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "BROKERUA",
-                     "%s [%" PRId32 "]: broker unavailable: %s: %s",
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "LEADERUA",
+                     "%s [%" PRId32 "]: leader unavailable: %s: %s",
                      rkt->rkt_topic->str, rktp->rktp_partition, reason,
                      rd_kafka_err2str(err));
 
@@ -2750,6 +2750,8 @@ rd_kafka_topic_partition_destroy0(rd_kafka_topic_partition_t *rktpar,
                 if (_priv->toppar)
                         rd_kafka_toppar_destroy(
                                 (rd_kafka_toppar_t *)_priv->toppar);
+                if (_priv->position)
+                        rd_free(_priv->position);
                 rd_free(_priv);
         }
 
@@ -4421,11 +4423,14 @@ rd_kafka_topic_partition_get_toppar(rd_kafka_topic_partition_t *toppar) {
 
 void
 rd_kafka_topic_partition_set_toppar(rd_kafka_topic_partition_t *rktpar,
-                                    rd_kafka_toppar_t *toppar) {
+                                    rd_kafka_toppar_t *toppar,
+                                    rd_bool_t keep) {
         if (!rktpar->_private)
                 rktpar->_private = rd_kafka_topic_partition_private_new();
         ((rd_kafka_topic_partition_private_t*)rktpar->_private)->toppar =
                 toppar;
+        if (keep)
+                rd_kafka_toppar_keep(toppar);
 }
 
 
@@ -4445,4 +4450,52 @@ int32_t rd_kafka_topic_partition_get_leader_epoch(
                 return RD_KAFKA_LEADER_EPOCH_UNSET;
         return ((rd_kafka_topic_partition_private_t *)rktpar->_private)->
                 leader_epoch;
+}
+
+
+rd_kafka_fetch_position_t*
+rd_kafka_fetch_position_clone(rd_kafka_fetch_position_t *fetch_position) {
+        rd_kafka_fetch_position_t *r;
+
+        if (!fetch_position)
+                return NULL;
+
+        r = rd_malloc(sizeof(*r));
+        memcpy(r, fetch_position, sizeof(*r));
+
+        return r;
+}
+
+
+void
+rd_kafka_topic_partition_set_position(rd_kafka_topic_partition_t *rktpar,
+                                      rd_kafka_fetch_position_t *position) {
+        if (!rktpar->_private)
+                rktpar->_private = rd_kafka_topic_partition_private_new();
+        ((rd_kafka_topic_partition_private_t *)rktpar->_private)->position
+                = position;
+}
+
+
+rd_kafka_fetch_position_t *
+rd_kafka_topic_partition_get_position(rd_kafka_topic_partition_t *rktpar) {
+        if (!rktpar->_private)
+                return NULL;
+        return  ((rd_kafka_topic_partition_private_t *)rktpar->_private)->
+                position;
+}
+
+
+rd_bool_t
+rd_kafka_fetch_position_equals(rd_kafka_fetch_position_t *a,
+                                rd_kafka_fetch_position_t *b) {
+        if (a->offset != b->offset)
+                return rd_false;
+        if (a->offset_epoch != b->offset_epoch)
+                return rd_false;
+        if (a->leader != b->leader)
+                return rd_false;
+        if (a->leader_epoch != b->leader_epoch)
+                return rd_false;
+        return rd_true;
 }

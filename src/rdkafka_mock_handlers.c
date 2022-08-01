@@ -107,7 +107,7 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
                         else if (mpart->leader != mconn->broker)
                                 err =
-                                    RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
+                                    RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
 
                         /* Append to partition log */
                         if (!err)
@@ -266,7 +266,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                         else if (!all_err && mpart->leader != mconn->broker &&
                                  !on_follower)
                                 err =
-                                    RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
+                                    RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
 
                         /* Find MessageSet for FetchOffset */
                         if (!err && FetchOffset != mpart->end_offset) {
@@ -466,7 +466,7 @@ static int rd_kafka_mock_handle_ListOffsets(rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
                         else if (!all_err && mpart->leader != mconn->broker)
                                 err =
-                                    RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
+                                    RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
 
 
                         /* Response: ErrorCode */
@@ -1393,7 +1393,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
 
                 if (AssignmentCnt > 0 && !is_leader)
                         err =
-                            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION; /* FIXME
+                            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER; /* FIXME
                                                                          */
                 else if (AssignmentCnt == 0 && is_leader)
                         err = RD_KAFKA_RESP_ERR_INVALID_PARTITIONS; /* FIXME */

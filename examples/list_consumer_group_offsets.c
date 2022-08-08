@@ -167,9 +167,15 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 return 1;
         }
+        /* Set requested require stable */
+        if (rd_kafka_AdminOptions_set_require_stable(
+                options, require_stable, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% Failed to set require stable: %s\n", errstr);
+                return 1;
+        }
 
         /* Create argument */
-        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, require_stable, NULL);
+        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, NULL);
         /* Call ListConsumerGroupOffsets */
         rd_kafka_ListConsumerGroupOffsets(rk, &list_cgrp_offsets, 1, options, queue);
 

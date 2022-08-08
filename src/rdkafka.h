@@ -6570,6 +6570,30 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                  char *errstr,
                                  size_t errstr_size);
 
+
+/**
+ * @brief Whether broker should return stable offsets
+ *        (transaction-committed).
+ *
+ * @param options Admin options.
+ * @param true_or_false Defaults to false.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This option is valid for ListConsumerGroupOffsets.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
+                                         int true_or_false,
+                                         char *errstr,
+                                         size_t errstr_size);
+
 /**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
@@ -7712,7 +7736,6 @@ rd_kafka_ListConsumerGroupOffsets_t;
  */
 RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new (const char *group,
-                                       int require_stable,
                                        const rd_kafka_topic_partition_list_t
                                        *partitions);
 

@@ -1368,6 +1368,16 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                          &ibroker_id, errstr, errstr_size);
 }
 
+rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
+                                         int true_or_false,
+                                         char *errstr,
+                                         size_t errstr_size) {
+        return rd_kafka_confval_set_type(&options->require_stable,
+                                         RD_KAFKA_CONFVAL_INT, &true_or_false,
+                                         errstr, errstr_size);
+}
+
 void rd_kafka_AdminOptions_set_opaque(rd_kafka_AdminOptions_t *options,
                                       void *opaque) {
         rd_kafka_confval_set_type(&options->opaque, RD_KAFKA_CONFVAL_PTR,
@@ -1412,6 +1422,13 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                                           0, 1, 0);
         else
                 rd_kafka_confval_disable(&options->incremental, "incremental");
+
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS)
+                rd_kafka_confval_init_int(&options->require_stable, "require_stable",
+                                          0, 1, 0);
+        else
+                rd_kafka_confval_disable(&options->require_stable, "require_stable");
 
         rd_kafka_confval_init_int(&options->broker, "broker", 0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
@@ -5142,7 +5159,6 @@ void rd_kafka_AlterConsumerGroupOffsets (
 
 rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new (const char *group,
-                                       const int require_stable,
                                        const rd_kafka_topic_partition_list_t
                                        *partitions) {
         size_t tsize = strlen(group) + 1;
@@ -5152,7 +5168,6 @@ rd_kafka_ListConsumerGroupOffsets_new (const char *group,
 
         /* Single allocation */
         list_grpoffsets = rd_malloc(sizeof(*list_grpoffsets) + tsize);
-        list_grpoffsets->require_stable = require_stable;
         list_grpoffsets->group = list_grpoffsets->data;
         memcpy(list_grpoffsets->group, group, tsize);
         list_grpoffsets->partitions =
@@ -5188,7 +5203,6 @@ static rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_copy (
         const rd_kafka_ListConsumerGroupOffsets_t *src) {
         return rd_kafka_ListConsumerGroupOffsets_new(src->group,
-                                                     src->require_stable,
                                                      src->partitions);
 }
 
@@ -5216,8 +5230,8 @@ rd_kafka_ListConsumerGroupOffsetsRequest (
         rd_assert(rd_list_cnt(list_grpoffsets) == 1);
 
         op_timeout = rd_kafka_confval_get_int(&options->request_timeout);
+        require_stable = rd_kafka_confval_get_int(&options->require_stable);
         rd_kafkap_str_t *group_str = rd_kafkap_str_new(grpoffsets->group, -1);
-        require_stable = grpoffsets->require_stable;
         rd_kafka_OffsetFetchRequest_group(rkb, group_str, grpoffsets->partitions, require_stable, op_timeout, replyq, resp_cb, opaque);
         rd_kafkap_str_destroy(group_str);
         return RD_KAFKA_RESP_ERR_NO_ERROR;

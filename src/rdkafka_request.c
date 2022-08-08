@@ -950,11 +950,11 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  *
  * @param parts List of topic-partitions to request,
  *              or NULL to return all topic partitions associated with the group.
- * @param require_stable Whether broker should return unstable offsets
- *                       (not yet transaction-committed).
+ * @param require_stable Whether broker should return stable offsets
+ *                       (transaction-committed).
  * @param rk_group_id Request offset for this group id.
- *                       If NULL, returns the
- *                       @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
+ *                    If NULL, returns the
+ *                    @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
  * @param timeout Optional timeout to set to the buffer.
  */
 void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
@@ -1067,8 +1067,8 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
  * reply is enqueued on the replyq.
  *
  * @param parts List of topic-partitions to request.
- * @param require_stable Whether broker should return unstable offsets
- *                       (not yet transaction-committed).
+ * @param require_stable Whether broker should return stable offsets
+ *                       (transaction-committed).
  */
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *parts,

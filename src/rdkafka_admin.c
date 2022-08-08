@@ -5215,10 +5215,10 @@ rd_kafka_ListConsumerGroupOffsetsRequest (
 
         rd_assert(rd_list_cnt(list_grpoffsets) == 1);
 
-        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        op_timeout = rd_kafka_confval_get_int(&options->request_timeout);
         rd_kafkap_str_t *group_str = rd_kafkap_str_new(grpoffsets->group, -1);
         require_stable = grpoffsets->require_stable;
-        rd_kafka_OffsetFetchRequest(rkb, grpoffsets->partitions, require_stable, group_str, op_timeout, replyq, resp_cb, opaque);
+        rd_kafka_OffsetFetchRequest_group(rkb, group_str, grpoffsets->partitions, require_stable, op_timeout, replyq, resp_cb, opaque);
         rd_kafkap_str_destroy(group_str);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         /*
          * Argument validation
          */
-        int print_usage = argc < min_argc + 2;
+        int print_usage = argc < min_argc;
         if (!print_usage) {
                 print_usage = (argc - min_argc) % 2 != 0;
         }
@@ -194,6 +194,7 @@ int main(int argc, char **argv) {
         /* Clean up input arguments */
         rd_kafka_AlterConsumerGroupOffsets_destroy(alter_consumer_group_offsets);
         rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_topic_partition_list_destroy(partitions);
 
 
         /* Wait for results */

@@ -4911,12 +4911,13 @@ rd_kafka_AlterConsumerGroupOffsetsRequest (
                 opaque,
                 "rd_kafka_AlterConsumerGroupOffsetsRequest"
         );
-
-        if (ret == 0) {
-                // TODO: handle
-        }
-
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        if (ret == 0) {
+                rd_snprintf(errstr, errstr_size,
+                        "At least one topic-partition offset must "
+                        "be >= 0");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -4975,6 +4976,7 @@ void rd_kafka_AlterConsumerGroupOffsets (
         size_t alter_grpoffsets_cnt,
         const rd_kafka_AdminOptions_t *options,
         rd_kafka_queue_t *rkqu) {
+        int i;
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_AlterConsumerGroupOffsetsRequest,
             rd_kafka_AlterConsumerGroupOffsetsResponse_parse,
@@ -4996,11 +4998,27 @@ void rd_kafka_AlterConsumerGroupOffsets (
                                            "Exactly one "
                                            "AlterConsumerGroupOffsets must "
                                            "be passed");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true/*destroy*/);
-                return;
+                goto fail;
         }
 
+        int empty_topic_partitions =  alter_grpoffsets[0]->partitions->cnt == 0;
+        if (empty_topic_partitions) {
+                rd_kafka_admin_result_fail(rko,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Non-empty topic partition list "
+                                           "must be present");
+                goto fail;
+        }
+
+        for (i = 0; i < alter_grpoffsets[0]->partitions->cnt; i++) {
+                if (alter_grpoffsets[0]->partitions->elems[i].offset < 0) {
+                        rd_kafka_admin_result_fail(rko,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "All topic-partition offsets "
+                                           "must be >= 0");
+                        goto fail;
+                }
+        }
 
         rko->rko_u.admin_request.broker_id =
                 RD_KAFKA_ADMIN_TARGET_COORDINATOR;
@@ -5017,6 +5035,10 @@ void rd_kafka_AlterConsumerGroupOffsets (
                             alter_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+fail:
+        rd_kafka_admin_common_worker_destroy(rk, rko,
+                                             rd_true/*destroy*/);
 }
 
 

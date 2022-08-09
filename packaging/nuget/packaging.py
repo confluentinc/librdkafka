@@ -735,6 +735,30 @@ class StaticPackage (Package):
              'rdkafka-static.pc',
              'librdkafka_musl_linux.pc'],
 
+            # glibc linux arm64 static lib and pkg-config file
+            [{'arch': 'arm64',
+              'plat': 'linux',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/librdkafka-static.a',
+             'librdkafka_glibc_linux_arm64.a'],
+            [{'arch': 'arm64',
+              'plat': 'linux',
+              'fname_glob': 'librdkafka-gcc.tar.gz'},
+             './lib/pkgconfig/rdkafka-static.pc',
+             'librdkafka_glibc_linux_arm64.pc'],
+
+            # musl linux arm64 static lib and pkg-config file
+            [{'arch': 'arm64',
+              'plat': 'linux',
+              'fname_glob': 'alpine-librdkafka.tgz'},
+             'librdkafka-static.a',
+             'librdkafka_musl_linux_arm64.a'],
+            [{'arch': 'arm64',
+              'plat': 'linux',
+              'fname_glob': 'alpine-librdkafka.tgz'},
+             'rdkafka-static.pc',
+             'librdkafka_musl_linux_arm64.pc'],
+
             # osx x64 static lib and pkg-config file
             [{'arch': 'x64', 'plat': 'osx',
               'fname_glob': 'librdkafka-clang.tar.gz'},
@@ -828,8 +852,12 @@ class StaticPackage (Package):
             "./LICENSES.txt",
             "./librdkafka_glibc_linux.a",
             "./librdkafka_glibc_linux.pc",
+            "./librdkafka_glibc_linux_arm64.a",
+            "./librdkafka_glibc_linux_arm64.pc",
             "./librdkafka_musl_linux.a",
             "./librdkafka_musl_linux.pc",
+            "./librdkafka_musl_linux_arm64.a",
+            "./librdkafka_musl_linux_arm64.pc",
             "./librdkafka_darwin_amd64.a",
             "./librdkafka_darwin_arm64.a",
             "./librdkafka_darwin_amd64.pc",

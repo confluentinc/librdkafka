@@ -4902,122 +4902,21 @@ rd_kafka_AlterConsumerGroupOffsetsRequest (
         rd_kafka_consumer_group_metadata_t *cgmetadata =
                 rd_kafka_consumer_group_metadata_new(grpoffsets->group);
 
-        rd_kafka_buf_t *rkbuf;
-        ssize_t of_TopicCnt = -1;
-        int TopicCnt = 0;
-        const char *last_topic = NULL;
-        ssize_t of_PartCnt = -1;
-        int PartCnt = 0;
-        int tot_PartCnt = 0;
-        int i;
-        int16_t ApiVersion;
-        int features;
+        int ret = rd_kafka_OffsetCommitRequest_group(
+                rkb,
+                cgmetadata,
+                offsets,
+                replyq,
+                resp_cb,
+                opaque,
+                "rd_kafka_AlterConsumerGroupOffsetsRequest"
+        );
 
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
-                                                          RD_KAFKAP_OffsetCommit,
-                                                          0, 7,
-                                                          &features);
-
-        rd_kafka_assert(NULL, offsets != NULL);
-
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_OffsetCommit,
-                                         1, 100 + (offsets->cnt * 128));
-
-        /* ConsumerGroup */
-        rd_kafka_buf_write_str(rkbuf, cgmetadata->group_id, -1);
-
-        /* v1,v2 */
-        if (ApiVersion >= 1) {
-                /* ConsumerGroupGenerationId */
-                rd_kafka_buf_write_i32(rkbuf, cgmetadata->generation_id);
-                /* ConsumerId */
-                rd_kafka_buf_write_str(rkbuf, cgmetadata->member_id, -1);
+        if (ret == 0) {
+                // TODO: handle
         }
 
-        /* v7: GroupInstanceId */
-        if (ApiVersion >= 7)
-                rd_kafka_buf_write_str(rkbuf, cgmetadata->group_instance_id, -1);
-
-        /* v2-4: RetentionTime */
-        if (ApiVersion >= 2 && ApiVersion <= 4)
-                rd_kafka_buf_write_i64(rkbuf, -1);
-
-        /* Sort offsets by topic */
-        rd_kafka_topic_partition_list_sort_by_topic(offsets);
-
-        /* TopicArrayCnt: Will be updated when we know the number of topics. */
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-
-        for (i = 0 ; i < offsets->cnt ; i++) {
-                rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
-
-                /* Skip partitions with invalid offset. */
-                if (rktpar->offset < 0)
-                        continue;
-
-                if (last_topic == NULL || strcmp(last_topic, rktpar->topic)) {
-                        /* New topic */
-
-                        /* Finalize previous PartitionCnt */
-                        if (PartCnt > 0)
-                                rd_kafka_buf_update_u32(rkbuf, of_PartCnt,
-                                                        PartCnt);
-
-                        /* TopicName */
-                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
-                        /* PartitionCnt, finalized later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
-                        PartCnt = 0;
-                        last_topic = rktpar->topic;
-                        TopicCnt++;
-                }
-
-                /* Partition */
-                rd_kafka_buf_write_i32(rkbuf,  rktpar->partition);
-                PartCnt++;
-                tot_PartCnt++;
-
-                /* Offset */
-                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
-
-                /* v6: KIP-101 CommittedLeaderEpoch */
-                if (ApiVersion >= 6)
-                        rd_kafka_buf_write_i32(rkbuf, -1);
-
-                /* v1: TimeStamp */
-                if (ApiVersion == 1)
-                        rd_kafka_buf_write_i64(rkbuf, -1);
-
-                /* Metadata */
-                /* Java client 0.9.0 and broker <0.10.0 can't parse
-                 * Null metadata fields, so as a workaround we send an
-                 * empty string if it's Null. */
-                if (!rktpar->metadata)
-                        rd_kafka_buf_write_str(rkbuf, "", 0);
-                else
-                        rd_kafka_buf_write_str(rkbuf,
-                                               rktpar->metadata,
-                                               rktpar->metadata_size);
-        }
-
-        if (tot_PartCnt == 0) {
-                /* No topic+partitions had valid offsets to commit. */
-                rd_kafka_replyq_destroy(&replyq);
-                rd_kafka_buf_destroy(rkbuf);
-                return 0;
-        }
-
-        /* Finalize previous PartitionCnt */
-        if (PartCnt > 0)
-                rd_kafka_buf_update_u32(rkbuf, of_PartCnt,  PartCnt);
-
-        /* Finalize TopicCnt */
-        rd_kafka_buf_update_u32(rkbuf, of_TopicCnt, TopicCnt);
-
-        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
-
-        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

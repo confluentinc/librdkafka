@@ -1271,21 +1271,23 @@ done:
         return err;
 }
 
-
-
 /**
  * @brief Send OffsetCommitRequest for a list of partitions.
+ * 
+ * @param cgmetadata - consumer group metadata.
+ * 
+ * @param offsets - offsets to commit for each topic-partition.
  *
  * @returns 0 if none of the partitions in \p offsets had valid offsets,
  *          else 1.
  */
-int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
-                                 rd_kafka_cgrp_t *rkcg,
-                                 rd_kafka_topic_partition_list_t *offsets,
-                                 rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
-                                 void *opaque,
-                                 const char *reason) {
+int rd_kafka_OffsetCommitRequest_group(rd_kafka_broker_t *rkb,
+                                       rd_kafka_consumer_group_metadata_t *cgmetadata,
+                                       rd_kafka_topic_partition_list_t *offsets,
+                                       rd_kafka_replyq_t replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque,
+                                       const char *reason) {
         rd_kafka_buf_t *rkbuf;
         ssize_t of_TopicCnt    = -1;
         int TopicCnt           = 0;
@@ -1306,19 +1308,19 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
                                          100 + (offsets->cnt * 128));
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_id);
+        rd_kafka_buf_write_str(rkbuf, cgmetadata->group_id, -1);
 
         /* v1,v2 */
         if (ApiVersion >= 1) {
                 /* ConsumerGroupGenerationId */
-                rd_kafka_buf_write_i32(rkbuf, rkcg->rkcg_generation_id);
+                rd_kafka_buf_write_i32(rkbuf, cgmetadata->generation_id);
                 /* ConsumerId */
-                rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_member_id);
+                rd_kafka_buf_write_str(rkbuf, cgmetadata->member_id, -1);
         }
 
         /* v7: GroupInstanceId */
         if (ApiVersion >= 7)
-                rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_instance_id);
+                rd_kafka_buf_write_str(rkbuf, cgmetadata->group_instance_id, -1);
 
         /* v2-4: RetentionTime */
         if (ApiVersion >= 2 && ApiVersion <= 4)
@@ -1404,6 +1406,43 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 
         return 1;
+}
+
+
+/**
+ * @brief Send OffsetCommitRequest for a list of partitions.
+ *
+ * @param rkcg - consumer group struct.
+ * 
+ * @param offsets - offsets to commit for each topic-partition.
+ * 
+ * @returns 0 if none of the partitions in \p offsets had valid offsets,
+ *          else 1.
+ */
+int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
+                                 rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_topic_partition_list_t *offsets,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque,
+                                 const char *reason) {
+        rd_kafka_consumer_group_metadata_t *cgmetadata =
+        rd_kafka_consumer_group_metadata_new_with_genid(
+                                rkcg->rkcg_rk->rk_conf.group_id_str,
+                                rkcg->rkcg_generation_id,
+                                rkcg->rkcg_member_id->str,
+                                rkcg->rkcg_rk->rk_conf.group_instance_id);
+        int ret = rd_kafka_OffsetCommitRequest_group(
+                rkb,
+                cgmetadata,
+                offsets,
+                replyq,
+                resp_cb,
+                opaque,
+                reason
+        );
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        return ret;
 }
 
 

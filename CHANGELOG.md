@@ -1,3 +1,13 @@
+# librdkafka v1.9.2
+
+librdkafka v1.9.2 is a maintenance release:
+
+ * The SASL OAUTHBEAR OIDC POST field was sometimes truncated by one byte (#3192).
+ * The bundled version of OpenSSL has been upgraded to version 1.1.1q for non-Windows builds. Windows builds remain on OpenSSL 1.1.1n for the time being.
+ * The bundled version of Curl has been upgraded to version 7.84.0.
+
+
+
 # librdkafka v1.9.1
 
 librdkafka v1.9.1 is a maintenance release:

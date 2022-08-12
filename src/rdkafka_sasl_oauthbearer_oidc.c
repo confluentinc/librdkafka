@@ -544,12 +544,12 @@ static int ut_sasl_oauthbearer_oidc_post_fields(void) {
         rd_kafka_oidc_build_post_fields(scope, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
-                     "Expected expected_post_fields_size is %zu"
-                     "received post_fields_size is %zu",
+                     "Expected expected_post_fields_size is %" PRIusz
+                     " received post_fields_size is %" PRIusz,
                      expected_post_fields_size, post_fields_size);
         RD_UT_ASSERT(!strcmp(expected_post_fields, post_fields),
                      "Expected expected_post_fields is %s"
-                     "received post_fields is %s",
+                     " received post_fields is %s",
                      expected_post_fields, post_fields);
 
         RD_UT_PASS();
@@ -574,12 +574,12 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
         rd_kafka_oidc_build_post_fields(scope, &post_fields, &post_fields_size);
 
         RD_UT_ASSERT(expected_post_fields_size == post_fields_size,
-                     "Expected expected_post_fields_size is %zu"
-                     "received post_fields_size is %zu",
+                     "Expected expected_post_fields_size is %" PRIusz
+                     " received post_fields_size is %" PRIusz,
                      expected_post_fields_size, post_fields_size);
         RD_UT_ASSERT(!strcmp(expected_post_fields, post_fields),
                      "Expected expected_post_fields is %s"
-                     "received post_fields is %s",
+                     " received post_fields is %s",
                      expected_post_fields, post_fields);
 
         RD_UT_PASS();

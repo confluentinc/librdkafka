@@ -653,7 +653,7 @@ Treats the message as successfully delivered.
 ##### RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID
 
 Returned by broker when the PID+Epoch is unknown, which may occur when
-the PID's state has expired (due to topic retention, DeleteRercords,
+the PID's state has expired (due to topic retention, DeleteRecords,
 or compaction).
 
 The Java producer added quite a bit of error handling for this case,

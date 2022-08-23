@@ -90,9 +90,23 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
 
                 /* Check if the destination size is too small */
                 if (ZSTD_getErrorCode(ret) == ZSTD_error_dstSize_tooSmall) {
+                        /* If we already reach the maximum buffer size, don't grow the buffer anymore */
+                        if (out_bufsize == (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
+                                rd_rkb_dbg(rkb, MSG, "ZSTD",
+                                   "Unable to allocate output buffer "
+                                   "(%llu bytes for %" PRIusz
+                                   " compressed bytes): %s",
+                                   out_bufsize, inlen, rd_strerror(errno));
+                                return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+                        }
 
                         /* Grow quadratically */
                         out_bufsize += RD_MAX(out_bufsize * 2, 4000);
+
+                        /* Do not allocate more memory than configured because it can lead to OOMs */
+                        if (out_bufsize > (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
+                                out_bufsize = (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size;
+                        }
 
                         rd_atomic64_add(&rkb->rkb_c.zbuf_grow, 1);
 

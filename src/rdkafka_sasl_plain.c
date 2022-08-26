@@ -70,17 +70,29 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
                                    size_t errstr_size) {
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         rd_kafka_t *rk         = rkb->rkb_rk;
+
+        char *username_ptr = rk->rk_conf.sasl.username;
+        char *password_ptr = rk->rk_conf.sasl.password;
+
+        if (rk->rk_conf.sasl.plain_creds_cb) {
+                username_ptr = rd_alloca(128);
+                password_ptr = rd_alloca(128);
+
+                if (rk->rk_conf.sasl.plain_creds_cb(rk, username_ptr, 128,
+                                                    password_ptr, 128) < 0) {
+                        rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
+                                   "SASL username or password does not fit in "
+                                   "128-byte receiving buffer");
+                        return -1;
+                }
+        }
+
         /* [authzid] UTF8NUL authcid UTF8NUL passwd */
         char *buf;
         int of     = 0;
         int zidlen = 0;
-        int cidlen = rk->rk_conf.sasl.username
-                         ? (int)strlen(rk->rk_conf.sasl.username)
-                         : 0;
-        int pwlen = rk->rk_conf.sasl.password
-                        ? (int)strlen(rk->rk_conf.sasl.password)
-                        : 0;
-
+        int cidlen = username_ptr ? (int)strlen(username_ptr) : 0;
+        int pwlen  = password_ptr ? (int)strlen(password_ptr) : 0;
 
         buf = rd_alloca(zidlen + 1 + cidlen + 1 + pwlen + 1);
 
@@ -88,12 +100,12 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
         /* UTF8NUL */
         buf[of++] = 0;
         /* authcid */
-        memcpy(&buf[of], rk->rk_conf.sasl.username, cidlen);
+        memcpy(&buf[of], username_ptr, cidlen);
         of += cidlen;
         /* UTF8NUL */
         buf[of++] = 0;
         /* passwd */
-        memcpy(&buf[of], rk->rk_conf.sasl.password, pwlen);
+        memcpy(&buf[of], password_ptr, pwlen);
         of += pwlen;
 
         rd_rkb_dbg(rkb, SECURITY, "SASLPLAIN",
@@ -115,9 +127,20 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_plain_conf_validate(rd_kafka_t *rk,
                                              char *errstr,
                                              size_t errstr_size) {
+        if (rk->rk_conf.sasl.plain_creds_cb) {
+                if (rk->rk_conf.sasl.username || rk->rk_conf.sasl.password) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "cannot set sasl.plain_creds_cb and "
+                                    "sasl.username or sasl.password");
+                        return -1;
+                }
+                return 0;
+        }
+
         if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
                 rd_snprintf(errstr, errstr_size,
-                            "sasl.username and sasl.password must be set");
+                            "sasl.username and sasl.password or "
+                            "sasl.plain_creds_cb must be set");
                 return -1;
         }
 

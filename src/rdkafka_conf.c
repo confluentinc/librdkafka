@@ -58,21 +58,22 @@
 struct rd_kafka_property {
         rd_kafka_conf_scope_t scope;
         const char *name;
-        enum { _RK_C_STR,
-               _RK_C_INT,
-               _RK_C_DBL, /* Double */
-               _RK_C_S2I, /* String to Integer mapping.
-                           * Supports limited canonical str->int mappings
-                           * using s2i[] */
-               _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
-               _RK_C_BOOL,
-               _RK_C_PTR,     /* Only settable through special set functions */
-               _RK_C_PATLIST, /* Pattern list */
-               _RK_C_KSTR,    /* Kafka string */
-               _RK_C_ALIAS, /* Alias: points to other property through .sdef */
-               _RK_C_INTERNAL, /* Internal, don't expose to application */
-               _RK_C_INVALID,  /* Invalid property, used to catch known
-                                * but unsupported Java properties. */
+        enum {
+                _RK_C_STR,
+                _RK_C_INT,
+                _RK_C_DBL, /* Double */
+                _RK_C_S2I, /* String to Integer mapping.
+                            * Supports limited canonical str->int mappings
+                            * using s2i[] */
+                _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
+                _RK_C_BOOL,
+                _RK_C_PTR,     /* Only settable through special set functions */
+                _RK_C_PATLIST, /* Pattern list */
+                _RK_C_KSTR,    /* Kafka string */
+                _RK_C_ALIAS, /* Alias: points to other property through .sdef */
+                _RK_C_INTERNAL, /* Internal, don't expose to application */
+                _RK_C_INVALID,  /* Invalid property, used to catch known
+                                 * but unsupported Java properties. */
         } type;
         int offset;
         const char *desc;
@@ -724,10 +725,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(security_protocol), "Protocol used to communicate with brokers.",
      .vdef = RD_KAFKA_PROTO_PLAINTEXT,
      .s2i  = {{RD_KAFKA_PROTO_PLAINTEXT, "plaintext"},
-             {RD_KAFKA_PROTO_SSL, "ssl", _UNSUPPORTED_SSL},
-             {RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext"},
-             {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
-             {0, NULL}}},
+              {RD_KAFKA_PROTO_SSL, "ssl", _UNSUPPORTED_SSL},
+              {RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext"},
+              {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
+              {0, NULL}}},
 
     {_RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR, _RK(ssl.cipher_suites),
      "A cipher suite is a named combination of authentication, "
@@ -848,7 +849,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OpenSSL >= 1.0.2 required.",
      .vdef = RD_KAFKA_SSL_ENDPOINT_ID_NONE,
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
-             {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
+              {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
      _UNSUPPORTED_OPENSSL_1_0_2},
     {_RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
      _RK(ssl.cert_verify_cb),
@@ -912,6 +913,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIGH | _RK_SENSITIVE, "sasl.password", _RK_C_STR,
      _RK(sasl.password),
      "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism"},
+    {_RK_GLOBAL | _RK_HIGH, "sasl_plain_creds_cb", _RK_C_PTR,
+     _RK(sasl.plain_creds_cb),
+     "SASL plain credentials callback (set with rd_kafka_set_plain_creds_cb)"},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "
@@ -966,7 +970,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "and `sasl.oauthbearer.token.endpoint.url`.",
      .vdef = RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT,
      .s2i  = {{RD_KAFKA_SASL_OAUTHBEARER_METHOD_DEFAULT, "default"},
-             {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
+              {RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC, "oidc"}},
      _UNSUPPORTED_OIDC},
     {_RK_GLOBAL, "sasl.oauthbearer.client.id", _RK_C_STR,
      _RK(sasl.oauthbearer.client_id),
@@ -1202,8 +1206,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "(requires Apache Kafka 0.8.2 or later on the broker).",
      .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
      .s2i  = {{RD_KAFKA_OFFSET_METHOD_NONE, "none"},
-             {RD_KAFKA_OFFSET_METHOD_FILE, "file"},
-             {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
+              {RD_KAFKA_OFFSET_METHOD_FILE, "file"},
+              {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_HIGH, "isolation.level", _RK_C_S2I,
      _RK(isolation_level),
      "Controls how to read messages written transactionally: "
@@ -1212,7 +1216,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "transactional messages which have been aborted.",
      .vdef = RD_KAFKA_READ_COMMITTED,
      .s2i  = {{RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted"},
-             {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
+              {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
     {_RK_GLOBAL | _RK_CONSUMER, "consume_cb", _RK_C_PTR, _RK(consume_cb),
      "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
     {_RK_GLOBAL | _RK_CONSUMER, "rebalance_cb", _RK_C_PTR, _RK(rebalance_cb),
@@ -1358,11 +1362,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "the topic configuration property `compression.codec`. ",
      .vdef = RD_KAFKA_COMPRESSION_NONE,
      .s2i  = {{RD_KAFKA_COMPRESSION_NONE, "none"},
-             {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
-             {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
-             {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
-             {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
-             {0}}},
+              {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
+              {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
+              {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
+              {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
+              {0}}},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "compression.type", _RK_C_ALIAS,
      .sdef = "compression.codec"},
     {_RK_GLOBAL | _RK_PRODUCER | _RK_MED, "batch.num.messages", _RK_C_INT,
@@ -1488,12 +1492,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "inherit = inherit global compression.codec configuration.",
      .vdef = RD_KAFKA_COMPRESSION_INHERIT,
      .s2i  = {{RD_KAFKA_COMPRESSION_NONE, "none"},
-             {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
-             {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
-             {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
-             {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
-             {RD_KAFKA_COMPRESSION_INHERIT, "inherit"},
-             {0}}},
+              {RD_KAFKA_COMPRESSION_GZIP, "gzip", _UNSUPPORTED_ZLIB},
+              {RD_KAFKA_COMPRESSION_SNAPPY, "snappy", _UNSUPPORTED_SNAPPY},
+              {RD_KAFKA_COMPRESSION_LZ4, "lz4"},
+              {RD_KAFKA_COMPRESSION_ZSTD, "zstd", _UNSUPPORTED_ZSTD},
+              {RD_KAFKA_COMPRESSION_INHERIT, "inherit"},
+              {0}}},
     {_RK_TOPIC | _RK_PRODUCER | _RK_HIGH, "compression.type", _RK_C_ALIAS,
      .sdef = "compression.codec"},
     {_RK_TOPIC | _RK_PRODUCER | _RK_MED, "compression.level", _RK_C_INT,
@@ -1577,7 +1581,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Apache Kafka 0.8.2 or later on the broker.).",
      .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
      .s2i  = {{RD_KAFKA_OFFSET_METHOD_FILE, "file"},
-             {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
+              {RD_KAFKA_OFFSET_METHOD_BROKER, "broker"}}},
 
     {_RK_TOPIC | _RK_CONSUMER, "consume.callback.max.messages", _RK_C_INT,
      _RKT(consume_callback_max_msgs),
@@ -2722,6 +2726,16 @@ void rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                                       "oauthbearer_token_refresh_cb",
                                       oauthbearer_token_refresh_cb);
 #endif
+}
+
+void rd_kafka_conf_set_plain_creds_cb(rd_kafka_conf_t *conf,
+                                      int (*plain_creds_cb)(rd_kafka_t *rk,
+                                                            char *username,
+                                                            int username_size,
+                                                            char *password,
+                                                            int password_size)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "sasl_plain_creds_cb",
+                                      plain_creds_cb);
 }
 
 void rd_kafka_conf_enable_sasl_queue(rd_kafka_conf_t *conf, int enable) {
@@ -4293,7 +4307,7 @@ int unittest_conf(void) {
         /* Verify that software.client.* string-safing works */
         conf = rd_kafka_conf_new();
         res  = rd_kafka_conf_set(conf, "client.software.name",
-                                " .~aba. va! !.~~", NULL, 0);
+                                 " .~aba. va! !.~~", NULL, 0);
         RD_UT_ASSERT(res == RD_KAFKA_CONF_OK, "%d", res);
         res = rd_kafka_conf_set(conf, "client.software.version",
                                 "!1.2.3.4.5!!! a", NULL, 0);
@@ -4312,7 +4326,7 @@ int unittest_conf(void) {
 
         readlen = sizeof(readval);
         res2    = rd_kafka_conf_get(conf, "client.software.version", readval,
-                                 &readlen);
+                                    &readlen);
         RD_UT_ASSERT(res2 == RD_KAFKA_CONF_OK, "%d", res2);
         RD_UT_ASSERT(!strcmp(readval, "1.2.3.4.5----a"),
                      "client.software.* safification failed: \"%s\"", readval);

@@ -351,21 +351,35 @@ static int rd_kafka_sasl_cyrus_cb_getsimple(void *context,
                                             int id,
                                             const char **result,
                                             unsigned *len) {
+        static RD_TLS char username[128];
         rd_kafka_transport_t *rktrans = context;
+        rd_kafka_broker_t *rkb        = rktrans->rktrans_rkb;
+        rd_kafka_t *rk                = rkb->rkb_rk;
 
         switch (id) {
         case SASL_CB_USER:
         case SASL_CB_AUTHNAME:
-                *result = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.username;
-                break;
+                if (rk->rk_conf.sasl.plain_creds_cb) {
+                        if (rk->rk_conf.sasl.plain_creds_cb(rk, username, 128,
+                                                            NULL, 0) < 0) {
+                                rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
+                                           "SASL username does not fit in "
+                                           "128-byte receiving buffer");
+                                return SASL_FAIL;
+                        }
+                        *result = username;
+                } else {
+                        *result = rk->rk_conf.sasl.username;
+                }
 
         default:
                 *result = NULL;
                 break;
         }
 
-        if (len)
+        if (len) {
                 *len = *result ? strlen(*result) : 0;
+        }
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
                    "CB_GETSIMPLE: id 0x%x: returning %s", id, *result);
@@ -379,17 +393,29 @@ static int rd_kafka_sasl_cyrus_cb_getsecret(sasl_conn_t *conn,
                                             int id,
                                             sasl_secret_t **psecret) {
         rd_kafka_transport_t *rktrans = context;
-        const char *password;
+        rd_kafka_broker_t *rkb        = rktrans->rktrans_rkb;
+        rd_kafka_t *rk                = rkb->rkb_rk;
+        char *password_ptr            = rk->rk_conf.sasl.password;
 
-        password = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.password;
+        if (rk->rk_conf.sasl.plain_creds_cb) {
+                password_ptr = rd_alloca(128);
 
-        if (!password) {
+                if (rk->rk_conf.sasl.plain_creds_cb(rk, NULL, 0, password_ptr,
+                                                    128) < 0) {
+                        rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
+                                   "SASL password does not fit in "
+                                   "128-byte receiving buffer");
+                        return SASL_FAIL;
+                }
+        }
+
+        if (!password_ptr) {
                 *psecret = NULL;
         } else {
-                size_t passlen = strlen(password);
+                size_t passlen = strlen(password_ptr);
                 *psecret = rd_realloc(*psecret, sizeof(**psecret) + passlen);
                 (*psecret)->len = passlen;
-                memcpy((*psecret)->data, password, passlen);
+                memcpy((*psecret)->data, password_ptr, passlen);
         }
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",

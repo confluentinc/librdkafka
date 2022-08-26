@@ -1,3 +1,9 @@
+# librdkafka v1.9.3
+
+librdkafka v1.9.3 is a maintenance release:
+
+* Added a callback for getting SASL PLAIN credentials (by @josvisser66)
+
 # librdkafka v1.9.2
 
 librdkafka v1.9.2 is a maintenance release:

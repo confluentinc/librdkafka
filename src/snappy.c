@@ -210,7 +210,7 @@ u64 rd_ctz64(u64 x) {
    y = x << 1;  if (y != 0) {n = n - 1;}
    return n;
 }
-#elif !defined(_MSC_VER)
+#elif defined(__clang__) || !defined(_MSC_VER)
 #define rd_clz(n)   __builtin_clz(n)
 #define rd_ctz(n)   __builtin_ctz(n)
 #define rd_ctz64(n) __builtin_ctzll(n)

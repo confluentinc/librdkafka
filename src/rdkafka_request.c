@@ -987,7 +987,7 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
             rk_group_id_size + 4 +
-                parts_size + 1,
+            parts_size + 1,
             ApiVersion >= 6 /*flexver*/);
 
         if (!send_rk_group_id) {

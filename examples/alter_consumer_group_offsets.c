@@ -81,10 +81,11 @@ print_partition_list(FILE *fp,
                      const rd_kafka_topic_partition_list_t *partitions) {
         int i;
         for (i = 0; i < partitions->cnt; i++) {
-                fprintf(fp, "%s %s [%" PRId32 "] offset %" PRId64,
-                        i > 0 ? "," : "", partitions->elems[i].topic,
+                fprintf(fp, "%s %s [%" PRId32 "] offset %" PRId64 " error %s",
+                        i > 0 ? "\n" : "", partitions->elems[i].topic,
                         partitions->elems[i].partition,
-                        partitions->elems[i].offset);
+                        partitions->elems[i].offset,
+                        rd_kafka_err2str(partitions->elems[i].err));
         }
         fprintf(fp, "\n");
 }

@@ -2950,7 +2950,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
         RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
         err =
-            rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets);
+            rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets, rd_true);
 
         /* Suppress empty commit debug logs if allowed */
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET ||

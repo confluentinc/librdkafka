@@ -1166,7 +1166,8 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                              rd_kafka_resp_err_t err,
                              rd_kafka_buf_t *rkbuf,
                              rd_kafka_buf_t *request,
-                             rd_kafka_topic_partition_list_t *offsets) {
+                             rd_kafka_topic_partition_list_t *offsets,
+                             rd_bool_t cgrp_actions) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         int errcnt  = 0;
@@ -1177,7 +1178,7 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
         if (err)
                 goto err;
 
-        if (request->rkbuf_reqhdr.ApiVersion >= 3)
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 3)
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
@@ -1214,10 +1215,12 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                                 err = ErrorCode;
                                 errcnt++;
 
-                                /* Accumulate actions for per-partition
-                                 * errors. */
-                                actions |= rd_kafka_handle_OffsetCommit_error(
-                                    rkb, request, rktpar);
+                                if (cgrp_actions) {
+                                        /* Accumulate actions for per-partition
+                                        * errors. */
+                                        actions |= rd_kafka_handle_OffsetCommit_error(
+                                        rkb, request, rktpar);
+                                }
                         }
 
                         partcnt++;
@@ -1235,7 +1238,7 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 err:
-        if (!actions) /* Transport/Request-level error */
+        if (cgrp_actions && !actions) /* Transport/Request-level error */
                 actions = rd_kafka_err_action(rkb, err, request,
 
                                               RD_KAFKA_ERR_ACTION_REFRESH |

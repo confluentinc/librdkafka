@@ -75,14 +75,28 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
         char *password_ptr = rk->rk_conf.sasl.password;
 
         if (rk->rk_conf.sasl.plain_creds_cb) {
-                username_ptr = rd_alloca(128);
-                password_ptr = rd_alloca(128);
+                int username_size = 128;
+                int password_size = 128;
+                int attempt;
+                int rc;
 
-                if (rk->rk_conf.sasl.plain_creds_cb(rk, username_ptr, 128,
-                                                    password_ptr, 128) < 0) {
+                for (attempt = 0; attempt < 2; ++attempt) {
+                        username_ptr = rd_alloca(username_size);
+                        password_ptr = rd_alloca(password_size);
+
+                        rc = rk->rk_conf.sasl.plain_creds_cb(
+                            rk, username_ptr, &username_size, password_ptr,
+                            &password_size);
+
+                        if (rc == 0) {
+                                break;
+                        }
+                }
+
+                if (rc < 0) {
                         rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
-                                   "SASL username or password does not fit in "
-                                   "128-byte receiving buffer");
+                                   "Could not obtain SASL/PLAIN username and "
+                                   "password from callback");
                         return -1;
                 }
         }

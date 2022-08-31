@@ -276,9 +276,9 @@ struct rd_kafka_conf_s {
                 char *password;
                 int (*plain_creds_cb)(rd_kafka_t *rk,
                                       char *username,
-                                      int username_size,
+                                      int *username_size,
                                       char *password,
-                                      int password_size);
+                                      int *password_size);
 #if WITH_SASL_SCRAM
                 /* SCRAM EVP-wrapped hash function
                  * (return value from EVP_shaX()) */

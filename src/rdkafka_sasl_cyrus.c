@@ -351,7 +351,8 @@ static int rd_kafka_sasl_cyrus_cb_getsimple(void *context,
                                             int id,
                                             const char **result,
                                             unsigned *len) {
-        static RD_TLS char username[128];
+        static RD_TLS char username[256];
+        int size                      = 256;
         rd_kafka_transport_t *rktrans = context;
         rd_kafka_broker_t *rkb        = rktrans->rktrans_rkb;
         rd_kafka_t *rk                = rkb->rkb_rk;
@@ -360,11 +361,11 @@ static int rd_kafka_sasl_cyrus_cb_getsimple(void *context,
         case SASL_CB_USER:
         case SASL_CB_AUTHNAME:
                 if (rk->rk_conf.sasl.plain_creds_cb) {
-                        if (rk->rk_conf.sasl.plain_creds_cb(rk, username, 128,
-                                                            NULL, 0) < 0) {
+                        if (rk->rk_conf.sasl.plain_creds_cb(rk, username, &size,
+                                                            NULL, NULL) < 0) {
                                 rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
                                            "SASL username does not fit in "
-                                           "128-byte receiving buffer");
+                                           "256-byte receiving buffer");
                                 return SASL_FAIL;
                         }
                         *result = username;
@@ -398,10 +399,12 @@ static int rd_kafka_sasl_cyrus_cb_getsecret(sasl_conn_t *conn,
         char *password_ptr            = rk->rk_conf.sasl.password;
 
         if (rk->rk_conf.sasl.plain_creds_cb) {
-                password_ptr = rd_alloca(128);
+                int size = 256;
 
-                if (rk->rk_conf.sasl.plain_creds_cb(rk, NULL, 0, password_ptr,
-                                                    128) < 0) {
+                password_ptr = rd_alloca(size);
+
+                if (rk->rk_conf.sasl.plain_creds_cb(rk, NULL, NULL,
+                                                    password_ptr, &size) < 0) {
                         rd_rkb_log(rkb, LOG_ERR, "SASLPLAIN",
                                    "SASL password does not fit in "
                                    "128-byte receiving buffer");

@@ -5246,6 +5246,18 @@ void rd_kafka_ListConsumerGroupOffsets (
                 return;
         }
 
+        int empty_topic_partitions =  list_grpoffsets[0]->partitions != NULL && list_grpoffsets[0]->partitions->cnt == 0;
+        if (empty_topic_partitions) {
+                /* Either pass NULL for all the partitions or a non-empty list */
+                rd_kafka_admin_result_fail(rko,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "NULL or "
+                                           "non-empty topic partition list must "
+                                           "be passed");
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true/*destroy*/);
+                return;
+        }
 
         rko->rko_u.admin_request.broker_id =
                 RD_KAFKA_ADMIN_TARGET_COORDINATOR;

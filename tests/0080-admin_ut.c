@@ -1503,6 +1503,7 @@ static void do_test_ListConsumerGroupOffsets (const char *what,
         rd_kafka_AdminOptions_t *options = NULL;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
+        rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];
@@ -1510,12 +1511,16 @@ static void do_test_ListConsumerGroupOffsets (const char *what,
         test_timing_t timing;
         rd_kafka_event_t *rkev;
         void *my_opaque = NULL, *opaque;
+        const char *errstr_ptr;
 
         SUB_TEST_QUICK("%s ListConsumerGroupOffsets with %s, timeout %dms",
                        rd_kafka_name(rk), what, exp_timeout);
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
+        empty_cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(
+                                "mygroup",
+                                rd_kafka_topic_partition_list_new(0));
         for (i = 0 ; i < MY_LIST_CGRPOFFS_CNT ; i++) {
                 rd_kafka_topic_partition_list_t *partitions =
                         rd_kafka_topic_partition_list_new(3);
@@ -1549,6 +1554,25 @@ static void do_test_ListConsumerGroupOffsets (const char *what,
                 }
         }
 
+        TEST_SAY("Call ListConsumerGroupOffsets with empty topic-partition list.\n");
+        rd_kafka_ListConsumerGroupOffsets(rk, &empty_cgoffsets,
+                                          1, options, q);
+        /* Poll result queue */
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TEST_SAY("ListConsumerGroupOffsets: got %s\n",
+                 rd_kafka_event_name(rkev));
+        
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        TEST_ASSERT(err, "expected ListConsumerGroupOffsets to fail");
+
+        errstr_ptr = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!strcmp(errstr_ptr, "NULL or non-empty topic partition list must be passed"),
+                "expected error string \"NULL or non-empty topic partition list must be passed\", not %s",
+                errstr_ptr);
+                
+        rd_kafka_event_destroy(rkev);
+
         TIMING_START(&timing, "ListConsumerGroupOffsets");
         TEST_SAY("Call ListConsumerGroupOffsets, timeout is %dms\n",
                  exp_timeout);
@@ -1578,6 +1602,11 @@ static void do_test_ListConsumerGroupOffsets (const char *what,
         err = rd_kafka_event_error(rkev);
         TEST_ASSERT(err, "expected ListConsumerGroupOffsets to fail");
 
+        errstr_ptr = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!strcmp(errstr_ptr, "Failed while waiting for response from broker: Local: Timed out"),
+                "expected error string \"Failed while waiting for response from broker: Local: Timed out\", not %s",
+                errstr_ptr);
+
         rd_kafka_event_destroy(rkev);
 
         if (options)
@@ -1586,6 +1615,7 @@ static void do_test_ListConsumerGroupOffsets (const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 
+        rd_kafka_ListConsumerGroupOffsets_destroy(empty_cgoffsets);
         rd_kafka_ListConsumerGroupOffsets_destroy_array(
                 cgoffsets, MY_LIST_CGRPOFFS_CNT);
 

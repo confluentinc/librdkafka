@@ -81,7 +81,7 @@ print_partition_list(FILE *fp,
         int i;
         for (i = 0; i < partitions->cnt; i++) {
                 fprintf(fp, "%s %s [%" PRId32 "] offset %" PRId64,
-                        i > 0 ? "," : "", partitions->elems[i].topic,
+                        i > 0 ? "\n" : "", partitions->elems[i].topic,
                         partitions->elems[i].partition,
                         partitions->elems[i].offset);
         }

@@ -4930,43 +4930,32 @@ rd_kafka_AlterConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
                                     rd_kafka_buf_t *reply,
                                     char *errstr, size_t errstr_size)
 {
-        const int log_decode_errors = LOG_ERR;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko_result;
         rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         const rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets =
                 rd_list_elem(&rko_req->rko_u.admin_request.args, 0);
+        partitions = rd_kafka_topic_partition_list_copy(alter_grpoffsets->partitions);
 
-        if (rd_kafka_buf_ApiVersion(reply) >= 3)
-                rd_kafka_buf_read_throttle_time(reply);
-
-        partitions = rd_kafka_buf_read_topic_partitions(reply,
-                                                        16,
-                                                        rd_false/*no offset */,
-                                                        rd_true/*read error*/);
-        if (!partitions) {
-                rd_snprintf(errstr, errstr_size,
-                            "Failed to parse OffsetCommitResponse partitions");
-                return RD_KAFKA_RESP_ERR__BAD_MSG;
-        }
-
+        rk = rko_req->rko_rk;
+        rkb = reply->rkbuf_rkb;
+        err = rd_kafka_handle_OffsetCommit(rk, rkb, err, reply, NULL, partitions, rd_false);
 
         /* Create result op and group_result_t */
         rko_result = rd_kafka_admin_result_new(rko_req);
         rd_list_init(&rko_result->rko_u.admin_result.results, 1,
-                     rd_kafka_group_result_free);
+                rd_kafka_group_result_free);
         rd_list_add(&rko_result->rko_u.admin_result.results,
-                    rd_kafka_group_result_new(alter_grpoffsets->group, -1,
-                                              partitions, NULL));
+                rd_kafka_group_result_new(alter_grpoffsets->group, -1,
+                                        partitions, NULL));
         rd_kafka_topic_partition_list_destroy(partitions);
-
         *rko_resultp = rko_result;
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-
- err_parse:
         rd_snprintf(errstr, errstr_size,
-                    "OffsetCommit response protocol parse failure: %s",
-                    rd_kafka_err2str(reply->rkbuf_err));
+                "AlterConsumerGroupOffset response protocol parse failure: %s",
+                rd_kafka_err2str(reply->rkbuf_err));
         return reply->rkbuf_err;
  }
 

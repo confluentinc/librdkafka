@@ -106,9 +106,7 @@ int main(int argc, char **argv) {
          * Argument validation
          */
         int print_usage = argc < min_argc;
-        if (!print_usage) {
-                print_usage = (argc - min_argc) % 2 != 0;
-        }
+        print_usage |= (argc - min_argc) % 2 != 0;
         if (print_usage) {
                 fprintf(stderr,
                         "%% Usage: %s <bootstrap_servers> "

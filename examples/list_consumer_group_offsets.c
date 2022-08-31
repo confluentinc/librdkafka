@@ -97,12 +97,16 @@ int main(int argc, char **argv) {
         rd_kafka_AdminOptions_t *options;      /* (Optional) Options for
                                                 * ListConsumerGroupOffsets() */
         rd_kafka_event_t *event;               /* ListConsumerGroupOffsets result event */
-        int exitcode = 0, print_usage = 0, require_stable = 0;
+        const int min_argc = 4;
+        char *topic;
+        int partition;
+        int exitcode = 0, print_usage = 0, require_stable = 0, num_partitions = 0;
 
         /*
          * Argument validation
          */
-        print_usage = argc < 4;
+        print_usage = argc < min_argc;
+        print_usage |= (argc - min_argc) % 2 != 0;
         if (!print_usage) {
                 require_stable = parse_int("require_stable", argv[3]);
                 print_usage = require_stable < 0 || require_stable > 1;
@@ -111,12 +115,18 @@ int main(int argc, char **argv) {
                 fprintf(stderr,
                         "%% Usage: %s <bootstrap_servers> "
                         "<group_id> "
-                        "<require_stable>"
+                        "<require_stable> "
+                        "<topic1> "
+                        "<partition1> "
+                        "<topic2> "
+                        "<partition2> "
+                        "..."
                         "\n",
                         argv[0]);
                 return 1;
         }
 
+        num_partitions = (argc - min_argc) / 2;
         bootstrap_servers = argv[1];
         const char *group = argv[2];
 
@@ -174,8 +184,22 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        /* Read passed partition-offsets */
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        if(num_partitions > 0) {
+                partitions = rd_kafka_topic_partition_list_new(num_partitions);
+                for (int i = 0; i < num_partitions; i++) {
+                        topic = argv[min_argc + i * 2];
+                        partition = parse_int("partition", argv[min_argc + i * 2 + 1]);
+                        rd_kafka_topic_partition_list_add(
+                                partitions,
+                                topic,
+                                partition);
+                }
+        }
+
         /* Create argument */
-        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, NULL);
+        rd_kafka_ListConsumerGroupOffsets_t * list_cgrp_offsets = rd_kafka_ListConsumerGroupOffsets_new(group, partitions);
         /* Call ListConsumerGroupOffsets */
         rd_kafka_ListConsumerGroupOffsets(rk, &list_cgrp_offsets, 1, options, queue);
 

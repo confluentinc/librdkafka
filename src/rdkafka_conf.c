@@ -2732,9 +2732,9 @@ void rd_kafka_conf_set_plain_creds_cb(
     rd_kafka_conf_t *conf,
     int (*plain_creds_cb)(rd_kafka_t *rk,
                           char *username,
-                          int *username_size,
+                          size_t *username_size,
                           char *password,
-                          int *password_size)) {
+                          size_t *password_size)) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "sasl_plain_creds_cb",
                                       plain_creds_cb);
 }

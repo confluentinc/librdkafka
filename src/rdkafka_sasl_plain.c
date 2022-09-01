@@ -75,8 +75,8 @@ int rd_kafka_sasl_plain_client_new(rd_kafka_transport_t *rktrans,
         char *password_ptr = rk->rk_conf.sasl.password;
 
         if (rk->rk_conf.sasl.plain_creds_cb) {
-                int username_size = 128;
-                int password_size = 128;
+                size_t username_size = 128;
+                size_t password_size = 128;
                 int attempt;
                 int rc;
 

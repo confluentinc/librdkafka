@@ -122,6 +122,44 @@ static void do_test_consume_batch(void) {
                 batch_cnt++;
         }
 
+        /* Reproduce messages for second test */
+        for (i = 0; i < topic_cnt; i++) {
+                for (p = 0; p < partition_cnt; p++)
+                        test_produce_msgs_easy(topics[i], testid, p,
+                                               msgcnt / topic_cnt /
+                                                   partition_cnt);
+        }
+
+        remains = msgcnt;
+        batch_cnt = 0;
+
+        /* Consume messages from common queue using default batch interface. */
+        TEST_SAY("Consume %d messages from queue\n", remains);
+        while (remains > 0) {
+                rd_kafka_message_t *rkmessage[500];
+                ssize_t r;
+                test_timing_t t_batch;
+
+                TIMING_START(&t_batch, "CONSUME.BATCH");
+                r = rd_kafka_consume_default_batch_queue(rkq, 1000, rkmessage);
+                TIMING_STOP(&t_batch);
+
+                TEST_SAY("Batch consume iteration #%d: Consumed %" PRIdsz
+                         "/500 messages\n",
+                         batch_cnt, r);
+
+                if (r == -1)
+                        TEST_FAIL("Failed to consume messages: %s\n",
+                                  rd_kafka_err2str(rd_kafka_last_error()));
+
+                remains -= (int)r;
+
+                for (i = 0; i < r; i++)
+                        rd_kafka_message_destroy(rkmessage[i]);
+
+                batch_cnt++;
+        }
+
 
         TEST_SAY("Stopping consumer\n");
         for (i = 0; i < topic_cnt; i++) {

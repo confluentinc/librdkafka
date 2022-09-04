@@ -3785,6 +3785,16 @@ rd_kafka_message_t *rd_kafka_consume_queue(rd_kafka_queue_t *rkqu,
                                            int timeout_ms);
 
 /**
+ * @brief Consume batch of messages from queue, with defaults
+ *
+ * @sa rd_kafka_consume_default_batch()
+ */
+RD_EXPORT
+ssize_t rd_kafka_consume_default_batch_queue(rd_kafka_queue_t *rkqu,
+                                             int timeout_ms,
+                                             rd_kafka_message_t **rkmessages);
+
+/**
  * @brief Consume batch of messages from queue
  *
  * @sa rd_kafka_consume_batch()

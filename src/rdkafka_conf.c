@@ -1116,6 +1116,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The interval is checked two times per second. "
      "See KIP-62 for more information.",
      1, 86400 * 1000, 300000},
+    {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "max.poll.records", _RK_C_INT,
+     _RK(max_poll_records),
+     "The maximum number of records returned in a single call to poll(). "
+     "Note, that max.poll.records does not impact the underlying fetching "
+     "behavior. The consumer will cache the records from each fetch request "
+     "and returns them incrementally from each poll.",
+     1, 2147483135, 500},
 
     /* Global consumer properties */
     {_RK_GLOBAL | _RK_CONSUMER | _RK_HIGH, "enable.auto.commit", _RK_C_BOOL,

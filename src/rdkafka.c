@@ -2965,6 +2965,15 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *app_rkt,
         return cnt;
 }
 
+ssize_t rd_kafka_consume_default_batch_queue(rd_kafka_queue_t *rkqu,
+                                             int timeout_ms,
+                                             rd_kafka_message_t **rkmessages) {
+
+        /* Populate application's rkmessages array. */
+        return rd_kafka_consume_batch0(rkqu->rkqu_q, timeout_ms, rkmessages,
+                                       rkqu->rkqu_rk->rk_conf.max_poll_records);
+}
+
 ssize_t rd_kafka_consume_batch_queue(rd_kafka_queue_t *rkqu,
                                      int timeout_ms,
                                      rd_kafka_message_t **rkmessages,

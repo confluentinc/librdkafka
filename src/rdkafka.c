@@ -4672,6 +4672,7 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
                                         rd_kafka_resp_err_t err,
                                         rd_kafka_buf_t *reply,
                                         rd_kafka_buf_t *request,
+                                        rd_bool_t describe,
                                         void *opaque) {
         struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
@@ -4728,10 +4729,32 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         }
 
         if (i > 0) {
-                state->wait_cnt++;
-                rd_kafka_DescribeGroupsRequest(
-                    rkb, (const char **)grps, i, RD_KAFKA_REPLYQ(state->q, 0),
-                    rd_kafka_DescribeGroups_resp_cb, state);
+                if (describe) {
+                        state->wait_cnt++;
+                        rd_kafka_DescribeGroupsRequest(
+                        rkb, (const char **)grps, i, RD_KAFKA_REPLYQ(state->q, 0),
+                        rd_kafka_DescribeGroups_resp_cb, state);
+                } else {
+                        for (int j=0; j < i; j++) {
+                                struct rd_kafka_group_info *gi;
+                                if (state->grplist->group_cnt == state->grplist_size) {
+                                        /* Grow group array */
+                                        state->grplist_size *= 2;
+                                        state->grplist->groups =
+                                        rd_realloc(state->grplist->groups,
+                                                state->grplist_size *
+                                                        sizeof(*state->grplist->groups));
+                                }
+                                gi = &state->grplist->groups[state->grplist->group_cnt++];
+                                memset(gi, 0, sizeof(*gi));
+                                rd_kafka_broker_lock(rkb);
+                                gi->broker.id   = rkb->rkb_nodeid;
+                                gi->broker.host = rd_strdup(rkb->rkb_origname);
+                                gi->broker.port = rkb->rkb_port;
+                                rd_kafka_broker_unlock(rkb);
+                                gi->group       = rd_strdup(grps[j]);
+                        }
+                }
 
                 while (i-- > 0)
                         rd_free(grps[i]);
@@ -4750,15 +4773,37 @@ err_parse:
         state->err = reply->rkbuf_err;
 }
 
-rd_kafka_resp_err_t
-rd_kafka_list_groups(rd_kafka_t *rk,
+static void rd_kafka_ListGroups_only_resp_cb(rd_kafka_t *rk,
+                                        rd_kafka_broker_t *rkb,
+                                        rd_kafka_resp_err_t err,
+                                        rd_kafka_buf_t *reply,
+                                        rd_kafka_buf_t *request,
+                                        void *opaque) {
+        rd_kafka_ListGroups_resp_cb(rk, rkb, err, reply, request, rd_false, opaque);
+}
+
+static void rd_kafka_ListGroups_and_describe_resp_cb(rd_kafka_t *rk,
+                                        rd_kafka_broker_t *rkb,
+                                        rd_kafka_resp_err_t err,
+                                        rd_kafka_buf_t *reply,
+                                        rd_kafka_buf_t *request,
+                                        void *opaque) {
+        rd_kafka_ListGroups_resp_cb(rk, rkb, err, reply, request, rd_true, opaque);
+}
+
+static rd_kafka_resp_err_t
+rd_kafka_list_and_describe_groups(rd_kafka_t *rk,
                      const char *group,
                      const struct rd_kafka_group_list **grplistp,
+                     rd_bool_t describe,
                      int timeout_ms) {
         rd_kafka_broker_t *rkb;
-        int rkb_cnt                    = 0;
-        struct list_groups_state state = RD_ZERO_INIT;
-        rd_ts_t ts_end                 = rd_timeout_init(timeout_ms);
+        int rkb_cnt                             = 0;
+        struct list_groups_state state          = RD_ZERO_INIT;
+        rd_ts_t ts_end                          = rd_timeout_init(timeout_ms);
+        rd_kafka_resp_cb_t *list_groups_resp_cb = describe ? 
+                                                  rd_kafka_ListGroups_and_describe_resp_cb :
+                                                  rd_kafka_ListGroups_only_resp_cb;
 
         /* Wait until metadata has been fetched from cluster so
          * that we have a full broker list.
@@ -4802,7 +4847,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
                 state.wait_cnt++;
                 rkb_cnt++;
                 rd_kafka_ListGroupsRequest(rkb, RD_KAFKA_REPLYQ(state.q, 0),
-                                           rd_kafka_ListGroups_resp_cb, &state);
+                                           list_groups_resp_cb, &state);
         }
         rd_kafka_rdunlock(rk);
 
@@ -4811,7 +4856,6 @@ rd_kafka_list_groups(rd_kafka_t *rk,
 
         } else {
                 int remains;
-
                 while (state.wait_cnt > 0 &&
                        !rd_timeout_expired(
                            (remains = rd_timeout_remains(ts_end)))) {
@@ -4841,6 +4885,18 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         return state.err;
 }
 
+
+rd_kafka_resp_err_t
+rd_kafka_list_groups(rd_kafka_t *rk,
+                     const char *group,
+                     const struct rd_kafka_group_list **grplistp,
+                     int timeout_ms) {
+        return rd_kafka_list_and_describe_groups(rk,
+                                                 group,
+                                                 grplistp,
+                                                 rd_true,
+                                                 timeout_ms);
+}
 
 void rd_kafka_group_list_destroy(const struct rd_kafka_group_list *grplist0) {
         struct rd_kafka_group_list *grplist =

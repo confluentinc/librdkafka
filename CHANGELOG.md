@@ -15,6 +15,7 @@ librdkafka v1.9.3 is a maintenance release:
 ## Enhancements
 
  * Bundled zlib upgraded to version 1.2.13.
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
 
 
 # librdkafka v1.9.2

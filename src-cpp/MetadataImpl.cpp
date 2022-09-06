@@ -49,18 +49,18 @@ class BrokerMetadataImpl : public BrokerMetadata {
       broker_metadata_(broker_metadata), host_(broker_metadata->host) {
   }
 
-  int32_t id() const {
+  int32_t id() const override {
     return broker_metadata_->id;
   }
 
-  std::string host() const {
+  std::string host() const override {
     return host_;
   }
-  int port() const {
+  int port() const override {
     return broker_metadata_->port;
   }
 
-  virtual ~BrokerMetadataImpl() {
+  ~BrokerMetadataImpl() override {
   }
 
  private:
@@ -88,24 +88,24 @@ class PartitionMetadataImpl : public PartitionMetadata {
       isrs_.push_back(partition_metadata->isrs[i]);
   }
 
-  int32_t id() const {
+  int32_t id() const override {
     return partition_metadata_->id;
   }
-  int32_t leader() const {
+  int32_t leader() const override {
     return partition_metadata_->leader;
   }
-  ErrorCode err() const {
+  ErrorCode err() const override {
     return static_cast<ErrorCode>(partition_metadata_->err);
   }
 
-  const std::vector<int32_t> *replicas() const {
+  const std::vector<int32_t> *replicas() const override {
     return &replicas_;
   }
-  const std::vector<int32_t> *isrs() const {
+  const std::vector<int32_t> *isrs() const override {
     return &isrs_;
   }
 
-  ~PartitionMetadataImpl() {
+  ~PartitionMetadataImpl() override {
   }
 
  private:
@@ -126,18 +126,18 @@ class TopicMetadataImpl : public TopicMetadata {
           new PartitionMetadataImpl(&topic_metadata->partitions[i]));
   }
 
-  ~TopicMetadataImpl() {
+  ~TopicMetadataImpl() override {
     for (size_t i = 0; i < partitions_.size(); ++i)
       delete partitions_[i];
   }
 
-  std::string topic() const {
+  std::string topic() const override {
     return topic_;
   }
-  const std::vector<const PartitionMetadata *> *partitions() const {
+  const std::vector<const PartitionMetadata *> *partitions() const override {
     return &partitions_;
   }
-  ErrorCode err() const {
+  ErrorCode err() const override {
     return static_cast<ErrorCode>(topic_metadata_->err);
   }
 

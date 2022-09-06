@@ -94,7 +94,7 @@ static void print_time() {
 }
 class ExampleEventCb : public RdKafka::EventCb {
  public:
-  void event_cb(RdKafka::Event &event) {
+  void event_cb(RdKafka::Event &event) override {
     print_time();
 
     switch (event.type()) {
@@ -143,9 +143,10 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
   }
 
  public:
-  void rebalance_cb(RdKafka::KafkaConsumer *consumer,
-                    RdKafka::ErrorCode err,
-                    std::vector<RdKafka::TopicPartition *> &partitions) {
+  void rebalance_cb(
+      RdKafka::KafkaConsumer *consumer,
+      RdKafka::ErrorCode err,
+      std::vector<RdKafka::TopicPartition *> &partitions) override {
     std::cerr << "RebalanceCb: " << RdKafka::err2str(err) << ": ";
 
     part_list_print(partitions);

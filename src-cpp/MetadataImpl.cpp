@@ -30,10 +30,14 @@
 
 using namespace RdKafka;
 
-BrokerMetadata::~BrokerMetadata() {};
-PartitionMetadata::~PartitionMetadata() {};
-TopicMetadata::~TopicMetadata() {};
-Metadata::~Metadata() {};
+BrokerMetadata::~BrokerMetadata() {
+}
+PartitionMetadata::~PartitionMetadata() {
+}
+TopicMetadata::~TopicMetadata() {
+}
+Metadata::~Metadata() {
+}
 
 
 /**
@@ -101,7 +105,8 @@ class PartitionMetadataImpl : public PartitionMetadata {
     return &isrs_;
   }
 
-  ~PartitionMetadataImpl() {};
+  ~PartitionMetadataImpl() {
+  }
 
  private:
   const rd_kafka_metadata_partition_t *partition_metadata_;

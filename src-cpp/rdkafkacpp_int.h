@@ -275,12 +275,6 @@ class HeadersImpl : public Headers {
     }
   }
 
-  ErrorCode add(const std::string &key, const char *value) {
-    rd_kafka_resp_err_t err;
-    err = rd_kafka_header_add(headers_, key.c_str(), key.size(), value, -1);
-    return static_cast<RdKafka::ErrorCode>(err);
-  }
-
   ErrorCode add(const std::string &key,
                 const void *value,
                 size_t value_size) override {

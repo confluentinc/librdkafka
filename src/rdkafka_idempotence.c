@@ -243,10 +243,22 @@ redo:
         case RD_KAFKA_IDEMP_STATE_WAIT_TRANSPORT:
                 /* Waiting for broker/coordinator to become available */
                 if (rd_kafka_is_transactional(rk)) {
-                        /* Assert that a coordinator has been assigned by
-                         * inspecting txn_curr_coord (the real broker)
-                         * rather than txn_coord (the logical broker). */
-                        rd_assert(rk->rk_eos.txn_curr_coord);
+                        /* Check that a proper coordinator broker has
+                         * been assigned by inspecting txn_curr_coord
+                         * (the real broker) rather than txn_coord
+                         * (the logical broker). */
+                        if (!rk->rk_eos.txn_curr_coord) {
+                                /*
+                                 * Can happen if the coordinator wasn't set or
+                                 * wasn't up initially and has been set to NULL
+                                 * after a COORDINATOR_NOT_AVAILABLE error in
+                                 * FindCoordinatorResponse. When the coordinator
+                                 * is known this FSM will be called again.
+                                 */
+                                rd_kafka_txn_coord_query(
+                                        rk, "Awaiting coordinator");
+                                return;
+                        }
                         rkb = rk->rk_eos.txn_coord;
                         rd_kafka_broker_keep(rkb);
 

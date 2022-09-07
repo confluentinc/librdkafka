@@ -2102,14 +2102,26 @@ err_parse:
 err:
         rd_kafka_wrlock(rk);
 
-        if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION) {
+        int state_committing =
+            rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION;
+        int state_aborting =
+            rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION;
+        int state_abortable_error =
+            rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR;
+        // While request was in queue, state can have changed from:
+        // RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION ->
+        // RD_KAFKA_TXN_STATE_ABORTABLE_ERROR ->
+        // RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION
+        int state_different_from_request =
+            (state_committing && !is_commit) || (state_aborting && is_commit);
+
+        if (state_committing && !state_different_from_request) {
                 may_retry = rd_true;
 
-        } else if (rk->rk_eos.txn_state ==
-                   RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION) {
+        } else if (state_aborting && !state_different_from_request) {
                 may_retry = rd_true;
 
-        } else if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR) {
+        } else if (state_abortable_error || state_different_from_request) {
                 /* Transaction has failed locally, typically due to timeout.
                  * Get the transaction error and return that instead of
                  * this error.

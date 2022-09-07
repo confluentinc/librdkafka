@@ -463,14 +463,15 @@ static void rd_kafka_txn_curr_api_reply(rd_kafka_q_t *rkq,
  */
 void rd_kafka_txn_idemp_state_change(rd_kafka_t *rk,
                                      rd_kafka_idemp_state_t idemp_state) {
-        rd_bool_t reply_assigned = rd_false;
+        rd_bool_t reply         = rd_false;
+        rd_kafka_error_t *error = NULL;
 
         if (idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED &&
             rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_WAIT_PID) {
                 /* Application is calling (or has called) init_transactions() */
                 RD_UT_COVERAGE(1);
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY_NOT_ACKED);
-                reply_assigned = rd_true;
+                reply = rd_true;
 
         } else if (idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED &&
                    rk->rk_eos.txn_state ==
@@ -478,37 +479,43 @@ void rd_kafka_txn_idemp_state_change(rd_kafka_t *rk,
                 /* Application is calling abort_transaction() as we're
                  * recovering from a fatal idempotence error. */
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
-                reply_assigned = rd_true;
+                reply = rd_true;
 
-        } else if (idemp_state == RD_KAFKA_IDEMP_STATE_FATAL_ERROR &&
-                   rk->rk_eos.txn_state != RD_KAFKA_TXN_STATE_FATAL_ERROR) {
+        } else if (idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED &&
+                   !rd_kafka_txn_require_state(
+                       rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED,
+                       RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED)) {
+                /* Application is calling abort_transaction() as we're
+                 * recovering from a fatal idempotence error. */
+                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
+                reply = rd_true;
+
+        } else if (idemp_state == RD_KAFKA_IDEMP_STATE_FATAL_ERROR) {
                 /* A fatal error has been raised. */
-
                 rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_FATAL_ERROR);
-                if (rk->rk_eos.txn_init_rkq) {
-                        /* Application has called init_transactions() or
-                         * abort_transaction() and it has now failed,
-                         * reply to the app. */
-                        rd_kafka_txn_curr_api_reply_error(
-                            rk->rk_eos.txn_init_rkq,
-                            rd_kafka_error_new_fatal(
-                                rk->rk_eos.txn_err ? rk->rk_eos.txn_err
-                                                   : RD_KAFKA_RESP_ERR__FATAL,
-                                "Fatal error raised by "
-                                "idempotent producer while "
-                                "retrieving PID: %s",
-                                rk->rk_eos.txn_errstr ? rk->rk_eos.txn_errstr
-                                                      : "see previous logs"));
-                        rk->rk_eos.txn_init_rkq = NULL;
-                }
+                error = rd_kafka_error_new_fatal(
+                    rk->rk_eos.txn_err ? rk->rk_eos.txn_err
+                                       : RD_KAFKA_RESP_ERR__FATAL,
+                    "Fatal error raised by "
+                    "idempotent producer while "
+                    "retrieving PID: %s",
+                    rk->rk_eos.txn_errstr ? rk->rk_eos.txn_errstr
+                                          : "see previous logs");
+                reply = rd_true;
         }
 
-        if (reply_assigned && rk->rk_eos.txn_init_rkq) {
+        if (reply && rk->rk_eos.txn_init_rkq) {
                 /* Application has called init_transactions() or
                  * abort_transaction() and it is now complete,
                  * reply to the app. */
-                rd_kafka_txn_curr_api_reply(rk->rk_eos.txn_init_rkq, 0,
-                                            RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
+                if (error) {
+                        rd_kafka_txn_curr_api_reply_error(
+                            rk->rk_eos.txn_init_rkq, error);
+                } else {
+                        rd_kafka_txn_curr_api_reply(rk->rk_eos.txn_init_rkq, 0,
+                                                    RD_KAFKA_RESP_ERR_NO_ERROR,
+                                                    NULL);
+                }
                 rk->rk_eos.txn_init_rkq = NULL;
         }
 }
@@ -2027,10 +2034,13 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
  *
  * Current state must be either COMMIT_NOT_ACKED or ABORT_NOT_ACKED.
  *
+ * @returns true if the transaction was completed, false if an epoch bump
+ *          is needed before completing.
+ *
  * @locality rdkafka main thread
  * @locks rd_kafka_wrlock(rk) MUST be held
  */
-static void rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
+static rd_bool_t rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
         rd_kafka_dbg(rk, EOS, "TXNCOMPLETE", "Transaction successfully %s",
                      is_commit ? "committed" : "aborted");
 
@@ -2038,10 +2048,23 @@ static void rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
         rd_kafka_txn_clear_pending_partitions(rk);
         rd_kafka_txn_clear_partitions(rk);
 
+        rd_bool_t drain_bump =
+            rk->rk_eos.txn_requires_epoch_bump ||
+            rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_ASSIGNED;
+
         rk->rk_eos.txn_requires_epoch_bump = rd_false;
         rk->rk_eos.txn_req_cnt             = 0;
 
-        rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
+        if (drain_bump) {
+                rd_kafka_wrunlock(rk);
+                rd_kafka_idemp_drain_epoch_bump_start(
+                    rk, "txn_requires_epoch_bump");
+                rd_kafka_wrlock(rk);
+                return rd_false;
+        } else {
+                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
+                return rd_true;
+        }
 }
 
 
@@ -2390,6 +2413,8 @@ rd_kafka_txn_op_commit_transaction_ack(rd_kafka_t *rk,
                                        rd_kafka_q_t *rkq,
                                        rd_kafka_op_t *rko) {
         rd_kafka_error_t *error;
+        rd_bool_t complete    = rd_true;
+        rd_kafka_q_t *reply_q = rd_kafka_q_keep(rko->rko_replyq.q);
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -2399,17 +2424,35 @@ rd_kafka_txn_op_commit_transaction_ack(rd_kafka_t *rk,
         if ((error = rd_kafka_txn_require_state(
                  rk, RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED)))
                 goto done;
+        if (rk->rk_eos.txn_init_rkq != NULL) {
+                /* If a queue is already waiting for completion,
+                 * return handled without calling
+                 * rd_kafka_txn_complete again.
+                 */
+                complete = rd_false;
+                goto done;
+        }
 
         rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
                      "Committed transaction now acked by application");
-        rd_kafka_txn_complete(rk, rd_true /*is commit*/);
-
+        complete = rd_kafka_txn_complete(rk, rd_true /*is commit*/);
+        if (!complete) {
+                /* Set this queue as waiting for completion.
+                 * rd_kafka_txn_curr_api_reply_error will be called
+                 * by rd_kafka_txn_idemp_state_change
+                 *
+                 * Grab a separate reference to use in state_change(),
+                 * outside the curr_api to allow the curr_api to timeout while
+                 * the background bump continues. */
+                rk->rk_eos.txn_init_rkq = rd_kafka_q_keep(reply_q);
+        }
         /* FALLTHRU */
 done:
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
-                                          error);
+        if (complete) {
+                rd_kafka_txn_curr_api_reply_error(reply_q, error);
+        }
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
@@ -2588,49 +2631,6 @@ static rd_kafka_op_res_t rd_kafka_txn_op_abort_transaction(rd_kafka_t *rk,
                 goto done;
         }
 
-        if (rk->rk_eos.txn_requires_epoch_bump ||
-            rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_ASSIGNED) {
-                /* If the underlying idempotent producer's state indicates it
-                 * is re-acquiring its PID we need to wait for that to finish
-                 * before allowing a new begin_transaction(), and since that is
-                 * not a blocking call we need to perform that wait in this
-                 * state instead.
-                 * This may happen on epoch bump and fatal idempotent producer
-                 * error which causes the current transaction to enter the
-                 * abortable state.
-                 * To recover we need to request an epoch bump from the
-                 * transaction coordinator. This is handled automatically
-                 * by the idempotent producer, so we just need to wait for
-                 * the new pid to be assigned.
-                 */
-
-                if (rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED) {
-                        rd_kafka_dbg(rk, EOS, "TXNABORT", "PID already bumped");
-                        rd_kafka_txn_set_state(
-                            rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
-                        goto done;
-                }
-
-                rd_kafka_dbg(rk, EOS, "TXNABORT",
-                             "Waiting for transaction coordinator "
-                             "PID bump to complete before aborting "
-                             "transaction (idempotent producer state %s)",
-                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
-
-                /* Replace the current init replyq, if any, which is
-                 * from a previous timed out abort_transaction() call. */
-                RD_IF_FREE(rk->rk_eos.txn_init_rkq, rd_kafka_q_destroy);
-
-                /* Grab a separate reference to use in state_change(),
-                 * outside the curr_api to allow the curr_api to
-                 * to timeout while the PID bump continues in the
-                 * the background. */
-                rk->rk_eos.txn_init_rkq = rd_kafka_q_keep(rko->rko_replyq.q);
-
-                rd_kafka_wrunlock(rk);
-                return RD_KAFKA_OP_RES_HANDLED;
-        }
-
         if (!rk->rk_eos.txn_req_cnt) {
                 rd_kafka_dbg(rk, EOS, "TXNABORT",
                              "No partitions registered: not sending EndTxn");
@@ -2685,6 +2685,8 @@ rd_kafka_txn_op_abort_transaction_ack(rd_kafka_t *rk,
                                       rd_kafka_q_t *rkq,
                                       rd_kafka_op_t *rko) {
         rd_kafka_error_t *error;
+        rd_bool_t complete    = rd_true;
+        rd_kafka_q_t *reply_q = rd_kafka_q_keep(rko->rko_replyq.q);
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -2694,17 +2696,35 @@ rd_kafka_txn_op_abort_transaction_ack(rd_kafka_t *rk,
         if ((error = rd_kafka_txn_require_state(
                  rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED)))
                 goto done;
+        if (rk->rk_eos.txn_init_rkq != NULL) {
+                /* If a queue is already waiting for completion,
+                 * return handled without calling
+                 * rd_kafka_txn_complete again.
+                 */
+                complete = rd_false;
+                goto done;
+        }
 
         rd_kafka_dbg(rk, EOS, "TXNABORT",
                      "Aborted transaction now acked by application");
-        rd_kafka_txn_complete(rk, rd_false /*is abort*/);
-
+        complete = rd_kafka_txn_complete(rk, rd_false /*is abort*/);
+        if (!complete) {
+                /* Set this queue as waiting for completion.
+                 * rd_kafka_txn_curr_api_reply_error will be called
+                 * by rd_kafka_txn_idemp_state_change
+                 *
+                 * Grab a separate reference to use in state_change(),
+                 * outside the curr_api to allow the curr_api to timeout while
+                 * the background bump continues. */
+                rk->rk_eos.txn_init_rkq = rd_kafka_q_keep(reply_q);
+        }
         /* FALLTHRU */
 done:
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_txn_curr_api_reply_error(rd_kafka_q_keep(rko->rko_replyq.q),
-                                          error);
+        if (complete) {
+                rd_kafka_txn_curr_api_reply_error(reply_q, error);
+        }
 
         return RD_KAFKA_OP_RES_HANDLED;
 }

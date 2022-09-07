@@ -2192,12 +2192,6 @@ err:
 
         case RD_KAFKA_RESP_ERR__DESTROY:
                 /* Producer is being terminated, ignore the response. */
-        case RD_KAFKA_RESP_ERR__TIMED_OUT:
-                /* Transaction API timeout has been hit
-                 * (this is our internal timer) */
-        case RD_KAFKA_RESP_ERR__OUTDATED:
-                /* Transactional state no longer relevant for this
-                 * outdated response. */
                 break;
 
         case RD_KAFKA_RESP_ERR__TRANSPORT:
@@ -2214,6 +2208,20 @@ err:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY;
                 break;
 
+        case RD_KAFKA_RESP_ERR__OUTDATED:
+                /* Transactional state no longer relevant for this
+                 * outdated response. */
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                /* Transaction API timeout has been hit
+                 * (this is our internal timer) */
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
+                /* Transaction API timeout while in queue has been hit
+                 * (this is our internal timer) */
+
+                /* Local transaction timed out hit.
+                 * Return retriable error to the caller and
+                 * let it retry, don't retry automatically */
+                may_retry = rd_false;
         case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
         case RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY;
@@ -2807,7 +2815,9 @@ rd_kafka_error_t *rd_kafka_abort_transaction(rd_kafka_t *rk, int timeout_ms) {
             rk, "abort_transaction (ack)",
             rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
                                rd_kafka_txn_op_abort_transaction_ack),
-            rd_timeout_remains(abs_timeout), RD_KAFKA_TXN_CURR_API_F_REUSE);
+            rd_timeout_remains(abs_timeout),
+            RD_KAFKA_TXN_CURR_API_F_REUSE |
+                RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT);
 }
 
 

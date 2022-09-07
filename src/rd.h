@@ -41,8 +41,10 @@
 #endif
 
 #define __need_IOV_MAX
+#if defined(__sun)
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L /* for timespec on solaris */
+#endif
 #endif
 #endif
 

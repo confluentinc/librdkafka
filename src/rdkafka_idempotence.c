@@ -490,6 +490,7 @@ void rd_kafka_idemp_pid_update(rd_kafka_broker_t *rkb,
         /* The idempotence state change will trigger the transaction manager,
          * see rd_kafka_txn_idemp_state_change(). */
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_ASSIGNED);
+        rd_kafka_txns_complete_waiting(rk);
 
         rd_kafka_wrunlock(rk);
 
@@ -540,6 +541,7 @@ static void rd_kafka_idemp_drain_done(rd_kafka_t *rk) {
                                      rd_kafka_pid2str(rk->rk_eos.pid));
                         rd_kafka_idemp_set_state(rk,
                                                  RD_KAFKA_IDEMP_STATE_ASSIGNED);
+                        rd_kafka_txns_complete_waiting(rk);
                         wakeup_brokers = rd_true;
                 }
         }
@@ -599,6 +601,32 @@ void rd_kafka_idemp_drain_reset(rd_kafka_t *rk, const char *reason) {
  *
  * The PID is not bumped until the queues are fully drained.
  *
+ * @param fmt is a human-readable reason for the bump.
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_idemp_drain_epoch_bump_start(rd_kafka_t *rk, const char *reason) {
+        rd_kafka_wrlock(rk);
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for %s epoch bump "
+                     "for %d partition(s) with in-flight requests: %s",
+                     rd_kafka_pid2str(rk->rk_eos.pid),
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt), reason);
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
+        rd_kafka_wrunlock(rk);
+        /* Check right away if the drain could be done. */
+        rd_kafka_idemp_check_drain_done(rk);
+}
+
+/**
+ * @brief Schedule an epoch bump when the local ProduceRequest queues
+ *        have been fully drained, or abort the current transaction,
+ *        if the producer is transactional, and
+ *        rd_kafka_idemp_drain_epoch_bump_start will be called after that.
+ *
+ * The PID is not bumped until the queues are fully drained.
+ *
  * @param fmt is a human-readable reason for the bump
  *
  *
@@ -616,22 +644,13 @@ void rd_kafka_idemp_drain_epoch_bump(rd_kafka_t *rk,
         rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
 
-        rd_kafka_wrlock(rk);
-        rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for %s epoch bump "
-                     "for %d partition(s) with in-flight requests: %s",
-                     rd_kafka_pid2str(rk->rk_eos.pid),
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt), buf);
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
-        rd_kafka_wrunlock(rk);
-
-        /* Transactions: bumping the epoch requires the current transaction
-         *               to be aborted. */
-        if (rd_kafka_is_transactional(rk))
+        if (rd_kafka_is_transactional(rk)) {
+                /* Transactions: requires aborting the current transaction
+                 * before bumping the epoch . */
                 rd_kafka_txn_set_abortable_error_with_bump(rk, err, "%s", buf);
-
-        /* Check right away if the drain could be done. */
-        rd_kafka_idemp_check_drain_done(rk);
+        } else {
+                rd_kafka_idemp_drain_epoch_bump_start(rk, buf);
+        }
 }
 
 /**

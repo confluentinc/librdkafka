@@ -539,6 +539,10 @@ static void do_test_txn_fenced_reinit(rd_kafka_resp_err_t error_code) {
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, txn_coord, RD_KAFKAP_InitProducerId, 1, error_code, 0);
 
+        /* Fail the Abort Transaction */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, txn_coord, RD_KAFKAP_EndTxn, 1, error_code, 0);
+
         /* Produce a message, let it fail with a fatal idempo error. */
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 1,

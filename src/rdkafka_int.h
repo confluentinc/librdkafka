@@ -496,6 +496,10 @@ struct rd_kafka_s {
 
                 /**< Transaction coordinator query timer */
                 rd_kafka_timer_t txn_coord_tmr;
+
+                /**< Queue of the completed transaction waiting response after
+                 * epoch bump */
+                rd_kafka_q_t *completed_txn_waiting_bump;
         } rk_eos;
 
         rd_atomic32_t rk_flushing; /**< Application is calling flush(). */

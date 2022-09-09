@@ -386,7 +386,8 @@ err:
  * @returns a pseudo-random integer in the range 0 to RAND_MAX inclusive [0,
  * RAND_MAX].
  */
-int rd_rand_r(unsigned int *seed) {
+static RD_UNUSED RD_INLINE int
+rd_rand_r(unsigned int *seed) {
         /* Source: https://git.musl-libc.org/cgit/musl/tree/src/prng/rand_r.c */
 
         unsigned int x;

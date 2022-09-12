@@ -32,17 +32,16 @@
 #include "tinycthread.h"
 
 int rd_jitter(int low, int high) {
-        int rand_num;
-        struct timeval tv;
         static RD_TLS unsigned int seed = 0;
 
-        rd_gettimeofday(&tv, NULL);
-        seed = (unsigned int)(tv.tv_usec / 1000);
-        seed ^= (unsigned int)(intptr_t)thrd_current();
+        if (unlikely(seed == 0)) {
+                struct timeval tv;
+                rd_gettimeofday(&tv, NULL);
+                seed = (unsigned int)(tv.tv_usec / 1000);
+                seed ^= (unsigned int)(intptr_t)thrd_current();
+        }
 
-        rand_num = rd_rand_r(&seed);
-
-        return (low + (rand_num % ((high - low) + 1)));
+        return (low + (rd_rand_r(&seed) % ((high - low) + 1)));
 }
 
 void rd_array_shuffle(void *base, size_t nmemb, size_t entry_size) {

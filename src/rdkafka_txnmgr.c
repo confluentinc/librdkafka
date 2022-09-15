@@ -1457,6 +1457,63 @@ rd_kafka_txn_send_TxnOffsetCommitRequest(rd_kafka_broker_t *rkb,
                                          rd_kafka_resp_cb_t *resp_cb,
                                          void *reply_opaque);
 
+
+static void rd_kafka_txn_handle_TxnOffsetCommit(rd_kafka_t *rk,
+                                                rd_kafka_broker_t *rkb,
+                                                rd_kafka_resp_err_t err,
+                                                rd_kafka_buf_t *rkbuf,
+                                                rd_kafka_buf_t *request,
+                                                void *opaque);
+
+/**
+ * @brief Retries TxnOffsetCommit
+ * replies \c RD_KAFKA_RESP_ERR__TIMED_OUT
+ * if transaction absolute timeout expired.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void rd_kafka_txn_handle_TxnOffsetCommit_retry(rd_kafka_op_t *rko) {
+        rd_kafka_t *rk = rko->rko_rk;
+        int remains_ms = rd_timeout_remains(rko->rko_u.txn.abs_timeout);
+        if (!rd_timeout_expired(remains_ms)) {
+                rd_kafka_coord_req(
+                    rk, RD_KAFKA_COORD_GROUP,
+                    rko->rko_u.txn.cgmetadata->group_id,
+                    rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
+                    rd_timeout_remains_limit0(remains_ms,
+                                              rk->rk_conf.socket_timeout_ms),
+                    RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                    rd_kafka_txn_handle_TxnOffsetCommit, rko);
+        } else {
+                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                char errstr[512];
+                rd_snprintf(errstr, sizeof(errstr),
+                            "Transactional API operation (%s) timed out",
+                            rk->rk_eos.txn_curr_api.name);
+                int actions = RD_KAFKA_ERR_ACTION_PERMANENT;
+
+                rd_kafka_txn_set_abortable_error(rk, err, "%s", errstr);
+                rd_kafka_txn_curr_api_reply(
+                    rd_kafka_q_keep(rko->rko_replyq.q), actions,
+                    RD_KAFKA_RESP_ERR__TIMED_OUT, "%s", errstr);
+                rd_kafka_op_destroy(rko);
+        }
+}
+
+/**
+ * @brief Retry TxnOffsetCommit callback
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void
+rd_kafka_txn_handle_TxnOffsetCommit_retry_cb(rd_kafka_timers_t *rkts,
+                                             void *arg) {
+        rd_kafka_op_t *rko = arg;
+        rd_kafka_txn_handle_TxnOffsetCommit_retry(rko);
+}
+
 /**
  * @brief Handle TxnOffsetCommitResponse
  *
@@ -1474,6 +1531,8 @@ static void rd_kafka_txn_handle_TxnOffsetCommit(rd_kafka_t *rk,
         int actions                                 = 0;
         rd_kafka_topic_partition_list_t *partitions = NULL;
         char errstr[512];
+        static rd_interval_t last_retry   = RD_ZERO_INIT;
+        static rd_kafka_timer_t retry_tmr = RD_ZERO_INIT;
 
         *errstr = '\0';
 
@@ -1534,6 +1593,7 @@ done:
                  * curr_api_set_result() is called below, without
                  * other side-effects. */
                 actions = RD_KAFKA_ERR_ACTION_SPECIAL;
+                rd_interval_init(&last_retry);
                 return;
 
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
@@ -1589,19 +1649,32 @@ done:
                 int remains_ms = rd_timeout_remains(rko->rko_u.txn.abs_timeout);
 
                 if (!rd_timeout_expired(remains_ms)) {
-                        rd_kafka_coord_req(
-                            rk, RD_KAFKA_COORD_GROUP,
-                            rko->rko_u.txn.cgmetadata->group_id,
-                            rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
-                            rd_timeout_remains_limit0(
-                                remains_ms, rk->rk_conf.socket_timeout_ms),
-                            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                            rd_kafka_txn_handle_TxnOffsetCommit, rko);
+                        rd_ts_t diff = rd_interval(&last_retry,
+                                                   500 * 1000 /* 500 ms */, 0);
+                        if (diff < 0) {
+                                rd_kafka_dbg(rk, EOS, "TXNOFFSETCOMMIT",
+                                             "Waiting %" PRId64
+                                             " ms before next retry. rkb:%s "
+                                             "err:%s actions:(%s)",
+                                             -diff / 1000,
+                                             rkb ? rd_kafka_broker_name(rkb)
+                                                 : "(none)",
+                                             rd_kafka_err2name(err),
+                                             rd_kafka_actions2str(actions));
+                                rd_kafka_timer_start_oneshot(
+                                    &rk->rk_timers, &retry_tmr, rd_true, -diff,
+                                    rd_kafka_txn_handle_TxnOffsetCommit_retry_cb,
+                                    rko);
+                        } else {
+                                rd_kafka_txn_handle_TxnOffsetCommit_retry(rko);
+                        }
                         return;
                 } else if (!err)
                         err = RD_KAFKA_RESP_ERR__TIMED_OUT;
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
         }
+
+        rd_interval_init(&last_retry);
 
         if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
                 rd_kafka_txn_set_abortable_error(rk, err, "%s", errstr);

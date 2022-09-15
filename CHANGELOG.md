@@ -2,7 +2,19 @@
 
 librdkafka v1.9.3 is a maintenance release:
 
- *  Self-contained static libraries can now be built on Linux arm64 too
+ * Self-contained static libraries can now be built on Linux arm64 too
+ * Fixes to the transactional and idempotent producer (#3971).
+
+
+## Fixes
+
+### Transactional producer fixes
+
+ * When requesting an abort with drain and bump after message timeouts, the bump was executed first, causing a series of retries on InitProducerIdRequest until a transaction timeout happen and the producer was fenced. This commit changes the order of the operations, starting the drain bump after the complete transaction ack (#3971).
+ * While a commit operation was in queue, a timeout happens that can cause an abort. The state changes from COMMITTING_TRANSACTION to ABORTABLE_ERROR to ABORTING_TRANSACTION. When the broker comes up the error is permanent or fatal because the state has changed from the initial one (#3971).
+ * When doing a drain and bump txn_curr_coord is not null in state WAIT_TRANSPORT, but if txn_coord has to be requested or broker is down it's retried. During this retry the txn_curr_coord can be set to null after a COORDINATOR_NOT_AVAILABLE error so when it comes back to the WAIT_TRANSPORT case a fatal error happens in the assert. It has to query for a transaction coordinator and retry (#3971).
+ * When aborting a transaction, if a local TIMED_OUT, TIMED_OUT_QUEUE or OUTDATED error happens, the error was not retriable (nor fenced or abortable) so rd_kafka_txn_op_abort_transaction_ack is never called, caller code doesn't know what to do so starts a new transaction but begin transaction fails because transactional state is not READY. These errors are now retriable (#3971).
+ * When calling TxnOffsetCommit, if retries were needed they were made at full speed, causing too much logging and network calls. A one second timeout has been added between retries (#3971).
 
 
 

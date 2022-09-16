@@ -7857,8 +7857,7 @@ rd_kafka_ListConsumerGroupOffsets_destroy_array (
 
 /**
  * @brief List committed offsets for a set of partitions in a conusmer
- *        group. This will succeed at the partition level only if the group
- *        is not actively subscribed to the corresponding topic.
+ *        group.
  *
  * @param rk Client instance.
  * @param list_grpoffsets Array of group committed offsets to list.

@@ -127,7 +127,8 @@ static void cmd_version(rd_kafka_conf_t *conf, int argc, char **argv) {
 
 
 /**
- * @brief Call rd_kafka_describe_consumer_groups() with an optional groupid argument.
+ * @brief Call rd_kafka_describe_consumer_groups() with an optional groupid
+ * argument.
  */
 static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
@@ -157,10 +158,11 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Describe consumer groups
          */
-        err = rd_kafka_describe_consumer_groups(rk, groupid, &grplist, 10 * 1000 /*10s*/);
+        err = rd_kafka_describe_consumer_groups(rk, groupid, &grplist,
+                                                10 * 1000 /*10s*/);
         if (err)
-                fatal("rd_kafka_describe_consumer_groups(%s) failed: %s", groupid,
-                      rd_kafka_err2str(err));
+                fatal("rd_kafka_describe_consumer_groups(%s) failed: %s",
+                      groupid, rd_kafka_err2str(err));
 
         if (grplist->group_cnt == 0) {
                 if (groupid) {

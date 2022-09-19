@@ -141,20 +141,20 @@ typedef enum {
         RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS, /**< Admin:
                                                 *   AlterConsumerGroupOffsets
                                                 *   u.admin_request */
-        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS, /**< Admin:
-                                               *   ListConsumerGroupOffsets
-                                               *   u.admin_request */
-        RD_KAFKA_OP_ADMIN_FANOUT, /**< Admin: fanout request */
-        RD_KAFKA_OP_ADMIN_RESULT, /**< Admin API .._result_t */
-        RD_KAFKA_OP_PURGE,        /**< Purge queues */
-        RD_KAFKA_OP_CONNECT,      /**< Connect (to broker) */
-        RD_KAFKA_OP_OAUTHBEARER_REFRESH,    /**< Refresh OAUTHBEARER token */
-        RD_KAFKA_OP_MOCK,                   /**< Mock cluster command */
-        RD_KAFKA_OP_BROKER_MONITOR,         /**< Broker state change */
-        RD_KAFKA_OP_TXN,                    /**< Transaction command */
-        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
-        RD_KAFKA_OP_LEADERS,                /**< Partition leader query */
-        RD_KAFKA_OP_BARRIER,                /**< Version barrier bump */
+        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS,  /**< Admin:
+                                                *   ListConsumerGroupOffsets
+                                                *   u.admin_request */
+        RD_KAFKA_OP_ADMIN_FANOUT,              /**< Admin: fanout request */
+        RD_KAFKA_OP_ADMIN_RESULT,              /**< Admin API .._result_t */
+        RD_KAFKA_OP_PURGE,                     /**< Purge queues */
+        RD_KAFKA_OP_CONNECT,                   /**< Connect (to broker) */
+        RD_KAFKA_OP_OAUTHBEARER_REFRESH,       /**< Refresh OAUTHBEARER token */
+        RD_KAFKA_OP_MOCK,                      /**< Mock cluster command */
+        RD_KAFKA_OP_BROKER_MONITOR,            /**< Broker state change */
+        RD_KAFKA_OP_TXN,                       /**< Transaction command */
+        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL,    /**< Get rebalance protocol */
+        RD_KAFKA_OP_LEADERS,                   /**< Partition leader query */
+        RD_KAFKA_OP_BARRIER,                   /**< Version barrier bump */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

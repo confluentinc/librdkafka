@@ -4472,8 +4472,8 @@ int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
  *
  * @remark The lists may be sorted by this function.
  */
-int test_partition_list_and_offsets_cmp (rd_kafka_topic_partition_list_t *al,
-                                         rd_kafka_topic_partition_list_t *bl) {
+int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
+                                        rd_kafka_topic_partition_list_t *bl) {
         int i;
 
         if (al->cnt < bl->cnt)
@@ -4486,12 +4486,11 @@ int test_partition_list_and_offsets_cmp (rd_kafka_topic_partition_list_t *al,
         rd_kafka_topic_partition_list_sort(al, NULL, NULL);
         rd_kafka_topic_partition_list_sort(bl, NULL, NULL);
 
-        for (i = 0 ; i < al->cnt ; i++) {
+        for (i = 0; i < al->cnt; i++) {
                 const rd_kafka_topic_partition_t *a = &al->elems[i];
                 const rd_kafka_topic_partition_t *b = &bl->elems[i];
                 if (a->partition != b->partition ||
-                    strcmp(a->topic, b->topic) || 
-                    a->offset != b->offset)
+                    strcmp(a->topic, b->topic) || a->offset != b->offset)
                         return -1;
         }
 

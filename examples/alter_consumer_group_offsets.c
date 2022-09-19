@@ -94,13 +94,13 @@ print_partition_list(FILE *fp,
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /* Temporary configuration object */
         char errstr[512];      /* librdkafka API error reporting buffer */
-        const char *bootstrap_servers;   /* Argument: bootstrap servers */
-        rd_kafka_t *rk;        /* Admin client instance */
-        rd_kafka_AdminOptions_t *options;      /* (Optional) Options for
-                                                * AlterConsumerGroupOffsets() */
-        rd_kafka_event_t *event;               /* AlterConsumerGroupOffsets result event */
+        const char *bootstrap_servers;    /* Argument: bootstrap servers */
+        rd_kafka_t *rk;                   /* Admin client instance */
+        rd_kafka_AdminOptions_t *options; /* (Optional) Options for
+                                           * AlterConsumerGroupOffsets() */
+        rd_kafka_event_t *event; /* AlterConsumerGroupOffsets result event */
         const int min_argc = 4;
-        int exitcode = 0;
+        int exitcode       = 0;
         int num_partitions = 0;
 
         /*
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        num_partitions = (argc - min_argc) / 2;
+        num_partitions    = (argc - min_argc) / 2;
         bootstrap_servers = argv[1];
         const char *group = argv[2];
         const char *topic = argv[3];
@@ -137,8 +137,8 @@ int main(int argc, char **argv) {
          * host or host:port (default port 9092).
          * librdkafka will use the bootstrap brokers to acquire the full
          * set of brokers from the cluster. */
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", bootstrap_servers, errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", bootstrap_servers,
+                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 return 1;
         }
@@ -168,8 +168,8 @@ int main(int argc, char **argv) {
         signal(SIGINT, stop);
 
         /* Set timeout (optional) */
-        options =
-            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
@@ -177,21 +177,25 @@ int main(int argc, char **argv) {
         }
 
         /* Read passed partition-offsets */
-        rd_kafka_topic_partition_list_t *partitions = rd_kafka_topic_partition_list_new(num_partitions);
+        rd_kafka_topic_partition_list_t *partitions =
+            rd_kafka_topic_partition_list_new(num_partitions);
         for (int i = 0; i < num_partitions; i++) {
                 rd_kafka_topic_partition_list_add(
-                        partitions,
-                        topic,
-                        parse_int("partition", argv[min_argc + i * 2]))->offset = parse_int("offset", argv[min_argc + 1 + i * 2]);
+                    partitions, topic,
+                    parse_int("partition", argv[min_argc + i * 2]))
+                    ->offset = parse_int("offset", argv[min_argc + 1 + i * 2]);
         }
 
         /* Create argument */
-        rd_kafka_AlterConsumerGroupOffsets_t *alter_consumer_group_offsets = rd_kafka_AlterConsumerGroupOffsets_new(group, partitions);
+        rd_kafka_AlterConsumerGroupOffsets_t *alter_consumer_group_offsets =
+            rd_kafka_AlterConsumerGroupOffsets_new(group, partitions);
         /* Call AlterConsumerGroupOffsets */
-        rd_kafka_AlterConsumerGroupOffsets(rk, &alter_consumer_group_offsets, 1, options, queue);
+        rd_kafka_AlterConsumerGroupOffsets(rk, &alter_consumer_group_offsets, 1,
+                                           options, queue);
 
         /* Clean up input arguments */
-        rd_kafka_AlterConsumerGroupOffsets_destroy(alter_consumer_group_offsets);
+        rd_kafka_AlterConsumerGroupOffsets_destroy(
+            alter_consumer_group_offsets);
         rd_kafka_AdminOptions_destroy(options);
         rd_kafka_topic_partition_list_destroy(partitions);
 
@@ -216,13 +220,15 @@ int main(int argc, char **argv) {
                 const rd_kafka_group_result_t **groups;
                 size_t n_groups;
 
-                result  = rd_kafka_event_AlterConsumerGroupOffsets_result(event);
-                groups = rd_kafka_AlterConsumerGroupOffsets_result_groups(result, &n_groups);
+                result = rd_kafka_event_AlterConsumerGroupOffsets_result(event);
+                groups = rd_kafka_AlterConsumerGroupOffsets_result_groups(
+                    result, &n_groups);
 
                 printf("AlterConsumerGroupOffsets results:\n");
                 for (size_t i = 0; i < n_groups; i++) {
                         const rd_kafka_group_result_t *group = groups[i];
-                        const rd_kafka_topic_partition_list_t *partitions = rd_kafka_group_result_partitions(group);
+                        const rd_kafka_topic_partition_list_t *partitions =
+                            rd_kafka_group_result_partitions(group);
                         print_partition_list(stderr, partitions);
                 }
         }

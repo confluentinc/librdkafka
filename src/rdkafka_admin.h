@@ -84,11 +84,11 @@ struct rd_kafka_AdminOptions_s {
                                     *     all
                                     */
 
-        rd_kafka_confval_t require_stable; /**< BOOL: Whether broker should return stable offsets
-                                            *         (transaction-committed).
-                                            *   Valid for:
-                                            *     ListConsumerGroupOffsets
-                                            */
+        rd_kafka_confval_t
+            require_stable; /**< BOOL: Whether broker should return stable
+                             * offsets (transaction-committed). Valid for:
+                             *     ListConsumerGroupOffsets
+                             */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
@@ -359,14 +359,14 @@ struct rd_kafka_DeleteAcls_result_response_s {
  * @brief AlterConsumerGroupOffsets result
  */
 struct rd_kafka_AlterConsumerGroupOffsets_result_s {
-        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
 };
 
 struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group;   /**< Points to data */
+        char *group; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char  data[1]; /**< The group name is allocated along with
-                        *   the struct here. */
+        char data[1]; /**< The group name is allocated along with
+                       *   the struct here. */
 };
 
 /**@}*/
@@ -381,14 +381,14 @@ struct rd_kafka_AlterConsumerGroupOffsets_s {
  * @brief ListConsumerGroupOffsets result
  */
 struct rd_kafka_ListConsumerGroupOffsets_result_s {
-        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
 };
 
 struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group;   /**< Points to data */
+        char *group; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char  data[1]; /**< The group name is allocated along with
-                        *   the struct here. */
+        char data[1]; /**< The group name is allocated along with
+                       *   the struct here. */
 };
 
 /**@}*/

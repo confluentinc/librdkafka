@@ -4792,7 +4792,7 @@ static void rd_kafka_ListGroups_and_describe_resp_cb(rd_kafka_t *rk,
 }
 
 static rd_kafka_resp_err_t
-rd_kafka_list_and_describe_groups(rd_kafka_t *rk,
+rd_kafka_list_and_describe_consumer_groups(rd_kafka_t *rk,
                      const char *group,
                      const struct rd_kafka_group_list **grplistp,
                      rd_bool_t describe,
@@ -4887,14 +4887,37 @@ rd_kafka_list_and_describe_groups(rd_kafka_t *rk,
 
 
 rd_kafka_resp_err_t
+rd_kafka_list_consumer_groups(rd_kafka_t *rk,
+                              const char *group,
+                              const struct rd_kafka_group_list **grplistp,
+                              int timeout_ms) {
+        return rd_kafka_list_and_describe_consumer_groups(rk,
+                                                          group,
+                                                          grplistp,
+                                                          rd_false,
+                                                          timeout_ms);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_describe_consumer_groups(rd_kafka_t *rk,
+                                  const char *group,
+                                  const struct rd_kafka_group_list **grplistp,
+                                  int timeout_ms) {
+        return rd_kafka_list_and_describe_consumer_groups(rk,
+                                                          group,
+                                                          grplistp,
+                                                          rd_true,
+                                                          timeout_ms);
+}
+
+rd_kafka_resp_err_t
 rd_kafka_list_groups(rd_kafka_t *rk,
                      const char *group,
                      const struct rd_kafka_group_list **grplistp,
                      int timeout_ms) {
-        return rd_kafka_list_and_describe_groups(rk,
+        return rd_kafka_describe_consumer_groups(rk,
                                                  group,
                                                  grplistp,
-                                                 rd_true,
                                                  timeout_ms);
 }
 

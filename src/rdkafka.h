@@ -4936,13 +4936,84 @@ struct rd_kafka_group_list {
  *           group list.
  *
  * @sa Use rd_kafka_group_list_destroy() to release list memory.
+ * 
+ * @deprecated Use rd_kafka_describe_consumer_groups() instead.
  */
 RD_EXPORT
+RD_DEPRECATED
 rd_kafka_resp_err_t
 rd_kafka_list_groups(rd_kafka_t *rk,
                      const char *group,
                      const struct rd_kafka_group_list **grplistp,
                      int timeout_ms);
+
+/**
+ * @brief List client groups in cluster.
+ *
+ * \p group is an optional group name to list, otherwise (\p NULL) all
+ * groups are returned.
+ *
+ * \p timeout_ms is the (approximate) maximum time to wait for response
+ * from brokers and must be a positive value.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR__NO_ERROR on success and \p grplistp is
+ *           updated to point to a newly allocated list of groups.
+ *           \c RD_KAFKA_RESP_ERR__PARTIAL if not all brokers responded
+ *           in time but at least one group is returned in  \p grplistlp.
+ *           \c RD_KAFKA_RESP_ERR__TIMED_OUT if no groups were returned in the
+ *           given timeframe but not all brokers have yet responded, or
+ *           if the list of brokers in the cluster could not be obtained within
+ *           the given timeframe.
+ *           \c RD_KAFKA_RESP_ERR__TRANSPORT if no brokers were found.
+ *           Other error codes may also be returned from the request layer.
+ *
+ *           The \p grplistp remains untouched if any error code is returned,
+ *           with the exception of RD_KAFKA_RESP_ERR__PARTIAL which behaves
+ *           as RD_KAFKA_RESP_ERR__NO_ERROR (success) but with an incomplete
+ *           group list.
+ *
+ * @sa Use rd_kafka_group_list_destroy() to release list memory.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_list_consumer_groups(rd_kafka_t *rk,
+                              const char *group,
+                              const struct rd_kafka_group_list **grplistp,
+                              int timeout_ms);
+
+/**
+ * @brief List and describe client groups in cluster.
+ *
+ * \p group is an optional group name to describe, otherwise (\p NULL) all
+ * groups are returned.
+ *
+ * \p timeout_ms is the (approximate) maximum time to wait for response
+ * from brokers and must be a positive value.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR__NO_ERROR on success and \p grplistp is
+ *           updated to point to a newly allocated list of groups.
+ *           \c RD_KAFKA_RESP_ERR__PARTIAL if not all brokers responded
+ *           in time but at least one group is returned in  \p grplistlp.
+ *           \c RD_KAFKA_RESP_ERR__TIMED_OUT if no groups were returned in the
+ *           given timeframe but not all brokers have yet responded, or
+ *           if the list of brokers in the cluster could not be obtained within
+ *           the given timeframe.
+ *           \c RD_KAFKA_RESP_ERR__TRANSPORT if no brokers were found.
+ *           Other error codes may also be returned from the request layer.
+ *
+ *           The \p grplistp remains untouched if any error code is returned,
+ *           with the exception of RD_KAFKA_RESP_ERR__PARTIAL which behaves
+ *           as RD_KAFKA_RESP_ERR__NO_ERROR (success) but with an incomplete
+ *           group list.
+ *
+ * @sa Use rd_kafka_group_list_destroy() to release list memory.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_describe_consumer_groups(rd_kafka_t *rk,
+                                  const char *group,
+                                  const struct rd_kafka_group_list **grplistp,
+                                  int timeout_ms);
 
 /**
  * @brief Release list memory

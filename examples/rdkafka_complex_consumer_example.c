@@ -246,7 +246,7 @@ static int describe_groups(rd_kafka_t *rk, const char *group) {
         const struct rd_kafka_group_list *grplist;
         int i;
 
-        err = rd_kafka_list_groups(rk, group, &grplist, 10000);
+        err = rd_kafka_describe_consumer_groups(rk, group, &grplist, 10000);
 
         if (err) {
                 fprintf(stderr, "%% Failed to acquire group list: %s\n",

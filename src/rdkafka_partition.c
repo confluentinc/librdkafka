@@ -2635,7 +2635,8 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr) {
  *
  * '_private' must be NULL or a valid 'rd_kafka_toppar_t *'.
  *
- * Returns a pointer to the added element.
+ * Returns a pointer to the added element or
+ * NULL if \p topic or \p rktparlist are NULL.
  */
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0(const char *func,
@@ -2644,6 +2645,7 @@ rd_kafka_topic_partition_list_add0(const char *func,
                                    const char *topic,
                                    int32_t partition,
                                    rd_kafka_toppar_t *_private) {
+        if (topic == NULL || rktparlist == NULL) return NULL;
         rd_kafka_topic_partition_t *rktpar;
         if (rktparlist->cnt == rktparlist->size)
                 rd_kafka_topic_partition_list_grow(rktparlist, 1);

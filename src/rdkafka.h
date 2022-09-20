@@ -8064,6 +8064,30 @@ rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
 RD_EXPORT const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
     const rd_kafka_DeleteAcls_result_response_t *result_response);
 
+RD_EXPORT const rd_kafka_error_t *rd_kafka_ListConsumerGroupOffsets_result_response_error(
+    const rd_kafka_group_result_t *result_response);
+
+RD_EXPORT const rd_kafka_topic_partition_list_t *rd_kafka_ListConsumerGroupOffsets_result_response_topic_partition_list(
+    const rd_kafka_group_result_t *result_response);
+
+RD_EXPORT const char *rd_kafka_ListConsumerGroupOffsets_result_response_group_name(
+    const rd_kafka_group_result_t *result_response);
+
+RD_EXPORT char *
+rd_kafka_topic_partition_get_topic(const rd_kafka_topic_partition_t *rktpar);
+
+RD_EXPORT int32_t
+rd_kafka_topic_partition_get_partition(const rd_kafka_topic_partition_t *rktpar);
+
+RD_EXPORT int64_t
+rd_kafka_topic_partition_get_offset(const rd_kafka_topic_partition_t *rktpar);
+
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_topic_partition_get_error(const rd_kafka_topic_partition_t *rktpar);
+
+RD_EXPORT const char *
+rd_kafka_topic_partition_get_error_string(const rd_kafka_topic_partition_t *rktpar);
+
 
 /**
  * @returns the matching acls array for the given DeleteAcls result response.

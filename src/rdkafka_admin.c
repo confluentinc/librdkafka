@@ -4617,6 +4617,47 @@ const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
         return result_response->error;
 }
 
+const rd_kafka_error_t *rd_kafka_ListConsumerGroupOffsets_result_response_error(
+    const rd_kafka_group_result_t *result_response) {
+        return result_response->error;
+}
+
+const rd_kafka_topic_partition_list_t *rd_kafka_ListConsumerGroupOffsets_result_response_topic_partition_list(
+    const rd_kafka_group_result_t *result_response) {
+                return result_response->partitions;
+}
+
+const char *rd_kafka_ListConsumerGroupOffsets_result_response_group_name(
+    const rd_kafka_group_result_t *result_response) {
+        return result_response->group;
+}
+
+char *
+rd_kafka_topic_partition_get_topic(const rd_kafka_topic_partition_t *rktpar) {
+        return rktpar->topic;
+}
+
+int32_t
+rd_kafka_topic_partition_get_partition(const rd_kafka_topic_partition_t *rktpar) {
+        return rktpar->partition;
+}
+int64_t
+rd_kafka_topic_partition_get_offset(const rd_kafka_topic_partition_t *rktpar) {
+        return rktpar->offset;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_topic_partition_get_error(const rd_kafka_topic_partition_t *rktpar) {
+        return rktpar->err;
+}
+
+const char *
+rd_kafka_topic_partition_get_error_string(const rd_kafka_topic_partition_t *rktpar) {
+        if (!rktpar->err)
+                return NULL;
+        return rd_kafka_err2str(rktpar->err);
+}
+
 const rd_kafka_AclBinding_t **rd_kafka_DeleteAcls_result_response_matching_acls(
     const rd_kafka_DeleteAcls_result_response_t *result_response,
     size_t *matching_acls_cntp) {

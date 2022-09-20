@@ -128,8 +128,8 @@ int main_0006_symbols(int argc, char **argv) {
                 rd_kafka_seek(NULL, 0, 0, 0);
                 rd_kafka_yield(NULL);
                 rd_kafka_mem_free(NULL, NULL);
-                rd_kafka_list_consumer_groups(NULL, NULL, NULL, 0);
-                rd_kafka_describe_consumer_groups(NULL, NULL, NULL, 0);
+                rd_kafka_list_consumer_groups(NULL, NULL, 0);
+                rd_kafka_describe_consumer_groups(NULL, NULL, 0, NULL, 0);
                 rd_kafka_group_list_destroy(NULL);
 
                 /* KafkaConsumer API */

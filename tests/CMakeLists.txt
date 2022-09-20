@@ -18,7 +18,7 @@ set(
     0016-client_swname.c
     0017-compression.c
     0018-cgrp_term.c
-    0019-list_groups.c
+    0019-describe_groups.c
     0020-destroy_hang.c
     0021-rkt_destroy.c
     0022-consume_batch.c

@@ -4543,10 +4543,36 @@ struct list_groups_state {
         rd_kafka_q_t *q;
         rd_kafka_resp_err_t err;
         int wait_cnt;
-        const char *desired_group;
+        rd_avl_t *desired_groups_avl;
+        int desired_groups_avl_cnt;
         struct rd_kafka_group_list *grplist;
         int grplist_size;
 };
+
+typedef struct desired_groups_node_s {
+        char *group_id;
+        rd_avl_node_t node;
+} desired_groups_node_t;
+
+static desired_groups_node_t *desired_groups_node_create(char *group_id) {
+        desired_groups_node_t *desired_groups_node;
+        desired_groups_node           = malloc(sizeof(desired_groups_node_t));
+        desired_groups_node->group_id = group_id;
+        return desired_groups_node;
+}
+
+static void
+desired_groups_node_destroy(desired_groups_node_t *desired_groups_node) {
+        rd_free(desired_groups_node->group_id);
+        rd_free(desired_groups_node);
+}
+
+static int desired_groups_node_cmp(const void *a, const void *b) {
+        if (a == NULL || b == NULL)
+                return a == b ? 0 : a == NULL ? -1 : 1;
+        return rd_strcmp(((desired_groups_node_t *)a)->group_id,
+                         ((desired_groups_node_t *)b)->group_id);
+}
 
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb,
@@ -4702,8 +4728,8 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
         rd_kafka_buf_read_i32(reply, &cnt);
 
-        if (state->desired_group)
-                grpcnt = 1;
+        if (state->desired_groups_avl)
+                grpcnt = state->desired_groups_avl_cnt;
         else
                 grpcnt = cnt;
 
@@ -4714,13 +4740,21 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
         while (cnt-- > 0) {
                 rd_kafkap_str_t grp, proto;
+                desired_groups_node_t *desired_groups_node,
+                    *desired_groups_node_found;
 
                 rd_kafka_buf_read_str(reply, &grp);
                 rd_kafka_buf_read_str(reply, &proto);
 
-                if (state->desired_group &&
-                    rd_kafkap_str_cmp_str(&grp, state->desired_group))
-                        continue;
+                if (state->desired_groups_avl) {
+                        desired_groups_node =
+                            desired_groups_node_create(rd_strdup(grp.str));
+                        desired_groups_node_found = RD_AVL_FIND(
+                            state->desired_groups_avl, desired_groups_node);
+                        desired_groups_node_destroy(desired_groups_node);
+                        if (desired_groups_node_found == NULL)
+                                continue;
+                }
 
                 grps[i++] = RD_KAFKAP_STR_DUP(&grp);
 
@@ -4799,14 +4833,18 @@ static void rd_kafka_ListGroups_and_describe_resp_cb(rd_kafka_t *rk,
 
 static rd_kafka_resp_err_t rd_kafka_list_and_describe_consumer_groups(
     rd_kafka_t *rk,
-    const char *group,
+    const char **groups,
+    size_t group_cnt,
     const struct rd_kafka_group_list **grplistp,
     rd_bool_t describe,
     int timeout_ms) {
         rd_kafka_broker_t *rkb;
+        size_t i;
         int rkb_cnt                    = 0;
         struct list_groups_state state = RD_ZERO_INIT;
-        rd_ts_t ts_end                 = rd_timeout_init(timeout_ms);
+        desired_groups_node_t *desired_groups_node_removed;
+        desired_groups_node_t **desired_groups_nodes;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_kafka_resp_cb_t *list_groups_resp_cb =
             describe ? rd_kafka_ListGroups_and_describe_resp_cb
                      : rd_kafka_ListGroups_only_resp_cb;
@@ -4832,10 +4870,27 @@ static rd_kafka_resp_err_t rd_kafka_list_and_describe_consumer_groups(
         }
 
 
-        state.q             = rd_kafka_q_new(rk);
-        state.desired_group = group;
-        state.grplist       = rd_calloc(1, sizeof(*state.grplist));
-        state.grplist_size  = group ? 1 : 32;
+        state.q                      = rd_kafka_q_new(rk);
+        state.desired_groups_avl_cnt = 0;
+        desired_groups_nodes = calloc(group_cnt, sizeof(desired_groups_node_t));
+        if (groups) {
+                state.desired_groups_avl =
+                    malloc(sizeof(*state.desired_groups_avl));
+                rd_avl_init(state.desired_groups_avl, desired_groups_node_cmp,
+                            RD_AVL_F_OWNER);
+                for (i = 0; i < group_cnt; i++) {
+                        desired_groups_nodes[i] =
+                            desired_groups_node_create(rd_strdup(groups[i]));
+                        desired_groups_node_removed =
+                            RD_AVL_INSERT(state.desired_groups_avl,
+                                          desired_groups_nodes[i], node);
+                        if (!desired_groups_node_removed) {
+                                state.desired_groups_avl_cnt++;
+                        }
+                }
+        }
+        state.grplist      = rd_calloc(1, sizeof(*state.grplist));
+        state.grplist_size = group_cnt ? group_cnt : 32;
 
         state.grplist->groups =
             rd_malloc(state.grplist_size * sizeof(*state.grplist->groups));
@@ -4873,6 +4928,13 @@ static rd_kafka_resp_err_t rd_kafka_list_and_describe_consumer_groups(
         }
 
         rd_kafka_q_destroy_owner(state.q);
+        if (state.desired_groups_avl) {
+                for (i = 0; i < group_cnt; i++) {
+                        desired_groups_node_destroy(desired_groups_nodes[i]);
+                }
+                rd_free(desired_groups_nodes);
+                rd_avl_destroy(state.desired_groups_avl);
+        }
 
         if (state.wait_cnt > 0 && !state.err) {
                 if (state.grplist->group_cnt == 0)
@@ -4894,20 +4956,20 @@ static rd_kafka_resp_err_t rd_kafka_list_and_describe_consumer_groups(
 
 rd_kafka_resp_err_t
 rd_kafka_list_consumer_groups(rd_kafka_t *rk,
-                              const char *group,
                               const struct rd_kafka_group_list **grplistp,
                               int timeout_ms) {
-        return rd_kafka_list_and_describe_consumer_groups(rk, group, grplistp,
+        return rd_kafka_list_and_describe_consumer_groups(rk, NULL, 0, grplistp,
                                                           rd_false, timeout_ms);
 }
 
 rd_kafka_resp_err_t
 rd_kafka_describe_consumer_groups(rd_kafka_t *rk,
-                                  const char *group,
+                                  const char **groups,
+                                  size_t group_cnt,
                                   const struct rd_kafka_group_list **grplistp,
                                   int timeout_ms) {
-        return rd_kafka_list_and_describe_consumer_groups(rk, group, grplistp,
-                                                          rd_true, timeout_ms);
+        return rd_kafka_list_and_describe_consumer_groups(
+            rk, groups, group_cnt, grplistp, rd_true, timeout_ms);
 }
 
 rd_kafka_resp_err_t
@@ -4915,7 +4977,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
                      const char *group,
                      const struct rd_kafka_group_list **grplistp,
                      int timeout_ms) {
-        return rd_kafka_describe_consumer_groups(rk, group, grplistp,
+        return rd_kafka_describe_consumer_groups(rk, &group, 1, grplistp,
                                                  timeout_ms);
 }
 

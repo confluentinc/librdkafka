@@ -60,7 +60,7 @@ static void usage(const char *reason, ...) {
                 "\n"
                 "Commands:\n"
                 " Describe groups:\n"
-                "   %s -b <brokers> describe_groups <group>\n"
+                "   %s -b <brokers> describe_groups <group1> <group2> ...\n"
                 "\n"
                 " Show librdkafka version:\n"
                 "   %s version\n"
@@ -132,18 +132,18 @@ static void cmd_version(rd_kafka_conf_t *conf, int argc, char **argv) {
  */
 static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
-        const char *groupid = NULL;
+        const char **groups = NULL;
         char errstr[512];
         rd_kafka_resp_err_t err;
         const struct rd_kafka_group_list *grplist;
         int i;
-        int retval = 0;
+        int retval     = 0;
+        int groups_cnt = 0;
 
-        if (argc > 1)
-                usage("too many arguments to describe_consumer_groups");
-
-        if (argc == 1)
-                groupid = argv[0];
+        if (argc >= 1) {
+                groups     = (const char **)&argv[0];
+                groups_cnt = argc;
+        }
 
         /*
          * Create consumer instance
@@ -158,15 +158,15 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Describe consumer groups
          */
-        err = rd_kafka_describe_consumer_groups(rk, groupid, &grplist,
-                                                10 * 1000 /*10s*/);
+        err = rd_kafka_describe_consumer_groups(rk, groups, groups_cnt,
+                                                &grplist, 10 * 1000 /*10s*/);
         if (err)
                 fatal("rd_kafka_describe_consumer_groups(%s) failed: %s",
-                      groupid, rd_kafka_err2str(err));
+                      (char *)groups, rd_kafka_err2str(err));
 
         if (grplist->group_cnt == 0) {
-                if (groupid) {
-                        fprintf(stderr, "Group %s not found\n", groupid);
+                if (groups) {
+                        fprintf(stderr, "Groups not found\n");
                         retval = 1;
                 } else {
                         fprintf(stderr, "No groups in cluster\n");

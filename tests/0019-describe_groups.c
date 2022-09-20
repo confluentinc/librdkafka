@@ -80,15 +80,17 @@ static int verify_groups(const struct rd_kafka_group_list *grplist,
 
 
 /**
- * List groups by:
- *   - List all groups, check that the groups in 'groups' are seen.
- *   - List each group in 'groups', one by one.
+ * Describe groups by:
+ *   - Describe all groups, check that the groups in 'groups' are seen.
+ *   - Describe each group in 'groups', one by one.
  *
  * Returns 'group_cnt' if all groups in 'groups' were seen by both
  * methods, else 0, or -1 on error.
  */
-static int
-list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
+static int describe_groups(rd_kafka_t *rk,
+                           char **groups,
+                           int group_cnt,
+                           const char *desc) {
         rd_kafka_resp_err_t err = 0;
         const struct rd_kafka_group_list *grplist;
         int i, r;
@@ -97,7 +99,7 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
         int seen_all = 0;
         int retries  = 5;
 
-        TEST_SAY("List groups (expect %d): %s\n", group_cnt, desc);
+        TEST_SAY("Describe groups (expect %d): %s\n", group_cnt, desc);
 
         /* FIXME: Wait for broker to come up. This should really be abstracted
          *        by librdkafka. */
@@ -107,14 +109,14 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
                                  rd_kafka_err2str(err));
                         rd_sleep(1);
                 }
-                err = rd_kafka_list_groups(rk, NULL, &grplist,
-                                           tmout_multip(5000));
+                err = rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist,
+                                                        tmout_multip(5000));
         } while ((err == RD_KAFKA_RESP_ERR__TRANSPORT ||
                   err == RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS) &&
                  retries-- > 0);
 
         if (err) {
-                TEST_SAY("Failed to list all groups: %s\n",
+                TEST_SAY("Failed to describe all groups: %s\n",
                          rd_kafka_err2str(err));
                 return -1;
         }
@@ -123,9 +125,10 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
         rd_kafka_group_list_destroy(grplist);
 
         for (i = 0; i < group_cnt; i++) {
-                err = rd_kafka_list_groups(rk, groups[i], &grplist, 5000);
+                err = rd_kafka_describe_consumer_groups(
+                    rk, (const char **)&groups[i], 1, &grplist, 5000);
                 if (err) {
-                        TEST_SAY("Failed to list group %s: %s\n", groups[i],
+                        TEST_SAY("Failed to describe group %s: %s\n", groups[i],
                                  rd_kafka_err2str(err));
                         fails++;
                         continue;
@@ -146,7 +149,7 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
 
 
 
-static void do_test_list_groups(void) {
+static void do_test_describe_groups(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 #define _CONS_CNT 2
         char *groups[_CONS_CNT];
@@ -170,7 +173,7 @@ static void do_test_list_groups(void) {
         rd_kafka_topic_destroy(rkt);
 
         /* Query groups before creation, should not list our groups. */
-        groups_seen = list_groups(rk, NULL, 0, "should be none");
+        groups_seen = describe_groups(rk, NULL, 0, "should be none");
         if (groups_seen != 0)
                 TEST_FAIL(
                     "Saw %d groups when there wasn't "
@@ -203,23 +206,24 @@ static void do_test_list_groups(void) {
         TIMING_START(&t_grps, "WAIT.GROUPS");
         /* Query groups again until both groups are seen. */
         while (1) {
-                groups_seen = list_groups(rk, (char **)groups, _CONS_CNT,
-                                          "should see my groups");
+                groups_seen = describe_groups(rk, (char **)groups, _CONS_CNT,
+                                              "should see my groups");
                 if (groups_seen == _CONS_CNT)
                         break;
                 rd_sleep(1);
         }
         TIMING_STOP(&t_grps);
 
-        /* Try a list_groups with a low enough timeout to fail. */
+        /* Try a describe_groups with a low enough timeout to fail. */
         grplist = NULL;
         TIMING_START(&t_grps, "WAIT.GROUPS.TIMEOUT0");
-        err = rd_kafka_list_groups(rk, NULL, &grplist, 0);
+        err = rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist, 0);
         TIMING_STOP(&t_grps);
-        TEST_SAY("list_groups(timeout=0) returned %d groups and status: %s\n",
-                 grplist ? grplist->group_cnt : -1, rd_kafka_err2str(err));
+        TEST_SAY(
+            "describe_groups(timeout=0) returned %d groups and status: %s\n",
+            grplist ? grplist->group_cnt : -1, rd_kafka_err2str(err));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "expected list_groups(timeout=0) to fail "
+                    "expected describe_groups(timeout=0) to fail "
                     "with timeout, got %s",
                     rd_kafka_err2str(err));
 
@@ -252,10 +256,10 @@ static void do_test_list_groups(void) {
 
 
 /**
- * @brief #3705: Verify that list_groups() doesn't hang if unable to
+ * @brief #3705: Verify that describe_groups() doesn't hang if unable to
  *        connect to the cluster.
  */
-static void do_test_list_groups_hang(void) {
+static void do_test_describe_groups_hang(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         const struct rd_kafka_group_list *grplist;
@@ -270,8 +274,9 @@ static void do_test_list_groups_hang(void) {
 
         rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
-        TIMING_START(&timing, "list_groups");
-        err = rd_kafka_list_groups(rk, NULL, &grplist, 5 * 1000);
+        TIMING_START(&timing, "describe_groups");
+        err =
+            rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist, 5 * 1000);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "Expected ERR__TIMED_OUT, not %s", rd_kafka_err2name(err));
         TIMING_ASSERT(&timing, 5 * 1000, 7 * 1000);
@@ -282,8 +287,8 @@ static void do_test_list_groups_hang(void) {
 }
 
 
-int main_0019_list_groups(int argc, char **argv) {
-        do_test_list_groups();
-        do_test_list_groups_hang();
+int main_0019_describe_groups(int argc, char **argv) {
+        do_test_describe_groups();
+        do_test_describe_groups_hang();
         return 0;
 }

@@ -121,7 +121,7 @@ _TEST_DECL(0015_offsets_seek);
 _TEST_DECL(0016_client_swname);
 _TEST_DECL(0017_compression);
 _TEST_DECL(0018_cgrp_term);
-_TEST_DECL(0019_list_groups);
+_TEST_DECL(0019_describe_groups);
 _TEST_DECL(0020_destroy_hang);
 _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
@@ -303,7 +303,7 @@ struct test tests[] = {
     _TEST(0016_client_swname, 0),
     _TEST(0017_compression, 0),
     _TEST(0018_cgrp_term, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0019_list_groups, 0, TEST_BRKVER(0, 9, 0, 0)),
+    _TEST(0019_describe_groups, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0020_destroy_hang, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0021_rkt_destroy, 0),
     _TEST(0022_consume_batch, 0),

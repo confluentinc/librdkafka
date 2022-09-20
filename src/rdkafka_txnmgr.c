@@ -1656,14 +1656,15 @@ done:
                         rd_ts_t diff =
                             rd_interval(&last_retry, 1000 * 1000 /* 1s */, 0);
                         if (diff < 0) {
-                                rd_kafka_dbg(
-                                    rk, EOS, "TXNOFFSETCOMMIT",
-                                    "Waiting %ld µs before next retry. rkb:%s "
-                                    "err:%s actions:(%s)",
-                                    -diff,
-                                    rkb ? rd_kafka_broker_name(rkb) : "(none)",
-                                    rd_kafka_err2name(err),
-                                    rd_kafka_actions2str(actions));
+                                rd_kafka_dbg(rk, EOS, "TXNOFFSETCOMMIT",
+                                             "Waiting %" PRId64
+                                             " ms before next retry. rkb:%s "
+                                             "err:%s actions:(%s)",
+                                             -diff / 1000,
+                                             rkb ? rd_kafka_broker_name(rkb)
+                                                 : "(none)",
+                                             rd_kafka_err2name(err),
+                                             rd_kafka_actions2str(actions));
                                 rd_kafka_timer_start_oneshot(
                                     &rk->rk_timers, &retry_tmr, rd_true, -diff,
                                     rd_kafka_txn_handle_TxnOffsetCommit_retry_cb,
@@ -2123,7 +2124,7 @@ static rd_bool_t rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
         if (drain_bump) {
                 rd_kafka_wrunlock(rk);
                 rd_kafka_idemp_drain_epoch_bump_start(
-                    rk, "txn_requires_epoch_bump");
+                    rk, "Transaction requires epoch bump");
                 rd_kafka_wrlock(rk);
                 return rd_false;
         } else {
@@ -2149,6 +2150,8 @@ static void rd_kafka_txn_handle_EndTxn(rd_kafka_t *rk,
         const int log_decode_errors = LOG_ERR;
         rd_kafka_q_t *rkq           = opaque;
         int16_t ErrorCode;
+        rd_bool_t state_committing, state_aborting, state_abortable_error,
+            state_different_from_request;
         int actions = 0;
         rd_bool_t is_commit, may_retry = rd_false;
 
@@ -2174,17 +2177,17 @@ err_parse:
 err:
         rd_kafka_wrlock(rk);
 
-        int state_committing =
+        state_committing =
             rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION;
-        int state_aborting =
+        state_aborting =
             rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION;
-        int state_abortable_error =
+        state_abortable_error =
             rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR;
-        // While request was in queue, state can have changed from:
-        // RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION ->
-        // RD_KAFKA_TXN_STATE_ABORTABLE_ERROR ->
-        // RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION
-        int state_different_from_request =
+        /* While request was in queue, state can have changed from:
+         * RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION ->
+         * RD_KAFKA_TXN_STATE_ABORTABLE_ERROR ->
+         * RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION */
+        state_different_from_request =
             (state_committing && !is_commit) || (state_aborting && is_commit);
 
         if (state_committing && !state_different_from_request) {

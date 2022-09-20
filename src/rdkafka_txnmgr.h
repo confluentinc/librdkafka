@@ -167,5 +167,5 @@ rd_bool_t rd_kafka_txn_coord_set(rd_kafka_t *rk,
 
 void rd_kafka_txns_term(rd_kafka_t *rk);
 void rd_kafka_txns_init(rd_kafka_t *rk);
-
+void rd_kafka_txns_complete_waiting(rd_kafka_t *rk);
 #endif /* _RDKAFKA_TXNMGR_H_ */

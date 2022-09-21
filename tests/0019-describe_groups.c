@@ -54,6 +54,22 @@ static int verify_groups(const struct rd_kafka_group_list *grplist,
         for (i = 0; i < grplist->group_cnt; i++) {
                 const struct rd_kafka_group_info *gi = &grplist->groups[i];
                 int j;
+                rd_bool_t correct_members = gi->member_cnt > 0;
+
+                for (j = 0; j < gi->member_cnt; j++) {
+                        struct rd_kafka_group_member_info *member =
+                            &gi->members[j];
+                        correct_members &=
+                            member->member_id != NULL &&
+                            member->client_id != NULL &&
+                            member->client_host != NULL &&
+                            member->member_metadata != NULL &&
+                            member->member_metadata_size > 0 &&
+                            member->member_assignment != NULL &&
+                            member->member_assignment_size > 0 &&
+                            member->member_assignment_toppars != NULL &&
+                            member->member_assignment_toppars->cnt > 0;
+                }
 
                 for (j = 0; j < group_cnt; j++) {
                         if (strcmp(gi->group, groups[j]))
@@ -65,7 +81,8 @@ static int verify_groups(const struct rd_kafka_group_list *grplist,
                                     "error: %s\n",
                                     gi->group, rd_kafka_err2str(gi->err));
 
-                        seen++;
+                        if (correct_members)
+                                seen++;
                 }
         }
 
@@ -205,7 +222,8 @@ static void do_test_describe_groups(void) {
 
         TIMING_START(&t_grps, "WAIT.GROUPS");
         /* Query groups again until both groups are seen. */
-        while (1) {
+        i = 20;
+        while (i-- > 0) {
                 groups_seen = describe_groups(rk, (char **)groups, _CONS_CNT,
                                               "should see my groups");
                 if (groups_seen == _CONS_CNT)
@@ -213,6 +231,11 @@ static void do_test_describe_groups(void) {
                 rd_sleep(1);
         }
         TIMING_STOP(&t_grps);
+        TEST_ASSERT(
+            groups_seen == _CONS_CNT,
+            "not all groups could be described correctly expected %" PRId32
+            ", got %" PRId32,
+            _CONS_CNT, groups_seen);
 
         /* Try a describe_groups with a low enough timeout to fail. */
         grplist = NULL;

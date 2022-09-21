@@ -952,7 +952,7 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  *
- * @param parts List of topic-partitions to request,
+ * @param parts List of topic partitions to request,
  *              or NULL to return all topic partitions associated with the
  * group.
  * @param require_stable Whether broker should return stable offsets
@@ -1074,7 +1074,7 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
  * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  *
- * @param parts List of topic-partitions to request.
+ * @param parts List of topic partitions to request.
  * @param require_stable Whether broker should return stable offsets
  *                       (transaction-committed).
  */

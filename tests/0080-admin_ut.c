@@ -1336,7 +1336,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         for (i = 0; i < MY_ALTER_CGRPOFFS_CNT; i++) {
-                /* Call with three correct topic-partitions. */
+                /* Call with three correct topic partitions. */
                 rd_kafka_topic_partition_list_t *partitions =
                     rd_kafka_topic_partition_list_new(3);
                 rd_kafka_topic_partition_list_add(partitions, "topic1", 9)

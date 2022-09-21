@@ -4883,6 +4883,9 @@ struct rd_kafka_group_member_info {
         void *member_assignment;    /**< Member assignment (binary),
                                      *    format depends on \p protocol_type. */
         int member_assignment_size; /**< Member assignment size in bytes */
+        rd_kafka_topic_partition_list_t
+            *member_assignment_toppars; /**< Member assignment topic partitions
+                                         */
 };
 
 /**

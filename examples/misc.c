@@ -109,6 +109,20 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 
+static void
+print_partition_list(FILE *fp,
+                     const rd_kafka_topic_partition_list_t *partitions,
+                     const char *prefix) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                fprintf(fp, "%s%s %s [%" PRId32 "] error %s", i > 0 ? "\n" : "",
+                        prefix, partitions->elems[i].topic,
+                        partitions->elems[i].partition,
+                        rd_kafka_err2str(partitions->elems[i].err));
+        }
+        fprintf(fp, "\n");
+}
+
 /**
  * Commands
  *
@@ -197,6 +211,16 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                             mb->member_id, mb->client_id, mb->client_host,
                             mb->member_metadata_size,
                             mb->member_assignment_size);
+                        if (!mb->member_assignment_toppars) {
+                                printf("    No assignment\n");
+                        } else if (mb->member_assignment_toppars->cnt == 0) {
+                                printf("    Empty assignment\n");
+                        } else {
+                                printf("    Assignment:\n");
+                                print_partition_list(
+                                    stdout, mb->member_assignment_toppars,
+                                    "      ");
+                        }
                 }
         }
 

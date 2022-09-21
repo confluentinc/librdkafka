@@ -4648,6 +4648,8 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         rd_kafkap_str_t MemberId, ClientId, ClientHost;
                         rd_kafkap_bytes_t Meta, Assignment;
                         struct rd_kafka_group_member_info *mi;
+                        int16_t Version;
+                        rd_kafka_buf_t *rkbuf = NULL;
 
                         mi = &gi->members[gi->member_cnt++];
                         memset(mi, 0, sizeof(*mi));
@@ -4681,6 +4683,27 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                 mi->member_assignment =
                                     rd_memdup(Assignment.data,
                                               mi->member_assignment_size);
+
+                                /* Parse assignment from MemberState */
+                                rkbuf = rd_kafka_buf_new_shadow(
+                                    mi->member_assignment,
+                                    mi->member_assignment_size, NULL);
+                                /* Protocol parser needs a broker handle to log
+                                 * errors on. */
+                                rkbuf->rkbuf_rkb = rkb;
+                                /* Decreased in rd_kafka_buf_destroy */
+                                rd_kafka_broker_keep(rkb);
+
+                                rd_kafka_buf_read_i16(rkbuf, &Version);
+                                mi->member_assignment_toppars =
+                                    rd_kafka_buf_read_topic_partitions(
+                                        rkbuf, 0, rd_false, rd_false);
+                                rd_kafka_buf_destroy(rkbuf);
+                                if (!mi->member_assignment_toppars) {
+                                        rd_kafka_buf_parse_fail(
+                                            reply,
+                                            "Error reading topic partitions");
+                                }
                         }
                 }
         }
@@ -5014,6 +5037,9 @@ void rd_kafka_group_list_destroy(const struct rd_kafka_group_list *grplist0) {
                                 rd_free(mi->member_metadata);
                         if (mi->member_assignment)
                                 rd_free(mi->member_assignment);
+                        if (mi->member_assignment_toppars)
+                                rd_kafka_topic_partition_list_destroy(
+                                    mi->member_assignment_toppars);
                 }
 
                 if (gi->members)

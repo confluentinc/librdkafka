@@ -8064,15 +8064,6 @@ rd_kafka_DeleteAcls_result_responses(const rd_kafka_DeleteAcls_result_t *result,
 RD_EXPORT const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
     const rd_kafka_DeleteAcls_result_response_t *result_response);
 
-RD_EXPORT const rd_kafka_error_t *rd_kafka_ListConsumerGroupOffsets_result_response_error(
-    const rd_kafka_group_result_t *result_response);
-
-RD_EXPORT const rd_kafka_topic_partition_list_t *rd_kafka_ListConsumerGroupOffsets_result_response_topic_partition_list(
-    const rd_kafka_group_result_t *result_response);
-
-RD_EXPORT const char *rd_kafka_ListConsumerGroupOffsets_result_response_group_name(
-    const rd_kafka_group_result_t *result_response);
-
 RD_EXPORT char *
 rd_kafka_topic_partition_get_topic(const rd_kafka_topic_partition_t *rktpar);
 

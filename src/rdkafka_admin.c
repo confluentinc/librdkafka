@@ -4617,21 +4617,6 @@ const rd_kafka_error_t *rd_kafka_DeleteAcls_result_response_error(
         return result_response->error;
 }
 
-const rd_kafka_error_t *rd_kafka_ListConsumerGroupOffsets_result_response_error(
-    const rd_kafka_group_result_t *result_response) {
-        return result_response->error;
-}
-
-const rd_kafka_topic_partition_list_t *rd_kafka_ListConsumerGroupOffsets_result_response_topic_partition_list(
-    const rd_kafka_group_result_t *result_response) {
-                return result_response->partitions;
-}
-
-const char *rd_kafka_ListConsumerGroupOffsets_result_response_group_name(
-    const rd_kafka_group_result_t *result_response) {
-        return result_response->group;
-}
-
 char *
 rd_kafka_topic_partition_get_topic(const rd_kafka_topic_partition_t *rktpar) {
         return rktpar->topic;

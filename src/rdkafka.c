@@ -4537,7 +4537,7 @@ void RD_NORETURN rd_kafka_crash(const char *file,
         abort();
 }
 
-
+#define CONSUMER_PROTOCOL_TYPE "consumer"
 
 struct list_groups_state {
         rd_kafka_q_t *q;
@@ -4684,25 +4684,28 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                     rd_memdup(Assignment.data,
                                               mi->member_assignment_size);
 
-                                /* Parse assignment from MemberState */
-                                rkbuf = rd_kafka_buf_new_shadow(
-                                    mi->member_assignment,
-                                    mi->member_assignment_size, NULL);
-                                /* Protocol parser needs a broker handle to log
-                                 * errors on. */
-                                rkbuf->rkbuf_rkb = rkb;
-                                /* Decreased in rd_kafka_buf_destroy */
-                                rd_kafka_broker_keep(rkb);
-
-                                rd_kafka_buf_read_i16(rkbuf, &Version);
-                                mi->member_assignment_toppars =
-                                    rd_kafka_buf_read_topic_partitions(
-                                        rkbuf, 0, rd_false, rd_false);
-                                rd_kafka_buf_destroy(rkbuf);
-                                if (!mi->member_assignment_toppars) {
-                                        rd_kafka_buf_parse_fail(
-                                            reply,
-                                            "Error reading topic partitions");
+                                if (!strcmp(gi->protocol_type,
+                                            CONSUMER_PROTOCOL_TYPE)) {
+                                        /* Parse assignment from MemberState */
+                                        rkbuf = rd_kafka_buf_new_shadow(
+                                            mi->member_assignment,
+                                            mi->member_assignment_size, NULL);
+                                        /* Protocol parser needs a broker handle
+                                         * to log errors on. */
+                                        rkbuf->rkbuf_rkb = rkb;
+                                        /* Decreased in rd_kafka_buf_destroy */
+                                        rd_kafka_broker_keep(rkb);
+                                        rd_kafka_buf_read_i16(rkbuf, &Version);
+                                        mi->member_assignment_toppars =
+                                            rd_kafka_buf_read_topic_partitions(
+                                                rkbuf, 0, rd_false, rd_false);
+                                        rd_kafka_buf_destroy(rkbuf);
+                                        if (!mi->member_assignment_toppars) {
+                                                rd_kafka_buf_parse_fail(
+                                                    reply,
+                                                    "Error reading topic "
+                                                    "partitions");
+                                        }
                                 }
                         }
                 }

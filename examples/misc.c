@@ -207,7 +207,7 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                             &grp->members[j];
                         printf(
                             "  Member \"%s\" with client-id %s, host %s, "
-                            "%d bytes of metadat, %d bytes of assignment\n",
+                            "%d bytes of metadata, %d bytes of assignment\n",
                             mb->member_id, mb->client_id, mb->client_host,
                             mb->member_metadata_size,
                             mb->member_assignment_size);

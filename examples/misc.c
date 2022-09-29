@@ -59,6 +59,8 @@ static void usage(const char *reason, ...) {
                 "Usage: %s <options> <command> [<command arguments>]\n"
                 "\n"
                 "Commands:\n"
+                " List groups:\n"
+                "   %s -b <brokers> list_groups <state1> <state2> ...\n"
                 " Describe groups:\n"
                 "   %s -b <brokers> describe_groups <group1> <group2> ...\n"
                 "\n"
@@ -71,7 +73,7 @@ static void usage(const char *reason, ...) {
                 "                   See CONFIGURATION.md for full list.\n"
                 "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
                 "\n",
-                argv0, argv0, argv0, rd_kafka_get_debug_contexts());
+                argv0, argv0, argv0, argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -139,66 +141,31 @@ static void cmd_version(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_conf_destroy(conf);
 }
 
-
 /**
- * @brief Call rd_kafka_describe_consumer_groups() with an optional groupid
- * argument.
+ * @brief Print group information.
  */
-static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
-        rd_kafka_t *rk;
-        const char **groups = NULL;
-        char errstr[512];
-        rd_kafka_resp_err_t err;
-        const struct rd_kafka_group_list *grplist;
+static int print_groups_info(const struct rd_kafka_group_list *grplist,
+                             int params_cnt) {
         int i;
-        int retval     = 0;
-        int groups_cnt = 0;
-
-        if (argc >= 1) {
-                groups     = (const char **)&argv[0];
-                groups_cnt = argc;
-        }
-
-        /*
-         * Create consumer instance
-         * NOTE: rd_kafka_new() takes ownership of the conf object
-         *       and the application must not reference it again after
-         *       this call.
-         */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        if (!rk)
-                fatal("Failed to create new consumer: %s", errstr);
-
-        /*
-         * Describe consumer groups
-         */
-        err = rd_kafka_describe_consumer_groups(rk, groups, groups_cnt,
-                                                &grplist, 10 * 1000 /*10s*/);
-        if (err)
-                fatal("rd_kafka_describe_consumer_groups(%s) failed: %s",
-                      (char *)groups, rd_kafka_err2str(err));
 
         if (grplist->group_cnt == 0) {
-                if (groups) {
-                        fprintf(stderr, "Groups not found\n");
-                        retval = 1;
+                if (params_cnt > 0) {
+                        fprintf(stderr, "No matching groups found\n");
+                        return 1;
                 } else {
                         fprintf(stderr, "No groups in cluster\n");
                 }
         }
 
-        /*
-         * Print group information
-         */
         for (i = 0; i < grplist->group_cnt; i++) {
                 int j;
                 const struct rd_kafka_group_info *grp = &grplist->groups[i];
 
                 printf(
                     "Group \"%s\" protocol-type %s, protocol %s, "
-                    "state %s, with %d member(s))",
+                    "state %s, state num %d, with %d member(s))",
                     grp->group, grp->protocol_type, grp->protocol, grp->state,
-                    grp->member_cnt);
+                    grp->state_num, grp->member_cnt);
                 if (grp->err)
                         printf(" error: %s", rd_kafka_err2str(grp->err));
                 printf("\n");
@@ -223,7 +190,78 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                         }
                 }
         }
+        return 0;
+}
 
+
+/**
+ * @brief Parse an integer or fail.
+ */
+int64_t parse_int(const char *what, const char *str) {
+        char *end;
+        unsigned long n = strtoull(str, &end, 0);
+
+        if (end != str + strlen(str)) {
+                fprintf(stderr, "%% Invalid input for %s: %s: not an integer\n",
+                        what, str);
+                exit(1);
+        }
+
+        return (int64_t)n;
+}
+
+/**
+ * @brief Call rd_kafka_list_consumer_groups() with and optional list of states.
+ */
+static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
+        rd_kafka_t *rk;
+        const char **states = NULL;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        const struct rd_kafka_group_list *grplist;
+        int retval     = 0;
+        int states_cnt = 0;
+
+        if (argc >= 1) {
+                states     = (const char **)&argv[0];
+                states_cnt = argc;
+        }
+
+        /*
+         * Create consumer instance
+         * NOTE: rd_kafka_new() takes ownership of the conf object
+         *       and the application must not reference it again after
+         *       this call.
+         */
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        if (!rk)
+                fatal("Failed to create new consumer: %s", errstr);
+
+        /*
+         * List consumer groups
+         */
+        rd_kafka_consumer_group_state_t *state_nums =
+            calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
+        for (int i = 0; i < states_cnt; i++) {
+                state_nums[i] = parse_int("state num", states[i]);
+        }
+        rd_kafka_list_consumer_groups_options_t *options =
+            rd_kafka_list_consumer_groups_options_new(state_nums, states_cnt);
+        if (!options)
+                fatal("Invalid state num");
+        err = rd_kafka_list_consumer_groups(rk, &grplist, options,
+                                            10 * 1000 /*10s*/);
+
+        if (err)
+                fatal("rd_kafka_list_consumer_groups failed: %s",
+                      rd_kafka_err2str(err));
+
+
+        retval = print_groups_info(grplist, states_cnt);
+
+        free(state_nums);
+        if (options)
+                rd_kafka_list_consumer_groups_options_destroy(options);
         rd_kafka_group_list_destroy(grplist);
 
         /* Destroy the client instance */
@@ -232,7 +270,54 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         exit(retval);
 }
 
+/**
+ * @brief Call rd_kafka_describe_consumer_groups() with and optional list of
+ * groups.
+ */
+static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
+        rd_kafka_t *rk;
+        const char **groups = NULL;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        const struct rd_kafka_group_list *grplist;
+        int retval     = 0;
+        int groups_cnt = 0;
 
+        if (argc >= 1) {
+                groups     = (const char **)&argv[0];
+                groups_cnt = argc;
+        }
+
+        /*
+         * Create consumer instance
+         * NOTE: rd_kafka_new() takes ownership of the conf object
+         *       and the application must not reference it again after
+         *       this call.
+         */
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        if (!rk)
+                fatal("Failed to create new consumer: %s", errstr);
+
+        /*
+         * Describe consumer groups
+         */
+
+        err = rd_kafka_describe_consumer_groups(rk, groups, groups_cnt,
+                                                &grplist, 10 * 1000 /*10s*/);
+        if (err)
+                fatal("rd_kafka_describe_consumer_groups failed: %s",
+                      rd_kafka_err2str(err));
+
+
+        retval = print_groups_info(grplist, groups_cnt);
+
+        rd_kafka_group_list_destroy(grplist);
+
+        /* Destroy the client instance */
+        rd_kafka_destroy(rk);
+
+        exit(retval);
+}
 
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
@@ -243,6 +328,7 @@ int main(int argc, char **argv) {
                 void (*func)(rd_kafka_conf_t *conf, int argc, char **argv);
         } cmds[] = {
             {"version", cmd_version},
+            {"list_groups", cmd_list_groups},
             {"describe_groups", cmd_describe_groups},
             {NULL},
         };

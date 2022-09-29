@@ -1919,7 +1919,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-511 - Collect Client's Name and Version                              | 2.4.0                       | Supported                                                                                     |
 | KIP-514 - Bounded flush()                                                | 2.4.0                       | Supported                                                                                     |
 | KIP-517 - Consumer poll() metrics                                        | 2.4.0                       | Not supported                                                                                 |
-| KIP-518 - Allow listing consumer groups per state                        | 2.6.0                       | Not supported                                                                                 |
+| KIP-518 - Allow listing consumer groups per state                        | 2.6.0                       | Supported                                                                                     |
 | KIP-519 - Make SSL engine configurable                                   | 2.6.0                       | Supported                                                                                     |
 | KIP-525 - Return topic metadata and configs in CreateTopics response     | 2.4.0                       | Not supported                                                                                 |
 | KIP-526 - Reduce Producer Metadata Lookups for Large Number of Topics    | 2.5.0                       | Not supported                                                                                 |

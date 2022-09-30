@@ -4630,7 +4630,7 @@ rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state) {
 }
 
 rd_kafka_consumer_group_state_t
-rd_kafka_consumer_group_state_num(const char *name) {
+rd_kafka_consumer_group_state_code(const char *name) {
         size_t i;
         for (i = 0; i < RD_KAFKA_CGRP_STATE__CNT; i++) {
                 if (!strcmp(rd_kafka_consumer_group_state_names[i], name))
@@ -4705,7 +4705,7 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                 gi->protocol_type            = RD_KAFKAP_STR_DUP(&ProtoType);
                 gi->protocol                 = RD_KAFKAP_STR_DUP(&Proto);
                 gi->is_simple_consumer_group = *gi->protocol_type == '\0';
-                gi->state_num = rd_kafka_consumer_group_state_num(gi->state);
+                gi->state_code = rd_kafka_consumer_group_state_code(gi->state);
 
                 if (MemberCnt > 0)
                         gi->members =
@@ -4902,8 +4902,8 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
                                 if (responses[j].state) {
                                         gi->state =
                                             rd_strdup(responses[j].state);
-                                        gi->state_num =
-                                            rd_kafka_consumer_group_state_num(
+                                        gi->state_code =
+                                            rd_kafka_consumer_group_state_code(
                                                 gi->state);
                                 }
                         }

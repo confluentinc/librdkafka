@@ -163,9 +163,9 @@ static int print_groups_info(const struct rd_kafka_group_list *grplist,
 
                 printf(
                     "Group \"%s\" protocol-type %s, protocol %s, "
-                    "state %s, state num %d, with %d member(s))",
+                    "state %s, state code %d, with %d member(s))",
                     grp->group, grp->protocol_type, grp->protocol, grp->state,
-                    grp->state_num, grp->member_cnt);
+                    grp->state_code, grp->member_cnt);
                 if (grp->err)
                         printf(" error: %s", rd_kafka_err2str(grp->err));
                 printf("\n");
@@ -240,13 +240,13 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * List consumer groups
          */
-        rd_kafka_consumer_group_state_t *state_nums =
+        rd_kafka_consumer_group_state_t *state_codes =
             calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
         for (int i = 0; i < states_cnt; i++) {
-                state_nums[i] = parse_int("state num", states[i]);
+                state_codes[i] = parse_int("state code", states[i]);
         }
         rd_kafka_list_consumer_groups_options_t *options =
-            rd_kafka_list_consumer_groups_options_new(state_nums, states_cnt);
+            rd_kafka_list_consumer_groups_options_new(state_codes, states_cnt);
         if (!options)
                 fatal("Invalid state num");
         err = rd_kafka_list_consumer_groups(rk, &grplist, options,
@@ -259,7 +259,7 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         retval = print_groups_info(grplist, states_cnt);
 
-        free(state_nums);
+        free(state_codes);
         if (options)
                 rd_kafka_list_consumer_groups_options_destroy(options);
         rd_kafka_group_list_destroy(grplist);

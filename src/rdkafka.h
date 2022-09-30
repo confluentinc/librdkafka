@@ -4909,7 +4909,7 @@ struct rd_kafka_group_info {
         char *group;                            /**< Group name */
         rd_kafka_resp_err_t err;                /**< Broker-originated error */
         char *state;                            /**< Group state */
-        rd_kafka_consumer_group_state_t state_num;  /**< Group state number */
+        rd_kafka_consumer_group_state_t state_code; /**< Group state code */
         char *protocol_type;                        /**< Group protocol type */
         char *protocol;                             /**< Group protocol */
         struct rd_kafka_group_member_info *members; /**< Group members */
@@ -4995,6 +4995,24 @@ rd_kafka_list_consumer_groups_options_new(
 RD_EXPORT
 void rd_kafka_list_consumer_groups_options_destroy(
     rd_kafka_list_consumer_groups_options_t *options);
+
+/**
+ * @brief Returns a name for a state code.
+ *
+ * \p state The state code.
+ */
+RD_EXPORT
+const char *
+rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state);
+
+/**
+ * @brief Returns a code for a state name.
+ *
+ * \p state The state name.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_state_t
+rd_kafka_consumer_group_state_code(const char *name);
 
 /**
  * @brief List client groups in cluster.

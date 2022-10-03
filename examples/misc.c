@@ -246,11 +246,11 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 state_codes[i] = parse_int("state code", states[i]);
         }
         rd_kafka_list_consumer_groups_options_t *options =
-            rd_kafka_list_consumer_groups_options_new(state_codes, states_cnt);
+            rd_kafka_list_consumer_groups_options_new(10 * 1000 /*10s*/,
+                                                      state_codes, states_cnt);
         if (!options)
-                fatal("Invalid state num");
-        err = rd_kafka_list_consumer_groups(rk, &grplist, options,
-                                            10 * 1000 /*10s*/);
+                fatal("Invalid options");
+        err = rd_kafka_list_consumer_groups(rk, &grplist, options);
 
         if (err)
                 fatal("rd_kafka_list_consumer_groups failed: %s",
@@ -280,6 +280,7 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512];
         rd_kafka_resp_err_t err;
         const struct rd_kafka_group_list *grplist;
+        const rd_kafka_describe_consumer_groups_options_t *options;
         int retval     = 0;
         int groups_cnt = 0;
 
@@ -301,9 +302,12 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Describe consumer groups
          */
-
+        options =
+            rd_kafka_describe_consumer_groups_options_new(10 * 1000 /*10s*/);
         err = rd_kafka_describe_consumer_groups(rk, groups, groups_cnt,
-                                                &grplist, 10 * 1000 /*10s*/);
+                                                &grplist, options);
+        rd_kafka_describe_consumer_groups_options_destroy(options);
+
         if (err)
                 fatal("rd_kafka_describe_consumer_groups failed: %s",
                       rd_kafka_err2str(err));

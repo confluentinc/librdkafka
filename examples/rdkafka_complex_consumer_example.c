@@ -244,9 +244,13 @@ static void rebalance_cb(rd_kafka_t *rk,
 static int describe_groups(rd_kafka_t *rk, const char *group) {
         rd_kafka_resp_err_t err;
         const struct rd_kafka_group_list *grplist;
+        rd_kafka_describe_consumer_groups_options_t *options;
         int i;
 
-        err = rd_kafka_describe_consumer_groups(rk, &group, 1, &grplist, 10000);
+        options = rd_kafka_describe_consumer_groups_options_new(10000);
+        err =
+            rd_kafka_describe_consumer_groups(rk, &group, 1, &grplist, options);
+        rd_kafka_describe_consumer_groups_options_destroy(options);
 
         if (err) {
                 fprintf(stderr, "%% Failed to acquire group list: %s\n",

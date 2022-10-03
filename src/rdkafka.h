@@ -4934,6 +4934,12 @@ typedef struct rd_kafka_list_consumer_groups_options_s
     rd_kafka_list_consumer_groups_options_t;
 
 /**
+ * @brief Options for rd_kafka_describe_consumer_groups
+ */
+typedef struct rd_kafka_describe_consumer_groups_options_s
+    rd_kafka_describe_consumer_groups_options_t;
+
+/**
  * @brief List and describe client groups in cluster.
  *
  * \p group is an optional group name to describe, otherwise (\p NULL) all
@@ -4973,17 +4979,20 @@ rd_kafka_list_groups(rd_kafka_t *rk,
 /**
  * @brief Creates an options struct for rd_kafka_list_consumer_groups.
  *
+ * \p request_timeout the request timeout.
  * \p states An array with the states to query, NULL to query for all the
  * states. \p states_cnt Size of the state array or 0 if NULL.
  *
  * @returns A pointer to the newly created
- * rd_kafka_list_consumer_groups_options_t.
+ * rd_kafka_list_consumer_groups_options_t,
+ * or NULL if options parameters are invalid.
  *
  * @sa Use rd_kafka_list_consumer_groups_options_destroy() to release it.
  */
 RD_EXPORT
 rd_kafka_list_consumer_groups_options_t *
 rd_kafka_list_consumer_groups_options_new(
+    int request_timeout,
     const rd_kafka_consumer_group_state_t *states,
     size_t states_cnt);
 
@@ -4994,7 +5003,31 @@ rd_kafka_list_consumer_groups_options_new(
  */
 RD_EXPORT
 void rd_kafka_list_consumer_groups_options_destroy(
-    rd_kafka_list_consumer_groups_options_t *options);
+    const rd_kafka_list_consumer_groups_options_t *options);
+
+
+/**
+ * @brief Creates an options struct for rd_kafka_describe_consumer_groups.
+ *
+ * \p request_timeout the request timeout.
+ *
+ * @returns A pointer to the newly created
+ * rd_kafka_describe_consumer_groups_options_t.
+ *
+ * @sa Use rd_kafka_describe_consumer_groups_options_destroy() to release it.
+ */
+RD_EXPORT
+rd_kafka_describe_consumer_groups_options_t *
+rd_kafka_describe_consumer_groups_options_new(int request_timeout);
+
+/**
+ * @brief Destroys the options struct.
+ *
+ * \p options The options struct to destroy.
+ */
+RD_EXPORT
+void rd_kafka_describe_consumer_groups_options_destroy(
+    const rd_kafka_describe_consumer_groups_options_t *options);
 
 /**
  * @brief Returns a name for a state code.
@@ -5017,8 +5050,7 @@ rd_kafka_consumer_group_state_code(const char *name);
 /**
  * @brief List client groups in cluster.
  *
- * \p timeout_ms is the (approximate) maximum time to wait for response
- * from brokers and must be a positive value.
+ * \p options set of options for this call.
  *
  * @returns \c RD_KAFKA_RESP_ERR__NO_ERROR on success and \p grplistp is
  *           updated to point to a newly allocated list of groups.
@@ -5039,11 +5071,10 @@ rd_kafka_consumer_group_state_code(const char *name);
  * @sa Use rd_kafka_group_list_destroy() to release list memory.
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_list_consumer_groups(rd_kafka_t *rk,
-                              const struct rd_kafka_group_list **grplistp,
-                              rd_kafka_list_consumer_groups_options_t *options,
-                              int timeout_ms);
+rd_kafka_resp_err_t rd_kafka_list_consumer_groups(
+    rd_kafka_t *rk,
+    const struct rd_kafka_group_list **grplistp,
+    const rd_kafka_list_consumer_groups_options_t *options);
 
 /**
  * @brief List and describe client groups in cluster.
@@ -5053,8 +5084,7 @@ rd_kafka_list_consumer_groups(rd_kafka_t *rk,
  *
  * \p group_cnt corresponds to the number of groups in \p groups parameter.
  *
- * \p timeout_ms is the (approximate) maximum time to wait for response
- * from brokers and must be a positive value.
+ * \p options set of options for this call.
  *
  * @returns \c RD_KAFKA_RESP_ERR__NO_ERROR on success and \p grplistp is
  *           updated to point to a newly allocated list of groups.
@@ -5075,12 +5105,12 @@ rd_kafka_list_consumer_groups(rd_kafka_t *rk,
  * @sa Use rd_kafka_group_list_destroy() to release list memory.
  */
 RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_describe_consumer_groups(rd_kafka_t *rk,
-                                  const char **groups,
-                                  size_t group_cnt,
-                                  const struct rd_kafka_group_list **grplistp,
-                                  int timeout_ms);
+rd_kafka_resp_err_t rd_kafka_describe_consumer_groups(
+    rd_kafka_t *rk,
+    const char **groups,
+    size_t group_cnt,
+    const struct rd_kafka_group_list **grplistp,
+    const rd_kafka_describe_consumer_groups_options_t *options);
 
 /**
  * @brief Release list memory

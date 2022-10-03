@@ -4942,7 +4942,7 @@ typedef struct rd_kafka_describe_consumer_groups_options_s
 /**
  * @brief List and describe client groups in cluster.
  *
- * \p group is an optional group name to describe, otherwise (\p NULL) all
+ * \p group is an optional group name to describe, otherwise (\c NULL) all
  * groups are returned.
  *
  * \p timeout_ms is the (approximate) maximum time to wait for response
@@ -7736,6 +7736,190 @@ RD_EXPORT const rd_kafka_group_result_t **rd_kafka_DeleteGroups_result_groups(
     const rd_kafka_DeleteGroups_result_t *result,
     size_t *cntp);
 
+/**
+ * @name ListConsumerGroupOffsets - list offsets for groups in cluster
+ * @{
+ *
+ *
+ */
+
+/*! Represents consumer group committed offsets to be listed. */
+typedef struct rd_kafka_ListConsumerGroupOffsets_s
+    rd_kafka_ListConsumerGroupOffsets_t;
+
+/**
+ * @brief Create a new ListConsumerGroupOffsets object.
+ *        This object is later passed to rd_kafka_ListConsumerGroupOffsets().
+ *
+ * @param group Consumer group id.
+ * @param partitions Partitions to list committed offsets for.
+ *                   Only the topic and partition fields are used.
+ *
+ * @returns a new allocated ListConsumerGroupOffsets object.
+ *          Use rd_kafka_ListConsumerGroupOffsets_destroy() to free
+ *          object when done.
+ */
+RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
+rd_kafka_ListConsumerGroupOffsets_new(
+    const char *group,
+    const rd_kafka_topic_partition_list_t *partitions);
+
+/**
+ * @brief Destroy and free a ListConsumerGroupOffsets object previously
+ *        created with rd_kafka_ListConsumerGroupOffsets_new()
+ */
+RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
+    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
+
+/**
+ * @brief Helper function to destroy all ListConsumerGroupOffsets objects in
+ *        the \p list_grpoffsets array (of \p list_grpoffsets_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    size_t list_grpoffset_cnt);
+
+/**
+ * @brief List committed offsets for a set of partitions in a conusmer
+ *        group.
+ *
+ * @param rk Client instance.
+ * @param list_grpoffsets Array of group committed offsets to list.
+ *                       MUST only be one single element.
+ * @param list_grpoffsets_cnt Number of elements in \p list_grpoffsets array.
+ *                           MUST always be 1.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
+ *
+ * @remark The current implementation only supports one group per invocation.
+ */
+RD_EXPORT
+void rd_kafka_ListConsumerGroupOffsets(
+    rd_kafka_t *rk,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    size_t list_grpoffsets_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+
+
+/*
+ * ListConsumerGroupOffsets result type and methods
+ */
+
+/**
+ * @brief Get an array of results from a ListConsumerGroupOffsets result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_ListConsumerGroupOffsets_result_groups(
+    const rd_kafka_ListConsumerGroupOffsets_result_t *result,
+    size_t *cntp);
+
+
+
+/**@}*/
+
+/**
+ * @name AlterConsumerGroupOffsets - alter offsets for groups in cluster
+ * @{
+ *
+ *
+ */
+
+/*! Represents consumer group committed offsets to be altered. */
+typedef struct rd_kafka_AlterConsumerGroupOffsets_s
+    rd_kafka_AlterConsumerGroupOffsets_t;
+
+/**
+ * @brief Create a new AlterConsumerGroupOffsets object.
+ *        This object is later passed to rd_kafka_AlterConsumerGroupOffsets().
+ *
+ * @param group Consumer group id.
+ * @param partitions Partitions to alter committed offsets for.
+ *                   Only the topic and partition fields are used.
+ *
+ * @returns a new allocated AlterConsumerGroupOffsets object.
+ *          Use rd_kafka_AlterConsumerGroupOffsets_destroy() to free
+ *          object when done.
+ */
+RD_EXPORT rd_kafka_AlterConsumerGroupOffsets_t *
+rd_kafka_AlterConsumerGroupOffsets_new(
+    const char *group,
+    const rd_kafka_topic_partition_list_t *partitions);
+
+/**
+ * @brief Destroy and free a AlterConsumerGroupOffsets object previously
+ *        created with rd_kafka_AlterConsumerGroupOffsets_new()
+ */
+RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
+    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
+
+/**
+ * @brief Helper function to destroy all AlterConsumerGroupOffsets objects in
+ *        the \p alter_grpoffsets array (of \p alter_grpoffsets_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    size_t alter_grpoffset_cnt);
+
+/**
+ * @brief Alter committed offsets for a set of partitions in a conusmer
+ *        group. This will succeed at the partition level only if the group
+ *        is not actively subscribed to the corresponding topic.
+ *
+ * @param rk Client instance.
+ * @param alter_grpoffsets Array of group committed offsets to alter.
+ *                       MUST only be one single element.
+ * @param alter_grpoffsets_cnt Number of elements in \p alter_grpoffsets array.
+ *                           MUST always be 1.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
+ *
+ * @remark The current implementation only supports one group per invocation.
+ */
+RD_EXPORT
+void rd_kafka_AlterConsumerGroupOffsets(
+    rd_kafka_t *rk,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    size_t alter_grpoffsets_cnt,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+
+
+/*
+ * AlterConsumerGroupOffsets result type and methods
+ */
+
+/**
+ * @brief Get an array of results from a AlterConsumerGroupOffsets result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_group_result_t **
+rd_kafka_AlterConsumerGroupOffsets_result_groups(
+    const rd_kafka_AlterConsumerGroupOffsets_result_t *result,
+    size_t *cntp);
+
+
+
+/**@}*/
 
 /*
  * DeleteConsumerGroupOffsets - delete groups from cluster
@@ -7881,189 +8065,6 @@ typedef enum rd_kafka_AclOperation_t {
  */
 RD_EXPORT const char *
 rd_kafka_AclOperation_name(rd_kafka_AclOperation_t acl_operation);
-
-
-/*
- * AlterConsumerGroupOffsets - alter offsets for groups in cluster
- *
- *
- */
-
-/*! Represents consumer group committed offsets to be altered. */
-typedef struct rd_kafka_AlterConsumerGroupOffsets_s
-    rd_kafka_AlterConsumerGroupOffsets_t;
-
-/**
- * @brief Create a new AlterConsumerGroupOffsets object.
- *        This object is later passed to rd_kafka_AlterConsumerGroupOffsets().
- *
- * @param group Consumer group id.
- * @param partitions Partitions to alter committed offsets for.
- *                   Only the topic and partition fields are used.
- *
- * @returns a new allocated AlterConsumerGroupOffsets object.
- *          Use rd_kafka_AlterConsumerGroupOffsets_destroy() to free
- *          object when done.
- */
-RD_EXPORT rd_kafka_AlterConsumerGroupOffsets_t *
-rd_kafka_AlterConsumerGroupOffsets_new(
-    const char *group,
-    const rd_kafka_topic_partition_list_t *partitions);
-
-/**
- * @brief Destroy and free a AlterConsumerGroupOffsets object previously
- *        created with rd_kafka_AlterConsumerGroupOffsets_new()
- */
-RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
-    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
-
-/**
- * @brief Helper function to destroy all AlterConsumerGroupOffsets objects in
- *        the \p alter_grpoffsets array (of \p alter_grpoffsets_cnt elements).
- *        The array itself is not freed.
- */
-RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
-    size_t alter_grpoffset_cnt);
-
-/**
- * @brief Alter committed offsets for a set of partitions in a conusmer
- *        group. This will succeed at the partition level only if the group
- *        is not actively subscribed to the corresponding topic.
- *
- * @param rk Client instance.
- * @param alter_grpoffsets Array of group committed offsets to alter.
- *                       MUST only be one single element.
- * @param alter_grpoffsets_cnt Number of elements in \p alter_grpoffsets array.
- *                           MUST always be 1.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
- *
- * @remark The current implementation only supports one group per invocation.
- */
-RD_EXPORT
-void rd_kafka_AlterConsumerGroupOffsets(
-    rd_kafka_t *rk,
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
-    size_t alter_grpoffsets_cnt,
-    const rd_kafka_AdminOptions_t *options,
-    rd_kafka_queue_t *rkqu);
-
-
-
-/*
- * AlterConsumerGroupOffsets result type and methods
- */
-
-/**
- * @brief Get an array of results from a AlterConsumerGroupOffsets result.
- *
- * The returned groups life-time is the same as the \p result object.
- *
- * @param result Result to get group results from.
- * @param cntp is updated to the number of elements in the array.
- */
-RD_EXPORT const rd_kafka_group_result_t **
-rd_kafka_AlterConsumerGroupOffsets_result_groups(
-    const rd_kafka_AlterConsumerGroupOffsets_result_t *result,
-    size_t *cntp);
-
-
-
-/**@}*/
-
-
-/*
- * ListConsumerGroupOffsets - list offsets for groups in cluster
- *
- *
- */
-
-/*! Represents consumer group committed offsets to be listed. */
-typedef struct rd_kafka_ListConsumerGroupOffsets_s
-    rd_kafka_ListConsumerGroupOffsets_t;
-
-/**
- * @brief Create a new ListConsumerGroupOffsets object.
- *        This object is later passed to rd_kafka_ListConsumerGroupOffsets().
- *
- * @param group Consumer group id.
- * @param partitions Partitions to list committed offsets for.
- *                   Only the topic and partition fields are used.
- *
- * @returns a new allocated ListConsumerGroupOffsets object.
- *          Use rd_kafka_ListConsumerGroupOffsets_destroy() to free
- *          object when done.
- */
-RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
-rd_kafka_ListConsumerGroupOffsets_new(
-    const char *group,
-    const rd_kafka_topic_partition_list_t *partitions);
-
-/**
- * @brief Destroy and free a ListConsumerGroupOffsets object previously
- *        created with rd_kafka_ListConsumerGroupOffsets_new()
- */
-RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
-    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
-
-/**
- * @brief Helper function to destroy all ListConsumerGroupOffsets objects in
- *        the \p list_grpoffsets array (of \p list_grpoffsets_cnt elements).
- *        The array itself is not freed.
- */
-RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
-    size_t list_grpoffset_cnt);
-
-/**
- * @brief List committed offsets for a set of partitions in a conusmer
- *        group.
- *
- * @param rk Client instance.
- * @param list_grpoffsets Array of group committed offsets to list.
- *                       MUST only be one single element.
- * @param list_grpoffsets_cnt Number of elements in \p list_grpoffsets array.
- *                           MUST always be 1.
- * @param options Optional admin options, or NULL for defaults.
- * @param rkqu Queue to emit result on.
- *
- * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
- *
- * @remark The current implementation only supports one group per invocation.
- */
-RD_EXPORT
-void rd_kafka_ListConsumerGroupOffsets(
-    rd_kafka_t *rk,
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
-    size_t list_grpoffsets_cnt,
-    const rd_kafka_AdminOptions_t *options,
-    rd_kafka_queue_t *rkqu);
-
-
-
-/*
- * ListConsumerGroupOffsets result type and methods
- */
-
-/**
- * @brief Get an array of results from a ListConsumerGroupOffsets result.
- *
- * The returned groups life-time is the same as the \p result object.
- *
- * @param result Result to get group results from.
- * @param cntp is updated to the number of elements in the array.
- */
-RD_EXPORT const rd_kafka_group_result_t **
-rd_kafka_ListConsumerGroupOffsets_result_groups(
-    const rd_kafka_ListConsumerGroupOffsets_result_t *result,
-    size_t *cntp);
-
-
 
 /**@}*/
 

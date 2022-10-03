@@ -110,6 +110,7 @@ static int describe_groups(rd_kafka_t *rk,
                            const char *desc) {
         rd_kafka_resp_err_t err = 0;
         const struct rd_kafka_group_list *grplist;
+        const rd_kafka_describe_consumer_groups_options_t *options;
         int i, r;
         int fails    = 0;
         int seen     = 0;
@@ -117,6 +118,8 @@ static int describe_groups(rd_kafka_t *rk,
         int retries  = 5;
 
         TEST_SAY("Describe groups (expect %d): %s\n", group_cnt, desc);
+        options =
+            rd_kafka_describe_consumer_groups_options_new(tmout_multip(5000));
 
         /* FIXME: Wait for broker to come up. This should really be abstracted
          *        by librdkafka. */
@@ -127,7 +130,7 @@ static int describe_groups(rd_kafka_t *rk,
                         rd_sleep(1);
                 }
                 err = rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist,
-                                                        tmout_multip(5000));
+                                                        options);
         } while ((err == RD_KAFKA_RESP_ERR__TRANSPORT ||
                   err == RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS) &&
                  retries-- > 0);
@@ -135,7 +138,7 @@ static int describe_groups(rd_kafka_t *rk,
         if (err) {
                 TEST_SAY("Failed to describe all groups: %s\n",
                          rd_kafka_err2str(err));
-                return -1;
+                goto err;
         }
 
         seen_all = verify_groups(grplist, groups, group_cnt);
@@ -143,7 +146,7 @@ static int describe_groups(rd_kafka_t *rk,
 
         for (i = 0; i < group_cnt; i++) {
                 err = rd_kafka_describe_consumer_groups(
-                    rk, (const char **)&groups[i], 1, &grplist, 5000);
+                    rk, (const char **)&groups[i], 1, &grplist, options);
                 if (err) {
                         TEST_SAY("Failed to describe group %s: %s\n", groups[i],
                                  rd_kafka_err2str(err));
@@ -157,11 +160,14 @@ static int describe_groups(rd_kafka_t *rk,
                 rd_kafka_group_list_destroy(grplist);
         }
 
-
+        rd_kafka_describe_consumer_groups_options_destroy(options);
         if (seen_all != seen)
                 return 0;
 
         return seen;
+err:
+        rd_kafka_describe_consumer_groups_options_destroy(options);
+        return -1;
 }
 
 
@@ -288,6 +294,8 @@ static void do_test_describe_groups_hang(void) {
         const struct rd_kafka_group_list *grplist;
         rd_kafka_resp_err_t err;
         test_timing_t timing;
+        rd_kafka_describe_consumer_groups_options_t *options =
+            rd_kafka_describe_consumer_groups_options_new(tmout_multip(5000));
 
         SUB_TEST();
         test_conf_init(&conf, NULL, 20);
@@ -298,14 +306,13 @@ static void do_test_describe_groups_hang(void) {
         rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
         TIMING_START(&timing, "describe_groups");
-        err =
-            rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist, 5 * 1000);
+        err = rd_kafka_describe_consumer_groups(rk, NULL, 0, &grplist, options);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "Expected ERR__TIMED_OUT, not %s", rd_kafka_err2name(err));
         TIMING_ASSERT(&timing, 5 * 1000, 7 * 1000);
 
         rd_kafka_destroy(rk);
-
+        rd_kafka_describe_consumer_groups_options_destroy(options);
         SUB_TEST_PASS();
 }
 

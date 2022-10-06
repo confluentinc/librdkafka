@@ -84,8 +84,8 @@ extern mtx_t test_mtx;
 #define TEST_LOCK()                     mtx_lock(&test_mtx)
 #define TEST_UNLOCK()                   mtx_unlock(&test_mtx)
 #define TEST_FIXTURES_FOLDER            "./fixtures"
-#define TEST_FIXTURES_KEYSTORE_PASSWORD "confluent"
-#define TEST_FIXTURES_KEY_PASSWORD      "confluent"
+#define TEST_FIXTURES_KEYSTORE_PASSWORD "strong_password"
+#define TEST_FIXTURES_KEY_PASSWORD      "strong_password"
 
 /* Forward decl */
 typedef struct test_msgver_s test_msgver_t;

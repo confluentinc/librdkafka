@@ -1,0 +1,11 @@
+*.key
+*.crt
+*.jks
+*.csr
+*.pem
+*.p12
+*.srl
+extfile
+!client.certificate.pem
+!client.key
+!client.keystore.p12

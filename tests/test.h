@@ -81,9 +81,11 @@ extern int test_idempotent_producer;
 
 extern mtx_t test_mtx;
 
-#define TEST_LOCK()   mtx_lock(&test_mtx)
-#define TEST_UNLOCK() mtx_unlock(&test_mtx)
-
+#define TEST_LOCK()                     mtx_lock(&test_mtx)
+#define TEST_UNLOCK()                   mtx_unlock(&test_mtx)
+#define TEST_FIXTURES_FOLDER            "./fixtures"
+#define TEST_FIXTURES_KEYSTORE_PASSWORD "confluent"
+#define TEST_FIXTURES_KEY_PASSWORD      "confluent"
 
 /* Forward decl */
 typedef struct test_msgver_s test_msgver_t;

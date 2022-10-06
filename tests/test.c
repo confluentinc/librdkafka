@@ -240,6 +240,7 @@ _TEST_DECL(0129_fetch_aborted_msgs);
 _TEST_DECL(0130_store_offsets);
 _TEST_DECL(0131_connect_timeout);
 _TEST_DECL(0132_strategy_ordering);
+_TEST_DECL(0133_ssl_keys_ut);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -478,6 +479,7 @@ struct test tests[] = {
     _TEST(0130_store_offsets, 0),
     _TEST(0131_connect_timeout, TEST_F_LOCAL),
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
+    _TEST(0133_ssl_keys_ut, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

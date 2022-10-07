@@ -115,6 +115,14 @@ matrix:
    before_script:
     - ./configure --disable-gssapi --install-deps --source-deps-only --enable-static --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
 
+ - name: "Linux GCC arm64: +static +alpine-static -gssapi"
+   if: tag IS present
+   os: linux
+   arch: arm64
+   env: ADDITIONAL_BUILDS="alpine-static" LINKAGE=static
+   before_script:
+    - ./configure --enable-static --install-deps --source-deps-only --disable-gssapi --disable-lz4-ext --prefix="$PWD/dest" --enable-strip
+
  - name: "Linux GCC s390x: +devel"
    if: tag IS PRESENT
    os: linux

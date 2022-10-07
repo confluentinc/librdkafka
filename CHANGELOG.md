@@ -1,3 +1,19 @@
+# librdkafka v1.9.3
+
+librdkafka v1.9.3 is a maintenance release:
+
+ * Self-contained static libraries can now be built on Linux arm64 (#4005).
+ * Fix for using PKCS#12 keystores on Windows.
+
+
+## Fixes
+
+### General fixes
+
+ * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
+
+
+
 # librdkafka v1.9.2
 
 librdkafka v1.9.2 is a maintenance release:

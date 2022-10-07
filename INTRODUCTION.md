@@ -653,7 +653,7 @@ Treats the message as successfully delivered.
 ##### RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID
 
 Returned by broker when the PID+Epoch is unknown, which may occur when
-the PID's state has expired (due to topic retention, DeleteRercords,
+the PID's state has expired (due to topic retention, DeleteRecords,
 or compaction).
 
 The Java producer added quite a bit of error handling for this case,
@@ -1867,7 +1867,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-124 - Request rate quotas                                            | 0.11.0.0                    | Partially supported (depending on protocol request)                                           |
 | KIP-126 - Producer ensure proper batch size after compression            | 0.11.0.0                    | Supported                                                                                     |
 | KIP-133 - AdminAPI: DescribeConfigs and AlterConfigs                     | 0.11.0.0                    | Supported                                                                                     |
-| KIP-140 - AdminAPI: ACLs                                                 | 0.11.0.0                    | Not supported                                                                                 |
+| KIP-140 - AdminAPI: ACLs                                                 | 0.11.0.0                    | Supported                                                                                     |
 | KIP-144 - Broker reconnect backoff                                       | 0.11.0.0                    | Supported                                                                                     |
 | KIP-152 - Improved SASL auth error messages                              | 1.0.0                       | Supported                                                                                     |
 | KIP-192 - Cleaner idempotence semantics                                  | 1.0.0                       | Not supported (superceeded by KIP-360)                                                        |

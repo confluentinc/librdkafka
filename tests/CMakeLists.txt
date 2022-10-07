@@ -123,7 +123,7 @@ set(
     0130-store_offsets.c
     0131-connect_timeout.c
     0132-strategy_ordering.c
-    0133-ssl_keys_ut.c
+    0133-ssl_keys.c
     8000-idle.cpp
     test.c
     testcpp.cpp

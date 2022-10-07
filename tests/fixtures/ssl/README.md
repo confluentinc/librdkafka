@@ -1,6 +1,8 @@
 # SSL keys generation for tests
 
-The Makefile in this directory generates a PKCS#12 keystore and corresponding PEM certificate and key for testing SSL keys and keystore usage in librdkafka.
+The Makefile in this directory generates a PKCS#12 keystore 
+and corresponding PEM certificate and key for testing 
+SSL keys and keystore usage in librdkafka.
 
 To update those files with a newer OpenSSL version, just run `make`.
 

@@ -29,14 +29,23 @@
 #include "test.h"
 #include "rdstring.h"
 
-#define SSL_FIXTURES "/ssl/"
-#define KEYSTORE_LOCATION                                                      \
-        TEST_FIXTURES_FOLDER SSL_FIXTURES "client.keystore.p12"
-#define CERTIFICATE_LOCATION                                                   \
-        TEST_FIXTURES_FOLDER SSL_FIXTURES "client.certificate.pem"
-#define KEY_LOCATION TEST_FIXTURES_FOLDER SSL_FIXTURES "client.key"
-
+/**
+ * @brief Tests reading SSL PKCS#12 keystore or PEM certificate and key from
+ * file. Decoding it with the correct password or not.
+ *
+ * Ensures it's read correctly on Windows too.
+ * See https://github.com/edenhill/librdkafka/issues/3992
+ */
 static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
+#define TEST_FIXTURES_FOLDER            "./fixtures"
+#define TEST_FIXTURES_SSL_FOLDER        TEST_FIXTURES_FOLDER "/ssl/"
+#define TEST_FIXTURES_KEYSTORE_PASSWORD "use_strong_password_keystore_client"
+#define TEST_FIXTURES_KEY_PASSWORD      "use_strong_password_keystore_client2"
+#define TEST_KEYSTORE_LOCATION          TEST_FIXTURES_SSL_FOLDER "client.keystore.p12"
+#define TEST_CERTIFICATE_LOCATION                                              \
+        TEST_FIXTURES_SSL_FOLDER "client2.certificate.pem"
+#define TEST_KEY_LOCATION TEST_FIXTURES_SSL_FOLDER "client2.key"
+
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         char errstr[256];
@@ -46,8 +55,10 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "security.protocol", "SSL");
+
         if (!strcmp(type, "PKCS12")) {
-                test_conf_set(conf, "ssl.keystore.location", KEYSTORE_LOCATION);
+                test_conf_set(conf, "ssl.keystore.location",
+                              TEST_KEYSTORE_LOCATION);
                 if (correct_password)
                         test_conf_set(conf, "ssl.keystore.password",
                                       TEST_FIXTURES_KEYSTORE_PASSWORD);
@@ -57,8 +68,8 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
                                       " and more");
         } else if (!strcmp(type, "PEM")) {
                 test_conf_set(conf, "ssl.certificate.location",
-                              CERTIFICATE_LOCATION);
-                test_conf_set(conf, "ssl.key.location", KEY_LOCATION);
+                              TEST_CERTIFICATE_LOCATION);
+                test_conf_set(conf, "ssl.key.location", TEST_KEY_LOCATION);
                 if (correct_password)
                         test_conf_set(conf, "ssl.key.password",
                                       TEST_FIXTURES_KEY_PASSWORD);
@@ -80,10 +91,18 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
                 rd_kafka_destroy(rk);
 
         SUB_TEST_PASS();
+
+#undef TEST_FIXTURES_KEYSTORE_PASSWORD
+#undef TEST_FIXTURES_KEY_PASSWORD
+#undef TEST_KEYSTORE_LOCATION
+#undef TEST_CERTIFICATE_LOCATION
+#undef TEST_KEY_LOCATION
+#undef TEST_FIXTURES_FOLDER
+#undef TEST_FIXTURES_SSL_FOLDER
 }
 
 
-int main_0133_ssl_keys_ut(int argc, char **argv) {
+int main_0133_ssl_keys(int argc, char **argv) {
         do_test_ssl_keys("PKCS12", rd_true);
         do_test_ssl_keys("PKCS12", rd_false);
         do_test_ssl_keys("PEM", rd_true);

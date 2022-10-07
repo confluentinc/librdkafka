@@ -1,3 +1,11 @@
+# librdkafka v1.9.3
+
+librdkafka v1.9.3 is a maintenance release:
+
+ * Self-contained static libraries can now be built on Linux arm64 (#4005).
+
+
+
 # librdkafka v1.9.2
 
 librdkafka v1.9.2 is a maintenance release:

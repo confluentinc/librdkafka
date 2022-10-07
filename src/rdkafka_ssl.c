@@ -1246,7 +1246,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                              "Loading client's keystore file from %s",
                              rk->rk_conf.ssl.keystore_location);
 
-                bio = BIO_new_file(rk->rk_conf.ssl.keystore_location, "r");
+                bio = BIO_new_file(rk->rk_conf.ssl.keystore_location, "rb");
                 if (!bio) {
                         rd_snprintf(errstr, errstr_size,
                                     "Failed to open ssl.keystore.location: "

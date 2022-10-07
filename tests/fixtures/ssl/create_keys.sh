@@ -4,7 +4,7 @@ CA_PASSWORD="${CA_PASSWORD:-use_strong_password_ca}"
 KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-use_strong_password_keystore}"
 TRUSTSTORE_PASSWORD="${TRUSTSTORE_PASSWORD:-use_strong_password_truststore}"
 OUTPUT_FOLDER=${OUTPUT_FOLDER:-$( dirname "$0" )}
-CNS=${CNS:-client}
+CNS=${@:-client}
 
 cd ${OUTPUT_FOLDER}
 CA_ROOT_KEY=caroot.key
@@ -12,9 +12,9 @@ CA_ROOT_CRT=caroot.crt
 
 echo "# Generate CA"
 openssl req -new -x509 -keyout $CA_ROOT_KEY \
--out $CA_ROOT_CRT -days 365 -subj \
-'/CN=caroot/OU=/O=/L=/ST=/C=' -passin "pass:${CA_PASSWORD}" \
--passout "pass:${CA_PASSWORD}"
+    -out $CA_ROOT_CRT -days 3650 -subj \
+    '/CN=caroot/OU=/O=/L=/ST=/C=' -passin "pass:${CA_PASSWORD}" \
+    -passout "pass:${CA_PASSWORD}"
 
 for CN in $CNS; do
     KEYSTORE=$CN.keystore.p12

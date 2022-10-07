@@ -89,6 +89,8 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
 
         if (rk)
                 rd_kafka_destroy(rk);
+        else
+                rd_kafka_conf_destroy(conf);
 
         SUB_TEST_PASS();
 

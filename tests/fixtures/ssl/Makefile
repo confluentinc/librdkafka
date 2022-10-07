@@ -1,5 +1,5 @@
 ssl_keys: clear_keys
-	@CNS="client client2" ./create_keys.sh
+	@./create_keys.sh client client2
 
 clear_keys:
 	@rm -f *.key *.crt *.jks \

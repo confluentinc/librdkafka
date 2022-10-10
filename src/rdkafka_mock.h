@@ -191,6 +191,26 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Get the count of errors in
+ *        the broker's error stack for the given \p ApiKey.
+
+ * \p mcluster the mock cluster.
+ * \p broker_id id of the broker in the cluster.
+ * \p ApiKey is the Kafka protocol request type, e.g., ProduceRequest (0).
+ * \p cnt pointer for receiving the count.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR if the count was retrieved,
+ * \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there was not broker with this id,
+ * \c RD_KAFKA_RESP_ERR__INVALID_ARG if some of the parameters are not valid.
+ */
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_error_stack_cnt(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t broker_id,
+                                     int16_t ApiKey,
+                                     size_t *cnt);
+
+
+/**
  * @brief Set the topic error to return in protocol requests.
  *
  * Currently only used for TopicMetadataRequest and AddPartitionsToTxnRequest.

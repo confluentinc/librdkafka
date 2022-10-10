@@ -11,6 +11,7 @@ librdkafka v1.9.3 is a maintenance release:
 ### General fixes
 
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
+ * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
 
 ## Enhancements
 

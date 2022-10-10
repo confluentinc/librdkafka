@@ -273,6 +273,7 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                         goto fail;
                                 }
 
+                                X509_free(x509);
                                 cnt++;
                         }
 

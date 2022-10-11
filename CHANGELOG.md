@@ -4,13 +4,21 @@ librdkafka v1.9.3 is a maintenance release:
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
  * Fix for using PKCS#12 keystores on Windows.
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Fixes
 
 ### General fixes
 
- * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
+ * Windows: couldn't read a PKCS#12 keystore correctly because binary
+   mode wasn't explicitly set and Windows defaults to text mode (#3999).
+
+
+### Transactional producer fixes
+
+ * Changed the order of the abort and PID bump operations,
+   starting the drain and bump after completing the transaction (#4011).
 
 
 

@@ -49,18 +49,18 @@ class BrokerMetadataImpl : public BrokerMetadata {
       broker_metadata_(broker_metadata), host_(broker_metadata->host) {
   }
 
-  int32_t id() const override {
+  int32_t id() const RD_OVERRIDE {
     return broker_metadata_->id;
   }
 
-  std::string host() const override {
+  std::string host() const RD_OVERRIDE {
     return host_;
   }
-  int port() const override {
+  int port() const RD_OVERRIDE {
     return broker_metadata_->port;
   }
 
-  ~BrokerMetadataImpl() override {
+  ~BrokerMetadataImpl() RD_OVERRIDE {
   }
 
  private:
@@ -88,24 +88,24 @@ class PartitionMetadataImpl : public PartitionMetadata {
       isrs_.push_back(partition_metadata->isrs[i]);
   }
 
-  int32_t id() const override {
+  int32_t id() const RD_OVERRIDE {
     return partition_metadata_->id;
   }
-  int32_t leader() const override {
+  int32_t leader() const RD_OVERRIDE {
     return partition_metadata_->leader;
   }
-  ErrorCode err() const override {
+  ErrorCode err() const RD_OVERRIDE {
     return static_cast<ErrorCode>(partition_metadata_->err);
   }
 
-  const std::vector<int32_t> *replicas() const override {
+  const std::vector<int32_t> *replicas() const RD_OVERRIDE {
     return &replicas_;
   }
-  const std::vector<int32_t> *isrs() const override {
+  const std::vector<int32_t> *isrs() const RD_OVERRIDE {
     return &isrs_;
   }
 
-  ~PartitionMetadataImpl() override {
+  ~PartitionMetadataImpl() RD_OVERRIDE {
   }
 
  private:
@@ -126,18 +126,18 @@ class TopicMetadataImpl : public TopicMetadata {
           new PartitionMetadataImpl(&topic_metadata->partitions[i]));
   }
 
-  ~TopicMetadataImpl() override {
+  ~TopicMetadataImpl() RD_OVERRIDE {
     for (size_t i = 0; i < partitions_.size(); ++i)
       delete partitions_[i];
   }
 
-  std::string topic() const override {
+  std::string topic() const RD_OVERRIDE {
     return topic_;
   }
-  const std::vector<const PartitionMetadata *> *partitions() const override {
+  const std::vector<const PartitionMetadata *> *partitions() const RD_OVERRIDE {
     return &partitions_;
   }
-  ErrorCode err() const override {
+  ErrorCode err() const RD_OVERRIDE {
     return static_cast<ErrorCode>(topic_metadata_->err);
   }
 

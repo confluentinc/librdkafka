@@ -116,7 +116,7 @@ void update_partitions_from_c_parts(
 
 class ErrorImpl : public Error {
  public:
-  ~ErrorImpl() override {
+  ~ErrorImpl() RD_OVERRIDE {
     rd_kafka_error_destroy(c_error_);
   }
 
@@ -133,27 +133,27 @@ class ErrorImpl : public Error {
     return new ErrorImpl(code, errstr);
   }
 
-  ErrorCode code() const override {
+  ErrorCode code() const RD_OVERRIDE {
     return static_cast<ErrorCode>(rd_kafka_error_code(c_error_));
   }
 
-  std::string name() const override {
+  std::string name() const RD_OVERRIDE {
     return std::string(rd_kafka_error_name(c_error_));
   }
 
-  std::string str() const override {
+  std::string str() const RD_OVERRIDE {
     return std::string(rd_kafka_error_string(c_error_));
   }
 
-  bool is_fatal() const override {
+  bool is_fatal() const RD_OVERRIDE {
     return !!rd_kafka_error_is_fatal(c_error_);
   }
 
-  bool is_retriable() const override {
+  bool is_retriable() const RD_OVERRIDE {
     return !!rd_kafka_error_is_retriable(c_error_);
   }
 
-  bool txn_requires_abort() const override {
+  bool txn_requires_abort() const RD_OVERRIDE {
     return !!rd_kafka_error_txn_requires_abort(c_error_);
   }
 
@@ -163,7 +163,7 @@ class ErrorImpl : public Error {
 
 class EventImpl : public Event {
  public:
-  ~EventImpl() override {
+  ~EventImpl() RD_OVERRIDE {
   }
 
   EventImpl(Type type,
@@ -192,35 +192,35 @@ class EventImpl : public Event {
       fatal_(false) {
   }
 
-  Type type() const override {
+  Type type() const RD_OVERRIDE {
     return type_;
   }
-  ErrorCode err() const override {
+  ErrorCode err() const RD_OVERRIDE {
     return err_;
   }
-  Severity severity() const override {
+  Severity severity() const RD_OVERRIDE {
     return severity_;
   }
-  std::string fac() const override {
+  std::string fac() const RD_OVERRIDE {
     return fac_;
   }
-  std::string str() const override {
+  std::string str() const RD_OVERRIDE {
     return str_;
   }
-  std::string broker_name() const override {
+  std::string broker_name() const RD_OVERRIDE {
     if (type_ == EVENT_THROTTLE)
       return str_;
     else
       return std::string("");
   }
-  int broker_id() const override {
+  int broker_id() const RD_OVERRIDE {
     return id_;
   }
-  int throttle_time() const override {
+  int throttle_time() const RD_OVERRIDE {
     return throttle_time_;
   }
 
-  bool fatal() const override {
+  bool fatal() const RD_OVERRIDE {
     return fatal_;
   }
 
@@ -238,14 +238,14 @@ class QueueImpl : virtual public Queue {
  public:
   QueueImpl(rd_kafka_queue_t *c_rkqu) : queue_(c_rkqu) {
   }
-  ~QueueImpl() override {
+  ~QueueImpl() RD_OVERRIDE {
     rd_kafka_queue_destroy(queue_);
   }
   static Queue *create(Handle *base);
-  ErrorCode forward(Queue *queue) override;
-  Message *consume(int timeout_ms) override;
-  int poll(int timeout_ms) override;
-  void io_event_enable(int fd, const void *payload, size_t size) override;
+  ErrorCode forward(Queue *queue) RD_OVERRIDE;
+  Message *consume(int timeout_ms) RD_OVERRIDE;
+  int poll(int timeout_ms) RD_OVERRIDE;
+  void io_event_enable(int fd, const void *payload, size_t size) RD_OVERRIDE;
 
   rd_kafka_queue_t *queue_;
 };
@@ -269,7 +269,7 @@ class HeadersImpl : public Headers {
     }
   }
 
-  ~HeadersImpl() override {
+  ~HeadersImpl() RD_OVERRIDE {
     if (headers_) {
       rd_kafka_headers_destroy(headers_);
     }
@@ -277,21 +277,21 @@ class HeadersImpl : public Headers {
 
   ErrorCode add(const std::string &key,
                 const void *value,
-                size_t value_size) override {
+                size_t value_size) RD_OVERRIDE {
     rd_kafka_resp_err_t err;
     err = rd_kafka_header_add(headers_, key.c_str(), key.size(), value,
                               value_size);
     return static_cast<RdKafka::ErrorCode>(err);
   }
 
-  ErrorCode add(const std::string &key, const std::string &value) override {
+  ErrorCode add(const std::string &key, const std::string &value) RD_OVERRIDE {
     rd_kafka_resp_err_t err;
     err = rd_kafka_header_add(headers_, key.c_str(), key.size(), value.c_str(),
                               value.size());
     return static_cast<RdKafka::ErrorCode>(err);
   }
 
-  ErrorCode add(const Header &header) override {
+  ErrorCode add(const Header &header) RD_OVERRIDE {
     rd_kafka_resp_err_t err;
     err =
         rd_kafka_header_add(headers_, header.key().c_str(), header.key().size(),
@@ -299,13 +299,13 @@ class HeadersImpl : public Headers {
     return static_cast<RdKafka::ErrorCode>(err);
   }
 
-  ErrorCode remove(const std::string &key) override {
+  ErrorCode remove(const std::string &key) RD_OVERRIDE {
     rd_kafka_resp_err_t err;
     err = rd_kafka_header_remove(headers_, key.c_str());
     return static_cast<RdKafka::ErrorCode>(err);
   }
 
-  std::vector<Headers::Header> get(const std::string &key) const override {
+  std::vector<Headers::Header> get(const std::string &key) const RD_OVERRIDE {
     std::vector<Headers::Header> headers;
     const void *value;
     size_t size;
@@ -318,7 +318,7 @@ class HeadersImpl : public Headers {
     return headers;
   }
 
-  Headers::Header get_last(const std::string &key) const override {
+  Headers::Header get_last(const std::string &key) const RD_OVERRIDE {
     const void *value;
     size_t size;
     rd_kafka_resp_err_t err;
@@ -327,7 +327,7 @@ class HeadersImpl : public Headers {
                            static_cast<RdKafka::ErrorCode>(err));
   }
 
-  std::vector<Headers::Header> get_all() const override {
+  std::vector<Headers::Header> get_all() const RD_OVERRIDE {
     std::vector<Headers::Header> headers;
     size_t idx = 0;
     const char *name;
@@ -339,7 +339,7 @@ class HeadersImpl : public Headers {
     return headers;
   }
 
-  size_t size() const override {
+  size_t size() const RD_OVERRIDE {
     return rd_kafka_header_cnt(headers_);
   }
 
@@ -373,7 +373,7 @@ class HeadersImpl : public Headers {
 
 class MessageImpl : public Message {
  public:
-  ~MessageImpl() override {
+  ~MessageImpl() RD_OVERRIDE {
     if (free_rkmessage_)
       rd_kafka_message_destroy(const_cast<rd_kafka_message_t *>(rkmessage_));
     if (key_)
@@ -432,7 +432,7 @@ class MessageImpl : public Message {
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
   }
 
-  std::string errstr() const override {
+  std::string errstr() const RD_OVERRIDE {
     const char *es;
     /* message_errstr() is only available for the consumer. */
     if (rk_type_ == RD_KAFKA_CONSUMER)
@@ -443,29 +443,29 @@ class MessageImpl : public Message {
     return std::string(es ? es : "");
   }
 
-  ErrorCode err() const override {
+  ErrorCode err() const RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(rkmessage_->err);
   }
 
-  Topic *topic() const override {
+  Topic *topic() const RD_OVERRIDE {
     return topic_;
   }
-  std::string topic_name() const override {
+  std::string topic_name() const RD_OVERRIDE {
     if (rkmessage_->rkt)
       return rd_kafka_topic_name(rkmessage_->rkt);
     else
       return "";
   }
-  int32_t partition() const override {
+  int32_t partition() const RD_OVERRIDE {
     return rkmessage_->partition;
   }
-  void *payload() const override {
+  void *payload() const RD_OVERRIDE {
     return rkmessage_->payload;
   }
-  size_t len() const override {
+  size_t len() const RD_OVERRIDE {
     return rkmessage_->len;
   }
-  const std::string *key() const override {
+  const std::string *key() const RD_OVERRIDE {
     if (key_) {
       return key_;
     } else if (rkmessage_->key) {
@@ -475,18 +475,18 @@ class MessageImpl : public Message {
     }
     return NULL;
   }
-  const void *key_pointer() const override {
+  const void *key_pointer() const RD_OVERRIDE {
     return rkmessage_->key;
   }
-  size_t key_len() const override {
+  size_t key_len() const RD_OVERRIDE {
     return rkmessage_->key_len;
   }
 
-  int64_t offset() const override {
+  int64_t offset() const RD_OVERRIDE {
     return rkmessage_->offset;
   }
 
-  MessageTimestamp timestamp() const override {
+  MessageTimestamp timestamp() const RD_OVERRIDE {
     MessageTimestamp ts;
     rd_kafka_timestamp_type_t tstype;
     ts.timestamp = rd_kafka_message_timestamp(rkmessage_, &tstype);
@@ -494,28 +494,28 @@ class MessageImpl : public Message {
     return ts;
   }
 
-  void *msg_opaque() const override {
+  void *msg_opaque() const RD_OVERRIDE {
     return rkmessage_->_private;
   }
 
-  int64_t latency() const override {
+  int64_t latency() const RD_OVERRIDE {
     return rd_kafka_message_latency(rkmessage_);
   }
 
-  struct rd_kafka_message_s *c_ptr() override {
+  struct rd_kafka_message_s *c_ptr() RD_OVERRIDE {
     return rkmessage_;
   }
 
-  Status status() const override {
+  Status status() const RD_OVERRIDE {
     return static_cast<Status>(rd_kafka_message_status(rkmessage_));
   }
 
-  Headers *headers() override {
+  Headers *headers() RD_OVERRIDE {
     ErrorCode err;
     return headers(&err);
   }
 
-  Headers *headers(ErrorCode *err) override {
+  Headers *headers(ErrorCode *err) RD_OVERRIDE {
     *err = ERR_NO_ERROR;
 
     if (!headers_) {
@@ -533,7 +533,7 @@ class MessageImpl : public Message {
     return headers_;
   }
 
-  int32_t broker_id() const override {
+  int32_t broker_id() const RD_OVERRIDE {
     return rd_kafka_message_broker_id(rkmessage_);
   }
 
@@ -589,7 +589,7 @@ class ConfImpl : public Conf {
       rk_conf_(NULL),
       rkt_conf_(NULL) {
   }
-  ~ConfImpl() override {
+  ~ConfImpl() RD_OVERRIDE {
     if (rk_conf_)
       rd_kafka_conf_destroy(rk_conf_);
     else if (rkt_conf_)
@@ -598,11 +598,11 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        const std::string &value,
-                       std::string &errstr) override;
+                       std::string &errstr) RD_OVERRIDE;
 
   Conf::ConfResult set(const std::string &name,
                        DeliveryReportCb *dr_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "dr_cb") {
       errstr = "Invalid value type, expected RdKafka::DeliveryReportCb";
       return Conf::CONF_INVALID;
@@ -619,7 +619,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        OAuthBearerTokenRefreshCb *oauthbearer_token_refresh_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "oauthbearer_token_refresh_cb") {
       errstr =
           "Invalid value type, expected RdKafka::OAuthBearerTokenRefreshCb";
@@ -637,7 +637,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        EventCb *event_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "event_cb") {
       errstr = "Invalid value type, expected RdKafka::EventCb";
       return Conf::CONF_INVALID;
@@ -654,7 +654,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        const Conf *topic_conf,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     const ConfImpl *tconf_impl =
         dynamic_cast<const RdKafka::ConfImpl *>(topic_conf);
     if (name != "default_topic_conf" || !tconf_impl->rkt_conf_) {
@@ -675,7 +675,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        PartitionerCb *partitioner_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "partitioner_cb") {
       errstr = "Invalid value type, expected RdKafka::PartitionerCb";
       return Conf::CONF_INVALID;
@@ -692,7 +692,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        PartitionerKeyPointerCb *partitioner_kp_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "partitioner_key_pointer_cb") {
       errstr = "Invalid value type, expected RdKafka::PartitionerKeyPointerCb";
       return Conf::CONF_INVALID;
@@ -709,7 +709,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        SocketCb *socket_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "socket_cb") {
       errstr = "Invalid value type, expected RdKafka::SocketCb";
       return Conf::CONF_INVALID;
@@ -727,7 +727,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        OpenCb *open_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "open_cb") {
       errstr = "Invalid value type, expected RdKafka::OpenCb";
       return Conf::CONF_INVALID;
@@ -746,7 +746,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        RebalanceCb *rebalance_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "rebalance_cb") {
       errstr = "Invalid value type, expected RdKafka::RebalanceCb";
       return Conf::CONF_INVALID;
@@ -764,7 +764,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        OffsetCommitCb *offset_commit_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "offset_commit_cb") {
       errstr = "Invalid value type, expected RdKafka::OffsetCommitCb";
       return Conf::CONF_INVALID;
@@ -782,7 +782,7 @@ class ConfImpl : public Conf {
 
   Conf::ConfResult set(const std::string &name,
                        SslCertificateVerifyCb *ssl_cert_verify_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "ssl_cert_verify_cb") {
       errstr = "Invalid value type, expected RdKafka::SslCertificateVerifyCb";
       return Conf::CONF_INVALID;
@@ -798,7 +798,7 @@ class ConfImpl : public Conf {
   }
 
   Conf::ConfResult set_engine_callback_data(void *value,
-                                            std::string &errstr) override {
+                                            std::string &errstr) RD_OVERRIDE {
     if (!rk_conf_) {
       errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
@@ -813,7 +813,7 @@ class ConfImpl : public Conf {
                                 RdKafka::CertificateEncoding cert_enc,
                                 const void *buffer,
                                 size_t size,
-                                std::string &errstr) override {
+                                std::string &errstr) RD_OVERRIDE {
     rd_kafka_conf_res_t res;
     char errbuf[512];
 
@@ -834,7 +834,7 @@ class ConfImpl : public Conf {
   }
 
   Conf::ConfResult enable_sasl_queue(bool enable,
-                                     std::string &errstr) override {
+                                     std::string &errstr) RD_OVERRIDE {
     if (!rk_conf_) {
       errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
@@ -847,7 +847,7 @@ class ConfImpl : public Conf {
 
 
   Conf::ConfResult get(const std::string &name,
-                       std::string &value) const override {
+                       std::string &value) const RD_OVERRIDE {
     if (name.compare("dr_cb") == 0 || name.compare("event_cb") == 0 ||
         name.compare("partitioner_cb") == 0 ||
         name.compare("partitioner_key_pointer_cb") == 0 ||
@@ -885,85 +885,85 @@ class ConfImpl : public Conf {
     return static_cast<Conf::ConfResult>(res);
   }
 
-  Conf::ConfResult get(DeliveryReportCb *&dr_cb) const override {
+  Conf::ConfResult get(DeliveryReportCb *&dr_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     dr_cb = this->dr_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(
-      OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb) const override {
+  Conf::ConfResult get(OAuthBearerTokenRefreshCb *&oauthbearer_token_refresh_cb)
+      const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     oauthbearer_token_refresh_cb = this->oauthbearer_token_refresh_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(EventCb *&event_cb) const override {
+  Conf::ConfResult get(EventCb *&event_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     event_cb = this->event_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(PartitionerCb *&partitioner_cb) const override {
+  Conf::ConfResult get(PartitionerCb *&partitioner_cb) const RD_OVERRIDE {
     if (!rkt_conf_)
       return Conf::CONF_INVALID;
     partitioner_cb = this->partitioner_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(
-      PartitionerKeyPointerCb *&partitioner_kp_cb) const override {
+  Conf::ConfResult get(PartitionerKeyPointerCb *&partitioner_kp_cb) const
+      RD_OVERRIDE {
     if (!rkt_conf_)
       return Conf::CONF_INVALID;
     partitioner_kp_cb = this->partitioner_kp_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(SocketCb *&socket_cb) const override {
+  Conf::ConfResult get(SocketCb *&socket_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     socket_cb = this->socket_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(OpenCb *&open_cb) const override {
+  Conf::ConfResult get(OpenCb *&open_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     open_cb = this->open_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(RebalanceCb *&rebalance_cb) const override {
+  Conf::ConfResult get(RebalanceCb *&rebalance_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     rebalance_cb = this->rebalance_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const override {
+  Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     offset_commit_cb = this->offset_commit_cb_;
     return Conf::CONF_OK;
   }
 
-  Conf::ConfResult get(
-      SslCertificateVerifyCb *&ssl_cert_verify_cb) const override {
+  Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const
+      RD_OVERRIDE {
     if (!rk_conf_)
       return Conf::CONF_INVALID;
     ssl_cert_verify_cb = this->ssl_cert_verify_cb_;
     return Conf::CONF_OK;
   }
 
-  std::list<std::string> *dump() override;
+  std::list<std::string> *dump() RD_OVERRIDE;
 
 
   Conf::ConfResult set(const std::string &name,
                        ConsumeCb *consume_cb,
-                       std::string &errstr) override {
+                       std::string &errstr) RD_OVERRIDE {
     if (name != "consume_cb") {
       errstr = "Invalid value type, expected RdKafka::ConsumeCb";
       return Conf::CONF_INVALID;
@@ -978,14 +978,14 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
-  struct rd_kafka_conf_s *c_ptr_global() override {
+  struct rd_kafka_conf_s *c_ptr_global() RD_OVERRIDE {
     if (conf_type_ == CONF_GLOBAL)
       return rk_conf_;
     else
       return NULL;
   }
 
-  struct rd_kafka_topic_conf_s *c_ptr_topic() override {
+  struct rd_kafka_topic_conf_s *c_ptr_topic() RD_OVERRIDE {
     if (conf_type_ == CONF_TOPIC)
       return rkt_conf_;
     else
@@ -1011,24 +1011,24 @@ class ConfImpl : public Conf {
 
 class HandleImpl : virtual public Handle {
  public:
-  ~HandleImpl() override {
+  ~HandleImpl() RD_OVERRIDE {
   }
   HandleImpl() {
   }
-  std::string name() const override {
+  std::string name() const RD_OVERRIDE {
     return std::string(rd_kafka_name(rk_));
   }
-  std::string memberid() const override {
+  std::string memberid() const RD_OVERRIDE {
     char *str            = rd_kafka_memberid(rk_);
     std::string memberid = str ? str : "";
     if (str)
       rd_kafka_mem_free(rk_, str);
     return memberid;
   }
-  int poll(int timeout_ms) override {
+  int poll(int timeout_ms) RD_OVERRIDE {
     return rd_kafka_poll(rk_, timeout_ms);
   }
-  int outq_len() override {
+  int outq_len() RD_OVERRIDE {
     return rd_kafka_outq_len(rk_);
   }
 
@@ -1037,16 +1037,16 @@ class HandleImpl : virtual public Handle {
   RdKafka::ErrorCode metadata(bool all_topics,
                               const Topic *only_rkt,
                               Metadata **metadatap,
-                              int timeout_ms) override;
+                              int timeout_ms) RD_OVERRIDE;
 
-  ErrorCode pause(std::vector<TopicPartition *> &partitions) override;
-  ErrorCode resume(std::vector<TopicPartition *> &partitions) override;
+  ErrorCode pause(std::vector<TopicPartition *> &partitions) RD_OVERRIDE;
+  ErrorCode resume(std::vector<TopicPartition *> &partitions) RD_OVERRIDE;
 
   ErrorCode query_watermark_offsets(const std::string &topic,
                                     int32_t partition,
                                     int64_t *low,
                                     int64_t *high,
-                                    int timeout_ms) override {
+                                    int timeout_ms) RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(rd_kafka_query_watermark_offsets(
         rk_, topic.c_str(), partition, low, high, timeout_ms));
   }
@@ -1054,14 +1054,14 @@ class HandleImpl : virtual public Handle {
   ErrorCode get_watermark_offsets(const std::string &topic,
                                   int32_t partition,
                                   int64_t *low,
-                                  int64_t *high) override {
+                                  int64_t *high) RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(rd_kafka_get_watermark_offsets(
         rk_, topic.c_str(), partition, low, high));
   }
 
-  Queue *get_partition_queue(const TopicPartition *partition) override;
+  Queue *get_partition_queue(const TopicPartition *partition) RD_OVERRIDE;
 
-  Queue *get_sasl_queue() override {
+  Queue *get_sasl_queue() RD_OVERRIDE {
     rd_kafka_queue_t *rkqu;
     rkqu = rd_kafka_queue_get_sasl(rk_);
 
@@ -1071,7 +1071,7 @@ class HandleImpl : virtual public Handle {
     return new QueueImpl(rkqu);
   }
 
-  Queue *get_background_queue() override {
+  Queue *get_background_queue() RD_OVERRIDE {
     rd_kafka_queue_t *rkqu;
     rkqu = rd_kafka_queue_get_background(rk_);
 
@@ -1083,7 +1083,7 @@ class HandleImpl : virtual public Handle {
 
 
   ErrorCode offsetsForTimes(std::vector<TopicPartition *> &offsets,
-                            int timeout_ms) override {
+                            int timeout_ms) RD_OVERRIDE {
     rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
     ErrorCode err                              = static_cast<ErrorCode>(
         rd_kafka_offsets_for_times(rk_, c_offsets, timeout_ms));
@@ -1092,13 +1092,13 @@ class HandleImpl : virtual public Handle {
     return err;
   }
 
-  ErrorCode set_log_queue(Queue *queue) override;
+  ErrorCode set_log_queue(Queue *queue) RD_OVERRIDE;
 
-  void yield() override {
+  void yield() RD_OVERRIDE {
     rd_kafka_yield(rk_);
   }
 
-  std::string clusterid(int timeout_ms) override {
+  std::string clusterid(int timeout_ms) RD_OVERRIDE {
     char *str             = rd_kafka_clusterid(rk_, timeout_ms);
     std::string clusterid = str ? str : "";
     if (str)
@@ -1106,15 +1106,15 @@ class HandleImpl : virtual public Handle {
     return clusterid;
   }
 
-  struct rd_kafka_s *c_ptr() override {
+  struct rd_kafka_s *c_ptr() RD_OVERRIDE {
     return rk_;
   }
 
-  int32_t controllerid(int timeout_ms) override {
+  int32_t controllerid(int timeout_ms) RD_OVERRIDE {
     return rd_kafka_controllerid(rk_, timeout_ms);
   }
 
-  ErrorCode fatal_error(std::string &errstr) const override {
+  ErrorCode fatal_error(std::string &errstr) const RD_OVERRIDE {
     char errbuf[512];
     RdKafka::ErrorCode err = static_cast<RdKafka::ErrorCode>(
         rd_kafka_fatal_error(rk_, errbuf, sizeof(errbuf)));
@@ -1127,7 +1127,7 @@ class HandleImpl : virtual public Handle {
                                   int64_t md_lifetime_ms,
                                   const std::string &md_principal_name,
                                   const std::list<std::string> &extensions,
-                                  std::string &errstr) override {
+                                  std::string &errstr) RD_OVERRIDE {
     char errbuf[512];
     ErrorCode err;
     const char **extensions_copy = new const char *[extensions.size()];
@@ -1147,12 +1147,13 @@ class HandleImpl : virtual public Handle {
     return err;
   }
 
-  ErrorCode oauthbearer_set_token_failure(const std::string &errstr) override {
+  ErrorCode oauthbearer_set_token_failure(const std::string &errstr)
+      RD_OVERRIDE {
     return static_cast<ErrorCode>(
         rd_kafka_oauthbearer_set_token_failure(rk_, errstr.c_str()));
   }
 
-  Error *sasl_background_callbacks_enable() override {
+  Error *sasl_background_callbacks_enable() RD_OVERRIDE {
     rd_kafka_error_t *c_error = rd_kafka_sasl_background_callbacks_enable(rk_);
 
     if (c_error)
@@ -1162,7 +1163,7 @@ class HandleImpl : virtual public Handle {
   }
 
   Error *sasl_set_credentials(const std::string &username,
-                              const std::string &password) override {
+                              const std::string &password) RD_OVERRIDE {
     rd_kafka_error_t *c_error =
         rd_kafka_sasl_set_credentials(rk_, username.c_str(), password.c_str());
 
@@ -1172,11 +1173,11 @@ class HandleImpl : virtual public Handle {
     return NULL;
   };
 
-  void *mem_malloc(size_t size) override {
+  void *mem_malloc(size_t size) RD_OVERRIDE {
     return rd_kafka_mem_malloc(rk_, size);
   }
 
-  void mem_free(void *ptr) override {
+  void mem_free(void *ptr) RD_OVERRIDE {
     rd_kafka_mem_free(rk_, ptr);
   }
 
@@ -1201,26 +1202,26 @@ class HandleImpl : virtual public Handle {
 
 class TopicImpl : public Topic {
  public:
-  ~TopicImpl() override {
+  ~TopicImpl() RD_OVERRIDE {
     rd_kafka_topic_destroy(rkt_);
   }
 
-  std::string name() const override {
+  std::string name() const RD_OVERRIDE {
     return rd_kafka_topic_name(rkt_);
   }
 
-  bool partition_available(int32_t partition) const override {
+  bool partition_available(int32_t partition) const RD_OVERRIDE {
     return !!rd_kafka_topic_partition_available(rkt_, partition);
   }
 
-  ErrorCode offset_store(int32_t partition, int64_t offset) override {
+  ErrorCode offset_store(int32_t partition, int64_t offset) RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(
         rd_kafka_offset_store(rkt_, partition, offset));
   }
 
   static Topic *create(Handle &base, const std::string &topic, Conf *conf);
 
-  struct rd_kafka_topic_s *c_ptr() override {
+  struct rd_kafka_topic_s *c_ptr() RD_OVERRIDE {
     return rkt_;
   }
 
@@ -1235,7 +1236,7 @@ class TopicImpl : public Topic {
  */
 class TopicPartitionImpl : public TopicPartition {
  public:
-  ~TopicPartitionImpl() override {
+  ~TopicPartitionImpl() RD_OVERRIDE {
   }
 
   static TopicPartition *create(const std::string &topic, int partition);
@@ -1270,22 +1271,22 @@ class TopicPartitionImpl : public TopicPartition {
 
   static void destroy(std::vector<TopicPartition *> &partitions);
 
-  int partition() const override {
+  int partition() const RD_OVERRIDE {
     return partition_;
   }
-  const std::string &topic() const override {
+  const std::string &topic() const RD_OVERRIDE {
     return topic_;
   }
 
-  int64_t offset() const override {
+  int64_t offset() const RD_OVERRIDE {
     return offset_;
   }
 
-  ErrorCode err() const override {
+  ErrorCode err() const RD_OVERRIDE {
     return err_;
   }
 
-  void set_offset(int64_t offset) override {
+  void set_offset(int64_t offset) RD_OVERRIDE {
     offset_ = offset;
   }
 
@@ -1324,7 +1325,7 @@ class TopicPartitionImpl : public TopicPartition {
  */
 class ConsumerGroupMetadataImpl : public ConsumerGroupMetadata {
  public:
-  ~ConsumerGroupMetadataImpl() override {
+  ~ConsumerGroupMetadataImpl() RD_OVERRIDE {
     rd_kafka_consumer_group_metadata_destroy(cgmetadata_);
   }
 
@@ -1339,48 +1340,48 @@ class ConsumerGroupMetadataImpl : public ConsumerGroupMetadata {
 class KafkaConsumerImpl : virtual public KafkaConsumer,
                           virtual public HandleImpl {
  public:
-  ~KafkaConsumerImpl() override {
+  ~KafkaConsumerImpl() RD_OVERRIDE {
     if (rk_)
       rd_kafka_destroy_flags(rk_, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
   }
 
   static KafkaConsumer *create(Conf *conf, std::string &errstr);
 
-  ErrorCode assignment(std::vector<TopicPartition *> &partitions) override;
-  bool assignment_lost() override;
-  std::string rebalance_protocol() override {
+  ErrorCode assignment(std::vector<TopicPartition *> &partitions) RD_OVERRIDE;
+  bool assignment_lost() RD_OVERRIDE;
+  std::string rebalance_protocol() RD_OVERRIDE {
     const char *str = rd_kafka_rebalance_protocol(rk_);
     return std::string(str ? str : "");
   }
-  ErrorCode subscription(std::vector<std::string> &topics) override;
-  ErrorCode subscribe(const std::vector<std::string> &topics) override;
-  ErrorCode unsubscribe() override;
-  ErrorCode assign(const std::vector<TopicPartition *> &partitions) override;
-  ErrorCode unassign() override;
-  Error *incremental_assign(
-      const std::vector<TopicPartition *> &partitions) override;
-  Error *incremental_unassign(
-      const std::vector<TopicPartition *> &partitions) override;
+  ErrorCode subscription(std::vector<std::string> &topics) RD_OVERRIDE;
+  ErrorCode subscribe(const std::vector<std::string> &topics) RD_OVERRIDE;
+  ErrorCode unsubscribe() RD_OVERRIDE;
+  ErrorCode assign(const std::vector<TopicPartition *> &partitions) RD_OVERRIDE;
+  ErrorCode unassign() RD_OVERRIDE;
+  Error *incremental_assign(const std::vector<TopicPartition *> &partitions)
+      RD_OVERRIDE;
+  Error *incremental_unassign(const std::vector<TopicPartition *> &partitions)
+      RD_OVERRIDE;
 
-  Message *consume(int timeout_ms) override;
-  ErrorCode commitSync() override {
+  Message *consume(int timeout_ms) RD_OVERRIDE;
+  ErrorCode commitSync() RD_OVERRIDE {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0 /*sync*/));
   }
-  ErrorCode commitAsync() override {
+  ErrorCode commitAsync() RD_OVERRIDE {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1 /*async*/));
   }
-  ErrorCode commitSync(Message *message) override {
+  ErrorCode commitSync(Message *message) RD_OVERRIDE {
     MessageImpl *msgimpl = dynamic_cast<MessageImpl *>(message);
     return static_cast<ErrorCode>(
         rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0 /*sync*/));
   }
-  ErrorCode commitAsync(Message *message) override {
+  ErrorCode commitAsync(Message *message) RD_OVERRIDE {
     MessageImpl *msgimpl = dynamic_cast<MessageImpl *>(message);
     return static_cast<ErrorCode>(
         rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 1 /*async*/));
   }
 
-  ErrorCode commitSync(std::vector<TopicPartition *> &offsets) override {
+  ErrorCode commitSync(std::vector<TopicPartition *> &offsets) RD_OVERRIDE {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
     rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 0);
     if (!err)
@@ -1389,21 +1390,22 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
     return static_cast<ErrorCode>(err);
   }
 
-  ErrorCode commitAsync(const std::vector<TopicPartition *> &offsets) override {
+  ErrorCode commitAsync(const std::vector<TopicPartition *> &offsets)
+      RD_OVERRIDE {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
     rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 1);
     rd_kafka_topic_partition_list_destroy(c_parts);
     return static_cast<ErrorCode>(err);
   }
 
-  ErrorCode commitSync(OffsetCommitCb *offset_commit_cb) override {
+  ErrorCode commitSync(OffsetCommitCb *offset_commit_cb) RD_OVERRIDE {
     return static_cast<ErrorCode>(rd_kafka_commit_queue(
         rk_, NULL, NULL, RdKafka::offset_commit_cb_trampoline0,
         offset_commit_cb));
   }
 
   ErrorCode commitSync(std::vector<TopicPartition *> &offsets,
-                       OffsetCommitCb *offset_commit_cb) override {
+                       OffsetCommitCb *offset_commit_cb) RD_OVERRIDE {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
     rd_kafka_resp_err_t err                  = rd_kafka_commit_queue(
         rk_, c_parts, NULL, RdKafka::offset_commit_cb_trampoline0,
@@ -1413,10 +1415,10 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
   }
 
   ErrorCode committed(std::vector<TopicPartition *> &partitions,
-                      int timeout_ms) override;
-  ErrorCode position(std::vector<TopicPartition *> &partitions) override;
+                      int timeout_ms) RD_OVERRIDE;
+  ErrorCode position(std::vector<TopicPartition *> &partitions) RD_OVERRIDE;
 
-  ConsumerGroupMetadata *groupMetadata() override {
+  ConsumerGroupMetadata *groupMetadata() RD_OVERRIDE {
     rd_kafka_consumer_group_metadata_t *cgmetadata;
 
     cgmetadata = rd_kafka_consumer_group_metadata(rk_);
@@ -1426,17 +1428,17 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
     return new ConsumerGroupMetadataImpl(cgmetadata);
   }
 
-  ErrorCode close() override;
+  ErrorCode close() RD_OVERRIDE;
 
-  Error *close(Queue *queue) override;
+  Error *close(Queue *queue) RD_OVERRIDE;
 
-  bool closed() override {
+  bool closed() RD_OVERRIDE {
     return rd_kafka_consumer_closed(rk_) ? true : false;
   }
 
-  ErrorCode seek(const TopicPartition &partition, int timeout_ms) override;
+  ErrorCode seek(const TopicPartition &partition, int timeout_ms) RD_OVERRIDE;
 
-  ErrorCode offsets_store(std::vector<TopicPartition *> &offsets) override {
+  ErrorCode offsets_store(std::vector<TopicPartition *> &offsets) RD_OVERRIDE {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
     rd_kafka_resp_err_t err = rd_kafka_offsets_store(rk_, c_parts);
     update_partitions_from_c_parts(offsets, c_parts);
@@ -1449,21 +1451,21 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 class MetadataImpl : public Metadata {
  public:
   MetadataImpl(const rd_kafka_metadata_t *metadata);
-  ~MetadataImpl() override;
+  ~MetadataImpl() RD_OVERRIDE;
 
-  const std::vector<const BrokerMetadata *> *brokers() const override {
+  const std::vector<const BrokerMetadata *> *brokers() const RD_OVERRIDE {
     return &brokers_;
   }
 
-  const std::vector<const TopicMetadata *> *topics() const override {
+  const std::vector<const TopicMetadata *> *topics() const RD_OVERRIDE {
     return &topics_;
   }
 
-  std::string orig_broker_name() const override {
+  std::string orig_broker_name() const RD_OVERRIDE {
     return std::string(metadata_->orig_broker_name);
   }
 
-  int32_t orig_broker_id() const override {
+  int32_t orig_broker_id() const RD_OVERRIDE {
     return metadata_->orig_broker_id;
   }
 
@@ -1478,40 +1480,38 @@ class MetadataImpl : public Metadata {
 
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
  public:
-  ~ConsumerImpl() override {
+  ~ConsumerImpl() RD_OVERRIDE {
     if (rk_)
       rd_kafka_destroy(rk_);
   }
   static Consumer *create(Conf *conf, std::string &errstr);
 
-  ErrorCode start(Topic *topic, int32_t partition, int64_t offset) override;
-  ErrorCode start(Topic *topic,
-                  int32_t partition,
-                  int64_t offset,
-                  Queue *queue) override;
-  ErrorCode stop(Topic *topic, int32_t partition) override;
+  ErrorCode start(Topic *topic, int32_t partition, int64_t offset) RD_OVERRIDE;
+  ErrorCode start(Topic *topic, int32_t partition, int64_t offset, Queue *queue)
+      RD_OVERRIDE;
+  ErrorCode stop(Topic *topic, int32_t partition) RD_OVERRIDE;
   ErrorCode seek(Topic *topic,
                  int32_t partition,
                  int64_t offset,
-                 int timeout_ms) override;
-  Message *consume(Topic *topic, int32_t partition, int timeout_ms) override;
-  Message *consume(Queue *queue, int timeout_ms) override;
+                 int timeout_ms) RD_OVERRIDE;
+  Message *consume(Topic *topic, int32_t partition, int timeout_ms) RD_OVERRIDE;
+  Message *consume(Queue *queue, int timeout_ms) RD_OVERRIDE;
   int consume_callback(Topic *topic,
                        int32_t partition,
                        int timeout_ms,
                        ConsumeCb *cb,
-                       void *opaque) override;
+                       void *opaque) RD_OVERRIDE;
   int consume_callback(Queue *queue,
                        int timeout_ms,
                        RdKafka::ConsumeCb *consume_cb,
-                       void *opaque) override;
+                       void *opaque) RD_OVERRIDE;
 };
 
 
 
 class ProducerImpl : virtual public Producer, virtual public HandleImpl {
  public:
-  ~ProducerImpl() override {
+  ~ProducerImpl() RD_OVERRIDE {
     if (rk_)
       rd_kafka_destroy(rk_);
   }
@@ -1522,7 +1522,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                     void *payload,
                     size_t len,
                     const std::string *key,
-                    void *msg_opaque) override;
+                    void *msg_opaque) RD_OVERRIDE;
 
   ErrorCode produce(Topic *topic,
                     int32_t partition,
@@ -1531,13 +1531,13 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                     size_t len,
                     const void *key,
                     size_t key_len,
-                    void *msg_opaque) override;
+                    void *msg_opaque) RD_OVERRIDE;
 
   ErrorCode produce(Topic *topic,
                     int32_t partition,
                     const std::vector<char> *payload,
                     const std::vector<char> *key,
-                    void *msg_opaque) override;
+                    void *msg_opaque) RD_OVERRIDE;
 
   ErrorCode produce(const std::string topic_name,
                     int32_t partition,
@@ -1547,7 +1547,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                     const void *key,
                     size_t key_len,
                     int64_t timestamp,
-                    void *msg_opaque) override;
+                    void *msg_opaque) RD_OVERRIDE;
 
   ErrorCode produce(const std::string topic_name,
                     int32_t partition,
@@ -1558,18 +1558,18 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                     size_t key_len,
                     int64_t timestamp,
                     RdKafka::Headers *headers,
-                    void *msg_opaque) override;
+                    void *msg_opaque) RD_OVERRIDE;
 
-  ErrorCode flush(int timeout_ms) override {
+  ErrorCode flush(int timeout_ms) RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(rd_kafka_flush(rk_, timeout_ms));
   }
 
-  ErrorCode purge(int purge_flags) override {
+  ErrorCode purge(int purge_flags) RD_OVERRIDE {
     return static_cast<RdKafka::ErrorCode>(
         rd_kafka_purge(rk_, (int)purge_flags));
   }
 
-  Error *init_transactions(int timeout_ms) override {
+  Error *init_transactions(int timeout_ms) RD_OVERRIDE {
     rd_kafka_error_t *c_error;
 
     c_error = rd_kafka_init_transactions(rk_, timeout_ms);
@@ -1580,7 +1580,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
       return NULL;
   }
 
-  Error *begin_transaction() override {
+  Error *begin_transaction() RD_OVERRIDE {
     rd_kafka_error_t *c_error;
 
     c_error = rd_kafka_begin_transaction(rk_);
@@ -1594,7 +1594,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   Error *send_offsets_to_transaction(
       const std::vector<TopicPartition *> &offsets,
       const ConsumerGroupMetadata *group_metadata,
-      int timeout_ms) override {
+      int timeout_ms) RD_OVERRIDE {
     rd_kafka_error_t *c_error;
     const RdKafka::ConsumerGroupMetadataImpl *cgmdimpl =
         dynamic_cast<const RdKafka::ConsumerGroupMetadataImpl *>(
@@ -1612,7 +1612,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
       return NULL;
   }
 
-  Error *commit_transaction(int timeout_ms) override {
+  Error *commit_transaction(int timeout_ms) RD_OVERRIDE {
     rd_kafka_error_t *c_error;
 
     c_error = rd_kafka_commit_transaction(rk_, timeout_ms);
@@ -1623,7 +1623,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
       return NULL;
   }
 
-  Error *abort_transaction(int timeout_ms) override {
+  Error *abort_transaction(int timeout_ms) RD_OVERRIDE {
     rd_kafka_error_t *c_error;
 
     c_error = rd_kafka_abort_transaction(rk_, timeout_ms);

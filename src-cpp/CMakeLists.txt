@@ -30,8 +30,18 @@ endif()
 
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 
-# Support '#include <rdkafcpp.h>'
-target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+# Copy public API headers to include/librdkafka/
+configure_file("rdkafkacpp.h" "include/librdkafka/rdkafkacpp.h" COPYONLY)
+
+# Support '#include <rdkafcpp.h>' and '#include <librdkafka/rdkafkacpp.h>'
+target_include_directories(rdkafka++
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+  INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 if(NOT RDKAFKA_BUILD_STATIC)
     target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 endif()

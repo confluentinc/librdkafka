@@ -184,8 +184,19 @@ if(MINGW)
   list(APPEND rdkafka_compile_definitions WINVER=0x0603 _WIN32_WINNT=0x0603 UNICODE)
 endif(MINGW)
 
-# Support '#include <rdkafka.h>'
-target_include_directories(rdkafka PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+# Copy public API headers to include/librdkafka/
+configure_file("rdkafka.h" "include/librdkafka/rdkafka.h" COPYONLY)
+configure_file("rdkafka_mock.h" "include/librdkafka/rdkafka_mock.h" COPYONLY)
+
+# Support '#include <rdkafka.h>' and '#include <librdkafka/rdkafka.h>'
+target_include_directories(rdkafka
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+  INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)

@@ -6,6 +6,7 @@ librdkafka v1.9.3 is a maintenance release:
  * Fix for using PKCS#12 keystores on Windows.
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.5 (previously 1.1.1q).
  * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Upgrade considerations
@@ -47,6 +48,15 @@ configuration property.
 ## Enhancements
 
  * Bundled zlib upgraded to version 1.2.13.
+
+### Transactional producer fixes
+
+ * When a commit operation is in queue, a timeout can happen,
+ causing an abortable error. The subsequent abort can cause
+ the an assert to fail for an invalid state transition.
+ This fix allows to recover from that acknowledging the
+ previously succeeded commit operation. (#4016).
+
 
 
 # librdkafka v1.9.2

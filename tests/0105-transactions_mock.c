@@ -2870,7 +2870,7 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
  * @brief Test that transaction state different from the initial one,
  * because of a local timed out, doesn't cause an illegal state transition.
  */
-static void do_test_txn_state_different_from_the_initial_one() {
+static void do_test_txn_state_different_from_the_initial_one(void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t coord_id = 1;

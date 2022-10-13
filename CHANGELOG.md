@@ -53,7 +53,7 @@ configuration property.
 
  * When a commit operation is in queue, a timeout can happen,
  causing an abortable error. The subsequent abort can cause
- the an assert to fail for an invalid state transition.
+ an assert to fail for an invalid state transition.
  This fix allows to recover from that acknowledging the
  previously succeeded commit operation. (#4016).
 

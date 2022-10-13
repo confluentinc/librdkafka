@@ -2866,6 +2866,67 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
 }
 
 
+/**
+ * @brief Test that transaction state different from the initial one,
+ * because of a local timed out, doesn't cause an illegal state transition.
+ */
+static void do_test_txn_state_different_from_the_initial_one() {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        int32_t coord_id = 1;
+        rd_kafka_resp_err_t err;
+        const char *topic            = "test";
+        const char *transactional_id = "txnid";
+        int msgcnt                   = 1000;
+        int remains                  = 0;
+        rd_kafka_error_t *error_commit, *error_abort;
+
+        SUB_TEST_QUICK("Test transaction state different from the initial one");
+
+        rk = create_txn_producer(&mcluster, transactional_id, 3, NULL);
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      coord_id);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, coord_id);
+
+        TEST_SAY("Starting transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0,
+                                  msgcnt / 2, NULL, 0, &remains);
+
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            500);
+
+        error_commit = rd_kafka_commit_transaction(rk, 50);
+        TEST_SAY_ERROR(error_commit, "commit_transaction() returned: ");
+        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error_commit),
+                    "Expected an abortable error");
+        TEST_ASSERT(rd_kafka_error_code(error_commit) ==
+                        RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected RD_KAFKA_RESP_ERR__TIMED_OUT, not %s",
+                    rd_kafka_error_name(error_commit));
+
+        error_abort = rd_kafka_abort_transaction(rk, 100);
+        TEST_SAY_ERROR(error_abort, "abort_transaction() returned: ");
+        TEST_ASSERT(rd_kafka_error_code(error_abort) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
+                    rd_kafka_error_name(error_abort));
+
+        rd_kafka_error_destroy(error_commit);
+        rd_kafka_error_destroy(error_abort);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 
 int main_0105_transactions_mock(int argc, char **argv) {
         if (test_needs_auth()) {
@@ -2943,6 +3004,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_disconnected_group_coord(rd_false);
 
         do_test_disconnected_group_coord(rd_true);
+
+        do_test_txn_state_different_from_the_initial_one();
 
         return 0;
 }

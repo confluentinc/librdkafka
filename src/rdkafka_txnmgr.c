@@ -2058,7 +2058,7 @@ static rd_bool_t rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
         if (drain_bump) {
                 rd_kafka_wrunlock(rk);
                 rd_kafka_idemp_drain_epoch_bump_start(
-                    rk, "txn_requires_epoch_bump");
+                    rk, "Transaction requires epoch bump");
                 rd_kafka_wrlock(rk);
                 return rd_false;
         } else {

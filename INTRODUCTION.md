@@ -1345,8 +1345,9 @@ The `rd_kafka_produce()` function takes the following arguments:
 
 `rd_kafka_produce()` is a non-blocking API, it will enqueue the message
 on an internal queue and return immediately.
-If the number of queued messages would exceed the `queue.buffering.max.messages`
-configuration property then `rd_kafka_produce()` returns -1 and sets errno
+If the new message would cause the internal queue to exceed
+`queue.buffering.max.messages` or `queue.buffering.max.kbytes`
+configuration properties, `rd_kafka_produce()` returns -1 and sets errno
 to `ENOBUFS` and last_error to `RD_KAFKA_RESP_ERR__QUEUE_FULL`, thus
 providing a backpressure mechanism.
 

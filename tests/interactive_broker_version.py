@@ -160,16 +160,16 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
                  key['password']).encode('ascii'))
 
         for k, v in ssl.ca.items():
-            cmd_env['RDK_SSL_ca_{}'.format(k)] = v
+            cmd_env['SSL_ca_{}'.format(k)] = v
 
         # Set envs for all generated keys so tests can find them.
         for k, v in key.items():
             if isinstance(v, dict):
                 for k2, v2 in v.items():
-                    # E.g. "RDK_SSL_priv_der=path/to/librdkafka-priv.der"
-                    cmd_env['RDK_SSL_{}_{}'.format(k, k2)] = v2
+                    # E.g. "SSL_priv_der=path/to/librdkafka-priv.der"
+                    cmd_env['SSL_{}_{}'.format(k, k2)] = v2
             else:
-                cmd_env['RDK_SSL_{}'.format(k)] = v
+                cmd_env['SSL_{}'.format(k)] = v
 
     # Define bootstrap brokers based on selected security protocol
     print('# Using client security.protocol=%s' % security_protocol)

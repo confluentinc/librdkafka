@@ -19,6 +19,10 @@ jobs:
           examples/rdkafka_example -X builtin.features
       - run: |
           make -C tests run_local_quick
+      - name: Prohibit CONFIGURATION.md changes
+        run: |
+          git diff --exit-code CONFIGURATION.md || echo -e "\n\nERROR: CONFIGURATION.md has been edited manually or not been auto-generated upon rdkafka_conf.c change. This file is auto-generated and must be committed when changed."
+
 
   style:
     runs-on: ubuntu-latest

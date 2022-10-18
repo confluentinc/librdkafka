@@ -1695,7 +1695,7 @@ const rd_kafka_conf_t *rd_kafka_conf(rd_kafka_t *rk);
  * Topic-level configuration properties may be set using this interface
  * in which case they are applied on the \c default_topic_conf.
  * If no \c default_topic_conf has been set one will be created.
- * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
+ * Any subsequent rd_kafka_conf_set_default_topic_conf() calls will
  * replace the current default topic configuration.
  *
  * @returns \c rd_kafka_conf_res_t to indicate success or failure.
@@ -2845,7 +2845,7 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random(const rd_kafka_topic_t *rkt,
  * \p conf is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
  * The \p conf object is freed by this function on success and must not be used
- * or destroyed by the application sub-sequently.
+ * or destroyed by the application subsequently.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * \p errstr must be a pointer to memory of at least size \p errstr_size where
@@ -2991,7 +2991,7 @@ int32_t rd_kafka_controllerid(rd_kafka_t *rk, int timeout_ms);
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
  * The \p conf object is freed by this function and must not be used or
- * destroyed by the application sub-sequently.
+ * destroyed by the application subsequently.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Topic handles are refcounted internally and calling rd_kafka_topic_new()
@@ -3051,22 +3051,22 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
 /**
  * @brief Polls the provided kafka handle for events.
  *
- * Events will cause application provided callbacks to be called.
+ * Events will cause application-provided callbacks to be called.
  *
  * The \p timeout_ms argument specifies the maximum amount of time
  * (in milliseconds) that the call will block waiting for events.
  * For non-blocking calls, provide 0 as \p timeout_ms.
- * To wait indefinately for an event, provide -1.
+ * To wait indefinitely for an event, provide -1.
  *
  * @remark  An application should make sure to call poll() at regular
  *          intervals to serve any queued callbacks waiting to be called.
  * @remark  If your producer doesn't have any callback set (in particular
  *          via rd_kafka_conf_set_dr_msg_cb or rd_kafka_conf_set_error_cb)
- *          you might chose not to call poll(), though this is not
+ *          you might choose not to call poll(), though this is not
  *          recommended.
  *
  * Events:
- *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
+ *   - delivery report callbacks (if dr_cb/dr_msg_cb is configured) [producer]
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
@@ -4419,13 +4419,13 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
 #define RD_KAFKA_MSG_F_BLOCK                                                   \
         0x4 /**< Block produce*() on message queue full.                       \
              *   WARNING: If a delivery report callback                        \
-             *            is used the application MUST                         \
+             *            is used, the application MUST                        \
              *            call rd_kafka_poll() (or equiv.)                     \
              *            to make sure delivered messages                      \
              *            are drained from the internal                        \
              *            delivery report queue.                               \
              *            Failure to do so will result                         \
-             *            in indefinately blocking on                          \
+             *            in indefinitely blocking on                          \
              *            the produce() call when the                          \
              *            message queue is full. */
 #define RD_KAFKA_MSG_F_PARTITION                                               \
@@ -4440,10 +4440,10 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  * \p rkt is the target topic which must have been previously created with
  * `rd_kafka_topic_new()`.
  *
- * `rd_kafka_produce()` is an asynch non-blocking API.
+ * `rd_kafka_produce()` is an asynchronous non-blocking API.
  * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
  * once the delivery status (success or failure) is known. The delivery report
- * is trigged by the application calling `rd_kafka_poll()` (at regular
+ * is triggered by the application calling `rd_kafka_poll()` (at regular
  * intervals) or `rd_kafka_flush()` (at termination).
  *
  * Since producing is asynchronous, you should call `rd_kafka_flush()` before
@@ -4660,7 +4660,7 @@ rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms);
  * RD_KAFKA_RESP_ERR__PURGE_INFLIGHT.
  *
  * @warning Purging messages that are in-flight to or from the broker
- *          will ignore any sub-sequent acknowledgement for these messages
+ *          will ignore any subsequent acknowledgement for these messages
  *          received from the broker, effectively making it impossible
  *          for the application to know if the messages were successfully
  *          produced or not. This may result in duplicate messages if the
@@ -8025,7 +8025,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  * the global rd_kafka_fatal_error() code.
  * Fatal errors are raised by triggering the \c error_cb (see the
  * Fatal error chapter in INTRODUCTION.md for more information), and any
- * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
+ * subsequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
  * or have the fatal flag set (see rd_kafka_error_is_fatal()).
  * The originating fatal error code can be retrieved by calling
  * rd_kafka_fatal_error().

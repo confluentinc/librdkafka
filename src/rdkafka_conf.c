@@ -58,22 +58,21 @@
 struct rd_kafka_property {
         rd_kafka_conf_scope_t scope;
         const char *name;
-        enum {
-                _RK_C_STR,
-                _RK_C_INT,
-                _RK_C_DBL, /* Double */
-                _RK_C_S2I, /* String to Integer mapping.
-                            * Supports limited canonical str->int mappings
-                            * using s2i[] */
-                _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
-                _RK_C_BOOL,
-                _RK_C_PTR,     /* Only settable through special set functions */
-                _RK_C_PATLIST, /* Pattern list */
-                _RK_C_KSTR,    /* Kafka string */
-                _RK_C_ALIAS, /* Alias: points to other property through .sdef */
-                _RK_C_INTERNAL, /* Internal, don't expose to application */
-                _RK_C_INVALID,  /* Invalid property, used to catch known
-                                 * but unsupported Java properties. */
+        enum { _RK_C_STR,
+               _RK_C_INT,
+               _RK_C_DBL, /* Double */
+               _RK_C_S2I, /* String to Integer mapping.
+                           * Supports limited canonical str->int mappings
+                           * using s2i[] */
+               _RK_C_S2F, /* CSV String to Integer flag mapping (OR:ed) */
+               _RK_C_BOOL,
+               _RK_C_PTR,     /* Only settable through special set functions */
+               _RK_C_PATLIST, /* Pattern list */
+               _RK_C_KSTR,    /* Kafka string */
+               _RK_C_ALIAS, /* Alias: points to other property through .sdef */
+               _RK_C_INTERNAL, /* Internal, don't expose to application */
+               _RK_C_INVALID,  /* Invalid property, used to catch known
+                                * but unsupported Java properties. */
         } type;
         int offset;
         const char *desc;

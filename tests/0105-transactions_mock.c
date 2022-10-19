@@ -2892,7 +2892,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
 
         /* One second is the minimum transaction timeout */
         rk = create_txn_producer(&mcluster, transactional_id, 1,
-            "transaction.timeout.ms", "1000", NULL);
+                                 "transaction.timeout.ms", "1000", NULL);
 
         err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
         TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
@@ -2939,7 +2939,7 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
         /* When it comes up, the error is triggered, if the preconditions
          * happen. */
         TEST_SAY("Bringing up coordinator %" PRId32 "\n", coord_id);
-            rd_kafka_mock_broker_set_up(mcluster, coord_id);
+        rd_kafka_mock_broker_set_up(mcluster, coord_id);
 
         /* Make sure DRs are received */
         rd_kafka_flush(rk, 1000);

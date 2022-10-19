@@ -256,7 +256,7 @@ redo:
                                  * is known this FSM will be called again.
                                  */
                                 rd_kafka_txn_coord_query(
-                                        rk, "Awaiting coordinator");
+                                    rk, "Awaiting coordinator");
                                 return;
                         }
                         rkb = rk->rk_eos.txn_coord;

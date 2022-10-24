@@ -4,6 +4,8 @@ librdkafka v2.0.0 is a feature release:
 
  * Fixes to the transactional and idempotent producer.
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+ * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Upgrade considerations
@@ -71,10 +73,14 @@ configuration property.
  * Timeouts for EndTxn requests (transaction commits and aborts) are now
    automatically retried and the error raised to the application is also
    a retriable error.
+ * When calling transaction offset commit, if the coordinator was found but
+   not available, retries were made without waits, causing too much logging
+   and network calls. An interval has been added between retries (#4031).
 
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
+
 
 
 # librdkafka v1.9.2

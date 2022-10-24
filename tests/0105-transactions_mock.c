@@ -2948,6 +2948,78 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that the TxnOffsetCommit op doesn't retry without waiting
+ * if the coordinator is found but not available, causing too many retries
+ * and logs too if debug is enabled.
+ */
+static void
+do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        const rd_kafka_error_t *error;
+        int timeout;
+
+        SUB_TEST_QUICK("times_out=%s", RD_STR_ToF(times_out));
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, 5000);
+
+        /*
+         * Fail TxnOffsetCommit with COORDINATOR_NOT_AVAILABLE
+         * repeatedly.
+         */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_TxnOffsetCommit, 2,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 1;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        /* If a 500 ms wait is configured, two retries should take at least
+         * 1000 ms, 500 ms will time out earlier. */
+        timeout = times_out ? 500 : 1500;
+        error   = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata,
+                                                     timeout);
+
+        if (times_out) {
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                                RD_KAFKA_RESP_ERR__TIMED_OUT,
+                            "expected \"Local: Timed out\", found: %s",
+                            rd_kafka_err2str(rd_kafka_error_code(error)));
+        } else {
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "expected \"Success\", found: %s",
+                            rd_kafka_err2str(rd_kafka_error_code(error)));
+        }
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        /* All done */
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief Test that a NULL coordinator is not fatal when
@@ -3610,6 +3682,10 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH);
 
         do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_PRODUCER_FENCED);
+
+        do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_true);
+        
+        do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_false);
 
         return 0;
 }

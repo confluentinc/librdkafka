@@ -242,6 +242,7 @@ _TEST_DECL(0131_connect_timeout);
 _TEST_DECL(0132_strategy_ordering);
 _TEST_DECL(0133_ssl_keys);
 _TEST_DECL(0134_ssl_provider);
+_TEST_DECL(0135_sasl_credentials);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -482,6 +483,7 @@ struct test tests[] = {
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0133_ssl_keys, TEST_F_LOCAL),
     _TEST(0134_ssl_provider, TEST_F_LOCAL),
+    _TEST(0135_sasl_credentials, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

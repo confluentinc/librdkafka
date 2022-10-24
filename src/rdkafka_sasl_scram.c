@@ -397,9 +397,8 @@ static int rd_kafka_sasl_scram_build_client_final_message(
     int itcnt,
     rd_chariov_t *out) {
         struct rd_kafka_sasl_scram_state *state = rktrans->rktrans_sasl.state;
-        const rd_kafka_conf_t *conf  = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
-        rd_chariov_t SaslPassword    = {.ptr  = conf->sasl.password,
-                                     .size = strlen(conf->sasl.password)};
+        rd_kafka_conf_t *conf        = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
+        rd_chariov_t SaslPassword    = RD_ZERO_INIT;
         rd_chariov_t SaltedPassword  = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
         rd_chariov_t ClientKey       = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
         rd_chariov_t ServerKey       = {.ptr = rd_alloca(EVP_MAX_MD_SIZE)};
@@ -415,6 +414,11 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         rd_chariov_t client_final_msg_wo_proof;
         char *ClientProofB64;
         int i;
+
+        mtx_lock(&conf->sasl.lock);
+        rd_strdupa(&SaslPassword.ptr, conf->sasl.password);
+        mtx_unlock(&conf->sasl.lock);
+        SaslPassword.size = strlen(SaslPassword.ptr);
 
         /* Constructing the ClientProof attribute (p):
          *
@@ -664,7 +668,7 @@ rd_kafka_sasl_scram_handle_server_final_message(rd_kafka_transport_t *rktrans,
         } else if ((attr_v = rd_kafka_sasl_scram_get_attr(
                         in, 'v', "verifier in server-final-message", errstr,
                         errstr_size))) {
-                const rd_kafka_conf_t *conf;
+                rd_kafka_conf_t *conf;
 
                 /* Authentication succesful on server,
                  * but we need to verify the ServerSignature too. */
@@ -686,9 +690,11 @@ rd_kafka_sasl_scram_handle_server_final_message(rd_kafka_transport_t *rktrans,
 
                 conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
 
+                mtx_lock(&conf->sasl.lock);
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
                            "SCRAMAUTH", "Authenticated as %s using %s",
                            conf->sasl.username, conf->sasl.mechanisms);
+                mtx_unlock(&conf->sasl.lock);
 
                 rd_kafka_sasl_auth_done(rktrans);
                 return 0;
@@ -711,11 +717,13 @@ rd_kafka_sasl_scram_build_client_first_message(rd_kafka_transport_t *rktrans,
                                                rd_chariov_t *out) {
         char *sasl_username;
         struct rd_kafka_sasl_scram_state *state = rktrans->rktrans_sasl.state;
-        const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
+        rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
 
         rd_kafka_sasl_scram_generate_nonce(&state->cnonce);
 
+        mtx_lock(&conf->sasl.lock);
         sasl_username = rd_kafka_sasl_safe_string(conf->sasl.username);
+        mtx_unlock(&conf->sasl.lock);
 
         out->size =
             strlen("n,,n=,r=") + strlen(sasl_username) + state->cnonce.size;
@@ -842,8 +850,13 @@ static int rd_kafka_sasl_scram_conf_validate(rd_kafka_t *rk,
                                              char *errstr,
                                              size_t errstr_size) {
         const char *mech = rk->rk_conf.sasl.mechanisms;
+        rd_bool_t both_set;
 
-        if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
+        mtx_lock(&rk->rk_conf.sasl.lock);
+        both_set = rk->rk_conf.sasl.username && rk->rk_conf.sasl.password;
+        mtx_unlock(&rk->rk_conf.sasl.lock);
+
+        if (!both_set) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.username and sasl.password must be set");
                 return -1;

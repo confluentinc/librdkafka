@@ -1138,6 +1138,17 @@ class HandleImpl : virtual public Handle {
     return NULL;
   }
 
+  Error *sasl_set_credentials(const std::string &username,
+                              const std::string &password) {
+    rd_kafka_error_t *c_error =
+        rd_kafka_sasl_set_credentials(rk_, username.c_str(), password.c_str());
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+
+    return NULL;
+  };
+
   void *mem_malloc(size_t size) {
     return rd_kafka_mem_malloc(rk_, size);
   };

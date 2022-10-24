@@ -1899,6 +1899,23 @@ class RD_EXPORT Handle {
    *         that explicitly mention using this function for freeing.
    */
   virtual void mem_free(void *ptr) = 0;
+
+  /**
+   * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+   *        this Kafka client.
+   *
+   * This function sets or resets the SASL username and password credentials
+   * used by this Kafka client. The new credentials will be used the next time
+   * this client needs to authenticate to a broker.
+   * will not disconnect existing connections that might have been made using
+   * the old credentials.
+   *
+   * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+   *
+   * @returns NULL on success or an error object on error.
+   */
+  virtual Error *sasl_set_credentials(const std::string &username,
+                                      const std::string &password) = 0;
 };
 
 

@@ -12,6 +12,9 @@ librdkafka v1.9.3 is a maintenance release:
 
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
 
+## Enhancements
+
+ * Bundled zlib upgraded to version 1.2.13.
 
 
 # librdkafka v1.9.2

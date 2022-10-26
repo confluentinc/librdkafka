@@ -447,6 +447,16 @@ struct rd_kafka_s {
                  */
                 rd_kafka_q_t *txn_init_rkq;
 
+                /**< Last called transaction API. Useful for telling when it's
+                 * necessary to reset txn_init_rkq.
+                 *
+                 *   @locks rk_lock
+                 */
+                struct {
+                        char name[64]; /**< API name, e.g.,
+                                        *   SendOffsetsToTransaction */
+                } txn_last_api;
+
                 int txn_req_cnt; /**< Number of transaction
                                   *   requests sent.
                                   *   This is incremented when a

@@ -44,17 +44,29 @@
 
 
 static int allowed_error;
+static int allowed_errors[5] = {0, 0, 0, 0, 0};
 
 /**
  * @brief Decide what error_cb's will cause the test to fail.
  */
 static int
 error_is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
-        if (err == allowed_error ||
-            /* If transport errors are allowed then it is likely
-             * that we'll also see ALL_BROKERS_DOWN. */
-            (allowed_error == RD_KAFKA_RESP_ERR__TRANSPORT &&
-             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)) {
+        int i;
+        rd_bool_t allowed = rd_false;
+        if (allowed_error != RD_KAFKA_RESP_ERR_NO_ERROR) {
+                memset(allowed_errors, 0, 5 * sizeof(int));
+                allowed_errors[0] = allowed_error;
+        }
+
+        for (i = 0; i < 5; i++) {
+                allowed = allowed ||
+                          (allowed_errors[i] ||
+                           /* If transport errors are allowed then it is likely
+                            * that we'll also see ALL_BROKERS_DOWN. */
+                           (allowed_errors[i] == RD_KAFKA_RESP_ERR__TRANSPORT &&
+                            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN));
+        }
+        if (allowed) {
                 TEST_SAY("Ignoring allowed error: %s: %s\n",
                          rd_kafka_err2name(err), reason);
                 return 0;
@@ -2867,10 +2879,11 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
 
 
 /**
- * @brief Test that transaction state different from the initial one,
- * because of a local timed out, doesn't cause an illegal state transition.
+ * @brief Test that a local timeout causes a retriable error that
+ * completes correctly when retried.
  */
-static void do_test_txn_state_different_from_the_initial_one(void) {
+static void do_test_txn_retriable_on_local_timeout(rd_bool_t is_commit,
+                                                   rd_bool_t timeout_queue) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t coord_id = 1;
@@ -2879,13 +2892,19 @@ static void do_test_txn_state_different_from_the_initial_one(void) {
         const char *transactional_id = "txnid";
         int msgcnt                   = 1000;
         int remains                  = 0;
-        rd_kafka_error_t *error_commit, *error_abort;
+        rd_kafka_error_t *error;
 
-        SUB_TEST_QUICK("Test transaction state different from the initial one");
+        SUB_TEST_QUICK("is_commit=%s", RD_STR_ToF(is_commit));
 
-        rk = create_txn_producer(&mcluster, transactional_id, 3, NULL);
+        rk = create_txn_producer(&mcluster, transactional_id, 3,
+                                 "transaction.timeout.ms", "1000", NULL);
 
-        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        allowed_errors[0]      = RD_KAFKA_RESP_ERR__TRANSPORT;
+        allowed_errors[1]      = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        allowed_errors[2]      = RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
         TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
 
         rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
@@ -2893,36 +2912,94 @@ static void do_test_txn_state_different_from_the_initial_one(void) {
         rd_kafka_mock_partition_set_leader(mcluster, topic, 0, coord_id);
 
         TEST_SAY("Starting transaction\n");
-        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0,
-                                  msgcnt / 2, NULL, 0, &remains);
+                                  msgcnt, NULL, 0, &remains);
 
+        /* Make sure messages are sent. */
+        err = rd_kafka_flush(rk, -1);
+        TEST_ASSERT(!err, "Expected no error while flushing, got: %s",
+                    rd_kafka_err2str(err));
+
+        TEST_SAY("First timeout in call\n");
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
-            500);
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
 
-        error_commit = rd_kafka_commit_transaction(rk, 50);
-        TEST_SAY_ERROR(error_commit, "commit_transaction() returned: ");
-        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error_commit),
-                    "Expected an abortable error");
-        TEST_ASSERT(rd_kafka_error_code(error_commit) ==
-                        RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "Expected RD_KAFKA_RESP_ERR__TIMED_OUT, not %s",
-                    rd_kafka_error_name(error_commit));
+        TEST_SAY("Second timeout in call\n");
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
 
-        error_abort = rd_kafka_abort_transaction(rk, 100);
-        TEST_SAY_ERROR(error_abort, "abort_transaction() returned: ");
-        TEST_ASSERT(rd_kafka_error_code(error_abort) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
-                    rd_kafka_error_name(error_abort));
+        TEST_SAY("Third timeout in flight\n");
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, -1);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, -1);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
 
-        rd_kafka_error_destroy(error_commit);
-        rd_kafka_error_destroy(error_abort);
+        TEST_SAY("Fourth timeout in queue\n");
+        TEST_SAY("Bringing down coordinator %" PRId32 "\n", coord_id);
+        rd_kafka_mock_broker_set_down(mcluster, coord_id);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, -1);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, -1);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
+
         rd_kafka_destroy(rk);
-
+        memset(allowed_errors, 0, 5 * sizeof(int));
+        test_curr->is_fatal_cb = NULL;
         SUB_TEST_PASS();
 }
 
@@ -3005,7 +3082,10 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_disconnected_group_coord(rd_true);
 
-        do_test_txn_state_different_from_the_initial_one();
+        do_test_txn_retriable_on_local_timeout(rd_true, /* is_commit */
+                                               rd_true /* timeout_queue */);
+        do_test_txn_retriable_on_local_timeout(rd_false, /* is_commit */
+                                               rd_true /* timeout_queue */);
 
         return 0;
 }

@@ -54,8 +54,9 @@ configuration property.
  * When a commit operation is in queue, a timeout can happen,
  causing an abortable error. The subsequent abort can cause
  an assert to fail for an invalid state transition.
- This fix allows to recover from that acknowledging the
- previously succeeded commit operation. (#4016).
+ This fix allows to recover from that, retrying the
+ commit or abort operation until a response by the broker
+ is received (#4016).
 
 
 

@@ -15,7 +15,6 @@ librdkafka v1.9.3 is a maintenance release:
 ## Enhancements
 
  * Bundled zlib upgraded to version 1.2.13.
- * Updated zlib download url (#4024).
 
 
 # librdkafka v1.9.2

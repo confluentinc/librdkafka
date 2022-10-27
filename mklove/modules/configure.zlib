@@ -48,7 +48,7 @@ function install_source {
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
         mkl_download_archive \
-            "https://zlib.net/zlib-${ver}.tar.gz" \
+            "https://zlib.net/fossils/zlib-${ver}.tar.gz" \
             "256" \
             "$checksum" || return 1
     fi

@@ -1192,16 +1192,15 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
 
         rd_assert(for_reuse == reuse);
 
-        rd_snprintf(rk->rk_eos.txn_curr_api.name,
-                    sizeof(rk->rk_eos.txn_curr_api.name), "%s", name);
         /* When API changes, destroy previous pending queue. */
         if (rk->rk_eos.txn_init_rkq &&
-            strcmp(rk->rk_eos.txn_last_api.name, name)) {
+            strcmp(rk->rk_eos.txn_curr_api.name, name)) {
                 rd_kafka_q_destroy_owner(rk->rk_eos.txn_init_rkq);
-                rk->rk_eos.txn_init_rkq       = NULL;
-                *rk->rk_eos.txn_last_api.name = '\0';
+                rk->rk_eos.txn_init_rkq = NULL;
         }
 
+        rd_snprintf(rk->rk_eos.txn_curr_api.name,
+                    sizeof(rk->rk_eos.txn_curr_api.name), "%s", name);
         rk->rk_eos.txn_curr_api.flags |= flags;
 
         /* Then update for_reuse to the passed flags so that
@@ -1275,8 +1274,6 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
                 if (!rk->rk_eos.txn_init_rkq) {
                         rk->rk_eos.txn_init_rkq = current_q;
                 }
-                rd_snprintf(rk->rk_eos.txn_last_api.name,
-                            sizeof(rk->rk_eos.txn_last_api.name), "%s", name);
         }
         if (reply)
                 rd_kafka_op_destroy(reply);

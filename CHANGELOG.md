@@ -4,6 +4,37 @@ librdkafka v1.9.3 is a maintenance release:
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
  * Fix for using PKCS#12 keystores on Windows.
+ * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.5 (previously 1.1.1q).
+ * Updated to zlib 1.2.13 in self-contained librdkafka bundles.
+
+
+## Upgrade considerations
+
+### OpenSSL 3.0.x
+
+#### OpenSSL default ciphers
+
+The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
+changes the default set of available ciphers, in particular all obsolete
+or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+are now disabled by default.
+
+**WARNING**: These ciphers are disabled for security reasons and it is
+highly recommended NOT to use them.
+
+Should you need to use any of these old ciphers you'll need to explicitly
+enable the `legacy` provider by configuring `ssl.providers=default,legacy`
+on the librdkafka client.
+
+#### OpenSSL engines and providers
+
+OpenSSL 3.0.x deprecates the use of engines, which is being replaced by
+providers. As such librdkafka will emit a deprecation warning if
+`ssl.engine.location` is configured.
+
+OpenSSL providers may be configured with the new `ssl.providers`
+configuration property.
+
 
 
 ## Fixes

@@ -2363,6 +2363,14 @@ typedef enum rd_kafka_cert_enc_t {
  *
  * @remark CA certificate in PEM format may also be set with the
  *         `ssl.ca.pem` configuration property.
+ *
+ * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+ *         encoded using an obsolete cipher, it might be necessary to set up
+ *         an OpenSSL configuration file to load the "legacy" provider and
+ *         set the OPENSSL_CONF environment variable.
+ *         See
+ * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+ * information.
  */
 RD_EXPORT rd_kafka_conf_res_t
 rd_kafka_conf_set_ssl_cert(rd_kafka_conf_t *conf,

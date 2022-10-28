@@ -65,6 +65,8 @@ error_is_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
                             * that we'll also see ALL_BROKERS_DOWN. */
                            (allowed_errors[i] == RD_KAFKA_RESP_ERR__TRANSPORT &&
                             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN));
+                if (allowed)
+                        break;
         }
         if (allowed) {
                 TEST_SAY("Ignoring allowed error: %s: %s\n",

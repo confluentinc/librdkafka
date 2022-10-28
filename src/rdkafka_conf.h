@@ -33,6 +33,8 @@
 #include "rdkafka_cert.h"
 
 #if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
+#define WITH_SSL_ENGINE 1
+/* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
 #endif /* WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 */
 
@@ -248,6 +250,8 @@ struct rd_kafka_conf_s {
                 char *engine_location;
                 char *engine_id;
                 void *engine_callback_data;
+                char *providers;
+                rd_list_t loaded_providers; /**< (SSL_PROVIDER*) */
                 char *keystore_location;
                 char *keystore_password;
                 int endpoint_identification;

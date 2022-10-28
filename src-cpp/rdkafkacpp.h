@@ -1326,6 +1326,14 @@ class RD_EXPORT Conf {
    *
    * @remark CA certificate in PEM format may also be set with the
    *         `ssl.ca.pem` configuration property.
+   *
+   * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+   *         encoded using an obsolete cipher, it might be necessary to set up
+   *         an OpenSSL configuration file to load the "legacy" provider and
+   *         set the OPENSSL_CONF environment variable.
+   *         See
+   * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+   * information.
    */
   virtual Conf::ConfResult set_ssl_cert(RdKafka::CertificateType cert_type,
                                         RdKafka::CertificateEncoding cert_enc,

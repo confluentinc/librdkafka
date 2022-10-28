@@ -149,6 +149,20 @@ struct rd_kafka_property {
         .unsupported = "OpenSSL >= 1.1.0 not available at build time"
 #endif
 
+#if WITH_SSL_ENGINE
+#define _UNSUPPORTED_SSL_ENGINE .unsupported = NULL
+#else
+#define _UNSUPPORTED_SSL_ENGINE                                                \
+        .unsupported = "OpenSSL >= 1.1.x not available at build time"
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000 && defined(WITH_SSL)
+#define _UNSUPPORTED_SSL_3 .unsupported = NULL
+#else
+#define _UNSUPPORTED_SSL_3                                                     \
+        .unsupported = "OpenSSL >= 3.0.0 not available at build time"
+#endif
+
 
 #if WITH_ZLIB
 #define _UNSUPPORTED_ZLIB .unsupported = NULL
@@ -821,17 +835,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
      _RK(ssl.keystore_password), "Client's keystore (PKCS#12) password.",
      _UNSUPPORTED_SSL},
-    {_RK_GLOBAL, "ssl.engine.location", _RK_C_STR, _RK(ssl.engine_location),
-     "Path to OpenSSL engine library. OpenSSL >= 1.1.0 required.",
-     _UNSUPPORTED_OPENSSL_1_1_0},
+    {_RK_GLOBAL, "ssl.providers", _RK_C_STR, _RK(ssl.providers),
+     "Comma-separated list of OpenSSL 3.0.x implementation providers. "
+     "E.g., \"default,legacy\".",
+     _UNSUPPORTED_SSL_3},
+    {_RK_GLOBAL | _RK_DEPRECATED, "ssl.engine.location", _RK_C_STR,
+     _RK(ssl.engine_location),
+     "Path to OpenSSL engine library. OpenSSL >= 1.1.x required. "
+     "DEPRECATED: OpenSSL engine support is deprecated and should be "
+     "replaced by OpenSSL 3 providers.",
+     _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "ssl.engine.id", _RK_C_STR, _RK(ssl.engine_id),
      "OpenSSL engine id is the name used for loading engine.",
-     .sdef = "dynamic", _UNSUPPORTED_OPENSSL_1_1_0},
+     .sdef = "dynamic", _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "ssl_engine_callback_data", _RK_C_PTR,
      _RK(ssl.engine_callback_data),
      "OpenSSL engine callback data (set "
      "with rd_kafka_conf_set_engine_callback_data()).",
-     _UNSUPPORTED_OPENSSL_1_1_0},
+     _UNSUPPORTED_SSL_ENGINE},
     {_RK_GLOBAL, "enable.ssl.certificate.verification", _RK_C_BOOL,
      _RK(ssl.enable_verify),
      "Enable OpenSSL's builtin broker (server) certificate verification. "

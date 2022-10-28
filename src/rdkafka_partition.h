@@ -52,6 +52,71 @@ static RD_UNUSED void rd_kafka_offset_stats_reset(struct offset_stats *offs) {
 }
 
 
+
+/**
+ * Represents the position of a partition subscription.
+ */
+typedef struct rd_kafka_fetch_position_s {
+        int64_t offset;       /**< Last offset delivered to application + 1.
+                               *   Is reset to INVALID_OFFSET when partition
+                               *   is unassigned/stopped/seeked. */
+        int32_t offset_epoch; /**< The epoch of the leader at the time the
+                               *   record at offset-1 was written to the log.*/
+        int32_t leader;       /**< The leader at the time the batch was
+                               *   consumed. */
+        int32_t leader_epoch; /**< The leader epoch at the time the batch was
+                               *   consumed. */
+} rd_kafka_fetch_position_t;
+
+
+rd_kafka_fetch_position_t*
+rd_kafka_fetch_position_clone(rd_kafka_fetch_position_t *fetch_position);
+
+
+rd_bool_t
+rd_kafka_fetch_position_equals(rd_kafka_fetch_position_t *a,
+                               rd_kafka_fetch_position_t *b);
+
+
+typedef struct rd_kafka_topic_partition_private_s {
+        rd_kafka_toppar_t *toppar;
+        rd_kafka_fetch_position_t *position;
+        int32_t leader_epoch;
+} rd_kafka_topic_partition_private_t;
+
+
+rd_kafka_topic_partition_private_t *rd_kafka_topic_partition_private_new();
+
+
+rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_private_clone(const char *func, int line,
+                                       rd_kafka_topic_partition_private_t
+                                       *private);
+
+
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_take_toppar(rd_kafka_topic_partition_t *rktpar);
+
+
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar(rd_kafka_topic_partition_t *rktpar);
+
+
+void
+rd_kafka_topic_partition_set_toppar(rd_kafka_topic_partition_t *rktpar,
+                                    rd_kafka_toppar_t *toppar,
+                                    rd_bool_t keep);
+
+
+void
+rd_kafka_topic_partition_set_position(rd_kafka_topic_partition_t *rktpar,
+                                      rd_kafka_fetch_position_t *position);
+
+
+rd_kafka_fetch_position_t *
+rd_kafka_topic_partition_get_position(rd_kafka_topic_partition_t *rktpar);
+
+
 /**
  * @brief Store information about a partition error for future use.
  */
@@ -89,6 +154,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         // LOCK: toppar_lock() + topic_wrlock()
         // LOCK: .. in partition_available()
         int32_t rktp_leader_id;              /**< Current leader id.
+                                              *   This is updated directly
+                                              *   from metadata. */
+        int32_t rktp_leader_epoch;           /**< Current leader epoch
                                               *   This is updated directly
                                               *   from metadata. */
         int32_t rktp_broker_id;              /**< Current broker id. */
@@ -259,7 +327,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int64_t rktp_last_next_offset;    /* Last next_offset handled
                                            * by fetch_decide().
                                            * Locality: broker thread */
-        int64_t rktp_app_offset;          /* Last offset delivered to
+        rd_kafka_fetch_position_t
+                        rktp_app_offset;  /* Last offset delivered to
                                            * application + 1.
                                            * Is reset to INVALID_OFFSET
                                            * when partition is
@@ -347,6 +416,13 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
         0x2000 /**< Toppar is part of the consumer                             \
                 *   assignment. */
+#define RD_KAFKA_TOPPAR_F_FENCED_LEADER_EPOCH                                  \
+        0x4000 /**< Fetching from toppar is fenced due to out-of-date          \
+                *   metadata. Waiting for updated metadata. */
+#define RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION                                     \
+        0x8000 /**< Position validation is required for the toppar. */
+#define RD_KAFKA_TOPPAR_F_WAIT_TRUNCATION_CHECK                                \
+        0x10000 /**< Waiting for result of position validation. */
 
         /*
          * Timers
@@ -585,12 +661,10 @@ void rd_kafka_topic_partition_list_clear(
     rd_kafka_topic_partition_list_t *rktparlist);
 
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0(const char *func,
-                                   int line,
-                                   rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic,
-                                   int32_t partition,
-                                   rd_kafka_toppar_t *_private);
+rd_kafka_topic_partition_list_add0(rd_kafka_topic_partition_list_t *rktparlist,
+                                   const char *topic,int32_t partition,
+                                   rd_kafka_topic_partition_private_t
+                                   *_private);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -669,7 +743,7 @@ rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_t *rktpar,
                                        rd_bool_t create_on_miss);
 
-rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar(
+rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar_for(
     rd_kafka_t *rk,
     rd_kafka_topic_partition_t *rktpar,
     rd_bool_t create_on_miss) RD_WARN_UNUSED_RESULT;

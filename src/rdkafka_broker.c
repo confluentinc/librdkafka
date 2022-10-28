@@ -3473,6 +3473,49 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_truncation_check(rd_kafka_broker_t *rkb,
+                          rd_kafka_toppar_t *rktp,
+                          rd_kafka_topic_partition_list_t
+                          **rktpars_check_for_truncation) {
+        rd_kafka_topic_partition_t *rktpar;
+
+        rd_kafka_toppar_lock(rktp);
+
+        if (unlikely(offsets_for_leader_epoch_version_check(rkb, NULL) ==
+            RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)) {
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION;
+                rd_kafka_toppar_unlock(rktp);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION)) {
+                rd_kafka_toppar_unlock(rktp);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION;
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_WAIT_TRUNCATION_CHECK;
+        if (!*rktpars_check_for_truncation)
+                *rktpars_check_for_truncation =
+                        rd_kafka_topic_partition_list_new(
+                                                rkb->rkb_toppar_cnt);
+        rktpar = rd_kafka_topic_partition_list_add(
+                                        *rktpars_check_for_truncation,
+                                        rktp->rktp_rkt->rkt_topic->str,
+                                        rktp->rktp_partition);
+        rd_kafka_topic_partition_set_toppar(
+                                        rktpar, rktp, rd_true);
+        rd_kafka_topic_partition_set_position(
+                                        rktpar,
+                                        rd_kafka_fetch_position_clone(
+                                                &rktp->rktp_app_offset));
+        rd_kafka_toppar_unlock(rktp);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 /**
  * @brief Consumer: Serve the toppars assigned to this broker.
  *
@@ -3482,8 +3525,11 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
  * @locality broker thread
  */
 static rd_ts_t rd_kafka_broker_consumer_toppars_serve(rd_kafka_broker_t *rkb) {
+        char errstr[512];
         rd_kafka_toppar_t *rktp, *rktp_tmp;
         rd_ts_t min_backoff = RD_TS_MAX;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_topic_partition_list_t *rktpars_check_for_truncation = NULL;
 
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
                 rd_ts_t backoff;
@@ -3492,7 +3538,26 @@ static rd_ts_t rd_kafka_broker_consumer_toppars_serve(rd_kafka_broker_t *rkb) {
                 backoff = rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
                 if (backoff < min_backoff)
                         min_backoff = backoff;
+
+                err = rd_kafka_truncation_check(rkb, rktp,
+                                                &rktpars_check_for_truncation);
         }
+
+        if (err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE) {
+                assert(!rktpars_check_for_truncation);
+                rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TRUNCATION",
+                   "Skipping validation of fetch offsets since the broker "
+                   "does not support the required protocol version "
+                   "(introduced in Kafka 2.3)");
+        }
+
+        else if (rktpars_check_for_truncation)
+                rd_kafka_OffsetForLeaderEpochRequest(
+                        rktp->rktp_leader, rktpars_check_for_truncation,
+                        errstr, sizeof(errstr),
+                        RD_KAFKA_REPLYQ(rktp->rktp_leader->rkb_rk->rk_ops, 0),
+                        rd_kafka_handle_OffsetForLeaderEpoch,
+                        rktpars_check_for_truncation);
 
         return min_backoff;
 }
@@ -4215,6 +4280,20 @@ static void rd_kafka_fetch_preferred_replica_handle(rd_kafka_toppar_t *rktp,
 }
 
 
+static void
+rd_kafka_toppar_fenced_leader_epoch(rd_kafka_broker_t *rkb,
+                                    rd_kafka_toppar_t *rktp) {
+        rd_kafka_toppar_lock(rktp);
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_FENCED_LEADER_EPOCH;
+        rd_kafka_toppar_unlock(rktp);
+
+        /* force metadata update */
+        rd_kafka_toppar_leader_unavailable(
+                                rktp, "fenced leader epoch",
+                                RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
+}
+
+
 /**
  * @brief Handle partition-specific Fetch error.
  */
@@ -4231,13 +4310,31 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                 /* Errors handled by rdkafka */
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
         case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
         case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
-        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
-                /* Request metadata information update*/
+                /* Request metadata information update */
                 rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+                /* The current leader epoch known to the consumer is less
+                 * than the broker.
+                 */
+                rd_kafka_toppar_fenced_leader_epoch(rkb, rktp);
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
+                /* The current leader epoch known to the consumer is greater
+                 * than the broker.
+                 *
+                 * Handle by retrying fetch (with backoff).
+                 */
+                rd_rkb_dbg(rkb, MSG, "FETCH",
+                           "Topic %s [%" PRId32 "]: Unknown leader epoch.",
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition);
                 break;
 
         case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
@@ -4342,7 +4439,6 @@ static void rd_kafka_fetch_reply_handle_partition_error(
         /* Back off the next fetch for this partition */
         rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
 }
-
 
 
 /**
@@ -4657,6 +4753,9 @@ rd_kafka_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                     rktp->rktp_offsets.fetch_offset;
                         }
 
+                        fprintf(stderr, "###MH###: Injecting fenced leader epoch error.\n");
+                        hdr.ErrorCode = RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH;
+
                         if (unlikely(hdr.ErrorCode !=
                                      RD_KAFKA_RESP_ERR_NO_ERROR)) {
                                 /* Handle partition-level errors. */
@@ -4765,7 +4864,7 @@ static void rd_kafka_broker_fetch_reply(rd_kafka_t *rk,
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
                 case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-                case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+                case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
                 case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
                         /* Request metadata information update */

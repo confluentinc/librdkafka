@@ -2826,8 +2826,9 @@ static int rd_kafka_cgrp_update_committed_offsets(
                         continue;
                 }
 
-                rktp = rd_kafka_topic_partition_get_toppar(rkcg->rkcg_rk,
-                                                           rktpar, rd_false);
+                rktp = rd_kafka_topic_partition_get_toppar_for(rkcg->rkcg_rk,
+                                                               rktpar,
+                                                               rd_false);
                 if (!rktp)
                         continue;
 
@@ -5291,8 +5292,9 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
                             rkcg->rkcg_group_assignment->cnt);
 
                 rd_kafka_topic_partition_list_add0(
-                    __FUNCTION__, __LINE__, result, curr->topic,
-                    curr->partition, curr->_private);
+                    result, curr->topic, curr->partition,
+                    rd_kafka_topic_partition_private_clone(
+                        __FUNCTION__, __LINE__, curr->_private));
         }
 
         return result;

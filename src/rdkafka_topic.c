@@ -32,6 +32,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_request.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_metadata.h"
 #include "rdlog.h"
@@ -51,6 +52,7 @@ const char *rd_kafka_topic_state_names[] = {"unknown", "exists", "notexists",
 static int
 rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                                const struct rd_kafka_metadata_topic *mdt,
+                               const int32_t *leader_epochs,
                                rd_ts_t ts_insert);
 
 
@@ -477,7 +479,7 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
                         *existing = 1;
 
                 rd_kafka_topic_metadata_update(rkt, &rkmce->rkmce_mtopic,
-                                               rkmce->rkmce_ts_insert);
+                                               NULL, rkmce->rkmce_ts_insert);
         }
 
         if (do_lock)
@@ -623,6 +625,7 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
  *         has been a leader change.
  *
  * @param leader_id The id of the new leader broker.
+ * @param leader_epoch The epoch of the new leader broker.
  * @param leader A reference to the leader broker or NULL if the
  *        toppar should be undelegated for any reason.
  *
@@ -636,9 +639,14 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
 static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                                          int32_t partition,
                                          int32_t leader_id,
+                                         int32_t leader_epoch,
                                          rd_kafka_broker_t *leader) {
         rd_kafka_toppar_t *rktp;
         rd_bool_t fetching_from_follower;
+        rd_bool_t check_truncation;
+        // char errstr[512];
+        // rd_kafka_topic_partition_list_t *epochs;
+        // rd_kafka_fetch_position_t *fetch_position;
         int r = 0;
 
         rktp = rd_kafka_toppar_get(rkt, partition, 0);
@@ -657,12 +665,43 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
 
         rd_kafka_toppar_lock(rktp);
 
+        fprintf(stderr, "HERE !@#!@#!@# %d %d 0x%X\n", rktp->rktp_leader_epoch, leader_epoch, rktp->rktp_flags);
+
+        check_truncation = rktp->rktp_leader_epoch != leader_epoch &&
+                        rktp->rktp_leader_epoch != RD_KAFKA_LEADER_EPOCH_UNSET;
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_FENCED_LEADER_EPOCH) {
+                check_truncation = rd_true;
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_FENCED_LEADER_EPOCH;
+                fprintf(stderr, "DFSD\n");
+        }
+
+        if (check_truncation &&
+            !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION) &&
+            !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_WAIT_TRUNCATION_CHECK)) {
+                fprintf(stderr, "AAAA\n");
+                rd_kafka_dbg(
+                    rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
+                    "Topic %s [%" PRId32 "]: leader %" PRId32
+                    ", epoch: %" PRId32 " -> %" PRId32 ": "
+                    "checking for log truncation.",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    leader_id, rktp->rktp_leader_epoch, leader_epoch);
+
+                /* flag for inclusion in OffsetForLeaderEpoch request
+                 * when broker toppars are served. */
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_CHECK_TRUNCATION;
+        }
+
+        rktp->rktp_leader_epoch = leader_epoch;
+
         fetching_from_follower =
             leader != NULL && rktp->rktp_broker != NULL &&
             rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
             rktp->rktp_broker != leader;
 
-        if (fetching_from_follower && rktp->rktp_leader_id == leader_id) {
+        if (fetching_from_follower &&
+            rktp->rktp_leader_id == leader_id &&
+            !check_truncation) {
                 rd_kafka_dbg(
                     rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
                     "Topic %s [%" PRId32 "]: leader %" PRId32
@@ -1197,6 +1236,7 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
 static int
 rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                                const struct rd_kafka_metadata_topic *mdt,
+                               const int32_t *leader_epochs,
                                rd_ts_t ts_age) {
         rd_kafka_t *rk = rkt->rkt_rk;
         int upd        = 0;
@@ -1280,6 +1320,10 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
                 /* Update leader for partition */
                 r = rd_kafka_toppar_leader_update(rkt, mdt->partitions[j].id,
                                                   mdt->partitions[j].leader,
+                                                  leader_epochs == NULL ?
+                                                  RD_KAFKA_LEADER_EPOCH_UNSET :
+                                                  leader_epochs
+                                                      [mdt->partitions[j].id],
                                                   leader);
 
                 upd += (r != 0 ? 1 : 0);
@@ -1337,7 +1381,8 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
  * @locks none
  */
 int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
-                                    const struct rd_kafka_metadata_topic *mdt) {
+                                    const struct rd_kafka_metadata_topic *mdt,
+                                    const int32_t *leader_epochs) {
         rd_kafka_topic_t *rkt;
         int r;
 
@@ -1348,7 +1393,8 @@ int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
                 return -1; /* Ignore topics that we dont have locally. */
         }
 
-        r = rd_kafka_topic_metadata_update(rkt, mdt, rd_clock());
+        r = rd_kafka_topic_metadata_update(rkt, mdt, leader_epochs,
+                                           rd_clock());
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
@@ -1841,6 +1887,6 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
 
         rd_kafka_wrlock(rkt->rkt_rk);
         rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, rd_true);
-        rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
+        rd_kafka_topic_metadata_update(rkt, &mdt, NULL, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
 }

@@ -355,6 +355,12 @@ void rd_kafka_handle_InitProducerId(rd_kafka_t *rk,
                                     rd_kafka_buf_t *request,
                                     void *opaque);
 
+void rd_kafka_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
+                                          rd_kafka_broker_t *rkb,
+                                          rd_kafka_resp_err_t err,
+                                          rd_kafka_buf_t *rkbuf,
+                                          rd_kafka_buf_t *request,
+                                          void *opaque);
 rd_kafka_resp_err_t
 rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
                                 const char *transactional_id,
@@ -420,5 +426,22 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
 
+// TODO: where to put this:
+#define RD_KAFKA_NO_PARTITION_LEADER_EPOCH -1
+#define RD_KAFKA_UNDEFINED_EPOCH_OFFSET RD_KAFKA_NO_PARTITION_LEADER_EPOCH
+#define RD_KAFKA_UNDEFINED_EPOCH RD_KAFKA_NO_PARTITION_LEADER_EPOCH
+
+rd_kafka_resp_err_t
+rd_kafka_OffsetForLeaderEpochRequest(rd_kafka_broker_t *rkb,
+                                     rd_kafka_topic_partition_list_t *epochs,
+                                     char *errstr,
+                                     size_t errstr_size,
+                                     rd_kafka_replyq_t replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque);
+
+rd_kafka_resp_err_t offsets_for_leader_epoch_version_check(
+                                        rd_kafka_broker_t *rkb,
+                                        int16_t *api_version);
 
 #endif /* _RDKAFKA_REQUEST_H_ */

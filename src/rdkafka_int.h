@@ -424,11 +424,23 @@ struct rd_kafka_s {
                                                   *   result (possibly
                                                   *   intermediate) has been set.
                                                   */
-                        cnd_t cnd;               /**< Application thread will
-                                                  *   block on this cnd waiting
-                                                  *   for a result to be set. */
-                        mtx_t lock;              /**< Protects all fields of
-                                                  *   txn_curr_api. */
+                        rd_kafka_timer_t retry_tmr; /**< Retry timer, used
+                                                     * for calls that cannot
+                                                     * be retried directly
+                                                     * by re-enqueuing and
+                                                     * cannot be retried
+                                                     * immediately. */
+
+                        rd_interval_t last_retry; /**< Keep track
+                                                   * of last retry
+                                                   * to avoid retrying
+                                                   * too fast or waiting
+                                                   * when it's not needed. */
+                        cnd_t cnd;                /**< Application thread will
+                                                   *   block on this cnd waiting
+                                                   *   for a result to be set. */
+                        mtx_t lock;               /**< Protects all fields of
+                                                   *   txn_curr_api. */
                 } txn_curr_api;
 
 

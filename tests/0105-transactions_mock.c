@@ -2960,7 +2960,7 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_consumer_group_metadata_t *cgmetadata;
-        const rd_kafka_error_t *error;
+        rd_kafka_error_t *error;
         int timeout;
 
         SUB_TEST_QUICK("times_out=%s", RD_STR_ToF(times_out));
@@ -2999,6 +2999,8 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
         timeout = times_out ? 500 : 1500;
         error   = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata,
                                                      timeout);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
 
         if (times_out) {
                 TEST_ASSERT(rd_kafka_error_code(error) ==
@@ -3011,9 +3013,7 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
                             "expected \"Success\", found: %s",
                             rd_kafka_err2str(rd_kafka_error_code(error)));
         }
-
-        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
-        rd_kafka_topic_partition_list_destroy(offsets);
+        rd_kafka_error_destroy(error);
 
         /* All done */
         rd_kafka_destroy(rk);
@@ -3684,7 +3684,7 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_PRODUCER_FENCED);
 
         do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_true);
-        
+
         do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_false);
 
         return 0;

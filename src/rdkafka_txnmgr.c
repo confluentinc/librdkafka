@@ -1150,10 +1150,10 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
         rd_kafka_op_t *reply;
         rd_bool_t reuse = rd_false;
         rd_bool_t for_reuse;
-        rd_kafka_q_t *current_q    = NULL;
-        rd_kafka_q_t *last_q       = NULL;
-        rd_kafka_error_t *error    = NULL;
-        rd_bool_t is_timeout_error = rd_false;
+        rd_kafka_q_t *current_q              = NULL;
+        rd_kafka_q_t *last_q                 = NULL;
+        rd_kafka_error_t *error              = NULL;
+        rd_bool_t is_retriable_timeout_error = rd_false;
 
         /* Strip __FUNCTION__ name's rd_kafka_ prefix since it will
          * not make sense in high-level language bindings. */
@@ -1174,13 +1174,21 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
                      name, rd_kafka_txn_state2str(rk->rk_eos.txn_state),
                      rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
 
+        /* When API changes, destroy previous pending queue. */
+        if (rk->rk_eos.txn_init_rkq &&
+            strcmp(rk->rk_eos.txn_curr_api.name, name)) {
+                rd_kafka_q_destroy_owner(rk->rk_eos.txn_init_rkq);
+                rk->rk_eos.txn_init_rkq = NULL;
+        }
+
         /* First set for_reuse to the current flags to match with
          * the passed flags. */
         for_reuse = !!(rk->rk_eos.txn_curr_api.flags &
                        RD_KAFKA_TXN_CURR_API_F_FOR_REUSE);
 
-        if ((for_reuse && !reuse) ||
-            (!for_reuse && *rk->rk_eos.txn_curr_api.name)) {
+        if (!rk->rk_eos.txn_init_rkq &&
+            ((for_reuse && !reuse) ||
+             (!for_reuse && *rk->rk_eos.txn_curr_api.name))) {
                 error = rd_kafka_error_new(
                     RD_KAFKA_RESP_ERR__STATE,
                     "Conflicting %s call already in progress",
@@ -1188,15 +1196,6 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
                 rd_kafka_wrunlock(rk);
                 rd_kafka_op_destroy(rko);
                 return error;
-        }
-
-        rd_assert(for_reuse == reuse);
-
-        /* When API changes, destroy previous pending queue. */
-        if (rk->rk_eos.txn_init_rkq &&
-            strcmp(rk->rk_eos.txn_curr_api.name, name)) {
-                rd_kafka_q_destroy_owner(rk->rk_eos.txn_init_rkq);
-                rk->rk_eos.txn_init_rkq = NULL;
         }
 
         rd_snprintf(rk->rk_eos.txn_curr_api.name,
@@ -1256,14 +1255,12 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
                 error            = reply->rko_error;
                 reply->rko_error = NULL;
         }
-        is_timeout_error =
-            rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT;
-        if (error) {
-                for_reuse = rd_false;
-        }
+        is_retriable_timeout_error =
+            rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT &&
+            rd_kafka_error_is_retriable(error);
 
         rd_kafka_wrlock(rk);
-        if (wait_last && is_timeout_error) {
+        if (wait_last && is_retriable_timeout_error) {
                 /* Destroy existing queue if different from current. */
                 if (rk->rk_eos.txn_init_rkq &&
                     rk->rk_eos.txn_init_rkq != current_q) {
@@ -1277,15 +1274,24 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_req(rd_kafka_t *rk,
         }
         if (reply)
                 rd_kafka_op_destroy(reply);
+
         /* Destroy current queue if not saved. */
-        if (current_q && rk->rk_eos.txn_init_rkq != current_q) {
+        if (!(rk->rk_eos.txn_init_rkq &&
+              rk->rk_eos.txn_init_rkq == current_q)) {
                 rd_kafka_q_destroy_owner(current_q);
+                current_q = NULL;
         }
-        /* Destroy last queue if a non-timeout response was received. */
-        if (rk->rk_eos.txn_init_rkq && rk->rk_eos.txn_init_rkq == last_q &&
-            !is_timeout_error) {
-                rd_kafka_q_destroy_owner(last_q);
+        /* Destroy saved queue if a non-timeout response was received. */
+        else if (!is_retriable_timeout_error) {
+                rd_kafka_q_destroy_owner(current_q);
+                current_q               = NULL;
                 rk->rk_eos.txn_init_rkq = NULL;
+        }
+        if (error) {
+                for_reuse = rd_false;
+        }
+        if (rk->rk_eos.txn_init_rkq) {
+                for_reuse = rd_true;
         }
         rd_kafka_txn_curr_api_reset(rk, for_reuse);
         rd_kafka_wrunlock(rk);

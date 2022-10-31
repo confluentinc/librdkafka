@@ -2302,6 +2302,21 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
 
 
 /**
+ * @enum rd_kafka_cert_refresh_engine_data_cb_res_t
+ *
+ * @brief return values from rd_kafka_conf_set_ssl_cert_refresh_engine_data_cb
+ * callback
+ *
+ * @sa rd_kafka_conf_set_ssl_cert_refresh_engine_data_cb
+ */
+typedef enum rd_kafka_cert_refresh_engine_data_cb_res_t {
+  RD_KAFKA_CERT_REFRESH_OK,  /**< Certificate & key written to buffers */
+  RD_KAFKA_CERT_REFRESH_ERR, /**< Error loading certificate/key */
+  RD_KAFKA_CERT_REFRESH_MORE_BUFFER /**< Must be called again with larger buffer */
+} rd_kafka_cert_refresh_engine_data_cb_res_t;
+
+
+/**
  * @enum rd_kafka_cert_type_t
  *
  * @brief SSL certificate type

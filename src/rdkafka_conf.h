@@ -159,7 +159,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 30)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 31)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -266,6 +266,11 @@ struct rd_kafka_conf_s {
                                       char *errstr,
                                       size_t errstr_size,
                                       void *opaque);
+                int (*cert_refresh_engine_data_cb)(char *buf,
+                                                   size_t *buf_size,
+                                                   char *errstr,
+                                                   size_t errstr_size,
+                                                   void *opaque);
         } ssl;
 
         struct {

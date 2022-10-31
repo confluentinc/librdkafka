@@ -294,6 +294,12 @@ void RdKafka::HandleImpl::set_common_config(const RdKafka::ConfImpl *confimpl) {
     ssl_cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
   }
 
+  if (confimpl->ssl_cert_refresh_engine_data_cb_) {
+    rd_kafka_conf_set_ssl_cert_refresh_engine_data_cb(
+        confimpl->rk_conf_, RdKafka::ssl_cert_refresh_engine_data_cb_trampoline);
+    ssl_cert_refresh_engine_data_cb_ = confimpl->ssl_cert_refresh_engine_data_cb_;
+  }
+
   if (confimpl->open_cb_) {
 #ifndef _WIN32
     rd_kafka_conf_set_open_cb(confimpl->rk_conf_, RdKafka::open_cb_trampoline);

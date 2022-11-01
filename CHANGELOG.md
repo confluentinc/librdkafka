@@ -47,7 +47,7 @@ configuration property.
 ## Enhancements
 
  * Bundled zlib upgraded to version 1.2.13.
- * New interceptor for `on_broker_state_change()`.
+ * Added `on_broker_state_change()` interceptor
 
 
 # librdkafka v1.9.2

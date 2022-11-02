@@ -12,11 +12,11 @@
   <Import Project="$(SolutionDir)common.vcxproj" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)/../include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)/../include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
@@ -96,6 +96,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\librdkafka\rdkafka.h.h" />
+    <ClInclude Include="..\include\librdkafka\rdkafka_mock.h" />
     <ClInclude Include="..\src\cJSON.h" />
     <ClInclude Include="..\src\crc32c.h" />
     <ClInclude Include="..\src\queue.h" />

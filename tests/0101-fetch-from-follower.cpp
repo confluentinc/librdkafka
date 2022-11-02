@@ -38,7 +38,7 @@
 #include <string>
 #include <map>
 #include <set>
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 #include <rapidjson/document.h>
 #include <rapidjson/schema.h>

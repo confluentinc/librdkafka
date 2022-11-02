@@ -49,9 +49,7 @@ extern "C" {
 #include "test.h"
 }
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafkacpp.h" /* for Kafka driver */
+#include <librdkafka/rdkafkacpp.h> /* for Kafka driver */
 
 /**
  * Generate unique topic name (there is a C function for that in test.h wihch

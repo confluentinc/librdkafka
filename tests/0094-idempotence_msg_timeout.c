@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 #if WITH_SOCKEM
 /**

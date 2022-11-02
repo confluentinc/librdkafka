@@ -27,7 +27,7 @@
  */
 
 
-#include "rdkafka.h" /* Include before rdkafkacpp.h (from testcpp.h) */
+#include <librdkafka/rdkafka.h> /* Include before rdkafkacpp.h (from testcpp.h) */
 #include "testcpp.h"
 #include <cstring>
 

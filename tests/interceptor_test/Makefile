@@ -9,7 +9,7 @@ SRCS=		interceptor_test.c
 OBJS=		$(SRCS:.c=.o)
 
 # For rdkafka.h
-CPPFLAGS+=-I../../src
+CPPFLAGS+=-I../../include -I../../src
 LDFLAGS+=-L../../src
 LIBS+=-lrdkafka
 

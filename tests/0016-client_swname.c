@@ -28,7 +28,7 @@
 
 #include "test.h"
 
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * @name Verify KIP-511, client.software.name and client.software.version

@@ -33,9 +33,7 @@
 
 #include "test.h"
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h" /* for Kafka driver */
+#include <librdkafka/rdkafka.h> /* for Kafka driver */
 
 int main_0001_multiobj(int argc, char **argv) {
         int partition = RD_KAFKA_PARTITION_UA; /* random */

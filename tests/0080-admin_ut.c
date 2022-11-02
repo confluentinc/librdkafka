@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * @brief Admin API local dry-run unit-tests.

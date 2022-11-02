@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * Local (no broker) unit-like tests of Message Headers

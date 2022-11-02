@@ -28,7 +28,7 @@
 
 #include "test.h"
 
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 #include "../src/rdkafka_proto.h"
 #include "../src/rdunittest.h"

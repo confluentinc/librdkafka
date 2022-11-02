@@ -35,7 +35,7 @@
  * the second consumer will segfault.
  */
 
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 
 static rd_kafka_t *c1, *c2;

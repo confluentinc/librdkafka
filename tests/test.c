@@ -40,9 +40,7 @@
 #include <sys/wait.h> /* waitpid */
 #endif
 
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 int test_level = 2;
 int test_seed  = 0;

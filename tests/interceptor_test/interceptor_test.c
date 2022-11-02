@@ -45,8 +45,7 @@
 #include <string.h>
 #include <assert.h>
 
-/* typical include path outside tests is <librdkafka/rdkafka.h> */
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 #include "interceptor_test.h"
 

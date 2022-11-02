@@ -30,7 +30,7 @@
 #include "testcpp.h"
 
 extern "C" {
-#include "rdkafka.h"            /* For interceptor interface */
+#include <librdkafka/rdkafka.h> /* For interceptor interface */
 #include "../src/tinycthread.h" /* For mutexes */
 }
 

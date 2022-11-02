@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * Message Headers end-to-end tests

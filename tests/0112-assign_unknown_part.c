@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * Assign consumer to single partition topic and consume a message.

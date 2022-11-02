@@ -8,7 +8,7 @@ SRCS=		plugin_test.c
 OBJS=		$(SRCS:.c=.o)
 
 # For rdkafka.h
-CPPFLAGS+=-I../../src
+CPPFLAGS+=-I../../include
 
 all: lib
 

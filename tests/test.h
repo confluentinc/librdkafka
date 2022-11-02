@@ -46,8 +46,8 @@
 #include <sys/resource.h>
 #endif
 
-#include "rdkafka.h"
-#include "rdkafka_mock.h"
+#include <librdkafka/rdkafka.h>
+#include <librdkafka/rdkafka_mock.h>
 #include "tinycthread.h"
 #include "rdlist.h"
 

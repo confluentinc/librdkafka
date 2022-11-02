@@ -27,7 +27,7 @@
  */
 
 #include "test.h"
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 /**
  * Verify message timestamp behaviour on supporting brokers (>=0.10.0.0).

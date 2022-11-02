@@ -34,8 +34,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-/* typical include path outside tests is <librdkafka/rdkafka.h> */
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 
 

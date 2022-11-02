@@ -29,7 +29,7 @@
 #include "test.h"
 
 #if WITH_SOCKEM
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 
 #include <stdarg.h>
 

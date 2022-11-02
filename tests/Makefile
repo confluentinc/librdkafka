@@ -7,8 +7,8 @@ LIBS	 += -lrdkafka++ -lrdkafka
 OBJS	 += test.o rusage.o testcpp.o \
 		tinycthread.o tinycthread_extra.o rdlist.o sockem.o \
 		sockem_ctrl.o
-CFLAGS += -I../src
-CXXFLAGS += -I../src -I../src-cpp
+CFLAGS += -I../include -I../src
+CXXFLAGS += -I../include -I../src
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 # Latest Kafka version

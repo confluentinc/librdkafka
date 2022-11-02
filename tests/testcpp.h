@@ -30,7 +30,7 @@
 
 #include <sstream>
 
-#include "rdkafkacpp.h"
+#include <librdkafka/rdkafkacpp.h>
 
 extern "C" {
 #ifdef _WIN32

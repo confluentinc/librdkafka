@@ -3006,6 +3006,169 @@ static void do_test_txn_retriable_on_local_timeout(rd_bool_t is_commit,
 }
 
 
+static int do_test_txn_operations_not_expected_commit(void *arg) {
+        rd_kafka_t *rk          = arg;
+        rd_kafka_error_t *error = rd_kafka_commit_transaction(rk, 100);
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE, not %s", rd_kafka_error_name(error));
+        TEST_ASSERT(!rd_kafka_error_is_fatal(error) &&
+                        !rd_kafka_error_is_retriable(error) &&
+                        !rd_kafka_error_txn_requires_abort(error),
+                    "Expected an error without flags, found is_fatal: %s,"
+                    " is_retriable: %s, txn_requires_abort: %s",
+                    RD_STR_ToF(rd_kafka_error_is_fatal(error)),
+                    RD_STR_ToF(rd_kafka_error_is_retriable(error)),
+                    RD_STR_ToF(rd_kafka_error_txn_requires_abort(error)));
+        rd_kafka_error_destroy(error);
+        return 0;
+}
+
+static int do_test_txn_operations_not_expected_abort(void *arg) {
+        rd_usleep(500 * 1000, NULL);
+        rd_kafka_t *rk          = arg;
+        rd_kafka_error_t *error = rd_kafka_abort_transaction(rk, 100);
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE, not %s", rd_kafka_error_name(error));
+        TEST_ASSERT(!rd_kafka_error_is_fatal(error) &&
+                        !rd_kafka_error_is_retriable(error) &&
+                        !rd_kafka_error_txn_requires_abort(error),
+                    "Expected an error without flags, found is_fatal: %s,"
+                    " is_retriable: %s, txn_requires_abort: %s",
+                    RD_STR_ToF(rd_kafka_error_is_fatal(error)),
+                    RD_STR_ToF(rd_kafka_error_is_retriable(error)),
+                    RD_STR_ToF(rd_kafka_error_txn_requires_abort(error)));
+        rd_kafka_error_destroy(error);
+        return 0;
+}
+
+/**
+ * @brief Test cases where the caller is not sending the requested
+ * operation, or sending a concurrent one from a different thread.
+ *
+ * @param is_commit is it a commit or abort test.
+ * @param different_concurrent_operation send a concurrent operation
+ * of a different type or of the same type.
+ */
+static void
+do_test_txn_unexpected_operations(rd_bool_t is_commit,
+                                  rd_bool_t different_concurrent_operation) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        int32_t coord_id = 1;
+        rd_kafka_resp_err_t err;
+        const char *topic            = "test";
+        const char *transactional_id = "txnid";
+        int msgcnt                   = 1000;
+        int remains                  = 0;
+        rd_kafka_error_t *error;
+        thrd_t thr;
+        thrd_start_t concurrent_operation;
+
+        SUB_TEST_QUICK("is_commit=%s different_concurrent_operation=%s",
+                       RD_STR_ToF(is_commit),
+                       RD_STR_ToF(different_concurrent_operation));
+
+        rk = create_txn_producer(&mcluster, transactional_id, 3,
+                                 "transaction.timeout.ms", "100000", NULL);
+
+        allowed_errors[0]      = RD_KAFKA_RESP_ERR__TRANSPORT;
+        allowed_errors[1]      = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      coord_id);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, coord_id);
+
+        TEST_SAY("Starting transaction\n");
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0,
+                                  msgcnt, NULL, 0, &remains);
+
+        /* Make sure messages are sent. */
+        err = rd_kafka_flush(rk, -1);
+        TEST_ASSERT(!err, "Expected no error while flushing, got: %s",
+                    rd_kafka_err2str(err));
+
+        TEST_SAY("First timeout in call\n");
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
+
+        TEST_SAY("Call a different operation than the expected one\n");
+        if (!is_commit) {
+                error = rd_kafka_commit_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, 100);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(!rd_kafka_error_is_fatal(error) &&
+                        !rd_kafka_error_is_retriable(error) &&
+                        !rd_kafka_error_txn_requires_abort(error),
+                    "Expected an error without flags, found is_fatal: %s,"
+                    " is_retriable: %s, txn_requires_abort: %s",
+                    RD_STR_ToF(rd_kafka_error_is_fatal(error)),
+                    RD_STR_ToF(rd_kafka_error_is_retriable(error)),
+                    RD_STR_ToF(rd_kafka_error_txn_requires_abort(error)));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE, not %s", rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
+
+        TEST_SAY("Concurrent operation while retrying\n");
+        concurrent_operation = do_test_txn_operations_not_expected_abort;
+        if (!is_commit && different_concurrent_operation ||
+            is_commit && !different_concurrent_operation) {
+                concurrent_operation =
+                    do_test_txn_operations_not_expected_commit;
+        }
+        if (thrd_create(&thr, concurrent_operation, (void *)rk) !=
+            thrd_success) {
+                TEST_FAIL("Thread creation should succeed");
+        }
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1, RD_KAFKA_RESP_ERR_NO_ERROR,
+            2000);
+        if (is_commit) {
+                error = rd_kafka_commit_transaction(rk, 700);
+                TEST_SAY_ERROR(error, "commit_transaction() returned: ");
+        } else {
+                error = rd_kafka_abort_transaction(rk, 700);
+                TEST_SAY_ERROR(error, "abort_transaction() returned: ");
+        }
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error");
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s", rd_kafka_error_name(error));
+        rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_EndTxn);
+        rd_kafka_error_destroy(error);
+
+        thrd_join(thr, NULL);
+
+        rd_kafka_destroy(rk);
+        memset(allowed_errors, 0, 5 * sizeof(int));
+        test_curr->is_fatal_cb = NULL;
+        SUB_TEST_PASS();
+}
+
+
 
 int main_0105_transactions_mock(int argc, char **argv) {
         if (test_needs_auth()) {
@@ -3088,6 +3251,19 @@ int main_0105_transactions_mock(int argc, char **argv) {
                                                rd_true /* timeout_queue */);
         do_test_txn_retriable_on_local_timeout(rd_false, /* is_commit */
                                                rd_true /* timeout_queue */);
+
+        do_test_txn_unexpected_operations(
+            rd_true, /* is_commit */
+            rd_true /* different_concurrent_operation */);
+        do_test_txn_unexpected_operations(
+            rd_true, /* is_commit */
+            rd_false /* different_concurrent_operation */);
+        do_test_txn_unexpected_operations(
+            rd_false, /* is_commit */
+            rd_true /* different_concurrent_operation */);
+        do_test_txn_unexpected_operations(
+            rd_false, /* is_commit */
+            rd_false /* different_concurrent_operation */);
 
         return 0;
 }

@@ -29,6 +29,14 @@
 #ifndef RDKAFKA_RDKAFKA_MOCK_H
 #define RDKAFKA_RDKAFKA_MOCK_H
 
+#if defined(__GNUC__) || defined(__clang__)
+#warning                                                                       \
+    "Including rdkafka_mock.h directly is deprecated. Please use '#include <librdkafka/rdkafka_mock.h>' instead!"
+#elif defined(_MSC_VER)
+#pragma message(                                                               \
+    "Including rdkafka_mock.h directly is deprecated. Please use '#include <librdkafka/rdkafka_mock.h>' instead!")
+#endif
+
 #include "../include/librdkafka/rdkafka_mock.h"
 
 #endif  // RDKAFKA_RDKAFKA_MOCK_H

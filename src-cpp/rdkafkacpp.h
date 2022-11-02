@@ -29,6 +29,14 @@
 #ifndef RDKAFKA_RDKAFKACPP_H
 #define RDKAFKA_RDKAFKACPP_H
 
+#if defined(__GNUC__) || defined(__clang__)
+#warning                                                                       \
+    "Including rdkafkacpp.h directly is deprecated. Please use '#include <librdkafka/rdkafkacpp.h>' instead!"
+#elif defined(_MSC_VER)
+#pragma message(                                                               \
+    "Including rdkafkacpp.h directly is deprecated. Please use '#include <librdkafka/rdkafkacpp.h>' instead!")
+#endif
+
 #include "../include/librdkafka/rdkafkacpp.h"
 
 #endif  // RDKAFKA_RDKAFKACPP_H

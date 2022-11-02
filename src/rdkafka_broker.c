@@ -371,6 +371,12 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
         if (trigger_monitors)
                 rd_kafka_broker_trigger_monitors(rkb);
 
+        /* Call on_broker_state_change interceptors */
+        rd_kafka_interceptors_on_broker_state_change(
+            rkb->rkb_rk, rkb->rkb_nodeid,
+            rd_kafka_secproto_names[rkb->rkb_proto], rkb->rkb_origname,
+            rkb->rkb_port, rd_kafka_broker_state_names[rkb->rkb_state]);
+
         rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 }
 
@@ -4792,6 +4798,12 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                            "Added new broker with NodeId %" PRId32,
                            rkb->rkb_nodeid);
         }
+
+        /* Call on_broker_state_change interceptors */
+        rd_kafka_interceptors_on_broker_state_change(
+            rk, rkb->rkb_nodeid, rd_kafka_secproto_names[rkb->rkb_proto],
+            rkb->rkb_origname, rkb->rkb_port,
+            rd_kafka_broker_state_names[rkb->rkb_state]);
 
         rd_kafka_broker_unlock(rkb);
 

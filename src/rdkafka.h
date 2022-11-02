@@ -5993,6 +5993,28 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
     void *ic_opaque);
 
 
+/**
+ * @brief on_broker_state_change() is called just after a broker
+ *        has been created or its state has been changed.
+ *
+ * @param rk The client instance.
+ * @param broker_id The broker id (-1 is used for bootstrap brokers).
+ * @param secproto The security protocol.
+ * @param name The original name of the broker.
+ * @param port The port of the broker.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_broker_state_change_t)(
+    rd_kafka_t *rk,
+    int32_t broker_id,
+    const char *secproto,
+    const char *name,
+    int port,
+    const char *state,
+    void *ic_opaque);
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -6003,7 +6025,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_set(
@@ -6022,7 +6044,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_set(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_dup(
@@ -6069,7 +6091,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_destroy(
  *         has not already been added.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -6089,7 +6111,7 @@ rd_kafka_conf_interceptor_add_on_new(rd_kafka_conf_t *conf,
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_destroy(
@@ -6126,7 +6148,7 @@ rd_kafka_interceptor_add_on_send(rd_kafka_t *rk,
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_acknowledgement(
@@ -6145,7 +6167,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_acknowledgement(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_consume(
@@ -6164,7 +6186,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_consume(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_commit(
@@ -6183,7 +6205,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_commit(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_request_sent(
@@ -6202,7 +6224,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_request_sent(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_response_received(
@@ -6221,7 +6243,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_response_received(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_start(
@@ -6240,13 +6262,33 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_start(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_exit(
     rd_kafka_t *rk,
     const char *ic_name,
     rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
+    void *ic_opaque);
+
+
+/**
+ * @brief Append an on_broker_state_change() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_broker_state_change() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing interceptor with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_interceptor_add_on_broker_state_change(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_broker_state_change_t *on_broker_state_change,
     void *ic_opaque);
 
 

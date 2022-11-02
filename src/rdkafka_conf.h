@@ -159,7 +159,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 30)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 31)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -314,20 +314,21 @@ struct rd_kafka_conf_s {
         /* Interceptors */
         struct {
                 /* rd_kafka_interceptor_method_t lists */
-                rd_list_t on_conf_set;          /* on_conf_set interceptors
-                                                 * (not copied on conf_dup()) */
-                rd_list_t on_conf_dup;          /* .. (not copied) */
-                rd_list_t on_conf_destroy;      /* .. (not copied) */
-                rd_list_t on_new;               /* .. (copied) */
-                rd_list_t on_destroy;           /* .. (copied) */
-                rd_list_t on_send;              /* .. (copied) */
-                rd_list_t on_acknowledgement;   /* .. (copied) */
-                rd_list_t on_consume;           /* .. (copied) */
-                rd_list_t on_commit;            /* .. (copied) */
-                rd_list_t on_request_sent;      /* .. (copied) */
-                rd_list_t on_response_received; /* .. (copied) */
-                rd_list_t on_thread_start;      /* .. (copied) */
-                rd_list_t on_thread_exit;       /* .. (copied) */
+                rd_list_t on_conf_set;            /* on_conf_set interceptors
+                                                   * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;            /* .. (not copied) */
+                rd_list_t on_conf_destroy;        /* .. (not copied) */
+                rd_list_t on_new;                 /* .. (copied) */
+                rd_list_t on_destroy;             /* .. (copied) */
+                rd_list_t on_send;                /* .. (copied) */
+                rd_list_t on_acknowledgement;     /* .. (copied) */
+                rd_list_t on_consume;             /* .. (copied) */
+                rd_list_t on_commit;              /* .. (copied) */
+                rd_list_t on_request_sent;        /* .. (copied) */
+                rd_list_t on_response_received;   /* .. (copied) */
+                rd_list_t on_thread_start;        /* .. (copied) */
+                rd_list_t on_thread_exit;         /* .. (copied) */
+                rd_list_t on_broker_state_change; /* .. (copied) */
 
                 /* rd_strtup_t list */
                 rd_list_t config; /* Configuration name=val's

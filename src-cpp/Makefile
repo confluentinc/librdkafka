@@ -7,7 +7,7 @@ CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
 		TopicImpl.cpp TopicPartitionImpl.cpp MessageImpl.cpp \
 		HeadersImpl.cpp QueueImpl.cpp MetadataImpl.cpp
 
-HDRS=		rdkafkacpp.h
+HDRS=		../include/librdkafka/rdkafkacpp.h
 
 OBJS=		$(CXXSRCS:%.cpp=%.o)
 

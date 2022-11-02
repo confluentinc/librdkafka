@@ -25,7 +25,7 @@ mkl_require libcurl
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
 
-verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
+verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' include/librdkafka/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 

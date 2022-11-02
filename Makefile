@@ -8,7 +8,7 @@ DOC_FILES+=	LICENSE LICENSES.txt INTRODUCTION.md README.md \
 		CONFIGURATION.md STATISTICS.md CHANGELOG.md
 
 PKGNAME?=	librdkafka
-VERSION?=	$(shell python3 packaging/get_version.py src/rdkafka.h)
+VERSION?=	$(shell python3 packaging/get_version.py include/librdkafka/rdkafka.h)
 
 # Jenkins CI integration
 BUILD_NUMBER ?= 1
@@ -26,7 +26,7 @@ include mklove/Makefile.base
 libs:
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d || exit $?; done)
 
-CONFIGURATION.md: src/rdkafka.h examples
+CONFIGURATION.md: include/librdkafka/rdkafka.h examples
 	@printf "$(MKL_YELLOW)Updating $@$(MKL_CLR_RESET)\n"
 	@echo "# Configuration properties" > CONFIGURATION.md.tmp
 	@(examples/rdkafka_performance -X list | \

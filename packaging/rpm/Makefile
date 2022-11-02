@@ -1,5 +1,5 @@
 PACKAGE_NAME?=	librdkafka
-VERSION?=	$(shell ../get_version.py ../../src/rdkafka.h)
+VERSION?=	$(shell ../get_version.py ../../include/librdkafka/rdkafka.h)
 
 # Jenkins CI integration
 BUILD_NUMBER?= 1

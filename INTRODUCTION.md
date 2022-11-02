@@ -791,7 +791,7 @@ See KIP-447 for more information.
 
 ### Documentation
 
-The librdkafka API is documented in the [`rdkafka.h`](src/rdkafka.h)
+The librdkafka API is documented in the [`rdkafka.h`](include/librdkafka/rdkafka.h)
 header file, the configuration properties are documented in
 [`CONFIGURATION.md`](CONFIGURATION.md)
 

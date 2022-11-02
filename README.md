@@ -38,7 +38,7 @@ affiliation with and is not endorsed by The Apache Software Foundation.
 
 # Documentation
 
- * Public API in [C header](src/rdkafka.h) and [C++ header](src-cpp/rdkafkacpp.h).
+ * Public API in [C header](include/librdkafka/rdkafka.h) and [C++ header](include/librdkafka/rdkafkacpp.h).
  * Introduction and manual in [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md).
  * Configuration properties in
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).

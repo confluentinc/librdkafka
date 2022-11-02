@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.2)
 
 include("packaging/cmake/parseversion.cmake")
-parseversion("src/rdkafka.h")
+parseversion("include/librdkafka/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 

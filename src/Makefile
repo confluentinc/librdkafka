@@ -58,7 +58,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_error.c rdkafka_fetcher.c \
 		$(SRCS_y)
 
-HDRS=		rdkafka.h rdkafka_mock.h
+HDRS=		../include/librdkafka/rdkafka.h ../include/librdkafka/rdkafka_mock.h
 
 OBJS=		$(SRCS:.c=.o)
 

@@ -94,13 +94,13 @@ The last octet in the version hex number is the pre-build/release-candidate
 number, where 0xAABBCCff is the final release for version 0xAABBCC.
 Release candidates start at 200, thus 0xAABBCCc9 is RC1, 0xAABBCCca is RC2, etc.
 
-Change the `RD_KAFKA_VERSION` defines in both `src/rdkafka.h` and
-`src-cpp/rdkafkacpp.h` to the version to build, such as 0x000b01c9
+Change the `RD_KAFKA_VERSION` defines in both `include/librdkafka/rdkafka.h` and
+`include/librdkafka/rdkafkacpp.h` to the version to build, such as 0x000b01c9
 for v0.11.1-RC1, or 0x000b01ff for the final v0.11.1 release.
 Update the librdkafka version in `vcpkg.json`.
 
    # Update defines
-   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h vcpkg.json
+   $ $EDITOR include/librdkafka/rdkafka.h include/librdkafka/rdkafkacpp.h vcpkg.json
 
    # Reconfigure and build
    $ ./configure
@@ -110,7 +110,7 @@ Update the librdkafka version in `vcpkg.json`.
    $ git diff
 
    # Commit
-   $ git commit -m "Version v0.11.1-RC1" src/rdkafka.h src-cpp/rdkafkacpp.h
+   $ git commit -m "Version v0.11.1-RC1" include/librdkafka/rdkafka.h include/librdkafka/rdkafkacpp.h
 
 
 **Create tag.**

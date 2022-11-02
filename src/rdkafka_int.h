@@ -42,7 +42,7 @@ typedef int mode_t;
 
 #include "rdsysqueue.h"
 
-#include "rdkafka.h"
+#include <librdkafka/rdkafka.h>
 #include "rd.h"
 #include "rdlog.h"
 #include "rdtime.h"
@@ -93,11 +93,11 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_metadata.h"
-#include "rdkafka_mock.h"
+#include <librdkafka/rdkafka_mock.h>
 #include "rdkafka_partition.h"
 #include "rdkafka_assignment.h"
 #include "rdkafka_coord.h"
-#include "rdkafka_mock.h"
+#include <librdkafka/rdkafka_mock.h>
 
 /**
  * Protocol level sanity

@@ -34,10 +34,10 @@
 #include <cstring>
 #include <stdlib.h>
 
-#include "rdkafkacpp.h"
+#include <librdkafka/rdkafkacpp.h>
 
 extern "C" {
-#include "../src/rdkafka.h"
+#include <librdkafka/rdkafka.h>
 }
 
 #ifdef _WIN32

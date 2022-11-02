@@ -62,6 +62,8 @@ HDRS=		../include/librdkafka/rdkafka.h ../include/librdkafka/rdkafka_mock.h
 
 OBJS=		$(SRCS:.c=.o)
 
+CFLAGS += -I../include
+
 
 all: lib check
 

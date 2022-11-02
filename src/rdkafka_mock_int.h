@@ -520,6 +520,6 @@ void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
  */
 
 
-#include "rdkafka_mock.h"
+#include <librdkafka/rdkafka_mock.h>
 
 #endif /* _RDKAFKA_MOCK_INT_H_ */

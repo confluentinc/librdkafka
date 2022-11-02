@@ -11,6 +11,8 @@ HDRS=		../include/librdkafka/rdkafkacpp.h
 
 OBJS=		$(CXXSRCS:%.cpp=%.o)
 
+CFLAGS += -I../include
+CXXFLAGS += -I../include
 
 
 all: lib check

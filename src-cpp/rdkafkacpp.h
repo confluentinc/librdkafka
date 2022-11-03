@@ -1326,6 +1326,14 @@ class RD_EXPORT Conf {
    *
    * @remark CA certificate in PEM format may also be set with the
    *         `ssl.ca.pem` configuration property.
+   *
+   * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+   *         encoded using an obsolete cipher, it might be necessary to set up
+   *         an OpenSSL configuration file to load the "legacy" provider and
+   *         set the OPENSSL_CONF environment variable.
+   *         See
+   * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+   * information.
    */
   virtual Conf::ConfResult set_ssl_cert(RdKafka::CertificateType cert_type,
                                         RdKafka::CertificateEncoding cert_enc,
@@ -1505,7 +1513,7 @@ class RD_EXPORT Handle {
   }
 
   /** @returns the name of the handle */
-  virtual const std::string name() const = 0;
+  virtual std::string name() const = 0;
 
   /**
    * @brief Returns the client's broker-assigned group member id
@@ -1515,7 +1523,7 @@ class RD_EXPORT Handle {
    * @returns Last assigned member id, or empty string if not currently
    *          a group member.
    */
-  virtual const std::string memberid() const = 0;
+  virtual std::string memberid() const = 0;
 
 
   /**
@@ -1714,7 +1722,7 @@ class RD_EXPORT Handle {
    * @returns Last cached ClusterId, or empty string if no ClusterId could be
    *          retrieved in the allotted timespan.
    */
-  virtual const std::string clusterid(int timeout_ms) = 0;
+  virtual std::string clusterid(int timeout_ms) = 0;
 
   /**
    * @brief Returns the underlying librdkafka C rd_kafka_t handle.
@@ -1996,7 +2004,7 @@ class RD_EXPORT Topic {
 
 
   /** @returns the topic name */
-  virtual const std::string name() const = 0;
+  virtual std::string name() const = 0;
 
   /**
    * @returns true if \p partition is available for the topic (has leader).
@@ -3580,7 +3588,7 @@ class BrokerMetadata {
   virtual int32_t id() const = 0;
 
   /** @returns Broker hostname */
-  virtual const std::string host() const = 0;
+  virtual std::string host() const = 0;
 
   /** @returns Broker listening port */
   virtual int port() const = 0;
@@ -3639,7 +3647,7 @@ class TopicMetadata {
   typedef PartitionMetadataVector::const_iterator PartitionMetadataIterator;
 
   /** @returns Topic name */
-  virtual const std::string topic() const = 0;
+  virtual std::string topic() const = 0;
 
   /** @returns Partition list */
   virtual const PartitionMetadataVector *partitions() const = 0;
@@ -3685,7 +3693,7 @@ class Metadata {
   virtual int32_t orig_broker_id() const = 0;
 
   /** @brief Broker (name) originating this metadata */
-  virtual const std::string orig_broker_name() const = 0;
+  virtual std::string orig_broker_name() const = 0;
 
   virtual ~Metadata() = 0;
 };

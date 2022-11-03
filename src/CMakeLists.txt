@@ -51,6 +51,7 @@ set(
     rdkafka_mock_handlers.c
     rdkafka_mock_cgrp.c
     rdkafka_error.c
+    rdkafka_fetcher.c
     rdlist.c
     rdlog.c
     rdmurmur2.c
@@ -196,6 +197,12 @@ set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 
+if(WITH_CURL)
+  find_package(CURL REQUIRED)
+  target_include_directories(rdkafka PUBLIC ${CURL_INCLUDE_DIRS})
+  target_link_libraries(rdkafka PUBLIC ${CURL_LIBRARIES})
+endif()
+
 if(WITH_HDRHISTOGRAM)
   target_link_libraries(rdkafka PUBLIC m)
 endif()
@@ -287,6 +294,11 @@ endif()
 if(NOT RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_NAME "librdkafka")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
+
+  if(WITH_CURL)
+    string(APPEND PKG_CONFIG_REQUIRES "curl ")
+  endif()
+
   if(WITH_ZLIB)
     string(APPEND PKG_CONFIG_REQUIRES "zlib ")
   endif()

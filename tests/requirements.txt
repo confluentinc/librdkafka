@@ -1,2 +1,2 @@
-trivup
+trivup >= 0.11.0
 jsoncomment

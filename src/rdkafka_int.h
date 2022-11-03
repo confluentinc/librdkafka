@@ -652,9 +652,11 @@ rd_kafka_curr_msgs_add(rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         mtx_lock(&rk->rk_curr_msgs.lock);
-        while (unlikely(rk->rk_curr_msgs.cnt + cnt > rk->rk_curr_msgs.max_cnt ||
-                        (unsigned long long)(rk->rk_curr_msgs.size + size) >
-                            (unsigned long long)rk->rk_curr_msgs.max_size)) {
+        while (
+            unlikely((rk->rk_curr_msgs.max_cnt > 0 &&
+                      rk->rk_curr_msgs.cnt + cnt > rk->rk_curr_msgs.max_cnt) ||
+                     (unsigned long long)(rk->rk_curr_msgs.size + size) >
+                         (unsigned long long)rk->rk_curr_msgs.max_size)) {
                 if (!block) {
                         mtx_unlock(&rk->rk_curr_msgs.lock);
                         return RD_KAFKA_RESP_ERR__QUEUE_FULL;

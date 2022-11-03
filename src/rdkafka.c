@@ -957,6 +957,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
                 rd_kafka_ssl_ctx_term(rk);
         }
+        rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
 #endif
 
         /* It is not safe to log after this point. */

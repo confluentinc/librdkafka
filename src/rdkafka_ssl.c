@@ -46,6 +46,10 @@
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#include <openssl/provider.h>
+#endif
+
 #include <ctype.h>
 
 #if !_WIN32
@@ -102,16 +106,21 @@ rd_kafka_transport_ssl_clear_error(rd_kafka_transport_t *rktrans) {
 const char *rd_kafka_ssl_last_error_str(void) {
         static RD_TLS char errstr[256];
         unsigned long l;
-        const char *file, *data;
+        const char *file, *data, *func;
         int line, flags;
 
-        l = ERR_peek_last_error_line_data(&file, &line, &data, &flags);
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        l = ERR_peek_last_error_all(&file, &line, &func, &data, &flags);
+#else
+        l    = ERR_peek_last_error_line_data(&file, &line, &data, &flags);
+        func = ERR_func_error_string(l);
+#endif
+
         if (!l)
                 return "";
 
         rd_snprintf(errstr, sizeof(errstr), "%lu:%s:%s:%s:%d: %s", l,
-                    ERR_lib_error_string(l), ERR_func_error_string(l), file,
-                    line,
+                    ERR_lib_error_string(l), func, file, line,
                     ((flags & ERR_TXT_STRING) && data && *data)
                         ? data
                         : ERR_reason_error_string(l));
@@ -131,7 +140,7 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                                 char *errstr,
                                 size_t errstr_size) {
         unsigned long l;
-        const char *file, *data;
+        const char *file, *data, *func;
         int line, flags;
         int cnt = 0;
 
@@ -140,9 +149,18 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                 rk = rkb->rkb_rk;
         }
 
-        while ((l = ERR_get_error_line_data(&file, &line, &data, &flags)) !=
-               0) {
+        while (
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+            (l = ERR_get_error_all(&file, &line, &func, &data, &flags))
+#else
+            (l = ERR_get_error_line_data(&file, &line, &data, &flags))
+#endif
+        ) {
                 char buf[256];
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000
+                func = ERR_func_error_string(l);
+#endif
 
                 if (cnt++ > 0) {
                         /* Log last message */
@@ -157,10 +175,10 @@ static char *rd_kafka_ssl_error(rd_kafka_t *rk,
                 if (!(flags & ERR_TXT_STRING) || !data || !*data)
                         data = NULL;
 
-                /* Include openssl file:line if debugging is enabled */
+                /* Include openssl file:line:func if debugging is enabled */
                 if (rk->rk_conf.log_level >= LOG_DEBUG)
-                        rd_snprintf(errstr, errstr_size, "%s:%d: %s%s%s", file,
-                                    line, buf, data ? ": " : "",
+                        rd_snprintf(errstr, errstr_size, "%s:%d:%s %s%s%s",
+                                    file, line, func, buf, data ? ": " : "",
                                     data ? data : "");
                 else
                         rd_snprintf(errstr, errstr_size, "%s%s%s", buf,
@@ -557,7 +575,11 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
         if (!rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.enable_verify)
                 return 0;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        cert = SSL_get1_peer_certificate(rktrans->rktrans_ssl);
+#else
         cert = SSL_get_peer_certificate(rktrans->rktrans_ssl);
+#endif
         X509_free(cert);
         if (!cert) {
                 rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
@@ -614,6 +636,7 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
                 else if (strstr(errstr,
                                 "tls_process_server_certificate:"
                                 "certificate verify failed") ||
+                         strstr(errstr, "error:0A000086") /*openssl3*/ ||
                          strstr(errstr,
                                 "get_server_certificate:"
                                 "certificate verify failed"))
@@ -1310,7 +1333,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 check_pkey = rd_true;
         }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL_ENGINE
         /*
          * If applicable, use OpenSSL engine to fetch SSL certificate.
          */
@@ -1380,7 +1403,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
                 check_pkey = rd_true;
         }
-#endif
+#endif /*WITH_SSL_ENGINE*/
 
         /* Check that a valid private/public key combo was set. */
         if (check_pkey && SSL_CTX_check_private_key(ctx) != 1) {
@@ -1403,13 +1426,13 @@ void rd_kafka_ssl_ctx_term(rd_kafka_t *rk) {
         SSL_CTX_free(rk->rk_conf.ssl.ctx);
         rk->rk_conf.ssl.ctx = NULL;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL_ENGINE
         RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
 #endif
 }
 
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL_ENGINE
 /**
  * @brief Initialize and load OpenSSL engine, if configured.
  *
@@ -1475,6 +1498,83 @@ rd_kafka_ssl_ctx_init_engine(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 #endif
 
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+/**
+ * @brief Wrapper around OSSL_PROVIDER_unload() to expose a free(void*) API
+ *        suitable for rd_list_t's free_cb.
+ */
+static void rd_kafka_ssl_OSSL_PROVIDER_free(void *ptr) {
+        OSSL_PROVIDER *prov = ptr;
+        (void)OSSL_PROVIDER_unload(prov);
+}
+
+
+/**
+ * @brief Load OpenSSL 3.0.x providers specified in comma-separated string.
+ *
+ * @remark Only the error preamble/prefix is written here, the actual
+ *         OpenSSL error is retrieved from the OpenSSL error stack by
+ *         the caller.
+ *
+ * @returns rd_false on failure (errstr will be written to), or rd_true
+ *          on successs.
+ */
+static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
+                                                 const char *providers_csv,
+                                                 char *errstr,
+                                                 size_t errstr_size) {
+        size_t provider_cnt, i;
+        char **providers = rd_string_split(
+            providers_csv, ',', rd_true /*skip empty*/, &provider_cnt);
+
+
+        if (!providers || !provider_cnt) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.providers expects a comma-separated "
+                            "list of OpenSSL 3.0.x providers");
+                if (providers)
+                        rd_free(providers);
+                return rd_false;
+        }
+
+        rd_list_init(&rk->rk_conf.ssl.loaded_providers, (int)provider_cnt,
+                     rd_kafka_ssl_OSSL_PROVIDER_free);
+
+        for (i = 0; i < provider_cnt; i++) {
+                const char *provider = providers[i];
+                OSSL_PROVIDER *prov;
+                const char *buildinfo = NULL;
+                OSSL_PARAM request[]  = {{"buildinfo", OSSL_PARAM_UTF8_PTR,
+                                         (void *)&buildinfo, 0, 0},
+                                        {NULL, 0, NULL, 0, 0}};
+
+                prov = OSSL_PROVIDER_load(NULL, provider);
+                if (!prov) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Failed to load OpenSSL provider \"%s\": ",
+                                    provider);
+                        rd_free(providers);
+                        return rd_false;
+                }
+
+                if (!OSSL_PROVIDER_get_params(prov, request))
+                        buildinfo = "no buildinfo";
+
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "OpenSSL provider \"%s\" loaded (%s)", provider,
+                             buildinfo);
+
+                rd_list_add(&rk->rk_conf.ssl.loaded_providers, prov);
+        }
+
+        rd_free(providers);
+
+        return rd_true;
+}
+#endif
+
+
+
 /**
  * @brief Once per rd_kafka_t handle initialization of OpenSSL
  *
@@ -1508,7 +1608,14 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         if (errstr_size > 0)
                 errstr[0] = '\0';
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.providers &&
+            !rd_kafka_ssl_ctx_load_providers(rk, rk->rk_conf.ssl.providers,
+                                             errstr, errstr_size))
+                goto fail;
+#endif
+
+#if WITH_SSL_ENGINE
         if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Loading OpenSSL engine from \"%s\"",
@@ -1600,12 +1707,18 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
 fail:
         r = (int)strlen(errstr);
-        rd_kafka_ssl_error(rk, NULL, errstr + r,
-                           (int)errstr_size > r ? (int)errstr_size - r : 0);
+        /* If only the error preamble is provided in errstr and ending with
+         * "....: ", then retrieve the last error from the OpenSSL error stack,
+         * else treat the errstr as complete. */
+        if (r > 2 && !strcmp(&errstr[r - 2], ": "))
+                rd_kafka_ssl_error(rk, NULL, errstr + r,
+                                   (int)errstr_size > r ? (int)errstr_size - r
+                                                        : 0);
         RD_IF_FREE(ctx, SSL_CTX_free);
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL_ENGINE
         RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
 #endif
+        rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
 
         return -1;
 }

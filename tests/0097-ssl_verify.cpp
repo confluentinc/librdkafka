@@ -37,21 +37,21 @@
 static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
     /* [RdKafka::CERT_PUBLIC_KEY] = */
     {
-        "RDK_SSL_pkcs",
-        "RDK_SSL_pub_der",
-        "RDK_SSL_pub_pem",
+        "SSL_pkcs",
+        "SSL_pub_der",
+        "SSL_pub_pem",
     },
     /* [RdKafka::CERT_PRIVATE_KEY] = */
     {
-        "RDK_SSL_pkcs",
-        "RDK_SSL_priv_der",
-        "RDK_SSL_priv_pem",
+        "SSL_pkcs",
+        "SSL_priv_der",
+        "SSL_priv_pem",
     },
     /* [RdKafka::CERT_CA] = */
     {
-        "RDK_SSL_pkcs",
-        "RDK_SSL_ca_der",
-        "RDK_SSL_ca_pem",
+        "SSL_pkcs",
+        "SSL_ca_der",
+        "SSL_ca_pem",
     }};
 
 
@@ -193,9 +193,9 @@ static void conf_location_to_setter(RdKafka::Conf *conf,
 
   if (conf->set_ssl_cert(cert_type, encoding, buffer.data(), size, errstr) !=
       RdKafka::Conf::CONF_OK)
-    Test::Fail(tostr() << "Failed to set cert from " << loc << " as cert type "
-                       << cert_type << " with encoding " << encoding << ": "
-                       << errstr << "\n");
+    Test::Fail(tostr() << "Failed to set " << loc_prop << " from " << loc
+                       << " as cert type " << cert_type << " with encoding "
+                       << encoding << ": " << errstr << "\n");
 }
 
 
@@ -322,8 +322,7 @@ static void do_test_bad_calls() {
   if (conf->set("security.protocol", "SSL", errstr))
     Test::Fail(errstr);
 
-  if (conf->set("ssl.key.password", test_getenv("RDK_SSL_password", NULL),
-                errstr))
+  if (conf->set("ssl.key.password", test_getenv("SSL_password", NULL), errstr))
     Test::Fail(errstr);
 
   std::vector<char> certBuffer = read_file(test_getenv(
@@ -367,7 +366,7 @@ int main_0097_ssl_verify(int argc, char **argv) {
     return 0;
   }
 
-  if (!test_getenv("RDK_SSL_pkcs", NULL)) {
+  if (!test_getenv("SSL_pkcs", NULL)) {
     Test::Skip("Test requires SSL_* env-vars set up by trivup\n");
     return 0;
   }

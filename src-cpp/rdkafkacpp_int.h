@@ -992,10 +992,10 @@ class HandleImpl : virtual public Handle {
  public:
   ~HandleImpl() {};
   HandleImpl() {};
-  const std::string name() const {
+  std::string name() const {
     return std::string(rd_kafka_name(rk_));
   };
-  const std::string memberid() const {
+  std::string memberid() const {
     char *str            = rd_kafka_memberid(rk_);
     std::string memberid = str ? str : "";
     if (str)
@@ -1075,7 +1075,7 @@ class HandleImpl : virtual public Handle {
     rd_kafka_yield(rk_);
   }
 
-  const std::string clusterid(int timeout_ms) {
+  std::string clusterid(int timeout_ms) {
     char *str             = rd_kafka_clusterid(rk_, timeout_ms);
     std::string clusterid = str ? str : "";
     if (str)
@@ -1171,7 +1171,7 @@ class TopicImpl : public Topic {
     rd_kafka_topic_destroy(rkt_);
   }
 
-  const std::string name() const {
+  std::string name() const {
     return rd_kafka_topic_name(rkt_);
   }
 
@@ -1398,7 +1398,7 @@ class MetadataImpl : public Metadata {
     return &topics_;
   }
 
-  const std::string orig_broker_name() const {
+  std::string orig_broker_name() const {
     return std::string(metadata_->orig_broker_name);
   }
 

@@ -8,16 +8,16 @@
         },
         {
             "name": "zlib",
-            "version>=": "1.2.12"
+            "version>=": "1.2.13"
         },
         {
             "name": "openssl",
-            "version>=": "3.0.5"
+            "version>=": "3.0.7"
         },
         {
             "name": "curl",
             "version>=": "7.84.0"
         }
     ],
-    "builtin-baseline": "083f103cfb6ff4a05d6c49b6a2231965e08b6e2b"
+    "builtin-baseline": "09adfdc8cdad76345b7cc7f3305899e1cbd66297"
 }

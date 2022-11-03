@@ -4,7 +4,7 @@ librdkafka v1.9.3 is a maintenance release:
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
  * Fix for using PKCS#12 keystores on Windows.
- * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.5 (previously 1.1.1q).
+ * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
  * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
 
 

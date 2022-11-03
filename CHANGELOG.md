@@ -48,6 +48,8 @@ configuration property.
 
  * Bundled zlib upgraded to version 1.2.13.
  * Added `on_broker_state_change()` interceptor
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+
 
 
 # librdkafka v1.9.2

@@ -443,7 +443,7 @@ char **rd_string_split(const char *input,
         size_t i    = 0;
         size_t elen = 0;
 
-        *cntp = '\0';
+        *cntp = 0;
 
         /* First count the maximum number of fields so we know how large of
          * an array we need to allocate. Escapes are ignored. */

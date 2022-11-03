@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
          *
          * The internal queue is limited by the
          * configuration property
-         * queue.buffering.max.messages */
+         * queue.buffering.max.messages and queue.buffering.max.kbytes */
         producer->poll(1000 /*block for max 1000ms*/);
         goto retry;
       }

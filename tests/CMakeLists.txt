@@ -124,6 +124,7 @@ set(
     0131-connect_timeout.c
     0132-strategy_ordering.c
     0133-ssl_keys.c
+    0134-ssl_provider.c
     8000-idle.cpp
     test.c
     testcpp.cpp

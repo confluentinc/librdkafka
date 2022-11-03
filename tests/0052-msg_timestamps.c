@@ -184,6 +184,11 @@ int main_0052_msg_timestamps(int argc, char **argv) {
         if (!test_can_create_topics(1))
                 return 0;
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Test cluster requires authentication/SSL\n");
+                return 0;
+        }
+
         /* Broker version limits the producer's feature set,
          * for 0.9.0.0 no timestamp will be transmitted,
          * but for 0.10.1.0 (or newer, api.version.request will be true)

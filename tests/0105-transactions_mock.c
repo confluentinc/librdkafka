@@ -3189,8 +3189,8 @@ do_test_txn_concurrent_operations(rd_bool_t is_commit,
 
         TEST_SAY("Concurrent operation while retrying\n");
         concurrent_operation = do_test_txn_concurrent_operations_abort;
-        if (!is_commit && different_concurrent_operation ||
-            is_commit && !different_concurrent_operation) {
+        if ((!is_commit && different_concurrent_operation) ||
+            (is_commit && !different_concurrent_operation)) {
                 concurrent_operation = do_test_txn_concurrent_operations_commit;
         }
         if (thrd_create(&thr, concurrent_operation, (void *)rk) !=

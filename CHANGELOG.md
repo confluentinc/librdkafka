@@ -12,6 +12,9 @@ librdkafka v1.9.3 is a maintenance release:
 
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
 
+### Consumer fixes
+
+ * Back-off and retry JoinGroup request if coordinator load is in progress.
 
 
 # librdkafka v1.9.2

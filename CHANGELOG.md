@@ -2,6 +2,7 @@
 
 librdkafka v1.9.3 is a maintenance release:
 
+ * Fixes to the transactional and idempotent producer.
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
  * Fix for using PKCS#12 keystores on Windows.
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.5 (previously 1.1.1q).
@@ -36,6 +37,12 @@ OpenSSL providers may be configured with the new `ssl.providers`
 configuration property.
 
 
+## Enhancements
+
+ * Bundled zlib upgraded to version 1.2.13.
+ * Added `on_broker_state_change()` interceptor
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+
 
 ## Fixes
 
@@ -44,11 +51,12 @@ configuration property.
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
  * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
 
-## Enhancements
+### Transactional producer fixes
 
- * Bundled zlib upgraded to version 1.2.13.
- * Added `on_broker_state_change()` interceptor
- * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+ * When a PID epoch bump is requested and the producer is waiting
+  to reconnect to the transaction coordinator, a failure in a find coordinator
+  request could cause an assert to fail. This was fixed by retrying when the
+  coordinator is known (#4020).
 
 
 

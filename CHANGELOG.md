@@ -36,6 +36,12 @@ OpenSSL providers may be configured with the new `ssl.providers`
 configuration property.
 
 
+## Enhancements
+
+ * Bundled zlib upgraded to version 1.2.13.
+ * Added `on_broker_state_change()` interceptor
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+
 
 ## Fixes
 
@@ -43,12 +49,9 @@ configuration property.
 
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
  * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
+ * Load all CA certificates from `ssl.ca.pem`, not just the first one.
 
-## Enhancements
 
- * Bundled zlib upgraded to version 1.2.13.
- * Added `on_broker_state_change()` interceptor
- * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
 
 
 

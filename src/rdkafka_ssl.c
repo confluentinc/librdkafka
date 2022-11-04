@@ -1019,32 +1019,55 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         /* CA as PEM string */
                         X509 *x509;
                         X509_STORE *store;
+                        BIO *bio;
+                        int cnt = 0;
 
                         /* Get the OpenSSL trust store */
                         store = SSL_CTX_get_cert_store(ctx);
                         rd_assert(store != NULL);
 
                         rd_kafka_dbg(rk, SECURITY, "SSL",
-                                     "Loading CA certificate from string");
+                                     "Loading CA certificate(s) from string");
 
-                        x509 = rd_kafka_ssl_X509_from_string(
-                            rk, rk->rk_conf.ssl.ca_pem);
-                        if (!x509) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "ssl.ca.pem failed: "
-                                            "not in PEM format?: ");
-                                return -1;
-                        }
+                        bio =
+                            BIO_new_mem_buf((void *)rk->rk_conf.ssl.ca_pem, -1);
+                        rd_assert(bio != NULL);
 
-                        if (!X509_STORE_add_cert(store, x509)) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "failed to add ssl.ca.pem to "
-                                            "CA cert store: ");
+                        /* Add all certificates to cert store */
+                        while ((x509 = PEM_read_bio_X509(
+                                    bio, NULL, rd_kafka_transport_ssl_passwd_cb,
+                                    rk))) {
+                                if (!X509_STORE_add_cert(store, x509)) {
+                                        rd_snprintf(errstr, errstr_size,
+                                                    "failed to add ssl.ca.pem "
+                                                    "certificate "
+                                                    "#%d to CA cert store: ",
+                                                    cnt);
+                                        X509_free(x509);
+                                        BIO_free(bio);
+                                        return -1;
+                                }
+
                                 X509_free(x509);
+                                cnt++;
+                        }
+
+                        if (!BIO_eof(bio) || !cnt) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "failed to read certificate #%d "
+                                            "from ssl.ca.pem: "
+                                            "not in PEM format?: ",
+                                            cnt);
+                                BIO_free(bio);
                                 return -1;
                         }
 
-                        X509_free(x509);
+                        BIO_free(bio);
+
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                                     "Loaded %d CA certificate(s) from string",
+                                     cnt);
+
 
                         ca_probe = rd_false;
                 }

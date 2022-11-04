@@ -267,7 +267,6 @@ static void do_test_joingroup_coordinator_load_in_progress() {
         const char *bootstraps;
         const char *topic = "test";
         const int msgcnt  = 1;
-        rd_kafka_topic_partition_list_t *partitions;
 
         SUB_TEST();
 

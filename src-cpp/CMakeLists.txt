@@ -30,8 +30,8 @@ endif()
 
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 
-# Support '#include <rdkafcpp.h>'
-target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+# Support '#include <rdkafkacpp.h>'
+target_include_directories(rdkafka++ PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}> $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../include>)
 if(NOT RDKAFKA_BUILD_STATIC)
     target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 endif()

@@ -253,6 +253,8 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                                 X509_free(x509);
                                 goto fail;
                         }
+
+                        X509_free(x509);
                 } break;
 
                 case RD_KAFKA_CERT_ENC_PEM: {

@@ -50,6 +50,7 @@ configuration property.
 
  * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
  * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
+ * Load all CA certificates from `ssl.ca.pem`, not just the first one.
 
 ### Transactional producer fixes
 

@@ -42,11 +42,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 
-/*
- * Typically include path in a real application would be
- * #include <librdkafka/rdkafkacpp.h>
- */
-#include "rdkafkacpp.h"
+#include <librdkafka/rdkafkacpp.h>
 
 
 

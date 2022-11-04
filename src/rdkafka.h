@@ -8124,6 +8124,9 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  *
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
+ *
+ * @remark Not allowed to be called concurrently
+ *         to other transactional calls.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_init_transactions(rd_kafka_t *rk, int timeout_ms);
@@ -8173,6 +8176,9 @@ rd_kafka_error_t *rd_kafka_init_transactions(rd_kafka_t *rk, int timeout_ms);
  *
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
+ *
+ * @remark Not allowed to be called concurrently
+ *         to other transactional calls.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
@@ -8221,7 +8227,8 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
  *          respectively.
  *          Error codes:
- *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction
+ *          or a concurrent transactional call is already in progress,
  *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
  *          transaction has been fenced by a newer producer instance,
  *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
@@ -8241,6 +8248,9 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
+ *
+ * @remark Not allowed to be called concurrently
+ *         to other transactional calls.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
@@ -8295,7 +8305,8 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
  *          rd_kafka_error_txn_requires_abort() or rd_kafka_error_is_fatal()
  *          respectively.
  *          Error codes:
- *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction
+ *          or a concurrent transactional call is already in progress,
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
  *          complete commmitted within \p timeout_ms, this is a retriable
  *          error as the commit continues in the background,
@@ -8312,6 +8323,9 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
  *
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
+ *
+ * @remark Not allowed to be called concurrently
+ *         to other transactional calls.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
@@ -8354,7 +8368,8 @@ rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
  *          by calling rd_kafka_error_is_retriable(), or whether a fatal error
  *          has been raised by calling rd_kafka_error_is_fatal().
  *          Error codes:
- *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction
+ *          or a concurrent transactional call is already in progress,
  *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
  *          complete commmitted within \p timeout_ms, this is a retriable
  *          error as the commit continues in the background,
@@ -8371,6 +8386,8 @@ rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
  *
  * @remark The returned error object (if not NULL) must be destroyed with
  *         rd_kafka_error_destroy().
+ * @remark Not allowed to be called concurrently
+ *         to other transactional calls.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_abort_transaction(rd_kafka_t *rk, int timeout_ms);

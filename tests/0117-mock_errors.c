@@ -255,6 +255,56 @@ static void do_test_offset_commit_request_timed_out(rd_bool_t auto_commit) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify that a cluster roll does not cause consumer_poll() to return
+ * the temporary and retriable COORDINATOR_LOAD_IN_PROGRESS error. We should
+ * backoff and retry in that case.
+ */
+static void do_test_joingroup_coordinator_load_in_progress() {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *consumer;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic = "test";
+        const int msgcnt  = 1;
+
+        SUB_TEST();
+
+        test_conf_init(&conf, NULL, 60);
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_FindCoordinator, 1,
+            RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+
+        consumer = test_create_consumer("mygroup", NULL,
+                                        rd_kafka_conf_dup(conf), NULL);
+
+
+        test_consumer_subscribe(consumer, topic);
+
+        /* Wait for assignment and one message */
+        test_consumer_poll("consumer", consumer, 0, -1, -1, msgcnt, NULL);
+
+        test_consumer_close(consumer);
+
+        rd_kafka_destroy(consumer);
+
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0117_mock_errors(int argc, char **argv) {
 
         if (test_needs_auth()) {
@@ -269,6 +319,8 @@ int main_0117_mock_errors(int argc, char **argv) {
 
         do_test_offset_commit_request_timed_out(rd_true);
         do_test_offset_commit_request_timed_out(rd_false);
+
+        do_test_joingroup_coordinator_load_in_progress();
 
         return 0;
 }

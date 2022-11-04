@@ -58,6 +58,9 @@ configuration property.
   request could cause an assert to fail. This was fixed by retrying when the
   coordinator is known (#4020).
 
+### Consumer fixes
+
+ * Back-off and retry JoinGroup request if coordinator load is in progress.
 
 
 # librdkafka v1.9.2

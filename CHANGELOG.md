@@ -2,6 +2,7 @@
 
 librdkafka v1.9.3 is a maintenance release:
 
+ * Fixes to the transactional and idempotent producer.
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
  * Fix for using PKCS#12 keystores on Windows.
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.5 (previously 1.1.1q).
@@ -51,7 +52,12 @@ configuration property.
  * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
  * Load all CA certificates from `ssl.ca.pem`, not just the first one.
 
+### Transactional producer fixes
 
+ * When a PID epoch bump is requested and the producer is waiting
+  to reconnect to the transaction coordinator, a failure in a find coordinator
+  request could cause an assert to fail. This was fixed by retrying when the
+  coordinator is known (#4020).
 
 
 

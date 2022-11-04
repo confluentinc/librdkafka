@@ -256,9 +256,9 @@ static void do_test_offset_commit_request_timed_out(rd_bool_t auto_commit) {
 }
 
 /**
- * @brief PR #4030. A COORDINATOR_LOAD_IN_PROGRESS error is returned while a
- * cluster is rolled, originating from two different protocol requests,
- * including JoinGroup. We should backoff and retry in that case.
+ * @brief Verify that a cluster roll does not cause consumer_poll() to return
+ * the temporary and retriable COORDINATOR_LOAD_IN_PROGRESS error. We should
+ * backoff and retry in that case.
  */
 static void do_test_joingroup_coordinator_load_in_progress() {
         rd_kafka_conf_t *conf;

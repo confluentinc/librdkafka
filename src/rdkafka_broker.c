@@ -987,10 +987,11 @@ static int rd_kafka_broker_resolve(rd_kafka_broker_t *rkb,
 
         if (!rkb->rkb_rsal) {
                 /* Resolve */
-                rkb->rkb_rsal =
-                    rd_getaddrinfo(nodename, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
-                                   rkb->rkb_rk->rk_conf.broker_addr_family,
-                                   SOCK_STREAM, IPPROTO_TCP, &errstr);
+                rkb->rkb_rsal = rd_getaddrinfo(
+                    nodename, RD_KAFKA_PORT_STR, AI_ADDRCONFIG,
+                    rkb->rkb_rk->rk_conf.broker_addr_family, SOCK_STREAM,
+                    IPPROTO_TCP, rkb->rkb_rk->rk_conf.resolve_cb,
+                    rkb->rkb_rk->rk_conf.opaque, &errstr);
 
                 if (!rkb->rkb_rsal) {
                         rd_kafka_broker_fail(

@@ -2244,6 +2244,35 @@ void rd_kafka_conf_set_open_cb(
     int (*open_cb)(const char *pathname, int flags, mode_t mode, void *opaque));
 #endif
 
+/** Forward declaration to avoid netdb.h or winsock includes */
+struct addrinfo;
+
+/**
+ * @brief Set address resolution callback.
+ *
+ * The callback is responsible for resolving the hostname \p node and the
+ * service \p service into a list of socket addresses as \c getaddrinfo(3)
+ * would. The \p hints and \p res parameters function as they do for
+ * \c getaddrinfo(3). The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * If the callback is invoked with a NULL \p node, \p service, and \p hints, the
+ * callback should instead free the addrinfo struct specified in \p res. In this
+ * case the callback must succeed; the return value will not be checked by the
+ * caller.
+ *
+ * The callback's return value is interpreted as the return value of \p
+ * \c getaddrinfo(3).
+ *
+ * @remark The callback will be called from an internal librdkafka thread.
+ */
+RD_EXPORT void
+rd_kafka_conf_set_resolve_cb(rd_kafka_conf_t *conf,
+                             int (*resolve_cb)(const char *node,
+                                               const char *service,
+                                               const struct addrinfo *hints,
+                                               struct addrinfo **res,
+                                               void *opaque));
 
 /**
  * @brief Sets the verification callback of the broker certificate

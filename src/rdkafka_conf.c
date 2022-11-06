@@ -683,6 +683,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           rd_kafka_open_cb_generic
 #endif
     },
+    {_RK_GLOBAL, "resolve_cb", _RK_C_PTR, _RK(resolve_cb),
+     "Address resolution callback (set with rd_kafka_conf_set_resolve_cb())."},
     {_RK_GLOBAL, "opaque", _RK_C_PTR, _RK(opaque),
      "Application opaque (set with rd_kafka_conf_set_opaque())"},
     {_RK_GLOBAL, "default_topic_conf", _RK_C_PTR, _RK(topic_conf),
@@ -2788,6 +2790,16 @@ void rd_kafka_conf_set_open_cb(rd_kafka_conf_t *conf,
 }
 #endif
 
+void rd_kafka_conf_set_resolve_cb(
+    rd_kafka_conf_t *conf,
+    int (*resolve_cb)(const char *node,
+                      const char *service,
+                      const struct addrinfo *hints,
+                      struct addrinfo **res,
+                      void *opaque)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "resolve_cb",
+                                      resolve_cb);
+}
 
 rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(
     rd_kafka_conf_t *conf,

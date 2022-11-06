@@ -504,6 +504,13 @@ struct rd_kafka_conf_s {
                        mode_t mode,
                        void *opaque);
 
+        /* Address resolution callback */
+        int (*resolve_cb)(const char *node,
+                          const char *service,
+                          const struct addrinfo *hints,
+                          struct addrinfo **res,
+                          void *opaque);
+
         /* Background queue event callback */
         void (*background_event_cb)(rd_kafka_t *rk,
                                     rd_kafka_event_t *rkev,

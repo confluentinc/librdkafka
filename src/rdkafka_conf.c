@@ -732,6 +732,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Any other value >= 0.10, such as 0.10.2.1, "
      "enables ApiVersionRequests.",
      .sdef = "0.10.0", .validate = rd_kafka_conf_validate_broker_version},
+    {_RK_GLOBAL, "allow.auto.create.topics", _RK_C_BOOL,
+     _RK(allow_auto_create_topics),
+     "Allow automatic topic creation on the broker when subscribing to "
+     "or assigning non-existent topics. "
+     "The broker must also be configured with "
+     "`auto.create.topics.enable=true` for this configuration to "
+     "take effect. "
+     "Note: the default value (true) for the producer is "
+     "different from the default value (false) for the consumer. "
+     "Further, the consumer default value is different from the Java "
+     "consumer (true), and this property is not supported by the Java "
+     "producer. Requires broker version >= 0.11.0.0, for older broker "
+     "versions only the broker configuration applies.",
+     0, 1, 0},
 
     /* Security related global properties */
     {_RK_GLOBAL | _RK_HIGH, "security.protocol", _RK_C_S2I,
@@ -1253,18 +1267,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Verify CRC32 of consumed messages, ensuring no on-the-wire or "
      "on-disk corruption to the messages occurred. This check comes "
      "at slightly increased CPU usage.",
-     0, 1, 0},
-    {_RK_GLOBAL | _RK_CONSUMER, "allow.auto.create.topics", _RK_C_BOOL,
-     _RK(allow_auto_create_topics),
-     "Allow automatic topic creation on the broker when subscribing to "
-     "or assigning non-existent topics. "
-     "The broker must also be configured with "
-     "`auto.create.topics.enable=true` for this configuraiton to "
-     "take effect. "
-     "Note: The default value (false) is different from the "
-     "Java consumer (true). "
-     "Requires broker version >= 0.11.0.0, for older broker versions "
-     "only the broker configuration applies.",
      0, 1, 0},
     {_RK_GLOBAL, "client.rack", _RK_C_KSTR, _RK(client_rack),
      "A rack identifier for this client. This can be any string value "

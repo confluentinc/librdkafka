@@ -42,6 +42,8 @@ configuration property.
  * Bundled zlib upgraded to version 1.2.13.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+ * Setting `allow.auto.create.topics` will no longer give a warning if used by a producer, since that is an expected use case.
+  Improvement in documentation for this property.
 
 
 ## Fixes

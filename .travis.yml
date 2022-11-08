@@ -64,7 +64,7 @@ matrix:
    compiler: clang
    env: LINKAGE=static HOMEBREW_NO_AUTO_UPDATE=1
    before_script:
-    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip
+    - ./configure --install-deps --source-deps-only --disable-lz4-ext --prefix="$PWD/dest" --enable-static --enable-strip --disable-syslog
 
  - name: "Windows MinGW-w64 Dynamic"
    if: tag IS PRESENT

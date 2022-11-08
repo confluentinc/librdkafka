@@ -3803,11 +3803,8 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                     now, flushing ? 1 : rkb->rkb_rk->rk_conf.buffering_max_us,
                     /* Batch message count threshold */
                     rkb->rkb_rk->rk_conf.batch_num_messages,
-                    /* Batch size threshold.
-                     * When compression is enabled the
-                     * threshold is increased by x8. */
-                    (rktp->rktp_rkt->rkt_conf.compression_codec ? 1 : 8) *
-                        (int64_t)rkb->rkb_rk->rk_conf.batch_size);
+                    /* Batch total size threshold */
+                    rkb->rkb_rk->rk_conf.batch_size);
         }
 
         rd_kafka_toppar_unlock(rktp);
@@ -3967,11 +3964,8 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                     flushing ? 1 : rkb->rkb_rk->rk_conf.buffering_max_us,
                     /* Batch message count threshold */
                     rkb->rkb_rk->rk_conf.batch_num_messages,
-                    /* Batch size threshold.
-                     * When compression is enabled the
-                     * threshold is increased by x8. */
-                    (rktp->rktp_rkt->rkt_conf.compression_codec ? 1 : 8) *
-                        (int64_t)rkb->rkb_rk->rk_conf.batch_size);
+                    /* Batch total size threshold */
+                    rkb->rkb_rk->rk_conf.batch_size);
                 rd_kafka_toppar_unlock(rktp);
         }
 

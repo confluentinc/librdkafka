@@ -57,6 +57,8 @@ if [[ -z $cpp_style ]]; then
 fi
 
 extra_info=""
+clang_format_version=10
+clang_version_warning=0
 
 for f in $*; do
 
@@ -79,6 +81,14 @@ for f in $*; do
     else
         style="file"  # Use .clang-format
         stylename="C"
+    fi
+
+    if [[ $lang == c && $clang_version_warning == 0 ]]; then
+        # Check if clang-format is at the correct version, and if not, warn.
+        if ! clang-format --version | grep -o "version ${clang_format_version}\.[[:digit:]]\+\.[[:digit:]]\+" 1> /dev/null; then
+            echo "Recommended clang-format version should be ${clang_format_version}.x.y, is '$(clang-format --version)'" 1>&2
+            clang_version_warning=1
+        fi
     fi
 
     check=0

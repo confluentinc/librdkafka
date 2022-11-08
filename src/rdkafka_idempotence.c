@@ -445,6 +445,8 @@ void rd_kafka_idemp_request_pid_failed(rd_kafka_broker_t *rkb,
              err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE))
                 rd_kafka_txn_coord_set(rk, NULL, "%s", errstr);
 
+        /* This error code is read by init_transactions() for propagation
+         * to the application. */
         rk->rk_eos.txn_init_err = err;
 
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
@@ -710,7 +712,10 @@ void rd_kafka_idemp_start(rd_kafka_t *rk, rd_bool_t immediate) {
                 return;
 
         rd_kafka_wrlock(rk);
-        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
+        /* Don't restart PID acquisition if there's already an outstanding
+         * request. */
+        if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_PID)
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
         rd_kafka_wrunlock(rk);
 
         /* Schedule request timer */

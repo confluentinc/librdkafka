@@ -635,13 +635,16 @@ static void do_test_misuse_txn(void) {
                 error = rd_kafka_begin_transaction(p);
                 TEST_ASSERT(error, "Expected begin_transactions() to fail");
                 TEST_ASSERT(rd_kafka_error_code(error) ==
-                                RD_KAFKA_RESP_ERR__STATE,
+                                RD_KAFKA_RESP_ERR__CONFLICT,
                             "Expected begin_transactions() to fail "
-                            "with STATE, not %s",
+                            "with CONFLICT, not %s",
                             rd_kafka_error_name(error));
 
                 rd_kafka_error_destroy(error);
         }
+
+        TEST_ASSERT(i <= 5000,
+                    "init_transactions() did not succeed after %d calls\n", i);
 
         TEST_SAY("init_transactions() succeeded after %d call(s)\n", i + 1);
 

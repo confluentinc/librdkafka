@@ -8157,6 +8157,10 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  *
  * @remark This function may block up to \p timeout_ms milliseconds.
  *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
+ *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
  *          by calling rd_kafka_error_is_retriable(), or whether a fatal
@@ -8272,8 +8276,17 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *
  * @remark Logical and invalid offsets (such as RD_KAFKA_OFFSET_INVALID) in
  *         \p offsets will be ignored, if there are no valid offsets in
- *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
- *         and no action will be taken.
+ *         \p offsets the function will return NULL and no action will be taken.
+ *
+ * @remark This call is retriable but not resumable, which means a new request
+ *         with a new set of provided offsets and group metadata will be
+ *         sent to the transaction coordinator if the call is retried.
+ *
+ * @remark It is highly recommended to retry the call (upon retriable error)
+ *         with identical \p offsets and \p cgmetadata parameters.
+ *         Failure to do so risks inconsistent state between what is actually
+ *         included in the transaction and what the application thinks is
+ *         included in the transaction.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -8294,9 +8307,7 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
- *          or if the \p consumer_group_id or \p offsets are empty,
- *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous
- *          rd_kafka_send_offsets_to_transaction() call is still in progress.
+ *          or if the \p consumer_group_id or \p offsets are empty.
  *          Other error codes not listed here may be returned, depending on
  *          broker version.
  *
@@ -8348,6 +8359,10 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
  *         If the application has enabled RD_KAFKA_EVENT_DR it must
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -8408,7 +8423,10 @@ rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
  *         If the application has enabled RD_KAFKA_EVENT_DR it must
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
-
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying

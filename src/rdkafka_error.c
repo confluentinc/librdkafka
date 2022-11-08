@@ -80,7 +80,7 @@ rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src) {
         ssize_t strsz = 0;
 
         if (src->errstr) {
-                strsz = strlen(src->errstr);
+                strsz = strlen(src->errstr) + 1;
         }
 
         error                     = rd_malloc(sizeof(*error) + strsz);

@@ -21,6 +21,12 @@ else
     fix=0
 fi
 
+clang_format_version=$(clang-format --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
+if ! [[ $clang_format_version == "10" ||  $clang_format_version == "11" ]]; then
+    echo "$0: clang-format version 10 or 11 required"
+    exit 1
+fi
+
 # Get list of files from .formatignore to ignore formatting for.
 ignore_files=( $(grep '^[^#]..' .formatignore) )
 

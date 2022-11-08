@@ -117,7 +117,7 @@ class ErrorImpl : public Error {
  public:
   ~ErrorImpl() {
     rd_kafka_error_destroy(c_error_);
-  };
+  }
 
   ErrorImpl(ErrorCode code, const std::string *errstr) {
     c_error_ = rd_kafka_error_new(static_cast<rd_kafka_resp_err_t>(code),
@@ -125,7 +125,8 @@ class ErrorImpl : public Error {
                                   errstr ? errstr->c_str() : NULL);
   }
 
-  ErrorImpl(rd_kafka_error_t *c_error) : c_error_(c_error) {};
+  ErrorImpl(rd_kafka_error_t *c_error) : c_error_(c_error) {
+  }
 
   static Error *create(ErrorCode code, const std::string *errstr) {
     return new ErrorImpl(code, errstr);
@@ -161,7 +162,8 @@ class ErrorImpl : public Error {
 
 class EventImpl : public Event {
  public:
-  ~EventImpl() {};
+  ~EventImpl() {
+  }
 
   EventImpl(Type type,
             ErrorCode err,
@@ -175,7 +177,8 @@ class EventImpl : public Event {
       str_(str),
       id_(0),
       throttle_time_(0),
-      fatal_(false) {};
+      fatal_(false) {
+  }
 
   EventImpl(Type type) :
       type_(type),
@@ -185,7 +188,8 @@ class EventImpl : public Event {
       str_(""),
       id_(0),
       throttle_time_(0),
-      fatal_(false) {};
+      fatal_(false) {
+  }
 
   Type type() const {
     return type_;
@@ -379,7 +383,7 @@ class MessageImpl : public Message {
       delete key_;
     if (headers_)
       delete headers_;
-  };
+  }
 
   MessageImpl(rd_kafka_type_t rk_type,
               RdKafka::Topic *topic,
@@ -495,7 +499,7 @@ class MessageImpl : public Message {
 
   void *msg_opaque() const {
     return rkmessage_->_private;
-  };
+  }
 
   int64_t latency() const {
     return rd_kafka_message_latency(rkmessage_);
@@ -990,11 +994,13 @@ class ConfImpl : public Conf {
 
 class HandleImpl : virtual public Handle {
  public:
-  ~HandleImpl() {};
-  HandleImpl() {};
+  ~HandleImpl() {
+  }
+  HandleImpl() {
+  }
   std::string name() const {
     return std::string(rd_kafka_name(rk_));
-  };
+  }
   std::string memberid() const {
     char *str            = rd_kafka_memberid(rk_);
     std::string memberid = str ? str : "";
@@ -1004,10 +1010,10 @@ class HandleImpl : virtual public Handle {
   }
   int poll(int timeout_ms) {
     return rd_kafka_poll(rk_, timeout_ms);
-  };
+  }
   int outq_len() {
     return rd_kafka_outq_len(rk_);
-  };
+  }
 
   void set_common_config(const RdKafka::ConfImpl *confimpl);
 
@@ -1127,7 +1133,7 @@ class HandleImpl : virtual public Handle {
   ErrorCode oauthbearer_set_token_failure(const std::string &errstr) {
     return static_cast<ErrorCode>(
         rd_kafka_oauthbearer_set_token_failure(rk_, errstr.c_str()));
-  };
+  }
 
   Error *sasl_background_callbacks_enable() {
     rd_kafka_error_t *c_error = rd_kafka_sasl_background_callbacks_enable(rk_);
@@ -1151,11 +1157,11 @@ class HandleImpl : virtual public Handle {
 
   void *mem_malloc(size_t size) {
     return rd_kafka_mem_malloc(rk_, size);
-  };
+  }
 
   void mem_free(void *ptr) {
     rd_kafka_mem_free(rk_, ptr);
-  };
+  }
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -1212,7 +1218,8 @@ class TopicImpl : public Topic {
  */
 class TopicPartitionImpl : public TopicPartition {
  public:
-  ~TopicPartitionImpl() {};
+  ~TopicPartitionImpl() {
+  }
 
   static TopicPartition *create(const std::string &topic, int partition);
 
@@ -1382,7 +1389,7 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 
   bool closed() {
     return rd_kafka_consumer_closed(rk_) ? true : false;
-  };
+  }
 
   ErrorCode seek(const TopicPartition &partition, int timeout_ms);
 
@@ -1431,7 +1438,7 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   ~ConsumerImpl() {
     if (rk_)
       rd_kafka_destroy(rk_);
-  };
+  }
   static Consumer *create(Conf *conf, std::string &errstr);
 
   ErrorCode start(Topic *topic, int32_t partition, int64_t offset);
@@ -1464,7 +1471,7 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   ~ProducerImpl() {
     if (rk_)
       rd_kafka_destroy(rk_);
-  };
+  }
 
   ErrorCode produce(Topic *topic,
                     int32_t partition,

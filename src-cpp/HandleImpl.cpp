@@ -419,4 +419,4 @@ void update_partitions_from_c_parts(
   }
 }
 
-};  // namespace RdKafka
+}  // namespace RdKafka

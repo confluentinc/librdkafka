@@ -169,6 +169,8 @@ typedef enum {
         /**< Transaction successfully committed but application has not made
          *   a successful commit_transaction() call yet. */
         RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED,
+        /**< begin_transaction() has been called. */
+        RD_KAFKA_TXN_STATE_BEGIN_ABORT,
         /**< abort_transaction() has been called. */
         RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION,
         /**< Transaction successfully aborted but application has not made
@@ -194,6 +196,7 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
                                       "BeginCommit",
                                       "CommittingTransaction",
                                       "CommitNotAcked",
+                                      "BeginAbort",
                                       "AbortingTransaction",
                                       "AbortedNotAcked",
                                       "AbortableError",
@@ -397,55 +400,34 @@ struct rd_kafka_s {
                  *   Only one transactional API call is allowed at any time.
                  *   Protected by the rk_lock. */
                 struct {
-                        char name[64];        /**< API name, e.g.,
-                                               *   SendOffsetsToTransaction */
-                        rd_kafka_timer_t tmr; /**< Timeout timer, the timeout
-                                               * is specified by the app. */
-
-                        int flags; /**< Flags */
-#define RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT                               \
-        0x1 /**< Set state to abortable                                        \
-             *   error on timeout,                                             \
-             *   i.e., fail the txn,                                           \
-             *   and set txn_requires_abort                                    \
-             *   on the returned error.                                        \
-             */
-#define RD_KAFKA_TXN_CURR_API_F_RETRIABLE_ON_TIMEOUT                           \
-        0x2 /**< Set retriable flag                                            \
-             *   on the error                                                  \
-             *   on timeout. */
-#define RD_KAFKA_TXN_CURR_API_F_FOR_REUSE                                      \
-        0x4 /**< Do not reset the                                              \
-             *   current API when it                                           \
-             *   completes successfully                                        \
-             *   Instead keep it alive                                         \
-             *   and allow reuse with                                          \
-             *   .._F_REUSE, blocking                                          \
-             *   any non-F_REUSE                                               \
-             *   curr API calls. */
-#define RD_KAFKA_TXN_CURR_API_F_REUSE                                          \
-        0x8 /**< Reuse/continue with                                           \
-             *   current API state.                                            \
-             *   This is used for                                              \
-             *   multi-stage APIs,                                             \
-             *   such as txn commit. */
+                        char name[64];     /**< API name, e.g.,
+                                            *   send_offsets_to_transaction.
+                                            *   This is used to make sure
+                                            *   conflicting APIs are not
+                                            *   called simultaneously. */
+                        rd_bool_t calling; /**< API is being actively called.
+                                            *   I.e., application is blocking
+                                            *   on a txn API call.
+                                            *   This is used to make sure
+                                            *   no concurrent API calls are
+                                            *   being made. */
+                        rd_kafka_error_t *error; /**< Last error from background
+                                                  *   processing. This is only
+                                                  *   set if the application's
+                                                  *   API call timed out.
+                                                  *   It will be returned on
+                                                  *   the next call. */
+                        rd_bool_t has_result;    /**< Indicates whether an API
+                                                  *   result (possibly
+                                                  *   intermediate) has been set.
+                                                  */
+                        cnd_t cnd;               /**< Application thread will
+                                                  *   block on this cnd waiting
+                                                  *   for a result to be set. */
+                        mtx_t lock;              /**< Protects all fields of
+                                                  *   txn_curr_api. */
                 } txn_curr_api;
 
-                /**< Copy (and reference) of the original init_transactions(),
-                 *   but out-lives the timeout of the curr API.
-                 *   This is used as the reply queue for when the
-                 *   black box idempotent producer has acquired the
-                 *   initial PID (or fails to do so).
-                 *   Since that acquisition may take longer than the
-                 *   init_transactions() API timeout this extra reference
-                 *   needs to be kept around.
-                 *   If the originating init_transactions() call has timed
-                 *   out and returned this queue reference simply points
-                 *   to a disabled queue that will discard any ops enqueued.
-                 *
-                 *   @locks rk_lock
-                 */
-                rd_kafka_q_t *txn_init_rkq;
 
                 int txn_req_cnt; /**< Number of transaction
                                   *   requests sent.

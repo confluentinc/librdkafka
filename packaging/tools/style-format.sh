@@ -79,8 +79,11 @@ for f in $*; do
     check=0
 
     if [[ $fix == 1 ]]; then
-        # Convert tabs to spaces first.
-        sed -i -e 's/\t/        /g' "$f"
+        # Convert tabs to 8 spaces first.
+        if grep -ql $'\t' "$f"; then
+            sed -i -e 's/\t/        /g' "$f"
+            echo "$f: tabs converted to spaces"
+        fi
 
         if [[ $lang == c ]]; then
             # Run clang-format to reformat the file

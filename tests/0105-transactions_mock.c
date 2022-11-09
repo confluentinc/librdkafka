@@ -588,6 +588,7 @@ static void do_test_txn_endtxn_errors(void) {
                 rd_bool_t exp_retriable;
                 rd_bool_t exp_abortable;
                 rd_bool_t exp_fatal;
+                rd_bool_t exp_successful_abort;
         } scenario[] = {
             /* This list of errors is from the EndTxnResponse handler in
              * AK clients/.../TransactionManager.java */
@@ -624,22 +625,24 @@ static void do_test_txn_endtxn_errors(void) {
                 RD_KAFKA_RESP_ERR_NO_ERROR,
             },
             {
-                /* #4 */
+                /* #4: the abort is auto-recovering thru epoch bump */
                 1,
                 {RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID},
                 RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID,
                 rd_false /* !retriable */,
                 rd_true /* abortable */,
-                rd_false /* !fatal */
+                rd_false /* !fatal */,
+                rd_true /* successful abort */
             },
             {
-                /* #5 */
+                /* #5: the abort is auto-recovering thru epoch bump */
                 1,
                 {RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING},
                 RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING,
                 rd_false /* !retriable */,
                 rd_true /* abortable */,
-                rd_false /* !fatal */
+                rd_false /* !fatal */,
+                rd_true /* successful abort */
             },
             {
                 /* #6 */
@@ -716,6 +719,8 @@ static void do_test_txn_endtxn_errors(void) {
                 for (j = 0; j < (2 + 2); j++) {
                         rd_bool_t commit     = j < 2;
                         rd_bool_t with_flush = j & 1;
+                        rd_bool_t exp_successful_abort =
+                            !commit && scenario[i].exp_successful_abort;
                         const char *commit_str =
                             commit ? (with_flush ? "commit&flush" : "commit")
                                    : (with_flush ? "abort&flush" : "abort");
@@ -727,7 +732,9 @@ static void do_test_txn_endtxn_errors(void) {
                         TEST_SAY("Testing scenario #%d %s with %" PRIusz
                                  " injected erorrs, expecting %s\n",
                                  i, commit_str, scenario[i].error_cnt,
-                                 rd_kafka_err2name(scenario[i].exp_err));
+                                 exp_successful_abort
+                                     ? "successful abort"
+                                     : rd_kafka_err2name(scenario[i].exp_err));
 
                         if (!rk) {
                                 const char *txnid = "myTxnId";
@@ -812,7 +819,7 @@ static void do_test_txn_endtxn_errors(void) {
                                 TEST_SAY("Scenario #%d %s succeeded\n", i,
                                          commit_str);
 
-                        if (!scenario[i].exp_err) {
+                        if (!scenario[i].exp_err || exp_successful_abort) {
                                 TEST_ASSERT(!error,
                                             "Expected #%d %s to succeed, "
                                             "got %s",
@@ -3396,6 +3403,122 @@ static void do_test_txn_concurrent_operations(rd_bool_t do_commit) {
 }
 
 
+/**
+ * @brief KIP-360: Test that fatal idempotence errors triggers abortable
+ *        transaction errors, but let the broker-side abort of the
+ *        transaction fail with a fencing error.
+ *        Should raise a fatal error.
+ *
+ * @param error_code Which error code EndTxn should fail with.
+ *                   Either RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH (older)
+ *                   or RD_KAFKA_RESP_ERR_PRODUCER_FENCED (newer).
+ */
+static void do_test_txn_fenced_abort(rd_kafka_resp_err_t error_code) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_error_t *error;
+        int32_t txn_coord = 2;
+        const char *txnid = "myTxnId";
+        char errstr[512];
+        rd_kafka_resp_err_t fatal_err;
+        size_t errors_cnt;
+
+        SUB_TEST_QUICK("With error %s", rd_kafka_err2name(error_code));
+
+        rk = create_txn_producer(&mcluster, txnid, 3, "batch.num.messages", "1",
+                                 NULL);
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
+                                      txn_coord);
+
+        test_curr->ignore_dr_err = rd_true;
+        test_curr->is_fatal_cb   = error_is_fatal_cb;
+        allowed_error            = RD_KAFKA_RESP_ERR__FENCED;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        /*
+         * Start a transaction
+         */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+
+        /* Produce a message without error first */
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        test_flush(rk, -1);
+
+        /* Fail abort transaction  */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, txn_coord, RD_KAFKAP_EndTxn, 1, error_code, 0);
+
+        /* Fail the PID reinit */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, txn_coord, RD_KAFKAP_InitProducerId, 1, error_code, 0);
+
+        /* Produce a message, let it fail with a fatal idempo error. */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_Produce, 1,
+            RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID);
+
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        test_flush(rk, -1);
+
+        /* Abort the transaction, should fail with a fatal error */
+        error = rd_kafka_abort_transaction(rk, -1);
+        TEST_ASSERT(error != NULL, "Expected abort_transaction() to fail");
+
+        TEST_SAY_ERROR(error, "abort_transaction() failed: ");
+        TEST_ASSERT(rd_kafka_error_is_fatal(error), "Expected a fatal error");
+        rd_kafka_error_destroy(error);
+
+        fatal_err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+        TEST_ASSERT(fatal_err, "Expected a fatal error to have been raised");
+        TEST_SAY("Fatal error: %s: %s\n", rd_kafka_err2name(fatal_err), errstr);
+
+        /* Verify that the producer sent the expected number of EndTxn requests
+         * by inspecting the mock broker error stack,
+         * which should now be empty. */
+        if (rd_kafka_mock_broker_error_stack_cnt(
+                mcluster, txn_coord, RD_KAFKAP_EndTxn, &errors_cnt)) {
+                TEST_FAIL(
+                    "Broker error count should succeed for API %s"
+                    " on broker %" PRId32,
+                    rd_kafka_ApiKey2str(RD_KAFKAP_EndTxn), txn_coord);
+        }
+        /* Checks all the  RD_KAFKAP_EndTxn responses have been consumed */
+        TEST_ASSERT(errors_cnt == 0,
+                    "Expected error count 0 for API %s, found %zu",
+                    rd_kafka_ApiKey2str(RD_KAFKAP_EndTxn), errors_cnt);
+
+        if (rd_kafka_mock_broker_error_stack_cnt(
+                mcluster, txn_coord, RD_KAFKAP_InitProducerId, &errors_cnt)) {
+                TEST_FAIL(
+                    "Broker error count should succeed for API %s"
+                    " on broker %" PRId32,
+                    rd_kafka_ApiKey2str(RD_KAFKAP_InitProducerId), txn_coord);
+        }
+        /* Checks none of the RD_KAFKAP_InitProducerId responses have been
+         * consumed
+         */
+        TEST_ASSERT(errors_cnt == 1,
+                    "Expected error count 1 for API %s, found %zu",
+                    rd_kafka_ApiKey2str(RD_KAFKAP_InitProducerId), errors_cnt);
+
+        /* All done */
+        rd_kafka_destroy(rk);
+
+        allowed_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -3479,6 +3602,10 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_concurrent_operations(rd_true /*commit*/);
 
         do_test_txn_concurrent_operations(rd_false /*abort*/);
+
+        do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH);
+
+        do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_PRODUCER_FENCED);
 
         return 0;
 }

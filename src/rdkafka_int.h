@@ -123,14 +123,17 @@ typedef enum {
                                               *   become available. */
         RD_KAFKA_IDEMP_STATE_WAIT_PID, /**< PID requested, waiting for reply */
         RD_KAFKA_IDEMP_STATE_ASSIGNED, /**< New PID assigned */
-        RD_KAFKA_IDEMP_STATE_DRAIN_RESET, /**< Wait for outstanding
-                                           *   ProduceRequests to finish
-                                           *   before resetting and
-                                           *   re-requesting a new PID. */
-        RD_KAFKA_IDEMP_STATE_DRAIN_BUMP,  /**< Wait for outstanding
-                                           *   ProduceRequests to finish
-                                           *   before bumping the current
-                                           *   epoch. */
+        RD_KAFKA_IDEMP_STATE_DRAIN_RESET,    /**< Wait for outstanding
+                                              *   ProduceRequests to finish
+                                              *   before resetting and
+                                              *   re-requesting a new PID. */
+        RD_KAFKA_IDEMP_STATE_DRAIN_BUMP,     /**< Wait for outstanding
+                                              *   ProduceRequests to finish
+                                              *   before bumping the current
+                                              *   epoch. */
+        RD_KAFKA_IDEMP_STATE_WAIT_TXN_ABORT, /**< Wait for transaction abort
+                                              *   to finish and trigger a
+                                              *   drain and reset or bump. */
 } rd_kafka_idemp_state_t;
 
 /**
@@ -140,7 +143,7 @@ static RD_UNUSED const char *
 rd_kafka_idemp_state2str(rd_kafka_idemp_state_t state) {
         static const char *names[] = {
             "Init",    "Terminate", "FatalError", "RequestPID", "WaitTransport",
-            "WaitPID", "Assigned",  "DrainReset", "DrainBump"};
+            "WaitPID", "Assigned",  "DrainReset", "DrainBump",  "WaitTxnAbort"};
         return names[state];
 }
 

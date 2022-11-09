@@ -59,12 +59,15 @@ configuration property.
 
  * When a PID epoch bump is requested and the producer is waiting
    to reconnect to the transaction coordinator, a failure in a find coordinator
-   request could cause an assert to fail. This was fixed by retrying when the
+   request could cause an assert to fail. This is fixed by retrying when the
    coordinator is known (#4020).
  * Transactional APIs (except `send_offsets_for_transaction()`) that
    timeout due to low timeout_ms may now be resumed by calling the same API
    again, as the operation continues in the background.
-
+ * For fatal idempotent producer errors that may be recovered by bumping the
+   epoch the current transaction must first be aborted prior to the epoch bump.
+   This is now handled correctly, which fixes issues seen with fenced
+   transactional producers on fatal idempotency errors.
 
 ### Consumer fixes
 

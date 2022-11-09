@@ -818,6 +818,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
         int actions                         = 0;
         int retry_backoff_ms                = 500; /* retry backoff */
         rd_kafka_resp_err_t reset_coord_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_bool_t require_bump              = rd_false;
 
         if (err)
                 goto done;
@@ -920,6 +921,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
 
                         case RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID:
                         case RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING:
+                                require_bump = rd_true;
                                 p_actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
                                 err           = ErrorCode;
                                 request_error = rd_true;
@@ -1058,13 +1060,22 @@ done:
                                              rd_kafka_err2str(err));
 
         } else if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
-                /* Treat all other permanent errors as abortable errors */
-                rd_kafka_txn_set_abortable_error(
-                    rk, err,
-                    "Failed to add partition(s) to transaction "
-                    "on broker %s: %s (after %d ms)",
-                    rd_kafka_broker_name(rkb), rd_kafka_err2str(err),
-                    (int)(request->rkbuf_ts_sent / 1000));
+                /* Treat all other permanent errors as abortable errors.
+                 * If an epoch bump is required let idempo sort it out. */
+                if (require_bump)
+                        rd_kafka_idemp_drain_epoch_bump(
+                            rk, err,
+                            "Failed to add partition(s) to transaction "
+                            "on broker %s: %s (after %d ms)",
+                            rd_kafka_broker_name(rkb), rd_kafka_err2str(err),
+                            (int)(request->rkbuf_ts_sent / 1000));
+                else
+                        rd_kafka_txn_set_abortable_error(
+                            rk, err,
+                            "Failed to add partition(s) to transaction "
+                            "on broker %s: %s (after %d ms)",
+                            rd_kafka_broker_name(rkb), rd_kafka_err2str(err),
+                            (int)(request->rkbuf_ts_sent / 1000));
 
         } else {
                 /* Schedule registration of any new or remaining partitions */
@@ -1104,7 +1115,7 @@ static void rd_kafka_txn_register_partitions(rd_kafka_t *rk) {
         }
 
         /* Get pid, checked later */
-        pid = rd_kafka_idemp_get_pid0(rk, rd_false /*dont-lock*/);
+        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK, rd_false);
 
         rd_kafka_rdunlock(rk);
 
@@ -1647,7 +1658,7 @@ rd_kafka_txn_send_TxnOffsetCommitRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__STATE;
         }
 
-        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK);
+        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK, rd_false);
         rd_kafka_rdunlock(rk);
         if (!rd_kafka_pid_valid(pid)) {
                 /* Do not free the rko, it is passed as the reply_opaque
@@ -1933,7 +1944,7 @@ rd_kafka_txn_op_send_offsets_to_transaction(rd_kafka_t *rk,
 
         rd_kafka_wrunlock(rk);
 
-        pid = rd_kafka_idemp_get_pid0(rk, rd_false /*dont-lock*/);
+        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK, rd_false);
         if (!rd_kafka_pid_valid(pid)) {
                 rd_dassert(!*"BUG: No PID despite proper transaction state");
                 error = rd_kafka_error_new_retriable(
@@ -2044,6 +2055,52 @@ static void rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
 }
 
 
+/**
+ * @brief EndTxn (commit or abort of transaction on the coordinator) is done,
+ *        or was skipped.
+ *        Continue with next steps (if any) before completing the local
+ *        transaction state.
+ *
+ * @locality rdkafka main thread
+ *
+ * @locks_acquired rd_kafka_wrlock(rk)
+ * @locks_required none
+ */
+static void rd_kafka_txn_endtxn_complete(rd_kafka_t *rk) {
+        rd_bool_t is_commit;
+
+        rd_kafka_wrlock(rk);
+        is_commit = !strcmp(rk->rk_eos.txn_curr_api.name, "commit_transaction");
+
+        /* If an epoch bump is required, let idempo handle it.
+         * When the bump is finished we'll be notified through
+         * idemp_state_change() and we can complete the local transaction state
+         * and set the final API call result.
+         * If the bumping fails a fatal error will be raised. */
+        if (rk->rk_eos.txn_requires_epoch_bump) {
+                rd_kafka_resp_err_t bump_err = rk->rk_eos.txn_err;
+                rd_dassert(!is_commit);
+
+                rd_kafka_wrunlock(rk);
+
+                /* After the epoch bump is done we'll be transitioned
+                 * to the next state. */
+                rd_kafka_idemp_drain_epoch_bump0(
+                    rk, rd_false /* don't allow txn abort */, bump_err,
+                    "Transaction aborted: %s", rd_kafka_err2str(bump_err));
+                return;
+        }
+
+        if (is_commit)
+                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED);
+        else
+                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
+
+        rd_kafka_txn_curr_api_set_result(rk, RD_DONT_LOCK, 0, NULL);
+
+        rd_kafka_wrunlock(rk);
+}
+
 
 /**
  * @brief Handle EndTxnResponse (commit or abort)
@@ -2148,16 +2205,6 @@ err:
                      rd_kafka_txn_state2str(rk->rk_eos.txn_state),
                      RD_STR_ToF(may_retry));
 
-        if (!err) {
-                /* EndTxn successful */
-                if (is_commit)
-                        rd_kafka_txn_set_state(
-                            rk, RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED);
-                else
-                        rd_kafka_txn_set_state(
-                            rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
-        }
-
         rd_kafka_wrunlock(rk);
 
         switch (err) {
@@ -2223,6 +2270,22 @@ err:
                         rd_kafka_txn_coord_timer_start(rk, 50);
 
                 if (actions & RD_KAFKA_ERR_ACTION_PERMANENT) {
+                        if (require_bump && !is_commit) {
+                                /* Abort failed to due invalid PID, starting
+                                 * with KIP-360 we can have idempo sort out
+                                 * epoch bumping.
+                                 * When the epoch has been bumped we'll detect
+                                 * the idemp_state_change and complete the
+                                 * current API call. */
+                                rd_kafka_idemp_drain_epoch_bump0(
+                                    rk,
+                                    /* don't allow txn abort */
+                                    rd_false, err, "EndTxn %s failed: %s",
+                                    is_commit ? "commit" : "abort",
+                                    rd_kafka_err2str(err));
+                                return;
+                        }
+
                         /* For aborts we need to revert the state back to
                          * BEGIN_ABORT so that the abort can be retried from
                          * the beginning in op_abort_transaction(). */
@@ -2251,7 +2314,7 @@ err:
                                        is_commit ? "commit" : "abort",
                                        rd_kafka_err2str(err)));
         else
-                rd_kafka_txn_curr_api_set_result(rk, RD_DO_LOCK, 0, NULL);
+                rd_kafka_txn_endtxn_complete(rk);
 }
 
 
@@ -2318,11 +2381,12 @@ rd_kafka_txn_op_commit_transaction(rd_kafka_t *rk,
                  * (since it will not have any txn state). */
                 rd_kafka_dbg(rk, EOS, "TXNCOMMIT",
                              "No partitions registered: not sending EndTxn");
-                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_COMMIT_NOT_ACKED);
-                goto done;
+                rd_kafka_wrunlock(rk);
+                rd_kafka_txn_endtxn_complete(rk);
+                return RD_KAFKA_OP_RES_HANDLED;
         }
 
-        pid = rd_kafka_idemp_get_pid0(rk, rd_false /*dont-lock*/);
+        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK, rd_false);
         if (!rd_kafka_pid_valid(pid)) {
                 rd_dassert(!*"BUG: No PID despite proper transaction state");
                 error = rd_kafka_error_new_retriable(
@@ -2612,30 +2676,26 @@ static rd_kafka_op_res_t rd_kafka_txn_op_abort_transaction(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
+        if (!rk->rk_eos.txn_req_cnt) {
+                rd_kafka_dbg(rk, EOS, "TXNABORT",
+                             "No partitions registered: not sending EndTxn");
+                rd_kafka_wrunlock(rk);
+                rd_kafka_txn_endtxn_complete(rk);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
 
-        if (rk->rk_eos.txn_requires_epoch_bump ||
-            rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_ASSIGNED) {
-                /* If the underlying idempotent producer's state indicates it
-                 * is re-acquiring its PID we need to wait for that to finish
-                 * before allowing a new begin_transaction(), and since that is
-                 * not a blocking call we need to perform that wait in this
-                 * state instead.
-                 * This may happen on epoch bump and fatal idempotent producer
-                 * error which causes the current transaction to enter the
-                 * abortable state.
-                 * To recover we need to request an epoch bump from the
-                 * transaction coordinator. This is handled automatically
-                 * by the idempotent producer, so we just need to wait for
-                 * the new pid to be assigned.
-                 */
-
-                if (rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED) {
-                        rd_kafka_dbg(rk, EOS, "TXNABORT", "PID already bumped");
-                        rd_kafka_txn_set_state(
-                            rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
-                        goto done;
-                }
-
+        /* If the underlying idempotent producer's state indicates it
+         * is re-acquiring its PID we need to wait for that to finish
+         * before allowing a new begin_transaction(), and since that is
+         * not a blocking call we need to perform that wait in this
+         * state instead.
+         * To recover we need to request an epoch bump from the
+         * transaction coordinator. This is handled automatically
+         * by the idempotent producer, so we just need to wait for
+         * the new pid to be assigned.
+         */
+        if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_ASSIGNED &&
+            rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_TXN_ABORT) {
                 rd_kafka_dbg(rk, EOS, "TXNABORT",
                              "Waiting for transaction coordinator "
                              "PID bump to complete before aborting "
@@ -2643,17 +2703,11 @@ static rd_kafka_op_res_t rd_kafka_txn_op_abort_transaction(rd_kafka_t *rk,
                              rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
 
                 rd_kafka_wrunlock(rk);
+
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
-        if (!rk->rk_eos.txn_req_cnt) {
-                rd_kafka_dbg(rk, EOS, "TXNABORT",
-                             "No partitions registered: not sending EndTxn");
-                rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED);
-                goto done;
-        }
-
-        pid = rd_kafka_idemp_get_pid0(rk, rd_false /*dont-lock*/);
+        pid = rd_kafka_idemp_get_pid0(rk, RD_DONT_LOCK, rd_true);
         if (!rd_kafka_pid_valid(pid)) {
                 rd_dassert(!*"BUG: No PID despite proper transaction state");
                 error = rd_kafka_error_new_retriable(

@@ -46,6 +46,7 @@ configuration property.
  * Setting `allow.auto.create.topics` will no longer give a warning if used by a producer, since that is an expected use case.
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
+ * Added `rd_kafka_mock_broker_error_stack_cnt()`.
 
 ## Fixes
 

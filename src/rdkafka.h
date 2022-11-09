@@ -3332,6 +3332,25 @@ rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk);
 
 
 /**
+ * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+ *        this Kafka client.
+ *
+ * This function sets or resets the SASL username and password credentials
+ * used by this Kafka client. The new credentials will be used the next time
+ * this client needs to authenticate to a broker. This function
+ * will not disconnect existing connections that might have been made using
+ * the old credentials.
+ *
+ * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+ *
+ * @returns NULL on success or an error object on error.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
+                                                const char *username,
+                                                const char *password);
+
+/**
  * @returns a reference to the librdkafka consumer queue.
  * This is the queue served by rd_kafka_consumer_poll().
  *

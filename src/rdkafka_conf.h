@@ -159,7 +159,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 31)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -276,6 +276,9 @@ struct rd_kafka_conf_s {
                 char *kinit_cmd;
                 char *keytab;
                 int relogin_min_time;
+                /** Protects .username and .password access after client
+                 *  instance has been created (see sasl_set_credentials()). */
+                mtx_t lock;
                 char *username;
                 char *password;
 #if WITH_SASL_SCRAM

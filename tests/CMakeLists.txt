@@ -125,6 +125,7 @@ set(
     0132-strategy_ordering.c
     0133-ssl_keys.c
     0134-ssl_provider.c
+    0135-sasl_credentials.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp

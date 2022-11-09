@@ -1877,6 +1877,34 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_error_stack_cnt(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t broker_id,
+                                     int16_t ApiKey,
+                                     size_t *cntp) {
+        rd_kafka_mock_broker_t *mrkb;
+        rd_kafka_mock_error_stack_t *errstack;
+
+        if (!mcluster || !cntp)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        mtx_lock(&mcluster->lock);
+
+        if (!(mrkb = rd_kafka_mock_broker_find(mcluster, broker_id))) {
+                mtx_unlock(&mcluster->lock);
+                return RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
+        }
+
+        if ((errstack =
+                 rd_kafka_mock_error_stack_find(&mrkb->errstacks, ApiKey)))
+                *cntp = errstack->cnt;
+
+        mtx_unlock(&mcluster->lock);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 void rd_kafka_mock_topic_set_error(rd_kafka_mock_cluster_t *mcluster,
                                    const char *topic,
                                    rd_kafka_resp_err_t err) {

@@ -126,6 +126,7 @@ set(
     0133-ssl_keys.c
     0134-ssl_provider.c
     0135-sasl_credentials.cpp
+    0136-barrier_batch_consume.c
     8000-idle.cpp
     test.c
     testcpp.cpp

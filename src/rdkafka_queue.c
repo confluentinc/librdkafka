@@ -539,7 +539,8 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
  *
  * @locality Any thread.
  */
-static size_t rd_kafka_purge_outdated_messages(int32_t version,
+static size_t rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
+                                               int32_t version,
                                                rd_kafka_message_t **rkmessages,
                                                size_t cnt) {
         size_t valid_count = 0;
@@ -548,8 +549,8 @@ static size_t rd_kafka_purge_outdated_messages(int32_t version,
         for (i = 0; i < cnt; i++) {
                 rd_kafka_op_t *rko;
                 rko = rkmessages[i]->_private;
-                if (rd_kafka_op_version_outdated(rko, version)) {
-                        /* This also destroys the corresponding rkmessage. */
+                if (rko->rko_rktp == rktp &&
+                    rd_kafka_op_version_outdated(rko, version)) {
                         rd_kafka_op_destroy(rko);
                 } else if (i > valid_count) {
                         rkmessages[valid_count++] = rkmessages[i];
@@ -628,7 +629,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
                         cnt = (unsigned int)rd_kafka_purge_outdated_messages(
-                            rko->rko_version, rkmessages, cnt);
+                            rko->rko_rktp, rko->rko_version, rkmessages, cnt);
                         rd_kafka_op_destroy(rko);
                         continue;
                 }

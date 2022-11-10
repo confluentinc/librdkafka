@@ -193,6 +193,7 @@ void rd_kafka_toppar_op_version_bump(rd_kafka_toppar_t *rktp, int32_t version) {
         rktp->rktp_op_version = version;
         rko                   = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
         rko->rko_version      = version;
+        rko->rko_rktp         = rd_kafka_toppar_keep(rktp);
         rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 }
 

@@ -108,6 +108,7 @@ If the version is out of date, please [create an issue or pull request](https://
 	libssl-dev (optional, for SSL and SASL SCRAM support)
 	libsasl2-dev (optional, for SASL GSSAPI support)
 	libzstd-dev (optional, for ZStd compression support)
+	libcurl-dev (optional, for SASL OAUTHBEARER OIDC support)
 
 **NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
           enables encoding the original size in the compression frame header,

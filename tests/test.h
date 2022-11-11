@@ -156,6 +156,7 @@ struct test {
         char failstr[512 + 1];          /**< First test failure reason */
         char subtest[400];              /**< Current subtest, if any */
         test_timing_t subtest_duration; /**< Subtest duration timing */
+        rd_bool_t subtest_quick;        /**< Subtest is marked as QUICK */
 
 #if WITH_SOCKEM
         rd_list_t sockets;

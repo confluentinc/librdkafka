@@ -599,6 +599,52 @@ void rd_kafka_broker_monitor_add(rd_kafka_broker_monitor_t *rkbmon,
 
 void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon);
 
+
+/**
+ * @struct Node represents a broker.
+ * It's the public type.
+ */
+typedef struct rd_kafka_Node_s {
+        int id;        /*< Node id */
+        char *host;    /*< Node host */
+        int port;      /*< Node port */
+        char *rack_id; /*< (optional) Node rack id */
+} rd_kafka_Node_t;
+
+/**
+ * @brief Create a new Node object.
+ *
+ * @param id The node id.
+ * @param host The node host.
+ * @param port The node port.
+ * @param rack_id (optional) The node rack id.
+ * @return A new allocated Node object, or NULL if
+ *         required parameters are NULL.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *
+rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id);
+
+/**
+ * @brief Copy \p src Node object
+ *
+ * @param src The Node to copy.
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
+
+RD_EXPORT
+int rd_kafka_Node_id(rd_kafka_Node_t *node);
+
+RD_EXPORT
+const char *rd_kafka_Node_host(rd_kafka_Node_t *node);
+
+RD_EXPORT
+int rd_kafka_Node_port(rd_kafka_Node_t *node);
+
 int unittest_broker(void);
 
 #endif /* _RDKAFKA_BROKER_H_ */

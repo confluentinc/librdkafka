@@ -5774,7 +5774,54 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
         rd_kafka_broker_destroy(rkb);
 }
 
+rd_kafka_Node_t *
+rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
+        if (!host)
+                return NULL;
+        rd_kafka_Node_t *ret = calloc(1, sizeof(*ret));
+        ret->id              = id;
+        ret->port            = port;
+        ret->host            = strdup(host);
+        if (rack_id != NULL)
+                ret->rack_id = strdup(rack_id);
+        return ret;
+}
 
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
+        if (!src)
+                return NULL;
+        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
+}
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
+        if (!node)
+                return;
+        rd_free(node->host);
+        if (node->rack_id)
+                rd_free(node->rack_id);
+        rd_free(node);
+}
+
+RD_EXPORT
+int rd_kafka_Node_id(rd_kafka_Node_t *node) {
+        if (!node)
+                return -1;
+        return node->id;
+}
+
+RD_EXPORT
+const char *rd_kafka_Node_host(rd_kafka_Node_t *node) {
+        if (!node)
+                return NULL;
+        return node->host;
+}
+
+RD_EXPORT
+int rd_kafka_Node_port(rd_kafka_Node_t *node) {
+        if (!node)
+                return -1;
+        return node->port;
+}
 
 /**
  * @name Unit tests

@@ -81,6 +81,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_ALTERCONFIGS]     = "REPLY:ALTERCONFIGS",
             [RD_KAFKA_OP_DESCRIBECONFIGS]  = "REPLY:DESCRIBECONFIGS",
             [RD_KAFKA_OP_DELETERECORDS]    = "REPLY:DELETERECORDS",
+            [RD_KAFKA_OP_DESCRIBEGROUPS]   = "REPLY:DESCRIBEGROUPS",
             [RD_KAFKA_OP_DELETEGROUPS]     = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
@@ -227,6 +228,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_ALTERCONFIGS]     = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBECONFIGS]  = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETERECORDS]    = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBEGROUPS]   = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETEGROUPS]     = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
@@ -383,6 +385,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
         case RD_KAFKA_OP_DELETERECORDS:
+        case RD_KAFKA_OP_DESCRIBEGROUPS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_CREATEACLS:

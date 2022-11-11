@@ -393,4 +393,54 @@ struct rd_kafka_ListConsumerGroupOffsets_s {
 
 /**@}*/
 
+
+/**
+ * @name DescribeGroups
+ * @{
+ */
+
+/**
+ * @struct Assignment of a consumer group member.
+ *
+ */
+typedef struct rd_kafka_MemberAssignment_s {
+        rd_kafka_topic_partition_list_t *topic_partitions;
+        /**< Partitions assigned to current member. */
+} rd_kafka_MemberAssignment_t;
+
+/**
+ * @struct Description of a consumer group member.
+ *
+ */
+typedef struct rd_kafka_MemberDescription_s {
+        char *client_id;                        /**< Client id */
+        char *consumer_id;                      /**< Consumer id */
+        char *group_instance_id;                /**< Group instance id */
+        char *host;                             /**< Group member host */
+        rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+} rd_kafka_MemberDescription_t;
+
+/**
+ * @struct DescribeGroups result
+ */
+typedef struct rd_kafka_ConsumerGroupDescription_s {
+        char *group_id; /**< Group id */
+        rd_bool_t is_simple_consumer_group;
+        /**< Is it a simple consumer group? That means empty protocol_type. */
+        rd_list_t members;
+        /**< Type (rd_kafka_MemberDescription_t *): members list */
+        char *protocol_type; /**< Protocol type */
+        /**< List of members. */
+        char *partition_assignor;
+        /**< Partition assignor identifier . */
+        rd_kafka_consumer_group_state_t state;
+        /**< Consumer group state. */
+        rd_kafka_Node_t *coordinator;
+        /**< Consumer group coordinator. */
+        rd_kafka_error_t *error;
+        /**< Group specific error. */
+} rd_kafka_ConsumerGroupDescription_t;
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

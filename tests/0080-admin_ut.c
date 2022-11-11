@@ -497,6 +497,132 @@ destroy:
         SUB_TEST_QUICK();
 }
 
+/**
+ * @brief DescribeGroups tests
+ *
+ *
+ *
+ */
+static void do_test_DescribeGroups(const char *what,
+                                   rd_kafka_t *rk,
+                                   rd_kafka_queue_t *useq,
+                                   int with_options,
+                                   rd_bool_t destroy) {
+        rd_kafka_queue_t *q;
+#define MY_DEL_GROUPS_CNT 4
+        const char *group_names[MY_DEL_GROUPS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DeleteGroups_result_t *res;
+        const rd_kafka_ConsumerGroupDescription_t **resgroups;
+        size_t resgroup_cnt;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DescribeGroups with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                group_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DescribeGroups");
+        TEST_SAY("Call DescribeGroups, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeGroups(rk, group_names, MY_DEL_GROUPS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (destroy)
+                goto destroy;
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DescribeGroups.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DescribeGroups: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeGroups_result(rkev);
+        TEST_ASSERT(res, "expected DescribeGroups_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting no error (errors will be per-group) */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected DescribeGroups to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Extract groups, should return MY_DEL_GROUPS_CNT groups. */
+        resgroups = rd_kafka_DescribeGroups_result_groups(res, &resgroup_cnt);
+        TEST_ASSERT(resgroups && resgroup_cnt == MY_DEL_GROUPS_CNT,
+                    "expected %d result_groups, got %p cnt %" PRIusz,
+                    MY_DEL_GROUPS_CNT, resgroups, resgroup_cnt);
+
+        /* The returned groups should be in the original order, and
+         * should all have timed out. */
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                TEST_ASSERT(
+                    !strcmp(group_names[i],
+                            rd_kafka_ConsumerGroupDescription_group_id(
+                                resgroups[i])),
+                    "expected group '%s' at position %d, not '%s'",
+                    group_names[i], i,
+                    rd_kafka_ConsumerGroupDescription_group_id(resgroups[i]));
+                TEST_ASSERT(
+                    rd_kafka_error_code(rd_kafka_ConsumerGroupDescription_error(
+                        resgroups[i])) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected group '%s' to have timed out, got %s",
+                    group_names[i],
+                    rd_kafka_error_string(
+                        rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+destroy:
+        for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
+                rd_free((char *)group_names[i]);
+        }
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+#undef MY_DEL_GROUPS_CNT
+
+        SUB_TEST_QUICK();
+}
+
 static void do_test_DeleteRecords(const char *what,
                                   rd_kafka_t *rk,
                                   rd_kafka_queue_t *useq,
@@ -1924,6 +2050,7 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,                        \
                     RD_KAFKA_ADMIN_OP_ALTERCONFIGS,                            \
                     RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,                         \
+                    RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS,                          \
                     RD_KAFKA_ADMIN_OP_DELETEGROUPS,                            \
                     RD_KAFKA_ADMIN_OP_DELETERECORDS,                           \
                     RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
@@ -1934,7 +2061,7 @@ static void do_test_options(rd_kafka_t *rk) {
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[12];
+                const rd_kafka_admin_op_t valid_apis[13];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",
@@ -2095,6 +2222,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteTopics("temp queue, no options", rk, NULL, 0);
         do_test_DeleteTopics("temp queue, options", rk, NULL, 1);
         do_test_DeleteTopics("main queue, options", rk, mainq, 1);
+
+        do_test_DescribeGroups("temp queue, no options", rk, NULL, 0, rd_false);
+        do_test_DescribeGroups("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_DescribeGroups("main queue, options", rk, mainq, 1, rd_false);
 
         do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);

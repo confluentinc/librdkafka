@@ -1,9 +1,6 @@
-alter_consumer_group_offsets
 consumer
-delete_records
 idempotent_producer
 kafkatest_verifiable_client
-list_consumer_group_offsets
 misc
 openssl_engine_example_cpp
 producer
@@ -15,3 +12,4 @@ rdkafka_example
 rdkafka_example_cpp
 rdkafka_performance
 transactions
+admin

@@ -2387,6 +2387,178 @@ static void do_test_DeleteGroups(const char *what,
 
 
 /**
+ * @brief Test describe groups
+ *
+ *
+ */
+
+typedef struct expected_DescribeGroups_result {
+        char *group;
+        rd_kafka_resp_err_t err;
+} expected_DescribeGroups_result_t;
+
+static void do_test_DescribeGroups(const char *what,
+                                   rd_kafka_t *rk,
+                                   rd_kafka_queue_t *useq,
+                                   int request_timeout) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev           = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define TEST_DESCRIBE_GROUPS_CNT 4
+        int known_groups = TEST_DESCRIBE_GROUPS_CNT - 1;
+        int i;
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
+        char *topic;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid                        = test_id_generate();
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        const rd_kafka_ConsumerGroupDescription_t **results = NULL;
+        expected_DescribeGroups_result_t expected[TEST_DESCRIBE_GROUPS_CNT] =
+            RD_ZERO_INIT;
+        const char *describe_groups[TEST_DESCRIBE_GROUPS_CNT];
+        const rd_kafka_DescribeGroups_result_t *res;
+
+        SUB_TEST_QUICK("%s DescribeGroups with %s, request_timeout %d",
+                       rd_kafka_name(rk), what, request_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (request_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS);
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+                char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                if (i < known_groups) {
+                        test_consume_msgs_easy(group, topic, testid, -1,
+                                               msgs_cnt, NULL);
+                }
+                expected[i].group  = group;
+                expected[i].err    = RD_KAFKA_RESP_ERR_NO_ERROR;
+                describe_groups[i] = group;
+        }
+
+        TIMING_START(&timing, "DescribeGroups");
+        TEST_SAY("Call DescribeGroups\n");
+        rd_kafka_DescribeGroups(rk, describe_groups, TEST_DESCRIBE_GROUPS_CNT,
+                                options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        TIMING_START(&timing, "DescribeGroups.queue_poll");
+
+        /* Poll result queue for DescribeGroups result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("DescribeGroups: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rkev == NULL)
+                        continue;
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT) {
+                        break;
+                }
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeGroups_result(rkev);
+        TEST_ASSERT(res, "expected DescribeGroups_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == exp_err,
+                    "expected DescribeGroups to return %s, not %s (%s)",
+                    rd_kafka_err2str(exp_err), rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DescribeGroups: returned %s (%s)\n", rd_kafka_err2str(err),
+                 err ? errstr2 : "n/a");
+
+        size_t cnt = 0;
+        results    = rd_kafka_DescribeGroups_result_groups(res, &cnt);
+
+        TEST_ASSERT(TEST_DESCRIBE_GROUPS_CNT == cnt,
+                    "expected DescribeGroups_result_groups to return %d items, "
+                    "not %" PRIusz,
+                    TEST_DESCRIBE_GROUPS_CNT, cnt);
+
+        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+                expected_DescribeGroups_result_t *exp          = &expected[i];
+                rd_kafka_resp_err_t exp_err                    = exp->err;
+                const rd_kafka_ConsumerGroupDescription_t *act = results[i];
+                rd_kafka_resp_err_t act_err = rd_kafka_error_code(
+                    rd_kafka_ConsumerGroupDescription_error(act));
+                TEST_ASSERT(
+                    strcmp(exp->group,
+                           rd_kafka_ConsumerGroupDescription_group_id(act)) ==
+                        0,
+                    "Result order mismatch at #%d: expected group id to be "
+                    "%s, not %s",
+                    i, exp->group,
+                    rd_kafka_ConsumerGroupDescription_group_id(act));
+                TEST_ASSERT(
+                    !rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
+                        act),
+                    "Expected a normal consumer group, not a simple one.");
+                TEST_ASSERT(exp_err == act_err,
+                            "expected err=%d for group %s, not %d (%s)",
+                            exp_err, exp->group, act_err,
+                            rd_kafka_err2str(act_err));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+                rd_free(expected[i].group);
+        }
+
+        rd_free(topic);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef TEST_DESCRIBE_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Test deletion of committed offsets.
  *
  *
@@ -3132,6 +3304,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         test_conf_init(&conf, NULL, 180);
         test_conf_set(conf, "socket.timeout.ms", "10000");
+        test_conf_set(conf, "debug", "all");
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);
@@ -3182,6 +3355,11 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
         do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
+        /* Describe groups */
+        do_test_DescribeGroups("temp queue, req timeout -1", rk, NULL, -1);
+        do_test_DescribeGroups("main queue, req timeout 1500", rk, mainq, 1500);
+        do_test_DescribeGroups("main queue, req timeout 1500", rk, mainq, 1500);
+
         /* Delete groups */
         do_test_DeleteGroups("temp queue, op timeout 0", rk, NULL, 0);
         do_test_DeleteGroups("main queue, op timeout 1500", rk, mainq, 1500);
@@ -3189,8 +3367,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
                 /* Delete committed offsets */
-                do_test_DeleteConsumerGroupOffsets("temp queue, op timeout 0",
-                                                   rk, NULL, 0, rd_false);
+                do_test_DeleteConsumerGroupOffsets(
+                    "temp queue, op timeout"
+                    "0",
+                    rk, NULL, 0, rd_false);
                 do_test_DeleteConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500, rd_false);
                 do_test_DeleteConsumerGroupOffsets(
@@ -3200,8 +3380,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 /* Alter committed offsets */
                 do_test_AlterConsumerGroupOffsets("temp queue, op timeout 0",
                                                   rk, NULL, 0, rd_false);
-                do_test_AlterConsumerGroupOffsets("main queue, op timeout 1500",
-                                                  rk, mainq, 1500, rd_false);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false);
                 do_test_AlterConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/);
@@ -3209,17 +3391,19 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                 /* List committed offsets */
                 do_test_ListConsumerGroupOffsets("temp queue, op timeout 0", rk,
                                                  NULL, 0, rd_false, rd_false);
-                do_test_ListConsumerGroupOffsets("main queue, op timeout 1500",
-                                                 rk, mainq, 1500, rd_false,
-                                                 rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false, rd_false);
                 do_test_ListConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/, rd_false);
                 do_test_ListConsumerGroupOffsets("temp queue, op timeout 0", rk,
                                                  NULL, 0, rd_false, rd_true);
-                do_test_ListConsumerGroupOffsets("main queue, op timeout 1500",
-                                                 rk, mainq, 1500, rd_false,
-                                                 rd_true);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false, rd_true);
                 do_test_ListConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/, rd_true);

@@ -6718,6 +6718,8 @@ int test_sub_start(const char *func,
                 return 0;
         }
 
+        test_curr->subtest_quick = is_quick;
+
         TIMING_START(&test_curr->subtest_duration, "SUBTEST");
 
         TEST_SAY(_C_MAG "[ %s ]\n", test_curr->subtest);
@@ -6749,6 +6751,16 @@ void test_sub_pass(void) {
         TEST_SAYL(1, _C_GRN "[ %s: PASS (%.02fs) ]\n", test_curr->subtest,
                   (float)(TIMING_DURATION(&test_curr->subtest_duration) /
                           1000000.0f));
+
+        if (test_curr->subtest_quick && test_quick && !test_on_ci &&
+            TIMING_DURATION(&test_curr->subtest_duration) > 45 * 1000 * 1000)
+                TEST_WARN(
+                    "Subtest %s marked as QUICK but took %.02fs to "
+                    "finish: either fix the test or "
+                    "remove the _QUICK identifier (limit is 45s)\n",
+                    test_curr->subtest,
+                    (float)(TIMING_DURATION(&test_curr->subtest_duration) /
+                            1000000.0f));
 
         test_sub_reset();
 }

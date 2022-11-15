@@ -1055,6 +1055,90 @@ static void do_test_txn_endtxn_timeout(void) {
 
 
 /**
+ * @brief Test commit/abort inflight timeout behaviour, which should result
+ *        in a retriable error.
+ */
+static void do_test_txn_endtxn_timeout_inflight(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster = NULL;
+        const char *txnid                 = "myTxnId";
+        int32_t coord_id                  = 1;
+        int i;
+
+        SUB_TEST();
+
+        allowed_error          = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+
+        rk = create_txn_producer(&mcluster, txnid, 1, "transaction.timeout.ms",
+                                 "5000");
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        for (i = 0; i < 2; i++) {
+                rd_bool_t commit       = i == 0;
+                const char *commit_str = commit ? "commit" : "abort";
+                rd_kafka_error_t *error;
+                test_timing_t t_call;
+
+                /* Messages will fail as the transaction fails,
+                 * ignore the DR error */
+                test_curr->ignore_dr_err = rd_true;
+
+                TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+                TEST_CALL_ERR__(rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_VALUE("hi", 2),
+                    RD_KAFKA_V_END));
+
+                /* Let EndTxn & EndTxn retry timeout */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, coord_id, RD_KAFKAP_EndTxn, 2,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, 10000,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, 10000);
+
+                rd_sleep(1);
+
+                TIMING_START(&t_call, "%s_transaction()", commit_str);
+                if (commit)
+                        error = rd_kafka_commit_transaction(rk, 4000);
+                else
+                        error = rd_kafka_abort_transaction(rk, 4000);
+                TIMING_STOP(&t_call);
+
+                TEST_SAY_ERROR(error, "%s returned: ", commit_str);
+                TEST_ASSERT(error != NULL, "Expected %s to fail", commit_str);
+                TEST_ASSERT(
+                    rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected %s to fail with timeout, not %s: %s", commit_str,
+                    rd_kafka_error_name(error), rd_kafka_error_string(error));
+                TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                            "%s failure should raise a retriable error",
+                            commit_str);
+                rd_kafka_error_destroy(error);
+
+                /* Now call it again with an infinite timeout, should work. */
+                TIMING_START(&t_call, "%s_transaction() nr 2", commit_str);
+                if (commit)
+                        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+                else
+                        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+                TIMING_STOP(&t_call);
+        }
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+
+
+/**
  * @brief Test that EndTxn is properly sent for aborted transactions
  *        even if AddOffsetsToTxnRequest was retried.
  *        This is a check for a txn_req_cnt bug.
@@ -3464,6 +3548,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_endtxn_infinite();
 
         do_test_txn_endtxn_timeout();
+
+        do_test_txn_endtxn_timeout_inflight();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);

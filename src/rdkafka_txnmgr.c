@@ -2198,14 +2198,14 @@ err:
 
         case RD_KAFKA_RESP_ERR__DESTROY:
                 /* Producer is being terminated, ignore the response. */
-        case RD_KAFKA_RESP_ERR__TIMED_OUT:
-                /* Transaction API timeout has been hit
-                 * (this is our internal timer) */
         case RD_KAFKA_RESP_ERR__OUTDATED:
                 /* Transactional state no longer relevant for this
                  * outdated response. */
                 break;
-
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
+                /* Request timeout */
+                /* FALLTHRU */
         case RD_KAFKA_RESP_ERR__TRANSPORT:
                 actions |=
                     RD_KAFKA_ERR_ACTION_RETRY | RD_KAFKA_ERR_ACTION_REFRESH;

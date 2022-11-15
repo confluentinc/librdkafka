@@ -69,10 +69,14 @@ configuration property.
    epoch the current transaction must first be aborted prior to the epoch bump.
    This is now handled correctly, which fixes issues seen with fenced
    transactional producers on fatal idempotency errors.
+ * Timeouts for EndTxn requests (transaction commits and aborts) are now
+   automatically retried and the error raised to the application is also
+   a retriable error.
 
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
+
 
 # librdkafka v1.9.2
 

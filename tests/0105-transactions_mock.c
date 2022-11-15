@@ -1055,6 +1055,8 @@ static void do_test_txn_endtxn_timeout(void) {
 }
 
 
+
+/**
  * @brief Test commit/abort inflight timeout behaviour, which should result
  *        in a retriable error.
  */
@@ -3548,6 +3550,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_endtxn_infinite();
 
         do_test_txn_endtxn_timeout();
+
+        do_test_txn_endtxn_timeout_inflight();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);

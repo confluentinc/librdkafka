@@ -98,6 +98,14 @@
         } while (0)
 #endif
 
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+/** Function attribute to indicate that a sentinel NULL is required at the
+ *  end of the va-arg input list. */
+#define RD_SENTINEL __attribute__((__sentinel__))
+#else
+#define RD_SENTINEL
+#endif
+
 
 /** Assert if reached */
 #define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")

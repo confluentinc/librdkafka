@@ -1,12 +1,9 @@
-# librdkafka v1.9.3
+# librdkafka v2.0.0
 
-librdkafka v1.9.3 is a maintenance release:
+librdkafka v2.0.0 is a feature release:
 
  * Fixes to the transactional and idempotent producer.
- * Self-contained static libraries can now be built on Linux arm64 (#4005).
- * Fix for using PKCS#12 keystores on Windows.
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
- * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
 
 
 ## Upgrade considerations
@@ -17,7 +14,7 @@ librdkafka v1.9.3 is a maintenance release:
 
 The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
 changes the default set of available ciphers, in particular all obsolete
-or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html) manual page
 are now disabled by default.
 
 **WARNING**: These ciphers are disabled for security reasons and it is
@@ -39,7 +36,8 @@ configuration property.
 
 ## Enhancements
 
- * Bundled zlib upgraded to version 1.2.13.
+ * Self-contained static libraries can now be built on Linux arm64 (#4005).
+ * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
  * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
@@ -52,7 +50,8 @@ configuration property.
 
 ### General fixes
 
- * Windows: couldn't read a PKCS#12 keystore correctly because binary mode wasn't explicitly set and Windows defaults to text mode.
+ * Windows: couldn't read a PKCS#12 keystore correctly because binary mode
+   wasn't explicitly set and Windows defaults to text mode.
  * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
  * Load all CA certificates from `ssl.ca.pem`, not just the first one.
 

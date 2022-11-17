@@ -61,11 +61,11 @@
  */
 
 
-static void test_assert(bool cond, std::string msg) {
-  if (!cond)
-    Test::Say(msg);
-  assert(cond);
-}
+#define test_assert(cond, msg)                                                 \
+  do {                                                                         \
+    if (!(cond))                                                               \
+      Test::Say(msg);                                                          \
+  } while (0)
 
 
 class TestEvent2Cb : public RdKafka::EventCb {

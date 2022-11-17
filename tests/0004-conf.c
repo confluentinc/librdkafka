@@ -716,6 +716,7 @@ int main_0004_conf(int argc, char **argv) {
                             "Expected rd_kafka_new() to fail with "
                             "invalid ssl.ca.location");
                 TEST_SAY("rd_kafka_new() failed as expected: %s\n", errstr);
+                rd_kafka_conf_destroy(conf);
         }
 
 #ifdef _WIN32

@@ -1,4 +1,5 @@
 consumer
+delete_records
 idempotent_producer
 kafkatest_verifiable_client
 misc
@@ -12,4 +13,6 @@ rdkafka_example
 rdkafka_example_cpp
 rdkafka_performance
 transactions
-admin
+describe_groups
+list_group_offsets
+alter_group_offsets

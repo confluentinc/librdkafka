@@ -493,6 +493,7 @@ static void do_test_fenced_member(void) {
                     rd_kafka_err2str(rkm->err), rd_kafka_message_errstr(rkm));
         TEST_SAY("Fenced consumer returned expected: %s: %s\n",
                  rd_kafka_err2name(rkm->err), rd_kafka_message_errstr(rkm));
+        rd_kafka_message_destroy(rkm);
 
 
         /* Read the actual error */

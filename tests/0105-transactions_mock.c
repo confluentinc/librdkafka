@@ -2835,7 +2835,8 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
         state.mcluster     = mcluster;
         state.grpid        = grpid;
         state.broker_id    = switch_coord ? 3 : 2;
-        thrd_create(&thrd, delayed_up_cb, &state);
+        if (thrd_create(&thrd, delayed_up_cb, &state) != thrd_success)
+                TEST_FAIL("Failed to create thread");
 
         TEST_SAY("Calling send_offsets_to_transaction()\n");
         offsets = rd_kafka_topic_partition_list_new(1);

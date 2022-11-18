@@ -287,9 +287,7 @@ static void do_test_joingroup_coordinator_load_in_progress() {
             mcluster, RD_KAFKAP_FindCoordinator, 1,
             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
 
-        consumer = test_create_consumer("mygroup", NULL,
-                                        rd_kafka_conf_dup(conf), NULL);
-
+        consumer = test_create_consumer("mygroup", NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
 

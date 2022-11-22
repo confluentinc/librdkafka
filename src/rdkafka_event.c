@@ -64,6 +64,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "DescribeConfigsResult";
         case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
                 return "DeleteRecordsResult";
+        case RD_KAFKA_EVENT_LISTGROUPS_RESULT:
+                return "ListGroupsResult";
         case RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT:
                 return "DescribeGroupsResult";
         case RD_KAFKA_EVENT_DELETEGROUPS_RESULT:
@@ -342,6 +344,14 @@ rd_kafka_event_DeleteRecords_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_DeleteRecords_result_t *)rkev;
+}
+
+const rd_kafka_ListGroups_result_t *
+rd_kafka_event_ListGroups_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_LISTGROUPS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_ListGroups_result_t *)rkev;
 }
 
 const rd_kafka_DescribeGroups_result_t *

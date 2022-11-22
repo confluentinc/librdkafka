@@ -445,6 +445,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to

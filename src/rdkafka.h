@@ -3823,7 +3823,6 @@ int rd_kafka_consume_callback(rd_kafka_topic_t *rkt,
 
 /**
  * @name Simple Consumer API (legacy): Queue consumers
- *
  * @{
  *
  * The following `..._queue()` functions are analogue to the functions above
@@ -3947,8 +3946,8 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
 
 /**
  * @name KafkaConsumer (C)
- * @{
  * @brief High-level KafkaConsumer C API
+ * @{
  *
  *
  *
@@ -5403,6 +5402,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x1200
 /** ListConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x1400
+/** ListConsumerGroupsResult_t */
+#define RD_KAFKA_EVENT_LISTGROUPS_RESULT 0x1600
 /** DescribeGroups_result_t */
 #define RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT 0x1800
 
@@ -5553,6 +5554,7 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DELETEACLS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_LISTGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
@@ -5658,6 +5660,8 @@ typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 /*! DeleteRecords result type */
 typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
+/*! ListGroups result type */
+typedef rd_kafka_event_t rd_kafka_ListGroups_result_t;
 /*! DescribeGroups result type */
 typedef rd_kafka_event_t rd_kafka_DescribeGroups_result_t;
 /*! DeleteGroups result type */
@@ -5738,6 +5742,18 @@ rd_kafka_event_DescribeConfigs_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_DeleteRecords_result_t *
 rd_kafka_event_DeleteRecords_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListGroups result.
+ *
+ * @returns the result of a ListGroups request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTGROUPS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListGroups_result_t *
+rd_kafka_event_ListGroups_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DescribeGroups result.
@@ -6719,6 +6735,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
         RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
         RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
+        RD_KAFKA_ADMIN_OP_LISTGROUPS,       /**< ListGroups */
         RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS,   /**< DescribeGroups */
         RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
@@ -6913,6 +6930,20 @@ rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
                                          int true_or_false,
                                          char *errstr,
                                          size_t errstr_size);
+
+/**
+ * @brief Set consumer groups states to query for.
+ *
+ * @param options Admin options.
+ * @param consumer_group_states Array of consumer group states.
+ * @param consumer_group_states_cnt Size of the \p consumer_group_states array.
+ */
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
+    rd_kafka_AdminOptions_t *options,
+    rd_kafka_consumer_group_state_t *consumer_group_states,
+    size_t consumer_group_states_cnt,
+    char *errstr,
+    size_t errstr_size);
 
 /**
  * @brief Set application opaque value that can be extracted from the
@@ -7730,6 +7761,98 @@ rd_kafka_DeleteRecords_result_offsets(
 /**@}*/
 
 /**
+ * @name Admin API - ListGroups
+ * @{
+ */
+
+
+/**
+ * @brief ListGroups result for a single group
+ */
+
+/**! ListGroups result for a single group */
+typedef struct rd_kafka_ConsumerGroupListing_s rd_kafka_ConsumerGroupListing_t;
+
+/**! ListGroups results and errors */
+typedef struct rd_kafka_ListConsumerGroupsResult_s
+    rd_kafka_ListConsumerGroupsResult_t;
+
+/**
+ * @brief List the consumer groups available in the cluster.
+ *
+ * @param rk Client instance.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTGROUPS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_ListGroups(rd_kafka_t *rk,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the group id for the \p desc group.
+ *
+ * @param desc The group description.
+ * @return The group id, or NULL if \p desc is NULL.
+ */
+RD_EXPORT
+const char *rd_kafka_ConsumerGroupListing_group_id(
+    const rd_kafka_ConsumerGroupListing_t *desc);
+
+/**
+ * @brief Is the \p desc group a simple consumer group.
+ *
+ * @param desc The group description.
+ * @return 1 if the group is a simple consumer group,
+ *         else 0 (also if \p desc is NULL).
+ */
+RD_EXPORT
+int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
+    const rd_kafka_ConsumerGroupListing_t *desc);
+
+/**
+ * @brief Gets state for the \p desc group.
+ *
+ * @param desc The group description.
+ * @return A group state, or RD_KAFKA_CGRP_STATE_UNKNOWN if \p desc is NULL.
+ */
+RD_EXPORT
+rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
+    const rd_kafka_ConsumerGroupListing_t *desc);
+
+/**
+ * @brief Get an array of valid list groups from a ListGroups result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT
+const rd_kafka_ConsumerGroupListing_t **
+rd_kafka_ListGroups_result_valid(const rd_kafka_ListGroups_result_t *result,
+                                 size_t *cntp);
+
+/**
+ * @brief Get an array of errors from a ListGroups call result.
+ *
+ * The returned errors life-time is the same as the \p result object.
+ *
+ * @param result ListGroups result.
+ * @param cntp Is updated to the number of elements in the array.
+ * @return Array of errors in \p result.
+ */
+RD_EXPORT
+const rd_kafka_error_t **
+rd_kafka_ListGroups_result_errors(const rd_kafka_ListGroups_result_t *result,
+                                  size_t *cntp);
+
+/**@}*/
+
+/**
  * @name Admin API - DescribeGroups
  * @{
  */
@@ -7928,8 +8051,8 @@ rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_topic_partitions(
 
 /**
  * @name Admin API - DeleteGroups
- * @{
  * @brief Delete groups from cluster
+ * @{
  *
  *
  */

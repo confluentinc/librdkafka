@@ -5673,9 +5673,13 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
         size_t aclres_cnt                      = 0;
         int errcnt                             = 0;
         rd_kafka_resp_err_t err;
-        const rd_kafka_group_result_t **gres           = NULL;
-        size_t gres_cnt                                = 0;
-        const rd_kafka_topic_partition_list_t *offsets = NULL;
+        const rd_kafka_group_result_t **gres               = NULL;
+        size_t gres_cnt                                    = 0;
+        const rd_kafka_ConsumerGroupDescription_t **gdescs = NULL;
+        size_t gdescs_cnt                                  = 0;
+        const rd_kafka_error_t **glists_errors             = NULL;
+        size_t glists_error_cnt                            = 0;
+        const rd_kafka_topic_partition_list_t *offsets     = NULL;
 
         rkev = test_wait_admin_result(q, evtype, tmout);
 
@@ -5737,7 +5741,22 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 aclres = rd_kafka_CreateAcls_result_acls(res, &aclres_cnt);
+        } else if (evtype == RD_KAFKA_EVENT_LISTGROUPS_RESULT) {
+                const rd_kafka_ListGroups_result_t *res;
+                if (!(res = rd_kafka_event_ListGroups_result(rkev)))
+                        TEST_FAIL("Expected a ListGroups result, not %s",
+                                  rd_kafka_event_name(rkev));
 
+                glists_errors =
+                    rd_kafka_ListGroups_result_errors(res, &glists_error_cnt);
+        } else if (evtype == RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT) {
+                const rd_kafka_DescribeGroups_result_t *res;
+                if (!(res = rd_kafka_event_DescribeGroups_result(rkev)))
+                        TEST_FAIL("Expected a DescribeGroups result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                gdescs =
+                    rd_kafka_DescribeGroups_result_groups(res, &gdescs_cnt);
         } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
                 const rd_kafka_DeleteGroups_result_t *res;
                 if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))
@@ -5802,6 +5821,30 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                 if (error) {
                         TEST_WARN("AclResult error: %s: %s\n",
                                   rd_kafka_error_name(error),
+                                  rd_kafka_error_string(error));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(error);
+                }
+        }
+
+        /* Check list groups errors */
+        for (i = 0; i < glists_error_cnt; i++) {
+                const rd_kafka_error_t *error = glists_errors[i];
+                TEST_WARN("%s error: %s\n", rd_kafka_event_name(rkev),
+                          rd_kafka_error_string(error));
+                if (!(errcnt++))
+                        err = rd_kafka_error_code(error);
+        }
+
+        /* Check describe groups errors */
+        for (i = 0; i < gdescs_cnt; i++) {
+                const rd_kafka_error_t *error;
+                if ((error =
+                         rd_kafka_ConsumerGroupDescription_error(gdescs[i]))) {
+                        TEST_WARN("%s result: %s: error: %s\n",
+                                  rd_kafka_event_name(rkev),
+                                  rd_kafka_ConsumerGroupDescription_group_id(
+                                      gdescs[i]),
                                   rd_kafka_error_string(error));
                         if (!(errcnt++))
                                 err = rd_kafka_error_code(error);
@@ -6101,7 +6144,7 @@ rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
 
         TEST_SAY("Deleting %" PRIusz " groups\n", group_cnt);
 
-        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, useq);
+        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, q);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -6115,8 +6158,6 @@ rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
             q, RD_KAFKA_EVENT_DELETEGROUPS_RESULT, NULL, tmout + 5000);
 
         rd_kafka_queue_destroy(q);
-
-        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
 
         if (err)
                 TEST_FAIL("Failed to delete groups: %s", rd_kafka_err2str(err));

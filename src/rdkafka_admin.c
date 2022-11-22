@@ -231,6 +231,7 @@ enum { RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
        RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
        RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
                                                 *   and has no target broker */
+       RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
 };
 
 /**
@@ -259,6 +260,8 @@ typedef void(rd_kafka_admin_fanout_PartialResponse_cb_t)(
 
 typedef rd_list_copy_cb_t rd_kafka_admin_fanout_CopyResult_cb_t;
 
+typedef rd_list_copy_cb_t rd_kafka_admin_fanout_CopyArg_cb_t;
+
 /**
  * @struct Request-specific worker callbacks.
  */
@@ -281,6 +284,9 @@ struct rd_kafka_admin_fanout_worker_cbs {
 
         /** Copy an accumulated result for storing into the rko_result. */
         rd_kafka_admin_fanout_CopyResult_cb_t *copy_result;
+
+        /** Copy the original arguments, used by target ALL. */
+        rd_kafka_admin_fanout_CopyArg_cb_t *copy_arg;
 };
 
 /* Forward declarations */
@@ -802,6 +808,57 @@ rd_kafka_admin_common_get_controller(rd_kafka_t *rk, rd_kafka_op_t *rko) {
 }
 
 
+/**
+ * @brief Asynchronously look up current list of broker ids until available.
+ *        Bootstrap and logical brokers are excluded from the list.
+ *
+ *        To be called repeatedly from each invocation of the worker
+ *        when in state RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST until
+ *        a not-NULL rd_list_t * is returned.
+ *
+ * @param rk Client instance.
+ * @param rko Op containing the admin request eonce to use for the
+ *            async callback.
+ * @return List of int32_t with broker nodeids when ready, NULL when
+ *         the eonce callback will be called.
+ */
+static rd_list_t *
+rd_kafka_admin_common_brokers_get_nodeids(rd_kafka_t *rk, rd_kafka_op_t *rko) {
+        rd_list_t *broker_ids;
+
+        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: looking up brokers",
+                     rd_kafka_op2str(rko->rko_type));
+
+        /* Since we're iterating over this rd_kafka_brokers_get_nodeids_async()
+         * call (asynchronously) until a nodeids list is available (or timeout),
+         * we need to re-enable the eonce to be triggered again (which
+         * is not necessary the first time we get here, but there
+         * is no harm doing it then either). */
+        rd_kafka_enq_once_reenable(rko->rko_u.admin_request.eonce, rko,
+                                   RD_KAFKA_REPLYQ(rk->rk_ops, 0));
+
+        /* Look up the nodeids list asynchronously, if it's
+         * not available the eonce is registered for broker
+         * state changes which will cause our function to be called
+         * again as soon as (any) broker state changes.
+         * When we are called again we perform the same lookup
+         * again and hopefully get a list of nodeids again,
+         * otherwise defer a new async wait.
+         * Repeat until success or timeout. */
+        if (!(broker_ids = rd_kafka_brokers_get_nodeids_async(
+                  rk, rko->rko_u.admin_request.eonce))) {
+                /* nodeids list not available, wait asynchronously
+                 * for the eonce to be triggered. */
+                return NULL;
+        }
+
+        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: %" PRId32 " broker(s)",
+                     rd_kafka_op2str(rko->rko_type), rd_list_cnt(broker_ids));
+
+        return broker_ids;
+}
+
+
 
 /**
  * @brief Handle response from broker by triggering worker callback.
@@ -926,6 +983,9 @@ static void rd_kafka_admin_coord_response_parse(rd_kafka_t *rk,
         rd_kafka_admin_result_enq(rko, rko_result);
 }
 
+static void rd_kafka_admin_fanout_op_distribute(rd_kafka_t *rk,
+                                                rd_kafka_op_t *rko,
+                                                rd_list_t *nodeids);
 
 
 /**
@@ -955,6 +1015,7 @@ rd_kafka_admin_worker(rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_ts_t timeout_in;
         rd_kafka_broker_t *rkb = NULL;
         rd_kafka_resp_err_t err;
+        rd_list_t *nodeids = NULL;
         char errstr[512];
 
         /* ADMIN_FANOUT handled by fanout_worker() */
@@ -1063,6 +1124,11 @@ redo:
                         /* Wait asynchronously for broker response, which will
                          * trigger the eonce and worker to be called again. */
                         return RD_KAFKA_OP_RES_KEEP;
+                case RD_KAFKA_ADMIN_TARGET_ALL:
+                        /* All brokers */
+                        rko->rko_u.admin_request.state =
+                            RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST;
+                        goto redo; /* Trigger next state immediately */
 
                 case RD_KAFKA_ADMIN_TARGET_FANOUT:
                         /* Shouldn't come here, fanouts are handled by
@@ -1102,11 +1168,23 @@ redo:
                     RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
                 goto redo;
 
+        case RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST:
+                /* Wait for a valid list of brokers to be available. */
+                if (!(nodeids =
+                          rd_kafka_admin_common_brokers_get_nodeids(rk, rko))) {
+                        /* Still waiting for brokers to become available. */
+                        return RD_KAFKA_OP_RES_KEEP;
+                }
+                rd_kafka_admin_fanout_op_distribute(rk, rko, nodeids);
+                rd_list_destroy(nodeids);
+                rko->rko_u.admin_request.state =
+                    RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS;
+                goto redo;
+
         case RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS:
-                /* This state is only used by ADMIN_FANOUT which has
-                 * its own fanout_worker() */
-                RD_NOTREACHED();
-                break;
+                /* This op can be destroyed, as a new fanout op has been
+                 * sent, and the response will be enqueued there. */
+                goto destroy;
 
         case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
                 /* Got broker, send protocol request. */
@@ -1159,7 +1237,6 @@ destroy:
                                              rd_false /*don't destroy*/);
         return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
 }
-
 
 /**
  * @brief Create a new admin_fanout op of type \p req_type and sets up the
@@ -1220,6 +1297,54 @@ rd_kafka_admin_fanout_op_new(rd_kafka_t *rk,
         rko->rko_u.admin_request.fanout.reqtype = req_type;
 
         return rko;
+}
+
+/**
+ * @brief Duplicate the fanout operation for each nodeid passed and
+ *        enqueue each new operation. Use the same fanout_parent as
+ *        the passed \p rko.
+ *
+ * @param rk Client instance.
+ * @param rko Operation to distribute to each broker.
+ * @param nodeids List of int32_t with the broker nodeids.
+ * @param rkq
+ * @return rd_kafka_op_t*
+ */
+static void rd_kafka_admin_fanout_op_distribute(rd_kafka_t *rk,
+                                                rd_kafka_op_t *rko,
+                                                rd_list_t *nodeids) {
+        int i, nodeids_cnt, timeout_remains;
+        rd_kafka_op_t *rko_fanout;
+        rd_kafka_AdminOptions_t *options = &rko->rko_u.admin_request.options;
+        timeout_remains                  = rd_kafka_admin_timeout_remains(rko);
+        rd_kafka_AdminOptions_set_request_timeout(options, timeout_remains,
+                                                  NULL, 0);
+
+        nodeids_cnt = rd_list_cnt(nodeids);
+        rko_fanout  = rko->rko_u.admin_request.fanout_parent;
+        rko_fanout->rko_u.admin_request.fanout.outstanding = (int)nodeids_cnt;
+        rko->rko_u.admin_request.fanout_parent             = NULL;
+
+        /* Create individual request ops for each node */
+        for (i = 0; i < nodeids_cnt; i++) {
+                rd_kafka_op_t *rko_dup = rd_kafka_admin_request_op_new(
+                    rk, rko->rko_type,
+                    rko->rko_u.admin_request.reply_event_type,
+                    rko->rko_u.admin_request.cbs, options, rk->rk_ops);
+
+                rko_dup->rko_u.admin_request.fanout_parent = rko_fanout;
+                rko_dup->rko_u.admin_request.broker_id =
+                    rd_list_get_int32(nodeids, i);
+
+                rd_list_init_copy(&rko_dup->rko_u.admin_request.args,
+                                  &rko->rko_u.admin_request.args);
+                rd_list_copy_to(
+                    &rko_dup->rko_u.admin_request.args,
+                    &rko->rko_u.admin_request.args,
+                    rko_fanout->rko_u.admin_request.fanout.cbs->copy_arg, NULL);
+
+                rd_kafka_q_enq(rk->rk_ops, rko_dup);
+        }
 }
 
 
@@ -1301,6 +1426,55 @@ static rd_kafka_op_res_t rd_kafka_admin_fanout_worker(rd_kafka_t *rk,
         return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy(rko) */
 }
 
+/**
+ * @brief Create a new operation that targets all the brokers.
+ *        The operation consists of a fanout parent that is reused and
+ *        fanout operation that is duplicated for each broker found.
+ *
+ * @param rk Client instance-
+ * @param optype Operation type.
+ * @param reply_event_type Reply event type.
+ * @param cbs Fanned out op callbacks.
+ * @param fanout_cbs Fanout parent out op callbacks.
+ * @param result_free Callback for freeing the result list.
+ * @param options Operation options.
+ * @param rkq Result queue.
+ * @return The newly created op targeting all the brokers.
+ *
+ * @sa Use rd_kafka_op_destroy() to release it.
+ */
+static rd_kafka_op_t *rd_kafka_admin_request_op_target_all_new(
+    rd_kafka_t *rk,
+    rd_kafka_op_type_t optype,
+    rd_kafka_event_type_t reply_event_type,
+    const struct rd_kafka_admin_worker_cbs *cbs,
+    const struct rd_kafka_admin_fanout_worker_cbs *fanout_cbs,
+    void (*result_free)(void *),
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_q_t *rkq) {
+        rd_kafka_op_t *rko, *rko_fanout;
+
+        rd_assert(rk);
+        rd_assert(rkq);
+        rd_assert(cbs);
+        rd_assert(fanout_cbs);
+
+        rko_fanout = rd_kafka_admin_fanout_op_new(rk, optype, reply_event_type,
+                                                  fanout_cbs, options, rkq);
+
+        rko = rd_kafka_admin_request_op_new(rk, optype, reply_event_type, cbs,
+                                            options, rk->rk_ops);
+
+        rko_fanout->rko_u.admin_request.fanout.outstanding = 1;
+        rko->rko_u.admin_request.fanout_parent             = rko_fanout;
+        rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_ALL;
+
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results, (int)1,
+                     result_free);
+
+        return rko;
+}
+
 /**@}*/
 
 
@@ -1378,6 +1552,23 @@ rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
                                          errstr, errstr_size);
 }
 
+rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
+    rd_kafka_AdminOptions_t *options,
+    rd_kafka_consumer_group_state_t *consumer_group_states,
+    size_t consumer_group_states_cnt,
+    char *errstr,
+    size_t errstr_size) {
+        size_t i;
+        rd_list_t *states_list = rd_list_new(0, NULL);
+        rd_list_init_int32(states_list, consumer_group_states_cnt);
+        for (i = 0; i < consumer_group_states_cnt; i++) {
+                rd_list_set_int32(states_list, i, consumer_group_states[i]);
+        }
+        return rd_kafka_confval_set_type(&options->consumer_group_states,
+                                         RD_KAFKA_CONFVAL_PTR, states_list,
+                                         errstr, errstr_size);
+}
+
 void rd_kafka_AdminOptions_set_opaque(rd_kafka_AdminOptions_t *options,
                                       void *opaque) {
         rd_kafka_confval_set_type(&options->opaque, RD_KAFKA_CONFVAL_PTR,
@@ -1431,6 +1622,14 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->require_stable,
                                          "require_stable");
 
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTGROUPS)
+                rd_kafka_confval_init_ptr(&options->consumer_group_states,
+                                          "states");
+        else
+                rd_kafka_confval_disable(&options->consumer_group_states,
+                                         "states");
+
         rd_kafka_confval_init_int(&options->broker, "broker", 0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
 }
@@ -1453,6 +1652,9 @@ rd_kafka_AdminOptions_new(rd_kafka_t *rk, rd_kafka_admin_op_t for_api) {
 }
 
 void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options) {
+        if (options && options->consumer_group_states.u.PTR) {
+                rd_list_destroy(options->consumer_group_states.u.PTR);
+        }
         rd_free(options);
 }
 
@@ -3991,7 +4193,6 @@ rd_kafka_DeleteConsumerGroupOffsets_result_groups(
                                                 cntp);
 }
 
-RD_EXPORT
 void rd_kafka_DeleteConsumerGroupOffsets(
     rd_kafka_t *rk,
     rd_kafka_DeleteConsumerGroupOffsets_t **del_grpoffsets,
@@ -5037,7 +5238,6 @@ rd_kafka_AlterConsumerGroupOffsets_result_groups(
                                                 cntp);
 }
 
-RD_EXPORT
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
     rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
@@ -5268,7 +5468,6 @@ const rd_kafka_group_result_t **rd_kafka_ListConsumerGroupOffsets_result_groups(
                                                 cntp);
 }
 
-RD_EXPORT
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
     rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
@@ -5277,6 +5476,432 @@ void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_queue_t *rkqu);
 /**@}*/
 
+/**
+ * @name List consumer groups
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Create a new ConsumerGroupListing object.
+ *
+ * @param group_id The group id.
+ * @param is_simple_consumer_group Is the group simple?
+ * @param state Group state.
+ */
+static rd_kafka_ConsumerGroupListing_t *
+rd_kafka_ConsumerGroupListing_new(const char *group_id,
+                                  rd_bool_t is_simple_consumer_group,
+                                  rd_kafka_consumer_group_state_t state) {
+        if (!group_id)
+                return NULL;
+        rd_kafka_ConsumerGroupListing_t *desc;
+        desc                           = rd_calloc(1, sizeof(*desc));
+        desc->group_id                 = rd_strdup(group_id);
+        desc->is_simple_consumer_group = is_simple_consumer_group;
+        desc->state                    = state;
+        return desc;
+}
+
+/**
+ * @brief Copy \p desc ConsumerGroupListing.
+ *
+ * @param desc The group description to copy.
+ * @return A new allocated copy of the passed ConsumerGroupListing, or
+ *         NULL if \p desc is NULL.
+ */
+static rd_kafka_ConsumerGroupListing_t *rd_kafka_ConsumerGroupListing_copy(
+    const rd_kafka_ConsumerGroupListing_t *desc) {
+        if (!desc)
+                return NULL;
+        return rd_kafka_ConsumerGroupListing_new(
+            desc->group_id, desc->is_simple_consumer_group, desc->state);
+}
+
+/**
+ * @brief Same as rd_kafka_ConsumerGroupListing_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *desc,
+                                                       void *opaque) {
+        return rd_kafka_ConsumerGroupListing_copy(desc);
+}
+
+static void
+rd_kafka_ConsumerGroupListing_destroy(rd_kafka_ConsumerGroupListing_t *desc) {
+        if (!desc)
+                return;
+        if (likely(desc->group_id != NULL))
+                rd_free(desc->group_id);
+        rd_free(desc);
+}
+
+static void rd_kafka_ConsumerGroupListing_free(void *ptr) {
+        rd_kafka_ConsumerGroupListing_destroy(ptr);
+}
+
+const char *rd_kafka_ConsumerGroupListing_group_id(
+    const rd_kafka_ConsumerGroupListing_t *desc) {
+        if (!desc)
+                return NULL;
+        return desc->group_id;
+}
+
+int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
+    const rd_kafka_ConsumerGroupListing_t *desc) {
+        if (!desc)
+                return 0;
+        return desc->is_simple_consumer_group;
+}
+
+rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
+    const rd_kafka_ConsumerGroupListing_t *desc) {
+        if (!desc)
+                return RD_KAFKA_CGRP_STATE_UNKNOWN;
+        return desc->state;
+}
+
+/**
+ * @brief Create a new ListConsumerGroupsResult object.
+ *
+ * @param valid
+ * @param errors
+ */
+static rd_kafka_ListConsumerGroupsResult_t *
+rd_kafka_ListConsumerGroupsResult_new(const rd_list_t *valid,
+                                      const rd_list_t *errors) {
+        rd_kafka_ListConsumerGroupsResult_t *res;
+        if (!valid || !errors)
+                return NULL;
+        res = rd_calloc(1, sizeof(*res));
+        rd_list_init_copy(&res->valid, valid);
+        rd_list_copy_to(&res->valid, valid,
+                        rd_kafka_ConsumerGroupListing_copy_opaque, NULL);
+        rd_list_init_copy(&res->errors, errors);
+        rd_list_copy_to(&res->errors, errors, rd_kafka_error_copy_opaque, NULL);
+        return res;
+}
+
+static void rd_kafka_ListConsumerGroupsResult_destroy(
+    rd_kafka_ListConsumerGroupsResult_t *res) {
+        if (!res)
+                return;
+        rd_list_destroy(&res->valid);
+        rd_list_destroy(&res->errors);
+        rd_free(res);
+}
+
+static void rd_kafka_ListConsumerGroupsResult_free(void *ptr) {
+        rd_kafka_ListConsumerGroupsResult_destroy(ptr);
+}
+
+/**
+ * @brief Copy the passed ListConsumerGroupsResult.
+ *
+ * @param res the ListConsumerGroupsResult to copy
+ * @return a newly allocated ListConsumerGroupsResult object.
+ *
+ * @sa Release the object with rd_kafka_ListConsumerGroupsResult_destroy().
+ */
+static rd_kafka_ListConsumerGroupsResult_t *
+rd_kafka_ListConsumerGroupsResult_copy(
+    const rd_kafka_ListConsumerGroupsResult_t *res) {
+        return rd_kafka_ListConsumerGroupsResult_new(&res->valid, &res->errors);
+}
+
+/**
+ * @brief Same as rd_kafka_ListConsumerGroupsResult_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_ListConsumerGroupsResult_copy_opaque(const void *list,
+                                                           void *opaque) {
+        return rd_kafka_ListConsumerGroupsResult_copy(list);
+}
+
+/**
+ * @brief Send ListGroupsRequest. Admin worker compatible callback.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_ListGroupsRequest(rd_kafka_broker_t *rkb,
+                                 const rd_list_t *groups /*(char*)*/,
+                                 rd_kafka_AdminOptions_t *options,
+                                 char *errstr,
+                                 size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        int i;
+        const rd_kafkap_str_t **states_str = NULL;
+        int states_str_cnt                 = 0;
+        rd_list_t *states =
+            rd_kafka_confval_get_ptr(&options->consumer_group_states);
+        /* Prepare list_options */
+        if (states && rd_list_cnt(states) > 0) {
+                states_str_cnt = rd_list_cnt(states);
+                states_str     = rd_calloc(states_str_cnt, sizeof(*states_str));
+                for (i = 0; i < states_str_cnt; i++) {
+                        states_str[i] = rd_kafkap_str_new(
+                            rd_kafka_consumer_group_state_name(
+                                rd_list_get_int32(states, i)),
+                            -1);
+                }
+        }
+
+        rd_kafka_ListGroupsRequest(rkb, states_str, states_str_cnt, replyq,
+                                   resp_cb, opaque);
+        if (states_str) {
+                for (i = 0; i < states_str_cnt; i++) {
+                        rd_kafkap_str_destroy((rd_kafkap_str_t *)states_str[i]);
+                }
+                rd_free(states_str);
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Parse ListGroupsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_ListGroupsResponse_parse(rd_kafka_op_t *rko_req,
+                                  rd_kafka_op_t **rko_resultp,
+                                  rd_kafka_buf_t *reply,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, cnt, nodeid;
+        int16_t error_code, api_version;
+        rd_kafka_op_t *rko_result = NULL;
+        rd_kafka_error_t *error   = NULL;
+        rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
+        rd_list_t valid, errors;
+        const rd_kafka_ListConsumerGroupsResult_t *list_result;
+        char *group_s = NULL, *group_state_s = NULL, *proto_type_s = NULL;
+
+        api_version = rd_kafka_buf_ApiVersion(reply);
+        if (api_version >= 1) {
+                rd_kafka_buf_read_throttle_time(reply);
+        }
+        rd_kafka_buf_read_i16(reply, &error_code);
+        if (error_code) {
+                rd_kafka_broker_lock(rkb);
+                nodeid = rkb->rkb_nodeid;
+                rd_kafka_broker_unlock(rkb);
+                error =
+                    rd_kafka_error_new(error_code,
+                                       "Broker [%" PRId16
+                                       "] "
+                                       "ListGroups: %s",
+                                       nodeid, rd_kafka_err2str(error_code));
+        }
+
+        rd_kafka_buf_read_arraycnt(reply, &cnt, -1);
+        rd_list_init(&valid, cnt, rd_kafka_ConsumerGroupListing_free);
+        rd_list_init(&errors, 1, rd_free);
+        if (error)
+                rd_list_add(&errors, error);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_ListConsumerGroupsResult_free);
+
+        for (i = 0; i < cnt; i++) {
+                rd_kafkap_str_t grp, protocol_type, grp_state = RD_ZERO_INIT;
+                rd_kafka_ConsumerGroupListing_t *group_listing;
+                rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
+                rd_kafka_consumer_group_state_t state =
+                    RD_KAFKA_CGRP_STATE_UNKNOWN;
+
+                rd_kafka_buf_read_str(reply, &grp);
+                rd_kafka_buf_read_str(reply, &protocol_type);
+                if (api_version >= 4) {
+                        rd_kafka_buf_read_str(reply, &grp_state);
+                }
+                rd_kafka_buf_skip_tags(reply);
+
+                group_s      = RD_KAFKAP_STR_DUP(&grp);
+                proto_type_s = RD_KAFKAP_STR_DUP(&protocol_type);
+                if (api_version >= 4) {
+                        group_state_s = RD_KAFKAP_STR_DUP(&grp_state);
+                        state =
+                            rd_kafka_consumer_group_state_code(group_state_s);
+                }
+
+                is_simple_consumer_group  = *proto_type_s == '\0';
+                is_consumer_protocol_type = !strcmp(proto_type_s, "consumer");
+                if (is_simple_consumer_group || is_consumer_protocol_type) {
+                        group_listing = rd_kafka_ConsumerGroupListing_new(
+                            group_s, is_simple_consumer_group, state);
+                        rd_list_add(&valid, group_listing);
+                }
+
+                rd_free(group_s);
+                rd_free(group_state_s);
+                rd_free(proto_type_s);
+                group_s       = NULL;
+                group_state_s = NULL;
+                proto_type_s  = NULL;
+        }
+        rd_kafka_buf_skip_tags(reply);
+
+err_parse:
+        if (group_s)
+                rd_free(group_s);
+        if (group_state_s)
+                rd_free(group_state_s);
+        if (proto_type_s)
+                rd_free(proto_type_s);
+
+        if (reply->rkbuf_err) {
+                error_code = reply->rkbuf_err;
+                rd_kafka_broker_lock(rkb);
+                nodeid = rkb->rkb_nodeid;
+                rd_kafka_broker_unlock(rkb);
+                error = rd_kafka_error_new(
+                    error_code,
+                    "Broker [%" PRId16
+                    "] "
+                    "ListGroups response protocol parse failure: %s",
+                    nodeid, rd_kafka_err2str(error_code));
+                rd_list_add(&errors, error);
+        }
+
+        list_result = rd_kafka_ListConsumerGroupsResult_new(&valid, &errors);
+        if (list_result)
+                rd_list_add(&rko_result->rko_u.admin_result.results,
+                            (void *)list_result);
+
+        *rko_resultp = rko_result;
+        rd_list_destroy(&valid);
+        rd_list_destroy(&errors);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/** @brief Merge the ListGroups response from a single broker
+ *         into the user response list.
+ */
+static void
+rd_kafka_ListGroups_response_merge(rd_kafka_op_t *rko_fanout,
+                                   const rd_kafka_op_t *rko_partial) {
+        int cnt;
+        rd_kafka_ListConsumerGroupsResult_t *res = NULL;
+        rd_kafka_ListConsumerGroupsResult_t *newres;
+        rd_list_t new_valid, new_errors;
+
+        rd_assert(rko_partial->rko_evtype == RD_KAFKA_EVENT_LISTGROUPS_RESULT);
+
+        cnt = rd_list_cnt(&rko_fanout->rko_u.admin_request.fanout.results);
+        if (cnt) {
+                res = rd_list_elem(
+                    &rko_fanout->rko_u.admin_request.fanout.results, 0);
+        } else {
+                rd_list_init(&new_valid, 0, rd_kafka_ConsumerGroupListing_free);
+                rd_list_init(&new_errors, 0, rd_free);
+                res = rd_kafka_ListConsumerGroupsResult_new(&new_valid,
+                                                            &new_errors);
+                rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, 0,
+                            (void *)res);
+                rd_list_destroy(&new_valid);
+                rd_list_destroy(&new_errors);
+        }
+        if (!rko_partial->rko_err) {
+                int new_valid, new_errors;
+                const rd_list_t *new_valid_list, *new_errors_list;
+                /* Read the partial result and merge the valid groups
+                 * and the errors into the fanout parent result. */
+                newres =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
+                rd_assert(newres);
+                new_valid  = rd_list_cnt(&newres->valid);
+                new_errors = rd_list_cnt(&newres->errors);
+                if (new_valid) {
+                        new_valid_list = &newres->valid;
+                        rd_list_grow(&res->valid, new_valid);
+                        rd_list_copy_to(
+                            &res->valid, new_valid_list,
+                            rd_kafka_ConsumerGroupListing_copy_opaque, NULL);
+                }
+                if (new_errors) {
+                        new_errors_list = &newres->errors;
+                        rd_list_grow(&res->errors, new_errors);
+                        rd_list_copy_to(&res->errors, new_errors_list,
+                                        rd_kafka_error_copy_opaque, NULL);
+                }
+        } else {
+                /* Op errored, e.g. timeout */
+                rd_kafka_error_t *error =
+                    rd_kafka_error_new(rko_partial->rko_err, NULL);
+                rd_list_add(&res->errors, error);
+        }
+}
+
+void rd_kafka_ListGroups(rd_kafka_t *rk,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_admin_ListGroupsRequest,
+            rd_kafka_ListGroupsResponse_parse};
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_ListGroups_response_merge,
+            rd_kafka_ListConsumerGroupsResult_copy_opaque,
+        };
+
+        rko = rd_kafka_admin_request_op_target_all_new(
+            rk, RD_KAFKA_OP_LISTGROUPS, RD_KAFKA_EVENT_LISTGROUPS_RESULT, &cbs,
+            &fanout_cbs, rd_kafka_ListConsumerGroupsResult_free, options,
+            rkqu->rkqu_q);
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+const rd_kafka_ConsumerGroupListing_t **
+rd_kafka_ListGroups_result_valid(const rd_kafka_ListGroups_result_t *result,
+                                 size_t *cntp) {
+        int list_result_cnt, result_cnt;
+        const rd_kafka_ListConsumerGroupsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTGROUPS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rd_list_elem(&rko->rko_u.admin_result.results, 0);
+        result_cnt  = rd_list_cnt(&list_result->valid);
+        if (result_cnt == 0) {
+                *cntp = 0;
+                return NULL;
+        }
+        *cntp = result_cnt;
+        return (const rd_kafka_ConsumerGroupListing_t **)
+            list_result->valid.rl_elems;
+}
+
+const rd_kafka_error_t **
+rd_kafka_ListGroups_result_errors(const rd_kafka_ListGroups_result_t *result,
+                                  size_t *cntp) {
+        int list_result_cnt, error_cnt;
+        const rd_kafka_ListConsumerGroupsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTGROUPS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rko->rko_u.admin_result.results.rl_elems[0];
+        error_cnt   = rd_list_cnt(&list_result->errors);
+        if (error_cnt == 0) {
+                *cntp = 0;
+                return NULL;
+        }
+        *cntp = error_cnt;
+        return (const rd_kafka_error_t **)list_result->errors.rl_elems;
+}
+
+/**@}*/
 
 /**
  * @name Describe consumer groups
@@ -5480,7 +6105,6 @@ static void rd_kafka_ConsumerGroupDescription_free(void *ptr) {
         rd_kafka_ConsumerGroupDescription_destroy(ptr);
 }
 
-RD_EXPORT
 const char *rd_kafka_ConsumerGroupDescription_group_id(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5488,7 +6112,6 @@ const char *rd_kafka_ConsumerGroupDescription_group_id(
         return desc->group_id;
 }
 
-RD_EXPORT
 const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5497,7 +6120,6 @@ const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
 }
 
 
-RD_EXPORT
 int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5506,7 +6128,6 @@ int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
 }
 
 
-RD_EXPORT
 char *rd_kafka_ConsumerGroupDescription_partition_assignor(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5515,7 +6136,6 @@ char *rd_kafka_ConsumerGroupDescription_partition_assignor(
 }
 
 
-RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5523,7 +6143,6 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
         return desc->state;
 }
 
-RD_EXPORT
 rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5531,7 +6150,6 @@ rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
         return desc->coordinator;
 }
 
-RD_EXPORT
 int rd_kafka_ConsumerGroupDescription_member_cnt(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
@@ -5539,7 +6157,6 @@ int rd_kafka_ConsumerGroupDescription_member_cnt(
         return rd_list_cnt(&desc->members);
 }
 
-RD_EXPORT
 rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *desc,
     int idx) {
@@ -5549,7 +6166,6 @@ rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
                                                             idx);
 }
 
-RD_EXPORT
 char *rd_kafka_MemberDescription_client_id(
     const rd_kafka_MemberDescription_t *member) {
         if (!member)
@@ -5557,7 +6173,6 @@ char *rd_kafka_MemberDescription_client_id(
         return member->client_id;
 }
 
-RD_EXPORT
 char *rd_kafka_MemberDescription_consumer_id(
     const rd_kafka_MemberDescription_t *member) {
         if (!member)
@@ -5565,7 +6180,6 @@ char *rd_kafka_MemberDescription_consumer_id(
         return member->consumer_id;
 }
 
-RD_EXPORT
 char *
 rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member) {
         if (!member)
@@ -5573,7 +6187,6 @@ rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member) {
         return member->host;
 }
 
-RD_EXPORT
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
     const rd_kafka_MemberDescription_t *member) {
         if (!member)
@@ -5581,7 +6194,6 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
         return &member->assignment;
 }
 
-RD_EXPORT
 rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_topic_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
         if (!assignment)
@@ -5875,7 +6487,6 @@ err_parse:
         return reply->rkbuf_err;
 }
 
-RD_EXPORT
 void rd_kafka_DescribeGroups(rd_kafka_t *rk,
                              const char **groups,
                              size_t groups_cnt,
@@ -5974,13 +6585,6 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
         }
 }
 
-/**
- * @brief Get an array of group results from a DescribeGroups result.
- *
- * The returned \p groups life-time is the same as the \p result object.
- * @param cntp is updated to the number of elements in the array.
- */
-RD_EXPORT
 const rd_kafka_ConsumerGroupDescription_t **
 rd_kafka_DescribeGroups_result_groups(
     const rd_kafka_DescribeGroups_result_t *result,

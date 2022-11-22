@@ -31,6 +31,7 @@
 
 
 #include "rdstring.h"
+#include "rdkafka_error.h"
 #include "rdkafka_confval.h"
 
 
@@ -89,6 +90,11 @@ struct rd_kafka_AdminOptions_s {
                              * offsets (transaction-committed). Valid for:
                              *     ListConsumerGroupOffsets
                              */
+
+        rd_kafka_confval_t
+            consumer_group_states; /**< PTR: list of consumer group states.
+                                    * Valid for: ListGroups.
+                                    */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
@@ -393,6 +399,32 @@ struct rd_kafka_ListConsumerGroupOffsets_s {
 
 /**@}*/
 
+/**
+ * @name ListGroups
+ * @{
+ */
+
+/**
+ * @struct ListGroups result for a single group
+ */
+typedef struct rd_kafka_ConsumerGroupListing_s {
+        char *group_id; /**< Group id */
+        rd_bool_t is_simple_consumer_group;
+        /**< Is it a simple consumer group? That means empty protocol_type. */
+        rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
+} rd_kafka_ConsumerGroupListing_t;
+
+
+/**
+ * @struct ListGroups results and errors
+ */
+typedef struct rd_kafka_ListConsumerGroupsResult_s {
+        rd_list_t valid;  /**< List of valid ConsumerGroupListing
+                               (rd_kafka_ConsumerGroupListing_t *) */
+        rd_list_t errors; /**< List of errors (rd_kafka_error_t *) */
+} rd_kafka_ListConsumerGroupsResult_t;
+
+/**@}*/
 
 /**
  * @name DescribeGroups

@@ -138,36 +138,13 @@ Update the librdkafka version in `vcpkg.json`.
 
 ## Creating packages
 
-As soon as a tag is pushed the CI systems (Travis and AppVeyor) will
-start their builds and eventually upload the packaging artifacts to S3.
-Wait until this process is finished by monitoring the two CIs:
+As soon as a tag is pushed the CI system (SemaphoreCI) will start its
+build pipeline and eventually upload packaging artifacts to the SemaphoreCI
+project artifact store.
 
- * https://travis-ci.org/edenhill/librdkafka
- * https://ci.appveyor.com/project/edenhill/librdkafka
-
-
-### Create NuGet package
-
-On a Linux host with docker installed, this will also require S3 credentials
-to be set up.
-
-    $ cd packaging/nuget
-    $ python3 -m pip install -r requirements.txt  # if necessary
-    $ ./release.py v0.11.1-RC1
-
-Test the generated librdkafka.redist.0.11.1-RC1.nupkg and
-then upload it to NuGet manually:
-
- * https://www.nuget.org/packages/manage/upload
-
-
-### Create static bundle (for Go)
-
-    $ cd packaging/nuget
-    $ ./release.py --class StaticPackage v0.11.1-RC1
-
-Follow the Go client release instructions for updating its bundled librdkafka
-version based on the tar ball created here.
+Monitor the Semaphore CI project page to know when the build pipeline
+is finished, then download the relevant artifacts for further use, see
+*The artifact pipeline* chapter below.
 
 
 ## Publish release on github
@@ -311,273 +288,24 @@ These jobs do not produce any artifacts.
 
 For the artifact pipeline there's tag builds, which are triggered by pushing a
 tag to the git repository.
-These tag builds will generate artifacts, and those artifacts are then uploaded
-to an S3 bucket (librdkafka-ci-packages) with a key-value based path format
-that allows us to identify where each artifact was built, how, for what
-platform, os, with what linkage (dynamic or static), etc.
+These tag builds will generate artifacts which are used by the same pipeline
+to create NuGet and static library packages, which are then uploaded to
+SemaphoreCI's project artifact store.
 
-Once all the CI jobs for a tagged build has finished (successfully), it is time
-to collect the artifacts and create release packages.
+Once a tag build pipeline is done, you can download the relevant packages
+from the Semaphore CI project artifact store.
 
-There are two scripts to run in the `packaging/nuget` directory:
+The NuGet package, `librdkafka.redist.<version>.nupkg`, needs to be
+manually uploaded to NuGet.
 
- 1. `./release.py --upload <your-nuget-key-file> <the-tag>`
-    This creates a NuGet package containing various build artifacts from the
-    previous CI step, typically `librdkafka.redist.<the-tag-minus-v-prefix>.nupkg`. NuGet packages are zip files, so you can inspect the contents by
-    doing `uzip -l librdkafka.redist.<tag..>.nupkg`.
+The `librdkafka-static-bundle-<version>.tgz` static library bundle
+needs to be manually imported into the confluent-kafka-go client using the
+import script that resides in the Go client repository.
 
- 2. `./release.py -class StaticPackage <the-tag>`
-    This creates a tar-ball named `librdkafka-static-bundle-<tag>.tgz`
-    with the self-contained static libraries for various platforms.
-    This tar-ball is used by `import.sh` in the confluent-kafka-go to import
-    and integrate the static libraries into the Go client.
-
-
-**Note**: You will need AWS S3 credentials to run these scripts as they
-          download the artifacts from the S3 buckets.
 
 **Note**: You will need a NuGet API key to upload nuget packages.
 
 
-### The artifacts
-
-Let's break it down and look at each of the build artifacts from the above
-artifact pipeline that end up in release packages.
-
-
-#### librdkafka.redist NuGet package artifacts
-
-(See `packaging/nuget/packaging.py`) to see how packages are assembled
-from build artifacts.)
-
-
-If we look inside the NuGet redist package (with `unzip -l librdkafka.redist.<version>.nupkg`)
-we'll see the following build artifacts:
-
-##### `runtimes/linux-x64/native/librdkafka.so`
-
-Dynamic library, x64, Linux glibc.
-
-Built on Ubuntu 16.04.
-
-Missing features: none
-
-OpenSSL: 1.0.2
-
-External dependencies:
-
- * libsasl2.so.2 (cyrus-sasl) for GSSAPI/Kerberos.
- * libz (zlib) for GZip compression.
- * libcrypto/libssl (OpenSSL 1.0.2) for SSL/TLS and SASL SCRAM and OAUTHBEARER.
- * libcurl (curl) for SASL OAUTHBEARER OIDC.
-
-
-
-##### `runtimes/linux-x64/native/centos6-librdkafka.so`
-
-Dynamic library, x64, Linux older glibc for broad backwards compatibility
-across glibc-based Linux distros.
-
-Built on CentOS 6.
-
-Missing features: SASL GSSAPI/Kerberos
-
-OpenSSL: 1.0.2
-
-No external dependencies except system libraries.
-
-
-##### `runtimes/linux-x64/native/centos7-librdkafka.so`
-
-Dynamic library, x64, Linux glibc.
-
-Built on CentOS 7.
-
-Missing features: none
-
-OpenSSL: 1.0.2
-
-External dependencies:
-
- * libsasl2.so.3 (cyrus-sasl) for GSSAPI/Kerberos.
- * libz (zlib) for GZip compression.
- * libcrypto/libssl (OpenSSL 1.0.2) for SSL/TLS and SASL SCRAM and OAUTHBEARER.
-
-
-##### `runtimes/linux-x64/native/alpine-librdkafka.so`
-
-Dynamic library, x64, Linux musl (Alpine).
-
-Built on Alpine 3.12.
-
-Missing features: SASL GSSAPI/Kerberos
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `runtimes/linux-arm64/native/librdkafka.so`
-
-Dynamic library, arm64, Linux glibc.
-
-Built on Ubuntu 18.04.
-
-Missing features: SASL GSSAPI/Kerberos
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-
-##### `runtimes/osx-x64/native/librdkafka.dylib`
-
-Dynamic library, x64, MacOSX
-
-Built on MacOSX 12.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `runtimes/osx-arm64/native/librdkafka.dylib`
-
-Dynamic library, arm64, MacOSX
-
-Built on MacOSX 12.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-
-##### `runtimes/win-x86/native/librdkafka.dll`
-
-Dynamic library, x86/i386, Windows.
-
-Built on Windows.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-All external dependencies are shipped alongside librdkafka.dll in the
-NuGet package.
-
-
-##### `runtimes/win-x64/native/librdkafka.dll`
-
-Dynamic library, x64, Windows.
-
-Built on Windows.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-All external dependencies are shipped alongside librdkafka.dll in the
-NuGet package.
-
-
-
-#### librdkafka-static-bundle tarball
-
-This tarball contains self-contained static libraries of librdkafka for various
-platforms. It is used by the confluent-kafka-go client.
-
-##### `librdkafka_darwin_amd64.a`
-
-Static library, x64, Mac OSX.
-
-Built on Mac OSX.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `librdkafka_darwin_arm64.a`
-
-Static library, arm64/m1, Mac OSX.
-
-Built on Mac OSX.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `librdkafka_glibc_linux.a`
-
-Static library, x64, Linux glibc.
-
-Built on ?
-
-Missing features: SASL GSSAPI/Kerberos
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `librdkafka_musl_linux.a`
-
-Static library, x64, Linux musl (Alpine).
-
-Built on ?
-
-Missing features: SASL GSSAPI/Kerberos
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-##### `librdkafka_windows.a`
-
-Static library, x64, Windows.
-
-Built on Windows using MinGW.
-
-Missing features: none
-
-OpenSSL: 1.1.1
-
-No external dependencies except system libraries.
-
-
-
-
-#### NEW ARTIFACTS
-
-Dynamic libraries for librdkafka.redist NuGet package and Python wheels:
-
-linux-x64/librdkafka.so: all, libsasl.so.2 - using manylinux2010 (Centos 6).
-linux-x64/centos6-librdkafka.so: all, no gssapi - using manylinux2010 (Centos 6).
-linux-x64/centos7-librdkafka.so: all, libsasl.so.3 - using manylinux2014 (Centos7)
-
-linux-arm64/librdkafka.so: all, no gssapi - using manylinux2014_aarch64 (Centos 7).
-
-linux-x64/alpine-librdkafka.so: all, no gssapi - using alpine:3.16.
-
-
-Need to verify that the glibc libraries work on centos and debian.
-
-
-Static libraries for confluent-kafka-go:
+See [nuget/nugetpackaging.py] and [nuget/staticpackaging.py] to see how
+packages are assembled from build artifacts.
 

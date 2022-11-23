@@ -9,7 +9,7 @@
     <ProjectGuid>{A3C4011E-F82E-4E97-9ADB-33B1ECE001A7}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>openssl_engine_example</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>

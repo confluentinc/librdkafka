@@ -11,6 +11,8 @@ import sys
 import argparse
 import time
 import packaging
+import nugetpackage
+import staticpackage
 
 
 dry_run = False
@@ -50,7 +52,7 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument(
         "--class",
-        help="Packaging class (see packaging.py)",
+        help="Packaging class (either NugetPackage or StaticPackage)",
         default="NugetPackage",
         dest="pkgclass")
     parser.add_argument(
@@ -70,7 +72,13 @@ if __name__ == '__main__':
     if args.sha is not None:
         match['sha'] = args.sha
 
-    pkgclass = getattr(packaging, args.pkgclass)
+    if args.pkgclass == "NugetPackage":
+        pkgclass = nugetpackage.NugetPackage
+    elif args.pkgclass == "StaticPackage":
+        pkgclass = staticpackage.StaticPackage
+    else:
+        raise ValueError(f'Unknown packaging class {args.pkgclass}: '
+                         'should be one of NugetPackage or StaticPackage')
 
     try:
         match.update(getattr(pkgclass, 'match'))

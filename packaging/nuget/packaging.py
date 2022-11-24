@@ -8,7 +8,9 @@ import sys
 import re
 import os
 import shutil
+from fnmatch import fnmatch
 from string import Template
+from zfile import zfile
 import boto3
 import magic
 
@@ -17,7 +19,13 @@ if sys.version_info[0] < 3:
 else:
     from urllib.parse import unquote as _unquote
 
-unquote = _unquote
+
+def unquote(path):
+    # Removes URL escapes, and normalizes the path by removing ./.
+    path = _unquote(path)
+    if path[:2] == './':
+        return path[2:]
+    return path
 
 
 # Rename token values
@@ -76,12 +84,15 @@ def magic_mismatch(path, a):
 #  p       - project (e.g., "confluent-kafka-python")
 #  bld     - builder (e.g., "travis")
 #  plat    - platform ("osx", "linux", ..)
+#  dist    - distro or runtime ("centos6", "mingw", "msvcr", "alpine", ..).
 #  arch    - arch ("x64", ..)
 #  tag     - git tag
 #  sha     - git sha
 #  bid     - builder's build-id
 #  bldtype - Release, Debug (appveyor)
-#  lnk     - std, static
+#  lnk     - Linkage ("std", "static", "all" (both std and static))
+#  extra   - Extra build options, typically "gssapi" (for cyrus-sasl linking).
+
 #
 # Example:
 #   librdkafka/p-librdkafka__bld-travis__plat-linux__arch-x64__tag-v0.0.62__sha-d051b2c19eb0c118991cd8bc5cf86d8e5e446cde__bid-1562.1/librdkafka.tar.gz
@@ -113,7 +124,7 @@ class Artifact (object):
         else:
             # Assign the map and convert all keys to lower case
             self.info = {k.lower(): v for k, v in info.items()}
-            # Rename values, e.g., 'plat':'linux' to 'plat':'debian'
+            # Rename values, e.g., 'plat':'windows' to 'plat':'win'
             for k, v in self.info.items():
                 rdict = rename_vals.get(k, None)
                 if rdict is not None:
@@ -200,7 +211,7 @@ class Artifacts (object):
         unmatched = list()
         for m, v in self.match.items():
             if m not in info or info[m] != v:
-                unmatched.append(m)
+                unmatched.append(f"{m} = {v}")
 
         # Make sure all matches were satisfied, unless this is a
         # common artifact.
@@ -254,16 +265,50 @@ class Artifacts (object):
             self.collect_single(f, req_tag)
 
 
+class Mapping (object):
+    """ Maps/matches a file in an input release artifact to
+        the output location of the package, based on attributes and paths. """
+
+    def __init__(self, attributes, artifact_fname_glob, path_in_artifact,
+                 output_pkg_path=None, artifact_fname_excludes=[]):
+        """
+        @param attributes A dict of artifact attributes that must match.
+                          If an attribute name (dict key) is prefixed
+                          with "!" (e.g., "!plat") then the attribute
+                          must not match.
+        @param artifact_fname_glob Match artifacts with this filename glob.
+        @param path_in_artifact On match, extract this file in the artifact,..
+        @param output_pkg_path ..and write it to this location in the package.
+                               Defaults to path_in_artifact.
+        @param artifact_fname_excludes Exclude artifacts matching these
+                                       filenames.
+
+        Pass a list of Mapping objects to FIXME to perform all mappings.
+        """
+        super(Mapping, self).__init__()
+        self.attributes = attributes
+        self.fname_glob = artifact_fname_glob
+        self.input_path = path_in_artifact
+        if output_pkg_path is None:
+            self.output_path = self.input_path
+        else:
+            self.output_path = output_pkg_path
+        self.name = self.output_path
+        self.fname_excludes = artifact_fname_excludes
+
+    def __str__(self):
+        return self.name
+
+
 class Package (object):
     """ Generic Package class
         A Package is a working container for one or more output
         packages for a specific package type (e.g., nuget) """
 
-    def __init__(self, version, arts, ptype):
+    def __init__(self, version, arts):
         super(Package, self).__init__()
         self.version = version
         self.arts = arts
-        self.ptype = ptype
         # These may be overwritten by specific sub-classes:
         self.artifacts = arts.artifacts
         # Staging path, filled in later.
@@ -281,10 +326,6 @@ class Package (object):
 
     def cleanup(self):
         """ Optional cleanup routine for removing temporary files, etc. """
-        pass
-
-    def verify(self, path):
-        """ Optional post-build package verifier """
         pass
 
     def render(self, fname, destpath='.'):
@@ -317,3 +358,91 @@ class Package (object):
         shutil.copy(os.path.join('templates', fname), outf)
 
         self.add_file(outf)
+
+    def apply_mappings(self):
+        """ Applies a list of Mapping to match and extract files from
+            matching artifacts. If any of the listed Mappings can not be
+            fulfilled an exception is raised. """
+
+        assert self.mappings
+        assert len(self.mappings) > 0
+
+        for m in self.mappings:
+
+            artifact = None
+            for a in self.arts.artifacts:
+                found = True
+
+                for attr in m.attributes:
+                    if attr[0] == '!':
+                        # Require attribute NOT to match
+                        origattr = attr
+                        attr = attr[1:]
+
+                        if attr in a.info and \
+                           a.info[attr] != m.attributes[origattr]:
+                            found = False
+                            break
+                    else:
+                        # Require attribute to match
+                        if attr not in a.info or \
+                           a.info[attr] != m.attributes[attr]:
+                            found = False
+                            break
+
+                if not fnmatch(a.fname, m.fname_glob):
+                    found = False
+
+                for exclude in m.fname_excludes:
+                    if exclude in a.fname:
+                        found = False
+                        break
+
+                if found:
+                    artifact = a
+                    break
+
+            if artifact is None:
+                raise MissingArtifactError(
+                    '%s: unable to find artifact with tags %s matching "%s"' %
+                    (m, str(m.attributes), m.fname_glob))
+
+            output_path = os.path.join(self.stpath, m.output_path)
+
+            try:
+                zfile.ZFile.extract(artifact.lpath, m.input_path, output_path)
+#            except KeyError:
+#                continue
+            except Exception as e:
+                raise Exception(
+                    '%s: file not found in archive %s: %s. Files in archive are:\n%s' %  # noqa: E501
+                    (m, artifact.lpath, e, '\n'.join(zfile.ZFile(
+                        artifact.lpath).getnames())))
+
+            # Check that the file type matches.
+            if magic_mismatch(output_path, a):
+                os.unlink(output_path)
+                continue
+
+        # All mappings found and extracted.
+
+    def verify(self, path):
+        """ Verify package content based on the previously defined mappings """
+
+        missing = list()
+        with zfile.ZFile(path, 'r') as zf:
+            print('Verifying %s:' % path)
+
+            # Zipfiles may url-encode filenames, unquote them before matching.
+            pkgd = [unquote(x) for x in zf.getnames()]
+            missing = [x for x in self.mappings if x.output_path not in pkgd]
+
+        if len(missing) > 0:
+            print(
+                'Missing files in package %s:\n%s' %
+                (path, '\n'.join([str(x) for x in missing])))
+            print('Actual: %s' % '\n'.join(pkgd))
+            return False
+
+        print('OK - %d expected files found' % len(self.mappings))
+        return True

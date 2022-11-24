@@ -54,6 +54,10 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
  * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * The librdkafka.redist NuGet package has been updated to have fewer external
+   dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
+   is now built-in. There are bundled builds with and without linking to
+   cyrus-sasl for maximum compatibility.
 
 ## Fixes
 

@@ -536,8 +536,12 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_begin(rd_kafka_t *rk,
                     "Simultaneous %s API calls not allowed",
                     rk->rk_eos.txn_curr_api.name);
 
+        } else if (*rk->rk_eos.txn_curr_api.name) {
+                /* Resumed call */
+                rk->rk_eos.txn_curr_api.calling = rd_true;
+
         } else {
-                /* New or resumable call. */
+                /* New call */
                 rd_snprintf(rk->rk_eos.txn_curr_api.name,
                             sizeof(rk->rk_eos.txn_curr_api.name), "%s",
                             api_name);

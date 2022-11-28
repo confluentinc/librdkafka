@@ -2003,7 +2003,7 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
                 /* No valid offsets, e.g., nothing was consumed,
                  * this is not an error, do nothing. */
                 rd_kafka_topic_partition_list_destroy(valid_offsets);
-                return NULL;
+                return rd_kafka_txn_curr_api_return(rk, rd_false, NULL);
         }
 
         rd_kafka_topic_partition_list_sort_by_topic(valid_offsets);

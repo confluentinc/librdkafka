@@ -2579,7 +2579,6 @@ static void do_test_commit_after_msg_timeout(void) {
         TEST_ASSERT(remains == 0, "%d message(s) were not flushed\n", remains);
 
         TEST_SAY("Attempting second transaction, which should succeed\n");
-        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = error_is_fatal_cb;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -2592,6 +2591,7 @@ static void do_test_commit_after_msg_timeout(void) {
 
         rd_kafka_destroy(rk);
 
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();

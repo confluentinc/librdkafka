@@ -1686,6 +1686,60 @@ static void do_test_txns_send_offsets_concurrent_is_retried(void) {
 
 
 /**
+ * @brief Verify that send_offsets_to_transaction() with no eligible offsets
+ *        is handled properly - the call should succeed immediately and be
+ *        repeatable.
+ */
+static void do_test_txns_send_offsets_non_eligible(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, 5000);
+
+        /* Empty offsets list */
+        offsets = rd_kafka_topic_partition_list_new(0);
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+
+        /* Now call it again, should also succeed. */
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Verify that request timeouts don't cause crash (#2913).
  */
 static void do_test_txns_no_timeout_crash(void) {
@@ -3721,6 +3775,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txns_not_supported();
 
         do_test_txns_send_offsets_concurrent_is_retried();
+
+        do_test_txns_send_offsets_non_eligible();
 
         do_test_txn_coord_req_destroy();
 

@@ -662,7 +662,7 @@ static void rd_kafka_txn_curr_api_set_result0(const char *func,
                      rk->rk_eos.txn_curr_api.name,
                      rk->rk_eos.txn_curr_api.calling ? ", calling" : "", func,
                      line, error ? rd_kafka_error_string(error) : "Success",
-                     rk->rk_eos.txn_curr_api.has_result ? "" : "no",
+                     rk->rk_eos.txn_curr_api.has_result ? "" : "no ",
                      rk->rk_eos.txn_curr_api.error ? ": " : "",
                      rd_kafka_error_string(rk->rk_eos.txn_curr_api.error));
 
@@ -1593,6 +1593,7 @@ done:
                             rk, RD_KAFKA_COORD_GROUP,
                             rko->rko_u.txn.cgmetadata->group_id,
                             rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
+                            500 /* 500ms delay before retrying */,
                             rd_timeout_remains_limit0(
                                 remains_ms, rk->rk_conf.socket_timeout_ms),
                             RD_KAFKA_REPLYQ(rk->rk_ops, 0),
@@ -1878,6 +1879,7 @@ done:
                     rk, RD_KAFKA_COORD_GROUP,
                     rko->rko_u.txn.cgmetadata->group_id,
                     rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
+                    0 /* no delay */,
                     rd_timeout_remains_limit0(remains_ms,
                                               rk->rk_conf.socket_timeout_ms),
                     RD_KAFKA_REPLYQ(rk->rk_ops, 0),

@@ -146,6 +146,12 @@ create_txn_producer(rd_kafka_mock_cluster_t **mclusterp,
         test_conf_init(&conf, NULL, 60);
 
         test_conf_set(conf, "transactional.id", transactional_id);
+        /* When mock brokers are set to down state they're still binding
+         * the port, just not listening to it, which makes connection attempts
+         * stall until socket.connection.setup.timeout.ms expires.
+         * To speed up detection of brokers being down we reduce this timeout
+         * to just a couple of seconds. */
+        test_conf_set(conf, "socket.connection.setup.timeout.ms", "5000");
         /* Speed up reconnects */
         test_conf_set(conf, "reconnect.backoff.max.ms", "2000");
         test_conf_set(conf, "test.mock.num.brokers", numstr);

@@ -1838,14 +1838,14 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
 
 
 /**
- * Send ListGroupsRequest
+ * Send ListGroupsRequest supporting a versioned request.
  */
-void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
-                                const rd_kafkap_str_t **states,
-                                size_t states_cnt,
-                                rd_kafka_replyq_t replyq,
-                                rd_kafka_resp_cb_t *resp_cb,
-                                void *opaque) {
+void rd_kafka_ListGroupsRequest_versioned(rd_kafka_broker_t *rkb,
+                                          const rd_kafkap_str_t **states,
+                                          size_t states_cnt,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque) {
         rd_kafka_buf_t *rkbuf;
         size_t i, size;
         int16_t ApiVersion;
@@ -1874,6 +1874,20 @@ void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+}
+
+/**
+ * Send ListGroupsRequest
+ */
+void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ListGroups, 0, 0);
+
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 

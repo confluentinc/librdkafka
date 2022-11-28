@@ -2405,7 +2405,7 @@ static void do_test_ListGroups(const char *what,
         const char *errstr2, *group_id, *list_groups[TEST_LIST_GROUPS_CNT];
         const int partitions_cnt = 1;
         const int msgs_cnt       = 100;
-        int i;
+        int i, found;
         char *topic;
         rd_kafka_metadata_topic_t exp_mdtopic = {0};
         int64_t testid                        = test_id_generate();
@@ -2495,8 +2495,9 @@ static void do_test_ListGroups(const char *what,
         groups = rd_kafka_ListGroups_result_valid(res, &valid_cnt);
         rd_kafka_ListGroups_result_errors(res, &error_cnt);
 
-        TEST_ASSERT(valid_cnt == TEST_LIST_GROUPS_CNT,
-                    "expected ListGroups to return %" PRId32
+        /* Other tests could be running */
+        TEST_ASSERT(valid_cnt >= TEST_LIST_GROUPS_CNT,
+                    "expected ListGroups to return at least %" PRId32
                     " valid groups,"
                     " got %zu",
                     TEST_LIST_GROUPS_CNT, valid_cnt);
@@ -2506,7 +2507,8 @@ static void do_test_ListGroups(const char *what,
                     " got %zu",
                     error_cnt);
 
-        for (i = 0; i < TEST_LIST_GROUPS_CNT; i++) {
+        found = 0;
+        for (i = 0; i < valid_cnt; i++) {
                 int j;
                 const rd_kafka_ConsumerGroupListing_t *group;
                 group    = groups[i];
@@ -2515,27 +2517,28 @@ static void do_test_ListGroups(const char *what,
                     rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                         group);
                 state = rd_kafka_ConsumerGroupListing_state(group);
-
-                rd_bool_t found = rd_false;
                 for (j = 0; j < TEST_LIST_GROUPS_CNT; j++) {
-                        found |= !strcmp(list_groups[j], group_id);
-                        if (found)
+                        if (!strcmp(list_groups[j], group_id)) {
+                                found++;
+                                TEST_ASSERT(!is_simple_consumer_group,
+                                            "expected a normal group,"
+                                            " got a simple group");
+
+                                TEST_ASSERT(
+                                    state == RD_KAFKA_CGRP_STATE_EMPTY,
+                                    "expected an Empty state,"
+                                    " got state %s",
+                                    rd_kafka_consumer_group_state_name(state));
                                 break;
+                        }
                 }
-                TEST_ASSERT(found,
-                            "expected a group id present in list_groups,"
-                            " got %s",
-                            group_id);
-
-                TEST_ASSERT(!is_simple_consumer_group,
-                            "expected a normal group,"
-                            " got a simple group");
-
-                TEST_ASSERT(state == RD_KAFKA_CGRP_STATE_EMPTY,
-                            "expected an Empty state,"
-                            " got state %s",
-                            rd_kafka_consumer_group_state_name(state));
         }
+        TEST_ASSERT(found == TEST_LIST_GROUPS_CNT,
+                    "expected to find %" PRId32
+                    " started groups,"
+                    " got %" PRId32,
+                    TEST_LIST_GROUPS_CNT, found);
+
         rd_kafka_event_destroy(rkev);
 
         test_DeleteGroups_simple(rk, NULL, (char **)list_groups,
@@ -2692,6 +2695,8 @@ static void do_test_DescribeGroups(const char *what,
                 const rd_kafka_ConsumerGroupDescription_t *act = results[i];
                 rd_kafka_resp_err_t act_err = rd_kafka_error_code(
                     rd_kafka_ConsumerGroupDescription_error(act));
+                rd_kafka_consumer_group_state_t state =
+                    rd_kafka_ConsumerGroupDescription_state(act);
                 TEST_ASSERT(
                     strcmp(exp->group,
                            rd_kafka_ConsumerGroupDescription_group_id(act)) ==
@@ -2700,10 +2705,20 @@ static void do_test_DescribeGroups(const char *what,
                     "%s, got %s",
                     i, exp->group,
                     rd_kafka_ConsumerGroupDescription_group_id(act));
-                TEST_ASSERT(
-                    !rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
-                        act),
-                    "Expected a normal consumer group, got a simple one.");
+                if (i < known_groups) {
+                        TEST_ASSERT(state == RD_KAFKA_CGRP_STATE_EMPTY,
+                                    "Expected Empty state, got %s.",
+                                    rd_kafka_consumer_group_state_name(state));
+                        TEST_ASSERT(
+                            !rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
+                                act),
+                            "Expected a normal consumer group, got a simple "
+                            "one.");
+                } else {
+                        TEST_ASSERT(state == RD_KAFKA_CGRP_STATE_DEAD,
+                                    "Expected Dead state, got %s.",
+                                    rd_kafka_consumer_group_state_name(state));
+                }
                 TEST_ASSERT(exp_err == act_err,
                             "expected err=%d for group %s, got %d (%s)",
                             exp_err, exp->group, act_err,
@@ -3536,9 +3551,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListGroups("main queue", rk, mainq, 1500);
 
         /* Describe groups */
-        do_test_DescribeGroups("temp queue, req timeout -1", rk, NULL, -1);
-        do_test_DescribeGroups("main queue, req timeout 1500", rk, mainq, 1500);
-        do_test_DescribeGroups("main queue, req timeout 1500", rk, mainq, 1500);
+        do_test_DescribeGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeGroups("main queue", rk, mainq, 1500);
+        do_test_DescribeGroups("main queue", rk, mainq, 1500);
 
         /* Delete groups */
         do_test_DeleteGroups("temp queue, op timeout 0", rk, NULL, 0);

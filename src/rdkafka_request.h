@@ -209,11 +209,16 @@ void rd_kafka_handle_SyncGroup(rd_kafka_t *rk,
                                void *opaque);
 
 void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
-                                const rd_kafkap_str_t **states,
-                                size_t states_cnt,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
+
+void rd_kafka_ListGroupsRequest_versioned(rd_kafka_broker_t *rkb,
+                                          const rd_kafkap_str_t **states,
+                                          size_t states_cnt,
+                                          rd_kafka_replyq_t replyq,
+                                          rd_kafka_resp_cb_t *resp_cb,
+                                          void *opaque);
 
 void rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                     const char **groups,

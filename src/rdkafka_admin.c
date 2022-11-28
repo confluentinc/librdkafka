@@ -5485,6 +5485,8 @@ void rd_kafka_ListConsumerGroupOffsets(
  *
  */
 
+#define CONSUMER_PROTOCOL_TYPE "consumer"
+
 /**
  * @brief Create a new ConsumerGroupListing object.
  *
@@ -5650,8 +5652,8 @@ rd_kafka_admin_ListGroupsRequest(rd_kafka_broker_t *rkb,
                 }
         }
 
-        rd_kafka_ListGroupsRequest(rkb, states_str, states_str_cnt, replyq,
-                                   resp_cb, opaque);
+        rd_kafka_ListGroupsRequest_versioned(rkb, states_str, states_str_cnt,
+                                             replyq, resp_cb, opaque);
         if (states_str) {
                 for (i = 0; i < states_str_cnt; i++) {
                         rd_kafkap_str_destroy((rd_kafkap_str_t *)states_str[i]);
@@ -5729,8 +5731,9 @@ rd_kafka_ListGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             rd_kafka_consumer_group_state_code(group_state_s);
                 }
 
-                is_simple_consumer_group  = *proto_type_s == '\0';
-                is_consumer_protocol_type = !strcmp(proto_type_s, "consumer");
+                is_simple_consumer_group = *proto_type_s == '\0';
+                is_consumer_protocol_type =
+                    !strcmp(proto_type_s, CONSUMER_PROTOCOL_TYPE);
                 if (is_simple_consumer_group || is_consumer_protocol_type) {
                         group_listing = rd_kafka_ConsumerGroupListing_new(
                             group_s, is_simple_consumer_group, state);
@@ -6353,8 +6356,9 @@ rd_kafka_DescribeGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             "Member count exceeds max size of 100000.");
                 }
 
-                is_simple_consumer_group  = *group_s == '\0';
-                is_consumer_protocol_type = strcmp(group_s, "consumer");
+                is_simple_consumer_group = *proto_type_s == '\0';
+                is_consumer_protocol_type =
+                    !strcmp(proto_type_s, CONSUMER_PROTOCOL_TYPE);
                 if (error == NULL && !is_simple_consumer_group &&
                     !is_consumer_protocol_type) {
                         error = rd_kafka_error_new(

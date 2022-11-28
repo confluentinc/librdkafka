@@ -60,9 +60,7 @@ static void usage(const char *reason, ...) {
                 "\n"
                 "Commands:\n"
                 " List groups:\n"
-                "   %s -b <brokers> list_groups <state1> <state2> ...\n"
-                " Describe groups:\n"
-                "   %s -b <brokers> describe_groups <group1> <group2> ...\n"
+                "   %s -b <brokers> list_groups <group>\n"
                 "\n"
                 " Show librdkafka version:\n"
                 "   %s version\n"
@@ -73,7 +71,7 @@ static void usage(const char *reason, ...) {
                 "                   See CONFIGURATION.md for full list.\n"
                 "   -d <dbg,..>     Enable librdkafka debugging (%s).\n"
                 "\n",
-                argv0, argv0, argv0, argv0, rd_kafka_get_debug_contexts());
+                argv0, argv0, argv0, rd_kafka_get_debug_contexts());
 
         if (reason) {
                 va_list ap;
@@ -111,20 +109,6 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 
-static void
-print_partition_list(FILE *fp,
-                     const rd_kafka_topic_partition_list_t *partitions,
-                     const char *prefix) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                fprintf(fp, "%s%s %s [%" PRId32 "] error %s", i > 0 ? "\n" : "",
-                        prefix, partitions->elems[i].topic,
-                        partitions->elems[i].partition,
-                        rd_kafka_err2str(partitions->elems[i].err));
-        }
-        fprintf(fp, "\n");
-}
-
 /**
  * Commands
  *
@@ -141,31 +125,64 @@ static void cmd_version(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_conf_destroy(conf);
 }
 
+
 /**
- * @brief Print group information.
+ * @brief Call rd_kafka_list_groups() with an optional groupid argument.
  */
-static int print_groups_info(const struct rd_kafka_group_list *grplist,
-                             int params_cnt) {
+static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
+        rd_kafka_t *rk;
+        const char *groupid = NULL;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        const struct rd_kafka_group_list *grplist;
         int i;
+        int retval = 0;
+
+        if (argc > 1)
+                usage("too many arguments to list_groups");
+
+        if (argc == 1)
+                groupid = argv[0];
+
+        /*
+         * Create consumer instance
+         * NOTE: rd_kafka_new() takes ownership of the conf object
+         *       and the application must not reference it again after
+         *       this call.
+         */
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        if (!rk)
+                fatal("Failed to create new consumer: %s", errstr);
+
+        /*
+         * List groups
+         */
+        err = rd_kafka_list_groups(rk, groupid, &grplist, 10 * 1000 /*10s*/);
+        if (err)
+                fatal("rd_kafka_list_groups(%s) failed: %s", groupid,
+                      rd_kafka_err2str(err));
 
         if (grplist->group_cnt == 0) {
-                if (params_cnt > 0) {
-                        fprintf(stderr, "No matching groups found\n");
-                        return 1;
+                if (groupid) {
+                        fprintf(stderr, "Group %s not found\n", groupid);
+                        retval = 1;
                 } else {
                         fprintf(stderr, "No groups in cluster\n");
                 }
         }
 
-        for (i = 0; i < grplist->group_cnt; i++) {
+        /*
+         * Print group information
+         */
+        for (i = 0; grplist->group_cnt; i++) {
                 int j;
                 const struct rd_kafka_group_info *grp = &grplist->groups[i];
 
                 printf(
                     "Group \"%s\" protocol-type %s, protocol %s, "
-                    "state %s, state code %d, with %d member(s))",
+                    "state %s, with %d member(s))",
                     grp->group, grp->protocol_type, grp->protocol, grp->state,
-                    grp->state_code, grp->member_cnt);
+                    grp->member_cnt);
                 if (grp->err)
                         printf(" error: %s", rd_kafka_err2str(grp->err));
                 printf("\n");
@@ -174,146 +191,12 @@ static int print_groups_info(const struct rd_kafka_group_list *grplist,
                             &grp->members[j];
                         printf(
                             "  Member \"%s\" with client-id %s, host %s, "
-                            "%d bytes of metadata, %d bytes of assignment\n",
+                            "%d bytes of metadat, %d bytes of assignment\n",
                             mb->member_id, mb->client_id, mb->client_host,
                             mb->member_metadata_size,
                             mb->member_assignment_size);
-                        if (!mb->member_assignment_toppars) {
-                                printf("    No assignment\n");
-                        } else if (mb->member_assignment_toppars->cnt == 0) {
-                                printf("    Empty assignment\n");
-                        } else {
-                                printf("    Assignment:\n");
-                                print_partition_list(
-                                    stdout, mb->member_assignment_toppars,
-                                    "      ");
-                        }
                 }
         }
-        return 0;
-}
-
-
-/**
- * @brief Parse an integer or fail.
- */
-int64_t parse_int(const char *what, const char *str) {
-        char *end;
-        unsigned long n = strtoull(str, &end, 0);
-
-        if (end != str + strlen(str)) {
-                fprintf(stderr, "%% Invalid input for %s: %s: not an integer\n",
-                        what, str);
-                exit(1);
-        }
-
-        return (int64_t)n;
-}
-
-/**
- * @brief Call rd_kafka_list_consumer_groups() with and optional list of states.
- */
-static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
-        rd_kafka_t *rk;
-        const char **states = NULL;
-        char errstr[512];
-        rd_kafka_resp_err_t err;
-        const struct rd_kafka_group_list *grplist;
-        int retval     = 0;
-        int states_cnt = 0;
-
-        if (argc >= 1) {
-                states     = (const char **)&argv[0];
-                states_cnt = argc;
-        }
-
-        /*
-         * Create consumer instance
-         * NOTE: rd_kafka_new() takes ownership of the conf object
-         *       and the application must not reference it again after
-         *       this call.
-         */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        if (!rk)
-                fatal("Failed to create new consumer: %s", errstr);
-
-        /*
-         * List consumer groups
-         */
-        rd_kafka_consumer_group_state_t *state_codes =
-            calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
-        for (int i = 0; i < states_cnt; i++) {
-                state_codes[i] = parse_int("state code", states[i]);
-        }
-        rd_kafka_list_consumer_groups_options_t *options =
-            rd_kafka_list_consumer_groups_options_new(10 * 1000 /*10s*/,
-                                                      state_codes, states_cnt);
-        if (!options)
-                fatal("Invalid options");
-        err = rd_kafka_list_consumer_groups(rk, &grplist, options);
-
-        if (err)
-                fatal("rd_kafka_list_consumer_groups failed: %s",
-                      rd_kafka_err2str(err));
-
-
-        retval = print_groups_info(grplist, states_cnt);
-
-        free(state_codes);
-        if (options)
-                rd_kafka_list_consumer_groups_options_destroy(options);
-        rd_kafka_group_list_destroy(grplist);
-
-        /* Destroy the client instance */
-        rd_kafka_destroy(rk);
-
-        exit(retval);
-}
-
-/**
- * @brief Call rd_kafka_describe_consumer_groups() with and optional list of
- * groups.
- */
-static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
-        rd_kafka_t *rk;
-        const char **groups = NULL;
-        char errstr[512];
-        rd_kafka_resp_err_t err;
-        const struct rd_kafka_group_list *grplist;
-        const rd_kafka_describe_consumer_groups_options_t *options;
-        int retval     = 0;
-        int groups_cnt = 0;
-
-        if (argc >= 1) {
-                groups     = (const char **)&argv[0];
-                groups_cnt = argc;
-        }
-
-        /*
-         * Create consumer instance
-         * NOTE: rd_kafka_new() takes ownership of the conf object
-         *       and the application must not reference it again after
-         *       this call.
-         */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        if (!rk)
-                fatal("Failed to create new consumer: %s", errstr);
-
-        /*
-         * Describe consumer groups
-         */
-        options =
-            rd_kafka_describe_consumer_groups_options_new(10 * 1000 /*10s*/);
-        err = rd_kafka_describe_consumer_groups(rk, groups, groups_cnt,
-                                                &grplist, options);
-        rd_kafka_describe_consumer_groups_options_destroy(options);
-
-        if (err)
-                fatal("rd_kafka_describe_consumer_groups failed: %s",
-                      rd_kafka_err2str(err));
-
-
-        retval = print_groups_info(grplist, groups_cnt);
 
         rd_kafka_group_list_destroy(grplist);
 
@@ -322,6 +205,8 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         exit(retval);
 }
+
+
 
 int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
@@ -333,7 +218,6 @@ int main(int argc, char **argv) {
         } cmds[] = {
             {"version", cmd_version},
             {"list_groups", cmd_list_groups},
-            {"describe_groups", cmd_describe_groups},
             {NULL},
         };
 

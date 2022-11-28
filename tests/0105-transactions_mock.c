@@ -3188,6 +3188,87 @@ static void do_test_txn_resumable_calls_timeout(rd_bool_t do_commit) {
 
 
 /**
+ * @brief Verify that resuming timed out calls that after the timeout, but
+ *        before the resuming call, would error out.
+ */
+static void do_test_txn_resumable_calls_timeout_error(rd_bool_t do_commit) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        int32_t coord_id             = 1;
+        const char *topic            = "test";
+        const char *transactional_id = "txnid";
+        int msgcnt                   = 1;
+        int remains                  = 0;
+        rd_kafka_error_t *error;
+
+        SUB_TEST_QUICK("%s_transaction", do_commit ? "commit" : "abort");
+
+        rk = create_txn_producer(&mcluster, transactional_id, 1, NULL);
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      coord_id);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, coord_id);
+
+        TEST_SAY("Starting transaction\n");
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0,
+                                  msgcnt, NULL, 0, &remains);
+
+
+        TEST_SAY("Fail EndTxn fatally after 2000ms\n");
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1,
+            RD_KAFKA_RESP_ERR_INVALID_TXN_STATE, 2000);
+
+        if (do_commit) {
+                TEST_SAY("Committing transaction\n");
+
+                TXN_CALL_EXPECT_ERROR__(rd_kafka_commit_transaction(rk, 500),
+                                        RD_KAFKA_RESP_ERR__TIMED_OUT);
+
+                /* Sleep so that the background EndTxn fails locally and sets
+                 * an error result. */
+                rd_sleep(3);
+
+                error = rd_kafka_commit_transaction(rk, -1);
+
+        } else {
+                TEST_SAY("Aborting transaction\n");
+
+                TXN_CALL_EXPECT_ERROR__(rd_kafka_commit_transaction(rk, 500),
+                                        RD_KAFKA_RESP_ERR__TIMED_OUT);
+
+                /* Sleep so that the background EndTxn fails locally and sets
+                 * an error result. */
+                rd_sleep(3);
+
+                error = rd_kafka_commit_transaction(rk, -1);
+        }
+
+        TEST_ASSERT(error != NULL && rd_kafka_error_is_fatal(error),
+                    "Expected fatal error, not %s",
+                    rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_INVALID_TXN_STATE,
+                    "Expected error INVALID_TXN_STATE, got %s",
+                    rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Concurrent transaction API calls are not permitted.
  *        This test makes sure they're properly enforced.
  *
@@ -3680,6 +3761,10 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_resumable_calls_timeout(rd_true);
 
         do_test_txn_resumable_calls_timeout(rd_false);
+
+        do_test_txn_resumable_calls_timeout_error(rd_true);
+
+        do_test_txn_resumable_calls_timeout_error(rd_false);
 
         do_test_txn_concurrent_operations(rd_true /*commit*/);
 

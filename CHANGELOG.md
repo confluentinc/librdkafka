@@ -73,6 +73,10 @@ configuration property.
  * Timeouts for EndTxn requests (transaction commits and aborts) are now
    automatically retried and the error raised to the application is also
    a retriable error.
+ * TxnOffsetCommitRequests were retried immediately upon temporary errors in
+   `send_offsets_to_transactions()`, causing excessive network requests.
+   These retries are now delayed 500ms.
+
 
 ### Consumer fixes
 

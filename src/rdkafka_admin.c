@@ -1050,14 +1050,14 @@ redo:
                         rd_kafka_enq_once_add_source(
                             rko->rko_u.admin_request.eonce,
                             "coordinator request");
-                        rd_kafka_coord_req(rk,
-                                           rko->rko_u.admin_request.coordtype,
-                                           rko->rko_u.admin_request.coordkey,
-                                           rd_kafka_admin_coord_request, NULL,
-                                           rd_kafka_admin_timeout_remains(rko),
-                                           RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                                           rd_kafka_admin_coord_response_parse,
-                                           rko->rko_u.admin_request.eonce);
+                        rd_kafka_coord_req(
+                            rk, rko->rko_u.admin_request.coordtype,
+                            rko->rko_u.admin_request.coordkey,
+                            rd_kafka_admin_coord_request, NULL, 0 /* no delay*/,
+                            rd_kafka_admin_timeout_remains(rko),
+                            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                            rd_kafka_admin_coord_response_parse,
+                            rko->rko_u.admin_request.eonce);
                         /* Wait asynchronously for broker response, which will
                          * trigger the eonce and worker to be called again. */
                         return RD_KAFKA_OP_RES_KEEP;

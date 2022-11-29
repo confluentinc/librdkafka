@@ -22,10 +22,88 @@ patch/code to us. We will credit you for your changes as far as possible, to
 give credit but also to keep a trace back to who made what changes. Please
 always provide us with your full real name when contributing!
 
-Official librdkafka project maintainer(s) assume ownership of all accepted
-submissions.
+Official librdkafka project maintainer(s) assume ownership and copyright owners
+of all accepted submissions.
+
 
 ## Write a good patch
+
+### API and ABI compatibility guarantees
+
+librdkafka maintains a strict API and ABI compatibility guarantee, we guarantee
+not to break existing applications and we honour the SONAME version.
+
+**Note:** ABI compatibility is guaranteed only for the C library, not C++.
+
+**Note to librdkafka maintainers:**
+
+Don't think we can or should bump the SONAME version, it will break all
+existing applications relying on librdkafka, and there's no change important
+enough to warrant that.
+Instead deprecate (but keep) old APIs and add new better APIs as required.
+Deprecate APIs through documentation (`@deprecate ..`) rather than
+compiler hints (`RD_DEPRECATED`) - since the latter will cause compilation
+warnings/errors for users.
+
+
+#### Changes to existing APIs
+
+Existing public APIs MUST NEVER be changed, as this would be a breaking API
+and ABI change. This line must never be crossed.
+
+This means that no changes are allowed to:
+ * public function or method signatures - arguments, types, return values.
+ * public structs - existing fields may not be modified and new fields must
+                    not be added.
+
+
+As for semantic changes (i.e., a function changes its behaviour), these are
+allowed under the following conditions:
+
+ * the existing behaviour that is changed is not documented and not widely
+   relied upon. Typically this revolves around what error codes a function
+   returns.
+ * the existing behaviour is well known but is clearly wrong and consistently
+   trips people up.
+
+All such changes must be clearly stated in the "Upgrade considerations" section
+of the release in CHANGELOG.md.
+
+
+#### New public APIs
+
+Since changes to existing APIs are strictly limited to the above rules, it is
+also clear that new APIs must be delicately designed to be complete and future
+proof, since once they've been introduced they can never be changed.
+
+ * Never add public structs - there are some public structs in librdkafka
+   and they were all mistakes, they've all been headaches.
+   Instead add private types and provide accessor methods to set/get values.
+   This allows future extension without breaking existing applications.
+ * Avoid adding synchronous APIs, try to make them asynch by the use of
+   `rd_kafka_queue_t` result queues, if possible.
+   This may complicate the APIs a bit, but they're most of the time abstracted
+   in higher-level language clients and it allows both synchronous and
+   asynchronous usage.
+
+
+
+### Portability
+
+librdkafka is highly portable and needs to stay that way; this means we're
+limited to almost-but-not-quite C99, and standard library (libc, et.al)
+functions that are generally available across platforms.
+
+Also avoid adding new dependencies since dependency availability across
+platforms and package managers are a common problem.
+
+If an external dependency is required, make sure that it is available as a
+vcpkg, and also add it as a source build dependency to mklove
+(see mklove/modules/configure.libcurl for an example) so that it can be built
+and linked statically into librdkafka as part of the packaging process.
+
+Less is more. Don't try to be fancy, be boring.
+
 
 ### Follow code style
 
@@ -80,7 +158,7 @@ bugfix in-place.
 New features and APIs should also result in an added test case.
 
 Submitted patches must pass all existing tests.
-For more information on the test suite see [tests/README.md]
+For more information on the test suite see [tests/README.md].
 
 
 
@@ -194,6 +272,18 @@ For other types use reasonably concise but descriptive names.
 
 Variables must be declared at the head of a scope, no in-line variable
 declarations are allowed.
+
+## Function parameters/arguments
+
+For internal functions assume that all function parameters are properly
+specified, there is no need to check arguments for non-NULL, etc.
+Any maluse internally is a bug, and not something we need to preemptively
+protect against - the test suites should cover most of the code anyway - so
+put your efforts there instead.
+
+For arguments that may be NULL, i.e., optional arguments, we explicitlly
+document in the function docstring that the argument is optional (NULL),
+but there is no need to do this for non-optional arguments.
 
 ## Indenting
 

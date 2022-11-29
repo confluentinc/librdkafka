@@ -33,6 +33,15 @@ providers. As such librdkafka will emit a deprecation warning if
 OpenSSL providers may be configured with the new `ssl.providers`
 configuration property.
 
+### Broker TLS certificate hostname verification
+
+The default value for `ssl.endpoint.identification.algorithm` has been
+changed from `none` (no hostname verification) to `https`, which enables
+broker hostname verification (to counter man-in-the-middle
+impersonation attacks) by default.
+
+To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
+
 
 ## Enhancements
 

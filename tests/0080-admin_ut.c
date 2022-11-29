@@ -517,6 +517,8 @@ static void do_test_ListGroups(const char *what,
         test_timing_t timing;
         rd_kafka_event_t *rkev;
         const rd_kafka_ListGroups_result_t *res;
+        const rd_kafka_error_t **errors;
+        size_t errors_cnt, valid_cnt;
         void *my_opaque = NULL, *opaque;
 
         SUB_TEST_QUICK("%s ListGroups with %s, timeout %dms", rd_kafka_name(rk),
@@ -564,14 +566,29 @@ static void do_test_ListGroups(const char *what,
         TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
                     my_opaque, opaque);
 
-        /* Expecting timed out error */
+        /* Expecting no error here, the real error will be in the error array */
         err     = rd_kafka_event_error(rkev);
         errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected ListGroups to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        errors = rd_kafka_ListGroups_result_errors(rkev, &errors_cnt);
+        TEST_ASSERT(errors_cnt == 1,
+                    "expected one error, got %" PRIu64,
+                    errors_cnt);
+        rd_kafka_ListGroups_result_valid(rkev, &valid_cnt);
+        TEST_ASSERT(valid_cnt == 0,
+                    "expected zero valid groups, got %" PRIu64,
+                    valid_cnt);
+
+        err = rd_kafka_error_code(errors[0]);
+        errstr2 = rd_kafka_error_string(errors[0]);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "expected ListGroups to return error %s, not %s (%s)",
                     rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
                     rd_kafka_err2str(err), err ? errstr2 : "n/a");
-
 
         rd_kafka_event_destroy(rkev);
 
@@ -1613,6 +1630,9 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         rd_kafka_AlterConsumerGroupOffsets(rk, cgoffsets_empty,
                                            MY_ALTER_CGRPOFFS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
+        rd_kafka_AlterConsumerGroupOffsets_destroy_array(cgoffsets_empty,
+                                                         MY_ALTER_CGRPOFFS_CNT);
+
         /* Poll result queue */
         TIMING_START(&timing, "AlterConsumerGroupOffsets.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
@@ -1646,6 +1666,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         rd_kafka_AlterConsumerGroupOffsets(rk, cgoffsets_negative,
                                            MY_ALTER_CGRPOFFS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 10);
+        rd_kafka_AlterConsumerGroupOffsets_destroy_array(cgoffsets_negative,
+                                                         MY_ALTER_CGRPOFFS_CNT);
         /* Poll result queue */
         TIMING_START(&timing, "AlterConsumerGroupOffsets.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
@@ -1731,6 +1753,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_queue_t *q;
 #define MY_LIST_CGRPOFFS_CNT 1
         rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *empty_cgoffsets_list;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
         rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
@@ -1749,8 +1772,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
+        empty_cgoffsets_list = rd_kafka_topic_partition_list_new(0);
         empty_cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(
-            "mygroup", rd_kafka_topic_partition_list_new(0));
+            "mygroup", empty_cgoffsets_list);
+        rd_kafka_topic_partition_list_destroy(empty_cgoffsets_list);
 
         rd_kafka_topic_partition_list_t *null_name_partitions =
             rd_kafka_topic_partition_list_new(1);

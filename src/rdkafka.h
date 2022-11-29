@@ -6804,6 +6804,10 @@ rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
  * @param options Admin options.
  * @param consumer_group_states Array of consumer group states.
  * @param consumer_group_states_cnt Size of the \p consumer_group_states array.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written in case of error.
+ * @param errstr_size Writable size in \p errstr.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,

@@ -5851,9 +5851,9 @@ rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
         rd_kafka_Node_t *ret = calloc(1, sizeof(*ret));
         ret->id              = id;
         ret->port            = port;
-        ret->host            = strdup(host);
+        ret->host            = rd_strdup(host);
         if (rack_id != NULL)
-                ret->rack_id = strdup(rack_id);
+                ret->rack_id = rd_strdup(rack_id);
         return ret;
 }
 

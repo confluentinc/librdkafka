@@ -215,7 +215,7 @@ void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
 
 void rd_kafka_ListGroupsRequest_versioned(rd_kafka_broker_t *rkb,
                                           const rd_kafkap_str_t **states,
-                                          size_t states_cnt,
+                                          int states_cnt,
                                           rd_kafka_replyq_t replyq,
                                           rd_kafka_resp_cb_t *resp_cb,
                                           void *opaque);

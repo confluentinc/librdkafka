@@ -1555,10 +1555,10 @@ rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
 rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
-    size_t consumer_group_states_cnt,
+    int consumer_group_states_cnt,
     char *errstr,
     size_t errstr_size) {
-        size_t i;
+        int i;
         rd_list_t *states_list = rd_list_new(0, NULL);
         rd_list_init_int32(states_list, consumer_group_states_cnt);
         for (i = 0; i < consumer_group_states_cnt; i++) {
@@ -5658,7 +5658,7 @@ rd_kafka_admin_ListGroupsRequest(rd_kafka_broker_t *rkb,
                 for (i = 0; i < states_str_cnt; i++) {
                         rd_kafkap_str_destroy((rd_kafkap_str_t *)states_str[i]);
                 }
-                rd_free(states_str);
+                rd_free((void *)states_str);
         }
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -5939,11 +5939,11 @@ rd_kafka_MemberDescription_new(const char *client_id,
                 return NULL;
         rd_kafka_MemberDescription_t *member;
         member              = rd_calloc(1, sizeof(*member));
-        member->client_id   = strdup(client_id);
-        member->consumer_id = strdup(consumer_id);
+        member->client_id   = rd_strdup(client_id);
+        member->consumer_id = rd_strdup(consumer_id);
         if (group_instance_id != NULL)
-                member->group_instance_id = strdup(group_instance_id);
-        member->host       = strdup(host);
+                member->group_instance_id = rd_strdup(group_instance_id);
+        member->host       = rd_strdup(host);
         member->assignment = assignment;
         member->assignment.topic_partitions =
             rd_kafka_topic_partition_list_copy(
@@ -6280,14 +6280,14 @@ rd_kafka_admin_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                      void *opaque) {
         int i;
         char *group;
-        size_t groups_cnt       = rd_list_cnt(groups);
+        int groups_cnt          = rd_list_cnt(groups);
         const char **groups_arr = calloc(groups_cnt, sizeof(*groups_arr));
         RD_LIST_FOREACH(group, groups, i) {
                 groups_arr[i] = rd_list_elem(groups, i);
         }
         rd_kafka_DescribeGroupsRequest(rkb, groups_arr, groups_cnt, replyq,
                                        resp_cb, opaque);
-        rd_free(groups_arr);
+        rd_free((void *)groups_arr);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -6583,7 +6583,8 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
                     &rko->rko_u.admin_request.options, grp);
 
                 rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
-                rd_list_add(&rko->rko_u.admin_request.args, strdup(groups[i]));
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_strdup(groups[i]));
 
                 rd_kafka_q_enq(rk->rk_ops, rko);
         }

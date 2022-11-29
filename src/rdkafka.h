@@ -6811,7 +6811,7 @@ rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
-    size_t consumer_group_states_cnt,
+    int consumer_group_states_cnt,
     char *errstr,
     size_t errstr_size);
 

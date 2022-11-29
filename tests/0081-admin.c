@@ -2405,7 +2405,7 @@ static void do_test_ListGroups(const char *what,
         const char *errstr2, *group_id, *list_groups[TEST_LIST_GROUPS_CNT];
         const int partitions_cnt = 1;
         const int msgs_cnt       = 100;
-        int i, found;
+        size_t i, found;
         char *topic;
         rd_kafka_metadata_topic_t exp_mdtopic = {0};
         int64_t testid                        = test_id_generate();
@@ -2536,7 +2536,7 @@ static void do_test_ListGroups(const char *what,
         TEST_ASSERT(found == TEST_LIST_GROUPS_CNT,
                     "expected to find %" PRId32
                     " started groups,"
-                    " got %" PRId32,
+                    " got %" PRIu64,
                     TEST_LIST_GROUPS_CNT, found);
 
         rd_kafka_event_destroy(rkev);

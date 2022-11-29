@@ -85,6 +85,10 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
  * TxnOffsetCommitRequests were retried immediately upon temporary errors in
    `send_offsets_to_transactions()`, causing excessive network requests.
    These retries are now delayed 500ms.
+ * If `init_transactions()` is called with an infinite timeout (-1),
+   the timeout will be limited to 2 * `transaction.timeout.ms`.
+   The application may retry and resume the call if a retriable error is
+   returned.
 
 
 ### Consumer fixes

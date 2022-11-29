@@ -1333,6 +1333,16 @@ rd_kafka_error_t *rd_kafka_init_transactions(rd_kafka_t *rk, int timeout_ms) {
         rd_kafka_error_t *error;
         rd_ts_t abs_timeout;
 
+        /* Cap actual timeout to transaction.timeout.ms * 2 when an infinite
+         * timeout is provided, this is to make sure the call doesn't block
+         * indefinitely in case a coordinator is not available.
+         * This is only needed for init_transactions() since there is no
+         * coordinator to time us out yet. */
+        if (timeout_ms == RD_POLL_INFINITE &&
+            /* Avoid overflow */
+            rk->rk_conf.eos.transaction_timeout_ms < INT_MAX / 2)
+                timeout_ms = rk->rk_conf.eos.transaction_timeout_ms * 2;
+
         if ((error = rd_kafka_txn_curr_api_begin(rk, "init_transactions",
                                                  rd_false /* no cap */,
                                                  timeout_ms, &abs_timeout)))

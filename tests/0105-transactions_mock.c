@@ -3111,6 +3111,67 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
 
 
 /**
+ * @brief Simple test to make sure the init_transactions() timeout is honoured
+ *        and also not infinite.
+ */
+static void do_test_txn_resumable_init(void) {
+        rd_kafka_t *rk;
+        const char *transactional_id = "txnid";
+        rd_kafka_error_t *error;
+        test_timing_t duration;
+
+        SUB_TEST();
+
+        rd_kafka_conf_t *conf;
+
+        test_conf_init(&conf, NULL, 20);
+        test_conf_set(conf, "bootstrap.servers", "");
+        test_conf_set(conf, "transactional.id", transactional_id);
+        test_conf_set(conf, "transaction.timeout.ms", "4000");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* First make sure a lower timeout is honoured. */
+        TIMING_START(&duration, "init_transactions(1000)");
+        error = rd_kafka_init_transactions(rk, 1000);
+        TIMING_STOP(&duration);
+
+        if (error)
+                TEST_SAY("First init_transactions failed (as expected): %s\n",
+                         rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s",
+                    error ? rd_kafka_error_string(error) : "success");
+        rd_kafka_error_destroy(error);
+
+        TIMING_ASSERT(&duration, 900, 1500);
+
+        TEST_SAY(
+            "Performing second init_transactions() call now with an "
+            "infinite timeout: "
+            "should time out in 2 x transaction.timeout.ms\n");
+
+        TIMING_START(&duration, "init_transactions(infinite)");
+        error = rd_kafka_init_transactions(rk, -1);
+        TIMING_STOP(&duration);
+
+        if (error)
+                TEST_SAY("Second init_transactions failed (as expected): %s\n",
+                         rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s",
+                    error ? rd_kafka_error_string(error) : "success");
+        rd_kafka_error_destroy(error);
+
+        TIMING_ASSERT(&duration, 2 * 4000 - 500, 2 * 4000 + 500);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Retries a transaction call until it succeeds or returns a
  *        non-retriable error - which will cause the test to fail.
  *
@@ -3827,6 +3888,7 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_resumable_calls_timeout_error(rd_true);
 
         do_test_txn_resumable_calls_timeout_error(rd_false);
+        do_test_txn_resumable_init();
 
         do_test_txn_concurrent_operations(rd_true /*commit*/);
 

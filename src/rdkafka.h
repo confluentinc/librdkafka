@@ -8183,6 +8183,8 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call init_transactions() again.
+ *                   If an infinite timeout (-1) is passed, the timeout will
+ *                   be adjusted to 2 * \c transaction.timeout.ms.
  *
  * @remark This function may block up to \p timeout_ms milliseconds.
  *

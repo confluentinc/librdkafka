@@ -5533,7 +5533,8 @@ static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *desc,
 }
 
 static void
-rd_kafka_ConsumerGroupListing_destroy(rd_kafka_ConsumerGroupListing_t *desc) {
+rd_kafka_ConsumerGroupListing_destroy(
+        rd_kafka_ConsumerGroupListing_t *desc) {
         if (!desc)
                 return;
         if (likely(desc->group_id != NULL))
@@ -6217,7 +6218,7 @@ static int rd_kafka_DescribeGroups_cmp(const void *a, const void *b) {
 static void
 rd_kafka_DescribeGroups_response_merge(rd_kafka_op_t *rko_fanout,
                                        const rd_kafka_op_t *rko_partial) {
-        const rd_kafka_ConsumerGroupDescription_t *groupres = NULL;
+        rd_kafka_ConsumerGroupDescription_t *groupres = NULL;
         rd_kafka_ConsumerGroupDescription_t *newgroupres;
         const char *grp = rko_partial->rko_u.admin_result.opaque;
         int orig_pos;

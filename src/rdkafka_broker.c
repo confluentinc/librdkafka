@@ -5879,19 +5879,19 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
         rd_free(node);
 }
 
-int rd_kafka_Node_id(rd_kafka_Node_t *node) {
+int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
         if (!node)
                 return -1;
         return node->id;
 }
 
-const char *rd_kafka_Node_host(rd_kafka_Node_t *node) {
+const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
         if (!node)
                 return NULL;
         return node->host;
 }
 
-int rd_kafka_Node_port(rd_kafka_Node_t *node) {
+int rd_kafka_Node_port(const rd_kafka_Node_t *node) {
         if (!node)
                 return -1;
         return node->port;

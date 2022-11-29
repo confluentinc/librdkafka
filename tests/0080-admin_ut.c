@@ -575,15 +575,13 @@ static void do_test_ListGroups(const char *what,
                     rd_kafka_err2str(err), err ? errstr2 : "n/a");
 
         errors = rd_kafka_ListGroups_result_errors(rkev, &errors_cnt);
-        TEST_ASSERT(errors_cnt == 1,
-                    "expected one error, got %" PRIu64,
+        TEST_ASSERT(errors_cnt == 1, "expected one error, got %" PRIu64,
                     errors_cnt);
         rd_kafka_ListGroups_result_valid(rkev, &valid_cnt);
-        TEST_ASSERT(valid_cnt == 0,
-                    "expected zero valid groups, got %" PRIu64,
+        TEST_ASSERT(valid_cnt == 0, "expected zero valid groups, got %" PRIu64,
                     valid_cnt);
 
-        err = rd_kafka_error_code(errors[0]);
+        err     = rd_kafka_error_code(errors[0]);
         errstr2 = rd_kafka_error_string(errors[0]);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "expected ListGroups to return error %s, not %s (%s)",
@@ -1773,7 +1771,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         empty_cgoffsets_list = rd_kafka_topic_partition_list_new(0);
-        empty_cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(
+        empty_cgoffsets      = rd_kafka_ListConsumerGroupOffsets_new(
             "mygroup", empty_cgoffsets_list);
         rd_kafka_topic_partition_list_destroy(empty_cgoffsets_list);
 

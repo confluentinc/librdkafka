@@ -955,8 +955,8 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  * @param parts List of topic partitions to request,
  *              or NULL to return all topic partitions associated with the
  * group.
- * @param require_stable Whether broker should return stable offsets
- *                       (transaction-committed).
+ * @param require_stable_offsets Whether broker should return stable offsets
+ *                               (transaction-committed).
  * @param rk_group_id Request offset for this group id.
  *                    If NULL, returns the
  *                    @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
@@ -965,7 +965,7 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
                                        rd_kafkap_str_t *rk_group_id,
                                        rd_kafka_topic_partition_list_t *parts,
-                                       rd_bool_t require_stable,
+                                       rd_bool_t require_stable_offsets,
                                        int timeout,
                                        rd_kafka_replyq_t replyq,
                                        rd_kafka_resp_cb_t *resp_cb,
@@ -1024,7 +1024,7 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 7) {
                 /* RequireStable */
-                rd_kafka_buf_write_i8(rkbuf, require_stable);
+                rd_kafka_buf_write_i8(rkbuf, require_stable_offsets);
         }
 
         if (PartCnt == 0) {
@@ -1075,18 +1075,19 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
  * reply is enqueued on the replyq.
  *
  * @param parts List of topic partitions to request.
- * @param require_stable Whether broker should return stable offsets
- *                       (transaction-committed).
+ * @param require_stable_offsets Whether broker should return stable offsets
+ *                               (transaction-committed).
  */
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_topic_partition_list_t *parts,
-                                 rd_bool_t require_stable,
+                                 rd_bool_t require_stable_offsets,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
         rd_assert(parts != NULL);
         rd_kafka_OffsetFetchRequest_group(rkb, rkb->rkb_rk->rk_group_id, parts,
-                                          require_stable, 0, replyq, resp_cb,
+                                          require_stable_offsets, 0,
+                                          replyq, resp_cb,
                                           opaque);
 }
 

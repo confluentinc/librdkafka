@@ -6807,10 +6807,10 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
  * @remark This option is valid for ListConsumerGroupOffsets.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
-                                         int true_or_false,
-                                         char *errstr,
-                                         size_t errstr_size);
+rd_kafka_AdminOptions_set_require_stable_offsets(rd_kafka_AdminOptions_t *options,
+                                                 int true_or_false,
+                                                 char *errstr,
+                                                 size_t errstr_size);
 
 /**
  * @brief Set consumer groups states to query for.

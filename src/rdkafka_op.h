@@ -302,7 +302,7 @@ struct rd_kafka_op_s {
                 struct {
                         rd_kafka_topic_partition_list_t *partitions;
                         /** Require stable (txn-commited) offsets */
-                        rd_bool_t require_stable;
+                        rd_bool_t require_stable_offsets;
                         int do_free; /* free .partitions on destroy() */
                 } offset_fetch;
 

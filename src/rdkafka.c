@@ -3367,7 +3367,7 @@ rd_kafka_committed(rd_kafka_t *rk,
                  * processing the op. */
                 rko->rko_u.offset_fetch.partitions =
                     rd_kafka_topic_partition_list_copy(partitions);
-                rko->rko_u.offset_fetch.require_stable =
+                rko->rko_u.offset_fetch.require_stable_offsets =
                     rk->rk_conf.isolation_level == RD_KAFKA_READ_COMMITTED;
                 rko->rko_u.offset_fetch.do_free = 1;
 

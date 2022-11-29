@@ -1543,11 +1543,12 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
 }
 
 rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_require_stable(rd_kafka_AdminOptions_t *options,
-                                         int true_or_false,
-                                         char *errstr,
-                                         size_t errstr_size) {
-        return rd_kafka_confval_set_type(&options->require_stable,
+rd_kafka_AdminOptions_set_require_stable_offsets(
+        rd_kafka_AdminOptions_t *options,
+        int true_or_false,
+        char *errstr,
+        size_t errstr_size) {
+        return rd_kafka_confval_set_type(&options->require_stable_offsets,
                                          RD_KAFKA_CONFVAL_INT, &true_or_false,
                                          errstr, errstr_size);
 }
@@ -1616,11 +1617,11 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS)
-                rd_kafka_confval_init_int(&options->require_stable,
-                                          "require_stable", 0, 1, 0);
+                rd_kafka_confval_init_int(&options->require_stable_offsets,
+                                          "require_stable_offsets", 0, 1, 0);
         else
-                rd_kafka_confval_disable(&options->require_stable,
-                                         "require_stable");
+                rd_kafka_confval_disable(&options->require_stable_offsets,
+                                         "require_stable_offsets");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTGROUPS)
@@ -5325,17 +5326,19 @@ static rd_kafka_resp_err_t rd_kafka_ListConsumerGroupOffsetsRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque) {
         int op_timeout;
-        rd_bool_t require_stable;
+        rd_bool_t require_stable_offsets;
         const rd_kafka_ListConsumerGroupOffsets_t *grpoffsets =
             rd_list_elem(list_grpoffsets, 0);
 
         rd_assert(rd_list_cnt(list_grpoffsets) == 1);
 
         op_timeout     = rd_kafka_confval_get_int(&options->request_timeout);
-        require_stable = rd_kafka_confval_get_int(&options->require_stable);
+        require_stable_offsets = rd_kafka_confval_get_int(
+                                        &options->require_stable_offsets);
         rd_kafkap_str_t *group_str = rd_kafkap_str_new(grpoffsets->group, -1);
         rd_kafka_OffsetFetchRequest_group(
-            rkb, group_str, grpoffsets->partitions, require_stable, op_timeout,
+            rkb, group_str, grpoffsets->partitions,
+            require_stable_offsets, op_timeout,
             replyq, resp_cb, opaque);
         rd_kafkap_str_destroy(group_str);
         return RD_KAFKA_RESP_ERR_NO_ERROR;

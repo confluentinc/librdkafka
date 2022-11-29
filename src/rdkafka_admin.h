@@ -86,10 +86,11 @@ struct rd_kafka_AdminOptions_s {
                                     */
 
         rd_kafka_confval_t
-            require_stable; /**< BOOL: Whether broker should return stable
-                             * offsets (transaction-committed). Valid for:
-                             *     ListConsumerGroupOffsets
-                             */
+            require_stable_offsets; /**< BOOL: Whether broker should return
+                                     * stable offsets (transaction-committed).
+                                     * Valid for:
+                                     *     ListConsumerGroupOffsets
+                                     */
 
         rd_kafka_confval_t
             consumer_group_states; /**< PTR: list of consumer group states.

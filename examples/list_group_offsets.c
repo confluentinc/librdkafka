@@ -74,7 +74,7 @@ static void usage(const char *reason, ...) {
                 "List consumer group offsets usage examples\n"
                 "\n"
                 "Usage: %s <options> <group_id> "
-                "<require_stable>\n"
+                "<require_stable_offsets>\n"
                 "                   <topic1> <partition1>\n"
                 "                   <topic2> <partition2>\n"
                 "                   ...\n"
@@ -174,7 +174,7 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         const int min_argc = 2;
         char *topic;
         int partition;
-        int print_usage = 0, require_stable = 0, num_partitions = 0;
+        int print_usage = 0, require_stable_offsets = 0, num_partitions = 0;
 
         /*
          * Argument validation
@@ -184,8 +184,10 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         if (print_usage)
                 usage("Wrong number of arguments");
         else {
-                require_stable = parse_int("require_stable", argv[1]);
-                print_usage    = require_stable < 0 || require_stable > 1;
+                require_stable_offsets = parse_int(
+                        "require_stable_offsets", argv[1]);
+                print_usage    = require_stable_offsets < 0 ||
+                        require_stable_offsets > 1;
                 if (print_usage)
                         usage("Require stable not a 0-1 int");
         }
@@ -221,10 +223,10 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 exit(1);
         }
-        /* Set requested require stable */
-        if (rd_kafka_AdminOptions_set_require_stable(options, require_stable,
-                                                     errstr, sizeof(errstr))) {
-                fprintf(stderr, "%% Failed to set require stable: %s\n",
+        /* Set requested require stable offsets */
+        if (rd_kafka_AdminOptions_set_require_stable_offsets(
+                options, require_stable_offsets, errstr, sizeof(errstr))) {
+                fprintf(stderr, "%% Failed to set require stable offsets: %s\n",
                         errstr);
                 exit(1);
         }

@@ -4922,16 +4922,16 @@ struct rd_kafka_group_member_info {
 };
 
 /**
- * @brief Consumer group states
+ * @enum Consumer group states
  */
 typedef enum {
-        RD_KAFKA_CGRP_STATE_UNKNOWN              = 0,
-        RD_KAFKA_CGRP_STATE_PREPARING_REBALANCE  = 1,
-        RD_KAFKA_CGRP_STATE_COMPLETING_REBALANCE = 2,
-        RD_KAFKA_CGRP_STATE_STABLE               = 3,
-        RD_KAFKA_CGRP_STATE_DEAD                 = 4,
-        RD_KAFKA_CGRP_STATE_EMPTY                = 5,
-        RD_KAFKA_CGRP_STATE__CNT
+        RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN              = 0,
+        RD_KAFKA_CONSUMER_GROUP_STATE_PREPARING_REBALANCE  = 1,
+        RD_KAFKA_CONSUMER_GROUP_STATE_COMPLETING_REBALANCE = 2,
+        RD_KAFKA_CONSUMER_GROUP_STATE_STABLE               = 3,
+        RD_KAFKA_CONSUMER_GROUP_STATE_DEAD                 = 4,
+        RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY                = 5,
+        RD_KAFKA_CONSUMER_GROUP_STATE__CNT
 } rd_kafka_consumer_group_state_t;
 
 /**
@@ -7705,7 +7705,7 @@ int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
  * @brief Gets state for the \p desc group.
  *
  * @param desc The group description.
- * @return A group state, or RD_KAFKA_CGRP_STATE_UNKNOWN if \p desc is NULL.
+ * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p desc is NULL.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
@@ -7864,7 +7864,7 @@ char *rd_kafka_ConsumerGroupDescription_partition_assignor(
  * @brief Gets state for the \p desc group.
  *
  * @param desc The group description.
- * @return A group state, or RD_KAFKA_CGRP_STATE_UNKNOWN if \p desc is NULL.
+ * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p desc is NULL.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(

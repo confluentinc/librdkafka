@@ -2525,7 +2525,7 @@ static void do_test_ListGroups(const char *what,
                                             " got a simple group");
 
                                 TEST_ASSERT(
-                                    state == RD_KAFKA_CGRP_STATE_EMPTY,
+                                    state == RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
                                     "expected an Empty state,"
                                     " got state %s",
                                     rd_kafka_consumer_group_state_name(state));
@@ -2706,7 +2706,7 @@ static void do_test_DescribeGroups(const char *what,
                     i, exp->group,
                     rd_kafka_ConsumerGroupDescription_group_id(act));
                 if (i < known_groups) {
-                        TEST_ASSERT(state == RD_KAFKA_CGRP_STATE_EMPTY,
+                        TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
                                     "Expected Empty state, got %s.",
                                     rd_kafka_consumer_group_state_name(state));
                         TEST_ASSERT(
@@ -2715,7 +2715,7 @@ static void do_test_DescribeGroups(const char *what,
                             "Expected a normal consumer group, got a simple "
                             "one.");
                 } else {
-                        TEST_ASSERT(state == RD_KAFKA_CGRP_STATE_DEAD,
+                        TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_DEAD,
                                     "Expected Dead state, got %s.",
                                     rd_kafka_consumer_group_state_name(state));
                 }

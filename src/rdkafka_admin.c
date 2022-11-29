@@ -5563,7 +5563,7 @@ int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
     const rd_kafka_ConsumerGroupListing_t *desc) {
         if (!desc)
-                return RD_KAFKA_CGRP_STATE_UNKNOWN;
+                return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
         return desc->state;
 }
 
@@ -5715,7 +5715,7 @@ rd_kafka_ListGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_ConsumerGroupListing_t *group_listing;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 rd_kafka_consumer_group_state_t state =
-                    RD_KAFKA_CGRP_STATE_UNKNOWN;
+                    RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
 
                 rd_kafka_buf_read_str(reply, &grp);
                 rd_kafka_buf_read_str(reply, &protocol_type);
@@ -6058,7 +6058,7 @@ static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_new_error(const char *group_id,
                                             rd_kafka_error_t *error) {
         return rd_kafka_ConsumerGroupDescription_new(
-            group_id, rd_false, NULL, NULL, RD_KAFKA_CGRP_STATE_UNKNOWN, NULL,
+            group_id, rd_false, NULL, NULL, RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN, NULL,
             error);
 }
 
@@ -6143,7 +6143,7 @@ char *rd_kafka_ConsumerGroupDescription_partition_assignor(
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
-                return RD_KAFKA_CGRP_STATE_UNKNOWN;
+                return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
         return desc->state;
 }
 

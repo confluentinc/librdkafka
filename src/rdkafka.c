@@ -4554,7 +4554,7 @@ static const char *rd_kafka_consumer_group_state_names[] = {
 
 const char *
 rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state) {
-        if (state < 0 || state >= RD_KAFKA_CGRP_STATE__CNT)
+        if (state < 0 || state >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT)
                 return NULL;
         return rd_kafka_consumer_group_state_names[state];
 }
@@ -4562,11 +4562,11 @@ rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state) {
 rd_kafka_consumer_group_state_t
 rd_kafka_consumer_group_state_code(const char *name) {
         size_t i;
-        for (i = 0; i < RD_KAFKA_CGRP_STATE__CNT; i++) {
+        for (i = 0; i < RD_KAFKA_CONSUMER_GROUP_STATE__CNT; i++) {
                 if (!strcmp(rd_kafka_consumer_group_state_names[i], name))
                         return i;
         }
-        return RD_KAFKA_CGRP_STATE_UNKNOWN;
+        return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
 }
 
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,

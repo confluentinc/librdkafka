@@ -4987,7 +4987,6 @@ struct rd_kafka_group_list {
  *             rd_kafka_DescribeGroups() instead.
  */
 RD_EXPORT
-RD_DEPRECATED
 rd_kafka_resp_err_t
 rd_kafka_list_groups(rd_kafka_t *rk,
                      const char *group,

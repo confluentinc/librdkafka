@@ -5290,9 +5290,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
                         result = rd_kafka_topic_partition_list_new(
                             rkcg->rkcg_group_assignment->cnt);
 
-                rd_kafka_topic_partition_list_add0(
-                    __FUNCTION__, __LINE__, result, curr->topic,
-                    curr->partition, curr->_private);
+                rd_kafka_topic_partition_list_add_copy(result, curr);
         }
 
         return result;

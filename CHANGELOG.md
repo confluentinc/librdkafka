@@ -75,6 +75,7 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
    dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
    is now built-in. There are bundled builds with and without linking to
    cyrus-sasl for maximum compatibility.
+ * Added `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`).
 
 ## Fixes
 

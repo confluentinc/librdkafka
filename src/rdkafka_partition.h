@@ -584,7 +584,7 @@ rd_kafka_topic_partition_list_add0(const char *func,
                                    rd_kafka_topic_partition_list_t *rktparlist,
                                    const char *topic,
                                    int32_t partition,
-                                   rd_kafka_toppar_t *_private);
+                                   rd_kafka_toppar_t *rktp);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -658,15 +658,81 @@ int rd_kafka_topic_partition_list_cmp(const void *_a,
                                       const void *_b,
                                       int (*cmp)(const void *, const void *));
 
+
+/**
+ * @struct This is a separately allocated glue object used in
+ *         rd_kafka_topic_partition_t._private to allow referencing both
+ *         an rktp and/or a leader epoch. Both are optional.
+ *         The rktp, if non-NULL, owns a refcount.
+ *
+ * This glue object is not always set in ._private, but allocated on demand
+ * as necessary.
+ */
+typedef struct rd_kafka_topic_partition_private_s {
+        /** Reference to a toppar. Optional, may be NULL. */
+        rd_kafka_toppar_t *rktp;
+        /** Leader epoch if known, else -1. */
+        int32_t leader_epoch;
+} rd_kafka_topic_partition_private_t;
+
+
+
+/**
+ * @returns (and creates if necessary) the ._private glue object.
+ */
+static RD_UNUSED RD_INLINE rd_kafka_topic_partition_private_t *
+rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        if (!(parpriv = rktpar->_private)) {
+                parpriv               = rd_calloc(1, sizeof(*parpriv));
+                parpriv->leader_epoch = -1;
+                rktpar->_private      = parpriv;
+        }
+
+        return parpriv;
+}
+
+
+/**
+ * @returns the partition's rktp if set (no refcnt increase), else NULL.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_toppar_t *
+rd_kafka_topic_partition_toppar(rd_kafka_t *rk,
+                                const rd_kafka_topic_partition_t *rktpar) {
+        const rd_kafka_topic_partition_private_t *parpriv;
+
+        if ((parpriv = rktpar->_private))
+                return parpriv->rktp;
+
+        return NULL;
+}
+
 rd_kafka_toppar_t *
 rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
                                        rd_kafka_topic_partition_t *rktpar,
                                        rd_bool_t create_on_miss);
 
-rd_kafka_toppar_t *rd_kafka_topic_partition_get_toppar(
-    rd_kafka_t *rk,
-    rd_kafka_topic_partition_t *rktpar,
-    rd_bool_t create_on_miss) RD_WARN_UNUSED_RESULT;
+/**
+ * @returns (and sets if necessary) the \p rktpar's ._private.
+ * @remark a new reference is returned.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar(rd_kafka_t *rk,
+                                    rd_kafka_topic_partition_t *rktpar,
+                                    rd_bool_t create_on_miss) {
+        rd_kafka_toppar_t *rktp;
+
+        rktp =
+            rd_kafka_topic_partition_ensure_toppar(rk, rktpar, create_on_miss);
+
+        if (rktp)
+                rd_kafka_toppar_keep(rktp);
+
+        return rktp;
+}
+
+
 
 void rd_kafka_topic_partition_list_update_toppars(
     rd_kafka_t *rk,

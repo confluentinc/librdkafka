@@ -135,7 +135,9 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
         rd_kafka_topic_partition_t *rktpar;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, offsets) {
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* May be NULL */
+                /* May be NULL, borrow ref. */
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_toppar(rk, rktpar);
 
                 if (!rd_kafka_topic_partition_list_del(
                         rk->rk_consumer.assignment.queried, rktpar->topic,
@@ -302,7 +304,9 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
         int valid_offsets = 0;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, rk->rk_consumer.assignment.removed) {
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* Borrow ref */
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_ensure_toppar(
+                        rk, rktpar, rd_true); /* Borrow ref */
                 int was_pending, was_queried;
 
                 /* Remove partition from pending and querying lists,
@@ -422,7 +426,9 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
         for (i = rk->rk_consumer.assignment.pending->cnt - 1; i >= 0; i--) {
                 rd_kafka_topic_partition_t *rktpar =
                     &rk->rk_consumer.assignment.pending->elems[i];
-                rd_kafka_toppar_t *rktp = rktpar->_private; /* Borrow ref */
+                /* Borrow ref */
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
 
                 rd_assert(!rktp->rktp_started);
 

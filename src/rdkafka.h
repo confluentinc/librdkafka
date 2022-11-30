@@ -898,7 +898,9 @@ typedef struct rd_kafka_topic_partition_s {
         void *opaque;            /**< Opaque value for application use */
         rd_kafka_resp_err_t err; /**< Error code, depending on use. */
         void *_private;          /**< INTERNAL USE ONLY,
-                                  *   INITIALIZE TO ZERO, DO NOT TOUCH */
+                                  *   INITIALIZE TO ZERO, DO NOT TOUCH,
+                                  *   DO NOT COPY, DO NOT SHARE WITH OTHER
+                                  *   rd_kafka_t INSTANCES. */
 } rd_kafka_topic_partition_t;
 
 
@@ -908,6 +910,32 @@ typedef struct rd_kafka_topic_partition_s {
  */
 RD_EXPORT
 void rd_kafka_topic_partition_destroy(rd_kafka_topic_partition_t *rktpar);
+
+
+/**
+ * @brief Sets the partition's leader epoch (use -1 to clear).
+ *
+ * @param rktpar Partition object.
+ * @param leader_epoch Partition leader epoch, use -1 to reset.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+void rd_kafka_topic_partition_set_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t leader_epoch);
+
+/**
+ * @returns the partition's leader epoch, if relevant and known,
+ *          else -1.
+ *
+ * @param rktpar Partition object.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+int32_t rd_kafka_topic_partition_get_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar);
 
 
 /**
@@ -1429,7 +1457,8 @@ typedef struct rd_kafka_message_s {
                                   *   for retried messages when
                                   *   idempotence is enabled. */
         void *_private;          /**< Consumer:
-                                  *  - rdkafka private pointer: DO NOT MODIFY
+                                  *  - rdkafka private pointer:
+                                  *    DO NOT MODIFY, DO NOT COPY.
                                   *  Producer:
                                   *  - dr_msg_cb:
                                   *    msg_opaque from produce() call or

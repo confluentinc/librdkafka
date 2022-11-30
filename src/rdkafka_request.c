@@ -780,12 +780,8 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
 
                         seen_cnt++;
 
-                        if (!(rktp = rktpar->_private)) {
-                                rktp = rd_kafka_toppar_get2(
-                                    rkb->rkb_rk, topic_name, partition, 0, 0);
-                                /* May be NULL if topic is not locally known */
-                                rktpar->_private = rktp;
-                        }
+                        rktp = rd_kafka_topic_partition_get_toppar(
+                            rk, rktpar, rd_false /*no create on miss*/);
 
                         /* broker reports invalid offset as -1 */
                         if (offset == -1)
@@ -826,6 +822,10 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                                 rktpar->metadata_size =
                                     RD_KAFKAP_STR_LEN(&metadata);
                         }
+
+                        /* Loose ref from get_toppar() */
+                        if (rktp)
+                                rd_kafka_toppar_destroy(rktp);
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);

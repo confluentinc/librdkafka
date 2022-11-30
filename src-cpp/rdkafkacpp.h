@@ -1978,6 +1978,12 @@ class RD_EXPORT TopicPartition {
 
   /** @returns error code (if applicable) */
   virtual ErrorCode err() const = 0;
+
+  /** @brief Get partition leader epoch, or -1 if not known or relevant. */
+  virtual int32_t get_leader_epoch() = 0;
+
+  /* @brief Set partition leader epoch. */
+  virtual void set_leader_epoch(int32_t leader_epoch) = 0;
 };
 
 

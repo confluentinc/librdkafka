@@ -235,7 +235,7 @@
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
     <ClCompile Include="..\src\rdstring.c" />
-    <ClInclude Include="..\src\rdrandr.c" />
+    <ClCompile Include="..\src\rdrandr.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />

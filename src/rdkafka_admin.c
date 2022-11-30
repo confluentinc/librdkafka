@@ -1562,8 +1562,11 @@ const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
         rd_list_t *states_list = rd_list_new(0, NULL);
         rd_list_init_int32(states_list, consumer_group_states_cnt);
         for (i = 0; i < consumer_group_states_cnt; i++) {
-                rd_list_set_int32(states_list, (int32_t)i,
-                                  consumer_group_states[i]);
+                rd_kafka_consumer_group_state_t state =
+                    consumer_group_states[i];
+                rd_assert(state >= 0 &&
+                          state < RD_KAFKA_CONSUMER_GROUP_STATE__CNT);
+                rd_list_set_int32(states_list, (int32_t)i, state);
         }
         err = rd_kafka_confval_set_type(&options->consumer_group_states,
                                         RD_KAFKA_CONFVAL_PTR, states_list,

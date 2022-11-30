@@ -22,8 +22,8 @@ patch/code to us. We will credit you for your changes as far as possible, to
 give credit but also to keep a trace back to who made what changes. Please
 always provide us with your full real name when contributing!
 
-Official librdkafka project maintainer(s) assume ownership and copyright owners
-of all accepted submissions.
+Official librdkafka project maintainer(s) assume ownership and copyright
+ownership of all accepted submissions.
 
 
 ## Write a good patch
@@ -114,7 +114,7 @@ likely to happen.
 clang-format is used to check, and fix, the style for C/C++ files,
 while flake8 and autopep8 is used for the Python scripts.
 
-You should check the style before committing by running `make style-check-changed`
+You must check the style before committing by running `make style-check-changed`
 from the top-level directory, and if any style errors are reported you can
 automatically fix them using `make style-fix-changed` (or just run
 that command directly).
@@ -245,7 +245,20 @@ E.g.:
 
 
 
-# librdkafka C style guide
+# librdkafka C style and naming guide
+
+*Note: The code format style is enforced by our clang-format and pep8 rules,
+so that is not covered here.*
+
+## C standard "C98"
+
+This is a mix of C89 and C99, to be compatible with old MSVC versions.
+
+Notable, it is C99 with the following limitations:
+
+ * No variable declarations after statements.
+ * No in-line variable declarations.
+
 
 ## Function and globals naming
 
@@ -253,6 +266,12 @@ Use self-explanatory hierarchical snake-case naming.
 Pretty much all symbols should start with `rd_kafka_`, followed by
 their subsystem (e.g., `cgrp`, `broker`, `buf`, etc..), followed by an
 action (e.g, `find`, `get`, `clear`, ..).
+
+The exceptions are:
+ - Protocol requests and fields, use their Apache Kafka CamelCase names, .e.g:
+   `rd_kafka_ProduceRequest()` and `int16_t ErrorCode`.
+ - Public APIs that closely mimic the Apache Kafka Java counterpart, e.g.,
+   the Admin API: `rd_kafka_DescribeConsumerGroups()`.
 
 
 ## Variable naming
@@ -264,6 +283,9 @@ Example:
   * `rd_kafka_broker_t` has field names starting with `rkb_..`, thus broker
      variable names should be named `rkb`
 
+Be consistent with using the same variable name for the same type throughout
+the code, it makes reading the code much easier as the type can be easily
+inferred from the variable.
 
 For other types use reasonably concise but descriptive names.
 `i` and `j` are typical int iterators.
@@ -271,7 +293,7 @@ For other types use reasonably concise but descriptive names.
 ## Variable declaration
 
 Variables must be declared at the head of a scope, no in-line variable
-declarations are allowed.
+declarations after statements are allowed.
 
 ## Function parameters/arguments
 
@@ -287,11 +309,11 @@ but there is no need to do this for non-optional arguments.
 
 ## Indenting
 
-Use 8 spaces indent, same as the Linux kernel.
+Use 8 spaces indent, no tabs, same as the Linux kernel.
 In emacs, use `c-set-style "linux`.
 For C++, use Google's C++ style.
 
-Fix formatting issues by running `make style-fix` prior to committing.
+Fix formatting issues by running `make style-fix-changed` prior to committing.
 
 
 ## Comments
@@ -386,7 +408,7 @@ New blocks should be on a new line:
 ## Parentheses
 
 Don't assume the reader knows C operator precedence by heart for complex
-statements, add parentheses to ease readability.
+statements, add parentheses to ease readability and make the intent clear.
 
 
 ## ifdef hell

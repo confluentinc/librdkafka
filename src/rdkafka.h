@@ -6797,22 +6797,16 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
  *
  * @param options Admin options.
  * @param true_or_false Defaults to false.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written in case of error.
- * @param errstr_size Writable size in \p errstr.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
- *          error code on failure in which case an error string will
- *          be written \p errstr.
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
  *
  * @remark This option is valid for ListConsumerGroupOffsets.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_require_stable_offsets(
+RD_EXPORT
+const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
     rd_kafka_AdminOptions_t *options,
-    int true_or_false,
-    char *errstr,
-    size_t errstr_size);
+    int true_or_false);
 
 /**
  * @brief Set consumer groups states to query for.
@@ -6820,17 +6814,14 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_require_stable_offsets(
  * @param options Admin options.
  * @param consumer_group_states Array of consumer group states.
  * @param consumer_group_states_cnt Size of the \p consumer_group_states array.
- * @param errstr A human readable error string (nul-terminated) is written to
- *               this location that must be of at least \p errstr_size bytes.
- *               The \p errstr is only written in case of error.
- * @param errstr_size Writable size in \p errstr.
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_AdminOptions_set_consumer_group_states(
+RD_EXPORT
+const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
-    int consumer_group_states_cnt,
-    char *errstr,
-    size_t errstr_size);
+    int consumer_group_states_cnt);
 
 /**
  * @brief Set application opaque value that can be extracted from the

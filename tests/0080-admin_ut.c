@@ -2192,11 +2192,14 @@ static void do_test_options(rd_kafka_t *rk) {
             {"broker", _all_apis},
             {"require_stable_offsets",
              {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS}},
+            {"consumer_group_states", {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS}},
             {"opaque", _all_apis},
             {NULL},
         };
         int i;
         rd_kafka_AdminOptions_t *options;
+        rd_kafka_consumer_group_state_t state[1] = {
+            RD_KAFKA_CONSUMER_GROUP_STATE_STABLE};
 
         SUB_TEST_QUICK();
 
@@ -2208,6 +2211,7 @@ static void do_test_options(rd_kafka_t *rk) {
                         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
                         rd_kafka_resp_err_t exp_err =
                             RD_KAFKA_RESP_ERR_NO_ERROR;
+                        const rd_kafka_error_t *error = NULL;
                         char errstr[512];
                         int fi;
 
@@ -2230,9 +2234,14 @@ static void do_test_options(rd_kafka_t *rk) {
                                     options, 5, errstr, sizeof(errstr));
                         else if (!strcmp(matrix[i].setter,
                                          "require_stable_offsets"))
-                                err =
+                                error =
                                     rd_kafka_AdminOptions_set_require_stable_offsets(
-                                        options, 0, errstr, sizeof(errstr));
+                                        options, 0);
+                        else if (!strcmp(matrix[i].setter,
+                                         "consumer_group_states"))
+                                error =
+                                    rd_kafka_AdminOptions_set_consumer_group_states(
+                                        options, state, 1);
                         else if (!strcmp(matrix[i].setter, "opaque")) {
                                 rd_kafka_AdminOptions_set_opaque(
                                     options, (void *)options);
@@ -2240,6 +2249,14 @@ static void do_test_options(rd_kafka_t *rk) {
                         } else
                                 TEST_FAIL("Invalid setter: %s",
                                           matrix[i].setter);
+
+                        if (error) {
+                                err = rd_kafka_error_code(error);
+                                snprintf(errstr, sizeof(errstr), "%s",
+                                         rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(
+                                    (rd_kafka_error_t *)error);
+                        }
 
 
                         TEST_SAYL(3,

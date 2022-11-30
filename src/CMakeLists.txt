@@ -56,6 +56,7 @@ set(
     rdlog.c
     rdmurmur2.c
     rdports.c
+    rdrandr.c
     rdrand.c
     rdregex.c
     rdstring.c

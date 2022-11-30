@@ -5750,14 +5750,15 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
 
                 glists_errors = rd_kafka_ListConsumerGroups_result_errors(
                     res, &glists_error_cnt);
-        } else if (evtype == RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT) {
-                const rd_kafka_DescribeGroups_result_t *res;
-                if (!(res = rd_kafka_event_DescribeGroups_result(rkev)))
-                        TEST_FAIL("Expected a DescribeGroups result, not %s",
-                                  rd_kafka_event_name(rkev));
+        } else if (evtype == RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT) {
+                const rd_kafka_DescribeConsumerGroups_result_t *res;
+                if (!(res = rd_kafka_event_DescribeConsumerGroups_result(rkev)))
+                        TEST_FAIL(
+                            "Expected a DescribeConsumerGroups result, not %s",
+                            rd_kafka_event_name(rkev));
 
-                gdescs =
-                    rd_kafka_DescribeGroups_result_groups(res, &gdescs_cnt);
+                gdescs = rd_kafka_DescribeConsumerGroups_result_groups(
+                    res, &gdescs_cnt);
         } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
                 const rd_kafka_DeleteGroups_result_t *res;
                 if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))

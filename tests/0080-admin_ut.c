@@ -602,16 +602,16 @@ destroy:
 }
 
 /**
- * @brief DescribeGroups tests
+ * @brief DescribeConsumerGroups tests
  *
  *
  *
  */
-static void do_test_DescribeGroups(const char *what,
-                                   rd_kafka_t *rk,
-                                   rd_kafka_queue_t *useq,
-                                   int with_options,
-                                   rd_bool_t destroy) {
+static void do_test_DescribeConsumerGroups(const char *what,
+                                           rd_kafka_t *rk,
+                                           rd_kafka_queue_t *useq,
+                                           int with_options,
+                                           rd_bool_t destroy) {
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_GROUPS_CNT 4
         const char *group_names[TEST_DESCRIBE_GROUPS_CNT];
@@ -628,7 +628,7 @@ static void do_test_DescribeGroups(const char *what,
         size_t resgroup_cnt;
         void *my_opaque = NULL, *opaque;
 
-        SUB_TEST_QUICK("%s DescribeGroups with %s, timeout %dms",
+        SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, timeout %dms",
                        rd_kafka_name(rk), what, exp_timeout);
 
         q = useq ? useq : rd_kafka_queue_new(rk);
@@ -639,7 +639,7 @@ static void do_test_DescribeGroups(const char *what,
 
         if (with_options) {
                 options = rd_kafka_AdminOptions_new(
-                    rk, RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS);
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
@@ -652,26 +652,26 @@ static void do_test_DescribeGroups(const char *what,
                 }
         }
 
-        TIMING_START(&timing, "DescribeGroups");
-        TEST_SAY("Call DescribeGroups, timeout is %dms\n", exp_timeout);
-        rd_kafka_DescribeGroups(rk, group_names, TEST_DESCRIBE_GROUPS_CNT,
-                                options, q);
+        TIMING_START(&timing, "DescribeConsumerGroups");
+        TEST_SAY("Call DescribeConsumerGroups, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeConsumerGroups(rk, group_names,
+                                        TEST_DESCRIBE_GROUPS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         if (destroy)
                 goto destroy;
 
         /* Poll result queue */
-        TIMING_START(&timing, "DescribeGroups.queue_poll");
+        TIMING_START(&timing, "DescribeConsumerGroups.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("DescribeGroups: got %s in %.3fs\n", rd_kafka_event_name(rkev),
-                 TIMING_DURATION(&timing) / 1000.0f);
+        TEST_SAY("DescribeConsumerGroups: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
 
         /* Convert event to proper result */
-        res = rd_kafka_event_DescribeGroups_result(rkev);
-        TEST_ASSERT(res, "expected DescribeGroups_result, not %s",
+        res = rd_kafka_event_DescribeConsumerGroups_result(rkev);
+        TEST_ASSERT(res, "expected DescribeConsumerGroups_result, not %s",
                     rd_kafka_event_name(rkev));
 
         opaque = rd_kafka_event_opaque(rkev);
@@ -681,13 +681,15 @@ static void do_test_DescribeGroups(const char *what,
         /* Expecting no error (errors will be per-group) */
         err     = rd_kafka_event_error(rkev);
         errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "expected DescribeGroups to return error %s, not %s (%s)",
-                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
-                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+        TEST_ASSERT(
+            err == RD_KAFKA_RESP_ERR_NO_ERROR,
+            "expected DescribeConsumerGroups to return error %s, not %s (%s)",
+            rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR), rd_kafka_err2str(err),
+            err ? errstr2 : "n/a");
 
         /* Extract groups, should return TEST_DESCRIBE_GROUPS_CNT groups. */
-        resgroups = rd_kafka_DescribeGroups_result_groups(res, &resgroup_cnt);
+        resgroups =
+            rd_kafka_DescribeConsumerGroups_result_groups(res, &resgroup_cnt);
         TEST_ASSERT(resgroups && resgroup_cnt == TEST_DESCRIBE_GROUPS_CNT,
                     "expected %d result_groups, got %p cnt %" PRIusz,
                     TEST_DESCRIBE_GROUPS_CNT, resgroups, resgroup_cnt);
@@ -2163,7 +2165,7 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,                        \
                     RD_KAFKA_ADMIN_OP_ALTERCONFIGS,                            \
                     RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,                         \
-                    RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS,                          \
+                    RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS,                  \
                     RD_KAFKA_ADMIN_OP_DELETEGROUPS,                            \
                     RD_KAFKA_ADMIN_OP_DELETERECORDS,                           \
                     RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
@@ -2346,9 +2348,12 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListConsumerGroups("main queue, options", rk, mainq, 1,
                                    rd_false);
 
-        do_test_DescribeGroups("temp queue, no options", rk, NULL, 0, rd_false);
-        do_test_DescribeGroups("temp queue, options", rk, NULL, 1, rd_false);
-        do_test_DescribeGroups("main queue, options", rk, mainq, 1, rd_false);
+        do_test_DescribeConsumerGroups("temp queue, no options", rk, NULL, 0,
+                                       rd_false);
+        do_test_DescribeConsumerGroups("temp queue, options", rk, NULL, 1,
+                                       rd_false);
+        do_test_DescribeConsumerGroups("main queue, options", rk, mainq, 1,
+                                       rd_false);
 
         do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);

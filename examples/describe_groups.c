@@ -27,7 +27,7 @@
  */
 
 /**
- * DescribeGroups usage example.
+ * DescribeConsumerGroups usage example.
  */
 
 #include <stdio.h>
@@ -147,13 +147,14 @@ print_partition_list(FILE *fp,
 /**
  * @brief Print group information.
  */
-static int print_groups_info(const rd_kafka_DescribeGroups_result_t *desc,
-                             int groups_cnt) {
+static int
+print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
+                  int groups_cnt) {
         size_t i;
         const rd_kafka_ConsumerGroupDescription_t **result_groups;
         size_t result_groups_cnt;
-        result_groups =
-            rd_kafka_DescribeGroups_result_groups(desc, &result_groups_cnt);
+        result_groups = rd_kafka_DescribeConsumerGroups_result_groups(
+            desc, &result_groups_cnt);
 
         if (result_groups_cnt == 0) {
                 if (groups_cnt > 0) {
@@ -230,7 +231,7 @@ static int print_groups_info(const rd_kafka_DescribeGroups_result_t *desc,
 }
 
 /**
- * @brief Call rd_kafka_DescribeGroups() with a list of
+ * @brief Call rd_kafka_DescribeConsumerGroups() with a list of
  * groups.
  */
 static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
@@ -261,9 +262,9 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Describe consumer groups
          */
-        queue = rd_kafka_queue_new(rk);
-        options =
-            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS);
+        queue   = rd_kafka_queue_new(rk);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
@@ -271,7 +272,7 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 goto exit;
         }
 
-        rd_kafka_DescribeGroups(rk, groups, groups_cnt, options, queue);
+        rd_kafka_DescribeConsumerGroups(rk, groups, groups_cnt, options, queue);
 
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
@@ -282,18 +283,19 @@ static void cmd_describe_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
-                /* DescribeGroups request failed */
-                fprintf(stderr, "%% DescribeGroups failed[%" PRId32 "]: %s\n",
+                /* DescribeConsumerGroups request failed */
+                fprintf(stderr,
+                        "%% DescribeConsumerGroups failed[%" PRId32 "]: %s\n",
                         err, rd_kafka_event_error_string(event));
                 goto exit;
 
         } else {
-                /* DescribeGroups request succeeded, but individual
+                /* DescribeConsumerGroups request succeeded, but individual
                  * groups may have errors. */
-                const rd_kafka_DescribeGroups_result_t *result;
+                const rd_kafka_DescribeConsumerGroups_result_t *result;
 
-                result = rd_kafka_event_DescribeGroups_result(event);
-                printf("DescribeGroups results:\n");
+                result = rd_kafka_event_DescribeConsumerGroups_result(event);
+                printf("DescribeConsumerGroups results:\n");
                 retval = print_groups_info(result, groups_cnt);
         }
 

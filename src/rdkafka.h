@@ -4989,7 +4989,7 @@ struct rd_kafka_group_list {
  * @sa Use rd_kafka_group_list_destroy() to release list memory.
  *
  * @deprecated Use rd_kafka_ListConsumerGroups() and
- *             rd_kafka_DescribeGroups() instead.
+ *             rd_kafka_DescribeConsumerGroups() instead.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -5275,8 +5275,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x1400
 /** ListConsumerGroupsResult_t */
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT 0x1600
-/** DescribeGroups_result_t */
-#define RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT 0x1800
+/** DescribeConsumerGroups_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT 0x1800
 
 
 /**
@@ -5426,7 +5426,7 @@ int rd_kafka_event_error_is_fatal(rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
  *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  *  - RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
- *  - RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETEGROUPS_RESULT
  *  - RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT
  *  - RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
@@ -5533,8 +5533,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
 /*! ListConsumerGroups result type */
 typedef rd_kafka_event_t rd_kafka_ListConsumerGroups_result_t;
-/*! DescribeGroups result type */
-typedef rd_kafka_event_t rd_kafka_DescribeGroups_result_t;
+/*! DescribeConsumerGroups result type */
+typedef rd_kafka_event_t rd_kafka_DescribeConsumerGroups_result_t;
 /*! DeleteGroups result type */
 typedef rd_kafka_event_t rd_kafka_DeleteGroups_result_t;
 /*! DeleteConsumerGroupOffsets result type */
@@ -5630,19 +5630,19 @@ RD_EXPORT const rd_kafka_ListConsumerGroups_result_t *
 rd_kafka_event_ListConsumerGroups_result(rd_kafka_event_t *rkev);
 
 /**
- * @brief Get DescribeGroups result.
+ * @brief Get DescribeConsumerGroups result.
  *
- * @returns the result of a DescribeGroups request, or NULL if event is of
- *          different type.
+ * @returns the result of a DescribeConsumerGroups request, or NULL if event is
+ * of different type.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p rkev object.
  *
  * Event types:
- *   RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT
+ *   RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
  */
-RD_EXPORT const rd_kafka_DescribeGroups_result_t *
-rd_kafka_event_DescribeGroups_result(rd_kafka_event_t *rkev);
+RD_EXPORT const rd_kafka_DescribeConsumerGroups_result_t *
+rd_kafka_event_DescribeConsumerGroups_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DeleteGroups result.
@@ -6611,16 +6611,16 @@ rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres);
  * @sa rd_kafka_AdminOptions_new()
  */
 typedef enum rd_kafka_admin_op_t {
-        RD_KAFKA_ADMIN_OP_ANY = 0,            /**< Default value */
-        RD_KAFKA_ADMIN_OP_CREATETOPICS,       /**< CreateTopics */
-        RD_KAFKA_ADMIN_OP_DELETETOPICS,       /**< DeleteTopics */
-        RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,   /**< CreatePartitions */
-        RD_KAFKA_ADMIN_OP_ALTERCONFIGS,       /**< AlterConfigs */
-        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,    /**< DescribeConfigs */
-        RD_KAFKA_ADMIN_OP_DELETERECORDS,      /**< DeleteRecords */
-        RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS, /**< ListConsumerGroups */
-        RD_KAFKA_ADMIN_OP_DESCRIBEGROUPS,     /**< DescribeGroups */
-        RD_KAFKA_ADMIN_OP_DELETEGROUPS,       /**< DeleteGroups */
+        RD_KAFKA_ADMIN_OP_ANY = 0,                /**< Default value */
+        RD_KAFKA_ADMIN_OP_CREATETOPICS,           /**< CreateTopics */
+        RD_KAFKA_ADMIN_OP_DELETETOPICS,           /**< DeleteTopics */
+        RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,       /**< CreatePartitions */
+        RD_KAFKA_ADMIN_OP_ALTERCONFIGS,           /**< AlterConfigs */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,        /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP_DELETERECORDS,          /**< DeleteRecords */
+        RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS,     /**< ListConsumerGroups */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS, /**< DescribeConsumerGroups */
+        RD_KAFKA_ADMIN_OP_DELETEGROUPS,           /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
         RD_KAFKA_ADMIN_OP_CREATEACLS,   /**< CreateAcls */
@@ -7751,12 +7751,12 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
 /**@}*/
 
 /**
- * @name Admin API - DescribeGroups
+ * @name Admin API - DescribeConsumerGroups
  * @{
  */
 
 /**
- * @brief DescribeGroups result type.
+ * @brief DescribeConsumerGroups result type.
  *
  */
 typedef struct rd_kafka_ConsumerGroupDescription_s
@@ -7785,17 +7785,17 @@ typedef struct rd_kafka_MemberAssignment_s rd_kafka_MemberAssignment_t;
  * @param rkqu Queue to emit result on.
  *
  * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT
+ *         \c RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
  */
 RD_EXPORT
-void rd_kafka_DescribeGroups(rd_kafka_t *rk,
-                             const char **groups,
-                             size_t groups_cnt,
-                             const rd_kafka_AdminOptions_t *options,
-                             rd_kafka_queue_t *rkqu);
+void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
+                                     const char **groups,
+                                     size_t groups_cnt,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu);
 
 /**
- * @brief Get an array of group results from a DescribeGroups result.
+ * @brief Get an array of group results from a DescribeConsumerGroups result.
  *
  * The returned groups life-time is the same as the \p result object.
  *
@@ -7807,8 +7807,8 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
  */
 RD_EXPORT
 const rd_kafka_ConsumerGroupDescription_t **
-rd_kafka_DescribeGroups_result_groups(
-    const rd_kafka_DescribeGroups_result_t *result,
+rd_kafka_DescribeConsumerGroups_result_groups(
+    const rd_kafka_DescribeConsumerGroups_result_t *result,
     size_t *cntp);
 
 
@@ -8032,6 +8032,8 @@ rd_kafka_DeleteGroup_destroy_array(rd_kafka_DeleteGroup_t **del_groups,
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_DELETEGROUPS_RESULT
+ *
+ * @remark This function in called deleteConsumerGroups in the Java client.
  */
 RD_EXPORT
 void rd_kafka_DeleteGroups(rd_kafka_t *rk,

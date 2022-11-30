@@ -6209,25 +6209,25 @@ rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_topic_partitions(
 }
 
 /**
- * @brief Group arguments comparator for DescribeGroups args
+ * @brief Group arguments comparator for DescribeConsumerGroups args
  */
-static int rd_kafka_DescribeGroups_cmp(const void *a, const void *b) {
+static int rd_kafka_DescribeConsumerGroups_cmp(const void *a, const void *b) {
         return strcmp(a, b);
 }
 
-/** @brief Merge the DescribeGroups response from a single broker
+/** @brief Merge the DescribeConsumerGroups response from a single broker
  *         into the user response list.
  */
-static void
-rd_kafka_DescribeGroups_response_merge(rd_kafka_op_t *rko_fanout,
-                                       const rd_kafka_op_t *rko_partial) {
+static void rd_kafka_DescribeConsumerGroups_response_merge(
+    rd_kafka_op_t *rko_fanout,
+    const rd_kafka_op_t *rko_partial) {
         rd_kafka_ConsumerGroupDescription_t *groupres = NULL;
         rd_kafka_ConsumerGroupDescription_t *newgroupres;
         const char *grp = rko_partial->rko_u.admin_result.opaque;
         int orig_pos;
 
         rd_assert(rko_partial->rko_evtype ==
-                  RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT);
+                  RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT);
 
         if (!rko_partial->rko_err) {
                 /* Proper results.
@@ -6249,7 +6249,7 @@ rd_kafka_DescribeGroups_response_merge(rd_kafka_op_t *rko_fanout,
         /* As a convenience to the application we insert group result
          * in the same order as they were requested. */
         orig_pos = rd_list_index(&rko_fanout->rko_u.admin_request.args, grp,
-                                 rd_kafka_DescribeGroups_cmp);
+                                 rd_kafka_DescribeConsumerGroups_cmp);
         rd_assert(orig_pos != -1);
 
         /* Make sure result is not already set */
@@ -6262,7 +6262,7 @@ rd_kafka_DescribeGroups_response_merge(rd_kafka_op_t *rko_fanout,
 
 
 /**
- * @brief Construct and send DescribeGroupsRequest to \p rkb
+ * @brief Construct and send DescribeConsumerGroupsRequest to \p rkb
  *        with the groups (char *) in \p groups, using
  *        \p options.
  *
@@ -6273,15 +6273,15 @@ rd_kafka_DescribeGroups_response_merge(rd_kafka_op_t *rko_fanout,
  *          transmission, otherwise an error code and errstr will be
  *          updated with a human readable error string.
  */
-static rd_kafka_resp_err_t
-rd_kafka_admin_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
-                                     const rd_list_t *groups /*(char*)*/,
-                                     rd_kafka_AdminOptions_t *options,
-                                     char *errstr,
-                                     size_t errstr_size,
-                                     rd_kafka_replyq_t replyq,
-                                     rd_kafka_resp_cb_t *resp_cb,
-                                     void *opaque) {
+static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *groups /*(char*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
         int i;
         char *group;
         int groups_cnt          = rd_list_cnt(groups);
@@ -6296,14 +6296,14 @@ rd_kafka_admin_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
 }
 
 /**
- * @brief Parse DescribeGroupsResponse and create ADMIN_RESULT op.
+ * @brief Parse DescribeConsumerGroupsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_DescribeGroupsResponse_parse(rd_kafka_op_t *rko_req,
-                                      rd_kafka_op_t **rko_resultp,
-                                      rd_kafka_buf_t *reply,
-                                      char *errstr,
-                                      size_t errstr_size) {
+rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
+                                              rd_kafka_op_t **rko_resultp,
+                                              rd_kafka_buf_t *reply,
+                                              char *errstr,
+                                              size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         int cnt, nodeid, port;
         rd_kafka_op_t *rko_result = NULL;
@@ -6349,9 +6349,9 @@ rd_kafka_DescribeGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 proto_s       = RD_KAFKAP_STR_DUP(&proto);
 
                 if (error_code) {
-                        error =
-                            rd_kafka_error_new(error_code, "DescribeGroups: %s",
-                                               rd_kafka_err2str(error_code));
+                        error = rd_kafka_error_new(
+                            error_code, "DescribeConsumerGroups: %s",
+                            rd_kafka_err2str(error_code));
                 }
 
                 if (member_cnt > 100000) {
@@ -6488,31 +6488,32 @@ err_parse:
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
 
-        rd_snprintf(errstr, errstr_size,
-                    "DescribeGroups response protocol parse failure: %s",
-                    rd_kafka_err2str(reply->rkbuf_err));
+        rd_snprintf(
+            errstr, errstr_size,
+            "DescribeConsumerGroups response protocol parse failure: %s",
+            rd_kafka_err2str(reply->rkbuf_err));
 
         return reply->rkbuf_err;
 }
 
-void rd_kafka_DescribeGroups(rd_kafka_t *rk,
-                             const char **groups,
-                             size_t groups_cnt,
-                             const rd_kafka_AdminOptions_t *options,
-                             rd_kafka_queue_t *rkqu) {
+void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
+                                     const char **groups,
+                                     size_t groups_cnt,
+                                     const rd_kafka_AdminOptions_t *options,
+                                     rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko_fanout;
         rd_list_t dup_list;
         size_t i;
         static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
-            rd_kafka_DescribeGroups_response_merge,
+            rd_kafka_DescribeConsumerGroups_response_merge,
             rd_kafka_ConsumerGroupDescription_copy_opaque};
 
         rd_assert(rkqu);
 
-        rko_fanout =
-            rd_kafka_admin_fanout_op_new(rk, RD_KAFKA_OP_DESCRIBEGROUPS,
-                                         RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT,
-                                         &fanout_cbs, options, rkqu->rkqu_q);
+        rko_fanout = rd_kafka_admin_fanout_op_new(
+            rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
+            RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, &fanout_cbs, options,
+            rkqu->rkqu_q);
 
         if (groups_cnt == 0) {
                 rd_kafka_admin_result_fail(rko_fanout,
@@ -6539,8 +6540,9 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
                      rd_list_cnt(&rko_fanout->rko_u.admin_request.args), NULL);
         rd_list_copy_to(&dup_list, &rko_fanout->rko_u.admin_request.args, NULL,
                         NULL);
-        rd_list_sort(&dup_list, rd_kafka_DescribeGroups_cmp);
-        if (rd_list_find_duplicate(&dup_list, rd_kafka_DescribeGroups_cmp)) {
+        rd_list_sort(&dup_list, rd_kafka_DescribeConsumerGroups_cmp);
+        if (rd_list_find_duplicate(&dup_list,
+                                   rd_kafka_DescribeConsumerGroups_cmp)) {
                 rd_list_destroy(&dup_list);
                 rd_kafka_admin_result_fail(rko_fanout,
                                            RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -6563,14 +6565,14 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
          *        coordinator into one op. */
         for (i = 0; i < groups_cnt; i++) {
                 static const struct rd_kafka_admin_worker_cbs cbs = {
-                    rd_kafka_admin_DescribeGroupsRequest,
-                    rd_kafka_DescribeGroupsResponse_parse,
+                    rd_kafka_admin_DescribeConsumerGroupsRequest,
+                    rd_kafka_DescribeConsumerGroupsResponse_parse,
                 };
                 char *grp =
                     rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
                 rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
-                    rk, RD_KAFKA_OP_DESCRIBEGROUPS,
-                    RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT, &cbs, options,
+                    rk, RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,
+                    RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT, &cbs, options,
                     rk->rk_ops);
 
                 rko->rko_u.admin_request.fanout_parent = rko_fanout;
@@ -6595,13 +6597,13 @@ void rd_kafka_DescribeGroups(rd_kafka_t *rk,
 }
 
 const rd_kafka_ConsumerGroupDescription_t **
-rd_kafka_DescribeGroups_result_groups(
-    const rd_kafka_DescribeGroups_result_t *result,
+rd_kafka_DescribeConsumerGroups_result_groups(
+    const rd_kafka_DescribeConsumerGroups_result_t *result,
     size_t *cntp) {
         const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
         rd_kafka_op_type_t reqtype =
             rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
-        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBEGROUPS);
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBECONSUMERGROUPS);
 
         *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
         return (const rd_kafka_ConsumerGroupDescription_t **)

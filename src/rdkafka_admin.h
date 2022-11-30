@@ -428,7 +428,7 @@ typedef struct rd_kafka_ListConsumerGroupsResult_s {
 /**@}*/
 
 /**
- * @name DescribeGroups
+ * @name DescribeConsumerGroups
  * @{
  */
 
@@ -454,7 +454,7 @@ typedef struct rd_kafka_MemberDescription_s {
 } rd_kafka_MemberDescription_t;
 
 /**
- * @struct DescribeGroups result
+ * @struct DescribeConsumerGroups result
  */
 typedef struct rd_kafka_ConsumerGroupDescription_s {
         char *group_id; /**< Group id */

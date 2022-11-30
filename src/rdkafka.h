@@ -7680,39 +7680,39 @@ void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
                                  rd_kafka_queue_t *rkqu);
 
 /**
- * @brief Gets the group id for the \p desc group.
+ * @brief Gets the group id for the \p grplist group.
  *
- * @param desc The group description.
- * @return The group id, or NULL if \p desc is NULL.
+ * @param grplist The group description.
+ * @return The group id, or NULL if \p grplist is NULL.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grplist object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupListing_group_id(
-    const rd_kafka_ConsumerGroupListing_t *desc);
+    const rd_kafka_ConsumerGroupListing_t *grplist);
 
 /**
- * @brief Is the \p desc group a simple consumer group.
+ * @brief Is the \p grplist group a simple consumer group.
  *
- * @param desc The group description.
+ * @param grplist The group listing.
  * @return 1 if the group is a simple consumer group,
- *         else 0 (also if \p desc is NULL).
+ *         else 0 (also if \p grplist is NULL).
  */
 RD_EXPORT
 int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupListing_t *desc);
+    const rd_kafka_ConsumerGroupListing_t *grplist);
 
 /**
- * @brief Gets state for the \p desc group.
+ * @brief Gets state for the \p grplist group.
  *
- * @param desc The group description.
- * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p desc is
- * NULL.
+ * @param grplist The group listing.
+ * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p grplist
+ * is NULL.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
-    const rd_kafka_ConsumerGroupListing_t *desc);
+    const rd_kafka_ConsumerGroupListing_t *grplist);
 
 /**
  * @brief Get an array of valid list groups from a ListConsumerGroups result.
@@ -7813,105 +7813,107 @@ rd_kafka_DescribeConsumerGroups_result_groups(
 
 
 /**
- * @brief Gets the group id for the \p desc group.
+ * @brief Gets the group id for the \p grpdesc group.
  *
- * @param desc The group description.
- * @return The group id, or NULL if \p desc is NULL.
+ * @param grpdesc The group description.
+ * @return The group id, or NULL if \p grpdesc is NULL.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grpdesc object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupDescription_group_id(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets the error for the \p desc group.
+ * @brief Gets the error for the \p grpdesc group.
  *
- * @param desc The group description.
- * @return The group description error, or NULL if no error or \p desc is NULL.
+ * @param grpdesc The group description.
+ * @return The group description error, or NULL if no error or
+ *         \p grpdesc is NULL.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Is the \p desc group a simple consumer group.
+ * @brief Is the \p grpdesc group a simple consumer group.
  *
- * @param desc The group description.
+ * @param grpdesc The group description.
  * @return 1 if the group is a simple consumer group,
- *         else 0 (also if \p desc is NULL).
+ *         else 0 (also if \p grpdesc is NULL).
  */
 RD_EXPORT
 int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 
 /**
- * @brief Gets the partition assignor for the \p desc group.
+ * @brief Gets the partition assignor for the \p grpdesc group.
  *
- * @param desc The group description.
- * @return The partition assignor, or NULL if \p desc is NULL.
+ * @param grpdesc The group description.
+ * @return The partition assignor, or NULL if \p grpdesc is NULL.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grpdesc object.
  */
 RD_EXPORT
-char *rd_kafka_ConsumerGroupDescription_partition_assignor(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 
 /**
- * @brief Gets state for the \p desc group.
+ * @brief Gets state for the \p grpdesc group.
  *
- * @param desc The group description.
- * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p desc is
+ * @param grpdesc The group description.
+ * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if
+ *         \p grpdesc is
  * NULL.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets the coordinator for the \p desc group.
+ * @brief Gets the coordinator for the \p grpdesc group.
  *
- * @param desc The group description.
- * @return The group coordinator, or NULL if \p desc is NULL.
+ * @param grpdesc The group description.
+ * @return The group coordinator, or NULL if \p grpdesc is NULL.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets the members count of \p desc group.
+ * @brief Gets the members count of \p grpdesc group.
  *
- * @param desc The group description.
- * @return The member count, or 0 if \p desc is NULL.
+ * @param grpdesc The group description.
+ * @return The member count, or 0 if \p grpdesc is NULL.
  */
 RD_EXPORT
 int rd_kafka_ConsumerGroupDescription_member_cnt(
-    const rd_kafka_ConsumerGroupDescription_t *desc);
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
- * @brief Gets a member of \p desc group.
+ * @brief Gets a member of \p grpdesc group.
  *
- * @param desc The group description.
+ * @param grpdesc The group description.
  * @param idx The member idx.
- * @return A member at index \p idx, or NULL if \p desc is NULL
+ * @return A member at index \p idx, or NULL if \p grpdesc is NULL
  *         or \p idx is out of range.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p desc object.
+ *         as the lifetime of \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
-    const rd_kafka_ConsumerGroupDescription_t *desc,
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     int idx);
 
 /**

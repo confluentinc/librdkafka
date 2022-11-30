@@ -148,13 +148,13 @@ print_partition_list(FILE *fp,
  * @brief Print group information.
  */
 static int
-print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
+print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                   int groups_cnt) {
         size_t i;
         const rd_kafka_ConsumerGroupDescription_t **result_groups;
         size_t result_groups_cnt;
         result_groups = rd_kafka_DescribeConsumerGroups_result_groups(
-            desc, &result_groups_cnt);
+            grpdesc, &result_groups_cnt);
 
         if (result_groups_cnt == 0) {
                 if (groups_cnt > 0) {
@@ -174,7 +174,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
                 const rd_kafka_Node_t *coordinator = NULL;
                 const char *group_id =
                     rd_kafka_ConsumerGroupDescription_group_id(group);
-                char *partition_assignor =
+                const char *partition_assignor =
                     rd_kafka_ConsumerGroupDescription_partition_assignor(group);
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(group);

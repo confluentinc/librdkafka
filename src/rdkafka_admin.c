@@ -5504,12 +5504,12 @@ rd_kafka_ConsumerGroupListing_new(const char *group_id,
                                   rd_kafka_consumer_group_state_t state) {
         if (!group_id)
                 return NULL;
-        rd_kafka_ConsumerGroupListing_t *desc;
-        desc                           = rd_calloc(1, sizeof(*desc));
-        desc->group_id                 = rd_strdup(group_id);
-        desc->is_simple_consumer_group = is_simple_consumer_group;
-        desc->state                    = state;
-        return desc;
+        rd_kafka_ConsumerGroupListing_t *grplist;
+        grplist                           = rd_calloc(1, sizeof(*grplist));
+        grplist->group_id                 = rd_strdup(group_id);
+        grplist->is_simple_consumer_group = is_simple_consumer_group;
+        grplist->state                    = state;
+        return grplist;
 }
 
 /**
@@ -5520,29 +5520,30 @@ rd_kafka_ConsumerGroupListing_new(const char *group_id,
  *         NULL if \p desc is NULL.
  */
 static rd_kafka_ConsumerGroupListing_t *rd_kafka_ConsumerGroupListing_copy(
-    const rd_kafka_ConsumerGroupListing_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupListing_t *grplist) {
+        if (!grplist)
                 return NULL;
         return rd_kafka_ConsumerGroupListing_new(
-            desc->group_id, desc->is_simple_consumer_group, desc->state);
+            grplist->group_id, grplist->is_simple_consumer_group,
+            grplist->state);
 }
 
 /**
  * @brief Same as rd_kafka_ConsumerGroupListing_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
  */
-static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *desc,
+static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *grplist,
                                                        void *opaque) {
-        return rd_kafka_ConsumerGroupListing_copy(desc);
+        return rd_kafka_ConsumerGroupListing_copy(grplist);
 }
 
-static void
-rd_kafka_ConsumerGroupListing_destroy(rd_kafka_ConsumerGroupListing_t *desc) {
-        if (!desc)
+static void rd_kafka_ConsumerGroupListing_destroy(
+    rd_kafka_ConsumerGroupListing_t *grplist) {
+        if (!grplist)
                 return;
-        if (likely(desc->group_id != NULL))
-                rd_free(desc->group_id);
-        rd_free(desc);
+        if (likely(grplist->group_id != NULL))
+                rd_free(grplist->group_id);
+        rd_free(grplist);
 }
 
 static void rd_kafka_ConsumerGroupListing_free(void *ptr) {
@@ -5550,24 +5551,24 @@ static void rd_kafka_ConsumerGroupListing_free(void *ptr) {
 }
 
 const char *rd_kafka_ConsumerGroupListing_group_id(
-    const rd_kafka_ConsumerGroupListing_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupListing_t *grplist) {
+        if (!grplist)
                 return NULL;
-        return desc->group_id;
+        return grplist->group_id;
 }
 
 int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupListing_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupListing_t *grplist) {
+        if (!grplist)
                 return 0;
-        return desc->is_simple_consumer_group;
+        return grplist->is_simple_consumer_group;
 }
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
-    const rd_kafka_ConsumerGroupListing_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupListing_t *grplist) {
+        if (!grplist)
                 return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
-        return desc->state;
+        return grplist->state;
 }
 
 /**
@@ -6028,29 +6029,29 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
                                       rd_kafka_error_t *error) {
         if (!group_id)
                 return NULL;
-        rd_kafka_ConsumerGroupDescription_t *desc;
-        desc                           = rd_calloc(1, sizeof(*desc));
-        desc->group_id                 = rd_strdup(group_id);
-        desc->is_simple_consumer_group = is_simple_consumer_group;
+        rd_kafka_ConsumerGroupDescription_t *grpdesc;
+        grpdesc                           = rd_calloc(1, sizeof(*grpdesc));
+        grpdesc->group_id                 = rd_strdup(group_id);
+        grpdesc->is_simple_consumer_group = is_simple_consumer_group;
         if (members == NULL) {
-                rd_list_init(&desc->members, 0,
+                rd_list_init(&grpdesc->members, 0,
                              rd_kafka_MemberDescription_free);
         } else {
-                rd_list_init_copy(&desc->members, members);
-                rd_list_copy_to(&desc->members, members,
+                rd_list_init_copy(&grpdesc->members, members);
+                rd_list_copy_to(&grpdesc->members, members,
                                 rd_kafka_MemberDescription_list_copy, NULL);
         }
-        desc->partition_assignor = !partition_assignor
-                                       ? (char *)partition_assignor
-                                       : rd_strdup(partition_assignor);
-        desc->state = state;
+        grpdesc->partition_assignor = !partition_assignor
+                                          ? (char *)partition_assignor
+                                          : rd_strdup(partition_assignor);
+        grpdesc->state = state;
         if (coordinator != NULL)
-                desc->coordinator = rd_kafka_Node_copy(coordinator);
-        desc->error = error != NULL
-                          ? rd_kafka_error_new(rd_kafka_error_code(error), "%s",
+                grpdesc->coordinator = rd_kafka_Node_copy(coordinator);
+        grpdesc->error =
+            error != NULL ? rd_kafka_error_new(rd_kafka_error_code(error), "%s",
                                                rd_kafka_error_string(error))
                           : NULL;
-        return desc;
+        return grpdesc;
 }
 
 /**
@@ -6077,38 +6078,38 @@ rd_kafka_ConsumerGroupDescription_new_error(const char *group_id,
  */
 static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_copy(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return NULL;
         return rd_kafka_ConsumerGroupDescription_new(
-            desc->group_id, desc->is_simple_consumer_group, &desc->members,
-            desc->partition_assignor, desc->state, desc->coordinator,
-            desc->error);
+            grpdesc->group_id, grpdesc->is_simple_consumer_group,
+            &grpdesc->members, grpdesc->partition_assignor, grpdesc->state,
+            grpdesc->coordinator, grpdesc->error);
 }
 
 /**
  * @brief Same as rd_kafka_ConsumerGroupDescription_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
  */
-static void *rd_kafka_ConsumerGroupDescription_copy_opaque(const void *desc,
+static void *rd_kafka_ConsumerGroupDescription_copy_opaque(const void *grpdesc,
                                                            void *opaque) {
-        return rd_kafka_ConsumerGroupDescription_copy(desc);
+        return rd_kafka_ConsumerGroupDescription_copy(grpdesc);
 }
 
 static void rd_kafka_ConsumerGroupDescription_destroy(
-    rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return;
-        if (likely(desc->group_id != NULL))
-                rd_free(desc->group_id);
-        rd_list_destroy(&desc->members);
-        if (likely(desc->partition_assignor != NULL))
-                rd_free(desc->partition_assignor);
-        if (likely(desc->error != NULL))
-                rd_kafka_error_destroy(desc->error);
-        if (desc->coordinator)
-                rd_kafka_Node_destroy(desc->coordinator);
-        rd_free(desc);
+        if (likely(grpdesc->group_id != NULL))
+                rd_free(grpdesc->group_id);
+        rd_list_destroy(&grpdesc->members);
+        if (likely(grpdesc->partition_assignor != NULL))
+                rd_free(grpdesc->partition_assignor);
+        if (likely(grpdesc->error != NULL))
+                rd_kafka_error_destroy(grpdesc->error);
+        if (grpdesc->coordinator)
+                rd_kafka_Node_destroy(grpdesc->coordinator);
+        rd_free(grpdesc);
 }
 
 static void rd_kafka_ConsumerGroupDescription_free(void *ptr) {
@@ -6116,63 +6117,63 @@ static void rd_kafka_ConsumerGroupDescription_free(void *ptr) {
 }
 
 const char *rd_kafka_ConsumerGroupDescription_group_id(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return NULL;
-        return desc->group_id;
+        return grpdesc->group_id;
 }
 
 const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return NULL;
-        return desc->error;
+        return grpdesc->error;
 }
 
 
 int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return 0;
-        return desc->is_simple_consumer_group;
+        return grpdesc->is_simple_consumer_group;
 }
 
 
-char *rd_kafka_ConsumerGroupDescription_partition_assignor(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return NULL;
-        return desc->partition_assignor;
+        return grpdesc->partition_assignor;
 }
 
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
-        return desc->state;
+        return grpdesc->state;
 }
 
 const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return NULL;
-        return desc->coordinator;
+        return grpdesc->coordinator;
 }
 
 int rd_kafka_ConsumerGroupDescription_member_cnt(
-    const rd_kafka_ConsumerGroupDescription_t *desc) {
-        if (!desc)
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if (!grpdesc)
                 return 0;
-        return rd_list_cnt(&desc->members);
+        return rd_list_cnt(&grpdesc->members);
 }
 
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
-    const rd_kafka_ConsumerGroupDescription_t *desc,
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     int idx) {
-        if (!desc)
+        if (!grpdesc)
                 return NULL;
-        return (rd_kafka_MemberDescription_t *)rd_list_elem(&desc->members,
+        return (rd_kafka_MemberDescription_t *)rd_list_elem(&grpdesc->members,
                                                             idx);
 }
 
@@ -6338,7 +6339,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 int member_cnt;
                 rd_list_t members;
-                rd_kafka_ConsumerGroupDescription_t *desc = NULL;
+                rd_kafka_ConsumerGroupDescription_t *grpdesc = NULL;
 
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &group);
@@ -6438,16 +6439,16 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 }
 
                 if (error == NULL) {
-                        desc = rd_kafka_ConsumerGroupDescription_new(
+                        grpdesc = rd_kafka_ConsumerGroupDescription_new(
                             group_s, is_simple_consumer_group, &members,
                             proto_s,
                             rd_kafka_consumer_group_state_code(group_state_s),
                             node, error);
                 } else {
-                        desc = rd_kafka_ConsumerGroupDescription_new_error(
+                        grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
                             group_s, error);
                 }
-                rd_list_add(&rko_result->rko_u.admin_result.results, desc);
+                rd_list_add(&rko_result->rko_u.admin_result.results, grpdesc);
                 if (error)
                         rd_kafka_error_destroy(error);
                 rd_list_destroy(&members);

@@ -151,6 +151,7 @@
     <ClInclude Include="..\src\rdkafka_header.h" />
     <ClInclude Include="..\src\rdlog.h" />
     <ClInclude Include="..\src\rdstring.h" />
+    <ClInclude Include="..\src\rdrandr.h" />
     <ClInclude Include="..\src\rdrand.h" />
     <ClInclude Include="..\src\rdsysqueue.h" />
     <ClInclude Include="..\src\rdtime.h" />
@@ -168,7 +169,6 @@
     <ClInclude Include="..\src\rdavl.h" />
     <ClInclude Include="..\src\rdports.h" />
     <ClInclude Include="..\src\rddl.h" />
-    <ClInclude Include="..\src\rdrandr.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cJSON.c" />
@@ -235,6 +235,7 @@
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />
     <ClCompile Include="..\src\rdstring.c" />
+    <ClInclude Include="..\src\rdrandr.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />
@@ -251,7 +252,6 @@
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />
     <ClCompile Include="..\src\rddl.c" />
-    <ClInclude Include="..\src\rdrandr.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.win32" />

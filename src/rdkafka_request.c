@@ -1086,9 +1086,8 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  void *opaque) {
         rd_assert(parts != NULL);
         rd_kafka_OffsetFetchRequest_group(rkb, rkb->rkb_rk->rk_group_id, parts,
-                                          require_stable_offsets, 0,
-                                          replyq, resp_cb,
-                                          opaque);
+                                          require_stable_offsets, 0, replyq,
+                                          resp_cb, opaque);
 }
 
 
@@ -1881,6 +1880,10 @@ void rd_kafka_ListGroupsRequest_versioned(rd_kafka_broker_t *rkb,
 
 /**
  * Send ListGroupsRequest
+ *
+ * @deprecated Used by list_groups.
+ *
+ * @sa rd_kafka_ListGroupsRequest_versioned
  */
 void rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,

@@ -184,10 +184,10 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         if (print_usage)
                 usage("Wrong number of arguments");
         else {
-                require_stable_offsets = parse_int(
-                        "require_stable_offsets", argv[1]);
-                print_usage    = require_stable_offsets < 0 ||
-                        require_stable_offsets > 1;
+                require_stable_offsets =
+                    parse_int("require_stable_offsets", argv[1]);
+                print_usage =
+                    require_stable_offsets < 0 || require_stable_offsets > 1;
                 if (print_usage)
                         usage("Require stable not a 0-1 int");
         }

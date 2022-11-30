@@ -94,7 +94,7 @@ struct rd_kafka_AdminOptions_s {
 
         rd_kafka_confval_t
             consumer_group_states; /**< PTR: list of consumer group states.
-                                    * Valid for: ListGroups.
+                                    * Valid for: ListConsumerGroups.
                                     */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
@@ -401,12 +401,12 @@ struct rd_kafka_ListConsumerGroupOffsets_s {
 /**@}*/
 
 /**
- * @name ListGroups
+ * @name ListConsumerGroups
  * @{
  */
 
 /**
- * @struct ListGroups result for a single group
+ * @struct ListConsumerGroups result for a single group
  */
 typedef struct rd_kafka_ConsumerGroupListing_s {
         char *group_id; /**< Group id */
@@ -417,7 +417,7 @@ typedef struct rd_kafka_ConsumerGroupListing_s {
 
 
 /**
- * @struct ListGroups results and errors
+ * @struct ListConsumerGroups results and errors
  */
 typedef struct rd_kafka_ListConsumerGroupsResult_s {
         rd_list_t valid;  /**< List of valid ConsumerGroupListing

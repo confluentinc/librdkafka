@@ -498,16 +498,16 @@ destroy:
 }
 
 /**
- * @brief ListGroups tests
+ * @brief ListConsumerGroups tests
  *
  *
  *
  */
-static void do_test_ListGroups(const char *what,
-                               rd_kafka_t *rk,
-                               rd_kafka_queue_t *useq,
-                               int with_options,
-                               rd_bool_t destroy) {
+static void do_test_ListConsumerGroups(const char *what,
+                                       rd_kafka_t *rk,
+                                       rd_kafka_queue_t *useq,
+                                       int with_options,
+                                       rd_bool_t destroy) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
         int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
@@ -516,19 +516,19 @@ static void do_test_ListGroups(const char *what,
         rd_kafka_resp_err_t err;
         test_timing_t timing;
         rd_kafka_event_t *rkev;
-        const rd_kafka_ListGroups_result_t *res;
+        const rd_kafka_ListConsumerGroups_result_t *res;
         const rd_kafka_error_t **errors;
         size_t errors_cnt, valid_cnt;
         void *my_opaque = NULL, *opaque;
 
-        SUB_TEST_QUICK("%s ListGroups with %s, timeout %dms", rd_kafka_name(rk),
-                       what, exp_timeout);
+        SUB_TEST_QUICK("%s ListConsumerGroups with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (with_options) {
-                options =
-                    rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err         = rd_kafka_AdminOptions_set_request_timeout(
@@ -541,25 +541,25 @@ static void do_test_ListGroups(const char *what,
                 }
         }
 
-        TIMING_START(&timing, "ListGroups");
-        TEST_SAY("Call ListGroups, timeout is %dms\n", exp_timeout);
-        rd_kafka_ListGroups(rk, options, q);
+        TIMING_START(&timing, "ListConsumerGroups");
+        TEST_SAY("Call ListConsumerGroups, timeout is %dms\n", exp_timeout);
+        rd_kafka_ListConsumerGroups(rk, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         if (destroy)
                 goto destroy;
 
         /* Poll result queue */
-        TIMING_START(&timing, "ListGroups.queue_poll");
+        TIMING_START(&timing, "ListConsumerGroups.queue_poll");
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("ListGroups: got %s in %.3fs\n", rd_kafka_event_name(rkev),
-                 TIMING_DURATION(&timing) / 1000.0f);
+        TEST_SAY("ListConsumerGroups: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
 
         /* Convert event to proper result */
-        res = rd_kafka_event_ListGroups_result(rkev);
-        TEST_ASSERT(res, "expected ListGroups_result, not %s",
+        res = rd_kafka_event_ListConsumerGroups_result(rkev);
+        TEST_ASSERT(res, "expected ListConsumerGroups_result, not %s",
                     rd_kafka_event_name(rkev));
 
         opaque = rd_kafka_event_opaque(rkev);
@@ -569,24 +569,26 @@ static void do_test_ListGroups(const char *what,
         /* Expecting no error here, the real error will be in the error array */
         err     = rd_kafka_event_error(rkev);
         errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "expected ListGroups to return error %s, not %s (%s)",
-                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
-                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+        TEST_ASSERT(
+            err == RD_KAFKA_RESP_ERR_NO_ERROR,
+            "expected ListConsumerGroups to return error %s, not %s (%s)",
+            rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR), rd_kafka_err2str(err),
+            err ? errstr2 : "n/a");
 
-        errors = rd_kafka_ListGroups_result_errors(rkev, &errors_cnt);
+        errors = rd_kafka_ListConsumerGroups_result_errors(rkev, &errors_cnt);
         TEST_ASSERT(errors_cnt == 1, "expected one error, got %" PRIu64,
                     errors_cnt);
-        rd_kafka_ListGroups_result_valid(rkev, &valid_cnt);
+        rd_kafka_ListConsumerGroups_result_valid(rkev, &valid_cnt);
         TEST_ASSERT(valid_cnt == 0, "expected zero valid groups, got %" PRIu64,
                     valid_cnt);
 
         err     = rd_kafka_error_code(errors[0]);
         errstr2 = rd_kafka_error_string(errors[0]);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "expected ListGroups to return error %s, not %s (%s)",
-                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
-                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+        TEST_ASSERT(
+            err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+            "expected ListConsumerGroups to return error %s, not %s (%s)",
+            rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+            rd_kafka_err2str(err), err ? errstr2 : "n/a");
 
         rd_kafka_event_destroy(rkev);
 
@@ -2185,8 +2187,7 @@ static void do_test_options(rd_kafka_t *rk) {
               RD_KAFKA_ADMIN_OP_ALTERCONFIGS}},
             {"broker", _all_apis},
             {"require_stable_offsets",
-                {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS}
-            },
+             {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS}},
             {"opaque", _all_apis},
             {NULL},
         };
@@ -2225,8 +2226,9 @@ static void do_test_options(rd_kafka_t *rk) {
                                     options, 5, errstr, sizeof(errstr));
                         else if (!strcmp(matrix[i].setter,
                                          "require_stable_offsets"))
-                                err = rd_kafka_AdminOptions_set_require_stable_offsets(
-                                    options, 0, errstr, sizeof(errstr));
+                                err =
+                                    rd_kafka_AdminOptions_set_require_stable_offsets(
+                                        options, 0, errstr, sizeof(errstr));
                         else if (!strcmp(matrix[i].setter, "opaque")) {
                                 rd_kafka_AdminOptions_set_opaque(
                                     options, (void *)options);
@@ -2337,9 +2339,12 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteTopics("temp queue, options", rk, NULL, 1);
         do_test_DeleteTopics("main queue, options", rk, mainq, 1);
 
-        do_test_ListGroups("temp queue, no options", rk, NULL, 0, rd_false);
-        do_test_ListGroups("temp queue, options", rk, NULL, 1, rd_false);
-        do_test_ListGroups("main queue, options", rk, mainq, 1, rd_false);
+        do_test_ListConsumerGroups("temp queue, no options", rk, NULL, 0,
+                                   rd_false);
+        do_test_ListConsumerGroups("temp queue, options", rk, NULL, 1,
+                                   rd_false);
+        do_test_ListConsumerGroups("main queue, options", rk, mainq, 1,
+                                   rd_false);
 
         do_test_DescribeGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DescribeGroups("temp queue, options", rk, NULL, 1, rd_false);

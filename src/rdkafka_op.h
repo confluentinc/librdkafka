@@ -131,13 +131,13 @@ typedef enum {
                                       *   u.admin_request*/
         RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
                                       *   u.admin_request*/
-        RD_KAFKA_OP_LISTGROUPS,      /**< Admin:
-                                      *   ListGroups
-                                      *   u.admin_request */
-        RD_KAFKA_OP_DESCRIBEGROUPS,  /**< Admin:
-                                      *   DescribeGroups
-                                      *   u.admin_request */
-        RD_KAFKA_OP_DELETEGROUPS,    /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_LISTCONSUMERGROUPS, /**< Admin:
+                                         *   ListConsumerGroups
+                                         *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBEGROUPS,     /**< Admin:
+                                         *   DescribeGroups
+                                         *   u.admin_request */
+        RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
                                                  *   u.admin_request */

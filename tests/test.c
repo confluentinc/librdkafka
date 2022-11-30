@@ -5741,14 +5741,15 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 aclres = rd_kafka_CreateAcls_result_acls(res, &aclres_cnt);
-        } else if (evtype == RD_KAFKA_EVENT_LISTGROUPS_RESULT) {
-                const rd_kafka_ListGroups_result_t *res;
-                if (!(res = rd_kafka_event_ListGroups_result(rkev)))
-                        TEST_FAIL("Expected a ListGroups result, not %s",
-                                  rd_kafka_event_name(rkev));
+        } else if (evtype == RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
+                const rd_kafka_ListConsumerGroups_result_t *res;
+                if (!(res = rd_kafka_event_ListConsumerGroups_result(rkev)))
+                        TEST_FAIL(
+                            "Expected a ListConsumerGroups result, not %s",
+                            rd_kafka_event_name(rkev));
 
-                glists_errors =
-                    rd_kafka_ListGroups_result_errors(res, &glists_error_cnt);
+                glists_errors = rd_kafka_ListConsumerGroups_result_errors(
+                    res, &glists_error_cnt);
         } else if (evtype == RD_KAFKA_EVENT_DESCRIBEGROUPS_RESULT) {
                 const rd_kafka_DescribeGroups_result_t *res;
                 if (!(res = rd_kafka_event_DescribeGroups_result(rkev)))

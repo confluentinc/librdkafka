@@ -27,7 +27,7 @@
  */
 
 /**
- * ListGroups usage example.
+ * ListConsumerGroups usage example.
  */
 
 #include <stdio.h>
@@ -121,15 +121,16 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 /**
  * @brief Print group information.
  */
-static int print_groups_info(const rd_kafka_ListGroups_result_t *list) {
+static int print_groups_info(const rd_kafka_ListConsumerGroups_result_t *list) {
         size_t i;
         const rd_kafka_ConsumerGroupListing_t **result_groups;
         const rd_kafka_error_t **errors;
         size_t result_groups_cnt;
         size_t result_error_cnt;
         result_groups =
-            rd_kafka_ListGroups_result_valid(list, &result_groups_cnt);
-        errors = rd_kafka_ListGroups_result_errors(list, &result_error_cnt);
+            rd_kafka_ListConsumerGroups_result_valid(list, &result_groups_cnt);
+        errors =
+            rd_kafka_ListConsumerGroups_result_errors(list, &result_error_cnt);
 
         if (result_groups_cnt == 0) {
                 fprintf(stderr, "No matching groups found\n");
@@ -177,7 +178,7 @@ int64_t parse_int(const char *what, const char *str) {
 }
 
 /**
- * @brief Call rd_kafka_ListGroups() with a list of
+ * @brief Call rd_kafka_ListConsumerGroups() with a list of
  * groups.
  */
 static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
@@ -215,8 +216,9 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * List consumer groups
          */
-        queue   = rd_kafka_queue_new(rk);
-        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+        queue = rd_kafka_queue_new(rk);
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
@@ -230,7 +232,7 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         }
         free(states);
 
-        rd_kafka_ListGroups(rk, options, queue);
+        rd_kafka_ListConsumerGroups(rk, options, queue);
 
         /* Wait for results */
         event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
@@ -241,18 +243,19 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
-                /* ListGroups request failed */
-                fprintf(stderr, "%% ListGroups failed[%" PRId32 "]: %s\n", err,
+                /* ListConsumerGroups request failed */
+                fprintf(stderr,
+                        "%% ListConsumerGroups failed[%" PRId32 "]: %s\n", err,
                         rd_kafka_event_error_string(event));
                 goto exit;
 
         } else {
-                /* ListGroups request succeeded, but individual
+                /* ListConsumerGroups request succeeded, but individual
                  * groups may have errors. */
-                const rd_kafka_ListGroups_result_t *result;
+                const rd_kafka_ListConsumerGroups_result_t *result;
 
-                result = rd_kafka_event_ListGroups_result(event);
-                printf("ListGroups results:\n");
+                result = rd_kafka_event_ListConsumerGroups_result(event);
+                printf("ListConsumerGroups results:\n");
                 retval = print_groups_info(result);
         }
 

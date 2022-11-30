@@ -6821,7 +6821,7 @@ RD_EXPORT
 const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
-    int consumer_group_states_cnt);
+    size_t consumer_group_states_cnt);
 
 /**
  * @brief Set application opaque value that can be extracted from the

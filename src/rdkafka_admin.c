@@ -1555,14 +1555,15 @@ const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
 const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
-    int consumer_group_states_cnt) {
-        int i;
+    size_t consumer_group_states_cnt) {
+        size_t i;
         char errstr[512];
         rd_kafka_resp_err_t err;
         rd_list_t *states_list = rd_list_new(0, NULL);
         rd_list_init_int32(states_list, consumer_group_states_cnt);
         for (i = 0; i < consumer_group_states_cnt; i++) {
-                rd_list_set_int32(states_list, i, consumer_group_states[i]);
+                rd_list_set_int32(states_list, (int32_t)i,
+                                  consumer_group_states[i]);
         }
         err = rd_kafka_confval_set_type(&options->consumer_group_states,
                                         RD_KAFKA_CONFVAL_PTR, states_list,

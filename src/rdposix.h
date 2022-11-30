@@ -247,7 +247,4 @@ static RD_UNUSED int rd_pipe_nonblocking(rd_socket_t *fds) {
 #define rd_open(path, flags, mode) open(path, flags, mode)
 #define rd_close(fd)               close(fd)
 
-/* PRNG */
-#define rd_rand_r(seed) rand_r(seed)
-
 #endif /* _RDPOSIX_H_ */

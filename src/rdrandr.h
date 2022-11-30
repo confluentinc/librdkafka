@@ -24,10 +24,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef _RAND_R_H_
 #define _RAND_R_H_
 
-#if !HAVE_RAND_R
-
+#if HAVE_RAND_R
+#define rd_rand_r rand_r
+#else
 int rd_rand_r(unsigned int *seed);
-
-#endif /* HAVE_RAND_R */
+#endif /* !HAVE_RAND_R */
 
 #endif /* _RAND_R_H_ */

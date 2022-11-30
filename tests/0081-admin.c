@@ -3031,7 +3031,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         int exp_mdtopic_cnt                                  = 0;
         test_timing_t timing;
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
         const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;
@@ -3285,7 +3285,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         int exp_mdtopic_cnt                                  = 0;
         test_timing_t timing;
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;

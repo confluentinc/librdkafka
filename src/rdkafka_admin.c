@@ -5032,7 +5032,8 @@ void rd_kafka_DeleteAcls(rd_kafka_t *rk,
  *
  */
 
-rd_kafka_AlterConsumerGroupOffsets_t *rd_kafka_AlterConsumerGroupOffsets_new(
+const rd_kafka_AlterConsumerGroupOffsets_t *
+rd_kafka_AlterConsumerGroupOffsets_new(
     const char *group,
     const rd_kafka_topic_partition_list_t *partitions) {
         rd_assert(group && partitions);
@@ -5051,9 +5052,9 @@ rd_kafka_AlterConsumerGroupOffsets_t *rd_kafka_AlterConsumerGroupOffsets_new(
 }
 
 void rd_kafka_AlterConsumerGroupOffsets_destroy(
-    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets) {
+    const rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets) {
         rd_kafka_topic_partition_list_destroy(alter_grpoffsets->partitions);
-        rd_free(alter_grpoffsets);
+        rd_free((void *)alter_grpoffsets);
 }
 
 static void rd_kafka_AlterConsumerGroupOffsets_free(void *ptr) {
@@ -5061,7 +5062,7 @@ static void rd_kafka_AlterConsumerGroupOffsets_free(void *ptr) {
 }
 
 void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt) {
         size_t i;
         for (i = 0; i < alter_grpoffsets_cnt; i++)
@@ -5071,7 +5072,7 @@ void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
 /**
  * @brief Allocate a new AlterGroup and make a copy of \p src
  */
-static rd_kafka_AlterConsumerGroupOffsets_t *
+static const rd_kafka_AlterConsumerGroupOffsets_t *
 rd_kafka_AlterConsumerGroupOffsets_copy(
     const rd_kafka_AlterConsumerGroupOffsets_t *src) {
         return rd_kafka_AlterConsumerGroupOffsets_new(src->group,
@@ -5159,7 +5160,7 @@ rd_kafka_AlterConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
 
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu) {
@@ -5213,9 +5214,9 @@ void rd_kafka_AlterConsumerGroupOffsets(
          * from the response parser. */
         rd_list_init(&rko->rko_u.admin_request.args, 1,
                      rd_kafka_AlterConsumerGroupOffsets_free);
-        rd_list_add(
-            &rko->rko_u.admin_request.args,
-            rd_kafka_AlterConsumerGroupOffsets_copy(alter_grpoffsets[0]));
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    (void *)rd_kafka_AlterConsumerGroupOffsets_copy(
+                        alter_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
         return;
@@ -5240,7 +5241,7 @@ rd_kafka_AlterConsumerGroupOffsets_result_groups(
 
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
@@ -5259,7 +5260,8 @@ void rd_kafka_AlterConsumerGroupOffsets(
  *
  */
 
-rd_kafka_ListConsumerGroupOffsets_t *rd_kafka_ListConsumerGroupOffsets_new(
+const rd_kafka_ListConsumerGroupOffsets_t *
+rd_kafka_ListConsumerGroupOffsets_new(
     const char *group,
     const rd_kafka_topic_partition_list_t *partitions) {
         size_t tsize = strlen(group) + 1;
@@ -5278,12 +5280,12 @@ rd_kafka_ListConsumerGroupOffsets_t *rd_kafka_ListConsumerGroupOffsets_new(
 }
 
 void rd_kafka_ListConsumerGroupOffsets_destroy(
-    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets) {
+    const rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets) {
         if (list_grpoffsets->partitions != NULL) {
                 rd_kafka_topic_partition_list_destroy(
                     list_grpoffsets->partitions);
         }
-        rd_free(list_grpoffsets);
+        rd_free((void *)list_grpoffsets);
 }
 
 static void rd_kafka_ListConsumerGroupOffsets_free(void *ptr) {
@@ -5291,7 +5293,7 @@ static void rd_kafka_ListConsumerGroupOffsets_free(void *ptr) {
 }
 
 void rd_kafka_ListConsumerGroupOffsets_destroy_array(
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt) {
         size_t i;
         for (i = 0; i < list_grpoffsets_cnt; i++)
@@ -5301,7 +5303,7 @@ void rd_kafka_ListConsumerGroupOffsets_destroy_array(
 /**
  * @brief Allocate a new ListGroup and make a copy of \p src
  */
-static rd_kafka_ListConsumerGroupOffsets_t *
+static const rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_copy(
     const rd_kafka_ListConsumerGroupOffsets_t *src) {
         return rd_kafka_ListConsumerGroupOffsets_new(src->group,
@@ -5397,7 +5399,7 @@ err:
 
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu) {
@@ -5449,8 +5451,9 @@ void rd_kafka_ListConsumerGroupOffsets(
          * from the response parser. */
         rd_list_init(&rko->rko_u.admin_request.args, 1,
                      rd_kafka_ListConsumerGroupOffsets_free);
-        rd_list_add(&rko->rko_u.admin_request.args,
-                    rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
+        rd_list_add(
+            &rko->rko_u.admin_request.args,
+            (void *)rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
@@ -5471,7 +5474,7 @@ const rd_kafka_group_result_t **rd_kafka_ListConsumerGroupOffsets_result_groups(
 
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
@@ -6150,7 +6153,7 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
         return desc->state;
 }
 
-rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
+const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
     const rd_kafka_ConsumerGroupDescription_t *desc) {
         if (!desc)
                 return NULL;
@@ -6164,7 +6167,7 @@ int rd_kafka_ConsumerGroupDescription_member_cnt(
         return rd_list_cnt(&desc->members);
 }
 
-rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
+const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *desc,
     int idx) {
         if (!desc)
@@ -6173,21 +6176,21 @@ rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
                                                             idx);
 }
 
-char *rd_kafka_MemberDescription_client_id(
+const char *rd_kafka_MemberDescription_client_id(
     const rd_kafka_MemberDescription_t *member) {
         if (!member)
                 return NULL;
         return member->client_id;
 }
 
-char *rd_kafka_MemberDescription_consumer_id(
+const char *rd_kafka_MemberDescription_consumer_id(
     const rd_kafka_MemberDescription_t *member) {
         if (!member)
                 return NULL;
         return member->consumer_id;
 }
 
-char *
+const char *
 rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member) {
         if (!member)
                 return NULL;
@@ -6201,7 +6204,8 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
         return &member->assignment;
 }
 
-rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_topic_partitions(
+const rd_kafka_topic_partition_list_t *
+rd_kafka_MemberAssignment_topic_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
         if (!assignment)
                 return NULL;

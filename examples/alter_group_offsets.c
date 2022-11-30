@@ -185,6 +185,8 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         num_partitions    = (argc - min_argc) / 2;
         const char *group = argv[0];
         const char *topic = argv[1];
+        const rd_kafka_AlterConsumerGroupOffsets_t
+            *alter_consumer_group_offsets;
 
         /*
          * Create an admin client, it can be created using any client type,
@@ -226,7 +228,7 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         }
 
         /* Create argument */
-        rd_kafka_AlterConsumerGroupOffsets_t *alter_consumer_group_offsets =
+        alter_consumer_group_offsets =
             rd_kafka_AlterConsumerGroupOffsets_new(group, partitions);
         /* Call AlterConsumerGroupOffsets */
         rd_kafka_AlterConsumerGroupOffsets(rk, &alter_consumer_group_offsets, 1,

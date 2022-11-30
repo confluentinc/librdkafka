@@ -175,6 +175,7 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         char *topic;
         int partition;
         int print_usage = 0, require_stable_offsets = 0, num_partitions = 0;
+        const rd_kafka_ListConsumerGroupOffsets_t *list_cgrp_offsets;
 
         /*
          * Argument validation
@@ -245,7 +246,7 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         }
 
         /* Create argument */
-        rd_kafka_ListConsumerGroupOffsets_t *list_cgrp_offsets =
+        list_cgrp_offsets =
             rd_kafka_ListConsumerGroupOffsets_new(group, partitions);
         /* Call ListConsumerGroupOffsets */
         rd_kafka_ListConsumerGroupOffsets(rk, &list_cgrp_offsets, 1, options,

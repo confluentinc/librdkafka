@@ -170,8 +170,8 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
                 const rd_kafka_error_t *error;
                 const rd_kafka_ConsumerGroupDescription_t *group =
                     result_groups[i];
-                char coordinator_desc[512]   = {};
-                rd_kafka_Node_t *coordinator = NULL;
+                char coordinator_desc[512]         = {};
+                const rd_kafka_Node_t *coordinator = NULL;
                 const char *group_id =
                     rd_kafka_ConsumerGroupDescription_group_id(group);
                 char *partition_assignor =
@@ -205,7 +205,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
                                rd_kafka_error_string(error));
                 printf("\n");
                 for (j = 0; j < member_cnt; j++) {
-                        rd_kafka_MemberDescription_t *member =
+                        const rd_kafka_MemberDescription_t *member =
                             rd_kafka_ConsumerGroupDescription_member(group, j);
                         printf("  Member \"%s\" with client-id %s, host %s\n",
                                rd_kafka_MemberDescription_consumer_id(member),
@@ -213,9 +213,10 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *desc,
                                rd_kafka_MemberDescription_host(member));
                         const rd_kafka_MemberAssignment_t *assignment =
                             rd_kafka_MemberDescription_assignment(member);
-                        rd_kafka_topic_partition_list_t *topic_partitions =
-                            rd_kafka_MemberAssignment_topic_partitions(
-                                assignment);
+                        const rd_kafka_topic_partition_list_t
+                            *topic_partitions =
+                                rd_kafka_MemberAssignment_topic_partitions(
+                                    assignment);
                         if (!topic_partitions) {
                                 printf("    No assignment\n");
                         } else if (topic_partitions->cnt == 0) {

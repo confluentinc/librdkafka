@@ -1550,10 +1550,11 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 #define MY_ALTER_CGRPOFFS_CNT 1
         rd_kafka_AdminOptions_t *options = NULL;
         const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
-        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets[MY_ALTER_CGRPOFFS_CNT];
-        rd_kafka_AlterConsumerGroupOffsets_t
+        const rd_kafka_AlterConsumerGroupOffsets_t
+            *cgoffsets[MY_ALTER_CGRPOFFS_CNT];
+        const rd_kafka_AlterConsumerGroupOffsets_t
             *cgoffsets_empty[MY_ALTER_CGRPOFFS_CNT];
-        rd_kafka_AlterConsumerGroupOffsets_t
+        const rd_kafka_AlterConsumerGroupOffsets_t
             *cgoffsets_negative[MY_ALTER_CGRPOFFS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
@@ -1757,9 +1758,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_AdminOptions_t *options = NULL;
         rd_kafka_topic_partition_list_t *empty_cgoffsets_list;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
-        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
-        rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
-        rd_kafka_ListConsumerGroupOffsets_t *null_name_cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_t
+            *cgoffsets[MY_LIST_CGRPOFFS_CNT];
+        const rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
+        const rd_kafka_ListConsumerGroupOffsets_t *null_name_cgoffsets;
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];

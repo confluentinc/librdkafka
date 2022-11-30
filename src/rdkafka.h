@@ -7885,7 +7885,7 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
  *         as the lifetime of \p desc object.
  */
 RD_EXPORT
-rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
+const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
     const rd_kafka_ConsumerGroupDescription_t *desc);
 
 /**
@@ -7910,7 +7910,7 @@ int rd_kafka_ConsumerGroupDescription_member_cnt(
  *         as the lifetime of \p desc object.
  */
 RD_EXPORT
-rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
+const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *desc,
     int idx);
 
@@ -7924,7 +7924,7 @@ rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
  *         as the lifetime of \p member object.
  */
 RD_EXPORT
-char *rd_kafka_MemberDescription_client_id(
+const char *rd_kafka_MemberDescription_client_id(
     const rd_kafka_MemberDescription_t *member);
 
 /**
@@ -7937,7 +7937,7 @@ char *rd_kafka_MemberDescription_client_id(
  *         as the lifetime of \p member object.
  */
 RD_EXPORT
-char *rd_kafka_MemberDescription_consumer_id(
+const char *rd_kafka_MemberDescription_consumer_id(
     const rd_kafka_MemberDescription_t *member);
 
 /**
@@ -7950,7 +7950,7 @@ char *rd_kafka_MemberDescription_consumer_id(
  *         as the lifetime of \p member object.
  */
 RD_EXPORT
-char *
+const char *
 rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member);
 
 /**
@@ -7976,7 +7976,8 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
  *         as the lifetime of \p assignment object.
  */
 RD_EXPORT
-rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_topic_partitions(
+const rd_kafka_topic_partition_list_t *
+rd_kafka_MemberAssignment_topic_partitions(
     const rd_kafka_MemberAssignment_t *assignment);
 
 /**@}*/
@@ -8085,7 +8086,7 @@ typedef struct rd_kafka_ListConsumerGroupOffsets_s
  *          Use rd_kafka_ListConsumerGroupOffsets_destroy() to free
  *          object when done.
  */
-RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
+RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new(
     const char *group,
     const rd_kafka_topic_partition_list_t *partitions);
@@ -8095,7 +8096,7 @@ rd_kafka_ListConsumerGroupOffsets_new(
  *        created with rd_kafka_ListConsumerGroupOffsets_new()
  */
 RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
-    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
+    const rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
 
 /**
  * @brief Helper function to destroy all ListConsumerGroupOffsets objects in
@@ -8103,7 +8104,7 @@ RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
  *        The array itself is not freed.
  */
 RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffset_cnt);
 
 /**
@@ -8126,7 +8127,7 @@ RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
 RD_EXPORT
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
@@ -8180,7 +8181,7 @@ typedef struct rd_kafka_AlterConsumerGroupOffsets_s
  *          Use rd_kafka_AlterConsumerGroupOffsets_destroy() to free
  *          object when done.
  */
-RD_EXPORT rd_kafka_AlterConsumerGroupOffsets_t *
+RD_EXPORT const rd_kafka_AlterConsumerGroupOffsets_t *
 rd_kafka_AlterConsumerGroupOffsets_new(
     const char *group,
     const rd_kafka_topic_partition_list_t *partitions);
@@ -8190,7 +8191,7 @@ rd_kafka_AlterConsumerGroupOffsets_new(
  *        created with rd_kafka_AlterConsumerGroupOffsets_new()
  */
 RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
-    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
+    const rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
 
 /**
  * @brief Helper function to destroy all AlterConsumerGroupOffsets objects in
@@ -8198,7 +8199,7 @@ RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
  *        The array itself is not freed.
  */
 RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffset_cnt);
 
 /**
@@ -8222,7 +8223,7 @@ RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
 RD_EXPORT
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);

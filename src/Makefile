@@ -20,7 +20,7 @@ SRCS_$(WITH_SSL) += rdkafka_ssl.c
 SRCS_$(WITH_CURL) += rdhttp.c
 SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
 
-ifeq ($(HAVE_RAND_R), n)
+ifneq ($(HAVE_RAND_R), y)
 SRCS_y += rdrandr.c
 endif
 

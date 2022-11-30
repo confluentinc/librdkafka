@@ -32,7 +32,10 @@
 #include "rdlist.h"
 #include "rdkafka_cert.h"
 
-#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 &&                        \
+    !defined(OPENSSL_IS_BORINGSSL)
+#define WITH_SSL_ENGINE 1
+/* Deprecated in OpenSSL 3 */
 #include <openssl/engine.h>
 #endif /* WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10100000 */
 
@@ -157,7 +160,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 30)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -248,6 +251,8 @@ struct rd_kafka_conf_s {
                 char *engine_location;
                 char *engine_id;
                 void *engine_callback_data;
+                char *providers;
+                rd_list_t loaded_providers; /**< (SSL_PROVIDER*) */
                 char *keystore_location;
                 char *keystore_password;
                 int endpoint_identification;
@@ -272,6 +277,9 @@ struct rd_kafka_conf_s {
                 char *kinit_cmd;
                 char *keytab;
                 int relogin_min_time;
+                /** Protects .username and .password access after client
+                 *  instance has been created (see sasl_set_credentials()). */
+                mtx_t lock;
                 char *username;
                 char *password;
 #if WITH_SASL_SCRAM
@@ -310,20 +318,21 @@ struct rd_kafka_conf_s {
         /* Interceptors */
         struct {
                 /* rd_kafka_interceptor_method_t lists */
-                rd_list_t on_conf_set;          /* on_conf_set interceptors
-                                                 * (not copied on conf_dup()) */
-                rd_list_t on_conf_dup;          /* .. (not copied) */
-                rd_list_t on_conf_destroy;      /* .. (not copied) */
-                rd_list_t on_new;               /* .. (copied) */
-                rd_list_t on_destroy;           /* .. (copied) */
-                rd_list_t on_send;              /* .. (copied) */
-                rd_list_t on_acknowledgement;   /* .. (copied) */
-                rd_list_t on_consume;           /* .. (copied) */
-                rd_list_t on_commit;            /* .. (copied) */
-                rd_list_t on_request_sent;      /* .. (copied) */
-                rd_list_t on_response_received; /* .. (copied) */
-                rd_list_t on_thread_start;      /* .. (copied) */
-                rd_list_t on_thread_exit;       /* .. (copied) */
+                rd_list_t on_conf_set;            /* on_conf_set interceptors
+                                                   * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;            /* .. (not copied) */
+                rd_list_t on_conf_destroy;        /* .. (not copied) */
+                rd_list_t on_new;                 /* .. (copied) */
+                rd_list_t on_destroy;             /* .. (copied) */
+                rd_list_t on_send;                /* .. (copied) */
+                rd_list_t on_acknowledgement;     /* .. (copied) */
+                rd_list_t on_consume;             /* .. (copied) */
+                rd_list_t on_commit;              /* .. (copied) */
+                rd_list_t on_request_sent;        /* .. (copied) */
+                rd_list_t on_response_received;   /* .. (copied) */
+                rd_list_t on_thread_start;        /* .. (copied) */
+                rd_list_t on_thread_exit;         /* .. (copied) */
+                rd_list_t on_broker_state_change; /* .. (copied) */
 
                 /* rd_strtup_t list */
                 rd_list_t config; /* Configuration name=val's
@@ -494,6 +503,13 @@ struct rd_kafka_conf_s {
                        int flags,
                        mode_t mode,
                        void *opaque);
+
+        /* Address resolution callback */
+        int (*resolve_cb)(const char *node,
+                          const char *service,
+                          const struct addrinfo *hints,
+                          struct addrinfo **res,
+                          void *opaque);
 
         /* Background queue event callback */
         void (*background_event_cb)(rd_kafka_t *rk,

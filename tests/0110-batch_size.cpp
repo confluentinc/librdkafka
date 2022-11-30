@@ -133,6 +133,8 @@ static void do_test_batch_size() {
   if (!p)
     Test::Fail("Failed to create Producer: " + errstr);
 
+  delete conf;
+
   /* Produce messages */
   char val[msgsize];
   memset(val, 'a', msgsize);

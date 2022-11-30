@@ -1,3 +1,101 @@
+# librdkafka v2.0.0
+
+librdkafka v2.0.0 is a feature release:
+
+ * Fixes to the transactional and idempotent producer.
+ * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+
+
+## Upgrade considerations
+
+### OpenSSL 3.0.x
+
+#### OpenSSL default ciphers
+
+The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
+changes the default set of available ciphers, in particular all obsolete
+or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html) manual page
+are now disabled by default.
+
+**WARNING**: These ciphers are disabled for security reasons and it is
+highly recommended NOT to use them.
+
+Should you need to use any of these old ciphers you'll need to explicitly
+enable the `legacy` provider by configuring `ssl.providers=default,legacy`
+on the librdkafka client.
+
+#### OpenSSL engines and providers
+
+OpenSSL 3.0.x deprecates the use of engines, which is being replaced by
+providers. As such librdkafka will emit a deprecation warning if
+`ssl.engine.location` is configured.
+
+OpenSSL providers may be configured with the new `ssl.providers`
+configuration property.
+
+### Broker TLS certificate hostname verification
+
+The default value for `ssl.endpoint.identification.algorithm` has been
+changed from `none` (no hostname verification) to `https`, which enables
+broker hostname verification (to counter man-in-the-middle
+impersonation attacks) by default.
+
+To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
+
+
+## Enhancements
+
+ * Self-contained static libraries can now be built on Linux arm64 (#4005).
+ * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Added `on_broker_state_change()` interceptor
+ * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
+ * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
+ * Setting `allow.auto.create.topics` will no longer give a warning if used by a producer, since that is an expected use case.
+  Improvement in documentation for this property.
+ * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
+ * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+
+## Fixes
+
+### General fixes
+
+ * Windows: couldn't read a PKCS#12 keystore correctly because binary mode
+   wasn't explicitly set and Windows defaults to text mode.
+ * Fixed memory leak when loading SSL certificates (@Mekk, #3930)
+ * Load all CA certificates from `ssl.ca.pem`, not just the first one.
+ * Each HTTP request made when using OAUTHBEARER OIDC would leak a small
+   amount of memory.
+
+### Transactional producer fixes
+
+ * When a PID epoch bump is requested and the producer is waiting
+   to reconnect to the transaction coordinator, a failure in a find coordinator
+   request could cause an assert to fail. This is fixed by retrying when the
+   coordinator is known (#4020).
+ * Transactional APIs (except `send_offsets_for_transaction()`) that
+   timeout due to low timeout_ms may now be resumed by calling the same API
+   again, as the operation continues in the background.
+ * For fatal idempotent producer errors that may be recovered by bumping the
+   epoch the current transaction must first be aborted prior to the epoch bump.
+   This is now handled correctly, which fixes issues seen with fenced
+   transactional producers on fatal idempotency errors.
+ * Timeouts for EndTxn requests (transaction commits and aborts) are now
+   automatically retried and the error raised to the application is also
+   a retriable error.
+ * TxnOffsetCommitRequests were retried immediately upon temporary errors in
+   `send_offsets_to_transactions()`, causing excessive network requests.
+   These retries are now delayed 500ms.
+ * If `init_transactions()` is called with an infinite timeout (-1),
+   the timeout will be limited to 2 * `transaction.timeout.ms`.
+   The application may retry and resume the call if a retriable error is
+   returned.
+
+
+### Consumer fixes
+
+ * Back-off and retry JoinGroup request if coordinator load is in progress.
+
+
 # librdkafka v1.9.2
 
 librdkafka v1.9.2 is a maintenance release:

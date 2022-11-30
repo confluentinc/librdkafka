@@ -165,7 +165,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION 0x010902ff
+#define RD_KAFKA_VERSION 0x020000ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1695,7 +1695,7 @@ const rd_kafka_conf_t *rd_kafka_conf(rd_kafka_t *rk);
  * Topic-level configuration properties may be set using this interface
  * in which case they are applied on the \c default_topic_conf.
  * If no \c default_topic_conf has been set one will be created.
- * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
+ * Any subsequent rd_kafka_conf_set_default_topic_conf() calls will
  * replace the current default topic configuration.
  *
  * @returns \c rd_kafka_conf_res_t to indicate success or failure.
@@ -2244,6 +2244,35 @@ void rd_kafka_conf_set_open_cb(
     int (*open_cb)(const char *pathname, int flags, mode_t mode, void *opaque));
 #endif
 
+/** Forward declaration to avoid netdb.h or winsock includes */
+struct addrinfo;
+
+/**
+ * @brief Set address resolution callback.
+ *
+ * The callback is responsible for resolving the hostname \p node and the
+ * service \p service into a list of socket addresses as \c getaddrinfo(3)
+ * would. The \p hints and \p res parameters function as they do for
+ * \c getaddrinfo(3). The callback's \p opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * If the callback is invoked with a NULL \p node, \p service, and \p hints, the
+ * callback should instead free the addrinfo struct specified in \p res. In this
+ * case the callback must succeed; the return value will not be checked by the
+ * caller.
+ *
+ * The callback's return value is interpreted as the return value of \p
+ * \c getaddrinfo(3).
+ *
+ * @remark The callback will be called from an internal librdkafka thread.
+ */
+RD_EXPORT void
+rd_kafka_conf_set_resolve_cb(rd_kafka_conf_t *conf,
+                             int (*resolve_cb)(const char *node,
+                                               const char *service,
+                                               const struct addrinfo *hints,
+                                               struct addrinfo **res,
+                                               void *opaque));
 
 /**
  * @brief Sets the verification callback of the broker certificate
@@ -2363,6 +2392,14 @@ typedef enum rd_kafka_cert_enc_t {
  *
  * @remark CA certificate in PEM format may also be set with the
  *         `ssl.ca.pem` configuration property.
+ *
+ * @remark When librdkafka is linked to OpenSSL 3.0 and the certificate is
+ *         encoded using an obsolete cipher, it might be necessary to set up
+ *         an OpenSSL configuration file to load the "legacy" provider and
+ *         set the OPENSSL_CONF environment variable.
+ *         See
+ * https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md for more
+ * information.
  */
 RD_EXPORT rd_kafka_conf_res_t
 rd_kafka_conf_set_ssl_cert(rd_kafka_conf_t *conf,
@@ -2845,7 +2882,7 @@ int32_t rd_kafka_msg_partitioner_fnv1a_random(const rd_kafka_topic_t *rkt,
  * \p conf is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
  * The \p conf object is freed by this function on success and must not be used
- * or destroyed by the application sub-sequently.
+ * or destroyed by the application subsequently.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * \p errstr must be a pointer to memory of at least size \p errstr_size where
@@ -2991,7 +3028,7 @@ int32_t rd_kafka_controllerid(rd_kafka_t *rk, int timeout_ms);
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
  * The \p conf object is freed by this function and must not be used or
- * destroyed by the application sub-sequently.
+ * destroyed by the application subsequently.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Topic handles are refcounted internally and calling rd_kafka_topic_new()
@@ -3051,22 +3088,22 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
 /**
  * @brief Polls the provided kafka handle for events.
  *
- * Events will cause application provided callbacks to be called.
+ * Events will cause application-provided callbacks to be called.
  *
  * The \p timeout_ms argument specifies the maximum amount of time
  * (in milliseconds) that the call will block waiting for events.
  * For non-blocking calls, provide 0 as \p timeout_ms.
- * To wait indefinately for an event, provide -1.
+ * To wait indefinitely for an event, provide -1.
  *
  * @remark  An application should make sure to call poll() at regular
  *          intervals to serve any queued callbacks waiting to be called.
  * @remark  If your producer doesn't have any callback set (in particular
  *          via rd_kafka_conf_set_dr_msg_cb or rd_kafka_conf_set_error_cb)
- *          you might chose not to call poll(), though this is not
+ *          you might choose not to call poll(), though this is not
  *          recommended.
  *
  * Events:
- *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
+ *   - delivery report callbacks (if dr_cb/dr_msg_cb is configured) [producer]
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
@@ -3322,6 +3359,25 @@ rd_kafka_queue_t *rd_kafka_queue_get_sasl(rd_kafka_t *rk);
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk);
 
+
+/**
+ * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+ *        this Kafka client.
+ *
+ * This function sets or resets the SASL username and password credentials
+ * used by this Kafka client. The new credentials will be used the next time
+ * this client needs to authenticate to a broker. This function
+ * will not disconnect existing connections that might have been made using
+ * the old credentials.
+ *
+ * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+ *
+ * @returns NULL on success or an error object on error.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
+                                                const char *username,
+                                                const char *password);
 
 /**
  * @returns a reference to the librdkafka consumer queue.
@@ -4419,13 +4475,13 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
 #define RD_KAFKA_MSG_F_BLOCK                                                   \
         0x4 /**< Block produce*() on message queue full.                       \
              *   WARNING: If a delivery report callback                        \
-             *            is used the application MUST                         \
+             *            is used, the application MUST                        \
              *            call rd_kafka_poll() (or equiv.)                     \
              *            to make sure delivered messages                      \
              *            are drained from the internal                        \
              *            delivery report queue.                               \
              *            Failure to do so will result                         \
-             *            in indefinately blocking on                          \
+             *            in indefinitely blocking on                          \
              *            the produce() call when the                          \
              *            message queue is full. */
 #define RD_KAFKA_MSG_F_PARTITION                                               \
@@ -4440,10 +4496,10 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  * \p rkt is the target topic which must have been previously created with
  * `rd_kafka_topic_new()`.
  *
- * `rd_kafka_produce()` is an asynch non-blocking API.
+ * `rd_kafka_produce()` is an asynchronous non-blocking API.
  * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
  * once the delivery status (success or failure) is known. The delivery report
- * is trigged by the application calling `rd_kafka_poll()` (at regular
+ * is triggered by the application calling `rd_kafka_poll()` (at regular
  * intervals) or `rd_kafka_flush()` (at termination).
  *
  * Since producing is asynchronous, you should call `rd_kafka_flush()` before
@@ -4660,7 +4716,7 @@ rd_kafka_resp_err_t rd_kafka_flush(rd_kafka_t *rk, int timeout_ms);
  * RD_KAFKA_RESP_ERR__PURGE_INFLIGHT.
  *
  * @warning Purging messages that are in-flight to or from the broker
- *          will ignore any sub-sequent acknowledgement for these messages
+ *          will ignore any subsequent acknowledgement for these messages
  *          received from the broker, effectively making it impossible
  *          for the application to know if the messages were successfully
  *          produced or not. This may result in duplicate messages if the
@@ -5985,6 +6041,28 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
     void *ic_opaque);
 
 
+/**
+ * @brief on_broker_state_change() is called just after a broker
+ *        has been created or its state has been changed.
+ *
+ * @param rk The client instance.
+ * @param broker_id The broker id (-1 is used for bootstrap brokers).
+ * @param secproto The security protocol.
+ * @param name The original name of the broker.
+ * @param port The port of the broker.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_broker_state_change_t)(
+    rd_kafka_t *rk,
+    int32_t broker_id,
+    const char *secproto,
+    const char *name,
+    int port,
+    const char *state,
+    void *ic_opaque);
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -5995,7 +6073,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_set(
@@ -6014,7 +6092,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_set(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_dup(
@@ -6061,7 +6139,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_conf_interceptor_add_on_conf_destroy(
  *         has not already been added.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -6081,7 +6159,7 @@ rd_kafka_conf_interceptor_add_on_new(rd_kafka_conf_t *conf,
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_destroy(
@@ -6118,7 +6196,7 @@ rd_kafka_interceptor_add_on_send(rd_kafka_t *rk,
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_acknowledgement(
@@ -6137,7 +6215,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_acknowledgement(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_consume(
@@ -6156,7 +6234,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_consume(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_commit(
@@ -6175,7 +6253,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_commit(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_request_sent(
@@ -6194,7 +6272,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_request_sent(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_response_received(
@@ -6213,7 +6291,7 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_response_received(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_start(
@@ -6232,13 +6310,33 @@ RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_start(
  * @param ic_opaque Opaque value that will be passed to the function.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
- *          if an existing intercepted with the same \p ic_name and function
+ *          if an existing interceptor with the same \p ic_name and function
  *          has already been added to \p conf.
  */
 RD_EXPORT rd_kafka_resp_err_t rd_kafka_interceptor_add_on_thread_exit(
     rd_kafka_t *rk,
     const char *ic_name,
     rd_kafka_interceptor_f_on_thread_exit_t *on_thread_exit,
+    void *ic_opaque);
+
+
+/**
+ * @brief Append an on_broker_state_change() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_broker_state_change() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing interceptor with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_interceptor_add_on_broker_state_change(
+    rd_kafka_t *rk,
+    const char *ic_name,
+    rd_kafka_interceptor_f_on_broker_state_change_t *on_broker_state_change,
     void *ic_opaque);
 
 
@@ -8025,7 +8123,7 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  * the global rd_kafka_fatal_error() code.
  * Fatal errors are raised by triggering the \c error_cb (see the
  * Fatal error chapter in INTRODUCTION.md for more information), and any
- * sub-sequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
+ * subsequent transactional API calls will return RD_KAFKA_RESP_ERR__FATAL
  * or have the fatal flag set (see rd_kafka_error_is_fatal()).
  * The originating fatal error code can be retrieved by calling
  * rd_kafka_fatal_error().
@@ -8085,8 +8183,14 @@ rd_kafka_resp_err_t rd_kafka_oauthbearer_set_token_failure(rd_kafka_t *rk,
  * @param timeout_ms The maximum time to block. On timeout the operation
  *                   may continue in the background, depending on state,
  *                   and it is okay to call init_transactions() again.
+ *                   If an infinite timeout (-1) is passed, the timeout will
+ *                   be adjusted to 2 * \c transaction.timeout.ms.
  *
  * @remark This function may block up to \p timeout_ms milliseconds.
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -8203,8 +8307,17 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *
  * @remark Logical and invalid offsets (such as RD_KAFKA_OFFSET_INVALID) in
  *         \p offsets will be ignored, if there are no valid offsets in
- *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
- *         and no action will be taken.
+ *         \p offsets the function will return NULL and no action will be taken.
+ *
+ * @remark This call is retriable but not resumable, which means a new request
+ *         with a new set of provided offsets and group metadata will be
+ *         sent to the transaction coordinator if the call is retried.
+ *
+ * @remark It is highly recommended to retry the call (upon retriable error)
+ *         with identical \p offsets and \p cgmetadata parameters.
+ *         Failure to do so risks inconsistent state between what is actually
+ *         included in the transaction and what the application thinks is
+ *         included in the transaction.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -8225,9 +8338,7 @@ rd_kafka_error_t *rd_kafka_begin_transaction(rd_kafka_t *rk);
  *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
  *          configured for the producer instance,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
- *          or if the \p consumer_group_id or \p offsets are empty,
- *          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS if a previous
- *          rd_kafka_send_offsets_to_transaction() call is still in progress.
+ *          or if the \p consumer_group_id or \p offsets are empty.
  *          Other error codes not listed here may be returned, depending on
  *          broker version.
  *
@@ -8279,6 +8390,10 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
  *         If the application has enabled RD_KAFKA_EVENT_DR it must
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying
@@ -8339,7 +8454,10 @@ rd_kafka_error_t *rd_kafka_commit_transaction(rd_kafka_t *rk, int timeout_ms);
  *         If the application has enabled RD_KAFKA_EVENT_DR it must
  *         serve the event queue in a separate thread since rd_kafka_flush()
  *         will not serve delivery reports in this mode.
-
+ *
+ * @remark This call is resumable when a retriable timeout error is returned.
+ *         Calling the function again will resume the operation that is
+ *         progressing in the background.
  *
  * @returns NULL on success or an error object on failure.
  *          Check whether the returned error object permits retrying

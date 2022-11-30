@@ -81,13 +81,27 @@ function manual_checks {
 function libcrypto_install_source {
     local name=$1
     local destdir=$2
-    local ver=1.1.1q
-    local checksum="d7939ce614029cdff0b6c20f0e2e5703158a489a72b2507b8bd51bf8c8fd10ca"
+    local ver=3.0.7
+    local checksum="83049d042a260e696f62406ac5c08bf706fd84383f945cf21bd61e9ed95c396e"
     local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
 
-    local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib no-deprecated"
+    local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib"
+
     if [[ $ver == 1.0.* ]]; then
         conf_args="${conf_args} no-krb5"
+    fi
+
+    if [[ $ver == 3.* ]]; then
+        # Silence OpenSSL 3.0.0 deprecation warnings since they'll make
+        # -Werror fail.
+        mkl_define_set "libcrypto" OPENSSL_SUPPRESS_DEPRECATED
+        # Make sure legacy provider (et.al) are built-in, since we're building
+        # a static library we don't want to rely on dynamically loaded modules.
+        conf_args="${conf_args} no-module"
+    else
+        # OpenSSL 3 deprecates ENGINE support, but we still need it, so only
+        # add no-deprecated to non-3.x builds.
+        conf_args="${conf_args} no-deprecated"
     fi
 
     # 1.1.1q tests fail to build on OSX/M1, so disable them.

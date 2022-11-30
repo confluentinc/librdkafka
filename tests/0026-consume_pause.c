@@ -485,6 +485,8 @@ static void consume_seek_pause_resume(void) {
         TEST_SAY("Assigning partition\n");
         TEST_CALL_ERR__(rd_kafka_assign(rk, parts));
 
+        rd_kafka_topic_partition_list_destroy(parts);
+
 
         TEST_SAY("Consuming messages 0..100\n");
         test_msgver_init(&mv, testid);

@@ -552,6 +552,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields(void) {
                      " received post_fields is %s",
                      expected_post_fields, post_fields);
 
+        rd_free(post_fields);
+
         RD_UT_PASS();
 }
 
@@ -581,6 +583,8 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
                      "Expected expected_post_fields is %s"
                      " received post_fields is %s",
                      expected_post_fields, post_fields);
+
+        rd_free(post_fields);
 
         RD_UT_PASS();
 }

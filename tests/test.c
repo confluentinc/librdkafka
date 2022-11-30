@@ -240,6 +240,10 @@ _TEST_DECL(0129_fetch_aborted_msgs);
 _TEST_DECL(0130_store_offsets);
 _TEST_DECL(0131_connect_timeout);
 _TEST_DECL(0132_strategy_ordering);
+_TEST_DECL(0133_ssl_keys);
+_TEST_DECL(0134_ssl_provider);
+_TEST_DECL(0135_sasl_credentials);
+_TEST_DECL(0136_resolve_cb);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -478,6 +482,10 @@ struct test tests[] = {
     _TEST(0130_store_offsets, 0),
     _TEST(0131_connect_timeout, TEST_F_LOCAL),
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
+    _TEST(0133_ssl_keys, TEST_F_LOCAL),
+    _TEST(0134_ssl_provider, TEST_F_LOCAL),
+    _TEST(0135_sasl_credentials, 0),
+    _TEST(0136_resolve_cb, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -6712,6 +6720,8 @@ int test_sub_start(const char *func,
                 return 0;
         }
 
+        test_curr->subtest_quick = is_quick;
+
         TIMING_START(&test_curr->subtest_duration, "SUBTEST");
 
         TEST_SAY(_C_MAG "[ %s ]\n", test_curr->subtest);
@@ -6743,6 +6753,16 @@ void test_sub_pass(void) {
         TEST_SAYL(1, _C_GRN "[ %s: PASS (%.02fs) ]\n", test_curr->subtest,
                   (float)(TIMING_DURATION(&test_curr->subtest_duration) /
                           1000000.0f));
+
+        if (test_curr->subtest_quick && test_quick && !test_on_ci &&
+            TIMING_DURATION(&test_curr->subtest_duration) > 45 * 1000 * 1000)
+                TEST_WARN(
+                    "Subtest %s marked as QUICK but took %.02fs to "
+                    "finish: either fix the test or "
+                    "remove the _QUICK identifier (limit is 45s)\n",
+                    test_curr->subtest,
+                    (float)(TIMING_DURATION(&test_curr->subtest_duration) /
+                            1000000.0f));
 
         test_sub_reset();
 }

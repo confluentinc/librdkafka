@@ -4,22 +4,20 @@
     "dependencies": [
         {
             "name": "zstd",
-            "version>=": "1.5.0"
+            "version>=": "1.5.2"
         },
         {
             "name": "zlib",
-            "version>=": "1.2.12"
+            "version>=": "1.2.13"
         },
         {
-            "name": "openssl"
+            "name": "openssl",
+            "version>=": "3.0.7"
         },
         {
             "name": "curl",
             "version>=": "7.84.0"
         }
     ],
-    "overrides": [
-        { "name": "openssl", "version-string": "1.1.1n" }
-    ],
-    "builtin-baseline": "de176433e9a8769eed0e43d61758f4cdc1dc6e20"
+    "builtin-baseline": "09adfdc8cdad76345b7cc7f3305899e1cbd66297"
 }

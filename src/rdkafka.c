@@ -957,6 +957,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
                 rd_kafka_ssl_ctx_term(rk);
         }
+        rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
 #endif
 
         /* It is not safe to log after this point. */
@@ -994,6 +995,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
+        mtx_destroy(&rk->rk_conf.sasl.lock);
         rwlock_destroy(&rk->rk_lock);
 
         rd_free(rk);
@@ -2204,6 +2206,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
 
         rwlock_init(&rk->rk_lock);
+        mtx_init(&rk->rk_conf.sasl.lock, mtx_plain);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
 
         cnd_init(&rk->rk_broker_state_change_cnd);

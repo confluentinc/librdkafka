@@ -160,6 +160,10 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
                            RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
                 break;
 
+        case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                break;
+
         case RD_KAFKA_RESP_ERR__DESTROY:
         case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:

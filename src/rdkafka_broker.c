@@ -5840,14 +5840,11 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
  * @param host The node host.
  * @param port The node port.
  * @param rack_id (optional) The node rack id.
- * @return A new allocated Node object, or NULL if
- *         required parameters are NULL.
+ * @return A new allocated Node object.
  *         Use rd_kafka_Node_destroy() to free when done.
  */
 rd_kafka_Node_t *
 rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
-        if (!host)
-                return NULL;
         rd_kafka_Node_t *ret = calloc(1, sizeof(*ret));
         ret->id              = id;
         ret->port            = port;
@@ -5865,8 +5862,6 @@ rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
  *         Use rd_kafka_Node_destroy() to free when done.
  */
 rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
-        if (!src)
-                return NULL;
         return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
 }
 
@@ -5880,20 +5875,17 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
 }
 
 int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
-        if (!node)
-                return -1;
+        rd_assert(node != NULL);
         return node->id;
 }
 
 const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
-        if (!node)
-                return NULL;
+        rd_assert(node != NULL);
         return node->host;
 }
 
 int rd_kafka_Node_port(const rd_kafka_Node_t *node) {
-        if (!node)
-                return -1;
+        rd_assert(node != NULL);
         return node->port;
 }
 

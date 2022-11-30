@@ -5502,8 +5502,7 @@ static rd_kafka_ConsumerGroupListing_t *
 rd_kafka_ConsumerGroupListing_new(const char *group_id,
                                   rd_bool_t is_simple_consumer_group,
                                   rd_kafka_consumer_group_state_t state) {
-        if (!group_id)
-                return NULL;
+        rd_assert(group_id != NULL);
         rd_kafka_ConsumerGroupListing_t *grplist;
         grplist                           = rd_calloc(1, sizeof(*grplist));
         grplist->group_id                 = rd_strdup(group_id);
@@ -5513,16 +5512,14 @@ rd_kafka_ConsumerGroupListing_new(const char *group_id,
 }
 
 /**
- * @brief Copy \p desc ConsumerGroupListing.
+ * @brief Copy \p grplist ConsumerGroupListing.
  *
- * @param desc The group description to copy.
- * @return A new allocated copy of the passed ConsumerGroupListing, or
- *         NULL if \p desc is NULL.
+ * @param grplist The group listing to copy.
+ * @return A new allocated copy of the passed ConsumerGroupListing.
  */
 static rd_kafka_ConsumerGroupListing_t *rd_kafka_ConsumerGroupListing_copy(
     const rd_kafka_ConsumerGroupListing_t *grplist) {
-        if (!grplist)
-                return NULL;
+        rd_assert(grplist != NULL);
         return rd_kafka_ConsumerGroupListing_new(
             grplist->group_id, grplist->is_simple_consumer_group,
             grplist->state);
@@ -5539,8 +5536,7 @@ static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *grplist,
 
 static void rd_kafka_ConsumerGroupListing_destroy(
     rd_kafka_ConsumerGroupListing_t *grplist) {
-        if (!grplist)
-                return;
+        rd_assert(grplist != NULL);
         if (likely(grplist->group_id != NULL))
                 rd_free(grplist->group_id);
         rd_free(grplist);
@@ -5552,22 +5548,19 @@ static void rd_kafka_ConsumerGroupListing_free(void *ptr) {
 
 const char *rd_kafka_ConsumerGroupListing_group_id(
     const rd_kafka_ConsumerGroupListing_t *grplist) {
-        if (!grplist)
-                return NULL;
+        rd_assert(grplist != NULL);
         return grplist->group_id;
 }
 
 int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
     const rd_kafka_ConsumerGroupListing_t *grplist) {
-        if (!grplist)
-                return 0;
+        rd_assert(grplist != NULL);
         return grplist->is_simple_consumer_group;
 }
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
     const rd_kafka_ConsumerGroupListing_t *grplist) {
-        if (!grplist)
-                return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
+        rd_assert(grplist != NULL);
         return grplist->state;
 }
 
@@ -5581,8 +5574,6 @@ static rd_kafka_ListConsumerGroupsResult_t *
 rd_kafka_ListConsumerGroupsResult_new(const rd_list_t *valid,
                                       const rd_list_t *errors) {
         rd_kafka_ListConsumerGroupsResult_t *res;
-        if (!valid || !errors)
-                return NULL;
         res = rd_calloc(1, sizeof(*res));
         rd_list_init_copy(&res->valid, valid);
         rd_list_copy_to(&res->valid, valid,
@@ -5933,8 +5924,7 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
  *                          for static membership.
  * @param host The consumer host.
  * @param assignment A member assignment containing a list of topic-partitions.
- * @return A new allocated MemberDescription object, or NULL if
- *         required parameters are NULL.
+ * @return A new allocated MemberDescription object.
  *         Use rd_kafka_MemberDescription_destroy() to free when done.
  */
 static rd_kafka_MemberDescription_t *
@@ -5943,8 +5933,6 @@ rd_kafka_MemberDescription_new(const char *client_id,
                                const char *group_instance_id,
                                const char *host,
                                rd_kafka_MemberAssignment_t assignment) {
-        if (client_id == NULL || consumer_id == NULL || host == NULL)
-                return NULL;
         rd_kafka_MemberDescription_t *member;
         member              = rd_calloc(1, sizeof(*member));
         member->client_id   = rd_strdup(client_id);
@@ -6004,6 +5992,38 @@ static void rd_kafka_MemberDescription_free(void *member) {
         rd_kafka_MemberDescription_destroy(member);
 }
 
+const char *rd_kafka_MemberDescription_client_id(
+    const rd_kafka_MemberDescription_t *member) {
+        rd_assert(member != NULL);
+        return member->client_id;
+}
+
+const char *rd_kafka_MemberDescription_consumer_id(
+    const rd_kafka_MemberDescription_t *member) {
+        rd_assert(member != NULL);
+        return member->consumer_id;
+}
+
+const char *
+rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member) {
+        rd_assert(member != NULL);
+        return member->host;
+}
+
+const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
+    const rd_kafka_MemberDescription_t *member) {
+        rd_assert(member != NULL);
+        return &member->assignment;
+}
+
+const rd_kafka_topic_partition_list_t *
+rd_kafka_MemberAssignment_topic_partitions(
+    const rd_kafka_MemberAssignment_t *assignment) {
+        rd_assert(assignment != NULL);
+        return assignment->topic_partitions;
+}
+
+
 /**
  * @brief Create a new ConsumerGroupDescription object.
  *
@@ -6015,8 +6035,7 @@ static void rd_kafka_MemberDescription_free(void *member) {
  * @param state Group state.
  * @param coordinator (optional) Group coordinator.
  * @param error (optional) Error received for this group.
- * @return A new allocated ConsumerGroupDescription object, or NULL if
- *         required parameters are NULL.
+ * @return A new allocated ConsumerGroupDescription object.
  *         Use rd_kafka_ConsumerGroupDescription_destroy() to free when done.
  */
 static rd_kafka_ConsumerGroupDescription_t *
@@ -6027,8 +6046,6 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
                                       rd_kafka_consumer_group_state_t state,
                                       const rd_kafka_Node_t *coordinator,
                                       rd_kafka_error_t *error) {
-        if (!group_id)
-                return NULL;
         rd_kafka_ConsumerGroupDescription_t *grpdesc;
         grpdesc                           = rd_calloc(1, sizeof(*grpdesc));
         grpdesc->group_id                 = rd_strdup(group_id);
@@ -6073,14 +6090,11 @@ rd_kafka_ConsumerGroupDescription_new_error(const char *group_id,
  * @brief Copy \p desc ConsumerGroupDescription.
  *
  * @param desc The group description to copy.
- * @return A new allocated copy of the passed ConsumerGroupDescription, or
- *         NULL if \p desc is NULL.
+ * @return A new allocated copy of the passed ConsumerGroupDescription.
  */
 static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_copy(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return NULL;
         return rd_kafka_ConsumerGroupDescription_new(
             grpdesc->group_id, grpdesc->is_simple_consumer_group,
             &grpdesc->members, grpdesc->partition_assignor, grpdesc->state,
@@ -6118,99 +6132,55 @@ static void rd_kafka_ConsumerGroupDescription_free(void *ptr) {
 
 const char *rd_kafka_ConsumerGroupDescription_group_id(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return NULL;
+        rd_assert(grpdesc != NULL);
         return grpdesc->group_id;
 }
 
 const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return NULL;
+        rd_assert(grpdesc != NULL);
         return grpdesc->error;
 }
 
 
 int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return 0;
+        rd_assert(grpdesc != NULL);
         return grpdesc->is_simple_consumer_group;
 }
 
 
 const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return NULL;
+        rd_assert(grpdesc != NULL);
         return grpdesc->partition_assignor;
 }
 
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
+        rd_assert(grpdesc != NULL);
         return grpdesc->state;
 }
 
 const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return NULL;
+        rd_assert(grpdesc != NULL);
         return grpdesc->coordinator;
 }
 
 int rd_kafka_ConsumerGroupDescription_member_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
-        if (!grpdesc)
-                return 0;
+        rd_assert(grpdesc != NULL);
         return rd_list_cnt(&grpdesc->members);
 }
 
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     int idx) {
-        if (!grpdesc)
-                return NULL;
+        rd_assert(grpdesc != NULL);
         return (rd_kafka_MemberDescription_t *)rd_list_elem(&grpdesc->members,
                                                             idx);
-}
-
-const char *rd_kafka_MemberDescription_client_id(
-    const rd_kafka_MemberDescription_t *member) {
-        if (!member)
-                return NULL;
-        return member->client_id;
-}
-
-const char *rd_kafka_MemberDescription_consumer_id(
-    const rd_kafka_MemberDescription_t *member) {
-        if (!member)
-                return NULL;
-        return member->consumer_id;
-}
-
-const char *
-rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member) {
-        if (!member)
-                return NULL;
-        return member->host;
-}
-
-const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
-    const rd_kafka_MemberDescription_t *member) {
-        if (!member)
-                return NULL;
-        return &member->assignment;
-}
-
-const rd_kafka_topic_partition_list_t *
-rd_kafka_MemberAssignment_topic_partitions(
-    const rd_kafka_MemberAssignment_t *assignment) {
-        if (!assignment)
-                return NULL;
-        return assignment->topic_partitions;
 }
 
 /**

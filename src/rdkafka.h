@@ -4864,7 +4864,7 @@ void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
  * @brief Get the id of \p node.
  *
  * @param node The Node instance.
- * @return The node id, or -1 is \p node is NULL.
+ * @return The node id.
  */
 RD_EXPORT
 int rd_kafka_Node_id(const rd_kafka_Node_t *node);
@@ -4873,7 +4873,7 @@ int rd_kafka_Node_id(const rd_kafka_Node_t *node);
  * @brief Get the host of \p node.
  *
  * @param node The Node instance.
- * @return The node host, or NULL is \p node is NULL.
+ * @return The node host.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p node object.
@@ -4885,7 +4885,7 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node);
  * @brief Get the port of \p node.
  *
  * @param node The Node instance.
- * @return The node port, or -1 is \p node is NULL.
+ * @return The node port.
  */
 RD_EXPORT
 int rd_kafka_Node_port(const rd_kafka_Node_t *node);
@@ -7682,8 +7682,8 @@ void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
 /**
  * @brief Gets the group id for the \p grplist group.
  *
- * @param grplist The group description.
- * @return The group id, or NULL if \p grplist is NULL.
+ * @param grplist The group listing.
+ * @return The group id.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grplist object.
@@ -7816,7 +7816,7 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  * @brief Gets the group id for the \p grpdesc group.
  *
  * @param grpdesc The group description.
- * @return The group id, or NULL if \p grpdesc is NULL.
+ * @return The group id.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grpdesc object.
@@ -7829,8 +7829,7 @@ const char *rd_kafka_ConsumerGroupDescription_group_id(
  * @brief Gets the error for the \p grpdesc group.
  *
  * @param grpdesc The group description.
- * @return The group description error, or NULL if no error or
- *         \p grpdesc is NULL.
+ * @return The group description error.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grpdesc object.
@@ -7855,7 +7854,7 @@ int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
  * @brief Gets the partition assignor for the \p grpdesc group.
  *
  * @param grpdesc The group description.
- * @return The partition assignor, or NULL if \p grpdesc is NULL.
+ * @return The partition assignor.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grpdesc object.
@@ -7881,7 +7880,7 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
  * @brief Gets the coordinator for the \p grpdesc group.
  *
  * @param grpdesc The group description.
- * @return The group coordinator, or NULL if \p grpdesc is NULL.
+ * @return The group coordinator.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grpdesc object.
@@ -7905,8 +7904,8 @@ int rd_kafka_ConsumerGroupDescription_member_count(
  *
  * @param grpdesc The group description.
  * @param idx The member idx.
- * @return A member at index \p idx, or NULL if \p grpdesc is NULL
- *         or \p idx is out of range.
+ * @return A member at index \p idx, or NULL if
+ *         \p idx is out of range.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p grpdesc object.
@@ -7920,7 +7919,7 @@ const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
  * @brief Gets client id of a \p member.
  *
  * @param member The group member.
- * @return The client id, or NULL if \p member is NULL.
+ * @return The client id.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p member object.
@@ -7933,7 +7932,7 @@ const char *rd_kafka_MemberDescription_client_id(
  * @brief Gets consumer id of a \p member.
  *
  * @param member The group member.
- * @return The consumer id, or NULL if \p member is NULL.
+ * @return The consumer id.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p member object.
@@ -7946,7 +7945,7 @@ const char *rd_kafka_MemberDescription_consumer_id(
  * @brief Gets host of a \p member.
  *
  * @param member The group member.
- * @return The host, or NULL if \p member is NULL.
+ * @return The host.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p member object.
@@ -7959,7 +7958,7 @@ rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member);
  * @brief Gets assignment of a \p member.
  *
  * @param member The group member.
- * @return The member assignment, or NULL if \p member is NULL.
+ * @return The member assignment.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p member object.
@@ -7972,7 +7971,7 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
  * @brief Gets assigned partitions of a member \p assignment.
  *
  * @param assignment The group member assignment.
- * @return The assigned partitions, or NULL if \p assignment is NULL.
+ * @return The assigned partitions.
  *
  * @remark The lifetime of the returned memory is the same
  *         as the lifetime of \p assignment object.

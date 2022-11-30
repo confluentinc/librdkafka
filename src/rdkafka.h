@@ -8070,7 +8070,7 @@ typedef struct rd_kafka_ListConsumerGroupOffsets_s
  * @brief Create a new ListConsumerGroupOffsets object.
  *        This object is later passed to rd_kafka_ListConsumerGroupOffsets().
  *
- * @param group Consumer group id.
+ * @param group_id Consumer group id.
  * @param partitions Partitions to list committed offsets for.
  *                   Only the topic and partition fields are used.
  *
@@ -8080,7 +8080,7 @@ typedef struct rd_kafka_ListConsumerGroupOffsets_s
  */
 RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new(
-    const char *group,
+    const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions);
 
 /**
@@ -8165,7 +8165,7 @@ typedef struct rd_kafka_AlterConsumerGroupOffsets_s
  * @brief Create a new AlterConsumerGroupOffsets object.
  *        This object is later passed to rd_kafka_AlterConsumerGroupOffsets().
  *
- * @param group Consumer group id.
+ * @param group_id Consumer group id.
  * @param partitions Partitions to alter committed offsets for.
  *                   Only the topic and partition fields are used.
  *
@@ -8175,7 +8175,7 @@ typedef struct rd_kafka_AlterConsumerGroupOffsets_s
  */
 RD_EXPORT const rd_kafka_AlterConsumerGroupOffsets_t *
 rd_kafka_AlterConsumerGroupOffsets_new(
-    const char *group,
+    const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions);
 
 /**

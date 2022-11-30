@@ -182,9 +182,9 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                 usage("Wrong number of arguments");
         }
 
-        num_partitions    = (argc - min_argc) / 2;
-        const char *group = argv[0];
-        const char *topic = argv[1];
+        num_partitions       = (argc - min_argc) / 2;
+        const char *group_id = argv[0];
+        const char *topic    = argv[1];
         const rd_kafka_AlterConsumerGroupOffsets_t
             *alter_consumer_group_offsets;
 
@@ -229,7 +229,7 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
 
         /* Create argument */
         alter_consumer_group_offsets =
-            rd_kafka_AlterConsumerGroupOffsets_new(group, partitions);
+            rd_kafka_AlterConsumerGroupOffsets_new(group_id, partitions);
         /* Call AlterConsumerGroupOffsets */
         rd_kafka_AlterConsumerGroupOffsets(rk, &alter_consumer_group_offsets, 1,
                                            options, queue);

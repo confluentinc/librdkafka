@@ -2564,7 +2564,7 @@ static void do_test_ListConsumerGroups(const char *what,
 }
 
 typedef struct expected_DescribeConsumerGroups_result {
-        char *group;
+        char *group_id;
         rd_kafka_resp_err_t err;
 } expected_DescribeConsumerGroups_result_t;
 
@@ -2627,14 +2627,14 @@ static void do_test_DescribeConsumerGroups(const char *what,
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
         for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
-                char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                char *group_id = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
                 if (i < known_groups) {
-                        test_consume_msgs_easy(group, topic, testid, -1,
+                        test_consume_msgs_easy(group_id, topic, testid, -1,
                                                msgs_cnt, NULL);
                 }
-                expected[i].group  = group;
-                expected[i].err    = RD_KAFKA_RESP_ERR_NO_ERROR;
-                describe_groups[i] = group;
+                expected[i].group_id = group_id;
+                expected[i].err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+                describe_groups[i]   = group_id;
         }
 
         TIMING_START(&timing, "DescribeConsumerGroups");
@@ -2700,12 +2700,12 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(act);
                 TEST_ASSERT(
-                    strcmp(exp->group,
+                    strcmp(exp->group_id,
                            rd_kafka_ConsumerGroupDescription_group_id(act)) ==
                         0,
                     "Result order mismatch at #%d: expected group id to be "
                     "%s, got %s",
-                    i, exp->group,
+                    i, exp->group_id,
                     rd_kafka_ConsumerGroupDescription_group_id(act));
                 if (i < known_groups) {
                         TEST_ASSERT(state ==
@@ -2724,7 +2724,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 }
                 TEST_ASSERT(exp_err == act_err,
                             "expected err=%d for group %s, got %d (%s)",
-                            exp_err, exp->group, act_err,
+                            exp_err, exp->group_id, act_err,
                             rd_kafka_err2str(act_err));
         }
 
@@ -2734,7 +2734,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                  known_groups, NULL);
 
         for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
-                rd_free(expected[i].group);
+                rd_free(expected[i].group_id);
         }
 
         rd_free(topic);
@@ -3036,7 +3036,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;
         rd_kafka_t *consumer;
-        char *groupid;
+        char *group_id;
 
         SUB_TEST_QUICK("%s AlterConsumerGroupOffsets with %s, op_timeout %d%s",
                        rd_kafka_name(rk), what, op_timeout,
@@ -3072,7 +3072,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                                                   RD_KAFKA_PARTITION_UA);
         }
 
-        groupid = topics[0];
+        group_id = topics[0];
 
         /* Create the topics first. */
         test_CreateTopics_simple(rk, NULL, topics, MY_TOPIC_CNT, partitions_cnt,
@@ -3082,7 +3082,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        consumer = test_create_consumer(groupid, NULL, NULL, NULL);
+        consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
         if (sub_consumer) {
                 TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
@@ -3135,7 +3135,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 }
         }
 
-        cgoffsets = rd_kafka_AlterConsumerGroupOffsets_new(groupid, to_alter);
+        cgoffsets = rd_kafka_AlterConsumerGroupOffsets_new(group_id, to_alter);
 
         TIMING_START(&timing, "AlterConsumerGroupOffsets");
         TEST_SAY("Call AlterConsumerGroupOffsets\n");
@@ -3290,7 +3290,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;
         rd_kafka_t *consumer;
-        char *groupid;
+        char *group_id;
 
         SUB_TEST_QUICK("%s ListConsumerGroupOffsets with %s, op_timeout %d%s",
                        rd_kafka_name(rk), what, op_timeout,
@@ -3323,7 +3323,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                                                   RD_KAFKA_PARTITION_UA);
         }
 
-        groupid = topics[0];
+        group_id = topics[0];
 
         /* Create the topics first. */
         test_CreateTopics_simple(rk, NULL, topics, MY_TOPIC_CNT, partitions_cnt,
@@ -3333,7 +3333,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        consumer = test_create_consumer(groupid, NULL, NULL, NULL);
+        consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
         if (sub_consumer) {
                 TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
@@ -3373,10 +3373,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         if (null_toppars) {
                 cgoffsets =
-                    rd_kafka_ListConsumerGroupOffsets_new(groupid, NULL);
+                    rd_kafka_ListConsumerGroupOffsets_new(group_id, NULL);
         } else {
                 cgoffsets =
-                    rd_kafka_ListConsumerGroupOffsets_new(groupid, to_list);
+                    rd_kafka_ListConsumerGroupOffsets_new(group_id, to_list);
         }
 
         TIMING_START(&timing, "ListConsumerGroupOffsets");

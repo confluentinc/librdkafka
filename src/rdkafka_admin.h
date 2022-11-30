@@ -370,9 +370,9 @@ struct rd_kafka_AlterConsumerGroupOffsets_result_s {
 };
 
 struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group; /**< Points to data */
+        char *group_id; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group name is allocated along with
+        char data[1]; /**< The group id is allocated along with
                        *   the struct here. */
 };
 
@@ -392,9 +392,9 @@ struct rd_kafka_ListConsumerGroupOffsets_result_s {
 };
 
 struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group; /**< Points to data */
+        char *group_id; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group name is allocated along with
+        char data[1]; /**< The group id is allocated along with
                        *   the struct here. */
 };
 

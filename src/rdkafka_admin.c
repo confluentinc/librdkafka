@@ -6161,7 +6161,7 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
         return grpdesc->coordinator;
 }
 
-int rd_kafka_ConsumerGroupDescription_member_cnt(
+int rd_kafka_ConsumerGroupDescription_member_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
         if (!grpdesc)
                 return 0;

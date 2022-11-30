@@ -179,7 +179,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(group);
                 member_cnt =
-                    rd_kafka_ConsumerGroupDescription_member_cnt(group);
+                    rd_kafka_ConsumerGroupDescription_member_count(group);
                 error = rd_kafka_ConsumerGroupDescription_error(group);
                 coordinator =
                     rd_kafka_ConsumerGroupDescription_coordinator(group);

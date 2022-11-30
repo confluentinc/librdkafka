@@ -7897,7 +7897,7 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
  * @return The member count, or 0 if \p grpdesc is NULL.
  */
 RD_EXPORT
-int rd_kafka_ConsumerGroupDescription_member_cnt(
+int rd_kafka_ConsumerGroupDescription_member_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**

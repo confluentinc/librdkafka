@@ -29,6 +29,7 @@
 #ifndef _RDRAND_H_
 #define _RDRAND_H_
 
+#include "rdrandr.h"
 
 /**
  * Returns a random (using rand(3)) number between 'low'..'high' (inclusive).

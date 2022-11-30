@@ -377,32 +377,6 @@ err:
 #define rd_open(path, flags, mode) _open(path, flags, mode)
 #define rd_close(fd)               _close(fd)
 
-/**
- * PRNG
- */
-
-/**
- * @brief rand_r() for Windows systems to ensure thread agnostic rand() results
- * @returns a pseudo-random integer in the range 0 to RAND_MAX inclusive [0,
- * RAND_MAX].
- */
-static RD_UNUSED RD_INLINE int
-rd_rand_r(unsigned int *seed) {
-        /* Source: https://git.musl-libc.org/cgit/musl/tree/src/prng/rand_r.c */
-
-        unsigned int x;
-
-        *seed = *seed * 1103515245 + 12345;
-
-        x = *seed;
-        x ^= x >> 11;
-        x ^= x << 7 & 0x9D2C5680;
-        x ^= x << 15 & 0xEFC60000;
-        x ^= x >> 18;
-
-        return x / 2;
-}
-
 #endif /* !__cplusplus*/
 
 #endif /* _RDWIN32_H_ */

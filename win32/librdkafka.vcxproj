@@ -168,6 +168,7 @@
     <ClInclude Include="..\src\rdavl.h" />
     <ClInclude Include="..\src\rdports.h" />
     <ClInclude Include="..\src\rddl.h" />
+    <ClInclude Include="..\src\rdrandr.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cJSON.c" />
@@ -250,6 +251,7 @@
     <ClCompile Include="..\src\lz4frame.c" />
     <ClCompile Include="..\src\lz4hc.c" />
     <ClCompile Include="..\src\rddl.c" />
+    <ClInclude Include="..\src\rdrandr.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.win32" />

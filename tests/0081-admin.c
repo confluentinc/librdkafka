@@ -2537,7 +2537,7 @@ static void do_test_ListConsumerGroups(const char *what,
         TEST_ASSERT(found == TEST_LIST_GROUPS_CNT,
                     "expected to find %" PRId32
                     " started groups,"
-                    " got %" PRIu64,
+                    " got %" PRIusz,
                     TEST_LIST_GROUPS_CNT, found);
 
         rd_kafka_event_destroy(rkev);

@@ -6264,12 +6264,15 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         char *group;
         int groups_cnt          = rd_list_cnt(groups);
         const char **groups_arr = calloc(groups_cnt, sizeof(*groups_arr));
+
         RD_LIST_FOREACH(group, groups, i) {
                 groups_arr[i] = rd_list_elem(groups, i);
         }
         rd_kafka_DescribeGroupsRequest(rkb, groups_arr, groups_cnt, replyq,
                                        resp_cb, opaque);
+
         rd_free((void *)groups_arr);
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

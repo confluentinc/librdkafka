@@ -8100,7 +8100,7 @@ RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
     size_t list_grpoffset_cnt);
 
 /**
- * @brief List committed offsets for a set of partitions in a conusmer
+ * @brief List committed offsets for a set of partitions in a consumer
  *        group.
  *
  * @param rk Client instance.
@@ -8195,7 +8195,7 @@ RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
     size_t alter_grpoffset_cnt);
 
 /**
- * @brief Alter committed offsets for a set of partitions in a conusmer
+ * @brief Alter committed offsets for a set of partitions in a consumer
  *        group. This will succeed at the partition level only if the group
  *        is not actively subscribed to the corresponding topic.
  *
@@ -8291,7 +8291,7 @@ RD_EXPORT void rd_kafka_DeleteConsumerGroupOffsets_destroy_array(
     size_t del_grpoffset_cnt);
 
 /**
- * @brief Delete committed offsets for a set of partitions in a conusmer
+ * @brief Delete committed offsets for a set of partitions in a consumer
  *        group. This will succeed at the partition level only if the group
  *        is not actively subscribed to the corresponding topic.
  *

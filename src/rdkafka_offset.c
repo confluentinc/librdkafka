@@ -400,12 +400,6 @@ rd_kafka_commit(rd_kafka_t *rk,
                 rq   = RD_KAFKA_REPLYQ(repq, 0);
         }
 
-        /* Don't attempt auto commit when rebalancing or initializing since
-         * the rkcg_generation_id is most likely in flux. */
-        if (rkcg->rkcg_subscription &&
-            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
-                return RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
-
         err = rd_kafka_commit0(rk, offsets, NULL, rq, NULL, NULL, "manual");
 
         if (!err && !async)

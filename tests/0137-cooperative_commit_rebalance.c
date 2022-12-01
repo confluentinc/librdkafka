@@ -33,7 +33,7 @@
  * be able to commit during rebalance
  */
 
-static rd_kafka_t *c1, *c2, *c3;
+static rd_kafka_t *c1, *c2;
 static int count = 0;
 
 static void rebalance_cb(rd_kafka_t *rk,

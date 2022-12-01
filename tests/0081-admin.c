@@ -3497,7 +3497,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         test_conf_init(&conf, NULL, 180);
         test_conf_set(conf, "socket.timeout.ms", "10000");
-        test_conf_set(conf, "debug", "all");
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);

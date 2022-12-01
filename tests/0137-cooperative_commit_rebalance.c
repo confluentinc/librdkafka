@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2020, Magnus Edenhill
+ * Copyright (c) 2022, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,8 @@
 #include "test.h"
 
 /**
- * Issue #4059: With cooperative sticky and manual commit, consumers should not be able to commit during rebalance
+ * Issue #4059: With cooperative sticky and manual commit, consumers should not
+ * be able to commit during rebalance
  */
 
 static rd_kafka_t *c1, *c2, *c3;
@@ -48,22 +49,26 @@ static void rebalance_cb(rd_kafka_t *rk,
                 rd_kafka_resp_err_t commit_err;
                 TEST_CALL_ERR__(rd_kafka_position(rk, parts));
 
-                /* Only attempt to commit offsets when the second consumer joins the group.
-                 * Since the first consumer is only asked to revoke half of its partitions,
-                 * it still owns partitions when it attempts to commit offset. As a result,
-                 * a rebalance in progress error should be returned.
+                /* Only attempt to commit offsets when the second consumer joins
+                 * the group. Since the first consumer is only asked to revoke
+                 * half of its partitions, it still owns partitions when it
+                 * attempts to commit offset. As a result, a rebalance in
+                 * progress error should be returned.
                  */
                 if (count == 0) {
                         count++;
                         TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
                         commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/);
-                        TEST_SAY("%s: Commit result: %d %s\n", rd_kafka_name(rk), commit_err,
-                                        rd_kafka_err2name(commit_err));
+                        TEST_SAY("%s: Commit result: %d %s\n",
+                                 rd_kafka_name(rk), commit_err,
+                                 rd_kafka_err2name(commit_err));
 
-                        TEST_ASSERT(commit_err == RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
-                                "Expected closing consumer %s's commit to "
-                                "fail, but got %s",
-                                rd_kafka_name(rk), rd_kafka_err2name(commit_err));
+                        TEST_ASSERT(commit_err ==
+                                        RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
+                                    "Expected closing consumer %s's commit to "
+                                    "fail, but got %s",
+                                    rd_kafka_name(rk),
+                                    rd_kafka_err2name(commit_err));
                 }
 
                 test_consumer_incremental_unassign("unassign", rk, parts);
@@ -75,66 +80,69 @@ static void rebalance_cb(rd_kafka_t *rk,
 
 
 int main_0137_cooperative_commit_rebalance(int argc, char **argv) {
-    const char *topic = test_mk_topic_name(__FUNCTION__, 1);
-    rd_kafka_conf_t *conf;
-    rd_kafka_t *p;
-    const int partition_cnt        = 6;
-    const int msgcnt_per_partition = 100;
-    const int msgcnt               = partition_cnt * msgcnt_per_partition;
-    uint64_t testid;
-    int i;
-    testid = test_id_generate();
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *p;
+        const int partition_cnt        = 6;
+        const int msgcnt_per_partition = 100;
+        const int msgcnt               = partition_cnt * msgcnt_per_partition;
+        uint64_t testid;
+        int i;
+        testid = test_id_generate();
 
-    test_conf_init(&conf, NULL, 60);
-    test_conf_set(conf, "enable.auto.commit", "false");
-    test_conf_set(conf, "auto.offset.reset", "earliest");
-    test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
-    rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "partition.assignment.strategy",
+                      "cooperative-sticky");
+        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
-    p = test_create_producer();
+        p = test_create_producer();
 
-    test_create_topic(p, topic, partition_cnt, 1);
+        test_create_topic(p, topic, partition_cnt, 1);
 
-    for (i = 0; i < partition_cnt; i++) {
-    test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
-                    msgcnt_per_partition, NULL, 0);
-    }
+        for (i = 0; i < partition_cnt; i++) {
+                test_produce_msgs2(p, topic, testid, i,
+                                   i * msgcnt_per_partition,
+                                   msgcnt_per_partition, NULL, 0);
+        }
 
-    test_flush(p, -1);
+        test_flush(p, -1);
 
-    rd_kafka_destroy(p);
+        rd_kafka_destroy(p);
 
-    /* Create two consumers to consume from the topic */
-    c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
-                                NULL);
-    c2 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf), NULL);
+        /* Create two consumers to consume from the topic */
+        c1 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
+                                  NULL);
+        c2 = test_create_consumer(topic, rebalance_cb, rd_kafka_conf_dup(conf),
+                                  NULL);
 
-    /* Have the first consumer subscribe to the topic and consume messages */
-    test_consumer_subscribe(c1, topic);
+        /* Have the first consumer subscribe to the topic and consume messages
+         */
+        test_consumer_subscribe(c1, topic);
 
-    /* Consume some messages so that we know we have an assignment
-    * and something to commit. */
-    test_consumer_poll("C1.PRECONSUME", c1, testid, -1, 0,
-                    msgcnt / 2, NULL);
+        /* Consume some messages so that we know we have an assignment
+         * and something to commit. */
+        test_consumer_poll("C1.PRECONSUME", c1, testid, -1, 0, msgcnt / 2,
+                           NULL);
 
-    /* Trigger a rebalance by having the second consumer joining the group */
-    test_consumer_subscribe(c2, topic);
+        /* Trigger a rebalance by having the second consumer joining the group
+         */
+        test_consumer_subscribe(c2, topic);
 
-    /* Sleep to allow enough time for all partitions to move around */
-    rd_sleep(5);
+        /* Sleep to allow enough time for all partitions to move around */
+        rd_sleep(5);
 
-    /* Poll both consumers */
-    test_consumer_poll("C1.PRE", c1, testid, -1, 0,
-            10, NULL);
-    test_consumer_poll("C2.PRE", c2, testid, -1, 0,
-    10, NULL);
+        /* Poll both consumers */
+        test_consumer_poll("C1.PRE", c1, testid, -1, 0, 10, NULL);
+        test_consumer_poll("C2.PRE", c2, testid, -1, 0, 10, NULL);
 
-    TEST_SAY("Closing consumers\n");
-    test_consumer_close(c1);
-    test_consumer_close(c2);
+        TEST_SAY("Closing consumers\n");
+        test_consumer_close(c1);
+        test_consumer_close(c2);
 
-    rd_kafka_destroy(c1);
-    rd_kafka_destroy(c2);
+        rd_kafka_destroy(c1);
+        rd_kafka_destroy(c2);
 
-    return 0;
+        return 0;
 }

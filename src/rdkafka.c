@@ -489,6 +489,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR__NOOP, "Local: No operation performed"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET,
               "Local: No offset to automatically reset to"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+              "Local: Partition log truncation detected"),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),
@@ -1457,9 +1459,13 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             ", "
             "\"stored_offset\":%" PRId64
             ", "
+            "\"stored_leader_epoch\":%" PRId32
+            ", "
             "\"commited_offset\":%" PRId64
             ", " /*FIXME: issue #80 */
             "\"committed_offset\":%" PRId64
+            ", "
+            "\"committed_leader_epoch\":%" PRId32
             ", "
             "\"eof_offset\":%" PRId64
             ", "
@@ -1472,6 +1478,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             "\"consumer_lag\":%" PRId64
             ", "
             "\"consumer_lag_stored\":%" PRId64
+            ", "
+            "\"leader_epoch\":%" PRId32
             ", "
             "\"txmsgs\":%" PRIu64
             ", "
@@ -1503,11 +1511,12 @@ static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
             rd_kafka_q_size(rktp->rktp_fetchq),
             rd_kafka_fetch_states[rktp->rktp_fetch_state],
             rktp->rktp_query_offset, offs.fetch_offset, rktp->rktp_app_offset,
-            rktp->rktp_stored_offset,
+            rktp->rktp_stored_offset, rktp->rktp_stored_leader_epoch,
             rktp->rktp_committed_offset, /* FIXME: issue #80 */
-            rktp->rktp_committed_offset, offs.eof_offset, rktp->rktp_lo_offset,
-            rktp->rktp_hi_offset, rktp->rktp_ls_offset, consumer_lag,
-            consumer_lag_stored, rd_atomic64_get(&rktp->rktp_c.tx_msgs),
+            rktp->rktp_committed_offset, rktp->rktp_committed_leader_epoch,
+            offs.eof_offset, rktp->rktp_lo_offset, rktp->rktp_hi_offset,
+            rktp->rktp_ls_offset, consumer_lag, consumer_lag_stored,
+            rktp->rktp_leader_epoch, rd_atomic64_get(&rktp->rktp_c.tx_msgs),
             rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes),
             rd_atomic64_get(&rktp->rktp_c.rx_msgs),
             rd_atomic64_get(&rktp->rktp_c.rx_msg_bytes),

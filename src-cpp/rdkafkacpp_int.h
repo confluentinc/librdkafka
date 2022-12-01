@@ -540,6 +540,21 @@ class MessageImpl : public Message {
     return rd_kafka_message_broker_id(rkmessage_);
   }
 
+  int32_t leader_epoch() const {
+    return rd_kafka_message_leader_epoch(rkmessage_);
+  }
+
+
+  Error *offset_store() {
+    rd_kafka_error_t *c_error;
+
+    c_error = rd_kafka_offset_store_message(rkmessage_);
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
+  }
 
   RdKafka::Topic *topic_;
   rd_kafka_message_t *rkmessage_;

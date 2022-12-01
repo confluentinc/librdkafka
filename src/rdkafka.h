@@ -402,6 +402,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOOP = -141,
         /** No offset to automatically reset to */
         RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET = -140,
+        /** Partition log truncation detected */
+        RD_KAFKA_RESP_ERR__LOG_TRUNCATION = -139,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,
@@ -1613,6 +1615,18 @@ typedef enum {
  */
 RD_EXPORT rd_kafka_msg_status_t
 rd_kafka_message_status(const rd_kafka_message_t *rkmessage);
+
+
+/**
+ * @returns the message's partition leader epoch at the time the message was
+ *          fetched and if known, else -1.
+ *
+ * @remark This API must only be used on consumed messages without error.
+ * @remark Requires broker version >= 2.10 (KIP-320).
+ */
+RD_EXPORT int32_t
+rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage);
+
 
 /**@}*/
 
@@ -3917,6 +3931,11 @@ int rd_kafka_consume_callback_queue(
  * The \c offset + 1 will be committed (written) to broker (or file) according
  * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
+ * @deprecated This API lacks support for partition leader epochs, which makes
+ *             it at risk for unclean leader election log truncation issues.
+ *             Use rd_kafka_offsets_store() and rd_kafka_offset_store_message()
+ *             instead.
+ *
  * @warning This method may only be called for partitions that are currently
  *          assigned.
  *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
@@ -3959,6 +3978,9 @@ rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
  * @remark \c `enable.auto.offset.store` must be set to "false" when using
  *         this API.
  *
+ * @remark The leader epoch, if set, will be used to fence outdated partition
+ *         leaders. See rd_kafka_topic_partition_set_leader_epoch().
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on (partial) success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store
  *          is true, or
@@ -3968,6 +3990,31 @@ rd_kafka_offset_store(rd_kafka_topic_t *rkt, int32_t partition, int64_t offset);
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_store(rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t *offsets);
+
+
+/**
+ * @brief Store offset +1 for the consumed message.
+ *
+ * The message offset + 1 will be committed to broker according
+ * to \c `auto.commit.interval.ms` or manual offset-less commit()
+ *
+ * @warning This method may only be called for partitions that are currently
+ *          assigned.
+ *          Non-assigned partitions will fail with RD_KAFKA_RESP_ERR__STATE.
+ *          Since v1.9.0.
+ *
+ * @warning Avoid storing offsets after calling rd_kafka_seek() (et.al) as
+ *          this may later interfere with resuming a paused partition, instead
+ *          store offsets prior to calling seek.
+ *
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using
+ *         this API.
+ *
+ * @returns NULL on success or an error object on failure.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_offset_store_message(rd_kafka_message_t *rkmessage);
+
 /**@}*/
 
 

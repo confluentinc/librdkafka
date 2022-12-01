@@ -242,6 +242,11 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state)                          \
         ((fetch_state) >= RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 
+        int32_t rktp_leader_epoch; /**< Last known partition leader epoch,
+                                    *   or -1. */
+
+
+
         int32_t rktp_fetch_msg_max_bytes; /* Max number of bytes to
                                            * fetch.
                                            * Locality: broker thread

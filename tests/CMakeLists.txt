@@ -127,7 +127,7 @@ set(
     0134-ssl_provider.c
     0135-sasl_credentials.cpp
     0136-resolve_cb.c
-    0137_cooperative_commit_rebalance.c
+    0137-cooperative_commit_rebalance.c
     8000-idle.cpp
     test.c
     testcpp.cpp

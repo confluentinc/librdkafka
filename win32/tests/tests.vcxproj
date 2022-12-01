@@ -217,6 +217,7 @@
     <ClCompile Include="..\..\tests\0134-ssl_provider.c" />
     <ClCompile Include="..\..\tests\0135-sasl_credentials.cpp" />
     <ClCompile Include="..\..\tests\0136-resolve_cb.c" />
+    <ClCompile Include="..\..\tests\0137-cooperative_commit_rebalance.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

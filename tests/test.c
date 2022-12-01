@@ -244,6 +244,7 @@ _TEST_DECL(0133_ssl_keys);
 _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
+_TEST_DECL(0137_cooperative_commit_rebalance);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -486,6 +487,7 @@ struct test tests[] = {
     _TEST(0134_ssl_provider, TEST_F_LOCAL),
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
+    _TEST(0137_cooperative_commit_rebalance, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

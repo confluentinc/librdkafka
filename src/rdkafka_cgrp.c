@@ -3184,6 +3184,14 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
                 rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
         }
 
+        /* Don't attempt auto commit when rebalancing or initializing since
+         * the rkcg_generation_id is most likely in flux. */
+        if (rkcg->rkcg_subscription &&
+            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY) {
+                err = RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS;
+                goto err;
+        }
+
         /* If offsets is NULL we shall use the current assignment
          * (not the group assignment). */
         if (!rko->rko_u.offset_commit.partitions &&
@@ -3346,12 +3354,6 @@ void rd_kafka_cgrp_assigned_offsets_commit(
 static void rd_kafka_cgrp_offset_commit_tmr_cb(rd_kafka_timers_t *rkts,
                                                void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
-
-        /* Don't attempt auto commit when rebalancing or initializing since
-         * the rkcg_generation_id is most likely in flux. */
-        if (rkcg->rkcg_subscription &&
-            rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY)
-                return;
 
         rd_kafka_cgrp_assigned_offsets_commit(
             rkcg, NULL, rd_true /*set offsets*/, "cgrp auto commit timer");

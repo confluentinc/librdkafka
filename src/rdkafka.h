@@ -4864,6 +4864,7 @@ void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
  * @brief Get the id of \p node.
  *
  * @param node The Node instance.
+ *
  * @return The node id.
  */
 RD_EXPORT
@@ -4873,10 +4874,11 @@ int rd_kafka_Node_id(const rd_kafka_Node_t *node);
  * @brief Get the host of \p node.
  *
  * @param node The Node instance.
+ *
  * @return The node host.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p node object.
+ *         as the lifetime of the \p node object.
  */
 RD_EXPORT
 const char *rd_kafka_Node_host(const rd_kafka_Node_t *node);
@@ -4885,6 +4887,7 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node);
  * @brief Get the port of \p node.
  *
  * @param node The Node instance.
+ *
  * @return The node port.
  */
 RD_EXPORT
@@ -5621,7 +5624,7 @@ rd_kafka_event_DeleteRecords_result(rd_kafka_event_t *rkev);
  *          different type.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p rkev object.
+ *         as the lifetime of the \p rkev object.
  *
  * Event types:
  *   RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
@@ -5636,7 +5639,7 @@ rd_kafka_event_ListConsumerGroups_result(rd_kafka_event_t *rkev);
  * of different type.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p rkev object.
+ *         as the lifetime of the \p rkev object.
  *
  * Event types:
  *   RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT
@@ -5705,7 +5708,7 @@ rd_kafka_event_DeleteAcls_result(rd_kafka_event_t *rkev);
  *          event is of different type.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p rkev object.
+ *         as the lifetime of the \p rkev object.
  *
  * Event types:
  *   RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT
@@ -5720,7 +5723,7 @@ rd_kafka_event_AlterConsumerGroupOffsets_result(rd_kafka_event_t *rkev);
  *          event is of different type.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p rkev object.
+ *         as the lifetime of the \p rkev object.
  *
  * Event types:
  *   RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT
@@ -6814,6 +6817,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
  * @param options Admin options.
  * @param consumer_group_states Array of consumer group states.
  * @param consumer_group_states_cnt Size of the \p consumer_group_states array.
+ *
  * @return NULL on success, a new error instance that must be
  *         released with rd_kafka_error_destroy() in case of error.
  */
@@ -7674,10 +7678,11 @@ void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
  * @brief Gets the group id for the \p grplist group.
  *
  * @param grplist The group listing.
+ *
  * @return The group id.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grplist object.
+ *         as the lifetime of the \p grplist object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupListing_group_id(
@@ -7687,6 +7692,7 @@ const char *rd_kafka_ConsumerGroupListing_group_id(
  * @brief Is the \p grplist group a simple consumer group.
  *
  * @param grplist The group listing.
+ *
  * @return 1 if the group is a simple consumer group,
  *         else 0 (also if \p grplist is NULL).
  */
@@ -7698,6 +7704,7 @@ int rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
  * @brief Gets state for the \p grplist group.
  *
  * @param grplist The group listing.
+ *
  * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if \p grplist
  * is NULL.
  */
@@ -7714,7 +7721,7 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupListing_state(
  * @param cntp is updated to the number of elements in the array.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p result object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT
 const rd_kafka_ConsumerGroupListing_t **
@@ -7729,10 +7736,11 @@ rd_kafka_ListConsumerGroups_result_valid(
  *
  * @param result ListConsumerGroups result.
  * @param cntp Is updated to the number of elements in the array.
+ *
  * @return Array of errors in \p result.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p result object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT
 const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
@@ -7794,7 +7802,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
  * @param cntp is updated to the number of elements in the array.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p result object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT
 const rd_kafka_ConsumerGroupDescription_t **
@@ -7807,10 +7815,11 @@ rd_kafka_DescribeConsumerGroups_result_groups(
  * @brief Gets the group id for the \p grpdesc group.
  *
  * @param grpdesc The group description.
+ *
  * @return The group id.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grpdesc object.
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupDescription_group_id(
@@ -7820,10 +7829,11 @@ const char *rd_kafka_ConsumerGroupDescription_group_id(
  * @brief Gets the error for the \p grpdesc group.
  *
  * @param grpdesc The group description.
+ *
  * @return The group description error.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grpdesc object.
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_error_t *rd_kafka_ConsumerGroupDescription_error(
@@ -7845,10 +7855,11 @@ int rd_kafka_ConsumerGroupDescription_is_simple_consumer_group(
  * @brief Gets the partition assignor for the \p grpdesc group.
  *
  * @param grpdesc The group description.
+ *
  * @return The partition assignor.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grpdesc object.
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
@@ -7871,10 +7882,11 @@ rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
  * @brief Gets the coordinator for the \p grpdesc group.
  *
  * @param grpdesc The group description.
+ *
  * @return The group coordinator.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grpdesc object.
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
@@ -7884,6 +7896,7 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
  * @brief Gets the members count of \p grpdesc group.
  *
  * @param grpdesc The group description.
+ *
  * @return The member count, or 0 if \p grpdesc is NULL.
  */
 RD_EXPORT
@@ -7895,11 +7908,12 @@ int rd_kafka_ConsumerGroupDescription_member_count(
  *
  * @param grpdesc The group description.
  * @param idx The member idx.
+ *
  * @return A member at index \p idx, or NULL if
  *         \p idx is out of range.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p grpdesc object.
+ *         as the lifetime of the \p grpdesc object.
  */
 RD_EXPORT
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
@@ -7907,52 +7921,56 @@ const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     int idx);
 
 /**
- * @brief Gets client id of a \p member.
+ * @brief Gets client id of \p member.
  *
  * @param member The group member.
+ *
  * @return The client id.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p member object.
+ *         as the lifetime of the \p member object.
  */
 RD_EXPORT
 const char *rd_kafka_MemberDescription_client_id(
     const rd_kafka_MemberDescription_t *member);
 
 /**
- * @brief Gets consumer id of a \p member.
+ * @brief Gets consumer id of \p member.
  *
  * @param member The group member.
+ *
  * @return The consumer id.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p member object.
+ *         as the lifetime of the \p member object.
  */
 RD_EXPORT
 const char *rd_kafka_MemberDescription_consumer_id(
     const rd_kafka_MemberDescription_t *member);
 
 /**
- * @brief Gets host of a \p member.
+ * @brief Gets host of \p member.
  *
  * @param member The group member.
+ *
  * @return The host.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p member object.
+ *         as the lifetime of the \p member object.
  */
 RD_EXPORT
 const char *
 rd_kafka_MemberDescription_host(const rd_kafka_MemberDescription_t *member);
 
 /**
- * @brief Gets assignment of a \p member.
+ * @brief Gets assignment of \p member.
  *
  * @param member The group member.
+ *
  * @return The member assignment.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p member object.
+ *         as the lifetime of the \p member object.
  */
 RD_EXPORT
 const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
@@ -7962,10 +7980,11 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
  * @brief Gets assigned partitions of a member \p assignment.
  *
  * @param assignment The group member assignment.
+ *
  * @return The assigned partitions.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p assignment object.
+ *         as the lifetime of the \p assignment object.
  */
 RD_EXPORT
 const rd_kafka_topic_partition_list_t *
@@ -8139,7 +8158,7 @@ void rd_kafka_ListConsumerGroupOffsets(
  * @param cntp is updated to the number of elements in the array.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p result object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT const rd_kafka_group_result_t **
 rd_kafka_ListConsumerGroupOffsets_result_groups(
@@ -8235,7 +8254,7 @@ void rd_kafka_AlterConsumerGroupOffsets(
  * @param cntp is updated to the number of elements in the array.
  *
  * @remark The lifetime of the returned memory is the same
- *         as the lifetime of \p result object.
+ *         as the lifetime of the \p result object.
  */
 RD_EXPORT const rd_kafka_group_result_t **
 rd_kafka_AlterConsumerGroupOffsets_result_groups(

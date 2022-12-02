@@ -5638,6 +5638,8 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
                                          rd_kafka_resp_cb_t *resp_cb,
                                          void *opaque) {
         int i;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         const rd_kafkap_str_t **states_str = NULL;
         int states_str_cnt                 = 0;
         rd_list_t *states =
@@ -5654,8 +5656,8 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
                 }
         }
 
-        rd_kafka_ListGroupsRequest_versioned(rkb, states_str, states_str_cnt,
-                                             replyq, resp_cb, opaque);
+        error = rd_kafka_ListGroupsRequest(rkb, -1, states_str, states_str_cnt,
+                                           replyq, resp_cb, opaque);
 
         if (states_str) {
                 for (i = 0; i < states_str_cnt; i++) {
@@ -5663,6 +5665,15 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
                 }
                 rd_free((void *)states_str);
         }
+
+        if (error) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_error_string(error));
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                return err;
+        }
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

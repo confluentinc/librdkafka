@@ -4813,6 +4813,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         /* Query each broker for its list of groups */
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_error_t *error;
                 rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_kafka_broker_unlock(rkb);
@@ -4822,8 +4823,15 @@ rd_kafka_list_groups(rd_kafka_t *rk,
 
                 state.wait_cnt++;
                 rkb_cnt++;
-                rd_kafka_ListGroupsRequest(rkb, RD_KAFKA_REPLYQ(state.q, 0),
-                                           rd_kafka_ListGroups_resp_cb, &state);
+                error = rd_kafka_ListGroupsRequest(
+                    rkb, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
+                    rd_kafka_ListGroups_resp_cb, &state);
+                if (error) {
+                        rd_kafka_ListGroups_resp_cb(rk, rkb,
+                                                    rd_kafka_error_code(error),
+                                                    NULL, NULL, &state);
+                        rd_kafka_error_destroy(error);
+                }
         }
         rd_kafka_rdunlock(rk);
 

@@ -207,10 +207,14 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 for (j = 0; j < member_cnt; j++) {
                         const rd_kafka_MemberDescription_t *member =
                             rd_kafka_ConsumerGroupDescription_member(group, j);
-                        printf("  Member \"%s\" with client-id %s, host %s\n",
-                               rd_kafka_MemberDescription_consumer_id(member),
-                               rd_kafka_MemberDescription_client_id(member),
-                               rd_kafka_MemberDescription_host(member));
+                        printf(
+                            "  Member \"%s\" with client-id %s,"
+                            " group instance id: %s, host %s\n",
+                            rd_kafka_MemberDescription_consumer_id(member),
+                            rd_kafka_MemberDescription_client_id(member),
+                            rd_kafka_MemberDescription_group_instance_id(
+                                member),
+                            rd_kafka_MemberDescription_host(member));
                         const rd_kafka_MemberAssignment_t *assignment =
                             rd_kafka_MemberDescription_assignment(member);
                         const rd_kafka_topic_partition_list_t

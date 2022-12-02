@@ -7935,6 +7935,20 @@ const char *rd_kafka_MemberDescription_client_id(
     const rd_kafka_MemberDescription_t *member);
 
 /**
+ * @brief Gets group instance id of \p member.
+ *
+ * @param member The group member.
+ *
+ * @return The group instance id, or NULL if not available.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p member object.
+ */
+RD_EXPORT
+const char *rd_kafka_MemberDescription_group_instance_id(
+    const rd_kafka_MemberDescription_t *member);
+
+/**
  * @brief Gets consumer id of \p member.
  *
  * @param member The group member.

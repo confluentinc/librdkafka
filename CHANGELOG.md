@@ -63,6 +63,7 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
  * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * Admin API DescribeGroups() now provides the group instance id for static members [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances) (#4091).
 
 ## Fixes
 

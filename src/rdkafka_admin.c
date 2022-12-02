@@ -6015,6 +6015,12 @@ const char *rd_kafka_MemberDescription_client_id(
         return member->client_id;
 }
 
+const char *rd_kafka_MemberDescription_group_instance_id(
+    const rd_kafka_MemberDescription_t *member) {
+        rd_assert(member != NULL);
+        return member->group_instance_id;
+}
+
 const char *rd_kafka_MemberDescription_consumer_id(
     const rd_kafka_MemberDescription_t *member) {
         rd_assert(member != NULL);

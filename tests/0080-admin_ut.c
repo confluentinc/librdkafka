@@ -2211,7 +2211,7 @@ static void do_test_options(rd_kafka_t *rk) {
                         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
                         rd_kafka_resp_err_t exp_err =
                             RD_KAFKA_RESP_ERR_NO_ERROR;
-                        const rd_kafka_error_t *error = NULL;
+                        rd_kafka_error_t *error = NULL;
                         char errstr[512];
                         int fi;
 
@@ -2254,8 +2254,7 @@ static void do_test_options(rd_kafka_t *rk) {
                                 err = rd_kafka_error_code(error);
                                 snprintf(errstr, sizeof(errstr), "%s",
                                          rd_kafka_error_string(error));
-                                rd_kafka_error_destroy(
-                                    (rd_kafka_error_t *)error);
+                                rd_kafka_error_destroy(error);
                         }
 
 

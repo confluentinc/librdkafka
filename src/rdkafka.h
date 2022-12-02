@@ -6804,7 +6804,7 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
  * @remark This option is valid for ListConsumerGroupOffsets.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
+rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
     rd_kafka_AdminOptions_t *options,
     int true_or_false);
 
@@ -6818,7 +6818,7 @@ const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
  *         released with rd_kafka_error_destroy() in case of error.
  */
 RD_EXPORT
-const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
+rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
     size_t consumer_group_states_cnt);

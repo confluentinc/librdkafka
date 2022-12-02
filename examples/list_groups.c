@@ -187,8 +187,8 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_queue_t *queue;
-        rd_kafka_event_t *event       = NULL;
-        const rd_kafka_error_t *error = NULL;
+        rd_kafka_event_t *event = NULL;
+        rd_kafka_error_t *error = NULL;
         int i;
         int retval     = 0;
         int states_cnt = 0;
@@ -231,7 +231,7 @@ static void cmd_list_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                  options, states, states_cnt))) {
                 fprintf(stderr, "%% Failed to set states: %s\n",
                         rd_kafka_error_string(error));
-                rd_kafka_error_destroy((rd_kafka_error_t *)error);
+                rd_kafka_error_destroy(error);
                 goto exit;
         }
         free(states);

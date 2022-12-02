@@ -176,7 +176,7 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         int partition;
         int print_usage = 0, require_stable_offsets = 0, num_partitions = 0;
         const rd_kafka_ListConsumerGroupOffsets_t *list_cgrp_offsets;
-        const rd_kafka_error_t *error;
+        rd_kafka_error_t *error;
 
         /*
          * Argument validation
@@ -230,7 +230,7 @@ cmd_list_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                  options, require_stable_offsets))) {
                 fprintf(stderr, "%% Failed to set require stable offsets: %s\n",
                         rd_kafka_error_string(error));
-                rd_kafka_error_destroy((rd_kafka_error_t *)error);
+                rd_kafka_error_destroy(error);
                 exit(1);
         }
 

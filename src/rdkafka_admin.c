@@ -1542,7 +1542,7 @@ rd_kafka_AdminOptions_set_broker(rd_kafka_AdminOptions_t *options,
                                          &ibroker_id, errstr, errstr_size);
 }
 
-const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
+rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
     rd_kafka_AdminOptions_t *options,
     int true_or_false) {
         char errstr[512];
@@ -1552,7 +1552,7 @@ const rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
-const rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
+rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     rd_kafka_consumer_group_state_t *consumer_group_states,
     size_t consumer_group_states_cnt) {

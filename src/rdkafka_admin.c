@@ -5713,7 +5713,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                        nodeid, rd_kafka_err2str(error_code));
         }
 
-        rd_kafka_buf_read_arraycnt(reply, &cnt, -1);
+        rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
         rd_list_init(&valid, cnt, rd_kafka_ConsumerGroupListing_free);
         rd_list_init(&errors, 1, rd_free);
         if (error)

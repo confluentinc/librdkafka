@@ -1887,11 +1887,12 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
             ,
             is_flexver);
         if (ApiVersion >= 4) {
-                size_t states_arraycnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                size_t of_GroupsArrayCnt =
+                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
                 for (i = 0; i < states_cnt; i++) {
                         rd_kafka_buf_write_kstr(rkbuf, states[i]);
                 }
-                rd_kafka_buf_finalize_arraycnt(rkbuf, states_arraycnt, i);
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
         }
         if (is_flexver) {
                 rd_kafka_buf_write_tags(rkbuf);

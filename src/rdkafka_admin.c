@@ -5694,7 +5694,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
         rd_list_t valid, errors;
         const rd_kafka_ListConsumerGroupsResult_t *list_result;
-        char *group_s = NULL, *group_state_s = NULL, *proto_type_s = NULL;
+        char *group_id = NULL, *group_state = NULL, *proto_type = NULL;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
         if (api_version >= 1) {
@@ -5724,52 +5724,52 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                      rd_kafka_ListConsumerGroupsResult_free);
 
         for (i = 0; i < cnt; i++) {
-                rd_kafkap_str_t grp, protocol_type, grp_state = RD_ZERO_INIT;
+                rd_kafkap_str_t GroupId, ProtocolType,
+                    GroupState = RD_ZERO_INIT;
                 rd_kafka_ConsumerGroupListing_t *group_listing;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 rd_kafka_consumer_group_state_t state =
                     RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
 
-                rd_kafka_buf_read_str(reply, &grp);
-                rd_kafka_buf_read_str(reply, &protocol_type);
+                rd_kafka_buf_read_str(reply, &GroupId);
+                rd_kafka_buf_read_str(reply, &ProtocolType);
                 if (api_version >= 4) {
-                        rd_kafka_buf_read_str(reply, &grp_state);
+                        rd_kafka_buf_read_str(reply, &GroupState);
                 }
                 rd_kafka_buf_skip_tags(reply);
 
-                group_s      = RD_KAFKAP_STR_DUP(&grp);
-                proto_type_s = RD_KAFKAP_STR_DUP(&protocol_type);
+                group_id   = RD_KAFKAP_STR_DUP(&GroupId);
+                proto_type = RD_KAFKAP_STR_DUP(&ProtocolType);
                 if (api_version >= 4) {
-                        group_state_s = RD_KAFKAP_STR_DUP(&grp_state);
-                        state =
-                            rd_kafka_consumer_group_state_code(group_state_s);
+                        group_state = RD_KAFKAP_STR_DUP(&GroupState);
+                        state = rd_kafka_consumer_group_state_code(group_state);
                 }
 
-                is_simple_consumer_group = *proto_type_s == '\0';
+                is_simple_consumer_group = *proto_type == '\0';
                 is_consumer_protocol_type =
-                    !strcmp(proto_type_s, CONSUMER_PROTOCOL_TYPE);
+                    !strcmp(proto_type, CONSUMER_PROTOCOL_TYPE);
                 if (is_simple_consumer_group || is_consumer_protocol_type) {
                         group_listing = rd_kafka_ConsumerGroupListing_new(
-                            group_s, is_simple_consumer_group, state);
+                            group_id, is_simple_consumer_group, state);
                         rd_list_add(&valid, group_listing);
                 }
 
-                rd_free(group_s);
-                rd_free(group_state_s);
-                rd_free(proto_type_s);
-                group_s       = NULL;
-                group_state_s = NULL;
-                proto_type_s  = NULL;
+                rd_free(group_id);
+                rd_free(group_state);
+                rd_free(proto_type);
+                group_id    = NULL;
+                group_state = NULL;
+                proto_type  = NULL;
         }
         rd_kafka_buf_skip_tags(reply);
 
 err_parse:
-        if (group_s)
-                rd_free(group_s);
-        if (group_state_s)
-                rd_free(group_state_s);
-        if (proto_type_s)
-                rd_free(proto_type_s);
+        if (group_id)
+                rd_free(group_id);
+        if (group_state)
+                rd_free(group_state);
+        if (proto_type)
+                rd_free(proto_type);
 
         if (reply->rkbuf_err) {
                 error_code = reply->rkbuf_err;

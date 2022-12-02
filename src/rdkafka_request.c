@@ -1904,27 +1904,68 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
 }
 
 /**
- * Send DescribeGroupsRequest
+ * @brief Construct and send DescribeGroupsRequest to \p rkb
+ *        with the groups (const char *) in \p groups.
+ *        Uses \p max_ApiVersion as maximum API version,
+ *        pass -1 to use the maximum available version.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
  */
-void rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
-                                    const char **groups,
-                                    int group_cnt,
-                                    rd_kafka_replyq_t replyq,
-                                    rd_kafka_resp_cb_t *resp_cb,
-                                    void *opaque) {
+rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
+                                                 int16_t max_ApiVersion,
+                                                 const char **groups,
+                                                 size_t group_cnt,
+                                                 rd_kafka_replyq_t replyq,
+                                                 rd_kafka_resp_cb_t *resp_cb,
+                                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        size_t of_GroupsArrayCnt;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeGroups, 1,
-                                         32 * group_cnt);
+        if (max_ApiVersion < 0)
+                max_ApiVersion = 4;
 
-        rd_kafka_buf_write_i32(rkbuf, group_cnt);
+        if (max_ApiVersion > ApiVersion) {
+                /* Remark: don't check if max_ApiVersion is zero.
+                 * As rd_kafka_broker_ApiVersion_supported cannot be checked
+                 * in the application thread reliably . */
+                ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                    rkb, RD_KAFKAP_DescribeGroups, 0, max_ApiVersion, NULL);
+        }
+
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "Unsupported feature.");
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeGroups, 1,
+            4 /* rd_kafka_buf_write_arraycnt_pos */ +
+                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                32 * group_cnt /* Groups */,
+            rd_false);
+
+        /* write Groups */
+        of_GroupsArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+        rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, group_cnt);
         while (group_cnt-- > 0)
                 rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
 
+        /* write IncludeAuthorizedOperations */
+        if (ApiVersion >= 3) {
+                /* TODO: implement KIP-430 */
+                rd_kafka_buf_write_bool(rkbuf, rd_false);
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return NULL;
 }
-
-
 
 /**
  * @brief Generic handler for Metadata responses

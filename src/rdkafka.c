@@ -4749,10 +4749,19 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         }
 
         if (i > 0) {
+                rd_kafka_error_t *error;
+
                 state->wait_cnt++;
-                rd_kafka_DescribeGroupsRequest(
-                    rkb, (const char **)grps, i, RD_KAFKA_REPLYQ(state->q, 0),
+                error = rd_kafka_DescribeGroupsRequest(
+                    rkb, 0, (const char **)grps, i,
+                    RD_KAFKA_REPLYQ(state->q, 0),
                     rd_kafka_DescribeGroups_resp_cb, state);
+                if (error) {
+                        rd_kafka_DescribeGroups_resp_cb(
+                            rk, rkb, rd_kafka_error_code(error), reply, request,
+                            opaque);
+                        rd_kafka_error_destroy(error);
+                }
 
                 while (i-- > 0)
                         rd_free(grps[i]);

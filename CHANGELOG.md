@@ -77,7 +77,7 @@ configuration property.
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
-
+ * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
 
 # librdkafka v1.9.2
 

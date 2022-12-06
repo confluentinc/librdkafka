@@ -424,7 +424,7 @@ rd_kafka_resp_err_t rd_kafka_commit_message(rd_kafka_t *rk,
 
         offsets = rd_kafka_topic_partition_list_new(1);
         rktpar  = rd_kafka_topic_partition_list_add(
-             offsets, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition);
+            offsets, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition);
         rktpar->offset = rkmessage->offset + 1;
 
         err = rd_kafka_commit(rk, offsets, async);
@@ -552,7 +552,7 @@ rd_kafka_offset_broker_commit(rd_kafka_toppar_t *rktp, const char *reason) {
 
         offsets = rd_kafka_topic_partition_list_new(1);
         rktpar  = rd_kafka_topic_partition_list_add(
-             offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+            offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rktpar->offset        = rktp->rktp_committing_offset;
         rktpar->metadata_size = rktp->rktp_stored_metadata_size;
         if (rktp->rktp_stored_metadata) {

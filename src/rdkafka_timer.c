@@ -321,12 +321,17 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
 
                 while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) &&
                        rtmr->rtmr_next <= now) {
+                        rd_bool_t oneshot;
 
                         rd_kafka_timer_unschedule(rkts, rtmr);
 
                         /* If timer must only be fired once,
-                         * disable it now prior to callback. */
-                        if (rtmr->rtmr_oneshot)
+                         * disable it now prior to callback.
+                         *
+                         * NOTE: Oneshot timers are never touched again after
+                         * the callback has been called to avoid use-after-free.
+                         */
+                        if ((oneshot = rtmr->rtmr_oneshot))
                                 rtmr->rtmr_interval = 0;
 
                         rd_kafka_timers_unlock(rkts);
@@ -337,7 +342,7 @@ void rd_kafka_timers_run(rd_kafka_timers_t *rkts, int timeout_us) {
 
                         /* Restart timer, unless it has been stopped, or
                          * already reschedueld (start()ed) from callback. */
-                        if (rd_kafka_timer_started(rtmr) &&
+                        if (!oneshot && rd_kafka_timer_started(rtmr) &&
                             !rd_kafka_timer_scheduled(rtmr))
                                 rd_kafka_timer_schedule(rkts, rtmr, 0);
                 }

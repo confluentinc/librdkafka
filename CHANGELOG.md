@@ -33,6 +33,15 @@ providers. As such librdkafka will emit a deprecation warning if
 OpenSSL providers may be configured with the new `ssl.providers`
 configuration property.
 
+### Broker TLS certificate hostname verification
+
+The default value for `ssl.endpoint.identification.algorithm` has been
+changed from `none` (no hostname verification) to `https`, which enables
+broker hostname verification (to counter man-in-the-middle
+impersonation attacks) by default.
+
+To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
+
 ## Known Issues
 
 ### Consumer issues
@@ -44,8 +53,9 @@ configuration property.
 
    It is strongly recommended to use the Consumer Batch APIs and the mentioned
    operations in sequential order in order to get consistent result.
+   
    For **repartition** operation to work in sequencial manner, please set `rebalance_cb`
-   configuration property (refer [examples/rdkafka_complex_consumer_example.c](examples/rdkafka_complex_consumer_example.c) for help with the usage) for the consumer.
+   configuration property (refer [examples/rdkafka_complex_consumer_example.c](examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
 
 ## Enhancements
 
@@ -86,6 +96,14 @@ configuration property.
  * Timeouts for EndTxn requests (transaction commits and aborts) are now
    automatically retried and the error raised to the application is also
    a retriable error.
+ * TxnOffsetCommitRequests were retried immediately upon temporary errors in
+   `send_offsets_to_transactions()`, causing excessive network requests.
+   These retries are now delayed 500ms.
+ * If `init_transactions()` is called with an infinite timeout (-1),
+   the timeout will be limited to 2 * `transaction.timeout.ms`.
+   The application may retry and resume the call if a retriable error is
+   returned.
+
 
 ### Consumer fixes
 

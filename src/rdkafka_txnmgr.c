@@ -536,8 +536,12 @@ static rd_kafka_error_t *rd_kafka_txn_curr_api_begin(rd_kafka_t *rk,
                     "Simultaneous %s API calls not allowed",
                     rk->rk_eos.txn_curr_api.name);
 
+        } else if (*rk->rk_eos.txn_curr_api.name) {
+                /* Resumed call */
+                rk->rk_eos.txn_curr_api.calling = rd_true;
+
         } else {
-                /* New or resumable call. */
+                /* New call */
                 rd_snprintf(rk->rk_eos.txn_curr_api.name,
                             sizeof(rk->rk_eos.txn_curr_api.name), "%s",
                             api_name);
@@ -662,7 +666,7 @@ static void rd_kafka_txn_curr_api_set_result0(const char *func,
                      rk->rk_eos.txn_curr_api.name,
                      rk->rk_eos.txn_curr_api.calling ? ", calling" : "", func,
                      line, error ? rd_kafka_error_string(error) : "Success",
-                     rk->rk_eos.txn_curr_api.has_result ? "" : "no",
+                     rk->rk_eos.txn_curr_api.has_result ? "" : "no ",
                      rk->rk_eos.txn_curr_api.error ? ": " : "",
                      rd_kafka_error_string(rk->rk_eos.txn_curr_api.error));
 
@@ -1329,6 +1333,16 @@ rd_kafka_error_t *rd_kafka_init_transactions(rd_kafka_t *rk, int timeout_ms) {
         rd_kafka_error_t *error;
         rd_ts_t abs_timeout;
 
+        /* Cap actual timeout to transaction.timeout.ms * 2 when an infinite
+         * timeout is provided, this is to make sure the call doesn't block
+         * indefinitely in case a coordinator is not available.
+         * This is only needed for init_transactions() since there is no
+         * coordinator to time us out yet. */
+        if (timeout_ms == RD_POLL_INFINITE &&
+            /* Avoid overflow */
+            rk->rk_conf.eos.transaction_timeout_ms < INT_MAX / 2)
+                timeout_ms = rk->rk_conf.eos.transaction_timeout_ms * 2;
+
         if ((error = rd_kafka_txn_curr_api_begin(rk, "init_transactions",
                                                  rd_false /* no cap */,
                                                  timeout_ms, &abs_timeout)))
@@ -1593,6 +1607,7 @@ done:
                             rk, RD_KAFKA_COORD_GROUP,
                             rko->rko_u.txn.cgmetadata->group_id,
                             rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
+                            500 /* 500ms delay before retrying */,
                             rd_timeout_remains_limit0(
                                 remains_ms, rk->rk_conf.socket_timeout_ms),
                             RD_KAFKA_REPLYQ(rk->rk_ops, 0),
@@ -1878,6 +1893,7 @@ done:
                     rk, RD_KAFKA_COORD_GROUP,
                     rko->rko_u.txn.cgmetadata->group_id,
                     rd_kafka_txn_send_TxnOffsetCommitRequest, rko,
+                    0 /* no delay */,
                     rd_timeout_remains_limit0(remains_ms,
                                               rk->rk_conf.socket_timeout_ms),
                     RD_KAFKA_REPLYQ(rk->rk_ops, 0),
@@ -1997,7 +2013,7 @@ rd_kafka_error_t *rd_kafka_send_offsets_to_transaction(
                 /* No valid offsets, e.g., nothing was consumed,
                  * this is not an error, do nothing. */
                 rd_kafka_topic_partition_list_destroy(valid_offsets);
-                return NULL;
+                return rd_kafka_txn_curr_api_return(rk, rd_false, NULL);
         }
 
         rd_kafka_topic_partition_list_sort_by_topic(valid_offsets);

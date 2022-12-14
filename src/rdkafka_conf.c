@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022 Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -883,7 +883,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "specified in RFC2818. "
      "none - No endpoint verification. "
      "OpenSSL >= 1.0.2 required.",
-     .vdef = RD_KAFKA_SSL_ENDPOINT_ID_NONE,
+     .vdef = RD_KAFKA_SSL_ENDPOINT_ID_HTTPS,
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
              {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
      _UNSUPPORTED_OPENSSL_1_0_2},

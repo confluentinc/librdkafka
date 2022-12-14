@@ -620,16 +620,16 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 mtx_unlock(&rkq->rkq_lock);
 
-                if (rd_kafka_op_version_outdated(rko, 0)) {
-                        /* Outdated op, put on discard queue */
-                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
-                        continue;
-                }
-
                 if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
                         cnt = (unsigned int)rd_kafka_purge_outdated_messages(
                             rko->rko_version, rkmessages, cnt);
                         rd_kafka_op_destroy(rko);
+                        continue;
+                }
+
+                if (rd_kafka_op_version_outdated(rko, 0)) {
+                        /* Outdated op, put on discard queue */
+                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
                 }
 

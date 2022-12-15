@@ -31,6 +31,7 @@
 
 
 #include "rdstring.h"
+#include "rdkafka_error.h"
 #include "rdkafka_confval.h"
 
 
@@ -82,6 +83,18 @@ struct rd_kafka_AdminOptions_s {
                                     *        requests to.
                                     *   Valid for:
                                     *     all
+                                    */
+
+        rd_kafka_confval_t
+            require_stable_offsets; /**< BOOL: Whether broker should return
+                                     * stable offsets (transaction-committed).
+                                     * Valid for:
+                                     *     ListConsumerGroupOffsets
+                                     */
+
+        rd_kafka_confval_t
+            consumer_group_states; /**< PTR: list of consumer group states.
+                                    * Valid for: ListConsumerGroups.
                                     */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
@@ -353,14 +366,14 @@ struct rd_kafka_DeleteAcls_result_response_s {
  * @brief AlterConsumerGroupOffsets result
  */
 struct rd_kafka_AlterConsumerGroupOffsets_result_s {
-        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
 };
 
 struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group;   /**< Points to data */
+        char *group_id; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char  data[1]; /**< The group name is allocated along with
-                        *   the struct here. */
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
 };
 
 /**@}*/
@@ -375,15 +388,91 @@ struct rd_kafka_AlterConsumerGroupOffsets_s {
  * @brief ListConsumerGroupOffsets result
  */
 struct rd_kafka_ListConsumerGroupOffsets_result_s {
-        rd_list_t groups;   /**< Type (rd_kafka_group_result_t *) */
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
 };
 
 struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group;   /**< Points to data */
+        char *group_id; /**< Points to data */
         rd_kafka_topic_partition_list_t *partitions;
-        char  data[1]; /**< The group name is allocated along with
-                        *   the struct here. */
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
 };
+
+/**@}*/
+
+/**
+ * @name ListConsumerGroups
+ * @{
+ */
+
+/**
+ * @struct ListConsumerGroups result for a single group
+ */
+typedef struct rd_kafka_ConsumerGroupListing_s {
+        char *group_id; /**< Group id */
+        rd_bool_t is_simple_consumer_group;
+        /**< Is it a simple consumer group? That means empty protocol_type. */
+        rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
+} rd_kafka_ConsumerGroupListing_t;
+
+
+/**
+ * @struct ListConsumerGroups results and errors
+ */
+typedef struct rd_kafka_ListConsumerGroupsResult_s {
+        rd_list_t valid;  /**< List of valid ConsumerGroupListing
+                               (rd_kafka_ConsumerGroupListing_t *) */
+        rd_list_t errors; /**< List of errors (rd_kafka_error_t *) */
+} rd_kafka_ListConsumerGroupsResult_t;
+
+/**@}*/
+
+/**
+ * @name DescribeConsumerGroups
+ * @{
+ */
+
+/**
+ * @struct Assignment of a consumer group member.
+ *
+ */
+typedef struct rd_kafka_MemberAssignment_s {
+        rd_kafka_topic_partition_list_t *topic_partitions;
+        /**< Partitions assigned to current member. */
+} rd_kafka_MemberAssignment_t;
+
+/**
+ * @struct Description of a consumer group member.
+ *
+ */
+typedef struct rd_kafka_MemberDescription_s {
+        char *client_id;                        /**< Client id */
+        char *consumer_id;                      /**< Consumer id */
+        char *group_instance_id;                /**< Group instance id */
+        char *host;                             /**< Group member host */
+        rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+} rd_kafka_MemberDescription_t;
+
+/**
+ * @struct DescribeConsumerGroups result
+ */
+typedef struct rd_kafka_ConsumerGroupDescription_s {
+        char *group_id; /**< Group id */
+        rd_bool_t is_simple_consumer_group;
+        /**< Is it a simple consumer group? That means empty protocol_type. */
+        rd_list_t members;
+        /**< Type (rd_kafka_MemberDescription_t *): members list */
+        char *protocol_type; /**< Protocol type */
+        /**< List of members. */
+        char *partition_assignor;
+        /**< Partition assignor identifier . */
+        rd_kafka_consumer_group_state_t state;
+        /**< Consumer group state. */
+        rd_kafka_Node_t *coordinator;
+        /**< Consumer group coordinator. */
+        rd_kafka_error_t *error;
+        /**< Group specific error. */
+} rd_kafka_ConsumerGroupDescription_t;
 
 /**@}*/
 

@@ -452,6 +452,9 @@ rd_kafka_broker_t *rd_kafka_broker_get_async(rd_kafka_t *rk,
                                              int state,
                                              rd_kafka_enq_once_t *eonce);
 
+rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
+                                              rd_kafka_enq_once_t *eonce);
+
 rd_kafka_broker_t *
 rd_kafka_broker_controller(rd_kafka_t *rk, int state, rd_ts_t abs_timeout);
 rd_kafka_broker_t *rd_kafka_broker_controller_async(rd_kafka_t *rk,
@@ -598,6 +601,25 @@ void rd_kafka_broker_monitor_add(rd_kafka_broker_monitor_t *rkbmon,
                                  void (*callback)(rd_kafka_broker_t *rkb));
 
 void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon);
+
+
+/**
+ * @struct Node represents a broker.
+ * It's the public type.
+ */
+typedef struct rd_kafka_Node_s {
+        int id;        /*< Node id */
+        char *host;    /*< Node host */
+        int port;      /*< Node port */
+        char *rack_id; /*< (optional) Node rack id */
+} rd_kafka_Node_t;
+
+rd_kafka_Node_t *
+rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id);
+
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 
 int unittest_broker(void);
 

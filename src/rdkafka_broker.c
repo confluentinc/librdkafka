@@ -1630,6 +1630,65 @@ rd_kafka_broker_t *rd_kafka_broker_get_async(rd_kafka_t *rk,
 
 
 /**
+ * @brief Asynchronously look up current list of broker ids until available.
+ *        Bootstrap and logical brokers are excluded from the list.
+ *
+ *        To be called repeatedly with an valid eonce until a non-NULL
+ *        list is returned.
+ *
+ * @param rk Client instance.
+ * @param eonce For triggering asynchronously on state change
+ *              in case broker list isn't yet available.
+ * @return List of int32_t with broker nodeids when ready, NULL when the eonce
+ *         was added to the wait list.
+ */
+rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
+                                              rd_kafka_enq_once_t *eonce) {
+        rd_list_t *nodeids = NULL;
+        int version, i, broker_cnt;
+        do {
+                rd_kafka_broker_t *rkb;
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rd_kafka_rdlock(rk);
+                broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+                if (nodeids) {
+                        if (broker_cnt > rd_list_cnt(nodeids)) {
+                                rd_list_destroy(nodeids);
+                                /* Will be recreated just after */
+                                nodeids = NULL;
+                        } else {
+                                rd_list_set_cnt(nodeids, 0);
+                        }
+                }
+                if (!nodeids) {
+                        nodeids = rd_list_new(0, NULL);
+                        rd_list_init_int32(nodeids, broker_cnt);
+                }
+                i = 0;
+                TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                        rd_kafka_broker_lock(rkb);
+                        if (rkb->rkb_nodeid != -1 &&
+                            !RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
+                                rd_list_set_int32(nodeids, i++,
+                                                  rkb->rkb_nodeid);
+                        }
+                        rd_kafka_broker_unlock(rkb);
+                }
+                rd_kafka_rdunlock(rk);
+
+                if (!rd_list_empty(nodeids))
+                        return nodeids;
+        } while (!rd_kafka_brokers_wait_state_change_async(rk, version, eonce));
+
+        if (nodeids) {
+                rd_list_destroy(nodeids);
+        }
+        return NULL; /* eonce added to wait list */
+}
+
+
+/**
  * @returns the current controller using cached metadata information,
  *          and only if the broker's state == \p state.
  *          The reference count is increased for the returned broker.
@@ -5774,7 +5833,61 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
         rd_kafka_broker_destroy(rkb);
 }
 
+/**
+ * @brief Create a new Node object.
+ *
+ * @param id The node id.
+ * @param host The node host.
+ * @param port The node port.
+ * @param rack_id (optional) The node rack id.
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *
+rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
+        rd_kafka_Node_t *ret = calloc(1, sizeof(*ret));
+        ret->id              = id;
+        ret->port            = port;
+        ret->host            = rd_strdup(host);
+        if (rack_id != NULL)
+                ret->rack_id = rd_strdup(rack_id);
+        return ret;
+}
 
+/**
+ * @brief Copy \p src Node object
+ *
+ * @param src The Node to copy.
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
+        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
+}
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
+        if (!node)
+                return;
+        rd_free(node->host);
+        if (node->rack_id)
+                rd_free(node->rack_id);
+        rd_free(node);
+}
+
+int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
+        rd_assert(node != NULL);
+        return node->id;
+}
+
+const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
+        rd_assert(node != NULL);
+        return node->host;
+}
+
+int rd_kafka_Node_port(const rd_kafka_Node_t *node) {
+        rd_assert(node != NULL);
+        return node->port;
+}
 
 /**
  * @name Unit tests

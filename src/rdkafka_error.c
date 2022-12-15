@@ -99,6 +99,14 @@ rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src) {
         return error;
 }
 
+/**
+ * @brief Same as rd_kafka_error_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+void *rd_kafka_error_copy_opaque(const void *error, void *opaque) {
+        return rd_kafka_error_copy(error);
+}
+
 
 rd_kafka_error_t *
 rd_kafka_error_new(rd_kafka_resp_err_t code, const char *fmt, ...) {

@@ -131,7 +131,13 @@ typedef enum {
                                       *   u.admin_request*/
         RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
                                       *   u.admin_request*/
-        RD_KAFKA_OP_DELETEGROUPS,    /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_LISTCONSUMERGROUPS,     /**< Admin:
+                                             *   ListConsumerGroups
+                                             *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBECONSUMERGROUPS, /**< Admin:
+                                             *   DescribeConsumerGroups
+                                             *   u.admin_request */
+        RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
                                                  *   u.admin_request */
@@ -141,20 +147,20 @@ typedef enum {
         RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS, /**< Admin:
                                                 *   AlterConsumerGroupOffsets
                                                 *   u.admin_request */
-        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS, /**< Admin:
-                                               *   ListConsumerGroupOffsets
-                                               *   u.admin_request */
-        RD_KAFKA_OP_ADMIN_FANOUT, /**< Admin: fanout request */
-        RD_KAFKA_OP_ADMIN_RESULT, /**< Admin API .._result_t */
-        RD_KAFKA_OP_PURGE,        /**< Purge queues */
-        RD_KAFKA_OP_CONNECT,      /**< Connect (to broker) */
-        RD_KAFKA_OP_OAUTHBEARER_REFRESH,    /**< Refresh OAUTHBEARER token */
-        RD_KAFKA_OP_MOCK,                   /**< Mock cluster command */
-        RD_KAFKA_OP_BROKER_MONITOR,         /**< Broker state change */
-        RD_KAFKA_OP_TXN,                    /**< Transaction command */
-        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL, /**< Get rebalance protocol */
-        RD_KAFKA_OP_LEADERS,                /**< Partition leader query */
-        RD_KAFKA_OP_BARRIER,                /**< Version barrier bump */
+        RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS,  /**< Admin:
+                                                *   ListConsumerGroupOffsets
+                                                *   u.admin_request */
+        RD_KAFKA_OP_ADMIN_FANOUT,              /**< Admin: fanout request */
+        RD_KAFKA_OP_ADMIN_RESULT,              /**< Admin API .._result_t */
+        RD_KAFKA_OP_PURGE,                     /**< Purge queues */
+        RD_KAFKA_OP_CONNECT,                   /**< Connect (to broker) */
+        RD_KAFKA_OP_OAUTHBEARER_REFRESH,       /**< Refresh OAUTHBEARER token */
+        RD_KAFKA_OP_MOCK,                      /**< Mock cluster command */
+        RD_KAFKA_OP_BROKER_MONITOR,            /**< Broker state change */
+        RD_KAFKA_OP_TXN,                       /**< Transaction command */
+        RD_KAFKA_OP_GET_REBALANCE_PROTOCOL,    /**< Get rebalance protocol */
+        RD_KAFKA_OP_LEADERS,                   /**< Partition leader query */
+        RD_KAFKA_OP_BARRIER,                   /**< Version barrier bump */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -296,7 +302,7 @@ struct rd_kafka_op_s {
                 struct {
                         rd_kafka_topic_partition_list_t *partitions;
                         /** Require stable (txn-commited) offsets */
-                        rd_bool_t require_stable;
+                        rd_bool_t require_stable_offsets;
                         int do_free; /* free .partitions on destroy() */
                 } offset_fetch;
 
@@ -439,6 +445,7 @@ struct rd_kafka_op_s {
                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to

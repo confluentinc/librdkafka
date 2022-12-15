@@ -55,6 +55,8 @@ rd_kafka_error_new_v(rd_kafka_resp_err_t code, const char *fmt, va_list ap);
 
 rd_kafka_error_t *rd_kafka_error_copy(const rd_kafka_error_t *src);
 
+void *rd_kafka_error_copy_opaque(const void *error, void *opaque);
+
 void rd_kafka_error_set_fatal(rd_kafka_error_t *error);
 void rd_kafka_error_set_retriable(rd_kafka_error_t *error);
 void rd_kafka_error_set_txn_requires_abort(rd_kafka_error_t *error);

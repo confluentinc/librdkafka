@@ -2949,8 +2949,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
-        err =
-            rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets);
+        err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request,
+                                           offsets, rd_true);
 
         /* Suppress empty commit debug logs if allowed */
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET ||
@@ -4872,7 +4872,7 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
 
                 rd_kafka_OffsetFetchRequest(
                     rkcg->rkcg_coord, rko->rko_u.offset_fetch.partitions,
-                    rko->rko_u.offset_fetch.require_stable,
+                    rko->rko_u.offset_fetch.require_stable_offsets,
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_op_handle_OffsetFetch, rko);
                 rko = NULL; /* rko now owned by request */

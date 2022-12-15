@@ -28,3 +28,10 @@ For more complex uses, see:
  * [rdkafka_performance.c](rdkafka_performance.c) - performance, benchmark, latency producer and consumer tool.
  * [kafkatest_verifiable_client.cpp](kafkatest_verifiable_client.cpp) - for use with the official Apache Kafka client system tests.
  * [openssl_engine_example.cpp](openssl_engine_example.cpp) - metadata listing in C++ over SSL channel established using OpenSSL engine.
+
+
+ For Admin API examples see:
+ * [list_consumer_groups.c](list_consumer_groups.c) - List consumer groups.
+ * [describe_consumer_groups.c](describe_consumer_groups.c) - Describe consumer groups.
+ * [list_consumer_group_offsets.c](list_consumer_group_offsets.c) - List offsets of a consumer group.
+ * [alter_consumer_group_offsets.c](alter_consumer_group_offsets.c) - Alter offsets of a consumer group.

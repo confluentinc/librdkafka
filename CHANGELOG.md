@@ -46,7 +46,8 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 ## Enhancements
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
- * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Updated to zlib 1.2.13, zstd 1.5.2, and curl 7.86.0 in self-contained
+   librdkafka bundles.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
  * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.

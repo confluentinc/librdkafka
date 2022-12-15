@@ -27,7 +27,7 @@
  */
 
 /**
- * AlterConsumerGroupOffsets usage example.
+ * ListConsumerGroupOffsets usage example.
  */
 
 #include <stdio.h>
@@ -71,11 +71,12 @@ static void stop(int sig) {
 static void usage(const char *reason, ...) {
 
         fprintf(stderr,
-                "Alter consumer group offsets usage examples\n"
+                "List consumer group offsets usage examples\n"
                 "\n"
-                "Usage: %s <options> <group_id> <topic>\n"
-                "                   <partition1> <offset1>\n"
-                "                   <partition2> <offset2>\n"
+                "Usage: %s <options> <group_id> "
+                "<require_stable_offsets>\n"
+                "                   <topic1> <partition1>\n"
+                "                   <topic2> <partition2>\n"
                 "                   ...\n"
                 "\n"
                 "Options:\n"
@@ -127,13 +128,14 @@ print_partition_list(FILE *fp,
                      const rd_kafka_topic_partition_list_t *partitions,
                      int print_offset,
                      const char *prefix) {
+        int i;
+
         if (partitions->cnt == 0) {
                 fprintf(fp, "%sNo partition found", prefix);
         }
-        int i;
-        char offset_string[521] = {};
         for (i = 0; i < partitions->cnt; i++) {
-                memset(&offset_string, 0, sizeof(offset_string));
+                char offset_string[512] = {};
+                *offset_string          = '\0';
                 if (print_offset) {
                         snprintf(offset_string, sizeof(offset_string),
                                  " offset %" PRId64,
@@ -164,29 +166,34 @@ int64_t parse_int(const char *what, const char *str) {
 }
 
 static void
-cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
+cmd_list_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512]; /* librdkafka API error reporting buffer */
         rd_kafka_t *rk;   /* Admin client instance */
         rd_kafka_AdminOptions_t *options; /* (Optional) Options for
-                                           * AlterConsumerGroupOffsets() */
-        rd_kafka_event_t *event; /* AlterConsumerGroupOffsets result event */
+                                           * ListConsumerGroupOffsets() */
+        rd_kafka_event_t *event; /* ListConsumerGroupOffsets result event */
         const int min_argc = 2;
-        int num_partitions = 0;
+        char *topic;
+        int partition;
+        int require_stable_offsets = 0, num_partitions = 0;
+        const rd_kafka_ListConsumerGroupOffsets_t *list_cgrp_offsets;
+        rd_kafka_error_t *error;
+        const char *group;
 
         /*
          * Argument validation
          */
-        int print_usage = argc < min_argc;
-        print_usage |= (argc - min_argc) % 2 != 0;
-        if (print_usage) {
+        if (argc < min_argc || (argc - min_argc) % 2 != 0)
                 usage("Wrong number of arguments");
+        else {
+                require_stable_offsets =
+                    parse_int("require_stable_offsets", argv[1]);
+                if (require_stable_offsets < 0 || require_stable_offsets > 1)
+                        usage("Require stable not a 0-1 int");
         }
 
-        num_partitions       = (argc - min_argc) / 2;
-        const char *group_id = argv[0];
-        const char *topic    = argv[1];
-        const rd_kafka_AlterConsumerGroupOffsets_t
-            *alter_consumer_group_offsets;
+        num_partitions = (argc - min_argc) / 2;
+        group          = argv[0];
 
         /*
          * Create an admin client, it can be created using any client type,
@@ -205,40 +212,49 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         }
 
         /* The Admin API is completely asynchronous, results are emitted
-         * on the result queue that is passed to AlterConsumerGroupOffsets() */
+         * on the result queue that is passed to ListConsumerGroupOffsets() */
         queue = rd_kafka_queue_new(rk);
 
         /* Set timeout (optional) */
         options = rd_kafka_AdminOptions_new(
-            rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
+            rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS);
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 30 * 1000 /* 30s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 exit(1);
         }
+        /* Set requested require stable offsets */
+        if ((error = rd_kafka_AdminOptions_set_require_stable_offsets(
+                 options, require_stable_offsets))) {
+                fprintf(stderr, "%% Failed to set require stable offsets: %s\n",
+                        rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+                exit(1);
+        }
 
         /* Read passed partition-offsets */
-        rd_kafka_topic_partition_list_t *partitions =
-            rd_kafka_topic_partition_list_new(num_partitions);
-        for (int i = 0; i < num_partitions; i++) {
-                rd_kafka_topic_partition_list_add(
-                    partitions, topic,
-                    parse_int("partition", argv[min_argc + i * 2]))
-                    ->offset = parse_int("offset", argv[min_argc + 1 + i * 2]);
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        if (num_partitions > 0) {
+                partitions = rd_kafka_topic_partition_list_new(num_partitions);
+                for (int i = 0; i < num_partitions; i++) {
+                        topic = argv[min_argc + i * 2];
+                        partition =
+                            parse_int("partition", argv[min_argc + i * 2 + 1]);
+                        rd_kafka_topic_partition_list_add(partitions, topic,
+                                                          partition);
+                }
         }
 
         /* Create argument */
-        alter_consumer_group_offsets =
-            rd_kafka_AlterConsumerGroupOffsets_new(group_id, partitions);
-        /* Call AlterConsumerGroupOffsets */
-        rd_kafka_AlterConsumerGroupOffsets(rk, &alter_consumer_group_offsets, 1,
-                                           options, queue);
+        list_cgrp_offsets =
+            rd_kafka_ListConsumerGroupOffsets_new(group, partitions);
+        /* Call ListConsumerGroupOffsets */
+        rd_kafka_ListConsumerGroupOffsets(rk, &list_cgrp_offsets, 1, options,
+                                          queue);
 
         /* Clean up input arguments */
-        rd_kafka_AlterConsumerGroupOffsets_destroy(
-            alter_consumer_group_offsets);
+        rd_kafka_ListConsumerGroupOffsets_destroy(list_cgrp_offsets);
         rd_kafka_AdminOptions_destroy(options);
-        rd_kafka_topic_partition_list_destroy(partitions);
 
 
         /* Wait for results */
@@ -249,23 +265,23 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                 fprintf(stderr, "%% Cancelled by user\n");
 
         } else if (rd_kafka_event_error(event)) {
-                /* AlterConsumerGroupOffsets request failed */
-                fprintf(stderr, "%% AlterConsumerGroupOffsets failed: %s\n",
+                /* ListConsumerGroupOffsets request failed */
+                fprintf(stderr, "%% ListConsumerGroupOffsets failed: %s\n",
                         rd_kafka_event_error_string(event));
                 exit(1);
 
         } else {
-                /* AlterConsumerGroupOffsets request succeeded, but individual
+                /* ListConsumerGroupOffsets request succeeded, but individual
                  * partitions may have errors. */
-                const rd_kafka_AlterConsumerGroupOffsets_result_t *result;
+                const rd_kafka_ListConsumerGroupOffsets_result_t *result;
                 const rd_kafka_group_result_t **groups;
                 size_t n_groups;
 
-                result = rd_kafka_event_AlterConsumerGroupOffsets_result(event);
-                groups = rd_kafka_AlterConsumerGroupOffsets_result_groups(
+                result = rd_kafka_event_ListConsumerGroupOffsets_result(event);
+                groups = rd_kafka_ListConsumerGroupOffsets_result_groups(
                     result, &n_groups);
 
-                printf("AlterConsumerGroupOffsets results:\n");
+                printf("ListConsumerGroupOffsets results:\n");
                 for (size_t i = 0; i < n_groups; i++) {
                         const rd_kafka_group_result_t *group = groups[i];
                         const rd_kafka_topic_partition_list_t *partitions =
@@ -273,6 +289,9 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                         print_partition_list(stderr, partitions, 1, "      ");
                 }
         }
+
+        if (partitions)
+                rd_kafka_topic_partition_list_destroy(partitions);
 
         /* Destroy event object when we're done with it.
          * Note: rd_kafka_event_destroy() allows a NULL event. */
@@ -286,12 +305,12 @@ cmd_alter_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-        /* Signal handler for clean shutdown */
-        signal(SIGINT, stop);
-
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt;
         argv0 = argv[0];
+
+        /* Signal handler for clean shutdown */
+        signal(SIGINT, stop);
 
         /*
          * Create Kafka client configuration place-holder
@@ -330,7 +349,7 @@ int main(int argc, char **argv) {
                 }
         }
 
-        cmd_alter_group_offsets(conf, argc - optind, &argv[optind]);
+        cmd_list_consumer_group_offsets(conf, argc - optind, &argv[optind]);
 
         return 0;
 }

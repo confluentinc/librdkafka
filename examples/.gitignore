@@ -13,7 +13,7 @@ rdkafka_example
 rdkafka_example_cpp
 rdkafka_performance
 transactions
-list_groups
-describe_groups
-list_group_offsets
-alter_group_offsets
+list_consumer_groups
+describe_consumer_groups
+list_consumer_group_offsets
+alter_consumer_group_offsets

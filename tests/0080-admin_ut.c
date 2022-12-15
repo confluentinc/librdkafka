@@ -613,8 +613,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                            int with_options,
                                            rd_bool_t destroy) {
         rd_kafka_queue_t *q;
-#define TEST_DESCRIBE_GROUPS_CNT 4
-        const char *group_names[TEST_DESCRIBE_GROUPS_CNT];
+#define TEST_DESCRIBE_CONSUMER_GROUPS_CNT 4
+        const char *group_names[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
         rd_kafka_AdminOptions_t *options = NULL;
         int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
         int i;
@@ -633,7 +633,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
                 group_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         }
 
@@ -654,8 +654,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
         TIMING_START(&timing, "DescribeConsumerGroups");
         TEST_SAY("Call DescribeConsumerGroups, timeout is %dms\n", exp_timeout);
-        rd_kafka_DescribeConsumerGroups(rk, group_names,
-                                        TEST_DESCRIBE_GROUPS_CNT, options, q);
+        rd_kafka_DescribeConsumerGroups(
+            rk, group_names, TEST_DESCRIBE_CONSUMER_GROUPS_CNT, options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         if (destroy)
@@ -690,13 +690,14 @@ static void do_test_DescribeConsumerGroups(const char *what,
         /* Extract groups, should return TEST_DESCRIBE_GROUPS_CNT groups. */
         resgroups =
             rd_kafka_DescribeConsumerGroups_result_groups(res, &resgroup_cnt);
-        TEST_ASSERT(resgroups && resgroup_cnt == TEST_DESCRIBE_GROUPS_CNT,
+        TEST_ASSERT(resgroups &&
+                        resgroup_cnt == TEST_DESCRIBE_CONSUMER_GROUPS_CNT,
                     "expected %d result_groups, got %p cnt %" PRIusz,
-                    TEST_DESCRIBE_GROUPS_CNT, resgroups, resgroup_cnt);
+                    TEST_DESCRIBE_CONSUMER_GROUPS_CNT, resgroups, resgroup_cnt);
 
         /* The returned groups should be in the original order, and
          * should all have timed out. */
-        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
                 TEST_ASSERT(
                     !strcmp(group_names[i],
                             rd_kafka_ConsumerGroupDescription_group_id(
@@ -716,7 +717,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         rd_kafka_event_destroy(rkev);
 
 destroy:
-        for (i = 0; i < TEST_DESCRIBE_GROUPS_CNT; i++) {
+        for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
                 rd_free((char *)group_names[i]);
         }
 
@@ -725,7 +726,7 @@ destroy:
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
-#undef TEST_DESCRIBE_GROUPS_CNT
+#undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
 
         SUB_TEST_QUICK();
 }

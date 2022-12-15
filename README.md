@@ -1,7 +1,7 @@
 librdkafka - the Apache Kafka C/C++ client library
 ==================================================
 
-Copyright (c) 2012-2020, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2022, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 

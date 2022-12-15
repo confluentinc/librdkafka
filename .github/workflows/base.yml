@@ -2,7 +2,7 @@ name: check
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -25,12 +25,12 @@ jobs:
 
 
   style:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - run: |
           sudo apt update
-          sudo apt install -y python3 python3-pip python3-setuptools clang-format
+          sudo apt install -y python3 python3-pip python3-setuptools clang-format-10
           python3 -m pip install -r packaging/tools/requirements.txt
       - name: Style checker
-        run: make style-check
+        run: CLANG_FORMAT=clang-format-10 make style-check

@@ -1599,6 +1599,8 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                 [RD_KAFKAP_DeleteAcls]       = rd_true,
                 [RD_KAFKAP_DescribeConfigs]  = rd_true,
                 [RD_KAFKAP_AlterConfigs]     = rd_true,
+                [RD_KAFKAP_IncrementalAlterConfigs] =
+                        rd_true,
                 [RD_KAFKAP_DeleteGroups]     = rd_true,
                 [RD_KAFKAP_ListGroups]       = rd_true,
                 [RD_KAFKAP_DescribeGroups]   = rd_true}};
@@ -3919,6 +3921,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
+        case RD_KAFKA_OP_INCREMENTALALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:

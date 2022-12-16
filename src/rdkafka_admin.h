@@ -69,6 +69,7 @@ struct rd_kafka_AdminOptions_s {
                                            *     CreateTopics
                                            *     CreatePartitions
                                            *     AlterConfigs
+                                           *     IncrementalAlterConfigs
                                            */
 
         rd_kafka_confval_t incremental; /**< BOOL: Incremental rather than
@@ -195,6 +196,14 @@ typedef enum rd_kafka_AlterOperation_t {
         RD_KAFKA_ALTER_OP_DELETE = 2,
 } rd_kafka_AlterOperation_t;
 
+/* KIP-339 */
+typedef enum rd_kafka_IncrementalAlterOperation_t {
+        RD_KAFKA_INCREMENTAL_ALTER_OP_SET      = 0,
+        RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE   = 1,
+        RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND   = 2,
+        RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT = 2,
+} rd_kafka_IncrementalAlterOperation_t;
+
 struct rd_kafka_ConfigEntry_s {
         rd_strtup_t *kv; /**< Name/Value pair */
 
@@ -203,6 +212,7 @@ struct rd_kafka_ConfigEntry_s {
         /* Attributes: this is a struct for easy copying */
         struct {
                 rd_kafka_AlterOperation_t operation; /**< Operation */
+                rd_kafka_IncrementalAlterOperation_t incremental_operation; /**< IncrementalOperation */
                 rd_kafka_ConfigSource_t source;      /**< Config source */
                 rd_bool_t is_readonly;  /**< Value is read-only (on broker) */
                 rd_bool_t is_default;   /**< Value is at its default */
@@ -249,6 +259,10 @@ struct rd_kafka_ConfigResource_s {
 struct rd_kafka_AlterConfigs_result_s {
         rd_list_t resources; /**< Type (rd_kafka_ConfigResource_t *) */
 };
+
+struct rd_kafka_IncrementalAlterConfigs_result_s {
+        rd_list_t resources; /**< Type (rd_kafka_ConfigResource_t *) */
+}
 
 struct rd_kafka_ConfigResource_result_s {
         rd_list_t resources; /**< Type (struct rd_kafka_ConfigResource *):

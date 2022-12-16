@@ -127,6 +127,9 @@ typedef enum {
         RD_KAFKA_OP_CREATEPARTITIONS, /**< Admin: CreatePartitions:
                                        *   u.admin_request*/
         RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
+        RD_KAFKA_OP_INCREMENTALALTERCONFIGS,   /**< Admin:
+                                                *    IncrementalAlterConfigs:
+                                                *    u.admin_request */
         RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs:
                                       *   u.admin_request*/
         RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
@@ -518,6 +521,7 @@ struct rd_kafka_op_s {
                                             *
                                             * (rd_kafka_ConfigResource_t *):
                                             * AlterConfigs, DescribeConfigs
+                                            * IncrementalAlterConfigs
                                             */
 
                         void *opaque; /**< Application's opaque as set by

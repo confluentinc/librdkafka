@@ -528,7 +528,8 @@ rd_kafka_admin_result_ret_resources(const rd_kafka_op_t *rko, size_t *cntp) {
         rd_kafka_op_type_t reqtype =
             rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
         rd_assert(reqtype == RD_KAFKA_OP_ALTERCONFIGS ||
-                  reqtype == RD_KAFKA_OP_DESCRIBECONFIGS);
+                  reqtype == RD_KAFKA_OP_DESCRIBECONFIGS ||
+                  reqtype == RD_KAFKA_OP_INCREMENTALALTERCONFIGS);
 
         *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
         return (const rd_kafka_ConfigResource_t **)
@@ -656,6 +657,7 @@ rd_kafka_admin_request_op_new(rd_kafka_t *rk,
 
         rko->rko_u.admin_request.state = RD_KAFKA_ADMIN_STATE_INIT;
         return rko;
+
 }
 
 
@@ -1635,7 +1637,8 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
+            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS)
                 rd_kafka_confval_init_int(&options->validate_only,
                                           "validate_only", 0, 1, 0);
         else
@@ -1887,6 +1890,29 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
                            const char *name,
                            const char *value,
                            rd_kafka_AlterOperation_t operation) {
+        rd_kafka_ConfigEntry_t *entry;
+
+        if (!name)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        entry              = rd_calloc(1, sizeof(*entry));
+        entry->kv          = rd_strtup_new(name, value);
+        entry->a.operation = operation;
+
+        rd_list_add(rl, entry);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Generic constructor of ConfigEntry for Incremental Alter Operations which is also added to \p rl
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_incremental_add_config0(rd_list_t *rl,
+                           const char *name,
+                           const char *value,
+                           rd_kafka_IncrementalAlterOperation_t operation) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name)
@@ -2843,6 +2869,18 @@ rd_kafka_ConfigResource_add_config(rd_kafka_ConfigResource_t *config,
                                           RD_KAFKA_ALTER_OP_ADD);
 }
 
+
+rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_append_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value) {
+        if (!name || !*name || !value)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_incremental_add_config0(&config->config, name, value,
+                                          RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                    const char *name,
@@ -2855,6 +2893,17 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_set_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value) {
+        if (!name || !*name || !value)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_incremental_add_config0(&config->config, name, value,
+                                          RD_KAFKA_INCREMENTAL_ALTER_OP_SET);
+}
+
+rd_kafka_resp_err_t
 rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
                                       const char *name) {
         if (!name || !*name)
@@ -2862,6 +2911,27 @@ rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
 
         return rd_kafka_admin_add_config0(&config->config, name, NULL,
                                           RD_KAFKA_ALTER_OP_DELETE);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_remove_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name) {
+        if (!name || !*name || !value)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_incremental_add_config0(&config->config, name, NULL,
+                                          RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value) {
+        if (!name || !*name || !value)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_incremental_add_config0(&config->config, name, NULL,
+                                          RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT);
 }
 
 
@@ -3148,6 +3218,198 @@ void rd_kafka_AlterConfigs(rd_kafka_t *rk,
 
 const rd_kafka_ConfigResource_t **rd_kafka_AlterConfigs_result_resources(
     const rd_kafka_AlterConfigs_result_t *result,
+    size_t *cntp) {
+        return rd_kafka_admin_result_ret_resources(
+            (const rd_kafka_op_t *)result, cntp);
+}
+
+/**@}*/
+
+
+
+/**
+ * @name IncrementalAlterConfigs
+ * @{
+ *
+ *
+ *
+ */
+
+
+
+/**
+ * @brief Parse IncrementalAlterConfigsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
+                                    rd_kafka_op_t **rko_resultp,
+                                    rd_kafka_buf_t *reply,
+                                    char *errstr,
+                                    size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
+        rd_kafka_t *rk              = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t res_cnt;
+        int i;
+        int32_t Throttle_Time;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        rd_kafka_buf_read_i32(reply, &res_cnt);
+
+        if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Received %" PRId32
+                            " ConfigResources in response "
+                            "when only %d were requested",
+                            res_cnt,
+                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, res_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        for (i = 0; i < (int)res_cnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg;
+                int8_t res_type;
+                rd_kafkap_str_t kres_name;
+                char *res_name;
+                char *this_errstr = NULL;
+                rd_kafka_ConfigResource_t *config;
+                rd_kafka_ConfigResource_t skel;
+                int orig_pos;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_str(reply, &kres_name);
+                RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                this_errstr =
+                                    (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
+                }
+
+                config = rd_kafka_ConfigResource_new(res_type, res_name);
+                if (!config) {
+                        rd_kafka_log(rko_req->rko_rk, LOG_ERR, "ADMIN",
+                                     "IncrementalAlterConfigs returned "
+                                     "unsupported ConfigResource #%d with "
+                                     "type %d and name \"%s\": ignoring",
+                                     i, res_type, res_name);
+                        continue;
+                }
+
+                config->err = error_code;
+                if (this_errstr)
+                        config->errstr = rd_strdup(this_errstr);
+
+                /* As a convenience to the application we insert result
+                 * in the same order as they were requested. The broker
+                 * does not maintain ordering unfortunately. */
+                skel.restype = config->restype;
+                skel.name    = config->name;
+                orig_pos = rd_list_index(&rko_result->rko_u.admin_result.args,
+                                         &skel, rd_kafka_ConfigResource_cmp);
+                if (orig_pos == -1) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned ConfigResource %d,%s "
+                            "that was not "
+                            "included in the original request",
+                            res_type, res_name);
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.results,
+                                 orig_pos) != NULL) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Broker returned ConfigResource %d,%s "
+                            "multiple times",
+                            res_type, res_name);
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
+                            config);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "IncrementalAlterConfigs response protocol parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+
+
+void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
+                           rd_kafka_ConfigResource_t **configs,
+                           size_t config_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_IncrementalAlterConfigsRequest,
+            rd_kafka_AlterConfigsResponse_parse,
+        };
+
+        rd_assert(rkqu);
+
+        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_INCREMENTALALTERCONFIGS,
+                                            RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT,
+                                            &cbs, options, rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, (int)config_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        for (i = 0; i < config_cnt; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_ConfigResource_copy(configs[i]));
+
+        /* If there's a BROKER resource in the list we need to
+         * speak directly to that broker rather than the controller.
+         *
+         * Multiple BROKER resources are not allowed.
+         */
+        err = rd_kafka_ConfigResource_get_single_broker_id(
+            &rko->rko_u.admin_request.args, &rko->rko_u.admin_request.broker_id,
+            errstr, sizeof(errstr));
+        if (err) {
+                rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+const rd_kafka_ConfigResource_t **rd_kafka_IncrementalAlterConfigs_result_resources(
+    const rd_kafka_IncrementalAlterConfigs_result_t *result,
     size_t *cntp) {
         return rd_kafka_admin_result_ret_resources(
             (const rd_kafka_op_t *)result, cntp);

@@ -2402,8 +2402,8 @@ static void do_test_ListConsumerGroups(const char *what,
         rd_bool_t is_simple_consumer_group;
         rd_kafka_consumer_group_state_t state;
         char errstr[512];
-        const char *errstr2, *group_id,
-            *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
+        const char *errstr2, *group_id;
+        char *list_consumer_groups[TEST_LIST_CONSUMER_GROUPS_CNT];
         const int partitions_cnt = 1;
         const int msgs_cnt       = 100;
         size_t i, found;
@@ -2536,7 +2536,7 @@ static void do_test_ListConsumerGroups(const char *what,
                 }
         }
         TEST_ASSERT(found == TEST_LIST_CONSUMER_GROUPS_CNT,
-                    "expected to find %" PRId32
+                    "expected to find %d"
                     " started groups,"
                     " got %" PRIusz,
                     TEST_LIST_CONSUMER_GROUPS_CNT, found);
@@ -2547,7 +2547,7 @@ static void do_test_ListConsumerGroups(const char *what,
                                  TEST_LIST_CONSUMER_GROUPS_CNT, NULL);
 
         for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
-                rd_free((void *)list_consumer_groups[i]);
+                rd_free(list_consumer_groups[i]);
         }
 
         rd_free(topic);
@@ -3092,7 +3092,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         int exp_mdtopic_cnt                                           = 0;
         test_timing_t timing;
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        const rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
+        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets;
         const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;
@@ -3353,7 +3353,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         int exp_mdtopic_cnt                                          = 0;
         test_timing_t timing;
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        const rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
+        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;

@@ -857,7 +857,7 @@ rd_kafka_admin_common_brokers_get_nodeids(rd_kafka_t *rk, rd_kafka_op_t *rko) {
                 return NULL;
         }
 
-        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: %" PRId32 " broker(s)",
+        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: %d broker(s)",
                      rd_kafka_op2str(rko->rko_type), rd_list_cnt(broker_ids));
 
         return broker_ids;
@@ -1180,6 +1180,7 @@ redo:
                         /* Still waiting for brokers to become available. */
                         return RD_KAFKA_OP_RES_KEEP;
                 }
+
                 rd_kafka_admin_fanout_op_distribute(rk, rko, nodeids);
                 rd_list_destroy(nodeids);
                 rko->rko_u.admin_request.state =
@@ -1460,11 +1461,6 @@ static rd_kafka_op_t *rd_kafka_admin_request_op_target_all_new(
     rd_kafka_q_t *rkq) {
         rd_kafka_op_t *rko, *rko_fanout;
 
-        rd_assert(rk);
-        rd_assert(rkq);
-        rd_assert(cbs);
-        rd_assert(fanout_cbs);
-
         rko_fanout = rd_kafka_admin_fanout_op_new(rk, optype, reply_event_type,
                                                   fanout_cbs, options, rkq);
 
@@ -1560,7 +1556,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
 
 rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
-    rd_kafka_consumer_group_state_t *consumer_group_states,
+    const rd_kafka_consumer_group_state_t *consumer_group_states,
     size_t consumer_group_states_cnt) {
         size_t i;
         char errstr[512];
@@ -1570,13 +1566,20 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
         for (i = 0; i < consumer_group_states_cnt; i++) {
                 rd_kafka_consumer_group_state_t state =
                     consumer_group_states[i];
-                rd_assert(state >= 0 &&
-                          state < RD_KAFKA_CONSUMER_GROUP_STATE__CNT);
+                if (state < 0 || state >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT) {
+                        rd_list_destroy(states_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Invalid group state value");
+                }
                 rd_list_set_int32(states_list, (int32_t)i, state);
         }
         err = rd_kafka_confval_set_type(&options->consumer_group_states,
                                         RD_KAFKA_CONFVAL_PTR, states_list,
                                         errstr, sizeof(errstr));
+        if (err) {
+                rd_list_destroy(states_list);
+        }
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
@@ -1655,7 +1658,7 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
 static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
                                           const rd_kafka_AdminOptions_t *src) {
         *dst = *src;
-        if (src && src->consumer_group_states.u.PTR) {
+        if (src->consumer_group_states.u.PTR) {
                 char errstr[512];
                 rd_list_t *states_list_copy = rd_list_copy_preallocated(
                     src->consumer_group_states.u.PTR, NULL);
@@ -1685,7 +1688,7 @@ rd_kafka_AdminOptions_new(rd_kafka_t *rk, rd_kafka_admin_op_t for_api) {
 }
 
 void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options) {
-        if (options && options->consumer_group_states.u.PTR) {
+        if (options->consumer_group_states.u.PTR) {
                 rd_list_destroy(options->consumer_group_states.u.PTR);
         }
         rd_free(options);
@@ -5065,8 +5068,7 @@ void rd_kafka_DeleteAcls(rd_kafka_t *rk,
  *
  */
 
-const rd_kafka_AlterConsumerGroupOffsets_t *
-rd_kafka_AlterConsumerGroupOffsets_new(
+rd_kafka_AlterConsumerGroupOffsets_t *rd_kafka_AlterConsumerGroupOffsets_new(
     const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions) {
         rd_assert(group_id && partitions);
@@ -5085,9 +5087,9 @@ rd_kafka_AlterConsumerGroupOffsets_new(
 }
 
 void rd_kafka_AlterConsumerGroupOffsets_destroy(
-    const rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets) {
+    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets) {
         rd_kafka_topic_partition_list_destroy(alter_grpoffsets->partitions);
-        rd_free((void *)alter_grpoffsets);
+        rd_free(alter_grpoffsets);
 }
 
 static void rd_kafka_AlterConsumerGroupOffsets_free(void *ptr) {
@@ -5095,7 +5097,7 @@ static void rd_kafka_AlterConsumerGroupOffsets_free(void *ptr) {
 }
 
 void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
-    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt) {
         size_t i;
         for (i = 0; i < alter_grpoffsets_cnt; i++)
@@ -5105,7 +5107,7 @@ void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
 /**
  * @brief Allocate a new AlterGroup and make a copy of \p src
  */
-static const rd_kafka_AlterConsumerGroupOffsets_t *
+static rd_kafka_AlterConsumerGroupOffsets_t *
 rd_kafka_AlterConsumerGroupOffsets_copy(
     const rd_kafka_AlterConsumerGroupOffsets_t *src) {
         return rd_kafka_AlterConsumerGroupOffsets_new(src->group_id,
@@ -5137,7 +5139,7 @@ static rd_kafka_resp_err_t rd_kafka_AlterConsumerGroupOffsetsRequest(
         rd_kafka_consumer_group_metadata_t *cgmetadata =
             rd_kafka_consumer_group_metadata_new(grpoffsets->group_id);
 
-        int ret = rd_kafka_OffsetCommitRequest_group(
+        int ret = rd_kafka_OffsetCommitRequest(
             rkb, cgmetadata, offsets, replyq, resp_cb, opaque,
             "rd_kafka_AlterConsumerGroupOffsetsRequest");
         rd_kafka_consumer_group_metadata_destroy(cgmetadata);
@@ -5145,7 +5147,7 @@ static rd_kafka_resp_err_t rd_kafka_AlterConsumerGroupOffsetsRequest(
                 rd_snprintf(errstr, errstr_size,
                             "At least one topic-partition offset must "
                             "be >= 0");
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                return RD_KAFKA_RESP_ERR__NO_OFFSET;
         }
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -5172,7 +5174,7 @@ rd_kafka_AlterConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
         rk  = rko_req->rko_rk;
         rkb = reply->rkbuf_rkb;
         err = rd_kafka_handle_OffsetCommit(rk, rkb, err, reply, NULL,
-                                           partitions, rd_false);
+                                           partitions, rd_true);
 
         /* Create result op and group_result_t */
         rko_result = rd_kafka_admin_result_new(rko_req);
@@ -5193,7 +5195,7 @@ rd_kafka_AlterConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
 
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu) {
@@ -5220,8 +5222,7 @@ void rd_kafka_AlterConsumerGroupOffsets(
                 goto fail;
         }
 
-        int empty_topic_partitions = alter_grpoffsets[0]->partitions->cnt == 0;
-        if (empty_topic_partitions) {
+        if (alter_grpoffsets[0]->partitions->cnt == 0) {
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "Non-empty topic partition list "
                                            "must be present");
@@ -5274,7 +5275,7 @@ rd_kafka_AlterConsumerGroupOffsets_result_groups(
 
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
@@ -5293,8 +5294,7 @@ void rd_kafka_AlterConsumerGroupOffsets(
  *
  */
 
-const rd_kafka_ListConsumerGroupOffsets_t *
-rd_kafka_ListConsumerGroupOffsets_new(
+rd_kafka_ListConsumerGroupOffsets_t *rd_kafka_ListConsumerGroupOffsets_new(
     const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions) {
         size_t tsize = strlen(group_id) + 1;
@@ -5303,22 +5303,24 @@ rd_kafka_ListConsumerGroupOffsets_new(
         rd_assert(group_id);
 
         /* Single allocation */
-        list_grpoffsets           = rd_malloc(sizeof(*list_grpoffsets) + tsize);
+        list_grpoffsets = rd_calloc(1, sizeof(*list_grpoffsets) + tsize);
         list_grpoffsets->group_id = list_grpoffsets->data;
         memcpy(list_grpoffsets->group_id, group_id, tsize);
-        list_grpoffsets->partitions =
-            rd_kafka_topic_partition_list_copy(partitions);
+        if (partitions) {
+                list_grpoffsets->partitions =
+                    rd_kafka_topic_partition_list_copy(partitions);
+        }
 
         return list_grpoffsets;
 }
 
 void rd_kafka_ListConsumerGroupOffsets_destroy(
-    const rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets) {
+    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets) {
         if (list_grpoffsets->partitions != NULL) {
                 rd_kafka_topic_partition_list_destroy(
                     list_grpoffsets->partitions);
         }
-        rd_free((void *)list_grpoffsets);
+        rd_free(list_grpoffsets);
 }
 
 static void rd_kafka_ListConsumerGroupOffsets_free(void *ptr) {
@@ -5326,7 +5328,7 @@ static void rd_kafka_ListConsumerGroupOffsets_free(void *ptr) {
 }
 
 void rd_kafka_ListConsumerGroupOffsets_destroy_array(
-    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt) {
         size_t i;
         for (i = 0; i < list_grpoffsets_cnt; i++)
@@ -5336,7 +5338,7 @@ void rd_kafka_ListConsumerGroupOffsets_destroy_array(
 /**
  * @brief Allocate a new ListGroup and make a copy of \p src
  */
-static const rd_kafka_ListConsumerGroupOffsets_t *
+static rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_copy(
     const rd_kafka_ListConsumerGroupOffsets_t *src) {
         return rd_kafka_ListConsumerGroupOffsets_new(src->group_id,
@@ -5369,12 +5371,9 @@ static rd_kafka_resp_err_t rd_kafka_ListConsumerGroupOffsetsRequest(
         op_timeout = rd_kafka_confval_get_int(&options->request_timeout);
         require_stable_offsets =
             rd_kafka_confval_get_int(&options->require_stable_offsets);
-        rd_kafkap_str_t *group_str =
-            rd_kafkap_str_new(grpoffsets->group_id, -1);
-        rd_kafka_OffsetFetchRequest_group(
-            rkb, group_str, grpoffsets->partitions, require_stable_offsets,
-            op_timeout, replyq, resp_cb, opaque);
-        rd_kafkap_str_destroy(group_str);
+        rd_kafka_OffsetFetchRequest(
+            rkb, grpoffsets->group_id, grpoffsets->partitions,
+            require_stable_offsets, op_timeout, replyq, resp_cb, opaque);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -5433,7 +5432,7 @@ err:
 
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
-    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu) {
@@ -5461,9 +5460,8 @@ void rd_kafka_ListConsumerGroupOffsets(
                 return;
         }
 
-        int empty_topic_partitions = list_grpoffsets[0]->partitions != NULL &&
-                                     list_grpoffsets[0]->partitions->cnt == 0;
-        if (empty_topic_partitions) {
+        if (list_grpoffsets[0]->partitions != NULL &&
+            list_grpoffsets[0]->partitions->cnt == 0) {
                 /* Either pass NULL for all the partitions or a non-empty list
                  */
                 rd_kafka_admin_result_fail(
@@ -5485,9 +5483,8 @@ void rd_kafka_ListConsumerGroupOffsets(
          * from the response parser. */
         rd_list_init(&rko->rko_u.admin_request.args, 1,
                      rd_kafka_ListConsumerGroupOffsets_free);
-        rd_list_add(
-            &rko->rko_u.admin_request.args,
-            (void *)rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
@@ -5506,12 +5503,6 @@ const rd_kafka_group_result_t **rd_kafka_ListConsumerGroupOffsets_result_groups(
                                                 cntp);
 }
 
-void rd_kafka_ListConsumerGroupOffsets(
-    rd_kafka_t *rk,
-    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
-    size_t list_grpoffsets_cnt,
-    const rd_kafka_AdminOptions_t *options,
-    rd_kafka_queue_t *rkqu);
 /**@}*/
 
 /**
@@ -5553,7 +5544,6 @@ rd_kafka_ConsumerGroupListing_new(const char *group_id,
  */
 static rd_kafka_ConsumerGroupListing_t *rd_kafka_ConsumerGroupListing_copy(
     const rd_kafka_ConsumerGroupListing_t *grplist) {
-        rd_assert(grplist != NULL);
         return rd_kafka_ConsumerGroupListing_new(
             grplist->group_id, grplist->is_simple_consumer_group,
             grplist->state);
@@ -5570,9 +5560,7 @@ static void *rd_kafka_ConsumerGroupListing_copy_opaque(const void *grplist,
 
 static void rd_kafka_ConsumerGroupListing_destroy(
     rd_kafka_ConsumerGroupListing_t *grplist) {
-        rd_assert(grplist != NULL);
-        if (likely(grplist->group_id != NULL))
-                rd_free(grplist->group_id);
+        RD_IF_FREE(grplist->group_id, rd_free);
         rd_free(grplist);
 }
 
@@ -5619,8 +5607,6 @@ rd_kafka_ListConsumerGroupsResult_new(const rd_list_t *valid,
 
 static void rd_kafka_ListConsumerGroupsResult_destroy(
     rd_kafka_ListConsumerGroupsResult_t *res) {
-        if (!res)
-                return;
         rd_list_destroy(&res->valid);
         rd_list_destroy(&res->errors);
         rd_free(res);
@@ -5668,19 +5654,18 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
         int i;
         rd_kafka_resp_err_t err;
         rd_kafka_error_t *error;
-        const rd_kafkap_str_t **states_str = NULL;
-        int states_str_cnt                 = 0;
+        const char **states_str = NULL;
+        int states_str_cnt      = 0;
         rd_list_t *states =
             rd_kafka_confval_get_ptr(&options->consumer_group_states);
+
         /* Prepare list_options */
         if (states && rd_list_cnt(states) > 0) {
                 states_str_cnt = rd_list_cnt(states);
                 states_str     = rd_calloc(states_str_cnt, sizeof(*states_str));
                 for (i = 0; i < states_str_cnt; i++) {
-                        states_str[i] = rd_kafkap_str_new(
-                            rd_kafka_consumer_group_state_name(
-                                rd_list_get_int32(states, i)),
-                            -1);
+                        states_str[i] = rd_kafka_consumer_group_state_name(
+                            rd_list_get_int32(states, i));
                 }
         }
 
@@ -5688,10 +5673,7 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
                                            replyq, resp_cb, opaque);
 
         if (states_str) {
-                for (i = 0; i < states_str_cnt; i++) {
-                        rd_kafkap_str_destroy((rd_kafkap_str_t *)states_str[i]);
-                }
-                rd_free((void *)states_str);
+                rd_free(states_str);
         }
 
         if (error) {
@@ -5715,13 +5697,13 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                           char *errstr,
                                           size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
-        int i, cnt, nodeid;
+        int i, cnt;
         int16_t error_code, api_version;
         rd_kafka_op_t *rko_result = NULL;
         rd_kafka_error_t *error   = NULL;
         rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
         rd_list_t valid, errors;
-        const rd_kafka_ListConsumerGroupsResult_t *list_result;
+        rd_kafka_ListConsumerGroupsResult_t *list_result;
         char *group_id = NULL, *group_state = NULL, *proto_type = NULL;
 
         api_version = rd_kafka_buf_ApiVersion(reply);
@@ -5730,20 +5712,17 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         }
         rd_kafka_buf_read_i16(reply, &error_code);
         if (error_code) {
-                rd_kafka_broker_lock(rkb);
-                nodeid = rkb->rkb_nodeid;
-                rd_kafka_broker_unlock(rkb);
-                error =
-                    rd_kafka_error_new(error_code,
-                                       "Broker [%" PRId16
-                                       "] "
-                                       "ListConsumerGroups: %s",
-                                       nodeid, rd_kafka_err2str(error_code));
+                error = rd_kafka_error_new(error_code,
+                                           "Broker [%d"
+                                           "] "
+                                           "ListConsumerGroups: %s",
+                                           rd_kafka_broker_id(rkb),
+                                           rd_kafka_err2str(error_code));
         }
 
         rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
         rd_list_init(&valid, cnt, rd_kafka_ConsumerGroupListing_free);
-        rd_list_init(&errors, 1, rd_free);
+        rd_list_init(&errors, 8, rd_free);
         if (error)
                 rd_list_add(&errors, error);
 
@@ -5801,22 +5780,17 @@ err_parse:
 
         if (reply->rkbuf_err) {
                 error_code = reply->rkbuf_err;
-                rd_kafka_broker_lock(rkb);
-                nodeid = rkb->rkb_nodeid;
-                rd_kafka_broker_unlock(rkb);
-                error = rd_kafka_error_new(
+                error      = rd_kafka_error_new(
                     error_code,
-                    "Broker [%" PRId16
+                    "Broker [%d"
                     "] "
                     "ListConsumerGroups response protocol parse failure: %s",
-                    nodeid, rd_kafka_err2str(error_code));
+                    rd_kafka_broker_id(rkb), rd_kafka_err2str(error_code));
                 rd_list_add(&errors, error);
         }
 
         list_result = rd_kafka_ListConsumerGroupsResult_new(&valid, &errors);
-        if (list_result)
-                rd_list_add(&rko_result->rko_u.admin_result.results,
-                            (void *)list_result);
+        rd_list_add(&rko_result->rko_u.admin_result.results, list_result);
 
         *rko_resultp = rko_result;
         rd_list_destroy(&valid);
@@ -5848,38 +5822,37 @@ rd_kafka_ListConsumerGroups_response_merge(rd_kafka_op_t *rko_fanout,
                 res = rd_kafka_ListConsumerGroupsResult_new(&new_valid,
                                                             &new_errors);
                 rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, 0,
-                            (void *)res);
+                            res);
                 rd_list_destroy(&new_valid);
                 rd_list_destroy(&new_errors);
         }
         if (!rko_partial->rko_err) {
-                int new_valid, new_errors;
+                int new_valid_count, new_errors_count;
                 const rd_list_t *new_valid_list, *new_errors_list;
                 /* Read the partial result and merge the valid groups
                  * and the errors into the fanout parent result. */
                 newres =
                     rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
                 rd_assert(newres);
-                new_valid  = rd_list_cnt(&newres->valid);
-                new_errors = rd_list_cnt(&newres->errors);
-                if (new_valid) {
+                new_valid_count  = rd_list_cnt(&newres->valid);
+                new_errors_count = rd_list_cnt(&newres->errors);
+                if (new_valid_count) {
                         new_valid_list = &newres->valid;
-                        rd_list_grow(&res->valid, new_valid);
+                        rd_list_grow(&res->valid, new_valid_count);
                         rd_list_copy_to(
                             &res->valid, new_valid_list,
                             rd_kafka_ConsumerGroupListing_copy_opaque, NULL);
                 }
-                if (new_errors) {
+                if (new_errors_count) {
                         new_errors_list = &newres->errors;
-                        rd_list_grow(&res->errors, new_errors);
+                        rd_list_grow(&res->errors, new_errors_count);
                         rd_list_copy_to(&res->errors, new_errors_list,
                                         rd_kafka_error_copy_opaque, NULL);
                 }
         } else {
                 /* Op errored, e.g. timeout */
-                rd_kafka_error_t *error =
-                    rd_kafka_error_new(rko_partial->rko_err, NULL);
-                rd_list_add(&res->errors, error);
+                rd_list_add(&res->errors,
+                            rd_kafka_error_new(rko_partial->rko_err, NULL));
         }
 }
 
@@ -5906,7 +5879,7 @@ const rd_kafka_ConsumerGroupListing_t **
 rd_kafka_ListConsumerGroups_result_valid(
     const rd_kafka_ListConsumerGroups_result_t *result,
     size_t *cntp) {
-        int list_result_cnt, result_cnt;
+        int list_result_cnt;
         const rd_kafka_ListConsumerGroupsResult_t *list_result;
         const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
         rd_kafka_op_type_t reqtype =
@@ -5916,12 +5889,8 @@ rd_kafka_ListConsumerGroups_result_valid(
         list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
         rd_assert(list_result_cnt == 1);
         list_result = rd_list_elem(&rko->rko_u.admin_result.results, 0);
-        result_cnt  = rd_list_cnt(&list_result->valid);
-        if (result_cnt == 0) {
-                *cntp = 0;
-                return NULL;
-        }
-        *cntp = result_cnt;
+        *cntp       = rd_list_cnt(&list_result->valid);
+
         return (const rd_kafka_ConsumerGroupListing_t **)
             list_result->valid.rl_elems;
 }
@@ -5986,9 +5955,8 @@ rd_kafka_MemberDescription_new(const char *client_id,
                 member->group_instance_id = rd_strdup(group_instance_id);
         member->host       = rd_strdup(host);
         member->assignment = assignment;
-        member->assignment.topic_partitions =
-            rd_kafka_topic_partition_list_copy(
-                member->assignment.topic_partitions);
+        member->assignment.partitions =
+            rd_kafka_topic_partition_list_copy(member->assignment.partitions);
         return member;
 }
 
@@ -6027,9 +5995,9 @@ rd_kafka_MemberDescription_destroy(rd_kafka_MemberDescription_t *member) {
         rd_free(member->host);
         if (member->group_instance_id != NULL)
                 rd_free(member->group_instance_id);
-        if (member->assignment.topic_partitions)
+        if (member->assignment.partitions)
                 rd_kafka_topic_partition_list_destroy(
-                    member->assignment.topic_partitions);
+                    member->assignment.partitions);
         rd_free(member);
 }
 
@@ -6071,7 +6039,7 @@ const rd_kafka_topic_partition_list_t *
 rd_kafka_MemberAssignment_topic_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
         rd_assert(assignment != NULL);
-        return assignment->topic_partitions;
+        return assignment->partitions;
 }
 
 
@@ -6313,14 +6281,14 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         rd_kafka_resp_err_t err;
         int groups_cnt          = rd_list_cnt(groups);
         rd_kafka_error_t *error = NULL;
-        const char **groups_arr = calloc(groups_cnt, sizeof(*groups_arr));
+        char **groups_arr       = rd_calloc(groups_cnt, sizeof(*groups_arr));
 
         RD_LIST_FOREACH(group, groups, i) {
                 groups_arr[i] = rd_list_elem(groups, i);
         }
         error = rd_kafka_DescribeGroupsRequest(rkb, -1, groups_arr, groups_cnt,
                                                replyq, resp_cb, opaque);
-        rd_free((void *)groups_arr);
+        rd_free(groups_arr);
 
         if (error) {
                 rd_snprintf(errstr, errstr_size, "%s",
@@ -6343,7 +6311,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                               char *errstr,
                                               size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
-        int nodeid, port;
+        int nodeid;
+        uint16_t port;
         int16_t api_version;
         int32_t cnt;
         rd_kafka_op_t *rko_result = NULL;
@@ -6454,7 +6423,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                             "Error reading topic "
                                             "partitions");
                                 }
-                                assignment.topic_partitions = toppars;
+                                assignment.partitions = toppars;
                         }
 
                         member_id = RD_KAFKAP_STR_DUP(&MemberId);
@@ -6469,9 +6438,9 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             client_id, member_id, group_instance_id,
                             client_host, assignment);
                         rd_list_add(&members, member);
-                        if (assignment.topic_partitions)
+                        if (assignment.partitions)
                                 rd_kafka_topic_partition_list_destroy(
-                                    assignment.topic_partitions);
+                                    assignment.partitions);
                         rd_free(member_id);
                         rd_free(group_instance_id);
                         rd_free(client_id);

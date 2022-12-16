@@ -368,9 +368,6 @@ struct rd_kafka_consumer_group_metadata_s {
 rd_kafka_consumer_group_metadata_t *rd_kafka_consumer_group_metadata_dup(
     const rd_kafka_consumer_group_metadata_t *cgmetadata);
 
-rd_kafka_consumer_group_metadata_t *
-rd_kafka_consumer_group_metadata_new(const char *group_id);
-
 static RD_UNUSED const char *
 rd_kafka_rebalance_protocol2str(rd_kafka_rebalance_protocol_t protocol) {
         switch (protocol) {

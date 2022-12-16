@@ -31,6 +31,7 @@ For more complex uses, see:
 
 
  For Admin API examples see:
+ * [delete_records.c](delete_records.c) - Delete records.
  * [list_consumer_groups.c](list_consumer_groups.c) - List consumer groups.
  * [describe_consumer_groups.c](describe_consumer_groups.c) - Describe consumer groups.
  * [list_consumer_group_offsets.c](list_consumer_group_offsets.c) - List offsets of a consumer group.

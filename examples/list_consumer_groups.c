@@ -187,7 +187,6 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         const char **states_str = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
-        rd_kafka_queue_t *queue;
         rd_kafka_event_t *event = NULL;
         rd_kafka_error_t *error = NULL;
         int i;
@@ -219,6 +218,10 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
          * List consumer groups
          */
         queue = rd_kafka_queue_new(rk);
+
+        /* Signal handler for clean shutdown */
+        signal(SIGINT, stop);
+
         options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
@@ -241,10 +244,13 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_AdminOptions_destroy(options);
 
         /* Wait for results */
-        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
+                                               * the request timeout set
+                                               * above (10s) */);
 
         if (!event) {
-                /* User hit Ctrl-C */
+                /* User hit Ctrl-C,
+                 * see yield call in stop() signal handler */
                 fprintf(stderr, "%% Cancelled by user\n");
 
         } else if (rd_kafka_event_error(event)) {
@@ -280,9 +286,6 @@ int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt;
         argv0 = argv[0];
-
-        /* Signal handler for clean shutdown */
-        signal(SIGINT, stop);
 
         /*
          * Create Kafka client configuration place-holder

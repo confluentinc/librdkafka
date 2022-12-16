@@ -4819,12 +4819,6 @@ typedef struct rd_kafka_metadata {
         char *orig_broker_name; /**< Name of originating broker */
 } rd_kafka_metadata_t;
 
-
-/**
- * @brief Node (broker) information.
- */
-typedef struct rd_kafka_Node_s rd_kafka_Node_t;
-
 /**
  * @brief Request Metadata from broker.
  *
@@ -4859,6 +4853,10 @@ rd_kafka_metadata(rd_kafka_t *rk,
 RD_EXPORT
 void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
 
+/**
+ * @brief Node (broker) information.
+ */
+typedef struct rd_kafka_Node_s rd_kafka_Node_t;
 
 /**
  * @brief Get the id of \p node.
@@ -4891,7 +4889,7 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node);
  * @return The node port.
  */
 RD_EXPORT
-int rd_kafka_Node_port(const rd_kafka_Node_t *node);
+uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node);
 
 /**@}*/
 
@@ -5004,7 +5002,9 @@ rd_kafka_list_groups(rd_kafka_t *rk,
 /**
  * @brief Returns a name for a state code.
  *
- * \p state The state code.
+ * @param state The state value.
+ *
+ * @return The group state name corresponding to the provided group state value.
  */
 RD_EXPORT
 const char *
@@ -5013,7 +5013,9 @@ rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state);
 /**
  * @brief Returns a code for a state name.
  *
- * \p state The state name.
+ * @param name The state name.
+ *
+ * @return The group state value corresponding to the provided group state name.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t
@@ -5272,14 +5274,14 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEACLS_RESULT         0x400 /**< CreateAcls_result_t */
 #define RD_KAFKA_EVENT_DESCRIBEACLS_RESULT       0x800 /**< DescribeAcls_result_t */
 #define RD_KAFKA_EVENT_DELETEACLS_RESULT         0x1000 /**< DeleteAcls_result_t */
-/** AlterConsumerGroupOffsets_result_t */
-#define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x1200
-/** ListConsumerGroupOffsets_result_t */
-#define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x1400
 /** ListConsumerGroupsResult_t */
-#define RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT 0x1600
+#define RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT 0x2000
 /** DescribeConsumerGroups_result_t */
-#define RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT 0x1800
+#define RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT 0x4000
+/** ListConsumerGroupOffsets_result_t */
+#define RD_KAFKA_EVENT_LISTCONSUMERGROUPOFFSETS_RESULT 0x8000
+/** AlterConsumerGroupOffsets_result_t */
+#define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
 
 
 /**
@@ -6824,7 +6826,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
-    rd_kafka_consumer_group_state_t *consumer_group_states,
+    const rd_kafka_consumer_group_state_t *consumer_group_states,
     size_t consumer_group_states_cnt);
 
 /**
@@ -7869,9 +7871,8 @@ const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
  * @brief Gets state for the \p grpdesc group.
  *
  * @param grpdesc The group description.
- * @return A group state, or RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN if
- *         \p grpdesc is
- * NULL.
+ *
+ * @return A group state.
  */
 RD_EXPORT
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
@@ -8110,7 +8111,7 @@ typedef struct rd_kafka_ListConsumerGroupOffsets_s
  *          Use rd_kafka_ListConsumerGroupOffsets_destroy() to free
  *          object when done.
  */
-RD_EXPORT const rd_kafka_ListConsumerGroupOffsets_t *
+RD_EXPORT rd_kafka_ListConsumerGroupOffsets_t *
 rd_kafka_ListConsumerGroupOffsets_new(
     const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions);
@@ -8120,7 +8121,7 @@ rd_kafka_ListConsumerGroupOffsets_new(
  *        created with rd_kafka_ListConsumerGroupOffsets_new()
  */
 RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
-    const rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
+    rd_kafka_ListConsumerGroupOffsets_t *list_grpoffsets);
 
 /**
  * @brief Helper function to destroy all ListConsumerGroupOffsets objects in
@@ -8128,7 +8129,7 @@ RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy(
  *        The array itself is not freed.
  */
 RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
-    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffset_cnt);
 
 /**
@@ -8151,7 +8152,7 @@ RD_EXPORT void rd_kafka_ListConsumerGroupOffsets_destroy_array(
 RD_EXPORT
 void rd_kafka_ListConsumerGroupOffsets(
     rd_kafka_t *rk,
-    const rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
+    rd_kafka_ListConsumerGroupOffsets_t **list_grpoffsets,
     size_t list_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);
@@ -8205,7 +8206,7 @@ typedef struct rd_kafka_AlterConsumerGroupOffsets_s
  *          Use rd_kafka_AlterConsumerGroupOffsets_destroy() to free
  *          object when done.
  */
-RD_EXPORT const rd_kafka_AlterConsumerGroupOffsets_t *
+RD_EXPORT rd_kafka_AlterConsumerGroupOffsets_t *
 rd_kafka_AlterConsumerGroupOffsets_new(
     const char *group_id,
     const rd_kafka_topic_partition_list_t *partitions);
@@ -8215,7 +8216,7 @@ rd_kafka_AlterConsumerGroupOffsets_new(
  *        created with rd_kafka_AlterConsumerGroupOffsets_new()
  */
 RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
-    const rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
+    rd_kafka_AlterConsumerGroupOffsets_t *alter_grpoffsets);
 
 /**
  * @brief Helper function to destroy all AlterConsumerGroupOffsets objects in
@@ -8223,7 +8224,7 @@ RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy(
  *        The array itself is not freed.
  */
 RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
-    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffset_cnt);
 
 /**
@@ -8247,7 +8248,7 @@ RD_EXPORT void rd_kafka_AlterConsumerGroupOffsets_destroy_array(
 RD_EXPORT
 void rd_kafka_AlterConsumerGroupOffsets(
     rd_kafka_t *rk,
-    const rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
+    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
     size_t alter_grpoffsets_cnt,
     const rd_kafka_AdminOptions_t *options,
     rd_kafka_queue_t *rkqu);

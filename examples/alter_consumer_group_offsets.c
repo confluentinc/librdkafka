@@ -172,10 +172,9 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                                            * AlterConsumerGroupOffsets() */
         rd_kafka_event_t *event; /* AlterConsumerGroupOffsets result event */
         const int min_argc = 2;
-        int num_partitions = 0;
+        int i, num_partitions = 0;
         const char *group_id, *topic;
-        const rd_kafka_AlterConsumerGroupOffsets_t
-            *alter_consumer_group_offsets;
+        rd_kafka_AlterConsumerGroupOffsets_t *alter_consumer_group_offsets;
 
         /*
          * Argument validation
@@ -208,6 +207,9 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
          * on the result queue that is passed to AlterConsumerGroupOffsets() */
         queue = rd_kafka_queue_new(rk);
 
+        /* Signal handler for clean shutdown */
+        signal(SIGINT, stop);
+
         /* Set timeout (optional) */
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
@@ -220,7 +222,7 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         /* Read passed partition-offsets */
         rd_kafka_topic_partition_list_t *partitions =
             rd_kafka_topic_partition_list_new(num_partitions);
-        for (int i = 0; i < num_partitions; i++) {
+        for (i = 0; i < num_partitions; i++) {
                 rd_kafka_topic_partition_list_add(
                     partitions, topic,
                     parse_int("partition", argv[min_argc + i * 2]))
@@ -242,10 +244,13 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
 
 
         /* Wait for results */
-        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
+                                               * the request timeout set
+                                               * above (30s) */);
 
         if (!event) {
-                /* User hit Ctrl-C */
+                /* User hit Ctrl-C,
+                 * see yield call in stop() signal handler */
                 fprintf(stderr, "%% Cancelled by user\n");
 
         } else if (rd_kafka_event_error(event)) {
@@ -289,9 +294,6 @@ int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt;
         argv0 = argv[0];
-
-        /* Signal handler for clean shutdown */
-        signal(SIGINT, stop);
 
         /*
          * Create Kafka client configuration place-holder

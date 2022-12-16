@@ -1646,6 +1646,7 @@ rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
                                               rd_kafka_enq_once_t *eonce) {
         rd_list_t *nodeids = NULL;
         int version, i, broker_cnt;
+
         do {
                 rd_kafka_broker_t *rkb;
                 version = rd_kafka_brokers_get_state_version(rk);
@@ -5831,62 +5832,6 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
         rd_kafka_broker_unlock(rkb);
 
         rd_kafka_broker_destroy(rkb);
-}
-
-/**
- * @brief Create a new Node object.
- *
- * @param id The node id.
- * @param host The node host.
- * @param port The node port.
- * @param rack_id (optional) The node rack id.
- * @return A new allocated Node object.
- *         Use rd_kafka_Node_destroy() to free when done.
- */
-rd_kafka_Node_t *
-rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id) {
-        rd_kafka_Node_t *ret = calloc(1, sizeof(*ret));
-        ret->id              = id;
-        ret->port            = port;
-        ret->host            = rd_strdup(host);
-        if (rack_id != NULL)
-                ret->rack_id = rd_strdup(rack_id);
-        return ret;
-}
-
-/**
- * @brief Copy \p src Node object
- *
- * @param src The Node to copy.
- * @return A new allocated Node object.
- *         Use rd_kafka_Node_destroy() to free when done.
- */
-rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
-        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
-}
-
-void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
-        if (!node)
-                return;
-        rd_free(node->host);
-        if (node->rack_id)
-                rd_free(node->rack_id);
-        rd_free(node);
-}
-
-int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
-        return node->id;
-}
-
-const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
-        return node->host;
-}
-
-int rd_kafka_Node_port(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
-        return node->port;
 }
 
 /**

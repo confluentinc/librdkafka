@@ -4563,7 +4563,8 @@ rd_kafka_consumer_group_state_t
 rd_kafka_consumer_group_state_code(const char *name) {
         size_t i;
         for (i = 0; i < RD_KAFKA_CONSUMER_GROUP_STATE__CNT; i++) {
-                if (!strcmp(rd_kafka_consumer_group_state_names[i], name))
+                if (!rd_strcasecmp(rd_kafka_consumer_group_state_names[i],
+                                   name))
                         return i;
         }
         return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
@@ -4753,8 +4754,7 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
 
                 state->wait_cnt++;
                 error = rd_kafka_DescribeGroupsRequest(
-                    rkb, 0, (const char **)grps, i,
-                    RD_KAFKA_REPLYQ(state->q, 0),
+                    rkb, 0, grps, i, RD_KAFKA_REPLYQ(state->q, 0),
                     rd_kafka_DescribeGroups_resp_cb, state);
                 if (error) {
                         rd_kafka_DescribeGroups_resp_cb(

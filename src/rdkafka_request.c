@@ -952,60 +952,41 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
  * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  *
- * @param parts List of topic partitions to request,
+ * @param group_id Request offset for this group id.
+ * @param parts (optional) List of topic partitions to request,
  *              or NULL to return all topic partitions associated with the
- * group.
+ *              group.
  * @param require_stable_offsets Whether broker should return stable offsets
  *                               (transaction-committed).
- * @param rk_group_id Request offset for this group id.
- *                    If NULL, returns the
- *                    @ref RD_KAFKA_RESP_ERR__UNKNOWN_GROUP error.
  * @param timeout Optional timeout to set to the buffer.
  */
-void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
-                                       rd_kafkap_str_t *rk_group_id,
-                                       rd_kafka_topic_partition_list_t *parts,
-                                       rd_bool_t require_stable_offsets,
-                                       int timeout,
-                                       rd_kafka_replyq_t replyq,
-                                       rd_kafka_resp_cb_t *resp_cb,
-                                       void *opaque) {
+void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
+                                 const char *group_id,
+                                 rd_kafka_topic_partition_list_t *parts,
+                                 rd_bool_t require_stable_offsets,
+                                 int timeout,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
-        size_t parts_size       = 4;
-        size_t rk_group_id_size = 0;
-        int PartCnt             = -1;
+        size_t parts_size = 4;
+        int PartCnt       = -1;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_OffsetFetch, 0, 7, NULL);
 
-        const rd_kafkap_str_t *send_rk_group_id =
-            rk_group_id == NULL ? rkb->rkb_rk->rk_group_id : rk_group_id;
         if (parts) {
                 parts_size = parts->cnt * 32;
-        }
-        if (send_rk_group_id) {
-                rk_group_id_size = RD_KAFKAP_STR_SIZE(send_rk_group_id);
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
-            rk_group_id_size + 4 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
-
-        if (!send_rk_group_id) {
-                /* No consumer group passed and no consumer group found:
-                 * retry with an error. */
-                rkbuf->rkbuf_replyq = replyq;
-                rkbuf->rkbuf_cb     = resp_cb;
-                rkbuf->rkbuf_opaque = opaque;
-                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
-                                      RD_KAFKA_RESP_ERR__UNKNOWN_GROUP, NULL,
-                                      rkbuf);
-                return;
-        }
+            32 /* GroupId */ + 4 + parts_size /* Topics */ + 1,
+            ApiVersion >= 6 /*flexver*/);
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf, send_rk_group_id);
+        rd_kafka_buf_write_str(rkbuf, group_id, -1);
 
         if (parts) {
                 /* Sort partitions by topic */
@@ -1043,13 +1024,17 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (parts) {
-                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                           "OffsetFetchRequest(v%d) for %d/%d partition(s)",
-                           ApiVersion, PartCnt, parts->cnt);
+                rd_rkb_dbg(
+                    rkb, TOPIC | RD_KAFKA_DBG_CGRP | RD_KAFKA_DBG_CONSUMER,
+                    "OFFSET",
+                    "Group %s OffsetFetchRequest(v%d) for %d/%d partition(s)",
+                    group_id, ApiVersion, PartCnt, parts->cnt);
         } else {
-                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                           "OffsetFetchRequest(v%d) for all the partitions",
-                           ApiVersion);
+                rd_rkb_dbg(
+                    rkb, TOPIC | RD_KAFKA_DBG_CGRP | RD_KAFKA_DBG_CONSUMER,
+                    "OFFSET",
+                    "Group %s OffsetFetchRequest(v%d) for all partitions",
+                    group_id, ApiVersion);
         }
 
         /* Let handler decide if retries should be performed */
@@ -1065,29 +1050,6 @@ void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
         }
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-}
-
-/**
- * Send OffsetFetchRequest for toppar.
- *
- * Any partition with a usable offset will be ignored, if all partitions
- * have usable offsets then no request is sent at all but an empty
- * reply is enqueued on the replyq.
- *
- * @param parts List of topic partitions to request.
- * @param require_stable_offsets Whether broker should return stable offsets
- *                               (transaction-committed).
- */
-void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
-                                 rd_kafka_topic_partition_list_t *parts,
-                                 rd_bool_t require_stable_offsets,
-                                 rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
-                                 void *opaque) {
-        rd_assert(parts != NULL);
-        rd_kafka_OffsetFetchRequest_group(rkb, rkb->rkb_rk->rk_group_id, parts,
-                                          require_stable_offsets, 0, replyq,
-                                          resp_cb, opaque);
 }
 
 
@@ -1176,7 +1138,7 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                              rd_kafka_buf_t *rkbuf,
                              rd_kafka_buf_t *request,
                              rd_kafka_topic_partition_list_t *offsets,
-                             rd_bool_t cgrp_actions) {
+                             rd_bool_t ignore_cgrp) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         int errcnt  = 0;
@@ -1224,13 +1186,10 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                                 err = ErrorCode;
                                 errcnt++;
 
-                                if (cgrp_actions) {
-                                        /* Accumulate actions for per-partition
-                                         * errors. */
-                                        actions |=
-                                            rd_kafka_handle_OffsetCommit_error(
-                                                rkb, request, rktpar);
-                                }
+                                /* Accumulate actions for per-partition
+                                 * errors. */
+                                actions |= rd_kafka_handle_OffsetCommit_error(
+                                    rkb, request, rktpar);
                         }
 
                         partcnt++;
@@ -1248,7 +1207,7 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 err:
-        if (cgrp_actions && !actions) /* Transport/Request-level error */
+        if (!actions) /* Transport/Request-level error */
                 actions = rd_kafka_err_action(rkb, err, request,
 
                                               RD_KAFKA_ERR_ACTION_REFRESH |
@@ -1258,13 +1217,14 @@ err:
 
                                               RD_KAFKA_ERR_ACTION_END);
 
-        if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
+        if (!ignore_cgrp && (actions & RD_KAFKA_ERR_ACTION_FATAL)) {
                 rd_kafka_set_fatal_error(rk, err, "OffsetCommit failed: %s",
                                          rd_kafka_err2str(err));
                 return err;
         }
 
-        if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
+        if (!ignore_cgrp && (actions & RD_KAFKA_ERR_ACTION_REFRESH) &&
+            rk->rk_cgrp) {
                 /* Mark coordinator dead or re-query for coordinator.
                  * ..dead() will trigger a re-query. */
                 if (actions & RD_KAFKA_ERR_ACTION_SPECIAL)
@@ -1287,21 +1247,20 @@ done:
 /**
  * @brief Send OffsetCommitRequest for a list of partitions.
  *
- * @param cgmetadata - consumer group metadata.
+ * @param cgmetadata consumer group metadata.
  *
  * @param offsets - offsets to commit for each topic-partition.
  *
  * @returns 0 if none of the partitions in \p offsets had valid offsets,
  *          else 1.
  */
-int rd_kafka_OffsetCommitRequest_group(
-    rd_kafka_broker_t *rkb,
-    rd_kafka_consumer_group_metadata_t *cgmetadata,
-    rd_kafka_topic_partition_list_t *offsets,
-    rd_kafka_replyq_t replyq,
-    rd_kafka_resp_cb_t *resp_cb,
-    void *opaque,
-    const char *reason) {
+int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
+                                 rd_kafka_consumer_group_metadata_t *cgmetadata,
+                                 rd_kafka_topic_partition_list_t *offsets,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque,
+                                 const char *reason) {
         rd_kafka_buf_t *rkbuf;
         ssize_t of_TopicCnt    = -1;
         int TopicCnt           = 0;
@@ -1422,36 +1381,6 @@ int rd_kafka_OffsetCommitRequest_group(
 
         return 1;
 }
-
-
-/**
- * @brief Send OffsetCommitRequest for a list of partitions.
- *
- * @param rkcg - consumer group struct.
- *
- * @param offsets - offsets to commit for each topic-partition.
- *
- * @returns 0 if none of the partitions in \p offsets had valid offsets,
- *          else 1.
- */
-int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
-                                 rd_kafka_cgrp_t *rkcg,
-                                 rd_kafka_topic_partition_list_t *offsets,
-                                 rd_kafka_replyq_t replyq,
-                                 rd_kafka_resp_cb_t *resp_cb,
-                                 void *opaque,
-                                 const char *reason) {
-        rd_kafka_consumer_group_metadata_t *cgmetadata =
-            rd_kafka_consumer_group_metadata_new_with_genid(
-                rkcg->rkcg_rk->rk_conf.group_id_str, rkcg->rkcg_generation_id,
-                rkcg->rkcg_member_id->str,
-                rkcg->rkcg_rk->rk_conf.group_instance_id);
-        int ret = rd_kafka_OffsetCommitRequest_group(
-            rkb, cgmetadata, offsets, replyq, resp_cb, opaque, reason);
-        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
-        return ret;
-}
-
 
 /**
  * @brief Construct and send OffsetDeleteRequest to \p rkb
@@ -1851,7 +1780,7 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
  */
 rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
-                                             const rd_kafkap_str_t **states,
+                                             const char **states,
                                              size_t states_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
@@ -1876,21 +1805,19 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion == -1) {
                 return rd_kafka_error_new(
                     RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
-                    "Unsupported feature.");
+                    "ListGroupsRequest not supported by broker");
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ListGroups, 1,
-            4 /* rd_kafka_buf_write_arraycnt_pos */ + 1 /* tags */ +
-                32 * states_cnt
-            /* StatesFilter */
-            ,
-            is_flexver);
+            /* rd_kafka_buf_write_arraycnt_pos + tags + StatesFilter */
+            4 + 1 + 32 * states_cnt, is_flexver);
+
         if (ApiVersion >= 4) {
                 size_t of_GroupsArrayCnt =
                     rd_kafka_buf_write_arraycnt_pos(rkbuf);
                 for (i = 0; i < states_cnt; i++) {
-                        rd_kafka_buf_write_kstr(rkbuf, states[i]);
+                        rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
         }
@@ -1917,7 +1844,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  */
 rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                                  int16_t max_ApiVersion,
-                                                 const char **groups,
+                                                 char **groups,
                                                  size_t group_cnt,
                                                  rd_kafka_replyq_t replyq,
                                                  rd_kafka_resp_cb_t *resp_cb,
@@ -1940,7 +1867,7 @@ rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion == -1) {
                 return rd_kafka_error_new(
                     RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
-                    "Unsupported feature.");
+                    "DescribeGroupsRequest not supported by broker");
         }
 
         rkbuf = rd_kafka_buf_new_flexver_request(

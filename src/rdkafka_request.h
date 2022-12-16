@@ -116,20 +116,13 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
                                     void *opaque);
 
 void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
+                                 const char *group_id,
                                  rd_kafka_topic_partition_list_t *parts,
                                  rd_bool_t require_stable_offsets,
+                                 int timeout,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque);
-
-void rd_kafka_OffsetFetchRequest_group(rd_kafka_broker_t *rkb,
-                                       rd_kafkap_str_t *rk_group_id,
-                                       rd_kafka_topic_partition_list_t *parts,
-                                       rd_bool_t require_stable_offsets,
-                                       int timeout,
-                                       rd_kafka_replyq_t replyq,
-                                       rd_kafka_resp_cb_t *resp_cb,
-                                       void *opaque);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
@@ -138,22 +131,15 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                              rd_kafka_buf_t *rkbuf,
                              rd_kafka_buf_t *request,
                              rd_kafka_topic_partition_list_t *offsets,
-                             rd_bool_t cgrp_actions);
+                             rd_bool_t ignore_cgrp);
+
 int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
-                                 rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_consumer_group_metadata_t *cgmetadata,
                                  rd_kafka_topic_partition_list_t *offsets,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque,
                                  const char *reason);
-int rd_kafka_OffsetCommitRequest_group(
-    rd_kafka_broker_t *rkb,
-    rd_kafka_consumer_group_metadata_t *cgmetadata,
-    rd_kafka_topic_partition_list_t *offsets,
-    rd_kafka_replyq_t replyq,
-    rd_kafka_resp_cb_t *resp_cb,
-    void *opaque,
-    const char *reason);
 
 rd_kafka_resp_err_t
 rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
@@ -210,7 +196,7 @@ void rd_kafka_handle_SyncGroup(rd_kafka_t *rk,
 
 rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
-                                             const rd_kafkap_str_t **states,
+                                             const char **states,
                                              size_t states_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
@@ -218,7 +204,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
 
 rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                                  int16_t max_ApiVersion,
-                                                 const char **groups,
+                                                 char **groups,
                                                  size_t group_cnt,
                                                  rd_kafka_replyq_t replyq,
                                                  rd_kafka_resp_cb_t *resp_cb,

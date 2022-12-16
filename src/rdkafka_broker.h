@@ -602,25 +602,6 @@ void rd_kafka_broker_monitor_add(rd_kafka_broker_monitor_t *rkbmon,
 
 void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon);
 
-
-/**
- * @struct Node represents a broker.
- * It's the public type.
- */
-typedef struct rd_kafka_Node_s {
-        int id;        /*< Node id */
-        char *host;    /*< Node host */
-        int port;      /*< Node port */
-        char *rack_id; /*< (optional) Node rack id */
-} rd_kafka_Node_t;
-
-rd_kafka_Node_t *
-rd_kafka_Node_new(int id, const char *host, int port, const char *rack_id);
-
-rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
-
-void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
-
 int unittest_broker(void);
 
 #endif /* _RDKAFKA_BROKER_H_ */

@@ -171,7 +171,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 const rd_kafka_error_t *error;
                 const rd_kafka_ConsumerGroupDescription_t *group =
                     result_groups[i];
-                char coordinator_desc[512]         = {};
+                char coordinator_desc[512];
                 const rd_kafka_Node_t *coordinator = NULL;
                 const char *group_id =
                     rd_kafka_ConsumerGroupDescription_group_id(group);
@@ -184,12 +184,13 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 error = rd_kafka_ConsumerGroupDescription_error(group);
                 coordinator =
                     rd_kafka_ConsumerGroupDescription_coordinator(group);
+                *coordinator_desc = '\0';
 
                 if (coordinator != NULL) {
                         snprintf(coordinator_desc, sizeof(coordinator_desc),
                                  ", coordinator [id: %" PRId32
                                  ", host: %s"
-                                 ", port: %" PRId32 "]",
+                                 ", port: %" PRIu16 "]",
                                  rd_kafka_Node_id(coordinator),
                                  rd_kafka_Node_host(coordinator),
                                  rd_kafka_Node_port(coordinator));
@@ -246,7 +247,6 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         const char **groups = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
-        rd_kafka_queue_t *queue;
         rd_kafka_event_t *event = NULL;
         int retval              = 0;
         int groups_cnt          = 0;
@@ -269,7 +269,11 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         /*
          * Describe consumer groups
          */
-        queue   = rd_kafka_queue_new(rk);
+        queue = rd_kafka_queue_new(rk);
+
+        /* Signal handler for clean shutdown */
+        signal(SIGINT, stop);
+
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
 
@@ -282,10 +286,13 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_DescribeConsumerGroups(rk, groups, groups_cnt, options, queue);
 
         /* Wait for results */
-        event = rd_kafka_queue_poll(queue, -1 /*indefinitely*/);
+        event = rd_kafka_queue_poll(queue, -1 /* indefinitely but limited by
+                                               * the request timeout set
+                                               * above (10s) */);
 
         if (!event) {
-                /* User hit Ctrl-C */
+                /* User hit Ctrl-C,
+                 * see yield call in stop() signal handler */
                 fprintf(stderr, "%% Cancelled by user\n");
 
         } else if (rd_kafka_event_error(event)) {
@@ -322,9 +329,6 @@ int main(int argc, char **argv) {
         rd_kafka_conf_t *conf; /**< Client configuration object */
         int opt;
         argv0 = argv[0];
-
-        /* Signal handler for clean shutdown */
-        signal(SIGINT, stop);
 
         /*
          * Create Kafka client configuration place-holder

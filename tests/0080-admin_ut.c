@@ -598,7 +598,7 @@ destroy:
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
-        SUB_TEST_QUICK();
+        SUB_TEST_PASS();
 }
 
 /**
@@ -728,7 +728,7 @@ destroy:
                 rd_kafka_queue_destroy(q);
 #undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
 
-        SUB_TEST_QUICK();
+        SUB_TEST_PASS();
 }
 
 static void do_test_DeleteRecords(const char *what,
@@ -1551,11 +1551,10 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 #define MY_ALTER_CGRPOFFS_CNT 1
         rd_kafka_AdminOptions_t *options = NULL;
         const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
-        const rd_kafka_AlterConsumerGroupOffsets_t
-            *cgoffsets[MY_ALTER_CGRPOFFS_CNT];
-        const rd_kafka_AlterConsumerGroupOffsets_t
+        rd_kafka_AlterConsumerGroupOffsets_t *cgoffsets[MY_ALTER_CGRPOFFS_CNT];
+        rd_kafka_AlterConsumerGroupOffsets_t
             *cgoffsets_empty[MY_ALTER_CGRPOFFS_CNT];
-        const rd_kafka_AlterConsumerGroupOffsets_t
+        rd_kafka_AlterConsumerGroupOffsets_t
             *cgoffsets_negative[MY_ALTER_CGRPOFFS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
@@ -1759,10 +1758,8 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_AdminOptions_t *options = NULL;
         rd_kafka_topic_partition_list_t *empty_cgoffsets_list;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
-        const rd_kafka_ListConsumerGroupOffsets_t
-            *cgoffsets[MY_LIST_CGRPOFFS_CNT];
-        const rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
-        const rd_kafka_ListConsumerGroupOffsets_t *null_name_cgoffsets;
+        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
+        rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];
@@ -1781,13 +1778,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         empty_cgoffsets      = rd_kafka_ListConsumerGroupOffsets_new(
             "mygroup", empty_cgoffsets_list);
         rd_kafka_topic_partition_list_destroy(empty_cgoffsets_list);
-
-        rd_kafka_topic_partition_list_t *null_name_partitions =
-            rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(null_name_partitions, NULL, 3);
-        null_name_cgoffsets = rd_kafka_ListConsumerGroupOffsets_new(
-            "mygroup", null_name_partitions);
-        rd_kafka_topic_partition_list_destroy(null_name_partitions);
 
         for (i = 0; i < MY_LIST_CGRPOFFS_CNT; i++) {
                 rd_kafka_topic_partition_list_t *partitions =
@@ -1824,29 +1814,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         TEST_SAY(
             "Call ListConsumerGroupOffsets with empty topic-partition list.\n");
         rd_kafka_ListConsumerGroupOffsets(rk, &empty_cgoffsets, 1, options, q);
-        /* Poll result queue */
-        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
-        TEST_SAY("ListConsumerGroupOffsets: got %s\n",
-                 rd_kafka_event_name(rkev));
-
-        /* Expecting error */
-        err = rd_kafka_event_error(rkev);
-        TEST_ASSERT(err, "expected ListConsumerGroupOffsets to fail");
-
-        errstr_ptr = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(
-            !strcmp(errstr_ptr,
-                    "NULL or non-empty topic partition list must be passed"),
-            "expected error string \"NULL or non-empty topic partition list "
-            "must be passed\", not %s",
-            errstr_ptr);
-
-        rd_kafka_event_destroy(rkev);
-
-        TEST_SAY(
-            "Call ListConsumerGroupOffsets with NULL topic-partition name.\n");
-        rd_kafka_ListConsumerGroupOffsets(rk, &null_name_cgoffsets, 1, options,
-                                          q);
         /* Poll result queue */
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TEST_SAY("ListConsumerGroupOffsets: got %s\n",
@@ -1911,7 +1878,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                 rd_kafka_queue_destroy(q);
 
         rd_kafka_ListConsumerGroupOffsets_destroy(empty_cgoffsets);
-        rd_kafka_ListConsumerGroupOffsets_destroy(null_name_cgoffsets);
         rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets,
                                                         MY_LIST_CGRPOFFS_CNT);
 

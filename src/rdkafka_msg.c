@@ -121,6 +121,9 @@ void rd_kafka_msg_destroy(rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
         if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
                 rd_free(rkm->rkm_payload);
+        
+        if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_key)
+                rd_free(rkm->rkm_key);
 
         if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_RKM)
                 rd_free(rkm);

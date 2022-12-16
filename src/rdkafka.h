@@ -7900,7 +7900,7 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
  * @return The member count.
  */
 RD_EXPORT
-int rd_kafka_ConsumerGroupDescription_member_count(
+size_t rd_kafka_ConsumerGroupDescription_member_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
 /**
@@ -7918,7 +7918,7 @@ int rd_kafka_ConsumerGroupDescription_member_count(
 RD_EXPORT
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
-    int idx);
+    size_t idx);
 
 /**
  * @brief Gets client id of \p member.

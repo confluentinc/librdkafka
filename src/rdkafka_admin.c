@@ -6168,14 +6168,14 @@ const rd_kafka_Node_t *rd_kafka_ConsumerGroupDescription_coordinator(
         return grpdesc->coordinator;
 }
 
-int rd_kafka_ConsumerGroupDescription_member_count(
+size_t rd_kafka_ConsumerGroupDescription_member_count(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
         return rd_list_cnt(&grpdesc->members);
 }
 
 const rd_kafka_MemberDescription_t *rd_kafka_ConsumerGroupDescription_member(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
-    int idx) {
+    size_t idx) {
         return (rd_kafka_MemberDescription_t *)rd_list_elem(&grpdesc->members,
                                                             idx);
 }

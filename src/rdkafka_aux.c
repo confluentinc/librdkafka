@@ -259,8 +259,6 @@ rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
 }
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
-        if (!node)
-                return;
         rd_free(node->host);
         if (node->rack_id)
                 rd_free(node->rack_id);
@@ -268,16 +266,13 @@ void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
 }
 
 int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
         return node->id;
 }
 
 const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
         return node->host;
 }
 
 uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
-        rd_assert(node != NULL);
         return node->port;
 }

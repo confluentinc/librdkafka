@@ -30,7 +30,6 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
-#include <unistd.h>
 
 typedef struct consumer_s {
         const char *what;
@@ -72,10 +71,6 @@ static int consumer_batch_queue(void *arg) {
                                                     consume_msg_cnt);
         TIMING_STOP(&t_cons);
 
-        for (i = 0; i < msg_cnt; i++) {
-            TEST_SAY("consumed message for partition %d with offset %lld\n", rkmessage[i]->partition, rkmessage[i]->offset);
-        }
-
         TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
                  msg_cnt, arguments->consume_msg_cnt,
                  arguments->expected_msg_cnt);
@@ -87,7 +82,7 @@ static int consumer_batch_queue(void *arg) {
                 if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
                         TEST_FAIL(
                             "The message is not from testid "
-                            "%" PRId64 " \n",
+                            "%" PRId64,
                             testid);
                 rd_kafka_message_destroy(rkmessage[i]);
         }
@@ -96,25 +91,25 @@ static int consumer_batch_queue(void *arg) {
 }
 
 
-static void do_test_consume_batch_with_seek() {
-        const int partition_cnt = 2;
+static void do_test_consume_batch_with_seek(void) {
         rd_kafka_queue_t *rkq;
         const char *topic;
         rd_kafka_t *consumer;
-        rd_kafka_topic_t *rkt;
         int p;
-        const int timeout_ms = 10000;
         uint64_t testid;
-        const int consume_msg_cnt = 10;
-        const int produce_msg_cnt = 8;
         rd_kafka_conf_t *conf;
         consumer_t consumer_args = RD_ZERO_INIT;
         test_msgver_t mv;
         thrd_t thread_id;
-        rd_kafka_resp_err_t err;
-        const int32_t seek_partition = 0;
-        const int64_t seek_offset = 1;
-        const int expected_msg_cnt = produce_msg_cnt - seek_offset;
+        rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *seek_toppars;
+        const int produce_partition_cnt = 2;
+        const int timeout_ms            = 10000;
+        const int consume_msg_cnt       = 10;
+        const int produce_msg_cnt       = 8;
+        const int32_t seek_partition    = 0;
+        const int64_t seek_offset       = 1;
+        const int expected_msg_cnt      = produce_msg_cnt - seek_offset;
 
         SUB_TEST();
 
@@ -128,12 +123,13 @@ static void do_test_consume_batch_with_seek() {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        for (p = 0; p < partition_cnt; p++)
+        for (p = 0; p < produce_partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
-                                       produce_msg_cnt / partition_cnt);
+                                       produce_msg_cnt / produce_partition_cnt);
 
         /* Create consumers */
-        consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer =
+            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -154,21 +150,23 @@ static void do_test_consume_batch_with_seek() {
             thrd_success)
                 TEST_FAIL("Failed to create thread for %s", "CONSUMER");
 
-        rkt = test_create_producer_topic(consumer, topic);
-        err = rd_kafka_seek(rkt, seek_partition, seek_offset, 3000);
+        seek_toppars = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(seek_toppars, topic, seek_partition);
+        rd_kafka_topic_partition_list_set_offset(seek_toppars, topic,
+                                                 seek_partition, seek_offset);
+        err = rd_kafka_seek_partitions(consumer, seek_toppars, 2000);
 
-        if(err == RD_KAFKA_RESP_ERR__TIMED_OUT) {
-            TEST_FAIL("Failed to seek partition %d for topic %s to offset %lld", seek_partition, topic, seek_offset);
-        }
+        TEST_ASSERT(!err,
+                    "Failed to seek partition %d for topic %s to offset %lld",
+                    seek_partition, topic, seek_offset);
 
         thrd_join(thread_id, NULL);
 
-        test_msgver_verify("CONSUME", &mv,
-                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP, 0,
-                           expected_msg_cnt);
+        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
+                           0, expected_msg_cnt);
         test_msgver_clear(&mv);
 
-        rd_kafka_topic_destroy(rkt);
+        rd_kafka_topic_partition_list_destroy(seek_toppars);
 
         rd_kafka_queue_destroy(rkq);
 
@@ -180,23 +178,26 @@ static void do_test_consume_batch_with_seek() {
 }
 
 
-static void do_test_consume_batch_with_pause_and_resume() {
-        const int partition_cnt = 2;
+static void do_test_consume_batch_with_pause_and_resume(void) {
         rd_kafka_queue_t *rkq;
         const char *topic;
         rd_kafka_t *consumer;
         int p;
-        const int timeout_ms = 10000;
         uint64_t testid;
-        const int consume_msg_cnt = 10;
-        const int produce_msg_cnt = 8;
         rd_kafka_conf_t *conf;
         consumer_t consumer_args = RD_ZERO_INIT;
         test_msgver_t mv;
         thrd_t thread_id;
         rd_kafka_resp_err_t err;
-        rd_kafka_topic_partition_list_t *parition_list;
-        int32_t pause_partition = 0;
+        rd_kafka_topic_partition_list_t *pause_partition_list;
+        rd_kafka_message_t **rkmessages;
+        size_t msg_cnt;
+        const int timeout_ms            = 10000;
+        const int consume_msg_cnt       = 10;
+        const int produce_msg_cnt       = 8;
+        const int produce_partition_cnt = 2;
+        const int expected_msg_cnt      = 4;
+        int32_t pause_partition         = 0;
 
         SUB_TEST();
 
@@ -210,12 +211,13 @@ static void do_test_consume_batch_with_pause_and_resume() {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        for (p = 0; p < partition_cnt; p++)
+        for (p = 0; p < produce_partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
-                                       produce_msg_cnt / partition_cnt);
+                                       produce_msg_cnt / produce_partition_cnt);
 
         /* Create consumers */
-        consumer = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer =
+            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -227,7 +229,7 @@ static void do_test_consume_batch_with_pause_and_resume() {
         consumer_args.rkq              = rkq;
         consumer_args.timeout_ms       = timeout_ms;
         consumer_args.consume_msg_cnt  = consume_msg_cnt;
-        consumer_args.expected_msg_cnt = 4;
+        consumer_args.expected_msg_cnt = expected_msg_cnt;
         consumer_args.rk               = consumer;
         consumer_args.testid           = testid;
         consumer_args.mv               = &mv;
@@ -236,40 +238,36 @@ static void do_test_consume_batch_with_pause_and_resume() {
             thrd_success)
                 TEST_FAIL("Failed to create thread for %s", "CONSUMER");
 
-        parition_list = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(parition_list, topic, pause_partition);
+        pause_partition_list = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(pause_partition_list, topic,
+                                          pause_partition);
 
-        sleep(1);
-        err = rd_kafka_pause_partitions(consumer, parition_list);
+        rd_sleep(1);
+        err = rd_kafka_pause_partitions(consumer, pause_partition_list);
 
-        if(err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-            TEST_FAIL("Failed to pause partition %d for topic %s", pause_partition, topic);
-        }
+        TEST_ASSERT(!err, "Failed to pause partition %d for topic %s",
+                    pause_partition, topic);
 
-        sleep(1);
+        rd_sleep(1);
 
-        err = rd_kafka_resume_partitions(consumer, parition_list);
+        err = rd_kafka_resume_partitions(consumer, pause_partition_list);
 
-        if(err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-            TEST_FAIL("Failed to resume partition %d for topic %s", pause_partition, topic);
-        }
+        TEST_ASSERT(!err, "Failed to resume partition %d for topic %s",
+                    pause_partition, topic);
 
         thrd_join(thread_id, NULL);
 
+        rkmessages = malloc(consume_msg_cnt * sizeof(*rkmessages));
 
-        rd_kafka_message_t **abc =
-            malloc(consume_msg_cnt * sizeof(*abc));
+        msg_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessages,
+                                               consume_msg_cnt);
 
-        int msg_cnt = (int)rd_kafka_consume_batch_queue(rkq, timeout_ms, abc,
-                                                    consume_msg_cnt);
+        TEST_ASSERT(msg_cnt == expected_msg_cnt,
+                    "consumed %zu messages, expected %d", msg_cnt,
+                    expected_msg_cnt);
 
-        TEST_ASSERT(msg_cnt == 4,
-                    "consumed %d messages, expected %d", msg_cnt,
-                    4);
-
-        test_msgver_verify("CONSUME", &mv,
-                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP, 0,
-                           produce_msg_cnt);
+        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
+                           0, produce_msg_cnt);
         test_msgver_clear(&mv);
 
         rd_kafka_queue_destroy(rkq);
@@ -284,7 +282,7 @@ static void do_test_consume_batch_with_pause_and_resume() {
 
 int main_0137_barrier_batch_consume(int argc, char **argv) {
         do_test_consume_batch_with_seek();
-        // Run this test once consume batch is fully fixed.
+        // FIXME: Run this test once consume batch is fully fixed.
         // do_test_consume_batch_with_pause_and_resume();
         return 0;
 }

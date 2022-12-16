@@ -44,18 +44,19 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 
 ## Known Issues
 
-### Consumer issues
+### Poor Consumer batch API messaging guarantees
 
- * The Consumer Batch APIs `rd_kafka_consume_batch` and `rd_kafka_consume_batch_queue`
-   are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
-   **pause**, **resume** and **repartition** operation is performed in parallel. Some
-   of the messages might be lost in the above scenario.
+The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
+**pause**, **resume** and **rebalance** operation is performed in parallel. Some
+of the messages might be lost, or erroneously returned to the application, in the above scenario.
 
-   It is strongly recommended to use the Consumer Batch APIs and the mentioned
-   operations in sequential order in order to get consistent result.
-   
-   For **repartition** operation to work in sequencial manner, please set `rebalance_cb`
-   configuration property (refer [examples/rdkafka_complex_consumer_example.c](examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
+It is strongly recommended to use the Consumer Batch APIs and the mentioned
+operations in sequential order in order to get consistent result.
+
+For **rebalance** operation to work in sequencial manner, please set `rebalance_cb`
+configuration property (refer [examples/rdkafka_complex_consumer_example.c]
+(examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
 
 ## Enhancements
 
@@ -108,7 +109,12 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
-
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` skipping
+   other partitions' offsets intermittently when **seek**, **pause**, **resume**
+   or **rebalancing** is used for a partition.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently returing incorrect partitions' messages if **rebalancing** 
+   happens during these operations.
 
 # librdkafka v1.9.2
 

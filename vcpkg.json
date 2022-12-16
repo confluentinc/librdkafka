@@ -1,0 +1,23 @@
+{
+    "name": "librdkafka",
+    "version": "1.9.2",
+    "dependencies": [
+        {
+            "name": "zstd",
+            "version>=": "1.5.2"
+        },
+        {
+            "name": "zlib",
+            "version>=": "1.2.13"
+        },
+        {
+            "name": "openssl",
+            "version>=": "3.0.7"
+        },
+        {
+            "name": "curl",
+            "version>=": "7.84.0"
+        }
+    ],
+    "builtin-baseline": "09adfdc8cdad76345b7cc7f3305899e1cbd66297"
+}

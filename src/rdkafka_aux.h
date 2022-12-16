@@ -35,8 +35,6 @@
 
 #include "rdkafka_conf.h"
 
-
-
 /**
  * @brief Topic [ + Error code + Error string ]
  *
@@ -47,18 +45,16 @@ struct rd_kafka_topic_result_s {
         char *topic;             /**< Points to data */
         rd_kafka_resp_err_t err; /**< Error code */
         char *errstr;            /**< Points to data after topic, unless NULL */
-        char  data[1];           /**< topic followed by errstr */
+        char data[1];            /**< topic followed by errstr */
 };
 
-void rd_kafka_topic_result_destroy (rd_kafka_topic_result_t *terr);
-void rd_kafka_topic_result_free (void *ptr);
+void rd_kafka_topic_result_destroy(rd_kafka_topic_result_t *terr);
+void rd_kafka_topic_result_free(void *ptr);
 
-rd_kafka_topic_result_t *
-rd_kafka_topic_result_new (const char *topic, ssize_t topic_size,
-                           rd_kafka_resp_err_t err,
-                           const char *errstr);
-
-/**@}*/
+rd_kafka_topic_result_t *rd_kafka_topic_result_new(const char *topic,
+                                                   ssize_t topic_size,
+                                                   rd_kafka_resp_err_t err,
+                                                   const char *errstr);
 
 /**
  * @brief Group [ + Error object ]
@@ -71,22 +67,36 @@ struct rd_kafka_group_result_s {
         rd_kafka_error_t *error; /**< Error object, or NULL on success */
         /** Partitions, used by DeleteConsumerGroupOffsets. */
         rd_kafka_topic_partition_list_t *partitions;
-        char  data[1];           /**< Group name */
+        char data[1]; /**< Group name */
 };
 
-void rd_kafka_group_result_destroy (rd_kafka_group_result_t *terr);
-void rd_kafka_group_result_free (void *ptr);
+void rd_kafka_group_result_destroy(rd_kafka_group_result_t *terr);
+void rd_kafka_group_result_free(void *ptr);
 
 rd_kafka_group_result_t *
-rd_kafka_group_result_new (const char *group, ssize_t group_size,
-                           const rd_kafka_topic_partition_list_t *partitions,
-                           rd_kafka_error_t *error);
+rd_kafka_group_result_new(const char *group,
+                          ssize_t group_size,
+                          const rd_kafka_topic_partition_list_t *partitions,
+                          rd_kafka_error_t *error);
+
+/**
+ * @brief Acl creation result [ Error code + Error string ]
+ *
+ * @remark Public type.
+ * @remark Single allocation.
+ */
+struct rd_kafka_acl_result_s {
+        rd_kafka_error_t *error; /**< Error object, or NULL on success. */
+};
+
+void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res);
+void rd_kafka_acl_result_free(void *ptr);
+
+rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_error_t *error);
 
 rd_kafka_group_result_t *
-rd_kafka_group_result_copy (const rd_kafka_group_result_t *groupres);
-void *
-rd_kafka_group_result_copy_opaque (const void *src_groupres,
-                                   void *opaque);
+rd_kafka_group_result_copy(const rd_kafka_group_result_t *groupres);
+void *rd_kafka_group_result_copy_opaque(const void *src_groupres, void *opaque);
 /**@}*/
 
 #endif /* _RDKAFKA_AUX_H_ */

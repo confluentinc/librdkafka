@@ -45,8 +45,8 @@
 
 #define MAX_THRD_CNT 4
 
-static int assign_cnt = 0;
-static int consumed_msg_cnt = 0;
+static int assign_cnt        = 0;
+static int consumed_msg_cnt  = 0;
 static int consumers_running = 0;
 static int exp_msg_cnt;
 
@@ -57,14 +57,14 @@ static int tids_started[MAX_THRD_CNT];
 #endif
 
 typedef struct part_consume_info_s {
-        rd_kafka_queue_t * rkqu;
+        rd_kafka_queue_t *rkqu;
         int partition;
 } part_consume_info_t;
 
 #ifndef __OS400__
-static int is_consuming () {
+static int is_consuming(){
 #else
-static int is_consuming (void) {
+static int is_consuming(void) {
 #endif
         int result;
         mtx_lock(&lock);
@@ -74,16 +74,16 @@ static int is_consuming (void) {
 }
 
 #ifndef __OS400__
-static int partition_consume (void *args) {
+static int partition_consume(void *args) {
 #else
-static void *partition_consume (void *args) {
+static void *partition_consume(void *args) {
 #endif
         part_consume_info_t *info = (part_consume_info_t *)args;
-        rd_kafka_queue_t *rkqu = info->rkqu;
-        int partition = info->partition;
-        int64_t ts_start = test_clock();
-        int max_time = (test_session_timeout_ms + 3000) * 1000;
-        int running = 1;
+        rd_kafka_queue_t *rkqu    = info->rkqu;
+        int partition             = info->partition;
+        int64_t ts_start          = test_clock();
+        int max_time              = (test_session_timeout_ms + 3000) * 1000;
+        int running               = 1;
 
         free(args); /* Free the parameter struct dynamically allocated for us */
 
@@ -99,19 +99,22 @@ static void *partition_consume (void *args) {
                         running = 0;
                 else if (rkmsg->err) {
                         mtx_lock(&lock);
-                        TEST_FAIL("Message error "
-                                  "(at offset %" PRId64 " after "
-                                  "%d/%d messages and %dms): %s",
-                                  rkmsg->offset, consumed_msg_cnt, exp_msg_cnt,
-                                  (int)(test_clock() - ts_start) / 1000,
-                                  rd_kafka_message_errstr(rkmsg));
+                        TEST_FAIL(
+                            "Message error "
+                            "(at offset %" PRId64
+                            " after "
+                            "%d/%d messages and %dms): %s",
+                            rkmsg->offset, consumed_msg_cnt, exp_msg_cnt,
+                            (int)(test_clock() - ts_start) / 1000,
+                            rd_kafka_message_errstr(rkmsg));
                         mtx_unlock(&lock);
                 } else {
                         if (rkmsg->partition != partition) {
                                 mtx_lock(&lock);
-                                TEST_FAIL("Message consumed has partition %d "
-                                          "but we expected partition %d.",
-                                          rkmsg->partition, partition);
+                                TEST_FAIL(
+                                    "Message consumed has partition %d "
+                                    "but we expected partition %d.",
+                                    rkmsg->partition, partition);
                                 mtx_unlock(&lock);
                         }
                 }
@@ -135,7 +138,7 @@ static void *partition_consume (void *args) {
 }
 
 #ifndef __OS400__
-static thrd_t spawn_thread (rd_kafka_queue_t *rkqu, int partition) {
+static thrd_t spawn_thread(rd_kafka_queue_t *rkqu, int partition) {
         thrd_t thr;
 #else
 static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
@@ -143,8 +146,9 @@ static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
 #endif
         part_consume_info_t *info = malloc(sizeof(part_consume_info_t));
 
-        info->rkqu = rkqu;
+        info->rkqu      = rkqu;
         info->partition = partition;
+
 #ifndef __OS400__
         if (thrd_create(&thr, &partition_consume, info) != thrd_success) {
 #else
@@ -153,7 +157,6 @@ static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
 #endif
                 TEST_FAIL("Failed to create consumer thread.");
         }
-
 #ifndef __OS400__
         return thr;
 #else
@@ -163,7 +166,8 @@ static int spawn_thread (rd_kafka_queue_t *rkqu, int partition, thrd_t *thr) {
 
 static int rebalanced = 0;
 
-static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+static void rebalance_cb(rd_kafka_t *rk,
+                         rd_kafka_resp_err_t err,
                          rd_kafka_topic_partition_list_t *partitions,
                          void *opaque) {
         int i;
@@ -195,11 +199,11 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
                         rd_kafka_queue_forward(rkqu, NULL);
 #ifndef __OS400__
-                        tids[part.partition] = spawn_thread(rkqu,
-                                                            part.partition);
+                        tids[part.partition] =
+                            spawn_thread(rkqu, part.partition);
 #else
-                        tids_started[part.partition] = !spawn_thread(rkqu,
-                                                            part.partition, &(tids[part.partition]));
+                        tids_started[part.partition] = 
+                            !spawn_thread(rkqu, part.partition, &(tids[part.partition]));
 #endif
                 }
 
@@ -224,7 +228,7 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         }
 }
 
-static void get_assignment (rd_kafka_t *rk_c) {
+static void get_assignment(rd_kafka_t *rk_c) {
         while (!rebalanced) {
                 rd_kafka_message_t *rkmsg;
                 rkmsg = rd_kafka_consumer_poll(rk_c, 500);
@@ -233,12 +237,12 @@ static void get_assignment (rd_kafka_t *rk_c) {
         }
 }
 
-int main_0056_balanced_group_mt (int argc, char **argv) {
+int main_0056_balanced_group_mt(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_t *rk_p, *rk_c;
         rd_kafka_topic_t *rkt_p;
-        int msg_cnt = test_quick ? 100 : 1000;
-        int msg_base = 0;
+        int msg_cnt       = test_quick ? 100 : 1000;
+        int msg_base      = 0;
         int partition_cnt = 2;
         int partition;
         uint64_t testid;
@@ -254,7 +258,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         testid = test_id_generate();
 
         /* Produce messages */
-        rk_p = test_create_producer();
+        rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
 
         for (partition = 0; partition < partition_cnt; partition++) {
@@ -282,9 +286,8 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
 
         /* Create consumers and start subscription */
-        rk_c = test_create_consumer(
-                topic /*group_id*/, rebalance_cb,
-                conf, default_topic_conf);
+        rk_c = test_create_consumer(topic /*group_id*/, rebalance_cb, conf,
+                                    default_topic_conf);
 
         test_consumer_subscribe(rk_c, topic);
 
@@ -340,9 +343,10 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
                     exp_msg_cnt);
 
         if (consumed_msg_cnt > exp_msg_cnt)
-                TEST_SAY("At least %d/%d messages were consumed "
-                         "multiple times\n",
-                         consumed_msg_cnt - exp_msg_cnt, exp_msg_cnt);
+                TEST_SAY(
+                    "At least %d/%d messages were consumed "
+                    "multiple times\n",
+                    consumed_msg_cnt - exp_msg_cnt, exp_msg_cnt);
 
         mtx_destroy(&lock);
 

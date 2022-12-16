@@ -63,8 +63,8 @@ typedef struct rd_map_elem_s {
  * @struct Hash buckets (internal use).
  */
 struct rd_map_buckets {
-        LIST_HEAD(, rd_map_elem_s) *p; /**< Hash buckets array */
-        int cnt;                       /**< Bucket count */
+        LIST_HEAD(, rd_map_elem_s) * p; /**< Hash buckets array */
+        int cnt;                        /**< Bucket count */
 };
 
 
@@ -72,20 +72,20 @@ struct rd_map_buckets {
  * @struct Hash map.
  */
 typedef struct rd_map_s {
-        struct rd_map_buckets rmap_buckets;    /**< Hash buckets */
-        int rmap_cnt;                          /**< Element count */
+        struct rd_map_buckets rmap_buckets; /**< Hash buckets */
+        int rmap_cnt;                       /**< Element count */
 
-        LIST_HEAD(, rd_map_elem_s) rmap_iter;  /**< Element list for iterating
-                                                *   over all elements. */
+        LIST_HEAD(, rd_map_elem_s)
+        rmap_iter; /**< Element list for iterating
+                    *   over all elements. */
 
-        int (*rmap_cmp) (const void *a, const void *b); /**< Key comparator */
-        unsigned int (*rmap_hash) (const void *key);   /**< Key hash function */
-        void (*rmap_destroy_key) (void *key);     /**< Optional key free */
-        void (*rmap_destroy_value) (void *value); /**< Optional value free */
+        int (*rmap_cmp)(const void *a, const void *b); /**< Key comparator */
+        unsigned int (*rmap_hash)(const void *key);    /**< Key hash function */
+        void (*rmap_destroy_key)(void *key);           /**< Optional key free */
+        void (*rmap_destroy_value)(void *value); /**< Optional value free */
 
         void *rmap_opaque;
 } rd_map_t;
-
 
 
 
@@ -102,7 +102,7 @@ typedef struct rd_map_s {
  *
  * @returns the map element.
  */
-rd_map_elem_t *rd_map_set (rd_map_t *rmap, void *key, void *value);
+rd_map_elem_t *rd_map_set(rd_map_t *rmap, void *key, void *value);
 
 
 /**
@@ -111,7 +111,7 @@ rd_map_elem_t *rd_map_set (rd_map_t *rmap, void *key, void *value);
  *
  * The returned memory is still owned by the map.
  */
-void *rd_map_get (const rd_map_t *rmap, const void *key);
+void *rd_map_get(const rd_map_t *rmap, const void *key);
 
 
 /**
@@ -120,11 +120,11 @@ void *rd_map_get (const rd_map_t *rmap, const void *key);
  * The destroy_key and destroy_value functions (if set) will be used
  * to free the key and value memory.
  */
-void rd_map_delete (rd_map_t *rmap, const void *key);
+void rd_map_delete(rd_map_t *rmap, const void *key);
 
 
 /** Key or Value Copy function signature. */
-typedef void *(rd_map_copy_t) (const void *key_or_value);
+typedef void *(rd_map_copy_t)(const void *key_or_value);
 
 
 /**
@@ -138,20 +138,21 @@ typedef void *(rd_map_copy_t) (const void *key_or_value);
  * @param value_copy Value copy callback. If NULL the \p dst value will just
  *                   reference the \p src value.
  */
-void rd_map_copy (rd_map_t *dst, const rd_map_t *src,
-                  rd_map_copy_t *key_copy,
-                  rd_map_copy_t *value_copy);
+void rd_map_copy(rd_map_t *dst,
+                 const rd_map_t *src,
+                 rd_map_copy_t *key_copy,
+                 rd_map_copy_t *value_copy);
 
 
 /**
  * @returns the current number of elements in the map.
  */
-size_t rd_map_cnt (const rd_map_t *rmap);
+size_t rd_map_cnt(const rd_map_t *rmap);
 
 /**
  * @returns true if map is empty, else false.
  */
-rd_bool_t rd_map_is_empty (const rd_map_t *rmap);
+rd_bool_t rd_map_is_empty(const rd_map_t *rmap);
 
 
 /**
@@ -161,30 +162,27 @@ rd_bool_t rd_map_is_empty (const rd_map_t *rmap);
  *
  * @remark This is part of the untyped generic API.
  */
-#define RD_MAP_FOREACH_ELEM(ELEM,RMAP)             \
-        for (rd_map_iter_begin((RMAP), &(ELEM)) ;  \
-             rd_map_iter(&(ELEM)) ;                \
+#define RD_MAP_FOREACH_ELEM(ELEM, RMAP)                                        \
+        for (rd_map_iter_begin((RMAP), &(ELEM)); rd_map_iter(&(ELEM));         \
              rd_map_iter_next(&(ELEM)))
 
 
 /**
  * @brief Begin iterating \p rmap, first element is set in \p *elem.
  */
-void rd_map_iter_begin (const rd_map_t *rmap, const rd_map_elem_t **elem);
+void rd_map_iter_begin(const rd_map_t *rmap, const rd_map_elem_t **elem);
 
 /**
  * @returns 1 if \p *elem is a valid iteration element, else 0.
  */
-static RD_INLINE RD_UNUSED
-int rd_map_iter (const rd_map_elem_t **elem) {
+static RD_INLINE RD_UNUSED int rd_map_iter(const rd_map_elem_t **elem) {
         return *elem != NULL;
 }
 
 /**
  * @brief Advances the iteration to the next element.
  */
-static RD_INLINE RD_UNUSED
-void rd_map_iter_next (const rd_map_elem_t **elem) {
+static RD_INLINE RD_UNUSED void rd_map_iter_next(const rd_map_elem_t **elem) {
         *elem = LIST_NEXT(*elem, link);
 }
 
@@ -208,23 +206,24 @@ void rd_map_iter_next (const rd_map_elem_t **elem) {
  *
  * @remarks The map is not thread-safe.
  */
-void rd_map_init (rd_map_t *rmap, size_t expected_cnt,
-                  int (*cmp) (const void *a, const void *b),
-                  unsigned int (*hash) (const void *key),
-                  void (*destroy_key) (void *key),
-                  void (*destroy_value) (void *value));
+void rd_map_init(rd_map_t *rmap,
+                 size_t expected_cnt,
+                 int (*cmp)(const void *a, const void *b),
+                 unsigned int (*hash)(const void *key),
+                 void (*destroy_key)(void *key),
+                 void (*destroy_value)(void *value));
 
 
 /**
  * @brief Internal use
  */
-struct rd_map_buckets rd_map_alloc_buckets (size_t expected_cnt);
+struct rd_map_buckets rd_map_alloc_buckets(size_t expected_cnt);
 
 
 /**
  * @brief Empty the map and free all elements.
  */
-void rd_map_clear (rd_map_t *rmap);
+void rd_map_clear(rd_map_t *rmap);
 
 
 /**
@@ -236,21 +235,19 @@ void rd_map_clear (rd_map_t *rmap);
  *
  * @sa rd_map_clear()
  */
-void rd_map_destroy (rd_map_t *rmap);
+void rd_map_destroy(rd_map_t *rmap);
 
 
 /**
  * @brief String comparator for (const char *) keys.
  */
-int rd_map_str_cmp (const void *a, const void *b);
+int rd_map_str_cmp(const void *a, const void *b);
 
 
 /**
  * @brief String hash function (djb2) for (const char *) keys.
  */
-unsigned int rd_map_str_hash (const void *a);
-
-
+unsigned int rd_map_str_hash(const void *a);
 
 
 
@@ -264,12 +261,12 @@ unsigned int rd_map_str_hash (const void *a);
  * @brief Define a typed map type which can later be used with
  *        RD_MAP_INITIALIZER() and typed RD_MAP_*() API.
  */
-#define RD_MAP_TYPE(KEY_TYPE,VALUE_TYPE)           \
-        struct {                                   \
-                rd_map_t rmap;                     \
-                KEY_TYPE key;                      \
-                VALUE_TYPE value;                  \
-                const rd_map_elem_t *elem;         \
+#define RD_MAP_TYPE(KEY_TYPE, VALUE_TYPE)                                      \
+        struct {                                                               \
+                rd_map_t rmap;                                                 \
+                KEY_TYPE key;                                                  \
+                VALUE_TYPE value;                                              \
+                const rd_map_elem_t *elem;                                     \
         }
 
 /**
@@ -292,15 +289,16 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_init()
  */
-#define RD_MAP_INITIALIZER(EXPECTED_CNT,CMP,HASH,DESTROY_KEY,DESTROY_VALUE) \
-        {                                                               \
-                .rmap = {                                               \
-                        .rmap_buckets = rd_map_alloc_buckets(EXPECTED_CNT), \
-                        .rmap_cmp = CMP,                                \
-                        .rmap_hash = HASH,                              \
-                        .rmap_destroy_key = DESTROY_KEY,                \
-                        .rmap_destroy_value = DESTROY_VALUE             \
-                }                                                       \
+#define RD_MAP_INITIALIZER(EXPECTED_CNT, CMP, HASH, DESTROY_KEY,                \
+                           DESTROY_VALUE)                                       \
+        {                                                                       \
+                .rmap = {                                                       \
+                        .rmap_buckets     = rd_map_alloc_buckets(EXPECTED_CNT), \
+                        .rmap_cmp         = CMP,                                \
+                        .rmap_hash        = HASH,                               \
+                        .rmap_destroy_key = DESTROY_KEY,                        \
+                        .rmap_destroy_value = DESTROY_VALUE                     \
+                }                                                               \
         }
 
 
@@ -315,16 +313,15 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa RD_MAP_INITIALIZER()
  */
-#define RD_MAP_LOCAL_INITIALIZER(RMAP, EXPECTED_CNT,                    \
-                                 KEY_TYPE, VALUE_TYPE,                  \
-                                 CMP, HASH, DESTROY_KEY, DESTROY_VALUE) \
-        struct {                                                        \
-                rd_map_t  rmap;                                         \
-                KEY_TYPE key;                                           \
-                VALUE_TYPE value;                                       \
-                const rd_map_elem_t *elem;                              \
-        } RMAP = RD_MAP_INITIALIZER(EXPECTED_CNT,CMP,HASH,              \
-                                    DESTROY_KEY,DESTROY_VALUE)
+#define RD_MAP_LOCAL_INITIALIZER(RMAP, EXPECTED_CNT, KEY_TYPE, VALUE_TYPE,     \
+                                 CMP, HASH, DESTROY_KEY, DESTROY_VALUE)        \
+        struct {                                                               \
+                rd_map_t rmap;                                                 \
+                KEY_TYPE key;                                                  \
+                VALUE_TYPE value;                                              \
+                const rd_map_elem_t *elem;                                     \
+        } RMAP = RD_MAP_INITIALIZER(EXPECTED_CNT, CMP, HASH, DESTROY_KEY,      \
+                                    DESTROY_VALUE)
 
 
 /**
@@ -332,9 +329,9 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_init()
  */
-#define RD_MAP_INIT(RMAP,EXPECTED_CNT,CMP,HASH,DESTROY_KEY,DESTROY_VALUE) \
-        rd_map_init(&(RMAP)->rmap, EXPECTED_CNT, CMP, HASH,             \
-                    DESTROY_KEY, DESTROY_VALUE)
+#define RD_MAP_INIT(RMAP, EXPECTED_CNT, CMP, HASH, DESTROY_KEY, DESTROY_VALUE) \
+        rd_map_init(&(RMAP)->rmap, EXPECTED_CNT, CMP, HASH, DESTROY_KEY,       \
+                    DESTROY_VALUE)
 
 
 /**
@@ -347,21 +344,19 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_set()
  */
-#define RD_MAP_SET(RMAP,KEY,VALUE)                                      \
-        ((RMAP)->key = KEY,                                             \
-         (RMAP)->value = VALUE,                                         \
-         rd_map_set(&(RMAP)->rmap,                                      \
-                    (void *)(RMAP)->key,                                \
-                    (void *)(RMAP)->value))                             \
+#define RD_MAP_SET(RMAP, KEY, VALUE)                                           \
+        ((RMAP)->key = KEY, (RMAP)->value = VALUE,                             \
+         rd_map_set(&(RMAP)->rmap, (void *)(RMAP)->key,                        \
+                    (void *)(RMAP)->value))
 
 /**
  * @brief Typed hash map: Get value for key.
  *
  * @sa rd_map_get()
  */
-#define RD_MAP_GET(RMAP,KEY)                                            \
-        ((RMAP)->key = (KEY),                                           \
-         (RMAP)->value = rd_map_get(&(RMAP)->rmap, (RMAP)->key),        \
+#define RD_MAP_GET(RMAP, KEY)                                                  \
+        ((RMAP)->key   = (KEY),                                                \
+         (RMAP)->value = rd_map_get(&(RMAP)->rmap, (RMAP)->key),               \
          (RMAP)->value)
 
 
@@ -370,11 +365,10 @@ unsigned int rd_map_str_hash (const void *a);
  * @brief Get value for key. If key does not exist in map a new
  *        entry is added using the DEFAULT_CODE.
  */
-#define RD_MAP_GET_OR_SET(RMAP,KEY,DEFAULT_CODE)                \
-        (RD_MAP_GET(RMAP,KEY) ?                                 \
-        (RMAP)->value :                                         \
-        (RD_MAP_SET(RMAP, (RMAP)->key, DEFAULT_CODE),           \
-         (RMAP)->value))
+#define RD_MAP_GET_OR_SET(RMAP, KEY, DEFAULT_CODE)                             \
+        (RD_MAP_GET(RMAP, KEY)                                                 \
+             ? (RMAP)->value                                                   \
+             : (RD_MAP_SET(RMAP, (RMAP)->key, DEFAULT_CODE), (RMAP)->value))
 
 
 /**
@@ -385,9 +379,8 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_delete()
  */
-#define RD_MAP_DELETE(RMAP,KEY)                                         \
-        ((RMAP)->key = (KEY),                                           \
-         rd_map_delete(&(RMAP)->rmap, (RMAP)->key))                     \
+#define RD_MAP_DELETE(RMAP, KEY)                                               \
+        ((RMAP)->key = (KEY), rd_map_delete(&(RMAP)->rmap, (RMAP)->key))
 
 
 /**
@@ -401,10 +394,11 @@ unsigned int rd_map_str_hash (const void *a);
  * @param VALUE_COPY Value copy callback. If NULL the \p DST value will just
  *                   reference the \p SRC value.
  */
-#define RD_MAP_COPY(DST,SRC,KEY_COPY,VALUE_COPY) do {            \
-                if ((DST) != (SRC))/*implicit type-check*/       \
-                        rd_map_copy(&(DST)->rmap, &(SRC)->rmap,  \
-                                    KEY_COPY, VALUE_COPY);       \
+#define RD_MAP_COPY(DST, SRC, KEY_COPY, VALUE_COPY)                            \
+        do {                                                                   \
+                if ((DST) != (SRC)) /*implicit type-check*/                    \
+                        rd_map_copy(&(DST)->rmap, &(SRC)->rmap, KEY_COPY,      \
+                                    VALUE_COPY);                               \
         } while (0)
 
 
@@ -413,7 +407,7 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_clear()
  */
-#define RD_MAP_CLEAR(RMAP)  rd_map_clear(&(RMAP)->rmap)
+#define RD_MAP_CLEAR(RMAP) rd_map_clear(&(RMAP)->rmap)
 
 
 /**
@@ -421,7 +415,7 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_destroy()
  */
-#define RD_MAP_DESTROY(RMAP)  rd_map_destroy(&(RMAP)->rmap)
+#define RD_MAP_DESTROY(RMAP) rd_map_destroy(&(RMAP)->rmap)
 
 
 /**
@@ -429,10 +423,11 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @sa rd_map_destroy()
  */
-#define RD_MAP_DESTROY_AND_FREE(RMAP) do {   \
-        rd_map_destroy(&(RMAP)->rmap);       \
-        rd_free(RMAP);                       \
-} while (0)
+#define RD_MAP_DESTROY_AND_FREE(RMAP)                                          \
+        do {                                                                   \
+                rd_map_destroy(&(RMAP)->rmap);                                 \
+                rd_free(RMAP);                                                 \
+        } while (0)
 
 
 /**
@@ -449,15 +444,13 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @remark The \p RMAP may not be const.
  */
-#define RD_MAP_FOREACH(K,V,RMAP)                                        \
-        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
-             rd_map_iter(&(RMAP)->elem) &&                              \
-                     ((RMAP)->key = (void *)(RMAP)->elem->key,          \
-                      (K) = (RMAP)->key,                                \
-                      (RMAP)->value = (void *)(RMAP)->elem->value,      \
-                      (V) = (RMAP)->value,                              \
-                      rd_map_iter_next(&(RMAP)->elem),                  \
-                      rd_true) ; )                                      \
+#define RD_MAP_FOREACH(K, V, RMAP)                                             \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem), (K) = NULL,      \
+                                                              (V) = NULL;      \
+             rd_map_iter(&(RMAP)->elem) &&                                     \
+             ((RMAP)->key = (void *)(RMAP)->elem->key, (K) = (RMAP)->key,      \
+             (RMAP)->value = (void *)(RMAP)->elem->value, (V) = (RMAP)->value, \
+             rd_map_iter_next(&(RMAP)->elem), rd_true);)
 
 
 /**
@@ -474,23 +467,21 @@ unsigned int rd_map_str_hash (const void *a);
  *
  * @remark The \p RMAP may not be const.
  */
-#define RD_MAP_FOREACH_KEY(K,RMAP)                                      \
-        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem) ;          \
-             rd_map_iter(&(RMAP)->elem) &&                              \
-                     ((RMAP)->key = (void *)(RMAP)->elem->key,          \
-                      (K) = (RMAP)->key,                                \
-                      rd_map_iter_next(&(RMAP)->elem),                  \
-                      rd_true) ; )                                      \
+#define RD_MAP_FOREACH_KEY(K, RMAP)                                            \
+        for (rd_map_iter_begin(&(RMAP)->rmap, &(RMAP)->elem), (K) = NULL;      \
+             rd_map_iter(&(RMAP)->elem) &&                                     \
+             ((RMAP)->key = (void *)(RMAP)->elem->key, (K) = (RMAP)->key,      \
+             rd_map_iter_next(&(RMAP)->elem), rd_true);)
 
 
 /**
  * @returns the number of elements in the map.
  */
-#define RD_MAP_CNT(RMAP)  rd_map_cnt(&(RMAP)->rmap)
+#define RD_MAP_CNT(RMAP) rd_map_cnt(&(RMAP)->rmap)
 
 /**
  * @returns true if map is empty, else false.
  */
-#define RD_MAP_IS_EMPTY(RMAP)  rd_map_is_empty(&(RMAP)->rmap)
+#define RD_MAP_IS_EMPTY(RMAP) rd_map_is_empty(&(RMAP)->rmap)
 
 #endif /* _RDMAP_H_ */

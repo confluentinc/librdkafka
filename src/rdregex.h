@@ -30,11 +30,14 @@
 
 typedef struct rd_regex_s rd_regex_t;
 
-void rd_regex_destroy (rd_regex_t *re);
-rd_regex_t *rd_regex_comp (const char *pattern, char *errstr, size_t errstr_size);
-int rd_regex_exec (rd_regex_t *re, const char *str);
+void rd_regex_destroy(rd_regex_t *re);
+rd_regex_t *
+rd_regex_comp(const char *pattern, char *errstr, size_t errstr_size);
+int rd_regex_exec(rd_regex_t *re, const char *str);
 
-int rd_regex_match (const char *pattern, const char *str,
-		    char *errstr, size_t errstr_size);
+int rd_regex_match(const char *pattern,
+                   const char *str,
+                   char *errstr,
+                   size_t errstr_size);
 
 #endif /* _RDREGEX_H_ */

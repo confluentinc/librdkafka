@@ -50,24 +50,30 @@ struct ictest ictest;
  */
 
 
-static void do_test_plugin () {
+static void do_test_plugin() {
   std::string errstr;
-  std::string topic = Test::mk_topic_name("0066_plugins", 1);
+  std::string topic           = Test::mk_topic_name("0066_plugins", 1);
   static const char *config[] = {
-    "session.timeout.ms", "6000", /* Before plugin */
-    "plugin.library.paths", "interceptor_test/interceptor_test",
-    "socket.timeout.ms", "12", /* After plugin */
-    "interceptor_test.config1", "one",
-    "interceptor_test.config2", "two",
-    "topic.metadata.refresh.interval.ms", "1234",
-    NULL,
+      "session.timeout.ms",
+      "6000", /* Before plugin */
+      "plugin.library.paths",
+      "interceptor_test/interceptor_test",
+      "socket.timeout.ms",
+      "12", /* After plugin */
+      "interceptor_test.config1",
+      "one",
+      "interceptor_test.config2",
+      "two",
+      "topic.metadata.refresh.interval.ms",
+      "1234",
+      NULL,
   };
 
   char cwd[512], *pcwd;
 #ifdef _WIN32
-  pcwd = _getcwd(cwd, sizeof(cwd)-1);
+  pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-  pcwd = getcwd(cwd, sizeof(cwd)-1);
+  pcwd = getcwd(cwd, sizeof(cwd) - 1);
 #endif
   if (pcwd)
     Test::Say(tostr() << "running test from cwd " << cwd << "\n");
@@ -80,9 +86,9 @@ static void do_test_plugin () {
   /* Config for intercepted client */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
-  for (int i = 0 ; config[i] ; i += 2) {
-    Test::Say(tostr() << "set(" << config[i] << ", " << config[i+1] << ")\n");
-    if (conf->set(config[i], config[i+1], errstr))
+  for (int i = 0; config[i]; i += 2) {
+    Test::Say(tostr() << "set(" << config[i] << ", " << config[i + 1] << ")\n");
+    if (conf->set(config[i], config[i + 1], errstr))
       Test::Fail(tostr() << "set(" << config[i] << ") failed: " << errstr);
   }
 
@@ -93,9 +99,9 @@ static void do_test_plugin () {
 
   if (ictest.on_new.cnt < ictest.on_new.min ||
       ictest.on_new.cnt > ictest.on_new.max)
-    Test::Fail(tostr() << "on_new.cnt " << ictest.on_new.cnt <<
-               " not within range " << ictest.on_new.min << ".." <<
-               ictest.on_new.max);
+    Test::Fail(tostr() << "on_new.cnt " << ictest.on_new.cnt
+                       << " not within range " << ictest.on_new.min << ".."
+                       << ictest.on_new.max);
 
   /* Verification */
   if (!ictest.config1 || strcmp(ictest.config1, "one"))
@@ -103,7 +109,8 @@ static void do_test_plugin () {
   if (!ictest.config2 || strcmp(ictest.config2, "two"))
     Test::Fail(tostr() << "config2 was " << ictest.config2);
   if (!ictest.session_timeout_ms || strcmp(ictest.session_timeout_ms, "6000"))
-    Test::Fail(tostr() << "session.timeout.ms was " << ictest.session_timeout_ms);
+    Test::Fail(tostr() << "session.timeout.ms was "
+                       << ictest.session_timeout_ms);
   if (!ictest.socket_timeout_ms || strcmp(ictest.socket_timeout_ms, "12"))
     Test::Fail(tostr() << "socket.timeout.ms was " << ictest.socket_timeout_ms);
 
@@ -115,8 +122,8 @@ static void do_test_plugin () {
 }
 
 extern "C" {
-  int main_0066_plugins (int argc, char **argv) {
-    do_test_plugin();
-    return 0;
-  }
+int main_0066_plugins(int argc, char **argv) {
+  do_test_plugin();
+  return 0;
+}
 }

@@ -92,6 +92,8 @@ BRIEF
 * Start Zookeeper
 ```
 ADDENVVAR ENVVAR(JAVA_HOME) VALUE('/qopensys/QIBM/ProdData/JavaVM/jdk80/64bit')
+ADDENVVAR ENVVAR(KAFKA_JVM_PERFORMANCE_OPTS) VALUE(' ')
+ADDENVVAR ENVVAR(KAFKA_GC_LOG_OPTS) VALUE(' ')
 SBMJOB CMD(STRQSH CMD('cd <path to apache kafka folder> && bin/zookeeper-server-start.sh config/zookeeper.properties')) CPYENVVAR(*YES)
 ```
 * Start brokers

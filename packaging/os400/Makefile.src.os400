@@ -5,83 +5,89 @@
 all: prebuild \
      librdkafka
 
-prebuild:
-	-system "CRTLIB RDKAFKA"
-
+outlib=RDKAFKA
+MAKEFILE=./../packaging/os400/Makefile.src.os400
 DBGVIEW=*NONE
 NDEBUG=-DNDEBUG
 #NDEBUG=
 
-librdkafka_objects = rdkafka.o                         \
-                     rdkafka_broker.o                  \
-                     rdkafka_msg.o                     \
-                     rdkafka_topic.o                   \
-                     rdkafka_conf.o                    \
-                     rdkafka_timer.o                   \
-                     rdkafka_offset.o                  \
-                     rdkafka_transport.o               \
-                     rdkafka_buf.o                     \
-                     rdkafka_queue.o                   \
-                     rdkafka_op.o                      \
-                     rdkafka_request.o                 \
-                     rdkafka_cgrp.o                    \
-                     rdkafka_pattern.o                 \
-                     rdkafka_partition.o               \
-                     rdkafka_subscription.o            \
-                     rdkafka_assignment.o              \
-                     rdkafka_assignor.o                \
-                     rdkafka_range_assignor.o          \
-                     rdkafka_roundrobin_assignor.o     \
-                     rdkafka_sticky_assignor.o         \
-                     rdkafka_feature.o                 \
-                     rdcrc32.o                         \
-                     crc32c.o                          \
-                     rdmurmur2.o                       \
-                     rdfnv1a.o                         \
-                     rdaddr.o                          \
-                     rdrand.o                          \
-                     rdlist.o                          \
-                     tinycthread.o                     \
-                     tinycthread_extra.o               \
-                     rdlog.o                           \
-                     rdstring.o                        \
-                     rdkafka_event.o                   \
-                     rdkafka_metadata.o                \
-                     rdregex.o                         \
-                     regexp.o                          \
-                     rdports.o                         \
-                     rdkafka_metadata_cache.o          \
-                     rdavl.o                           \
-                     rdkafka_sasl.o                    \
-                     rdkafka_sasl_plain.o              \
-                     rdkafka_interceptor.o             \
-                     rdkafka_msgset_writer.o           \
-                     rdkafka_msgset_reader.o           \
-                     rdkafka_header.o                  \
-                     rdkafka_admin.o                   \
-                     rdkafka_aux.o                     \
-                     rdkafka_background.o              \
-                     rdkafka_idempotence.o             \
-                     rdkafka_cert.o                    \
-                     rdkafka_txnmgr.o                  \
-                     rdkafka_coord.o                   \
-                     rdvarint.o                        \
-                     rdbuf.o                           \
-                     rdmap.o                           \
-                     rdunittest.o                      \
-                     rdkafka_mock.o                    \
-                     rdkafka_mock_handlers.o           \
-                     rdkafka_mock_cgrp.o               \
-                     rdkafka_error.o                   \
-                     rdhdrhistogram.o                  \
-                     rdkafka_lz4.o                     \
-                     lz4frame.o                        \
-                     lz4.o                             \
-                     lz4hc.o                           \
-                     rdxxhash.o
+prebuild:
+	-system "CRTLIB $(outlib)"
+	-mkdir "$(outlib)"
 
-%.o : %.c   ./../packaging/os400/Makefile.src.os400
-	icc -o $@ -c $<                    \
+
+librdkafka_objects = $(outlib)/rdkafka.o                         \
+                     $(outlib)/rdkafka_broker.o                  \
+                     $(outlib)/rdkafka_msg.o                     \
+                     $(outlib)/rdkafka_topic.o                   \
+                     $(outlib)/rdkafka_conf.o                    \
+                     $(outlib)/rdkafka_timer.o                   \
+                     $(outlib)/rdkafka_offset.o                  \
+                     $(outlib)/rdkafka_transport.o               \
+                     $(outlib)/rdkafka_buf.o                     \
+                     $(outlib)/rdkafka_queue.o                   \
+                     $(outlib)/rdkafka_op.o                      \
+                     $(outlib)/rdkafka_request.o                 \
+                     $(outlib)/rdkafka_cgrp.o                    \
+                     $(outlib)/rdkafka_pattern.o                 \
+                     $(outlib)/rdkafka_partition.o               \
+                     $(outlib)/rdkafka_subscription.o            \
+                     $(outlib)/rdkafka_assignment.o              \
+                     $(outlib)/rdkafka_assignor.o                \
+                     $(outlib)/rdkafka_range_assignor.o          \
+                     $(outlib)/rdkafka_roundrobin_assignor.o     \
+                     $(outlib)/rdkafka_sticky_assignor.o         \
+                     $(outlib)/rdkafka_feature.o                 \
+                     $(outlib)/rdkafka_fetcher.o                 \
+                     $(outlib)/rdcrc32.o                         \
+                     $(outlib)/crc32c.o                          \
+                     $(outlib)/rdmurmur2.o                       \
+                     $(outlib)/rdfnv1a.o                         \
+                     $(outlib)/rdaddr.o                          \
+                     $(outlib)/rdrand.o                          \
+                     $(outlib)/rdlist.o                          \
+                     $(outlib)/tinycthread.o                     \
+                     $(outlib)/tinycthread_extra.o               \
+                     $(outlib)/rdlog.o                           \
+                     $(outlib)/rdstring.o                        \
+                     $(outlib)/rdkafka_event.o                   \
+                     $(outlib)/rdkafka_metadata.o                \
+                     $(outlib)/rdregex.o                         \
+                     $(outlib)/regexp.o                          \
+                     $(outlib)/rdports.o                         \
+                     $(outlib)/rdkafka_metadata_cache.o          \
+                     $(outlib)/rdavl.o                           \
+                     $(outlib)/rdkafka_sasl.o                    \
+                     $(outlib)/rdkafka_sasl_plain.o              \
+                     $(outlib)/rdkafka_interceptor.o             \
+                     $(outlib)/rdkafka_msgset_writer.o           \
+                     $(outlib)/rdkafka_msgset_reader.o           \
+                     $(outlib)/rdkafka_header.o                  \
+                     $(outlib)/rdkafka_admin.o                   \
+                     $(outlib)/rdkafka_aux.o                     \
+                     $(outlib)/rdkafka_background.o              \
+                     $(outlib)/rdkafka_idempotence.o             \
+                     $(outlib)/rdkafka_cert.o                    \
+                     $(outlib)/rdkafka_txnmgr.o                  \
+                     $(outlib)/rdkafka_coord.o                   \
+                     $(outlib)/rdvarint.o                        \
+                     $(outlib)/rdbuf.o                           \
+                     $(outlib)/rdmap.o                           \
+                     $(outlib)/rdunittest.o                      \
+                     $(outlib)/rdkafka_mock.o                    \
+                     $(outlib)/rdkafka_mock_handlers.o           \
+                     $(outlib)/rdkafka_mock_cgrp.o               \
+                     $(outlib)/rdkafka_error.o                   \
+                     $(outlib)/rdhdrhistogram.o                  \
+                     $(outlib)/rdkafka_lz4.o                     \
+                     $(outlib)/lz4frame.o                        \
+                     $(outlib)/lz4.o                             \
+                     $(outlib)/lz4hc.o                           \
+                     $(outlib)/rdxxhash.o                        \
+                     $(outlib)/cJSON.o
+
+$(outlib)/%.o : %.c   $(MAKEFILE)
+	icc -o $(outlib)/$(@F) -c $<       \
             -v                             \
             -qDTAMDL=*P128                 \
             -qDBGVIEW=$(DBGVIEW)           \
@@ -98,7 +104,7 @@ librdkafka_objects = rdkafka.o                         \
 librdkafka: rdkafka
 
 rdkafka: $(librdkafka_objects)
-	ld -v -o rdkafka                             \
+	ld -v -o $(outlib)/rdkafka                   \
              -rQADRTTS                               \
              $(librdkafka_objects)
 

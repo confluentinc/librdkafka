@@ -30,95 +30,94 @@
 #include "testcpp.h"
 
 
- /**
-   * @brief Test log callbacks and log queues
-   */
+/**
+ * @brief Test log callbacks and log queues
+ */
 
 class myLogCb : public RdKafka::EventCb {
-private:
-        enum {
-                _EXP_NONE,
-                _EXP_LOG
-        } state_;
-        int cnt_;
-public:
-        myLogCb (): state_(_EXP_NONE), cnt_(0) {}
-        void expecting (bool b) {
-                state_ = b ? _EXP_LOG : _EXP_NONE;
-        }
-        int count () {
-                return cnt_;
-        }
-        void event_cb (RdKafka::Event &event) {
-                switch (event.type())
-                {
-                  case RdKafka::Event::EVENT_LOG:
-                                cnt_++;
-                                Test::Say(tostr() << "Log: " <<
-                                          "level " << event.severity() <<
-                                          ", facility " << event.fac() <<
-                                          ", str " << event.str() << "\n");
-                                if (state_ != _EXP_LOG)
-                                        Test::Fail("Received unexpected "
-                                                   "log message");
-                                break;
-                        default:
-                                break;
-                }
-        }
+ private:
+  enum { _EXP_NONE, _EXP_LOG } state_;
+  int cnt_;
+
+ public:
+  myLogCb() : state_(_EXP_NONE), cnt_(0) {
+  }
+  void expecting(bool b) {
+    state_ = b ? _EXP_LOG : _EXP_NONE;
+  }
+  int count() {
+    return cnt_;
+  }
+  void event_cb(RdKafka::Event &event) {
+    switch (event.type()) {
+    case RdKafka::Event::EVENT_LOG:
+      cnt_++;
+      Test::Say(tostr() << "Log: "
+                        << "level " << event.severity() << ", facility "
+                        << event.fac() << ", str " << event.str() << "\n");
+      if (state_ != _EXP_LOG)
+        Test::Fail(
+            "Received unexpected "
+            "log message");
+      break;
+    default:
+      break;
+    }
+  }
 };
 
-static void test_log (std::string what, bool main_queue) {
-        RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-        myLogCb my_log;
-        std::string errstr;
+static void test_log(std::string what, bool main_queue) {
+  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+  myLogCb my_log;
+  std::string errstr;
 
-        Test::conf_set(conf, "client.id", test_curr_name());
-        Test::conf_set(conf, "debug", "generic"); // generate some logs
-        Test::conf_set(conf, "log.queue", "true");
+  Test::conf_set(conf, "client.id", test_curr_name());
+  Test::conf_set(conf, "debug", "generic");  // generate some logs
+  Test::conf_set(conf, "log.queue", "true");
 
-        if (conf->set("event_cb", &my_log, errstr) != RdKafka::Conf::CONF_OK)
-                Test::Fail(errstr);
+  if (conf->set("event_cb", &my_log, errstr) != RdKafka::Conf::CONF_OK)
+    Test::Fail(errstr);
 
-        Test::Say(what + "Creating producer, not expecting any log messages\n");
-        my_log.expecting(false);
-        RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-        if (!p)
-                Test::Fail(what + "Failed to create Producer: " + errstr);
-        delete conf;
+  Test::Say(what + "Creating producer, not expecting any log messages\n");
+  my_log.expecting(false);
+  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+  if (!p)
+    Test::Fail(what + "Failed to create Producer: " + errstr);
+  delete conf;
 
-        RdKafka::Queue *queue = NULL;
-        if (!main_queue) {
-                queue = RdKafka::Queue::create(p);
-                queue->poll(1000);
-        } else {
-                p->poll(1000);
-        }
+  RdKafka::Queue *queue = NULL;
+  if (!main_queue) {
+    queue = RdKafka::Queue::create(p);
+    queue->poll(1000);
+  } else {
+    p->poll(1000);
+  }
 
-        Test::Say(what + "Setting log queue\n");
-        p->set_log_queue(queue); /* Redirect logs to main queue */
+  Test::Say(what + "Setting log queue\n");
+  p->set_log_queue(queue); /* Redirect logs to main queue */
 
-        Test::Say(what + "Expecting at least one log message\n");
-        my_log.expecting(true);
-        if (queue)
-                queue->poll(1000);
-        else
-                p->poll(1000);  /* Should not spontaneously call logs */
+  Test::Say(what + "Expecting at least one log message\n");
+  my_log.expecting(true);
+  if (queue)
+    queue->poll(1000);
+  else
+    p->poll(1000); /* Should not spontaneously call logs */
 
-        Test::Say(tostr() << what << "Saw " << my_log.count() << " logs\n");
-        if (my_log.count() < 1)
-                Test::Fail(what + "No logs seen: expected at least one broker "
-                           "failure");
+  Test::Say(tostr() << what << "Saw " << my_log.count() << " logs\n");
+  if (my_log.count() < 1)
+    Test::Fail(what +
+               "No logs seen: expected at least one broker "
+               "failure");
 
-        if (queue)
-                delete queue;
-        delete(p);
+  if (queue)
+    delete queue;
+  delete (p);
 }
 
 extern "C" {
-        int main_0058_log (int argc, char **argv) {
-                test_log("main.queue: ", true);
-                test_log("local.queue: ", false);
-                return 0;
-        }
+int main_0058_log(int argc, char **argv) {
+  test_log("main.queue: ", true);
+  test_log("local.queue: ", false);
+  return 0;
+}
 }

@@ -105,3 +105,20 @@ coverity: Makefile.config
 	 tar cvzf ../cov-librdkafka.tgz cov-int && \
 	 printf "$(MKL_GREEN)Now upload cov-librdkafka.tgz to Coverity for analysis$(MKL_CLR_RESET)\n")
 
+
+style-check:
+	@(packaging/tools/style-format.sh \
+		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h|py)$$') )
+
+style-check-changed:
+	@(packaging/tools/style-format.sh \
+		$$( (git diff --name-only ; git diff --name-only --staged) | egrep '\.(c|cpp|h|py)$$'))
+
+style-fix:
+	@(packaging/tools/style-format.sh --fix \
+		$$(git ls-tree -r --name-only HEAD | egrep '\.(c|cpp|h|py)$$'))
+
+style-fix-changed:
+	@(packaging/tools/style-format.sh --fix \
+		$$( (git diff --name-only ; git diff --name-only --staged) | egrep '\.(c|cpp|h|py)$$'))
+

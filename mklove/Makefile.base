@@ -108,16 +108,16 @@ $(LIBNAME_LDS):
 $(LIBFILENAME): $(OBJS) $(LIBNAME_LDS)
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
 	$(CC_LD) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
-ifeq ($(WITH_STRIP),y)
 	cp $@ $(LIBFILENAMEDBG)
+ifeq ($(WITH_STRIP),y)
 	$(STRIP) -S $@
 endif
 
 $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
-ifeq ($(WITH_STRIP),y)
 	cp $@ $(LIBNAME)-dbg.a
+ifeq ($(WITH_STRIP),y)
 	$(STRIP) -S $@
 	$(RANLIB) $@
 endif
@@ -134,7 +134,7 @@ $(LIBNAME)-static.a: $(LIBNAME).a
 	@printf "$(MKL_YELLOW)Creating self-contained static library $@$(MKL_CLR_RESET)\n"
 ifeq ($(HAS_LIBTOOL_STATIC),y)
 	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(MKL_STATIC_LIBS)
-else # HAS_LIBTOOL_STATIC
+else ifeq ($(HAS_GNU_AR),y)
 	(_tmp=$$(mktemp arstaticXXXXXX) ; \
 	echo "CREATE $@" > $$_tmp ; \
 	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
@@ -145,7 +145,11 @@ else # HAS_LIBTOOL_STATIC
 	cat $$_tmp ; \
 	ar -M < $$_tmp || exit 1 ; \
 	rm $$_tmp)
-endif # HAS_LIBTOOL_STATIC
+else
+	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
+		ar -r $@ $$_f ; \
+	done
+endif
 	cp $@ $(LIBNAME)-static-dbg.a
 # The self-contained static library is always stripped, regardless
 # of --enable-strip, since otherwise it would become too big.
@@ -158,8 +162,14 @@ endif # MKL_DYNAMIC_LIBS
 
 else # MKL_STATIC_LIBS is empty
 _STATIC_FILENAME=$(LIBNAME).a
-$(LIBNAME)-static.a:
-	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: Not creating self-contained static library $@: no static libraries available/enabled$(MKL_CLR_RESET)\n"
+$(LIBNAME)-static.a: $(LIBNAME).a
+	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: No static libraries available/enabled for inclusion in self-contained static library $@: this library will be identical to $(LIBNAME).a$(MKL_CLR_RESET)\n"
+ifneq ($(MKL_DYNAMIC_LIBS),)
+	@printf "$(MKL_RED)WARNING:$(MKL_YELLOW) $@: The following libraries were not available as static libraries and need to be linked dynamically: $(MKL_DYNAMIC_LIBS)$(MKL_CLR_RESET)\n"
+	cp $(LIBNAME).a $@
+	cp $(LIBNAME)-dbg.a $(LIBNAME)-static-dbg.a
+	cp $@ $(LIBNAME)-static-dbg.a
+endif # MKL_DYNAMIC_LIBS
 endif # MKL_STATIC_LIBS
 
 endif # MKL_NO_SELFCONTAINED_STATIC_LIB

@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2012, Magnus Edenhill
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -37,23 +37,23 @@
 #include <ws2tcpip.h>
 #endif
 
-const char *rd_sockaddr2str (const void *addr, int flags) {
+const char *rd_sockaddr2str(const void *addr, int flags) {
 	const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
 	static RD_TLS char ret[32][256];
-	static RD_TLS int  reti = 0;
+        static RD_TLS int reti = 0;
 	char portstr[32];
-	int of = 0;
+        int of      = 0;
 	int niflags = NI_NUMERICSERV;
         int r;
 
 	reti = (reti + 1) % 32;
 	
-	switch (a->sinx_family)
-	{
+        switch (a->sinx_family) {
 	case AF_INET:
 	case AF_INET6:
 		if (flags & RD_SOCKADDR2STR_F_FAMILY)
-			of += rd_snprintf(&ret[reti][of], sizeof(ret[reti])-of, "ipv%i#",
+                        of += rd_snprintf(&ret[reti][of],
+                                          sizeof(ret[reti]) - of, "ipv%i#",
 				      a->sinx_family == AF_INET ? 4 : 6);
 
 		if ((flags & RD_SOCKADDR2STR_F_PORT) &&
@@ -65,16 +65,13 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 
         retry:
                 if ((r = getnameinfo(
-                             (const struct sockaddr *)a,
-                             RD_SOCKADDR_INX_LEN(a),
+                         (const struct sockaddr *)a, RD_SOCKADDR_INX_LEN(a),
 
-                             ret[reti]+of, sizeof(ret[reti])-of,
+                         ret[reti] + of, sizeof(ret[reti]) - of,
 
-                             (flags & RD_SOCKADDR2STR_F_PORT) ?
-                             portstr : NULL,
+                         (flags & RD_SOCKADDR2STR_F_PORT) ? portstr : NULL,
 
-                             (flags & RD_SOCKADDR2STR_F_PORT) ?
-                             sizeof(portstr) : 0,
+                         (flags & RD_SOCKADDR2STR_F_PORT) ? sizeof(portstr) : 0,
 
                              niflags))) {
 
@@ -119,33 +116,32 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 }
 
 
-const char *rd_addrinfo_prepare (const char *nodesvc,
-				 char **node, char **svc) {
+const char *rd_addrinfo_prepare(const char *nodesvc, char **node, char **svc) {
 	static RD_TLS char snode[256];
 	static RD_TLS char ssvc[64];
 	const char *t;
 	const char *svct = NULL;
-	size_t nodelen = 0;
+        size_t nodelen   = 0;
 
 	*snode = '\0';
-	*ssvc = '\0';
+        *ssvc  = '\0';
 
 	if (*nodesvc == '[') {
 		/* "[host]".. (enveloped node name) */
-		if  (!(t = strchr(nodesvc, ']')))
+                if (!(t = strchr(nodesvc, ']')))
 			return "Missing close-']'";
 		nodesvc++;
-		nodelen = t-nodesvc;
-		svct = t+1;
+                nodelen = t - nodesvc;
+                svct    = t + 1;
 
-	} else if (*nodesvc == ':' && *(nodesvc+1) != ':') {
+        } else if (*nodesvc == ':' && *(nodesvc + 1) != ':') {
 		/* ":"..  (port only) */
 		nodelen = 0;
-		svct = nodesvc;
+                svct    = nodesvc;
 	}
 		
-	if ((svct = strrchr(svct ? svct : nodesvc, ':')) && (*(svct-1) != ':') &&
-	    *(++svct)) {
+        if ((svct = strrchr(svct ? svct : nodesvc, ':')) &&
+            (*(svct - 1) != ':') && *(++svct)) {
 		/* Optional ":service" definition. */
 		if (strlen(svct) >= sizeof(ssvc))
 			return "Service name too long";
@@ -158,29 +154,39 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 
 	if (nodelen) {
 		/* Truncate nodename if necessary. */
-		nodelen = RD_MIN(nodelen, sizeof(snode)-1);
+                nodelen = RD_MIN(nodelen, sizeof(snode) - 1);
 		memcpy(snode, nodesvc, nodelen);
 		snode[nodelen] = '\0';
 	}
 
 	*node = snode;
-	*svc = ssvc;
+        *svc  = ssvc;
 
 	return NULL;
 }
 
 
 
-rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
-				    int flags, int family,
-				    int socktype, int protocol,
+rd_sockaddr_list_t *
+rd_getaddrinfo(const char *nodesvc,
+               const char *defsvc,
+               int flags,
+               int family,
+               int socktype,
+               int protocol,
+               int (*resolve_cb)(const char *node,
+                                 const char *service,
+                                 const struct addrinfo *hints,
+                                 struct addrinfo **res,
+                                 void *opaque),
+               void *opaque,
 				    const char **errstr) {
 	struct addrinfo hints;
     	memset(&hints, 0, sizeof(hints));
-    	hints.ai_family = family;
+        hints.ai_family   = family;
 	hints.ai_socktype = socktype;
 	hints.ai_protocol = protocol;
-	hints.ai_flags = flags;
+        hints.ai_flags    = flags;
 
 	struct addrinfo *ais, *ai;
 	char *node, *svc;
@@ -199,9 +205,12 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 
 	if (*svc)
 		defsvc = svc;
-
+		
+        if (resolve_cb) {
+                r = resolve_cb(node, defsvc, &hints, &ais, opaque);
+        } else {
 #ifndef __OS400__
-	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
+	r = getaddrinfo(node, defsvc, &hints, &ais);
 #else
         /* getaddrinfo has no Ascii eqivalent in Qadrt               */
         /* we have to convert name and service string to ascii       */
@@ -211,8 +220,11 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
         defsvc_e=strdup(defsvc);
         cvtlength = strlen(defsvc_e);
         QadrtConvertA2E(defsvc_e, defsvc_e, cvtlength, cvtlength);
-	if ((r = getaddrinfo(node_e, defsvc_e, &hints, &ais))) {
+	r = getaddrinfo(node_e, defsvc_e, &hints, &ais);
 #endif
+        }
+
+        if (r) {
 #ifdef EAI_SYSTEM
 		if (r == EAI_SYSTEM)
 #else
@@ -241,13 +253,16 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 #endif
 	
 	/* Count number of addresses */
-	for (ai = ais ; ai != NULL ; ai = ai->ai_next)
+        for (ai = ais; ai != NULL; ai = ai->ai_next)
 		cnt++;
 
 	if (cnt == 0) {
 		/* unlikely? */
+                if (resolve_cb)
+                        resolve_cb(NULL, NULL, NULL, &ais, opaque);
+                else
 		freeaddrinfo(ais);
-		errno = ENOENT;
+                errno   = ENOENT;
 		*errstr = "No addresses";
 		return NULL;
 	}
@@ -255,10 +270,13 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 
 	rsal = rd_calloc(1, sizeof(*rsal) + (sizeof(*rsal->rsal_addr) * cnt));
 
-	for (ai = ais ; ai != NULL ; ai = ai->ai_next)
-		memcpy(&rsal->rsal_addr[rsal->rsal_cnt++],
-		       ai->ai_addr, ai->ai_addrlen);
+        for (ai = ais; ai != NULL; ai = ai->ai_next)
+                memcpy(&rsal->rsal_addr[rsal->rsal_cnt++], ai->ai_addr,
+                       ai->ai_addrlen);
 
+        if (resolve_cb)
+                resolve_cb(NULL, NULL, NULL, &ais, opaque);
+        else
 	freeaddrinfo(ais);
 
 	/* Shuffle address list for proper round-robin */
@@ -271,7 +289,6 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 
 
 
-void rd_sockaddr_list_destroy (rd_sockaddr_list_t *rsal) {
+void rd_sockaddr_list_destroy(rd_sockaddr_list_t *rsal) {
 	rd_free(rsal);
 }
-

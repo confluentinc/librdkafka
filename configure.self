@@ -20,6 +20,7 @@ mkl_require zlib
 mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
+mkl_require libcurl
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
@@ -105,6 +106,7 @@ void foo (void) {
     mkl_check "libssl"
     mkl_check "libsasl2"
     mkl_check "libzstd"
+    mkl_check "libcurl"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then
@@ -144,6 +146,10 @@ void foo (void) {
         # SASL OAUTHBEARER's default unsecured JWS implementation
         # requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
+
+        if [[ $WITH_CURL == y ]]; then
+            mkl_allvar_set WITH_OAUTHBEARER_OIDC WITH_OAUTHBEARER_OIDC y
+        fi
     fi
 
     # CRC32C: check for crc32 instruction support.

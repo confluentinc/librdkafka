@@ -44,6 +44,7 @@ affiliation with and is not endorsed by The Apache Software Foundation.
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
  * Statistics metrics in [STATISTICS.md](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md).
  * [Frequently asked questions](https://github.com/edenhill/librdkafka/wiki).
+ * Step-by-step tutorial [Getting Started with Apache Kafka and C/C++](https://developer.confluent.io/get-started/c/).
 
 **NOTE**: The `master` branch is actively developed, use latest [release](https://github.com/edenhill/librdkafka/releases) for production use.
 
@@ -107,6 +108,7 @@ If the version is out of date, please [create an issue or pull request](https://
 	libssl-dev (optional, for SSL and SASL SCRAM support)
 	libsasl2-dev (optional, for SASL GSSAPI support)
 	libzstd-dev (optional, for ZStd compression support)
+	libcurl-dev (optional, for SASL OAUTHBEARER OIDC support)
 
 **NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
           enables encoding the original size in the compression frame header,
@@ -138,11 +140,13 @@ If the version is out of date, please [create an issue or pull request](https://
 
 ## Usage in code
 
+See [getting Started with Apache Kafka and C/C++](https://developer.confluent.io/get-started/c/) for a basic tutorial.
+
 1. Refer to the [examples directory](examples/) for code using:
 
-* Producers: basic producers, idempotent producers, transactional producers.
-* Consumers: basic consumers, reading batches of messages.
-* Performance and latency testing tools.
+    * Producers: basic producers, idempotent producers, transactional producers.
+    * Consumers: basic consumers, reading batches of messages.
+    * Performance and latency testing tools.
 
 2. Refer to the [examples GitHub repo](https://github.com/confluentinc/examples/tree/master/clients/cloud/c) for code connecting to a cloud streaming data service based on Apache Kafka
 
@@ -156,12 +160,11 @@ Commercial support is available from [Confluent Inc](https://www.confluent.io/)
 
 ## Community support
 
-**Only the [last official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
+**Only the [latest official release](https://github.com/edenhill/librdkafka/releases) is supported for community members.**
 
-File bug reports, feature requests and questions using
-[GitHub Issues](https://github.com/edenhill/librdkafka/issues)
+File bug reports and feature requests using [GitHub Issues](https://github.com/edenhill/librdkafka/issues).
 
-Questions and discussions are also welcome on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel.
+Questions and discussions are welcome on the [Discussions](https://github.com/edenhill/librdkafka/discussions) forum, and on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel.
 
 
 # Language bindings #
@@ -175,12 +178,13 @@ Questions and discussions are also welcome on the [Confluent Community slack](ht
   * Erlang: [erlkaf](https://github.com/silviucpp/erlkaf)
   * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)
   * Haskell (kafka, conduit, avro, schema registry): [hw-kafka](https://github.com/haskell-works/hw-kafka)
+  * Kotlin Native: [Kafka-Kotlin-Native](https://github.com/icemachined/kafka-kotlin-native)
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * Node.js: [node-rdkafka](https://github.com/Blizzard/node-rdkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * Perl: [Net::Kafka](https://github.com/bookingcom/perl-Net-Kafka)
-  * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
+  * PHP: [php-simple-kafka-client](https://github.com/php-kafka/php-simple-kafka-client)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/reiseburo/hermann)

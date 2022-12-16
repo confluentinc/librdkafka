@@ -39,7 +39,7 @@
 
 
 static size_t
-rd_buf_get_writable0 (rd_buf_t *rbuf, rd_segment_t **segp, void **p);
+rd_buf_get_writable0(rd_buf_t *rbuf, rd_segment_t **segp, void **p);
 
 
 /**
@@ -47,7 +47,7 @@ rd_buf_get_writable0 (rd_buf_t *rbuf, rd_segment_t **segp, void **p);
  *
  * @remark Will NOT unlink from buffer.
  */
-static void rd_segment_destroy (rd_segment_t *seg) {
+static void rd_segment_destroy(rd_segment_t *seg) {
         /* Free payload */
         if (seg->seg_free && seg->seg_p)
                 seg->seg_free(seg->seg_p);
@@ -61,10 +61,10 @@ static void rd_segment_destroy (rd_segment_t *seg) {
  *        and backing memory size.
  * @remark The segment is NOT linked.
  */
-static void rd_segment_init (rd_segment_t *seg, void *mem, size_t size) {
+static void rd_segment_init(rd_segment_t *seg, void *mem, size_t size) {
         memset(seg, 0, sizeof(*seg));
-        seg->seg_p     = mem;
-        seg->seg_size  = size;
+        seg->seg_p    = mem;
+        seg->seg_size = size;
 }
 
 
@@ -74,12 +74,12 @@ static void rd_segment_init (rd_segment_t *seg, void *mem, size_t size) {
  * @remark Will set the buffer position to the new \p seg if no existing wpos.
  * @remark Will set the segment seg_absof to the current length of the buffer.
  */
-static rd_segment_t *rd_buf_append_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
+static rd_segment_t *rd_buf_append_segment(rd_buf_t *rbuf, rd_segment_t *seg) {
         TAILQ_INSERT_TAIL(&rbuf->rbuf_segments, seg, seg_link);
         rbuf->rbuf_segment_cnt++;
-        seg->seg_absof      = rbuf->rbuf_len;
-        rbuf->rbuf_len     += seg->seg_of;
-        rbuf->rbuf_size    += seg->seg_size;
+        seg->seg_absof = rbuf->rbuf_len;
+        rbuf->rbuf_len += seg->seg_of;
+        rbuf->rbuf_size += seg->seg_size;
 
         /* Update writable position */
         if (!rbuf->rbuf_wpos)
@@ -92,14 +92,13 @@ static rd_segment_t *rd_buf_append_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
 
 
 
-
 /**
  * @brief Attempt to allocate \p size bytes from the buffers extra buffers.
  * @returns the allocated pointer which MUST NOT be freed, or NULL if
  *          not enough memory.
  * @remark the returned pointer is memory-aligned to be safe.
  */
-static void *extra_alloc (rd_buf_t *rbuf, size_t size) {
+static void *extra_alloc(rd_buf_t *rbuf, size_t size) {
 #ifndef __OS400__
         size_t of = RD_ROUNDUP(rbuf->rbuf_extra_len, 8); /* FIXME: 32-bit */
 #else
@@ -125,15 +124,14 @@ static void *extra_alloc (rd_buf_t *rbuf, size_t size) {
  *
  *        Will not append the segment to the buffer.
  */
-static rd_segment_t *
-rd_buf_alloc_segment0 (rd_buf_t *rbuf, size_t size) {
+static rd_segment_t *rd_buf_alloc_segment0(rd_buf_t *rbuf, size_t size) {
         rd_segment_t *seg;
 
         /* See if there is enough room in the extra buffer for
          * allocating the segment header and the buffer,
          * or just the segment header, else fall back to malloc. */
         if ((seg = extra_alloc(rbuf, sizeof(*seg) + size))) {
-                rd_segment_init(seg, size > 0 ? seg+1 : NULL, size);
+                rd_segment_init(seg, size > 0 ? seg + 1 : NULL, size);
 
         } else if ((seg = extra_alloc(rbuf, sizeof(*seg)))) {
                 rd_segment_init(seg, size > 0 ? rd_malloc(size) : NULL, size);
@@ -141,7 +139,7 @@ rd_buf_alloc_segment0 (rd_buf_t *rbuf, size_t size) {
                         seg->seg_free = rd_free;
 
         } else if ((seg = rd_malloc(sizeof(*seg) + size))) {
-                rd_segment_init(seg, size > 0 ? seg+1 : NULL, size);
+                rd_segment_init(seg, size > 0 ? seg + 1 : NULL, size);
                 seg->seg_flags |= RD_SEGMENT_F_FREE;
 
         } else
@@ -160,14 +158,13 @@ rd_buf_alloc_segment0 (rd_buf_t *rbuf, size_t size) {
  *        (max_size == 0 or max_size > min_size).
  */
 static rd_segment_t *
-rd_buf_alloc_segment (rd_buf_t *rbuf, size_t min_size, size_t max_size) {
+rd_buf_alloc_segment(rd_buf_t *rbuf, size_t min_size, size_t max_size) {
         rd_segment_t *seg;
 
         /* Over-allocate if allowed. */
         if (min_size != max_size || max_size == 0)
                 max_size = RD_MAX(sizeof(*seg) * 4,
-                                  RD_MAX(min_size * 2,
-                                         rbuf->rbuf_size / 2));
+                                  RD_MAX(min_size * 2, rbuf->rbuf_size / 2));
 
         seg = rd_buf_alloc_segment0(rbuf, max_size);
 
@@ -182,7 +179,7 @@ rd_buf_alloc_segment (rd_buf_t *rbuf, size_t min_size, size_t max_size) {
  *        for writing and the position will be updated to point to the
  *        start of this contiguous block.
  */
-void rd_buf_write_ensure_contig (rd_buf_t *rbuf, size_t size) {
+void rd_buf_write_ensure_contig(rd_buf_t *rbuf, size_t size) {
         rd_segment_t *seg = rbuf->rbuf_wpos;
 
         if (seg) {
@@ -207,11 +204,10 @@ void rd_buf_write_ensure_contig (rd_buf_t *rbuf, size_t size) {
  *
  *        Typically used prior to a call to rd_buf_get_write_iov()
  */
-void rd_buf_write_ensure (rd_buf_t *rbuf, size_t min_size, size_t max_size) {
+void rd_buf_write_ensure(rd_buf_t *rbuf, size_t min_size, size_t max_size) {
         size_t remains;
         while ((remains = rd_buf_write_remains(rbuf)) < min_size)
-                rd_buf_alloc_segment(rbuf,
-                                     min_size - remains,
+                rd_buf_alloc_segment(rbuf, min_size - remains,
                                      max_size ? max_size - remains : 0);
 }
 
@@ -222,8 +218,8 @@ void rd_buf_write_ensure (rd_buf_t *rbuf, size_t min_size, size_t max_size) {
  * @remark \p hint is an optional segment where to start looking, such as
  *         the current write or read position.
  */
-rd_segment_t *
-rd_buf_get_segment_at_offset (const rd_buf_t *rbuf, const rd_segment_t *hint,
+rd_segment_t *rd_buf_get_segment_at_offset(const rd_buf_t *rbuf,
+                                           const rd_segment_t *hint,
                               size_t absof) {
         const rd_segment_t *seg = hint;
 
@@ -262,8 +258,8 @@ rd_buf_get_segment_at_offset (const rd_buf_t *rbuf, const rd_segment_t *hint,
  * @remark The seg_free callback is retained on the original \p seg
  *         and is not copied to the new segment, but flags are copied.
  */
-static rd_segment_t *rd_segment_split (rd_buf_t *rbuf, rd_segment_t *seg,
-                                       size_t absof) {
+static rd_segment_t *
+rd_segment_split(rd_buf_t *rbuf, rd_segment_t *seg, size_t absof) {
         rd_segment_t *newseg;
         size_t relof;
 
@@ -276,24 +272,23 @@ static rd_segment_t *rd_segment_split (rd_buf_t *rbuf, rd_segment_t *seg,
         newseg = rd_buf_alloc_segment0(rbuf, 0);
 
         /* Add later part of split bytes to new segment */
-        newseg->seg_p      = seg->seg_p+relof;
-        newseg->seg_of     = seg->seg_of-relof;
-        newseg->seg_size   = seg->seg_size-relof;
-        newseg->seg_absof  = SIZE_MAX; /* Invalid */
+        newseg->seg_p     = seg->seg_p + relof;
+        newseg->seg_of    = seg->seg_of - relof;
+        newseg->seg_size  = seg->seg_size - relof;
+        newseg->seg_absof = SIZE_MAX; /* Invalid */
         newseg->seg_flags |= seg->seg_flags;
 
         /* Remove earlier part of split bytes from previous segment */
-        seg->seg_of        = relof;
-        seg->seg_size      = relof;
+        seg->seg_of   = relof;
+        seg->seg_size = relof;
 
         /* newseg's length will be added to rbuf_len in append_segment(),
          * so shave it off here from seg's perspective. */
-        rbuf->rbuf_len   -= newseg->seg_of;
-        rbuf->rbuf_size  -= newseg->seg_size;
+        rbuf->rbuf_len -= newseg->seg_of;
+        rbuf->rbuf_size -= newseg->seg_size;
 
         return newseg;
 }
-
 
 
 
@@ -301,14 +296,13 @@ static rd_segment_t *rd_segment_split (rd_buf_t *rbuf, rd_segment_t *seg,
  * @brief Unlink and destroy a segment, updating the \p rbuf
  *        with the decrease in length and capacity.
  */
-static void rd_buf_destroy_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
-        rd_assert(rbuf->rbuf_segment_cnt > 0 &&
-                  rbuf->rbuf_len >= seg->seg_of &&
+static void rd_buf_destroy_segment(rd_buf_t *rbuf, rd_segment_t *seg) {
+        rd_assert(rbuf->rbuf_segment_cnt > 0 && rbuf->rbuf_len >= seg->seg_of &&
                   rbuf->rbuf_size >= seg->seg_size);
 
         TAILQ_REMOVE(&rbuf->rbuf_segments, seg, seg_link);
         rbuf->rbuf_segment_cnt--;
-        rbuf->rbuf_len  -= seg->seg_of;
+        rbuf->rbuf_len -= seg->seg_of;
         rbuf->rbuf_size -= seg->seg_size;
         if (rbuf->rbuf_wpos == seg)
                 rbuf->rbuf_wpos = NULL;
@@ -321,17 +315,18 @@ static void rd_buf_destroy_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
  * @brief Free memory associated with the \p rbuf, but not the rbuf itself.
  *        Segments will be destroyed.
  */
-void rd_buf_destroy (rd_buf_t *rbuf) {
+void rd_buf_destroy(rd_buf_t *rbuf) {
         rd_segment_t *seg, *tmp;
 
 #if ENABLE_DEVEL
         /* FIXME */
         if (rbuf->rbuf_len > 0 && 0) {
                 size_t overalloc = rbuf->rbuf_size - rbuf->rbuf_len;
-                float fill_grade = (float)rbuf->rbuf_len /
-                        (float)rbuf->rbuf_size;
+                float fill_grade =
+                    (float)rbuf->rbuf_len / (float)rbuf->rbuf_size;
 
-                printf("fill grade: %.2f%% (%"PRIusz" bytes over-allocated)\n",
+                printf("fill grade: %.2f%% (%" PRIusz
+                       " bytes over-allocated)\n",
                        fill_grade * 100.0f, overalloc);
         }
 #endif
@@ -339,7 +334,6 @@ void rd_buf_destroy (rd_buf_t *rbuf) {
 
         TAILQ_FOREACH_SAFE(seg, &rbuf->rbuf_segments, seg_link, tmp) {
                 rd_segment_destroy(seg);
-
         }
 
         if (rbuf->rbuf_extra)
@@ -348,12 +342,20 @@ void rd_buf_destroy (rd_buf_t *rbuf) {
 
 
 /**
+ * @brief Same as rd_buf_destroy() but also frees the \p rbuf itself.
+ */
+void rd_buf_destroy_free(rd_buf_t *rbuf) {
+        rd_buf_destroy(rbuf);
+        rd_free(rbuf);
+}
+
+/**
  * @brief Initialize buffer, pre-allocating \p fixed_seg_cnt segments
  *        where the first segment will have a \p buf_size of backing memory.
  *
  *        The caller may rearrange the backing memory as it see fits.
  */
-void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
+void rd_buf_init(rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
         size_t totalloc = 0;
 
         memset(rbuf, 0, sizeof(*rbuf));
@@ -367,21 +369,25 @@ void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
         /* Pre-allocate memory for a fixed set of segments that are known
          * before-hand, to minimize the number of extra allocations
          * needed for well-known layouts (such as headers, etc) */
-#ifndef __OS400__
         totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 8) * fixed_seg_cnt;
-#else
-        /* OS400 *p128 uses 16-bytes alignment */
-        totalloc += RD_ROUNDUP(sizeof(rd_segment_t), 16) * fixed_seg_cnt; 
-#endif
 
         /* Pre-allocate extra space for the backing buffer. */
         totalloc += buf_size;
 
         rbuf->rbuf_extra_size = totalloc;
-        rbuf->rbuf_extra = rd_malloc(rbuf->rbuf_extra_size);
+        rbuf->rbuf_extra      = rd_malloc(rbuf->rbuf_extra_size);
 }
 
 
+/**
+ * @brief Allocates a buffer object and initializes it.
+ * @sa rd_buf_init()
+ */
+rd_buf_t *rd_buf_new(size_t fixed_seg_cnt, size_t buf_size) {
+        rd_buf_t *rbuf = rd_malloc(sizeof(*rbuf));
+        rd_buf_init(rbuf, fixed_seg_cnt, buf_size);
+        return rbuf;
+}
 
 
 /**
@@ -394,10 +400,10 @@ void rd_buf_init (rd_buf_t *rbuf, size_t fixed_seg_cnt, size_t buf_size) {
  *          and sets \p *p to point to the start of the memory region.
  */
 static size_t
-rd_buf_get_writable0 (rd_buf_t *rbuf, rd_segment_t **segp, void **p) {
+rd_buf_get_writable0(rd_buf_t *rbuf, rd_segment_t **segp, void **p) {
         rd_segment_t *seg;
 
-        for (seg = rbuf->rbuf_wpos ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
+        for (seg = rbuf->rbuf_wpos; seg; seg = TAILQ_NEXT(seg, seg_link)) {
                 size_t len = rd_segment_write_remains(seg, p);
 
                 /* Even though the write offset hasn't changed we
@@ -423,11 +429,10 @@ rd_buf_get_writable0 (rd_buf_t *rbuf, rd_segment_t **segp, void **p) {
         return 0;
 }
 
-size_t rd_buf_get_writable (rd_buf_t *rbuf, void **p) {
+size_t rd_buf_get_writable(rd_buf_t *rbuf, void **p) {
         rd_segment_t *seg;
         return rd_buf_get_writable0(rbuf, &seg, p);
 }
-
 
 
 
@@ -447,7 +452,7 @@ size_t rd_buf_get_writable (rd_buf_t *rbuf, void **p) {
  *         uninitialized memory in any new segments allocated from this
  *         function).
  */
-size_t rd_buf_write (rd_buf_t *rbuf, const void *payload, size_t size) {
+size_t rd_buf_write(rd_buf_t *rbuf, const void *payload, size_t size) {
         size_t remains = size;
         size_t initial_absof;
         const char *psrc = (const char *)payload;
@@ -458,24 +463,24 @@ size_t rd_buf_write (rd_buf_t *rbuf, const void *payload, size_t size) {
         rd_buf_write_ensure(rbuf, size, 0);
 
         while (remains > 0) {
-                void *p = NULL;
+                void *p           = NULL;
                 rd_segment_t *seg = NULL;
                 size_t segremains = rd_buf_get_writable0(rbuf, &seg, &p);
-                size_t wlen = RD_MIN(remains, segremains);
+                size_t wlen       = RD_MIN(remains, segremains);
 
                 rd_dassert(seg == rbuf->rbuf_wpos);
                 rd_dassert(wlen > 0);
-                rd_dassert(seg->seg_p+seg->seg_of <= (char *)p &&
-                           (char *)p < seg->seg_p+seg->seg_size);
+                rd_dassert(seg->seg_p + seg->seg_of <= (char *)p &&
+                           (char *)p < seg->seg_p + seg->seg_size);
 
                 if (payload) {
                         memcpy(p, psrc, wlen);
                         psrc += wlen;
                 }
 
-                seg->seg_of    += wlen;
+                seg->seg_of += wlen;
                 rbuf->rbuf_len += wlen;
-                remains        -= wlen;
+                remains -= wlen;
         }
 
         rd_assert(remains == 0);
@@ -492,7 +497,7 @@ size_t rd_buf_write (rd_buf_t *rbuf, const void *payload, size_t size) {
  *
  * @returns the number of bytes witten (always slice length)
  */
-size_t rd_buf_write_slice (rd_buf_t *rbuf, rd_slice_t *slice) {
+size_t rd_buf_write_slice(rd_buf_t *rbuf, rd_slice_t *slice) {
         const void *p;
         size_t rlen;
         size_t sum = 0;
@@ -519,8 +524,10 @@ size_t rd_buf_write_slice (rd_buf_t *rbuf, rd_slice_t *slice) {
  * @returns the number of bytes written, which may be less than \p size
  *          if the update spans multiple segments.
  */
-static size_t rd_segment_write_update (rd_segment_t *seg, size_t absof,
-                                       const void *payload, size_t size) {
+static size_t rd_segment_write_update(rd_segment_t *seg,
+                                      size_t absof,
+                                      const void *payload,
+                                      size_t size) {
         size_t relof;
         size_t wlen;
 
@@ -530,7 +537,7 @@ static size_t rd_segment_write_update (rd_segment_t *seg, size_t absof,
         wlen = RD_MIN(size, seg->seg_of - relof);
         rd_dassert(relof + wlen <= seg->seg_of);
 
-        memcpy(seg->seg_p+relof, payload, wlen);
+        memcpy(seg->seg_p + relof, payload, wlen);
 
         return wlen;
 }
@@ -544,8 +551,10 @@ static size_t rd_segment_write_update (rd_segment_t *seg, size_t absof,
  *        This is used to update a previously written region, such
  *        as updating the header length.
  */
-size_t rd_buf_write_update (rd_buf_t *rbuf, size_t absof,
-                            const void *payload, size_t size) {
+size_t rd_buf_write_update(rd_buf_t *rbuf,
+                           size_t absof,
+                           const void *payload,
+                           size_t size) {
         rd_segment_t *seg;
         const char *psrc = (const char *)payload;
         size_t of;
@@ -554,10 +563,10 @@ size_t rd_buf_write_update (rd_buf_t *rbuf, size_t absof,
         seg = rd_buf_get_segment_at_offset(rbuf, rbuf->rbuf_wpos, absof);
         rd_assert(seg && *"invalid absolute offset");
 
-        for (of = 0 ; of < size ; seg = TAILQ_NEXT(seg, seg_link)) {
+        for (of = 0; of < size; seg = TAILQ_NEXT(seg, seg_link)) {
                 rd_assert(seg->seg_absof <= rd_buf_len(rbuf));
-                size_t wlen = rd_segment_write_update(seg, absof+of,
-                                                      psrc+of, size-of);
+                size_t wlen = rd_segment_write_update(seg, absof + of,
+                                                      psrc + of, size - of);
                 of += wlen;
         }
 
@@ -571,24 +580,26 @@ size_t rd_buf_write_update (rd_buf_t *rbuf, size_t absof,
 /**
  * @brief Push reference memory segment to current write position.
  */
-void rd_buf_push0 (rd_buf_t *rbuf, const void *payload, size_t size,
-                   void (*free_cb)(void *), rd_bool_t writable) {
+void rd_buf_push0(rd_buf_t *rbuf,
+                  const void *payload,
+                  size_t size,
+                  void (*free_cb)(void *),
+                  rd_bool_t writable) {
         rd_segment_t *prevseg, *seg, *tailseg = NULL;
 
         if ((prevseg = rbuf->rbuf_wpos) &&
             rd_segment_write_remains(prevseg, NULL) > 0) {
                 /* If the current segment still has room in it split it
                  * and insert the pushed segment in the middle (below). */
-                tailseg = rd_segment_split(rbuf, prevseg,
-                                           prevseg->seg_absof +
-                                           prevseg->seg_of);
+                tailseg = rd_segment_split(
+                    rbuf, prevseg, prevseg->seg_absof + prevseg->seg_of);
         }
 
-        seg = rd_buf_alloc_segment0(rbuf, 0);
-        seg->seg_p      = (char *)payload;
-        seg->seg_size   = size;
-        seg->seg_of     = size;
-        seg->seg_free   = free_cb;
+        seg           = rd_buf_alloc_segment0(rbuf, 0);
+        seg->seg_p    = (char *)payload;
+        seg->seg_size = size;
+        seg->seg_of   = size;
+        seg->seg_free = free_cb;
         if (!writable)
                 seg->seg_flags |= RD_SEGMENT_F_RDONLY;
 
@@ -607,7 +618,7 @@ void rd_buf_push0 (rd_buf_t *rbuf, const void *payload, size_t size,
  *
  * @remark This is costly since it forces a memory move.
  */
-size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
+size_t rd_buf_erase(rd_buf_t *rbuf, size_t absof, size_t size) {
         rd_segment_t *seg, *next = NULL;
         size_t of;
 
@@ -616,7 +627,7 @@ size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
 
         /* Adjust segments until size is exhausted, then continue scanning to
          * update the absolute offset. */
-        for (of = 0 ; seg && of < size ; seg = next) {
+        for (of = 0; seg && of < size; seg = next) {
                 /* Example:
                  *   seg_absof = 10
                  *   seg_of    = 7
@@ -652,7 +663,7 @@ size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
                         RD_BUG("rd_buf_erase() called on read-only segment");
 
                 if (likely(segremains > 0))
-                        memmove(seg->seg_p+rof, seg->seg_p+rof+toerase,
+                        memmove(seg->seg_p + rof, seg->seg_p + rof + toerase,
                                 segremains);
 
                 seg->seg_of -= toerase;
@@ -666,7 +677,7 @@ size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
         }
 
         /* Update absolute offset of remaining segments */
-        for (seg = next ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
+        for (seg = next; seg; seg = TAILQ_NEXT(seg, seg_link)) {
                 rd_assert(seg->seg_absof >= of);
                 seg->seg_absof -= of;
         }
@@ -678,7 +689,6 @@ size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
 
 
 
-
 /**
  * @brief Do a write-seek, updating the write position to the given
  *        absolute \p absof.
@@ -687,7 +697,7 @@ size_t rd_buf_erase (rd_buf_t *rbuf, size_t absof, size_t size) {
  *
  * @returns -1 if the offset is out of bounds, else 0.
  */
-int rd_buf_write_seek (rd_buf_t *rbuf, size_t absof) {
+int rd_buf_write_seek(rd_buf_t *rbuf, size_t absof) {
         rd_segment_t *seg, *next;
         size_t relof;
 
@@ -702,17 +712,17 @@ int rd_buf_write_seek (rd_buf_t *rbuf, size_t absof) {
         /* Destroy sub-sequent segments in reverse order so that
          * destroy_segment() length checks are correct.
          * Will decrement rbuf_len et.al. */
-        for (next = TAILQ_LAST(&rbuf->rbuf_segments, rd_segment_head) ;
-             next != seg ; ) {
+        for (next = TAILQ_LAST(&rbuf->rbuf_segments, rd_segment_head);
+             next != seg;) {
                 rd_segment_t *this = next;
                 next = TAILQ_PREV(this, rd_segment_head, seg_link);
                 rd_buf_destroy_segment(rbuf, this);
         }
 
         /* Update relative write offset */
-        seg->seg_of         = relof;
-        rbuf->rbuf_wpos     = seg;
-        rbuf->rbuf_len      = seg->seg_absof + seg->seg_of;
+        seg->seg_of     = relof;
+        rbuf->rbuf_wpos = seg;
+        rbuf->rbuf_len  = seg->seg_absof + seg->seg_of;
 
         rd_assert(rbuf->rbuf_len == absof);
 
@@ -733,15 +743,16 @@ int rd_buf_write_seek (rd_buf_t *rbuf, size_t absof) {
  *
  * @remark the write position will NOT be updated.
  */
-size_t rd_buf_get_write_iov (const rd_buf_t *rbuf,
-                             struct iovec *iovs, size_t *iovcntp,
-                             size_t iov_max, size_t size_max) {
+size_t rd_buf_get_write_iov(const rd_buf_t *rbuf,
+                            struct iovec *iovs,
+                            size_t *iovcntp,
+                            size_t iov_max,
+                            size_t size_max) {
         const rd_segment_t *seg;
         size_t iovcnt = 0;
-        size_t sum = 0;
+        size_t sum    = 0;
 
-        for (seg = rbuf->rbuf_wpos ;
-             seg && iovcnt < iov_max && sum < size_max ;
+        for (seg = rbuf->rbuf_wpos; seg && iovcnt < iov_max && sum < size_max;
              seg = TAILQ_NEXT(seg, seg_link)) {
                 size_t len;
                 void *p;
@@ -763,14 +774,6 @@ size_t rd_buf_get_write_iov (const rd_buf_t *rbuf,
 
 
 
-
-
-
-
-
-
-
-
 /**
  * @name Slice reader interface
  *
@@ -784,20 +787,23 @@ size_t rd_buf_get_write_iov (const rd_buf_t *rbuf,
  * @returns 0 on success or -1 if there is not at least \p size bytes available
  *          in the buffer.
  */
-int rd_slice_init_seg (rd_slice_t *slice, const rd_buf_t *rbuf,
-                           const rd_segment_t *seg, size_t rof, size_t size) {
+int rd_slice_init_seg(rd_slice_t *slice,
+                      const rd_buf_t *rbuf,
+                      const rd_segment_t *seg,
+                      size_t rof,
+                      size_t size) {
         /* Verify that \p size bytes are indeed available in the buffer. */
         if (unlikely(rbuf->rbuf_len < (seg->seg_absof + rof + size)))
                 return -1;
 
-        slice->buf    = rbuf;
-        slice->seg    = seg;
-        slice->rof    = rof;
-        slice->start  = seg->seg_absof + rof;
-        slice->end    = slice->start + size;
+        slice->buf   = rbuf;
+        slice->seg   = seg;
+        slice->rof   = rof;
+        slice->start = seg->seg_absof + rof;
+        slice->end   = slice->start + size;
 
-        rd_assert(seg->seg_absof+rof >= slice->start &&
-                  seg->seg_absof+rof <= slice->end);
+        rd_assert(seg->seg_absof + rof >= slice->start &&
+                  seg->seg_absof + rof <= slice->end);
 
         rd_assert(slice->end <= rd_buf_len(rbuf));
 
@@ -810,21 +816,23 @@ int rd_slice_init_seg (rd_slice_t *slice, const rd_buf_t *rbuf,
  * @returns 0 on success or -1 if there is not at least \p size bytes available
  *          in the buffer.
  */
-int rd_slice_init (rd_slice_t *slice, const rd_buf_t *rbuf,
-                   size_t absof, size_t size) {
-        const rd_segment_t *seg = rd_buf_get_segment_at_offset(rbuf, NULL,
-                                                               absof);
+int rd_slice_init(rd_slice_t *slice,
+                  const rd_buf_t *rbuf,
+                  size_t absof,
+                  size_t size) {
+        const rd_segment_t *seg =
+            rd_buf_get_segment_at_offset(rbuf, NULL, absof);
         if (unlikely(!seg))
                 return -1;
 
-        return rd_slice_init_seg(slice, rbuf, seg,
-                                 absof - seg->seg_absof, size);
+        return rd_slice_init_seg(slice, rbuf, seg, absof - seg->seg_absof,
+                                 size);
 }
 
 /**
  * @brief Initialize new slice covering the full buffer \p rbuf
  */
-void rd_slice_init_full (rd_slice_t *slice, const rd_buf_t *rbuf) {
+void rd_slice_init_full(rd_slice_t *slice, const rd_buf_t *rbuf) {
         int r = rd_slice_init(slice, rbuf, 0, rd_buf_len(rbuf));
         rd_assert(r == 0);
 }
@@ -834,18 +842,18 @@ void rd_slice_init_full (rd_slice_t *slice, const rd_buf_t *rbuf) {
 /**
  * @sa rd_slice_reader() rd_slice_peeker()
  */
-size_t rd_slice_reader0 (rd_slice_t *slice, const void **p, int update_pos) {
+size_t rd_slice_reader0(rd_slice_t *slice, const void **p, int update_pos) {
         size_t rof = slice->rof;
         size_t rlen;
         const rd_segment_t *seg;
 
         /* Find segment with non-zero payload */
-        for (seg = slice->seg ;
-             seg && seg->seg_absof+rof < slice->end && seg->seg_of == rof ;
+        for (seg = slice->seg;
+             seg && seg->seg_absof + rof < slice->end && seg->seg_of == rof;
              seg = TAILQ_NEXT(seg, seg_link))
                 rof = 0;
 
-        if (unlikely(!seg || seg->seg_absof+rof >= slice->end))
+        if (unlikely(!seg || seg->seg_absof + rof >= slice->end))
                 return 0;
 
         *p   = (const void *)(seg->seg_p + rof);
@@ -854,9 +862,9 @@ size_t rd_slice_reader0 (rd_slice_t *slice, const void **p, int update_pos) {
         if (update_pos) {
                 if (slice->seg != seg) {
                         rd_assert(seg->seg_absof + rof >= slice->start &&
-                                  seg->seg_absof + rof+rlen <= slice->end);
-                        slice->seg  = seg;
-                        slice->rof  = rlen;
+                                  seg->seg_absof + rof + rlen <= slice->end);
+                        slice->seg = seg;
+                        slice->rof = rlen;
                 } else {
                         slice->rof += rlen;
                 }
@@ -877,18 +885,16 @@ size_t rd_slice_reader0 (rd_slice_t *slice, const void **p, int update_pos) {
  *
  * @returns the number of bytes read, or 0 if slice is empty.
  */
-size_t rd_slice_reader (rd_slice_t *slice, const void **p) {
-        return rd_slice_reader0(slice, p, 1/*update_pos*/);
+size_t rd_slice_reader(rd_slice_t *slice, const void **p) {
+        return rd_slice_reader0(slice, p, 1 /*update_pos*/);
 }
 
 /**
  * @brief Identical to rd_slice_reader() but does NOT update the read position
  */
-size_t rd_slice_peeker (const rd_slice_t *slice, const void **p) {
-        return rd_slice_reader0((rd_slice_t *)slice, p, 0/*dont update_pos*/);
+size_t rd_slice_peeker(const rd_slice_t *slice, const void **p) {
+        return rd_slice_reader0((rd_slice_t *)slice, p, 0 /*dont update_pos*/);
 }
-
-
 
 
 
@@ -905,9 +911,9 @@ size_t rd_slice_peeker (const rd_slice_t *slice, const void **p) {
  *
  * @remark If \p dst is NULL only the read position is updated.
  */
-size_t rd_slice_read (rd_slice_t *slice, void *dst, size_t size) {
+size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         size_t remains = size;
-        char *d = (char *)dst; /* Possibly NULL */
+        char *d        = (char *)dst; /* Possibly NULL */
         size_t rlen;
         const void *p;
         size_t orig_end = slice->end;
@@ -922,7 +928,7 @@ size_t rd_slice_read (rd_slice_t *slice, void *dst, size_t size) {
                 rd_dassert(remains >= rlen);
                 if (dst) {
                         memcpy(d, p, rlen);
-                        d       += rlen;
+                        d += rlen;
                 }
                 remains -= rlen;
         }
@@ -942,15 +948,14 @@ size_t rd_slice_read (rd_slice_t *slice, void *dst, size_t size) {
  *
  * @returns \p size if the offset and size was within the slice, else 0.
  */
-size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
-                      void *dst, size_t size) {
+size_t
+rd_slice_peek(const rd_slice_t *slice, size_t offset, void *dst, size_t size) {
         rd_slice_t sub = *slice;
 
         if (unlikely(rd_slice_seek(&sub, offset) == -1))
                 return 0;
 
         return rd_slice_read(&sub, dst, size);
-
 }
 
 
@@ -961,19 +966,19 @@ size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
  * @returns the number of bytes read on success or 0 in case of
  *          buffer underflow.
  */
-size_t rd_slice_read_uvarint (rd_slice_t *slice, uint64_t *nump) {
+size_t rd_slice_read_uvarint(rd_slice_t *slice, uint64_t *nump) {
         uint64_t num = 0;
-        int shift = 0;
-        size_t rof = slice->rof;
+        int shift    = 0;
+        size_t rof   = slice->rof;
         const rd_segment_t *seg;
 
         /* Traverse segments, byte for byte, until varint is decoded
          * or no more segments available (underflow). */
-        for (seg = slice->seg ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
-                for ( ; rof < seg->seg_of ; rof++) {
+        for (seg = slice->seg; seg; seg = TAILQ_NEXT(seg, seg_link)) {
+                for (; rof < seg->seg_of; rof++) {
                         unsigned char oct;
 
-                        if (unlikely(seg->seg_absof+rof >= slice->end))
+                        if (unlikely(seg->seg_absof + rof >= slice->end))
                                 return 0; /* Underflow */
 
                         oct = *(const unsigned char *)(seg->seg_p + rof);
@@ -1009,7 +1014,7 @@ size_t rd_slice_read_uvarint (rd_slice_t *slice, uint64_t *nump) {
  *
  * @remark The read position is updated to point past \p size.
  */
-const void *rd_slice_ensure_contig (rd_slice_t *slice, size_t size) {
+const void *rd_slice_ensure_contig(rd_slice_t *slice, size_t size) {
         void *p;
 
         if (unlikely(rd_slice_remains(slice) < size ||
@@ -1032,7 +1037,7 @@ const void *rd_slice_ensure_contig (rd_slice_t *slice, size_t size) {
  * @returns 0 if offset was within range, else -1 in which case the position
  *          is not changed.
  */
-int rd_slice_seek (rd_slice_t *slice, size_t offset) {
+int rd_slice_seek(rd_slice_t *slice, size_t offset) {
         const rd_segment_t *seg;
         size_t absof = slice->start + offset;
 
@@ -1063,11 +1068,11 @@ int rd_slice_seek (rd_slice_t *slice, size_t offset) {
  *
  * @returns 1 if enough underlying slice buffer memory is available, else 0.
  */
-int rd_slice_narrow (rd_slice_t *slice, rd_slice_t *save_slice, size_t size) {
+int rd_slice_narrow(rd_slice_t *slice, rd_slice_t *save_slice, size_t size) {
         if (unlikely(slice->start + size > slice->end))
                 return 0;
         *save_slice = *slice;
-        slice->end = slice->start + size;
+        slice->end  = slice->start + size;
         rd_assert(rd_slice_abs_offset(slice) <= slice->end);
         return 1;
 }
@@ -1076,7 +1081,8 @@ int rd_slice_narrow (rd_slice_t *slice, rd_slice_t *save_slice, size_t size) {
  * @brief Same as rd_slice_narrow() but using a relative size \p relsize
  *        from the current read position.
  */
-int rd_slice_narrow_relative (rd_slice_t *slice, rd_slice_t *save_slice,
+int rd_slice_narrow_relative(rd_slice_t *slice,
+                             rd_slice_t *save_slice,
                                size_t relsize) {
         return rd_slice_narrow(slice, save_slice,
                                rd_slice_offset(slice) + relsize);
@@ -1088,7 +1094,7 @@ int rd_slice_narrow_relative (rd_slice_t *slice, rd_slice_t *save_slice,
  *        rd_slice_narrow(), while keeping the updated read pointer from
  *        \p slice.
  */
-void rd_slice_widen (rd_slice_t *slice, const rd_slice_t *save_slice) {
+void rd_slice_widen(rd_slice_t *slice, const rd_slice_t *save_slice) {
         slice->end = save_slice->end;
 }
 
@@ -1102,11 +1108,12 @@ void rd_slice_widen (rd_slice_t *slice, const rd_slice_t *save_slice) {
  *
  * @returns 1 if enough underlying slice buffer memory is available, else 0.
  */
-int rd_slice_narrow_copy (const rd_slice_t *orig, rd_slice_t *new_slice,
+int rd_slice_narrow_copy(const rd_slice_t *orig,
+                         rd_slice_t *new_slice,
                           size_t size) {
         if (unlikely(orig->start + size > orig->end))
                 return 0;
-        *new_slice = *orig;
+        *new_slice     = *orig;
         new_slice->end = orig->start + size;
         rd_assert(rd_slice_abs_offset(new_slice) <= new_slice->end);
         return 1;
@@ -1116,14 +1123,12 @@ int rd_slice_narrow_copy (const rd_slice_t *orig, rd_slice_t *new_slice,
  * @brief Same as rd_slice_narrow_copy() but with a relative size from
  *        the current read position.
  */
-int rd_slice_narrow_copy_relative (const rd_slice_t *orig,
+int rd_slice_narrow_copy_relative(const rd_slice_t *orig,
                                     rd_slice_t *new_slice,
                                     size_t relsize) {
         return rd_slice_narrow_copy(orig, new_slice,
                                     rd_slice_offset(orig) + relsize);
 }
-
-
 
 
 
@@ -1140,13 +1145,15 @@ int rd_slice_narrow_copy_relative (const rd_slice_t *orig,
  *
  * @remark will NOT update the read position.
  */
-size_t rd_slice_get_iov (const rd_slice_t *slice,
-                         struct iovec *iovs, size_t *iovcntp,
-                         size_t iov_max, size_t size_max) {
+size_t rd_slice_get_iov(const rd_slice_t *slice,
+                        struct iovec *iovs,
+                        size_t *iovcntp,
+                        size_t iov_max,
+                        size_t size_max) {
         const void *p;
         size_t rlen;
-        size_t iovcnt = 0;
-        size_t sum = 0;
+        size_t iovcnt   = 0;
+        size_t sum      = 0;
         rd_slice_t copy = *slice; /* Use a copy of the slice so we dont
                                    * update the position for the caller. */
 
@@ -1165,8 +1172,6 @@ size_t rd_slice_get_iov (const rd_slice_t *slice,
 
 
 
-
-
 /**
  * @brief CRC32 calculation of slice.
  *
@@ -1174,7 +1179,7 @@ size_t rd_slice_get_iov (const rd_slice_t *slice,
  *
  * @remark the slice's position is updated.
  */
-uint32_t rd_slice_crc32 (rd_slice_t *slice) {
+uint32_t rd_slice_crc32(rd_slice_t *slice) {
         rd_crc32_t crc;
         const void *p;
         size_t rlen;
@@ -1194,18 +1199,16 @@ uint32_t rd_slice_crc32 (rd_slice_t *slice) {
  *
  * @remark the slice's position is updated.
  */
-uint32_t rd_slice_crc32c (rd_slice_t *slice) {
+uint32_t rd_slice_crc32c(rd_slice_t *slice) {
         const void *p;
         size_t rlen;
         uint32_t crc = 0;
 
         while ((rlen = rd_slice_reader(slice, &p)))
-                crc = crc32c(crc, (const char *)p, rlen);
+                crc = rd_crc32c(crc, (const char *)p, rlen);
 
         return crc;
 }
-
-
 
 
 
@@ -1215,29 +1218,32 @@ uint32_t rd_slice_crc32c (rd_slice_t *slice) {
  *
  */
 
-static void rd_segment_dump (const rd_segment_t *seg, const char *ind,
-                             size_t relof, int do_hexdump) {
+static void rd_segment_dump(const rd_segment_t *seg,
+                            const char *ind,
+                            size_t relof,
+                            int do_hexdump) {
         fprintf(stderr,
                 "%s((rd_segment_t *)%p): "
-                "p %p, of %"PRIusz", "
-                "absof %"PRIusz", size %"PRIusz", free %p, flags 0x%x\n",
-                ind, seg, seg->seg_p, seg->seg_of,
-                seg->seg_absof, seg->seg_size, seg->seg_free, seg->seg_flags);
+                "p %p, of %" PRIusz
+                ", "
+                "absof %" PRIusz ", size %" PRIusz ", free %p, flags 0x%x\n",
+                ind, seg, seg->seg_p, seg->seg_of, seg->seg_absof,
+                seg->seg_size, seg->seg_free, seg->seg_flags);
         rd_assert(relof <= seg->seg_of);
         if (do_hexdump)
-                rd_hexdump(stderr, "segment",
-                           seg->seg_p+relof, seg->seg_of-relof);
+                rd_hexdump(stderr, "segment", seg->seg_p + relof,
+                           seg->seg_of - relof);
 }
 
-void rd_buf_dump (const rd_buf_t *rbuf, int do_hexdump) {
+void rd_buf_dump(const rd_buf_t *rbuf, int do_hexdump) {
         const rd_segment_t *seg;
 
         fprintf(stderr,
                 "((rd_buf_t *)%p):\n"
-                " len %"PRIusz" size %"PRIusz
-                ", %"PRIusz"/%"PRIusz" extra memory used\n",
-                rbuf, rbuf->rbuf_len, rbuf->rbuf_size,
-                rbuf->rbuf_extra_len, rbuf->rbuf_extra_size);
+                " len %" PRIusz " size %" PRIusz ", %" PRIusz "/%" PRIusz
+                " extra memory used\n",
+                rbuf, rbuf->rbuf_len, rbuf->rbuf_size, rbuf->rbuf_extra_len,
+                rbuf->rbuf_extra_size);
 
         if (rbuf->rbuf_wpos) {
                 fprintf(stderr, " wpos:\n");
@@ -1247,7 +1253,7 @@ void rd_buf_dump (const rd_buf_t *rbuf, int do_hexdump) {
         if (rbuf->rbuf_segment_cnt > 0) {
                 size_t segcnt = 0;
 
-                fprintf(stderr, " %"PRIusz" linked segments:\n",
+                fprintf(stderr, " %" PRIusz " linked segments:\n",
                         rbuf->rbuf_segment_cnt);
                 TAILQ_FOREACH(seg, &rbuf->rbuf_segments, seg_link) {
                         rd_segment_dump(seg, "  ", 0, do_hexdump);
@@ -1257,22 +1263,23 @@ void rd_buf_dump (const rd_buf_t *rbuf, int do_hexdump) {
         }
 }
 
-void rd_slice_dump (const rd_slice_t *slice, int do_hexdump) {
+void rd_slice_dump(const rd_slice_t *slice, int do_hexdump) {
         const rd_segment_t *seg;
         size_t relof;
 
         fprintf(stderr,
                 "((rd_slice_t *)%p):\n"
-                "  buf %p (len %"PRIusz"), seg %p (absof %"PRIusz"), "
-                "rof %"PRIusz", start %"PRIusz", end %"PRIusz", size %"PRIusz
-                ", offset %"PRIusz"\n",
-                slice, slice->buf, rd_buf_len(slice->buf),
-                slice->seg, slice->seg ? slice->seg->seg_absof : 0,
-                slice->rof, slice->start, slice->end,
-                rd_slice_size(slice), rd_slice_offset(slice));
+                "  buf %p (len %" PRIusz "), seg %p (absof %" PRIusz
+                "), "
+                "rof %" PRIusz ", start %" PRIusz ", end %" PRIusz
+                ", size %" PRIusz ", offset %" PRIusz "\n",
+                slice, slice->buf, rd_buf_len(slice->buf), slice->seg,
+                slice->seg ? slice->seg->seg_absof : 0, slice->rof,
+                slice->start, slice->end, rd_slice_size(slice),
+                rd_slice_offset(slice));
         relof = slice->rof;
 
-        for (seg = slice->seg ; seg ; seg = TAILQ_NEXT(seg, seg_link)) {
+        for (seg = slice->seg; seg; seg = TAILQ_NEXT(seg, seg_link)) {
                 rd_segment_dump(seg, "  ", relof, do_hexdump);
                 relof = 0;
         }
@@ -1290,13 +1297,13 @@ void rd_slice_dump (const rd_slice_t *slice, int do_hexdump) {
 /**
  * @brief Basic write+read test
  */
-static int do_unittest_write_read (void) {
+static int do_unittest_write_read(void) {
         rd_buf_t b;
         char ones[1024];
         char twos[1024];
         char threes[1024];
         char fiftyfives[100]; /* 0x55 indicates "untouched" memory */
-        char buf[1024*3];
+        char buf[1024 * 3];
         rd_slice_t slice;
         size_t r, pos;
 
@@ -1312,21 +1319,21 @@ static int do_unittest_write_read (void) {
          * Verify write
          */
         r = rd_buf_write(&b, ones, 200);
-        RD_UT_ASSERT(r == 0, "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(r == 0, "write() returned position %" PRIusz, r);
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200, "pos() returned position %" PRIusz, pos);
 
         r = rd_buf_write(&b, twos, 800);
-        RD_UT_ASSERT(r == 200, "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(r == 200, "write() returned position %" PRIusz, r);
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200+800, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200 + 800, "pos() returned position %" PRIusz, pos);
 
         /* Buffer grows here */
         r = rd_buf_write(&b, threes, 1);
-        RD_UT_ASSERT(pos == 200+800,
-                     "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(pos == 200 + 800, "write() returned position %" PRIusz, r);
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200+800+1, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200 + 800 + 1, "pos() returned position %" PRIusz,
+                     pos);
 
         /*
          * Verify read
@@ -1334,18 +1341,19 @@ static int do_unittest_write_read (void) {
         /* Get full slice. */
         rd_slice_init_full(&slice, &b);
 
-        r = rd_slice_read(&slice, buf, 200+800+2);
+        r = rd_slice_read(&slice, buf, 200 + 800 + 2);
         RD_UT_ASSERT(r == 0,
-                     "read() > remaining should have failed, gave %"PRIusz, r);
-        r = rd_slice_read(&slice, buf, 200+800+1);
-        RD_UT_ASSERT(r == 200+800+1,
-                     "read() returned %"PRIusz" (%"PRIusz" remains)",
-                     r, rd_slice_remains(&slice));
+                     "read() > remaining should have failed, gave %" PRIusz, r);
+        r = rd_slice_read(&slice, buf, 200 + 800 + 1);
+        RD_UT_ASSERT(r == 200 + 800 + 1,
+                     "read() returned %" PRIusz " (%" PRIusz " remains)", r,
+                     rd_slice_remains(&slice));
 
         RD_UT_ASSERT(!memcmp(buf, ones, 200), "verify ones");
-        RD_UT_ASSERT(!memcmp(buf+200, twos, 800), "verify twos");
-        RD_UT_ASSERT(!memcmp(buf+200+800, threes, 1), "verify threes");
-        RD_UT_ASSERT(!memcmp(buf+200+800+1, fiftyfives, 100), "verify 55s");
+        RD_UT_ASSERT(!memcmp(buf + 200, twos, 800), "verify twos");
+        RD_UT_ASSERT(!memcmp(buf + 200 + 800, threes, 1), "verify threes");
+        RD_UT_ASSERT(!memcmp(buf + 200 + 800 + 1, fiftyfives, 100),
+                     "verify 55s");
 
         rd_buf_destroy(&b);
 
@@ -1356,15 +1364,19 @@ static int do_unittest_write_read (void) {
 /**
  * @brief Helper read verifier, not a unit-test itself.
  */
-#define do_unittest_read_verify(b,absof,len,verify) do {                \
-                int __fail = do_unittest_read_verify0(b,absof,len,verify); \
-                RD_UT_ASSERT(!__fail,                                   \
-                             "read_verify(absof=%"PRIusz",len=%"PRIusz") " \
-                             "failed", (size_t)absof, (size_t)len);     \
+#define do_unittest_read_verify(b, absof, len, verify)                         \
+        do {                                                                   \
+                int __fail = do_unittest_read_verify0(b, absof, len, verify);  \
+                RD_UT_ASSERT(!__fail,                                          \
+                             "read_verify(absof=%" PRIusz ",len=%" PRIusz      \
+                             ") "                                              \
+                             "failed",                                         \
+                             (size_t)absof, (size_t)len);                      \
         } while (0)
 
-static int
-do_unittest_read_verify0 (const rd_buf_t *b, size_t absof, size_t len,
+static int do_unittest_read_verify0(const rd_buf_t *b,
+                                    size_t absof,
+                                    size_t len,
                           const char *verify) {
         rd_slice_t slice, sub;
         char buf[1024];
@@ -1380,53 +1392,53 @@ do_unittest_read_verify0 (const rd_buf_t *b, size_t absof, size_t len,
 
         r = rd_slice_read(&slice, buf, len);
         RD_UT_ASSERT(r == len,
-                     "read() returned %"PRIusz" expected %"PRIusz
-                     " (%"PRIusz" remains)",
+                     "read() returned %" PRIusz " expected %" PRIusz
+                     " (%" PRIusz " remains)",
                      r, len, rd_slice_remains(&slice));
 
         RD_UT_ASSERT(!memcmp(buf, verify, len), "verify");
 
         r = rd_slice_offset(&slice);
-        RD_UT_ASSERT(r == len, "offset() returned %"PRIusz", not %"PRIusz,
-                     r, len);
+        RD_UT_ASSERT(r == len, "offset() returned %" PRIusz ", not %" PRIusz, r,
+                     len);
 
         half = len / 2;
-        i = rd_slice_seek(&slice, half);
-        RD_UT_ASSERT(i == 0, "seek(%"PRIusz") returned %d", half, i);
+        i    = rd_slice_seek(&slice, half);
+        RD_UT_ASSERT(i == 0, "seek(%" PRIusz ") returned %d", half, i);
         r = rd_slice_offset(&slice);
-        RD_UT_ASSERT(r == half, "offset() returned %"PRIusz", not %"PRIusz,
+        RD_UT_ASSERT(r == half, "offset() returned %" PRIusz ", not %" PRIusz,
                      r, half);
 
         /* Get a sub-slice covering the later half. */
         sub = rd_slice_pos(&slice);
-        r = rd_slice_offset(&sub);
-        RD_UT_ASSERT(r == 0, "sub: offset() returned %"PRIusz", not %"PRIusz,
+        r   = rd_slice_offset(&sub);
+        RD_UT_ASSERT(r == 0, "sub: offset() returned %" PRIusz ", not %" PRIusz,
                      r, (size_t)0);
         r = rd_slice_size(&sub);
-        RD_UT_ASSERT(r == half, "sub: size() returned %"PRIusz", not %"PRIusz,
-                     r, half);
+        RD_UT_ASSERT(r == half,
+                     "sub: size() returned %" PRIusz ", not %" PRIusz, r, half);
         r = rd_slice_remains(&sub);
         RD_UT_ASSERT(r == half,
-                     "sub: remains() returned %"PRIusz", not %"PRIusz,
-                     r, half);
+                     "sub: remains() returned %" PRIusz ", not %" PRIusz, r,
+                     half);
 
         /* Read half */
         r = rd_slice_read(&sub, buf, half);
         RD_UT_ASSERT(r == half,
-                     "sub read() returned %"PRIusz" expected %"PRIusz
-                     " (%"PRIusz" remains)",
+                     "sub read() returned %" PRIusz " expected %" PRIusz
+                     " (%" PRIusz " remains)",
                      r, len, rd_slice_remains(&sub));
 
         RD_UT_ASSERT(!memcmp(buf, verify, len), "verify");
 
         r = rd_slice_offset(&sub);
         RD_UT_ASSERT(r == rd_slice_size(&sub),
-                     "sub offset() returned %"PRIusz", not %"PRIusz,
-                     r, rd_slice_size(&sub));
+                     "sub offset() returned %" PRIusz ", not %" PRIusz, r,
+                     rd_slice_size(&sub));
         r = rd_slice_remains(&sub);
         RD_UT_ASSERT(r == 0,
-                     "sub: remains() returned %"PRIusz", not %"PRIusz,
-                     r, (size_t)0);
+                     "sub: remains() returned %" PRIusz ", not %" PRIusz, r,
+                     (size_t)0);
 
         return 0;
 }
@@ -1435,13 +1447,13 @@ do_unittest_read_verify0 (const rd_buf_t *b, size_t absof, size_t len,
 /**
  * @brief write_seek() and split() test
  */
-static int do_unittest_write_split_seek (void) {
+static int do_unittest_write_split_seek(void) {
         rd_buf_t b;
         char ones[1024];
         char twos[1024];
         char threes[1024];
         char fiftyfives[100]; /* 0x55 indicates "untouched" memory */
-        char buf[1024*3];
+        char buf[1024 * 3];
         size_t r, pos;
         rd_segment_t *seg, *newseg;
 
@@ -1457,9 +1469,9 @@ static int do_unittest_write_split_seek (void) {
          * Verify write
          */
         r = rd_buf_write(&b, ones, 400);
-        RD_UT_ASSERT(r == 0, "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(r == 0, "write() returned position %" PRIusz, r);
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 400, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 400, "pos() returned position %" PRIusz, pos);
 
         do_unittest_read_verify(&b, 0, 400, ones);
 
@@ -1469,19 +1481,19 @@ static int do_unittest_write_split_seek (void) {
         r = rd_buf_write_seek(&b, 200);
         RD_UT_ASSERT(r == 0, "seek() failed");
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200, "pos() returned position %" PRIusz, pos);
 
         r = rd_buf_write(&b, twos, 100);
-        RD_UT_ASSERT(pos == 200, "write() returned position %"PRIusz, r);
+        RD_UT_ASSERT(pos == 200, "write() returned position %" PRIusz, r);
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200+100, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200 + 100, "pos() returned position %" PRIusz, pos);
 
         do_unittest_read_verify(&b, 0, 200, ones);
         do_unittest_read_verify(&b, 200, 100, twos);
 
         /* Make sure read() did not modify the write position. */
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200+100, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200 + 100, "pos() returned position %" PRIusz, pos);
 
         /* Split buffer, write position is now at split where writes
         * are not allowed (mid buffer). */
@@ -1493,10 +1505,10 @@ static int do_unittest_write_split_seek (void) {
         RD_UT_ASSERT(seg != NULL, "seg");
         RD_UT_ASSERT(seg == newseg, "newseg %p, seg %p", newseg, seg);
         RD_UT_ASSERT(seg->seg_of > 0,
-                     "assumed beginning of segment, got %"PRIusz, seg->seg_of);
+                     "assumed beginning of segment, got %" PRIusz, seg->seg_of);
 
         pos = rd_buf_write_pos(&b);
-        RD_UT_ASSERT(pos == 200+100, "pos() returned position %"PRIusz, pos);
+        RD_UT_ASSERT(pos == 200 + 100, "pos() returned position %" PRIusz, pos);
 
         /* Re-verify that nothing changed */
         do_unittest_read_verify(&b, 0, 200, ones);
@@ -1517,7 +1529,7 @@ static int do_unittest_write_split_seek (void) {
  * @brief Unittest to verify payload is correctly written and read.
  *        Each written u32 word is the running CRC of the word count.
  */
-static int do_unittest_write_read_payload_correctness (void) {
+static int do_unittest_write_read_payload_correctness(void) {
         uint32_t crc;
         uint32_t write_crc, read_crc;
         const int seed = 12345;
@@ -1532,7 +1544,7 @@ static int do_unittest_write_read_payload_correctness (void) {
         crc = rd_crc32_update(crc, (void *)&seed, sizeof(seed));
 
         rd_buf_init(&b, 0, 0);
-        for (i = 0 ; i < max_cnt ; i++) {
+        for (i = 0; i < max_cnt; i++) {
                 crc = rd_crc32_update(crc, (void *)&i, sizeof(i));
                 rd_buf_write(&b, &crc, sizeof(crc));
         }
@@ -1541,8 +1553,8 @@ static int do_unittest_write_read_payload_correctness (void) {
 
         r = rd_buf_len(&b);
         RD_UT_ASSERT(r == max_cnt * sizeof(crc),
-                     "expected length %"PRIusz", not %"PRIusz,
-                     r, max_cnt * sizeof(crc));
+                     "expected length %" PRIusz ", not %" PRIusz, r,
+                     max_cnt * sizeof(crc));
 
         /*
          * Now verify the contents with a reader.
@@ -1551,20 +1563,20 @@ static int do_unittest_write_read_payload_correctness (void) {
 
         r = rd_slice_remains(&slice);
         RD_UT_ASSERT(r == rd_buf_len(&b),
-                     "slice remains %"PRIusz", should be %"PRIusz,
-                     r, rd_buf_len(&b));
+                     "slice remains %" PRIusz ", should be %" PRIusz, r,
+                     rd_buf_len(&b));
 
-        for (pass = 0 ; pass < 2 ; pass++) {
+        for (pass = 0; pass < 2; pass++) {
                 /* Two passes:
                  *  - pass 1: using peek()
                  *  - pass 2: using read()
                  */
-                const char *pass_str = pass == 0 ? "peek":"read";
+                const char *pass_str = pass == 0 ? "peek" : "read";
 
                 crc = rd_crc32_init();
                 crc = rd_crc32_update(crc, (void *)&seed, sizeof(seed));
 
-                for (i = 0 ; i < max_cnt ; i++) {
+                for (i = 0; i < max_cnt; i++) {
                         uint32_t buf_crc;
 
                         crc = rd_crc32_update(crc, (void *)&i, sizeof(i));
@@ -1576,40 +1588,40 @@ static int do_unittest_write_read_payload_correctness (void) {
                                 r = rd_slice_read(&slice, &buf_crc,
                                                   sizeof(buf_crc));
                         RD_UT_ASSERT(r == sizeof(buf_crc),
-                                     "%s() at #%"PRIusz" failed: "
-                                     "r is %"PRIusz" not %"PRIusz,
+                                     "%s() at #%" PRIusz
+                                     " failed: "
+                                     "r is %" PRIusz " not %" PRIusz,
                                      pass_str, i, r, sizeof(buf_crc));
                         RD_UT_ASSERT(buf_crc == crc,
-                                     "%s: invalid crc at #%"PRIusz
-                                     ": expected %"PRIu32", read %"PRIu32,
+                                     "%s: invalid crc at #%" PRIusz
+                                     ": expected %" PRIu32 ", read %" PRIu32,
                                      pass_str, i, crc, buf_crc);
                 }
 
                 read_crc = rd_crc32_finalize(crc);
 
                 RD_UT_ASSERT(read_crc == write_crc,
-                             "%s: finalized read crc %"PRIu32
-                             " != write crc %"PRIu32,
+                             "%s: finalized read crc %" PRIu32
+                             " != write crc %" PRIu32,
                              pass_str, read_crc, write_crc);
-
         }
 
         r = rd_slice_remains(&slice);
-        RD_UT_ASSERT(r == 0,
-                     "slice remains %"PRIusz", should be %"PRIusz,
-                     r, (size_t)0);
+        RD_UT_ASSERT(r == 0, "slice remains %" PRIusz ", should be %" PRIusz, r,
+                     (size_t)0);
 
         rd_buf_destroy(&b);
 
         RD_UT_PASS();
 }
 
-#define do_unittest_iov_verify(...) do {                                \
-                int __fail = do_unittest_iov_verify0(__VA_ARGS__);      \
-                RD_UT_ASSERT(!__fail, "iov_verify() failed");           \
+#define do_unittest_iov_verify(...)                                            \
+        do {                                                                   \
+                int __fail = do_unittest_iov_verify0(__VA_ARGS__);             \
+                RD_UT_ASSERT(!__fail, "iov_verify() failed");                  \
         } while (0)
-static int do_unittest_iov_verify0 (rd_buf_t *b,
-                                    size_t exp_iovcnt, size_t exp_totsize) {
+static int
+do_unittest_iov_verify0(rd_buf_t *b, size_t exp_iovcnt, size_t exp_totsize) {
         #define MY_IOV_MAX 16
         struct iovec iov[MY_IOV_MAX];
         size_t iovcnt;
@@ -1618,31 +1630,32 @@ static int do_unittest_iov_verify0 (rd_buf_t *b,
 
         rd_assert(exp_iovcnt <= MY_IOV_MAX);
 
-        totsize = rd_buf_get_write_iov(b, iov, &iovcnt,
-                                       MY_IOV_MAX, exp_totsize);
+        totsize =
+            rd_buf_get_write_iov(b, iov, &iovcnt, MY_IOV_MAX, exp_totsize);
         RD_UT_ASSERT(totsize >= exp_totsize,
-                     "iov total size %"PRIusz" expected >= %"PRIusz,
-                     totsize, exp_totsize);
+                     "iov total size %" PRIusz " expected >= %" PRIusz, totsize,
+                     exp_totsize);
         RD_UT_ASSERT(iovcnt >= exp_iovcnt && iovcnt <= MY_IOV_MAX,
-                     "iovcnt %"PRIusz
-                     ", expected %"PRIusz" < x <= MY_IOV_MAX",
+                     "iovcnt %" PRIusz ", expected %" PRIusz
+                     " < x <= MY_IOV_MAX",
                      iovcnt, exp_iovcnt);
 
         sum = 0;
-        for (i = 0 ; i < iovcnt ; i++) {
+        for (i = 0; i < iovcnt; i++) {
                 RD_UT_ASSERT(iov[i].iov_base,
-                             "iov #%"PRIusz" iov_base not set", i);
+                             "iov #%" PRIusz " iov_base not set", i);
                 RD_UT_ASSERT(iov[i].iov_len,
-                             "iov #%"PRIusz" iov_len %"PRIusz" out of range",
+                             "iov #%" PRIusz " iov_len %" PRIusz
+                             " out of range",
                              i, iov[i].iov_len);
                 sum += iov[i].iov_len;
-                RD_UT_ASSERT(sum <= totsize, "sum %"PRIusz" > totsize %"PRIusz,
-                             sum, totsize);
+                RD_UT_ASSERT(sum <= totsize,
+                             "sum %" PRIusz " > totsize %" PRIusz, sum,
+                             totsize);
         }
 
-        RD_UT_ASSERT(sum == totsize,
-                     "sum %"PRIusz" != totsize %"PRIusz,
-                     sum, totsize);
+        RD_UT_ASSERT(sum == totsize, "sum %" PRIusz " != totsize %" PRIusz, sum,
+                     totsize);
 
         return 0;
 }
@@ -1651,7 +1664,7 @@ static int do_unittest_iov_verify0 (rd_buf_t *b,
 /**
  * @brief Verify that buffer to iovec conversion works.
  */
-static int do_unittest_write_iov (void) {
+static int do_unittest_write_iov(void) {
         rd_buf_t b;
 
         rd_buf_init(&b, 0, 0);
@@ -1662,7 +1675,7 @@ static int do_unittest_write_iov (void) {
         /* Add a secondary buffer */
         rd_buf_write_ensure(&b, 30000, 0);
 
-        do_unittest_iov_verify(&b, 2, 100+30000);
+        do_unittest_iov_verify(&b, 2, 100 + 30000);
 
 
         rd_buf_destroy(&b);
@@ -1673,7 +1686,7 @@ static int do_unittest_write_iov (void) {
 /**
  * @brief Verify that erasing parts of the buffer works.
  */
-static int do_unittest_erase (void) {
+static int do_unittest_erase(void) {
         static const struct {
                 const char *segs[4];
                 const char *writes[4];
@@ -1684,24 +1697,26 @@ static int do_unittest_erase (void) {
                 } erasures[4];
 
                 const char *expect;
-        } in[] = {
-                /* 12|3|45
+        } in[] = {/* 12|3|45
                  *  x x xx */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 1, 4, 4 } },
-                  .expect = "1",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{1, 4, 4}},
+                      .expect   = "1",
                 },
                 /* 12|3|45
                  * xx */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 0, 2, 2 } },
-                  .expect = "345",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{0, 2, 2}},
+                      .expect   = "345",
                 },
                 /* 12|3|45
                  *      xx */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 3, 2, 2 } },
-                  .expect = "123",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{3, 2, 2}},
+                      .expect   = "123",
                 },
                 /* 12|3|45
                  *  x
@@ -1709,73 +1724,78 @@ static int do_unittest_erase (void) {
                  *    x
                  * 1 |  45
                  *       x */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 1, 1, 1 },
-                                { 1, 1, 1 },
-                                { 2, 1, 1 } },
-                  .expect = "14",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{1, 1, 1}, {1, 1, 1}, {2, 1, 1}},
+                      .expect   = "14",
                 },
                 /* 12|3|45
                  * xxxxxxx */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 0, 5, 5 } },
-                  .expect = "",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{0, 5, 5}},
+                      .expect   = "",
                 },
                 /* 12|3|45
                  * x       */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 0, 1, 1 } },
-                  .expect = "2345",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{0, 1, 1}},
+                      .expect   = "2345",
                 },
                 /* 12|3|45
                  *       x  */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 4, 1, 1 } },
-                  .expect = "1234",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{4, 1, 1}},
+                      .expect   = "1234",
                 },
                 /* 12|3|45
                  *        x  */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 5, 10, 0 } },
-                  .expect = "12345",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{5, 10, 0}},
+                      .expect   = "12345",
                 },
                 /* 12|3|45
                  *       xxx */
-                { .segs = { "12", "3", "45" },
-                  .erasures = { { 4, 3, 1 }, { 4, 3, 0 }, { 4, 3, 0 } },
-                  .expect = "1234",
+                  {
+                      .segs     = {"12", "3", "45"},
+                      .erasures = {{4, 3, 1}, {4, 3, 0}, {4, 3, 0}},
+                      .expect   = "1234",
                 },
                 /* 1
                  * xxx */
-                { .segs = { "1" },
-                  .erasures = { { 0, 3, 1 } },
-                  .expect = "",
+                  {
+                      .segs     = {"1"},
+                      .erasures = {{0, 3, 1}},
+                      .expect   = "",
                 },
                 /* 123456
                  * xxxxxx */
-                { .segs = { "123456" },
-                  .erasures = { { 0, 6, 6 } },
-                  .expect = "",
+                  {
+                      .segs     = {"123456"},
+                      .erasures = {{0, 6, 6}},
+                      .expect   = "",
                 },
                 /* 123456789a
                  *     xxx    */
-                { .segs = { "123456789a" },
-                  .erasures = { { 4, 3, 3 } },
-                  .expect = "123489a",
+                  {
+                      .segs     = {"123456789a"},
+                      .erasures = {{4, 3, 3}},
+                      .expect   = "123489a",
                 },
                 /* 1234|5678
                  *    x xx   */
-                { .segs = { "1234", "5678" },
-                  .erasures = { { 3, 3, 3 } },
-                  .writes = { "9abc" },
-                  .expect = "123789abc"
-                },
+                  {.segs     = {"1234", "5678"},
+                   .erasures = {{3, 3, 3}},
+                   .writes   = {"9abc"},
+                   .expect   = "123789abc"},
 
-                { .expect = NULL }
-        };
+                  {.expect = NULL}};
         int i;
 
-        for (i = 0 ; in[i].expect ; i++) {
+        for (i = 0; in[i].expect; i++) {
                 rd_buf_t b;
                 rd_slice_t s;
                 size_t expsz = strlen(in[i].expect);
@@ -1787,63 +1807,63 @@ static int do_unittest_erase (void) {
                 rd_buf_init(&b, 0, 0);
 
                 /* Write segments to buffer */
-                for (j = 0 ; in[i].segs[j] ; j++)
+                for (j = 0; in[i].segs[j]; j++)
                         rd_buf_push_writable(&b, rd_strdup(in[i].segs[j]),
                                              strlen(in[i].segs[j]), rd_free);
 
                 /* Perform erasures */
-                for (j = 0 ; in[i].erasures[j].retsize ; j++) {
-                        r = rd_buf_erase(&b,
-                                         in[i].erasures[j].of,
+                for (j = 0; in[i].erasures[j].retsize; j++) {
+                        r = rd_buf_erase(&b, in[i].erasures[j].of,
                                          in[i].erasures[j].size);
                         RD_UT_ASSERT(r == in[i].erasures[j].retsize,
-                                     "expected retsize %"PRIusz" for i=%d,j=%d"
-                                     ", not %"PRIusz,
+                                     "expected retsize %" PRIusz
+                                     " for i=%d,j=%d"
+                                     ", not %" PRIusz,
                                      in[i].erasures[j].retsize, i, j, r);
                 }
 
                 /* Perform writes */
-                for (j = 0 ; in[i].writes[j] ; j++)
+                for (j = 0; in[i].writes[j]; j++)
                         rd_buf_write(&b, in[i].writes[j],
                                      strlen(in[i].writes[j]));
 
                 RD_UT_ASSERT(expsz == rd_buf_len(&b),
-                             "expected buffer to be %"PRIusz" bytes, not "
-                             "%"PRIusz" for i=%d",
+                             "expected buffer to be %" PRIusz
+                             " bytes, not "
+                             "%" PRIusz " for i=%d",
                              expsz, rd_buf_len(&b), i);
 
                 /* Read back and verify */
                 r2 = rd_slice_init(&s, &b, 0, rd_buf_len(&b));
                 RD_UT_ASSERT((r2 == -1 && rd_buf_len(&b) == 0) ||
                              (r2 == 0 && rd_buf_len(&b) > 0),
-                             "slice_init(%"PRIusz") returned %d for i=%d",
+                             "slice_init(%" PRIusz ") returned %d for i=%d",
                              rd_buf_len(&b), r2, i);
                 if (r2 == -1)
                         continue; /* Empty buffer */
 
                 RD_UT_ASSERT(expsz == rd_slice_size(&s),
-                             "expected slice to be %"PRIusz" bytes, not %"PRIusz
-                             " for i=%d",
+                             "expected slice to be %" PRIusz
+                             " bytes, not %" PRIusz " for i=%d",
                              expsz, rd_slice_size(&s), i);
 
                 out = rd_malloc(expsz);
 
                 r = rd_slice_read(&s, out, expsz);
                 RD_UT_ASSERT(r == expsz,
-                             "expected to read %"PRIusz" bytes, not %"PRIusz
+                             "expected to read %" PRIusz " bytes, not %" PRIusz
                              " for i=%d",
                              expsz, r, i);
 
                 RD_UT_ASSERT(!memcmp(out, in[i].expect, expsz),
                              "Expected \"%.*s\", not \"%.*s\" for i=%d",
-                             (int)expsz, in[i].expect,
-                             (int)r, out, i);
+                             (int)expsz, in[i].expect, (int)r, out, i);
 
                 rd_free(out);
 
                 RD_UT_ASSERT(rd_slice_remains(&s) == 0,
                              "expected no remaining bytes in slice, but got "
-                             "%"PRIusz" for i=%d",
+                             "%" PRIusz " for i=%d",
                              rd_slice_remains(&s), i);
 
                 rd_buf_destroy(&b);
@@ -1854,7 +1874,7 @@ static int do_unittest_erase (void) {
 }
 
 
-int unittest_rdbuf (void) {
+int unittest_rdbuf(void) {
         int fails = 0;
 
         fails += do_unittest_write_read();

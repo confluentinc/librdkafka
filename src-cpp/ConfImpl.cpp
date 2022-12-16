@@ -35,18 +35,16 @@
 
 
 RdKafka::ConfImpl::ConfResult RdKafka::ConfImpl::set(const std::string &name,
-						     const std::string &value,
-						     std::string &errstr) {
+                                                     const std::string &value,
+                                                     std::string &errstr) {
   rd_kafka_conf_res_t res;
   char errbuf[512];
 
   if (this->conf_type_ == CONF_GLOBAL)
-    res = rd_kafka_conf_set(this->rk_conf_,
-                            name.c_str(), value.c_str(),
-                            errbuf, sizeof(errbuf));
+    res = rd_kafka_conf_set(this->rk_conf_, name.c_str(), value.c_str(), errbuf,
+                            sizeof(errbuf));
   else
-    res = rd_kafka_topic_conf_set(this->rkt_conf_,
-                                  name.c_str(), value.c_str(),
+    res = rd_kafka_topic_conf_set(this->rkt_conf_, name.c_str(), value.c_str(),
                                   errbuf, sizeof(errbuf));
 
   if (res != RD_KAFKA_CONF_OK)
@@ -56,8 +54,7 @@ RdKafka::ConfImpl::ConfResult RdKafka::ConfImpl::set(const std::string &name,
 }
 
 
-std::list<std::string> *RdKafka::ConfImpl::dump () {
-
+std::list<std::string> *RdKafka::ConfImpl::dump() {
   const char **arrc;
   size_t cnt;
   std::list<std::string> *arr;
@@ -68,14 +65,14 @@ std::list<std::string> *RdKafka::ConfImpl::dump () {
     arrc = rd_kafka_topic_conf_dump(rkt_conf_, &cnt);
 
   arr = new std::list<std::string>();
-  for (int i = 0 ; i < static_cast<int>(cnt) ; i++)
+  for (int i = 0; i < static_cast<int>(cnt); i++)
     arr->push_back(std::string(arrc[i]));
 
   rd_kafka_conf_dump_free(arrc, cnt);
   return arr;
 }
 
-RdKafka::Conf *RdKafka::Conf::create (ConfType type) {
+RdKafka::Conf *RdKafka::Conf::create(ConfType type) {
   ConfImpl *conf = new ConfImpl(type);
 
   if (type == CONF_GLOBAL)

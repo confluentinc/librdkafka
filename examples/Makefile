@@ -2,7 +2,9 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	rdkafka_complex_consumer_example rdkafka_complex_consumer_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
-	delete_records
+	delete_records \
+	openssl_engine_example_cpp \
+	misc
 
 all: $(EXAMPLES)
 
@@ -102,20 +104,13 @@ rdkafka_consume_batch: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_con
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_consume_batch.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
-rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -I/usr/include/zookeeper rdkafka_zookeeper_example.c -o $@ $(LDFLAGS) \
-		../src/librdkafka.a $(LIBS) -lzookeeper_mt -ljansson
-	@echo "# $@ is ready"
-	@echo "#"
-	@echo "# Run producer (write messages on stdin)"
-	@echo "./$@ -P -t <topic> -p <partition>"
-	@echo ""
-	@echo "# or consumer"
-	@echo "./$@ -C -t <topic> -p <partition>"
-	@echo ""
-	@echo "#"
-	@echo "# More usage options:"
-	@echo "./$@ -h"
+openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openssl_engine_example.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) openssl_engine_example.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
+
+misc: ../src/librdkafka.a misc.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
 
 clean:
 	rm -f $(EXAMPLES)

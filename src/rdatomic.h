@@ -31,59 +31,61 @@
 #include "tinycthread.h"
 
 typedef struct {
-	int32_t val;
+        int32_t val;
 #if !defined(_WIN32) && !HAVE_ATOMICS_32
-	mtx_t lock;
+        mtx_t lock;
 #endif
 } rd_atomic32_t;
 
 typedef struct {
-	int64_t val;
+        int64_t val;
 #if !defined(_WIN32) && !HAVE_ATOMICS_64
-	mtx_t lock;
+        mtx_t lock;
 #endif
 } rd_atomic64_t;
 
 
-static RD_INLINE RD_UNUSED void rd_atomic32_init (rd_atomic32_t *ra, int32_t v) {
-	ra->val = v;
+static RD_INLINE RD_UNUSED void rd_atomic32_init(rd_atomic32_t *ra, int32_t v) {
+        ra->val = v;
 #if !defined(_WIN32) && !HAVE_ATOMICS_32
-	mtx_init(&ra->lock, mtx_plain);
+        mtx_init(&ra->lock, mtx_plain);
 #endif
 }
 
 
-static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_add(rd_atomic32_t *ra,
+                                                   int32_t v) {
 #ifdef __SUNPRO_C
-	return atomic_add_32_nv(&ra->val, v);
+        return atomic_add_32_nv(&ra->val, v);
 #elif defined(_WIN32)
-	return InterlockedAdd((LONG *)&ra->val, v);
+        return InterlockedAdd((LONG *)&ra->val, v);
 #elif !HAVE_ATOMICS_32
-	int32_t r;
-	mtx_lock(&ra->lock);
-	ra->val += v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int32_t r;
+        mtx_lock(&ra->lock);
+        ra->val += v;
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP32(add, fetch, &ra->val, v);
+        return ATOMIC_OP32(add, fetch, &ra->val, v);
 #endif
 }
 
-static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra,
+                                                   int32_t v) {
 #ifdef __SUNPRO_C
-	return atomic_add_32_nv(&ra->val, -v);
+        return atomic_add_32_nv(&ra->val, -v);
 #elif defined(_WIN32)
-	return InterlockedAdd((LONG *)&ra->val, -v);
+        return InterlockedAdd((LONG *)&ra->val, -v);
 #elif !HAVE_ATOMICS_32
-	int32_t r;
-	mtx_lock(&ra->lock);
-	ra->val -= v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int32_t r;
+        mtx_lock(&ra->lock);
+        ra->val -= v;
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP32(sub, fetch, &ra->val, v);
+        return ATOMIC_OP32(sub, fetch, &ra->val, v);
 #endif
 }
 
@@ -97,27 +99,28 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v)
  */
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 #if defined(_WIN32) || defined(__SUNPRO_C)
-	return ra->val;
+        return ra->val;
 #elif !HAVE_ATOMICS_32
-	int32_t r;
-	mtx_lock(&ra->lock);
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int32_t r;
+        mtx_lock(&ra->lock);
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP32(fetch, add, &ra->val, 0);
+        return ATOMIC_OP32(fetch, add, &ra->val, 0);
 #endif
 }
 
-static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra,
+                                                   int32_t v) {
 #ifdef _WIN32
-	return InterlockedExchange((LONG *)&ra->val, v);
+        return InterlockedExchange((LONG *)&ra->val, v);
 #elif !HAVE_ATOMICS_32
-	int32_t r;
-	mtx_lock(&ra->lock);
-	r = ra->val = v;
-	mtx_unlock(&ra->lock);
-	return r;
+        int32_t r;
+        mtx_lock(&ra->lock);
+        r = ra->val = v;
+        mtx_unlock(&ra->lock);
+        return r;
 #elif HAVE_ATOMICS_32_ATOMIC
         __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);
         return v;
@@ -125,50 +128,52 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v)
         (void)__sync_lock_test_and_set(&ra->val, v);
         return v;
 #else
-	return ra->val = v; // FIXME
+        return ra->val = v;  // FIXME
 #endif
 }
 
 
 
-static RD_INLINE RD_UNUSED void rd_atomic64_init (rd_atomic64_t *ra, int64_t v) {
-	ra->val = v;
+static RD_INLINE RD_UNUSED void rd_atomic64_init(rd_atomic64_t *ra, int64_t v) {
+        ra->val = v;
 #if !defined(_WIN32) && !HAVE_ATOMICS_64
-	mtx_init(&ra->lock, mtx_plain);
+        mtx_init(&ra->lock, mtx_plain);
 #endif
 }
 
-static RD_INLINE int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
+static RD_INLINE int64_t RD_UNUSED rd_atomic64_add(rd_atomic64_t *ra,
+                                                   int64_t v) {
 #ifdef __SUNPRO_C
-	return atomic_add_64_nv(&ra->val, v);
+        return atomic_add_64_nv(&ra->val, v);
 #elif defined(_WIN32)
-	return InterlockedAdd64(&ra->val, v);
+        return InterlockedAdd64(&ra->val, v);
 #elif !HAVE_ATOMICS_64
-	int64_t r;
-	mtx_lock(&ra->lock);
-	ra->val += v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int64_t r;
+        mtx_lock(&ra->lock);
+        ra->val += v;
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP64(add, fetch, &ra->val, v);
+        return ATOMIC_OP64(add, fetch, &ra->val, v);
 #endif
 }
 
-static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) {
+static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra,
+                                                   int64_t v) {
 #ifdef __SUNPRO_C
-	return atomic_add_64_nv(&ra->val, -v);
+        return atomic_add_64_nv(&ra->val, -v);
 #elif defined(_WIN32)
-	return InterlockedAdd64(&ra->val, -v);
+        return InterlockedAdd64(&ra->val, -v);
 #elif !HAVE_ATOMICS_64
-	int64_t r;
-	mtx_lock(&ra->lock);
-	ra->val -= v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int64_t r;
+        mtx_lock(&ra->lock);
+        ra->val -= v;
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP64(sub, fetch, &ra->val, v);
+        return ATOMIC_OP64(sub, fetch, &ra->val, v);
 #endif
 }
 
@@ -183,29 +188,30 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v)
  */
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 #if defined(_WIN32) || defined(__SUNPRO_C)
-	return ra->val;
+        return InterlockedCompareExchange64(&ra->val, 0, 0);
 #elif !HAVE_ATOMICS_64
-	int64_t r;
-	mtx_lock(&ra->lock);
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int64_t r;
+        mtx_lock(&ra->lock);
+        r = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #else
-	return ATOMIC_OP64(fetch, add, &ra->val, 0);
+        return ATOMIC_OP64(fetch, add, &ra->val, 0);
 #endif
 }
 
 
-static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
+static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra,
+                                                   int64_t v) {
 #ifdef _WIN32
-	return InterlockedExchange64(&ra->val, v);
+        return InterlockedExchange64(&ra->val, v);
 #elif !HAVE_ATOMICS_64
-	int64_t r;
-	mtx_lock(&ra->lock);
-	ra->val = v;
-	r = ra->val;
-	mtx_unlock(&ra->lock);
-	return r;
+        int64_t r;
+        mtx_lock(&ra->lock);
+        ra->val = v;
+        r       = ra->val;
+        mtx_unlock(&ra->lock);
+        return r;
 #elif HAVE_ATOMICS_64_ATOMIC
         __atomic_store_n(&ra->val, v, __ATOMIC_SEQ_CST);
         return v;
@@ -213,7 +219,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v)
         (void)__sync_lock_test_and_set(&ra->val, v);
         return v;
 #else
-	return ra->val = v; // FIXME
+        return ra->val = v;  // FIXME
 #endif
 }
 

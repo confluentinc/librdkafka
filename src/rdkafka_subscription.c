@@ -41,20 +41,20 @@
 #include "rdkafka_int.h"
 
 
-rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
+rd_kafka_resp_err_t rd_kafka_unsubscribe(rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        return rd_kafka_op_err_destroy(rd_kafka_op_req2(rkcg->rkcg_ops,
-                                                        RD_KAFKA_OP_SUBSCRIBE));
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_SUBSCRIBE));
 }
 
 
 /** @returns 1 if the topic is invalid (bad regex, empty), else 0 if valid. */
-static size_t _invalid_topic_cb (const rd_kafka_topic_partition_t *rktpar,
-                                 void *opaque) {
+static size_t _invalid_topic_cb(const rd_kafka_topic_partition_t *rktpar,
+                                void *opaque) {
         rd_regex_t *re;
         char errstr[1];
 
@@ -74,8 +74,8 @@ static size_t _invalid_topic_cb (const rd_kafka_topic_partition_t *rktpar,
 
 
 rd_kafka_resp_err_t
-rd_kafka_subscribe (rd_kafka_t *rk,
-                    const rd_kafka_topic_partition_list_t *topics) {
+rd_kafka_subscribe(rd_kafka_t *rk,
+                   const rd_kafka_topic_partition_list_t *topics) {
 
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
@@ -85,30 +85,29 @@ rd_kafka_subscribe (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         /* Validate topics */
-        if (topics->cnt == 0 ||
-            rd_kafka_topic_partition_list_sum(topics,
-                                              _invalid_topic_cb, NULL) > 0)
+        if (topics->cnt == 0 || rd_kafka_topic_partition_list_sum(
+                                    topics, _invalid_topic_cb, NULL) > 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         topics_cpy = rd_kafka_topic_partition_list_copy(topics);
-        if (rd_kafka_topic_partition_list_has_duplicates(topics_cpy,
-            rd_true/*ignore partition field*/)) {
+        if (rd_kafka_topic_partition_list_has_duplicates(
+                topics_cpy, rd_true /*ignore partition field*/)) {
                 rd_kafka_topic_partition_list_destroy(topics_cpy);
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-	rko->rko_u.subscribe.topics = topics_cpy;
+        rko                         = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
+        rko->rko_u.subscribe.topics = topics_cpy;
 
         return rd_kafka_op_err_destroy(
-                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+            rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
 }
 
 
 rd_kafka_error_t *
-rd_kafka_assign0 (rd_kafka_t *rk,
-                  rd_kafka_assign_method_t assign_method,
-                  const rd_kafka_topic_partition_list_t *partitions) {
+rd_kafka_assign0(rd_kafka_t *rk,
+                 rd_kafka_assign_method_t assign_method,
+                 const rd_kafka_topic_partition_list_t *partitions) {
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
 
@@ -123,21 +122,20 @@ rd_kafka_assign0 (rd_kafka_t *rk,
 
         if (partitions)
                 rko->rko_u.assign.partitions =
-                        rd_kafka_topic_partition_list_copy(partitions);
+                    rd_kafka_topic_partition_list_copy(partitions);
 
         return rd_kafka_op_error_destroy(
-                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+            rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
 }
 
 
 rd_kafka_resp_err_t
-rd_kafka_assign (rd_kafka_t *rk,
-                 const rd_kafka_topic_partition_list_t *partitions) {
+rd_kafka_assign(rd_kafka_t *rk,
+                const rd_kafka_topic_partition_list_t *partitions) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
 
-        error = rd_kafka_assign0(rk, RD_KAFKA_ASSIGN_METHOD_ASSIGN,
-                                 partitions);
+        error = rd_kafka_assign0(rk, RD_KAFKA_ASSIGN_METHOD_ASSIGN, partitions);
 
         if (!error)
                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -151,9 +149,8 @@ rd_kafka_assign (rd_kafka_t *rk,
 
 
 rd_kafka_error_t *
-rd_kafka_incremental_assign (rd_kafka_t *rk,
-                             const rd_kafka_topic_partition_list_t
-                             *partitions) {
+rd_kafka_incremental_assign(rd_kafka_t *rk,
+                            const rd_kafka_topic_partition_list_t *partitions) {
         if (!partitions)
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
                                           "partitions must not be NULL");
@@ -163,10 +160,9 @@ rd_kafka_incremental_assign (rd_kafka_t *rk,
 }
 
 
-rd_kafka_error_t *
-rd_kafka_incremental_unassign (rd_kafka_t *rk,
-                               const rd_kafka_topic_partition_list_t
-                               *partitions) {
+rd_kafka_error_t *rd_kafka_incremental_unassign(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *partitions) {
         if (!partitions)
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
                                           "partitions must not be NULL");
@@ -176,8 +172,7 @@ rd_kafka_incremental_unassign (rd_kafka_t *rk,
 }
 
 
-int
-rd_kafka_assignment_lost (rd_kafka_t *rk) {
+int rd_kafka_assignment_lost(rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
@@ -187,8 +182,7 @@ rd_kafka_assignment_lost (rd_kafka_t *rk) {
 }
 
 
-const char *
-rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
+const char *rd_kafka_rebalance_protocol(rd_kafka_t *rk) {
         rd_kafka_op_t *rko;
         rd_kafka_cgrp_t *rkcg;
         const char *result;
@@ -215,8 +209,8 @@ rd_kafka_rebalance_protocol (rd_kafka_t *rk) {
 
 
 rd_kafka_resp_err_t
-rd_kafka_assignment (rd_kafka_t *rk,
-                     rd_kafka_topic_partition_list_t **partitions) {
+rd_kafka_assignment(rd_kafka_t *rk,
+                    rd_kafka_topic_partition_list_t **partitions) {
         rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
@@ -225,13 +219,13 @@ rd_kafka_assignment (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
-	if (!rko)
-		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+        if (!rko)
+                return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
         err = rko->rko_err;
 
-        *partitions = rko->rko_u.assign.partitions;
-	rko->rko_u.assign.partitions = NULL;
+        *partitions                  = rko->rko_u.assign.partitions;
+        rko->rko_u.assign.partitions = NULL;
         rd_kafka_op_destroy(rko);
 
         if (!*partitions && !err) {
@@ -243,9 +237,9 @@ rd_kafka_assignment (rd_kafka_t *rk,
 }
 
 rd_kafka_resp_err_t
-rd_kafka_subscription (rd_kafka_t *rk,
-                       rd_kafka_topic_partition_list_t **topics){
-	rd_kafka_op_t *rko;
+rd_kafka_subscription(rd_kafka_t *rk,
+                      rd_kafka_topic_partition_list_t **topics) {
+        rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
 
@@ -253,13 +247,13 @@ rd_kafka_subscription (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
-	if (!rko)
-		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+        if (!rko)
+                return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
         err = rko->rko_err;
 
-        *topics = rko->rko_u.subscribe.topics;
-	rko->rko_u.subscribe.topics = NULL;
+        *topics                     = rko->rko_u.subscribe.topics;
+        rko->rko_u.subscribe.topics = NULL;
         rd_kafka_op_destroy(rko);
 
         if (!*topics && !err) {
@@ -272,23 +266,18 @@ rd_kafka_subscription (rd_kafka_t *rk,
 
 
 rd_kafka_resp_err_t
-rd_kafka_pause_partitions (rd_kafka_t *rk,
-                           rd_kafka_topic_partition_list_t *partitions) {
-        return rd_kafka_toppars_pause_resume(rk,
-                                             rd_true/*pause*/,
-                                             RD_SYNC,
+rd_kafka_pause_partitions(rd_kafka_t *rk,
+                          rd_kafka_topic_partition_list_t *partitions) {
+        return rd_kafka_toppars_pause_resume(rk, rd_true /*pause*/, RD_SYNC,
                                              RD_KAFKA_TOPPAR_F_APP_PAUSE,
                                              partitions);
 }
 
 
 rd_kafka_resp_err_t
-rd_kafka_resume_partitions (rd_kafka_t *rk,
+rd_kafka_resume_partitions(rd_kafka_t *rk,
                            rd_kafka_topic_partition_list_t *partitions) {
-        return rd_kafka_toppars_pause_resume(rk,
-                                             rd_false/*resume*/,
-                                             RD_SYNC,
+        return rd_kafka_toppars_pause_resume(rk, rd_false /*resume*/, RD_SYNC,
                                              RD_KAFKA_TOPPAR_F_APP_PAUSE,
                                              partitions);
 }
-

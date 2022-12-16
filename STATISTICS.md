@@ -52,8 +52,9 @@ Field | Type | Example | Description
 name | string | `"rdkafka#producer-1"` | Handle instance name
 client_id | string | `"rdkafka"` | The configured (or default) `client.id`
 type | string | `"producer"` | Instance type (producer or consumer)
-ts | int | 12345678912345 | librdkafka's internal monotonic clock (micro seconds)
+ts | int | 12345678912345 | librdkafka's internal monotonic clock (microseconds)
 time | int | | Wall clock time in seconds since the epoch
+age | int | | Time since this client instance was created (microseconds)
 replyq | int gauge | | Number of ops (callbacks, events, etc) waiting in queue for application to serve with rd_kafka_poll()
 msg_cnt | int gauge | | Current number of messages in producer queues
 msg_size | int gauge | | Current total size of messages in producer queues
@@ -105,7 +106,7 @@ rxidle | int | | Microseconds since last socket receive (or -1 if no receives ye
 req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
-wakeups | int | | Broker thread poll wakeups
+wakeups | int | | Broker thread poll loop wakeups
 connects | int | | Number of connection attempts, including successful and failed, and name resolution failures.
 disconnects | int | | Number of disconnects (triggered by broker, network, load-balancer, etc.).
 int_latency | object | | Internal producer queue latency in microseconds. See *Window stats* below

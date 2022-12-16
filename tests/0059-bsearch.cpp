@@ -35,19 +35,20 @@
 
 
 static std::string topic;
-static const int partition = 0;
+static const int partition      = 0;
 static int64_t golden_timestamp = -1;
-static int64_t golden_offset = -1;
+static int64_t golden_offset    = -1;
 
 /**
  * @brief Seek to offset and consume that message.
  *
  * Asserts on failure.
  */
-static RdKafka::Message *get_msg (RdKafka::KafkaConsumer *c, int64_t offset,
-                                  bool use_seek) {
+static RdKafka::Message *get_msg(RdKafka::KafkaConsumer *c,
+                                 int64_t offset,
+                                 bool use_seek) {
   RdKafka::TopicPartition *next =
-    RdKafka::TopicPartition::create(topic, partition, offset);
+      RdKafka::TopicPartition::create(topic, partition, offset);
   RdKafka::ErrorCode err;
 
   /* Since seek() can only be used to change the currently consumed
@@ -57,7 +58,7 @@ static RdKafka::Message *get_msg (RdKafka::KafkaConsumer *c, int64_t offset,
   test_timing_t t_seek;
   TIMING_START(&t_seek, "seek");
   if (!use_seek) {
-    std::vector<RdKafka::TopicPartition*> parts;
+    std::vector<RdKafka::TopicPartition *> parts;
     parts.push_back(next);
     err = c->assign(parts);
     if (err)
@@ -82,15 +83,15 @@ static RdKafka::Message *get_msg (RdKafka::KafkaConsumer *c, int64_t offset,
     Test::Fail("consume() returned error: " + msg->errstr());
 
   if (msg->offset() != offset)
-    Test::Fail(tostr() << "seek()ed to offset " << offset <<
-               " but consume() returned offset " << msg->offset());
+    Test::Fail(tostr() << "seek()ed to offset " << offset
+                       << " but consume() returned offset " << msg->offset());
 
   return msg;
 }
 
 class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
-  void dr_cb (RdKafka::Message &msg) {
+  void dr_cb(RdKafka::Message &msg) {
     if (msg.err())
       Test::Fail("Delivery failed: " + msg.errstr());
 
@@ -102,11 +103,11 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
       Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
 
     golden_timestamp = ts.timestamp;
-    golden_offset = msg.offset();
+    golden_offset    = msg.offset();
   }
 };
 
-static void do_test_bsearch (void) {
+static void do_test_bsearch(void) {
   RdKafka::Conf *conf, *tconf;
   int msgcnt = 1000;
   int64_t timestamp;
@@ -128,22 +129,21 @@ static void do_test_bsearch (void) {
   delete tconf;
 
   timestamp = 1000;
-  for (int i = 0 ; i < msgcnt ; i++) {
+  for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
-                     (void *)topic.c_str(), topic.size(), NULL, 0,
-                     timestamp,
+                     (void *)topic.c_str(), topic.size(), NULL, 0, timestamp,
                      i == 357 ? (void *)1 /*golden*/ : NULL);
-      if (err != RdKafka::ERR_NO_ERROR)
-        Test::Fail("Produce failed: " + RdKafka::err2str(err));
-      timestamp += 100 + (timestamp % 9);
+    if (err != RdKafka::ERR_NO_ERROR)
+      Test::Fail("Produce failed: " + RdKafka::err2str(err));
+    timestamp += 100 + (timestamp % 9);
   }
 
   if (p->flush(tmout_multip(5000)) != 0)
     Test::Fail("Not all messages flushed");
 
-  Test::Say(tostr() << "Produced " << msgcnt << " messages, " <<
-            "golden message with timestamp " << golden_timestamp <<
-            " at offset " << golden_offset << "\n");
+  Test::Say(tostr() << "Produced " << msgcnt << " messages, "
+                    << "golden message with timestamp " << golden_timestamp
+                    << " at offset " << golden_offset << "\n");
 
   delete p;
 
@@ -184,8 +184,8 @@ static void do_test_bsearch (void) {
 
     mid = low + ((high - low) / 2);
 
-    Test::Say(1, tostr() << "Get message at mid point of " << low <<
-              ".." << high << " -> " << mid << "\n");
+    Test::Say(1, tostr() << "Get message at mid point of " << low << ".."
+                         << high << " -> " << mid << "\n");
 
     RdKafka::Message *msg = get_msg(c, mid,
                                     /* use assign() on first iteration,
@@ -194,25 +194,25 @@ static void do_test_bsearch (void) {
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
     if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-      Test::Fail(tostr() << "Expected CreateTime timestamp, not " <<
-                 ts.type << " at offset " << msg->offset());
+      Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
+                         << " at offset " << msg->offset());
 
-    Test::Say(1, tostr() << "Message at offset " << msg->offset() <<
-              " with timestamp " << ts.timestamp << "\n");
+    Test::Say(1, tostr() << "Message at offset " << msg->offset()
+                         << " with timestamp " << ts.timestamp << "\n");
 
     if (ts.timestamp == golden_timestamp) {
-      Test::Say(1, tostr() << "Found golden timestamp " << ts.timestamp <<
-                " at offset " << msg->offset() << " in " << itcnt+1 <<
-                " iterations\n");
+      Test::Say(1, tostr() << "Found golden timestamp " << ts.timestamp
+                           << " at offset " << msg->offset() << " in "
+                           << itcnt + 1 << " iterations\n");
       delete msg;
       break;
     }
 
     if (low == high) {
-      Test::Fail(tostr() << "Search exhausted at offset " << msg->offset() <<
-                 " with timestamp " << ts.timestamp <<
-                 " without finding golden timestamp " << golden_timestamp <<
-                 " at offset " << golden_offset);
+      Test::Fail(tostr() << "Search exhausted at offset " << msg->offset()
+                         << " with timestamp " << ts.timestamp
+                         << " without finding golden timestamp "
+                         << golden_timestamp << " at offset " << golden_offset);
 
     } else if (ts.timestamp < golden_timestamp)
       low = msg->offset() + 1;
@@ -230,8 +230,8 @@ static void do_test_bsearch (void) {
 }
 
 extern "C" {
-  int main_0059_bsearch (int argc, char **argv) {
-    do_test_bsearch();
-    return 0;
-  }
+int main_0059_bsearch(int argc, char **argv) {
+  do_test_bsearch();
+  return 0;
+}
 }

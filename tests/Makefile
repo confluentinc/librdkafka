@@ -12,12 +12,16 @@ CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 # Latest Kafka version
-KAFKA_VERSION?=2.7.0
+KAFKA_VERSION?=3.1.0
 # Kafka versions for compatibility tests
-COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 2.4.1 $(KAFKA_VERSION)
+COMPAT_KAFKA_VERSIONS?=0.8.2.2 0.9.0.1 0.11.0.3 1.0.2 2.4.1 2.8.1 $(KAFKA_VERSION)
 
 # Non-default scenarios (FIXME: read from scenarios/*)
 SCENARIOS?=noautocreate ak23
+
+# A subset of rudimentary (and quick) tests suitable for quick smoke testing.
+# The smoke test should preferably finish in under a minute.
+SMOKE_TESTS?=0000,0001,0004,0012,0017,0022,0030,0039,0049,0087,0103
 
 -include ../Makefile.config
 
@@ -37,10 +41,6 @@ broker: $(BIN)
 broker_idempotent: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L -Q"}' $(KAFKA_VERSION)
 
-non_sparse_connections: $(BIN)
-	./broker_version_tests.py --brokers 5 \
-		--conf '{"parallel":1, "args": "-L -Q", "sparse_connections": "false"}' $(KAFKA_VERSION)
-
 sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' $(KAFKA_VERSION)
 
@@ -54,6 +54,10 @@ full: broker broker_idempotent sasl
 quick:
 	@echo "Running quick(er) test suite (without sockem)"
 	./run-test.sh -Q -E
+
+smoke:
+	@echo "Running smoke tests: $(SMOKE_TESTS)"
+	TESTS="$(SMOKE_TESTS)" $(MAKE) quick
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"

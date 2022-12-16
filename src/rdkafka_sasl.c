@@ -36,21 +36,23 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
 #include "rdkafka_request.h"
-
+#include "rdkafka_queue.h"
 
 /**
  * @brief Send SASL auth data using legacy directly on socket framing.
  *
  * @warning This is a blocking call.
  */
-static int rd_kafka_sasl_send_legacy (rd_kafka_transport_t *rktrans,
-                                      const void *payload, int len,
-                                      char *errstr, size_t errstr_size) {
+static int rd_kafka_sasl_send_legacy(rd_kafka_transport_t *rktrans,
+                                     const void *payload,
+                                     int len,
+                                     char *errstr,
+                                     size_t errstr_size) {
         rd_buf_t buf;
         rd_slice_t slice;
         int32_t hdr;
 
-        rd_buf_init(&buf, 1+1, sizeof(hdr));
+        rd_buf_init(&buf, 1 + 1, sizeof(hdr));
 
         hdr = htobe32(len);
         rd_buf_write(&buf, &hdr, sizeof(hdr));
@@ -65,8 +67,8 @@ static int rd_kafka_sasl_send_legacy (rd_kafka_transport_t *rktrans,
         do {
                 int r;
 
-                r = (int)rd_kafka_transport_send(rktrans, &slice,
-                                                 errstr, errstr_size);
+                r = (int)rd_kafka_transport_send(rktrans, &slice, errstr,
+                                                 errstr_size);
                 if (r == -1) {
                         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
                                    "SASL send failed: %s", errstr);
@@ -78,7 +80,7 @@ static int rd_kafka_sasl_send_legacy (rd_kafka_transport_t *rktrans,
                         break;
 
                 /* Avoid busy-looping */
-                rd_usleep(10*1000, NULL);
+                rd_usleep(10 * 1000, NULL);
 
         } while (1);
 
@@ -92,28 +94,28 @@ static int rd_kafka_sasl_send_legacy (rd_kafka_transport_t *rktrans,
  *
  * @warning This is a blocking call when used with the legacy framing.
  */
-int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
-                        const void *payload, int len,
-                        char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_send(rd_kafka_transport_t *rktrans,
+                       const void *payload,
+                       int len,
+                       char *errstr,
+                       size_t errstr_size) {
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
-        rd_rkb_dbg(rkb, SECURITY, "SASL",
-                   "Send SASL %s frame to broker (%d bytes)",
-                   (rkb->rkb_features & RD_KAFKA_FEATURE_SASL_AUTH_REQ) ?
-                   "Kafka" : "legacy",
-                   len);
+        rd_rkb_dbg(
+            rkb, SECURITY, "SASL", "Send SASL %s frame to broker (%d bytes)",
+            (rkb->rkb_features & RD_KAFKA_FEATURE_SASL_AUTH_REQ) ? "Kafka"
+                                                                 : "legacy",
+            len);
 
         /* Blocking legacy framed send directly on the socket */
         if (!(rkb->rkb_features & RD_KAFKA_FEATURE_SASL_AUTH_REQ))
-                return rd_kafka_sasl_send_legacy(rktrans, payload, len,
-                                                 errstr, errstr_size);
+                return rd_kafka_sasl_send_legacy(rktrans, payload, len, errstr,
+                                                 errstr_size);
 
         /* Kafka-framed asynchronous send */
-        rd_kafka_SaslAuthenticateRequest(rkb,
-                                         payload, (size_t)len,
-                                         RD_KAFKA_NO_REPLYQ,
-                                         rd_kafka_handle_SaslAuthenticate,
-                                         NULL);
+        rd_kafka_SaslAuthenticateRequest(
+            rkb, payload, (size_t)len, RD_KAFKA_NO_REPLYQ,
+            rd_kafka_handle_SaslAuthenticate, NULL);
 
         return 0;
 }
@@ -124,7 +126,7 @@ int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
  *
  * Transition to next connect state.
  */
-void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans) {
+void rd_kafka_sasl_auth_done(rd_kafka_transport_t *rktrans) {
         /* Authenticated */
         rd_kafka_broker_connect_up(rktrans->rktrans_rkb);
 }
@@ -137,16 +139,17 @@ void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans) {
  *
  * @returns -1 on error, else 0.
  */
-int rd_kafka_sasl_recv (rd_kafka_transport_t *rktrans,
-                        const void *buf, size_t len,
-                        char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_recv(rd_kafka_transport_t *rktrans,
+                       const void *buf,
+                       size_t len,
+                       char *errstr,
+                       size_t errstr_size) {
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-                   "Received SASL frame from broker (%"PRIusz" bytes)", len);
+                   "Received SASL frame from broker (%" PRIusz " bytes)", len);
 
-        return rktrans->rktrans_rkb->rkb_rk->
-                rk_conf.sasl.provider->recv(rktrans, buf, len,
-                                            errstr, errstr_size);
+        return rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.provider->recv(
+            rktrans, buf, len, errstr, errstr_size);
 }
 
 /**
@@ -156,8 +159,10 @@ int rd_kafka_sasl_recv (rd_kafka_transport_t *rktrans,
  *
  * @returns -1 on error, else 0.
  */
-int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-                            char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_io_event(rd_kafka_transport_t *rktrans,
+                           int events,
+                           char *errstr,
+                           size_t errstr_size) {
         rd_kafka_buf_t *rkbuf;
         int r;
         const void *buf;
@@ -166,15 +171,15 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
         if (!(events & POLLIN))
                 return 0;
 
-        r = rd_kafka_transport_framed_recv(rktrans, &rkbuf,
-                                           errstr, errstr_size);
+        r = rd_kafka_transport_framed_recv(rktrans, &rkbuf, errstr,
+                                           errstr_size);
         if (r == -1) {
                 if (!strcmp(errstr, "Disconnected"))
                         rd_snprintf(errstr, errstr_size,
                                     "Disconnected: check client %s credentials "
                                     "and broker logs",
-                                    rktrans->rktrans_rkb->rkb_rk->rk_conf.
-                                    sasl.mechanisms);
+                                    rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl
+                                        .mechanisms);
                 return -1;
         } else if (r == 0) /* not fully received yet */
                 return 0;
@@ -203,10 +208,9 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
  * @brief Close SASL session (from transport code)
  * @remark May be called on non-SASL transports (no-op)
  */
-void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
+void rd_kafka_sasl_close(rd_kafka_transport_t *rktrans) {
         const struct rd_kafka_sasl_provider *provider =
-                rktrans->rktrans_rkb->rkb_rk->rk_conf.
-                sasl.provider;
+            rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.provider;
 
 #ifndef __OS400__
         if (provider && provider->close)
@@ -226,14 +230,15 @@ void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
  *
  * Locality: broker thread
  */
-int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, size_t errstr_size) {
-	int r;
-	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
-	rd_kafka_t *rk = rkb->rkb_rk;
+int rd_kafka_sasl_client_new(rd_kafka_transport_t *rktrans,
+                             char *errstr,
+                             size_t errstr_size) {
+        int r;
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+        rd_kafka_t *rk         = rkb->rkb_rk;
         char *hostname, *t;
         const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
+            rk->rk_conf.sasl.provider;
 
         /* Verify broker support:
          * - RD_KAFKA_FEATURE_SASL_GSSAPI - GSSAPI supported
@@ -251,8 +256,9 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
                             "SASL Handshake not supported by broker "
                             "(required by mechanism %s)%s",
                             rk->rk_conf.sasl.mechanisms,
-                            rk->rk_conf.api_version_request ? "" :
-                            ": try api.version.request=true");
+                            rk->rk_conf.api_version_request
+                                ? ""
+                                : ": try api.version.request=true");
                 return -1;
         }
 
@@ -261,14 +267,13 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
         rd_kafka_broker_unlock(rktrans->rktrans_rkb);
 
         if ((t = strchr(hostname, ':')))
-                *t = '\0';  /* remove ":port" */
+                *t = '\0'; /* remove ":port" */
 
         rd_rkb_dbg(rkb, SECURITY, "SASL",
                    "Initializing SASL client: service name %s, "
                    "hostname %s, mechanisms %s, provider %s",
                    rk->rk_conf.sasl.service_name, hostname,
-                   rk->rk_conf.sasl.mechanisms,
-                   provider->name);
+                   rk->rk_conf.sasl.mechanisms, provider->name);
 
         r = provider->client_new(rktrans, hostname, errstr, errstr_size);
         if (r != -1)
@@ -279,8 +284,12 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 
 
 
+rd_kafka_queue_t *rd_kafka_queue_get_sasl(rd_kafka_t *rk) {
+        if (!rk->rk_sasl.callback_q)
+                return NULL;
 
-
+        return rd_kafka_queue_new0(rk, rk->rk_sasl.callback_q);
+}
 
 
 /**
@@ -288,9 +297,9 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
  *
  * Locality: broker thread
  */
-void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb) {
+void rd_kafka_sasl_broker_term(rd_kafka_broker_t *rkb) {
         const struct rd_kafka_sasl_provider *provider =
-                rkb->rkb_rk->rk_conf.sasl.provider;
+            rkb->rkb_rk->rk_conf.sasl.provider;
         if (provider->broker_term)
                 provider->broker_term(rkb);
 }
@@ -300,9 +309,9 @@ void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb) {
  *
  * Locality: broker thread
  */
-void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
+void rd_kafka_sasl_broker_init(rd_kafka_broker_t *rkb) {
         const struct rd_kafka_sasl_provider *provider =
-                rkb->rkb_rk->rk_conf.sasl.provider;
+            rkb->rkb_rk->rk_conf.sasl.provider;
         if (provider->broker_init)
                 provider->broker_init(rkb);
 }
@@ -315,9 +324,9 @@ void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
  *
  * @locality app thread (from rd_kafka_new())
  */
-int rd_kafka_sasl_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
+            rk->rk_conf.sasl.provider;
 
         if (provider && provider->init)
                 return provider->init(rk, errstr, errstr_size);
@@ -331,12 +340,14 @@ int rd_kafka_sasl_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
  *
  * @locality app thread (from rd_kafka_new()) or rdkafka main thread
  */
-void rd_kafka_sasl_term (rd_kafka_t *rk) {
+void rd_kafka_sasl_term(rd_kafka_t *rk) {
         const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
+            rk->rk_conf.sasl.provider;
 
         if (provider && provider->term)
                 provider->term(rk);
+
+        RD_IF_FREE(rk->rk_sasl.callback_q, rd_kafka_q_destroy_owner);
 }
 
 
@@ -347,9 +358,9 @@ void rd_kafka_sasl_term (rd_kafka_t *rk) {
  * @locks none
  * @locality any thread
  */
-rd_bool_t rd_kafka_sasl_ready (rd_kafka_t *rk) {
+rd_bool_t rd_kafka_sasl_ready(rd_kafka_t *rk) {
         const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
+            rk->rk_conf.sasl.provider;
 
         if (provider && provider->ready)
                 return provider->ready(rk);
@@ -362,8 +373,9 @@ rd_bool_t rd_kafka_sasl_ready (rd_kafka_t *rk) {
  * @brief Select SASL provider for configured mechanism (singularis)
  * @returns 0 on success or -1 on failure.
  */
-int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
-                                   char *errstr, size_t errstr_size) {
+int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
+                                  char *errstr,
+                                  size_t errstr_size) {
         const struct rd_kafka_sasl_provider *provider = NULL;
 
         if (!strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
@@ -455,11 +467,34 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 }
 
 
+rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk) {
+        rd_kafka_queue_t *saslq, *bgq;
+
+        if (!(saslq = rd_kafka_queue_get_sasl(rk)))
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__NOT_CONFIGURED,
+                    "No SASL mechanism using callbacks is configured");
+
+        if (!(bgq = rd_kafka_queue_get_background(rk))) {
+                rd_kafka_queue_destroy(saslq);
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+                    "The background thread is not available");
+        }
+
+        rd_kafka_queue_forward(saslq, bgq);
+
+        rd_kafka_queue_destroy(saslq);
+        rd_kafka_queue_destroy(bgq);
+
+        return NULL;
+}
+
 
 /**
  * Global SASL termination.
  */
-void rd_kafka_sasl_global_term (void) {
+void rd_kafka_sasl_global_term(void) {
 #if WITH_SASL_CYRUS
         rd_kafka_sasl_cyrus_global_term();
 #endif
@@ -469,7 +504,7 @@ void rd_kafka_sasl_global_term (void) {
 /**
  * Global SASL init, called once per runtime.
  */
-int rd_kafka_sasl_global_init (void) {
+int rd_kafka_sasl_global_init(void) {
 #if WITH_SASL_CYRUS
         return rd_kafka_sasl_cyrus_global_init();
 #else
@@ -477,3 +512,34 @@ int rd_kafka_sasl_global_init (void) {
 #endif
 }
 
+/**
+ * Sets or resets the SASL (PLAIN or SCRAM) credentials used by this
+ * client when making new connections to brokers.
+ *
+ * @returns NULL on success or an error object on error.
+ */
+rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
+                                                const char *username,
+                                                const char *password) {
+
+        if (!username || !password)
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "Username and password are required");
+
+        mtx_lock(&rk->rk_conf.sasl.lock);
+
+        if (rk->rk_conf.sasl.username)
+                rd_free(rk->rk_conf.sasl.username);
+        rk->rk_conf.sasl.username = rd_strdup(username);
+
+        if (rk->rk_conf.sasl.password)
+                rd_free(rk->rk_conf.sasl.password);
+        rk->rk_conf.sasl.password = rd_strdup(password);
+
+        mtx_unlock(&rk->rk_conf.sasl.lock);
+
+        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                    "SASL credentials updated");
+
+        return NULL;
+}

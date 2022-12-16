@@ -40,18 +40,22 @@
  */
 typedef struct rd_kafka_cert_s {
         rd_kafka_cert_type_t type;
-        rd_kafka_cert_enc_t  encoding;
-        rd_refcnt_t          refcnt;
+        rd_kafka_cert_enc_t encoding;
+        rd_refcnt_t refcnt;
 #if WITH_SSL
-        X509                *x509;   /**< Certificate (public key) */
-        EVP_PKEY            *pkey;   /**< Private key */
-        X509_STORE          *store;  /**< CA certificate chain store */
+        X509 *x509;        /**< Certificate (public key) */
+        EVP_PKEY *pkey;    /**< Private key */
+        X509_STORE *store; /**< CA certificate chain store */
 #endif
 } rd_kafka_cert_t;
 
-void rd_kafka_conf_cert_dtor (int scope, void *pconf);
-void rd_kafka_conf_cert_copy (int scope, void *pdst, const void *psrc,
-                              void *dstptr, const void *srcptr,
-                              size_t filter_cnt, const char **filter);
+void rd_kafka_conf_cert_dtor(int scope, void *pconf);
+void rd_kafka_conf_cert_copy(int scope,
+                             void *pdst,
+                             const void *psrc,
+                             void *dstptr,
+                             const void *srcptr,
+                             size_t filter_cnt,
+                             const char **filter);
 
 #endif /* _RDKAFKA_CERT_H_ */

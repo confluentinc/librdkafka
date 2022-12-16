@@ -37,49 +37,40 @@ if(NOT RDKAFKA_BUILD_STATIC)
 endif()
 
 # Generate pkg-config file
-set(PKG_CONFIG_NAME
-    "librdkafka++"
-)
-set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library"
-)
-set(PKG_CONFIG_VERSION
-    "${PROJECT_VERSION}"
-)
-set(PKG_CONFIG_REQUIRES "rdkafka")
-set(PKG_CONFIG_CFLAGS
-    "-I\${includedir}"
-)
-set(PKG_CONFIG_LIBS
-    "-L\${libdir} -lrdkafka++"
-)
-set(PKG_CONFIG_LIBS_PRIVATE
-    "-lrdkafka"
-)
-configure_file(
+set(PKG_CONFIG_VERSION "${PROJECT_VERSION}")
+if(NOT RDKAFKA_BUILD_STATIC)
+  set(PKG_CONFIG_NAME "librdkafka++")
+  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
+  set(PKG_CONFIG_REQUIRES "rdkafka")
+  set(PKG_CONFIG_CFLAGS "-I\${includedir}")
+  set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka++")
+  set(PKG_CONFIG_LIBS_PRIVATE "-lrdkafka")
+  configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka++.pc"
     @ONLY
-)
-install(FILES ${GENERATED_DIR}/rdkafka++.pc
+  )
+  install(
+    FILES ${GENERATED_DIR}/rdkafka++.pc
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
-)
-if(RDKAFKA_BUILD_STATIC)
-  set(PKG_CONFIG_NAME
-    "librdkafka++-static"
   )
-  set(PKG_CONFIG_DESCRIPTION
-    "The Apache Kafka C/C++ library (static)"
-  )
-  set(PKG_CONFIG_LIBS
-    "-L\${libdir} \${libdir}/librdkafka++.a"
-  )
+else()
+  set(PKG_CONFIG_NAME "librdkafka++-static")
+  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
+  set(PKG_CONFIG_REQUIRES "")
+  set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
+  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka++.a")
+  if(WIN32)
+    string(APPEND PKG_CONFIG_LIBS " -lws2_32 -lsecur32 -lcrypt32")
+  endif()
+
   configure_file(
     "../packaging/cmake/rdkafka.pc.in"
     "${GENERATED_DIR}/rdkafka++-static.pc"
     @ONLY
   )
-  install(FILES ${GENERATED_DIR}/rdkafka.pc
+  install(
+    FILES ${GENERATED_DIR}/rdkafka++-static.pc
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
   )
 endif()

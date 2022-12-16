@@ -10,32 +10,9 @@ Releases are done in two phases:
    followed by a single version-bump commit (see below).
 
 Release tag and version format:
+ * tagged release builds to verify CI release builders: vA.B.C-PREn
  * release-candidate: vA.B.C-RCn
  * final release: vA.B.C
-
-
-
-## Write release notes
-
-Go to https://github.com/edenhill/librdkafka/releases and create a new
-release (save as draft), outlining the following sections based on the
-changes since the last release:
- * What type of release (maintenance or feature release)
- * A short intro to the release, describing the type of release: maintenance
-   or feature release, as well as fix or feature high-lights.
- * A section of New features, if any.
- * A section of Enhancements, if any.
- * A section of Fixes, if any.
-
-Hint: Use ´git log --oneline vLastReleaseTag..´ to get a list of commits since
-      the last release, filter and sort this list into the above categories,
-      making sure the end result is meaningful to the end-user.
-      Make sure to credit community contributors for their work.
-
-Save this page as Draft until the final tag is created.
-
-The github release asset/artifact checksums will be added later when the
-final tag is pushed.
 
 
 ## Update protocol requests and error codes
@@ -62,6 +39,7 @@ respectively.
 Add the error strings to `rdkafka.c`.
 The Kafka error strings are sometimes a bit too verbose for our taste,
 so feel free to rewrite them (usually removing a couple of 'the's).
+Error strings must not contain a trailing period.
 
 **NOTE**: Only add **new** error codes, do not alter existing ones since that
           will be a breaking API change.
@@ -82,6 +60,27 @@ so feel free to rewrite them (usually removing a couple of 'the's).
 If all tests pass, carry on, otherwise identify and fix bug and start over.
 
 
+
+## Write release notes / changelog
+
+All relevant PRs should also include an update to [CHANGELOG.md](../CHANGELOG.md)
+that in a user-centric fashion outlines what changed.
+It might not be practical for all contributors to write meaningful changelog
+entries, so it is okay to add them separately later after the PR has been
+merged (make sure to credit community contributors for their work).
+
+The changelog should include:
+ * What type of release (maintenance or feature release)
+ * A short intro to the release, describing the type of release: maintenance
+   or feature release, as well as fix or feature high-lights.
+ * A section of **New features**, if any.
+ * A section of **Upgrade considerations**, if any, to outline important changes
+   that require user attention.
+ * A section of **Enhancements**, if any.
+ * A section of **Fixes**, if any, preferably with Consumer, Producer, and
+   Generic sub-sections.
+
+
 ## Pre-release code tasks
 
 **Switch to the release branch which is of the format `A.B.C.x` or `A.B.x`.**
@@ -98,9 +97,10 @@ Release candidates start at 200, thus 0xAABBCCc9 is RC1, 0xAABBCCca is RC2, etc.
 Change the `RD_KAFKA_VERSION` defines in both `src/rdkafka.h` and
 `src-cpp/rdkafkacpp.h` to the version to build, such as 0x000b01c9
 for v0.11.1-RC1, or 0x000b01ff for the final v0.11.1 release.
+Update the librdkafka version in `vcpkg.json`.
 
    # Update defines
-   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h
+   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h vcpkg.json
 
    # Reconfigure and build
    $ ./configure
@@ -146,28 +146,13 @@ Wait until this process is finished by monitoring the two CIs:
  * https://ci.appveyor.com/project/edenhill/librdkafka
 
 
-## Publish release on github
-
-Open up the release page on github that was created above.
-
-Run the following command to get checksums of the github release assets:
-
-    $ packaging/tools/gh-release-checksums.py <the-tag>
-
-It will take some time for the script to download the files, when done
-paste the output to the end of the release page.
-
-Make sure the release page looks okay, is still correct (check for new commits),
-and has the correct tag, then click Publish release.
-
-
 ### Create NuGet package
 
 On a Linux host with docker installed, this will also require S3 credentials
 to be set up.
 
     $ cd packaging/nuget
-    $ pip3 install -r requirements.txt  # if necessary
+    $ python3 -m pip install -r requirements.txt  # if necessary
     $ ./release.py v0.11.1-RC1
 
 Test the generated librdkafka.redist.0.11.1-RC1.nupkg and
@@ -185,7 +170,31 @@ Follow the Go client release instructions for updating its bundled librdkafka
 version based on the tar ball created here.
 
 
+## Publish release on github
+
+Create a release on github by going to https://github.com/edenhill/librdkafka/releases
+and Draft a new release.
+Name the release the same as the final release tag (e.g., `v1.9.0`) and set
+the tag to the same.
+Paste the CHANGELOG.md section for this release into the release description,
+look at the preview and fix any formatting issues.
+
+Run the following command to get checksums of the github release assets:
+
+    $ packaging/tools/gh-release-checksums.py <the-tag>
+
+It will take some time for the script to download the files, when done
+paste the output to the end of the release page.
+
+Make sure the release page looks okay, is still correct (check for new commits),
+and has the correct tag, then click Publish release.
+
+
+
 ### Homebrew recipe update
+
+**Note**: This is typically not needed since homebrew seems to pick up new
+    release versions quickly enough.
 
 The brew-update-pr.sh script automatically pushes a PR to homebrew-core
 with a patch to update the librdkafka version of the formula.

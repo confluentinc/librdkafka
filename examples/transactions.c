@@ -60,29 +60,31 @@ static volatile sig_atomic_t run = 1;
 /**
  * @brief A fatal error has occurred, immediately exit the application.
  */
-#define fatal(...) do {                                 \
-                fprintf(stderr, "FATAL ERROR: ");       \
-                fprintf(stderr, __VA_ARGS__);           \
-                fprintf(stderr, "\n");                  \
-                exit(1);                                \
+#define fatal(...)                                                             \
+        do {                                                                   \
+                fprintf(stderr, "FATAL ERROR: ");                              \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\n");                                         \
+                exit(1);                                                       \
         } while (0)
 
 /**
  * @brief Same as fatal() but takes an rd_kafka_error_t object, prints its
  *        error message, destroys the object and then exits fatally.
  */
-#define fatal_error(what,error) do {                                    \
-                fprintf(stderr, "FATAL ERROR: %s: %s: %s\n",             \
-                        what, rd_kafka_error_name(error),               \
-                        rd_kafka_error_string(error));                  \
-                rd_kafka_error_destroy(error);                          \
-                exit(1);                                                \
+#define fatal_error(what, error)                                               \
+        do {                                                                   \
+                fprintf(stderr, "FATAL ERROR: %s: %s: %s\n", what,             \
+                        rd_kafka_error_name(error),                            \
+                        rd_kafka_error_string(error));                         \
+                rd_kafka_error_destroy(error);                                 \
+                exit(1);                                                       \
         } while (0)
 
 /**
  * @brief Signal termination of program
  */
-static void stop (int sig) {
+static void stop(int sig) {
         run = 0;
 }
 
@@ -108,11 +110,10 @@ static void stop (int sig) {
  * In the case of transactional producing the delivery report callback is
  * mostly useful for logging the produce failures.
  */
-static void dr_msg_cb (rd_kafka_t *rk,
-                       const rd_kafka_message_t *rkmessage, void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         if (rkmessage->err)
-                fprintf(stderr,
-                        "%% Message delivery failed: %s\n",
+                fprintf(stderr, "%% Message delivery failed: %s\n",
                         rd_kafka_err2str(rkmessage->err));
 
         /* The rkmessage is destroyed automatically by librdkafka */
@@ -123,18 +124,18 @@ static void dr_msg_cb (rd_kafka_t *rk,
 /**
  * @brief Create a transactional producer.
  */
-static rd_kafka_t *
-create_transactional_producer (const char *brokers, const char *output_topic) {
+static rd_kafka_t *create_transactional_producer(const char *brokers,
+                                                 const char *output_topic) {
         rd_kafka_conf_t *conf = rd_kafka_conf_new();
         rd_kafka_t *rk;
         char errstr[256];
         rd_kafka_error_t *error;
 
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
             rd_kafka_conf_set(conf, "transactional.id",
-                              "librdkafka_transactions_example",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+                              "librdkafka_transactions_example", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK)
                 fatal("Failed to configure producer: %s", errstr);
 
         /* This callback will be called once per message to indicate
@@ -162,7 +163,7 @@ create_transactional_producer (const char *brokers, const char *output_topic) {
  * @brief Rewind consumer's consume position to the last committed offsets
  *        for the current assignment.
  */
-static void rewind_consumer (rd_kafka_t *consumer) {
+static void rewind_consumer(rd_kafka_t *consumer) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_resp_err_t err;
         rd_kafka_error_t *error;
@@ -184,18 +185,17 @@ static void rewind_consumer (rd_kafka_t *consumer) {
         }
 
         /* Note: Timeout must be lower than max.poll.interval.ms */
-        err = rd_kafka_committed(consumer, offsets, 10*1000);
+        err = rd_kafka_committed(consumer, offsets, 10 * 1000);
         if (err)
                 fatal("Failed to acquire committed offsets: %s",
                       rd_kafka_err2str(err));
 
         /* Seek to committed offset, or start of partition if no
          * committed offset is available. */
-        for (i = 0 ; i < offsets->cnt ; i++) {
+        for (i = 0; i < offsets->cnt; i++) {
                 /* No committed offset, start from beginning */
                 if (offsets->elems[i].offset < 0)
-                        offsets->elems[i].offset =
-                                RD_KAFKA_OFFSET_BEGINNING;
+                        offsets->elems[i].offset = RD_KAFKA_OFFSET_BEGINNING;
         }
 
         /* Perform seek */
@@ -211,8 +211,8 @@ static void rewind_consumer (rd_kafka_t *consumer) {
  *        position where the transaction last started, i.e., the committed
  *        consumer offset, then begin a new transaction.
  */
-static void abort_transaction_and_rewind (rd_kafka_t *consumer,
-                                          rd_kafka_t *producer) {
+static void abort_transaction_and_rewind(rd_kafka_t *consumer,
+                                         rd_kafka_t *producer) {
         rd_kafka_error_t *error;
 
         fprintf(stdout, "Aborting transaction and rewinding offsets\n");
@@ -238,8 +238,7 @@ static void abort_transaction_and_rewind (rd_kafka_t *consumer,
  * @returns 1 if transaction was successfully committed, or 0
  *          if the current transaction was aborted.
  */
-static int commit_transaction (rd_kafka_t *consumer,
-                               rd_kafka_t *producer) {
+static int commit_transaction(rd_kafka_t *consumer, rd_kafka_t *producer) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
         rd_kafka_consumer_group_metadata_t *cgmd;
@@ -263,7 +262,8 @@ static int commit_transaction (rd_kafka_t *consumer,
                 if (err)
                         fprintf(stderr,
                                 "Failed to get consumer assignment to commit: "
-                                "%s\n", rd_kafka_err2str(err));
+                                "%s\n",
+                                rd_kafka_err2str(err));
                 else
                         rd_kafka_topic_partition_list_destroy(offsets);
 
@@ -281,8 +281,8 @@ static int commit_transaction (rd_kafka_t *consumer,
                       rd_kafka_err2str(err));
 
         /* Send offsets to transaction coordinator */
-        error = rd_kafka_send_offsets_to_transaction(producer,
-                                                     offsets, cgmd, -1);
+        error =
+            rd_kafka_send_offsets_to_transaction(producer, offsets, cgmd, -1);
         rd_kafka_consumer_group_metadata_destroy(cgmd);
         rd_kafka_topic_partition_list_destroy(offsets);
         if (error) {
@@ -334,8 +334,8 @@ static int commit_transaction (rd_kafka_t *consumer,
 /**
  * @brief Commit the current transaction and start a new transaction.
  */
-static void commit_transaction_and_start_new (rd_kafka_t *consumer,
-                                              rd_kafka_t *producer) {
+static void commit_transaction_and_start_new(rd_kafka_t *consumer,
+                                             rd_kafka_t *producer) {
         rd_kafka_error_t *error;
 
         /* Commit transaction.
@@ -355,15 +355,14 @@ static void commit_transaction_and_start_new (rd_kafka_t *consumer,
  *        when the consumer's partition assignment is assigned or revoked.
  */
 static void
-consumer_group_rebalance_cb (rd_kafka_t *consumer,
-                             rd_kafka_resp_err_t err,
-                             rd_kafka_topic_partition_list_t *partitions,
-                             void *opaque) {
+consumer_group_rebalance_cb(rd_kafka_t *consumer,
+                            rd_kafka_resp_err_t err,
+                            rd_kafka_topic_partition_list_t *partitions,
+                            void *opaque) {
         rd_kafka_t *producer = (rd_kafka_t *)opaque;
         rd_kafka_error_t *error;
 
-        switch (err)
-        {
+        switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 fprintf(stdout,
                         "Consumer group rebalanced: "
@@ -418,31 +417,31 @@ consumer_group_rebalance_cb (rd_kafka_t *consumer,
 /**
  * @brief Create the input consumer.
  */
-static rd_kafka_t *create_input_consumer (const char *brokers,
-                                          const char *input_topic,
-                                          rd_kafka_t *producer) {
+static rd_kafka_t *create_input_consumer(const char *brokers,
+                                         const char *input_topic,
+                                         rd_kafka_t *producer) {
         rd_kafka_conf_t *conf = rd_kafka_conf_new();
         rd_kafka_t *rk;
         char errstr[256];
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *topics;
 
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
             rd_kafka_conf_set(conf, "group.id",
-                              "librdkafka_transactions_example_group",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+                              "librdkafka_transactions_example_group", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
             rd_kafka_conf_set(conf, "partition.assignment.strategy",
-                              "cooperative-sticky",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
-            rd_kafka_conf_set(conf, "auto.offset.reset", "earliest",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+                              "cooperative-sticky", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+            rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK ||
             /* The input consumer's offsets are explicitly committed with the
              * output producer's transaction using
              * rd_kafka_send_offsets_to_transaction(), so auto commits
              * must be disabled. */
-            rd_kafka_conf_set(conf, "enable.auto.commit", "false",
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+            rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fatal("Failed to configure consumer: %s", errstr);
         }
 
@@ -476,8 +475,8 @@ static rd_kafka_t *create_input_consumer (const char *brokers,
         rd_kafka_topic_partition_list_destroy(topics);
         if (err) {
                 rd_kafka_destroy(rk);
-                fatal("Failed to subscribe to %s: %s\n",
-                      input_topic, rd_kafka_err2str(err));
+                fatal("Failed to subscribe to %s: %s\n", input_topic,
+                      rd_kafka_err2str(err));
         }
 
         return rk;
@@ -488,16 +487,16 @@ static rd_kafka_t *create_input_consumer (const char *brokers,
  * @brief Find and parse next integer string in \p start.
  * @returns Pointer after found integer string, or NULL if not found.
  */
-static const void *find_next_int (const void *start, const void *end,
-                                  int *intp) {
+static const void *
+find_next_int(const void *start, const void *end, int *intp) {
         const char *p;
         int collecting = 0;
-        int num = 0;
+        int num        = 0;
 
-        for (p = (const char *)start ; p < (const char *)end ; p++) {
+        for (p = (const char *)start; p < (const char *)end; p++) {
                 if (isdigit((int)(*p))) {
                         collecting = 1;
-                        num = (num * 10) + ((int)*p - ((int)'0'));
+                        num        = (num * 10) + ((int)*p - ((int)'0'));
                 } else if (collecting)
                         break;
         }
@@ -517,10 +516,10 @@ static const void *find_next_int (const void *start, const void *end,
  *        the output topic using the transactional producer for the given
  *        inut partition.
  */
-static void process_message (rd_kafka_t *consumer,
-                             rd_kafka_t *producer,
-                             const char *output_topic,
-                             const rd_kafka_message_t *rkmessage) {
+static void process_message(rd_kafka_t *consumer,
+                            rd_kafka_t *producer,
+                            const char *output_topic,
+                            const rd_kafka_message_t *rkmessage) {
         int num;
         long unsigned sum = 0;
         const void *p, *end;
@@ -530,7 +529,7 @@ static void process_message (rd_kafka_t *consumer,
         if (rkmessage->len == 0)
                 return; /* Ignore empty messages */
 
-        p = rkmessage->payload;
+        p   = rkmessage->payload;
         end = ((const char *)rkmessage->payload) + rkmessage->len;
 
         /* Find and sum all numbers in the message */
@@ -545,17 +544,14 @@ static void process_message (rd_kafka_t *consumer,
         /* Emit output message on transactional producer */
         while (1) {
                 err = rd_kafka_producev(
-                        producer,
-                        RD_KAFKA_V_TOPIC(output_topic),
-                        /* Use same key as input message */
-                        RD_KAFKA_V_KEY(rkmessage->key,
-                                       rkmessage->key_len),
-                        /* Value is the current sum of this
-                         * transaction. */
-                        RD_KAFKA_V_VALUE(value, strlen(value)),
-                        /* Copy value since it is allocated on the stack */
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_END);
+                    producer, RD_KAFKA_V_TOPIC(output_topic),
+                    /* Use same key as input message */
+                    RD_KAFKA_V_KEY(rkmessage->key, rkmessage->key_len),
+                    /* Value is the current sum of this
+                     * transaction. */
+                    RD_KAFKA_V_VALUE(value, strlen(value)),
+                    /* Copy value since it is allocated on the stack */
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END);
 
                 if (!err)
                         break;
@@ -576,9 +572,9 @@ static void process_message (rd_kafka_t *consumer,
 }
 
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
         rd_kafka_t *producer, *consumer;
-        int msgcnt = 0;
+        int msgcnt         = 0;
         time_t last_commit = 0;
         const char *brokers, *input_topic, *output_topic;
         rd_kafka_error_t *error;
@@ -593,8 +589,8 @@ int main (int argc, char **argv) {
                 return 1;
         }
 
-        brokers = argv[1];
-        input_topic = argv[2];
+        brokers      = argv[1];
+        input_topic  = argv[2];
         output_topic = argv[3];
 
         /* Signal handler for clean shutdown */
@@ -611,8 +607,8 @@ int main (int argc, char **argv) {
                 "Observe summed integers on output topic %s:\n"
                 "  $ examples/consumer %s just-watching %s\n"
                 "\n",
-                input_topic, brokers, input_topic,
-                output_topic, brokers, output_topic);
+                input_topic, brokers, input_topic, output_topic, brokers,
+                output_topic);
 
         /* Begin transaction and start waiting for messages */
         error = rd_kafka_begin_transaction(producer);
@@ -628,12 +624,12 @@ int main (int argc, char **argv) {
                         printf("msgcnt %d, elapsed %d\n", msgcnt,
                                (int)(time(NULL) - last_commit));
                         commit_transaction_and_start_new(consumer, producer);
-                        msgcnt = 0;
+                        msgcnt      = 0;
                         last_commit = time(NULL);
                 }
 
                 /* Wait for new mesages or error events */
-                msg = rd_kafka_consumer_poll(consumer, 1000/*1 second*/);
+                msg = rd_kafka_consumer_poll(consumer, 1000 /*1 second*/);
                 if (!msg)
                         continue; /* Poll timeout */
 

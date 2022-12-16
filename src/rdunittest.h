@@ -43,50 +43,65 @@ extern rd_bool_t rd_unittest_slow;
  * @brief Begin single unit-test function (optional).
  *        Currently only used for logging.
  */
-#define RD_UT_BEGIN()                                                   \
-        fprintf(stderr,                                                 \
-                "\033[34mRDUT: INFO: %s:%d: %s: BEGIN: \033[0m\n",      \
+#define RD_UT_BEGIN()                                                          \
+        fprintf(stderr, "\033[34mRDUT: INFO: %s:%d: %s: BEGIN: \033[0m\n",     \
                 __FILE__, __LINE__, __FUNCTION__)
 
 
 /**
  * @brief Fail the current unit-test function.
  */
-#define RD_UT_FAIL(...) do {                                            \
-                fprintf(stderr, "\033[31mRDUT: FAIL: %s:%d: %s: ",      \
-                        __FILE__, __LINE__, __FUNCTION__);              \
-                fprintf(stderr, __VA_ARGS__);                           \
-                fprintf(stderr, "\033[0m\n");                           \
-                if (rd_unittest_assert_on_failure)                      \
-                        rd_assert(!*"unittest failure");                \
-                return 1;                                               \
+#define RD_UT_FAIL(...)                                                        \
+        do {                                                                   \
+                fprintf(stderr, "\033[31mRDUT: FAIL: %s:%d: %s: ", __FILE__,   \
+                        __LINE__, __FUNCTION__);                               \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\033[0m\n");                                  \
+                if (rd_unittest_assert_on_failure)                             \
+                        rd_assert(!*"unittest failure");                       \
+                return 1;                                                      \
         } while (0)
 
 /**
  * @brief Pass the current unit-test function
  */
-#define RD_UT_PASS() do {                                               \
-                fprintf(stderr, "\033[32mRDUT: PASS: %s:%d: %s\033[0m\n", \
-                        __FILE__, __LINE__, __FUNCTION__);              \
-                return 0;                                               \
+#define RD_UT_PASS()                                                           \
+        do {                                                                   \
+                fprintf(stderr, "\033[32mRDUT: PASS: %s:%d: %s\033[0m\n",      \
+                        __FILE__, __LINE__, __FUNCTION__);                     \
+                return 0;                                                      \
         } while (0)
+
+/**
+ * @brief Skip the current unit-test function
+ */
+#define RD_UT_SKIP(...)                                                        \
+        do {                                                                   \
+                fprintf(stderr, "\033[33mRDUT: SKIP: %s:%d: %s: ", __FILE__,   \
+                        __LINE__, __FUNCTION__);                               \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\033[0m\n");                                  \
+                return 0;                                                      \
+        } while (0)
+
 
 /**
  * @brief Fail unit-test if \p expr is false
  */
-#define RD_UT_ASSERT(expr,...) do {                                     \
-        if (!(expr)) {                                                  \
-                fprintf(stderr,                                         \
-                        "\033[31mRDUT: FAIL: %s:%d: %s: "               \
-                        "assert failed: " # expr ": ",                  \
-                        __FILE__, __LINE__, __FUNCTION__);              \
-                fprintf(stderr, __VA_ARGS__);                           \
-                fprintf(stderr, "\033[0m\n");                           \
-                if (rd_unittest_assert_on_failure)                      \
-                        rd_assert(expr);                                \
-                return 1;                                               \
-        }                                                               \
-         } while (0)
+#define RD_UT_ASSERT(expr, ...)                                                \
+        do {                                                                   \
+                if (!(expr)) {                                                 \
+                        fprintf(stderr,                                        \
+                                "\033[31mRDUT: FAIL: %s:%d: %s: "              \
+                                "assert failed: " #expr ": ",                  \
+                                __FILE__, __LINE__, __FUNCTION__);             \
+                        fprintf(stderr, __VA_ARGS__);                          \
+                        fprintf(stderr, "\033[0m\n");                          \
+                        if (rd_unittest_assert_on_failure)                     \
+                                rd_assert(expr);                               \
+                        return 1;                                              \
+                }                                                              \
+        } while (0)
 
 
 /**
@@ -95,36 +110,38 @@ extern rd_bool_t rd_unittest_slow;
  *
  * @param VFMT is the printf formatter for \p V's type
  */
-#define RD_UT_ASSERT_RANGE(V,VMIN,VMAX,VFMT)                            \
-        RD_UT_ASSERT((VMIN) <= (V) && (VMAX) >= (V),                    \
-                     VFMT" out of range "VFMT" .. "VFMT,                \
-                     (V), (VMIN), (VMAX))
+#define RD_UT_ASSERT_RANGE(V, VMIN, VMAX, VFMT)                                \
+        RD_UT_ASSERT((VMIN) <= (V) && (VMAX) >= (V),                           \
+                     VFMT " out of range " VFMT " .. " VFMT, (V), (VMIN),      \
+                     (VMAX))
 
 
 /**
  * @brief Log something from a unit-test
  */
-#define RD_UT_SAY(...) do {                                             \
-                fprintf(stderr, "RDUT: INFO: %s:%d: %s: ",              \
-                        __FILE__, __LINE__, __FUNCTION__);              \
-                fprintf(stderr, __VA_ARGS__);                           \
-                fprintf(stderr, "\n");                                  \
+#define RD_UT_SAY(...)                                                         \
+        do {                                                                   \
+                fprintf(stderr, "RDUT: INFO: %s:%d: %s: ", __FILE__, __LINE__, \
+                        __FUNCTION__);                                         \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\n");                                         \
         } while (0)
 
 
 /**
  * @brief Warn about something from a unit-test
  */
-#define RD_UT_WARN(...) do {                                             \
-                fprintf(stderr, "\033[33mRDUT: WARN: %s:%d: %s: ",      \
-                        __FILE__, __LINE__, __FUNCTION__);              \
-                fprintf(stderr, __VA_ARGS__);                           \
-                fprintf(stderr, "\033[0m\n");                           \
+#define RD_UT_WARN(...)                                                        \
+        do {                                                                   \
+                fprintf(stderr, "\033[33mRDUT: WARN: %s:%d: %s: ", __FILE__,   \
+                        __LINE__, __FUNCTION__);                               \
+                fprintf(stderr, __VA_ARGS__);                                  \
+                fprintf(stderr, "\033[0m\n");                                  \
         } while (0)
 
 
 
-int rd_unittest (void);
+int rd_unittest(void);
 
 
 
@@ -180,7 +197,7 @@ int rd_unittest (void);
 /**
  * @brief Register code as covered/executed.
  */
-#define RD_UT_COVERAGE(COVNR)                                   \
+#define RD_UT_COVERAGE(COVNR)                                                  \
         rd_ut_coverage(__FILE__, __FUNCTION__, __LINE__, COVNR)
 
 /**
@@ -188,18 +205,20 @@ int rd_unittest (void);
  *          will fail the unit test (but not return) if code has not
  *          been executed.
  */
-#define RD_UT_COVERAGE_CHECK(COVNR)                                     \
+#define RD_UT_COVERAGE_CHECK(COVNR)                                            \
         rd_ut_coverage_check(__FILE__, __FUNCTION__, __LINE__, COVNR)
 
 
-void rd_ut_coverage (const char *file, const char *func, int line, int covnr);
-int64_t rd_ut_coverage_check (const char *file, const char *func, int line,
-                              int covnr);
+void rd_ut_coverage(const char *file, const char *func, int line, int covnr);
+int64_t
+rd_ut_coverage_check(const char *file, const char *func, int line, int covnr);
 
 #else
 
 /* Does nothing if ENABLE_CODECOV is not set */
-#define RD_UT_COVERAGE(COVNR) do {} while (0)
+#define RD_UT_COVERAGE(COVNR)                                                  \
+        do {                                                                   \
+        } while (0)
 #define RD_UT_COVERAGE_CHECK(COVNR) 1
 
 #endif /* ENABLE_CODECOV */

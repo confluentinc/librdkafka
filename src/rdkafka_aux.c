@@ -35,17 +35,17 @@
 #include "rdkafka_error.h"
 
 rd_kafka_resp_err_t
-rd_kafka_topic_result_error (const rd_kafka_topic_result_t *topicres) {
+rd_kafka_topic_result_error(const rd_kafka_topic_result_t *topicres) {
         return topicres->err;
 }
 
 const char *
-rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres) {
+rd_kafka_topic_result_error_string(const rd_kafka_topic_result_t *topicres) {
         return topicres->errstr;
 }
 
 const char *
-rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres) {
+rd_kafka_topic_result_name(const rd_kafka_topic_result_t *topicres) {
         return topicres->topic;
 }
 
@@ -61,10 +61,10 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres) {
  * All input arguments are copied.
  */
 
-rd_kafka_topic_result_t *
-rd_kafka_topic_result_new (const char *topic, ssize_t topic_size,
-                           rd_kafka_resp_err_t err,
-                           const char *errstr) {
+rd_kafka_topic_result_t *rd_kafka_topic_result_new(const char *topic,
+                                                   ssize_t topic_size,
+                                                   rd_kafka_resp_err_t err,
+                                                   const char *errstr) {
         size_t tlen = topic_size != -1 ? (size_t)topic_size : strlen(topic);
         size_t elen = errstr ? strlen(errstr) + 1 : 0;
         rd_kafka_topic_result_t *terr;
@@ -91,50 +91,46 @@ rd_kafka_topic_result_new (const char *topic, ssize_t topic_size,
 /**
  * @brief Destroy topic_result
  */
-void rd_kafka_topic_result_destroy (rd_kafka_topic_result_t *terr) {
+void rd_kafka_topic_result_destroy(rd_kafka_topic_result_t *terr) {
         rd_free(terr);
 }
 
 /**
  * @brief Destroy-variant suitable for rd_list free_cb use.
  */
-void rd_kafka_topic_result_free (void *ptr) {
+void rd_kafka_topic_result_free(void *ptr) {
         rd_kafka_topic_result_destroy((rd_kafka_topic_result_t *)ptr);
 }
 
 const rd_kafka_error_t *
-rd_kafka_group_result_error (const rd_kafka_group_result_t *groupres) {
+rd_kafka_group_result_error(const rd_kafka_group_result_t *groupres) {
         return groupres->error;
 }
 
 const char *
-rd_kafka_group_result_name (const rd_kafka_group_result_t *groupres) {
+rd_kafka_group_result_name(const rd_kafka_group_result_t *groupres) {
         return groupres->group;
 }
 
 const rd_kafka_topic_partition_list_t *
-rd_kafka_group_result_partitions (const rd_kafka_group_result_t *groupres) {
+rd_kafka_group_result_partitions(const rd_kafka_group_result_t *groupres) {
         return groupres->partitions;
 }
 
 rd_kafka_group_result_t *
-rd_kafka_group_result_copy (const rd_kafka_group_result_t *groupres) {
-        return rd_kafka_group_result_new(groupres->group,
-                                         -1,
-                                         groupres->partitions,
-                                         groupres->error ?
-                                         rd_kafka_error_copy(groupres->error) :
-                                         NULL);
+rd_kafka_group_result_copy(const rd_kafka_group_result_t *groupres) {
+        return rd_kafka_group_result_new(
+            groupres->group, -1, groupres->partitions,
+            groupres->error ? rd_kafka_error_copy(groupres->error) : NULL);
 }
 
 /**
  * @brief Same as rd_kafka_group_result_copy() but suitable for
  *        rd_list_copy(). The \p opaque is ignored.
  */
-void *
-rd_kafka_group_result_copy_opaque (const void *src_groupres,
-                                   void *opaque) {
-       return rd_kafka_group_result_copy(src_groupres);
+void *rd_kafka_group_result_copy_opaque(const void *src_groupres,
+                                        void *opaque) {
+        return rd_kafka_group_result_copy(src_groupres);
 }
 
 
@@ -150,9 +146,10 @@ rd_kafka_group_result_copy_opaque (const void *src_groupres,
  */
 
 rd_kafka_group_result_t *
-rd_kafka_group_result_new (const char *group, ssize_t group_size,
-                           const rd_kafka_topic_partition_list_t *partitions,
-                           rd_kafka_error_t *error) {
+rd_kafka_group_result_new(const char *group,
+                          ssize_t group_size,
+                          const rd_kafka_topic_partition_list_t *partitions,
+                          rd_kafka_error_t *error) {
         size_t glen = group_size != -1 ? (size_t)group_size : strlen(group);
         rd_kafka_group_result_t *groupres;
 
@@ -164,8 +161,8 @@ rd_kafka_group_result_new (const char *group, ssize_t group_size,
         groupres->group[glen] = '\0';
 
         if (partitions)
-                groupres->partitions = rd_kafka_topic_partition_list_copy(
-                        partitions);
+                groupres->partitions =
+                    rd_kafka_topic_partition_list_copy(partitions);
 
         groupres->error = error;
 
@@ -173,10 +170,10 @@ rd_kafka_group_result_new (const char *group, ssize_t group_size,
 }
 
 
- /**
+/**
  * @brief Destroy group_result
  */
-void rd_kafka_group_result_destroy (rd_kafka_group_result_t *groupres) {
+void rd_kafka_group_result_destroy(rd_kafka_group_result_t *groupres) {
         if (groupres->partitions)
                 rd_kafka_topic_partition_list_destroy(groupres->partitions);
         if (groupres->error)
@@ -184,9 +181,47 @@ void rd_kafka_group_result_destroy (rd_kafka_group_result_t *groupres) {
         rd_free(groupres);
 }
 
- /**
+/**
  * @brief Destroy-variant suitable for rd_list free_cb use.
  */
-void rd_kafka_group_result_free (void *ptr) {
+void rd_kafka_group_result_free(void *ptr) {
         rd_kafka_group_result_destroy((rd_kafka_group_result_t *)ptr);
+}
+
+
+const rd_kafka_error_t *
+rd_kafka_acl_result_error(const rd_kafka_acl_result_t *aclres) {
+        return aclres->error;
+}
+
+/**
+ * @brief Allocates and return an acl result, takes ownership of \p error
+ *        (unless NULL).
+ *
+ * @returns The new acl result.
+ */
+rd_kafka_acl_result_t *rd_kafka_acl_result_new(rd_kafka_error_t *error) {
+        rd_kafka_acl_result_t *acl_res;
+
+        acl_res = rd_calloc(1, sizeof(*acl_res));
+
+        acl_res->error = error;
+
+        return acl_res;
+}
+
+/**
+ * @brief Destroy acl_result
+ */
+void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res) {
+        if (acl_res->error)
+                rd_kafka_error_destroy(acl_res->error);
+        rd_free(acl_res);
+}
+
+/**
+ * @brief Destroy-variant suitable for rd_list free_cb use.
+ */
+void rd_kafka_acl_result_free(void *ptr) {
+        rd_kafka_acl_result_destroy((rd_kafka_acl_result_t *)ptr);
 }

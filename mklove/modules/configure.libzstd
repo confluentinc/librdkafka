@@ -42,12 +42,15 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=1.3.8
+    local ver=1.5.2
+    local checksum="7c42d56fac126929a6a85dbc73ff1db2411d04f104fae9bdea51305663a83fd0"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
-        curl -fL https://github.com/facebook/zstd/releases/download/v${ver}/zstd-${ver}.tar.gz | \
-            tar xzf - --strip-components 1
+        mkl_download_archive \
+            "https://github.com/facebook/zstd/releases/download/v${ver}/zstd-${ver}.tar.gz" \
+            "256" \
+            $checksum || return 1
     fi
 
     time make -j DESTDIR="${destdir}" prefix=/usr install

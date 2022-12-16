@@ -16,22 +16,48 @@ import packaging
 dry_run = False
 
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--no-s3", help="Don't collect from S3", action="store_true")
+    parser.add_argument(
+        "--no-s3",
+        help="Don't collect from S3",
+        action="store_true")
     parser.add_argument("--dry-run",
-                        help="Locate artifacts but don't actually download or do anything",
+                        help="Locate artifacts but don't actually "
+                        "download or do anything",
                         action="store_true")
-    parser.add_argument("--directory", help="Download directory (default: dl-<tag>)", default=None)
-    parser.add_argument("--no-cleanup", help="Don't clean up temporary folders", action="store_true")
-    parser.add_argument("--sha", help="Also match on this git sha1", default=None)
-    parser.add_argument("--nuget-version", help="The nuget package version (defaults to same as tag)", default=None)
-    parser.add_argument("--upload", help="Upload package to after building, using provided NuGet API key (either file or the key itself)", default=None,
+    parser.add_argument(
+        "--directory",
+        help="Download directory (default: dl-<tag>)",
+        default=None)
+    parser.add_argument(
+        "--no-cleanup",
+        help="Don't clean up temporary folders",
+        action="store_true")
+    parser.add_argument(
+        "--sha",
+        help="Also match on this git sha1",
+        default=None)
+    parser.add_argument(
+        "--nuget-version",
+        help="The nuget package version (defaults to same as tag)",
+        default=None)
+    parser.add_argument("--upload", help="Upload package to after building, "
+                        "using provided NuGet API key "
+                        "(either file or the key itself)",
+                        default=None,
                         type=str)
-    parser.add_argument("--class", help="Packaging class (see packaging.py)", default="NugetPackage", dest="pkgclass")
-    parser.add_argument("--retries", help="Number of retries to collect artifacts", default=0, type=int)
+    parser.add_argument(
+        "--class",
+        help="Packaging class (see packaging.py)",
+        default="NugetPackage",
+        dest="pkgclass")
+    parser.add_argument(
+        "--retries",
+        help="Number of retries to collect artifacts",
+        default=0,
+        type=int)
     parser.add_argument("tag", help="Git tag to collect")
 
     args = parser.parse_args()
@@ -48,7 +74,7 @@ if __name__ == '__main__':
 
     try:
         match.update(getattr(pkgclass, 'match'))
-    except:
+    except BaseException:
         pass
 
     arts = packaging.Artifacts(match, args.directory)
@@ -59,8 +85,8 @@ if __name__ == '__main__':
     while True:
         if not args.no_s3:
             arts.collect_s3()
-        else:
-            arts.collect_local(arts.dlpath)
+
+        arts.collect_local(arts.dlpath)
 
         if len(arts.artifacts) == 0:
             raise ValueError('No artifacts found for %s' % match)
@@ -119,5 +145,6 @@ if __name__ == '__main__':
 
         print('Uploading %s to NuGet' % pkgfile)
         r = os.system("./push-to-nuget.sh '%s' %s" % (nuget_key, pkgfile))
-        assert int(r) == 0, "NuGet upload failed with exit code {}, see previous errors".format(r)
+        assert int(r) == 0, \
+            f"NuGet upload failed with exit code {r}, see previous errors"
         print('%s successfully uploaded to NuGet' % pkgfile)

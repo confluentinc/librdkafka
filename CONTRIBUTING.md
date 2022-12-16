@@ -33,6 +33,18 @@ When writing C code, follow the code style already established in
 the project. Consistent style makes code easier to read and mistakes less
 likely to happen.
 
+clang-format is used to check, and fix, the style for C/C++ files,
+while flake8 and autopep8 is used for the Python scripts.
+
+You should check the style before committing by running `make style-check-changed`
+from the top-level directory, and if any style errors are reported you can
+automatically fix them using `make style-fix-changed` (or just run
+that command directly).
+
+The Python code may need some manual fixing since autopep8 is unable to fix
+all warnings reported by flake8, in particular it will not split long lines,
+in which case a `  # noqa: E501` may be needed to turn off the warning.
+
 See the end of this document for the C style guide to use in librdkafka.
 
 
@@ -189,6 +201,9 @@ Use 8 spaces indent, same as the Linux kernel.
 In emacs, use `c-set-style "linux`.
 For C++, use Google's C++ style.
 
+Fix formatting issues by running `make style-fix` prior to committing.
+
+
 ## Comments
 
 Use `/* .. */` comments, not `// ..`
@@ -228,7 +243,7 @@ Braces go on the same line as their enveloping statement:
           ..
         }
       }
- 
+
       /* Single line scopes should not have braces */
       if (1)
         hi();
@@ -258,12 +273,12 @@ All expression parentheses should be prefixed and suffixed with a single space:
 Use space around operators:
 
     int a = 2;
-  
+
     if (b >= 3)
        c += 2;
 
 Except for these:
-  
+
     d++;
     --e;
 

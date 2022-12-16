@@ -10,8 +10,8 @@
 
 set -ex
 
-_DOCKER_IMAGE=fedora:33
-_MOCK_CONFIGS="epel-7-x86_64 epel-8-x86_64"
+_DOCKER_IMAGE=fedora:35
+_MOCK_CONFIGS="centos+epel-7-x86_64 centos-stream+epel-8-x86_64"
 
 if [[ $1 == "--build" ]]; then
     on_builder=1
@@ -76,6 +76,9 @@ else
         echo "config_opts['docker_unshare_warning'] = False" >> $cfg_file
         echo "Building $MOCK_CONFIG in $PWD"
         cat $cfg_file
+
+        echo "Setting git safe.directory"
+        git config --global --add safe.directory /io
 
         export MOCK_CONFIG=$MOCK_CONFIG
         make all

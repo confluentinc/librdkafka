@@ -40,12 +40,14 @@
 #include "rdkafka_event.h"
 #include "rdkafka_interceptor.h"
 
+#include <signal.h>
+
 /**
  * @brief Call the registered background_event_cb.
  * @locality rdkafka background queue thread
  */
-static RD_INLINE void
-rd_kafka_call_background_event_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+static RD_INLINE void rd_kafka_call_background_event_cb(rd_kafka_t *rk,
+                                                        rd_kafka_op_t *rko) {
         rd_assert(!rk->rk_background.calling);
         rk->rk_background.calling = 1;
 
@@ -65,7 +67,7 @@ rd_kafka_call_background_event_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
  *    APIs to the background queue.
  */
 static rd_kafka_op_res_t
-rd_kafka_background_queue_serve (rd_kafka_t *rk,
+rd_kafka_background_queue_serve(rd_kafka_t *rk,
                                  rd_kafka_q_t *rkq,
                                  rd_kafka_op_t *rko,
                                  rd_kafka_q_cb_type_t cb_type,
@@ -75,7 +77,8 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
         /*
          * Dispatch Event:able ops to background_event_cb()
          */
-        if (likely(rd_kafka_event_setup(rk, rko))) {
+        if (likely(rk->rk_conf.background_event_cb &&
+                   rd_kafka_event_setup(rk, rko))) {
                 rd_kafka_call_background_event_cb(rk, rko);
                 /* Event must be destroyed by application. */
                 return RD_KAFKA_OP_RES_HANDLED;
@@ -84,10 +87,11 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
         /*
          * Handle non-event:able ops through the standard poll_cb that
          * will trigger type-specific callbacks (and return OP_RES_HANDLED)
-         * or do no handling and return OP_RES_PASS
+         * or do no handling and return OP_RES_PASS.
+         * Also signal yield to q_serve() (which implies that op was handled).
          */
         res = rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_CALLBACK, opaque);
-        if (res == RD_KAFKA_OP_RES_HANDLED)
+        if (res == RD_KAFKA_OP_RES_HANDLED || res == RD_KAFKA_OP_RES_YIELD)
                 return res;
 
         /* Op was not handled, log and destroy it. */
@@ -96,10 +100,6 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
                      "non-event op %s in background queue: discarding",
                      rd_kafka_op2str(rko->rko_type));
         rd_kafka_op_destroy(rko);
-
-        /* Signal yield to q_serve() (implies that the op was handled). */
-        if (res == RD_KAFKA_OP_RES_YIELD)
-                return res;
 
         /* Indicate that the op was handled. */
         return RD_KAFKA_OP_RES_HANDLED;
@@ -110,7 +110,7 @@ rd_kafka_background_queue_serve (rd_kafka_t *rk,
  * @brief Main loop for background queue thread.
  */
 #ifndef __OS400__
-int rd_kafka_background_thread_main (void *arg) {
+int rd_kafka_background_thread_main(void *arg) {
 #else
 void *rd_kafka_background_thread_main (void *arg) {
 #endif
@@ -134,7 +134,7 @@ void *rd_kafka_background_thread_main (void *arg) {
         mtx_unlock(&rk->rk_init_lock);
 
         while (likely(!rd_kafka_terminating(rk))) {
-                rd_kafka_q_serve(rk->rk_background.q, 10*1000, 0,
+                rd_kafka_q_serve(rk->rk_background.q, 10 * 1000, 0,
                                  RD_KAFKA_Q_CB_RETURN,
                                  rd_kafka_background_queue_serve, NULL);
         }
@@ -148,16 +148,85 @@ void *rd_kafka_background_thread_main (void *arg) {
         rd_kafka_q_disable(rk->rk_background.q);
         rd_kafka_q_purge(rk->rk_background.q);
 
-        rd_kafka_dbg(rk, GENERIC, "BGQUEUE",
-                     "Background queue thread exiting");
+        rd_kafka_dbg(rk, GENERIC, "BGQUEUE", "Background queue thread exiting");
 
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BACKGROUND);
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
-#ifndef __OS400__
-        return 0;
-#else
+
+#ifdef __OS400__
         return NULL;
+#else
+        return 0;
 #endif
 }
 
+
+/**
+ * @brief Create the background thread.
+ *
+ * @locks_acquired rk_init_lock
+ * @locks_required rd_kafka_wrlock()
+ */
+rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
+                                                      char *errstr,
+                                                      size_t errstr_size) {
+#ifndef _WIN32
+        sigset_t newset, oldset;
+#endif
+
+        if (rk->rk_background.q) {
+                rd_snprintf(errstr, errstr_size,
+                            "Background thread already created");
+                return RD_KAFKA_RESP_ERR__CONFLICT;
+        }
+
+        rk->rk_background.q = rd_kafka_q_new(rk);
+
+        mtx_lock(&rk->rk_init_lock);
+        rk->rk_init_wait_cnt++;
+
+#ifndef _WIN32
+        /* Block all signals in newly created threads.
+         * To avoid race condition we block all signals in the calling
+         * thread, which the new thread will inherit its sigmask from,
+         * and then restore the original sigmask of the calling thread when
+         * we're done creating the thread. */
+        sigemptyset(&oldset);
+        sigfillset(&newset);
+        if (rk->rk_conf.term_sig) {
+                struct sigaction sa_term = {.sa_handler =
+                                                rd_kafka_term_sig_handler};
+                sigaction(rk->rk_conf.term_sig, &sa_term, NULL);
+        }
+        pthread_sigmask(SIG_SETMASK, &newset, &oldset);
+#endif
+
+
+        if ((thrd_create(&rk->rk_background.thread,
+                         rd_kafka_background_thread_main, rk)) !=
+            thrd_success) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to create background thread: %s",
+                            rd_strerror(errno));
+                rd_kafka_q_destroy_owner(rk->rk_background.q);
+                rk->rk_background.q = NULL;
+                rk->rk_init_wait_cnt--;
+                mtx_unlock(&rk->rk_init_lock);
+
+#ifndef _WIN32
+                /* Restore sigmask of caller */
+                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+                return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+        }
+
+        mtx_unlock(&rk->rk_init_lock);
+
+#ifndef _WIN32
+        /* Restore sigmask of caller */
+        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}

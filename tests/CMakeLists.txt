@@ -113,7 +113,20 @@ set(
     0119-consumer_auth.cpp
     0120-asymmetric_subscription.c
     0121-clusterid.c
+    0122-buffer_cleaning_after_rebalance.c
     0123-connections_max_idle.c
+    0124-openssl_invalid_engine.c
+    0125-immediate_flush.c
+    0126-oauthbearer_oidc.c
+    0128-sasl_callback_queue.cpp
+    0129-fetch_aborted_msgs.c
+    0130-store_offsets.c
+    0131-connect_timeout.c
+    0132-strategy_ordering.c
+    0133-ssl_keys.c
+    0134-ssl_provider.c
+    0135-sasl_credentials.cpp
+    0136-resolve_cb.c
     8000-idle.cpp
     test.c
     testcpp.cpp

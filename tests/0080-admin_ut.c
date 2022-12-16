@@ -2159,7 +2159,8 @@ static void do_test_options(rd_kafka_t *rk) {
             {"broker", _all_apis},
             {"require_stable_offsets",
              {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS}},
-            {"consumer_group_states", {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS}},
+            {"match_consumer_group_states",
+             {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS}},
             {"opaque", _all_apis},
             {NULL},
         };
@@ -2205,9 +2206,9 @@ static void do_test_options(rd_kafka_t *rk) {
                                     rd_kafka_AdminOptions_set_require_stable_offsets(
                                         options, 0);
                         else if (!strcmp(matrix[i].setter,
-                                         "consumer_group_states"))
+                                         "match_consumer_group_states"))
                                 error =
-                                    rd_kafka_AdminOptions_set_consumer_group_states(
+                                    rd_kafka_AdminOptions_set_match_consumer_group_states(
                                         options, state, 1);
                         else if (!strcmp(matrix[i].setter, "opaque")) {
                                 rd_kafka_AdminOptions_set_opaque(

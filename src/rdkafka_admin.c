@@ -1554,7 +1554,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
-rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     const rd_kafka_consumer_group_state_t *consumer_group_states,
     size_t consumer_group_states_cnt) {
@@ -1574,7 +1574,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_consumer_group_states(
                 }
                 rd_list_set_int32(states_list, (int32_t)i, state);
         }
-        err = rd_kafka_confval_set_type(&options->consumer_group_states,
+        err = rd_kafka_confval_set_type(&options->match_consumer_group_states,
                                         RD_KAFKA_CONFVAL_PTR, states_list,
                                         errstr, sizeof(errstr));
         if (err) {
@@ -1638,10 +1638,10 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS)
-                rd_kafka_confval_init_ptr(&options->consumer_group_states,
+                rd_kafka_confval_init_ptr(&options->match_consumer_group_states,
                                           "states");
         else
-                rd_kafka_confval_disable(&options->consumer_group_states,
+                rd_kafka_confval_disable(&options->match_consumer_group_states,
                                          "states");
 
         rd_kafka_confval_init_int(&options->broker, "broker", 0, INT32_MAX, -1);
@@ -1658,13 +1658,13 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
 static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
                                           const rd_kafka_AdminOptions_t *src) {
         *dst = *src;
-        if (src->consumer_group_states.u.PTR) {
+        if (src->match_consumer_group_states.u.PTR) {
                 char errstr[512];
                 rd_list_t *states_list_copy = rd_list_copy_preallocated(
-                    src->consumer_group_states.u.PTR, NULL);
+                    src->match_consumer_group_states.u.PTR, NULL);
 
                 rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
-                    &dst->consumer_group_states, RD_KAFKA_CONFVAL_PTR,
+                    &dst->match_consumer_group_states, RD_KAFKA_CONFVAL_PTR,
                     states_list_copy, errstr, sizeof(errstr));
                 rd_assert(!err);
         }
@@ -1688,8 +1688,8 @@ rd_kafka_AdminOptions_new(rd_kafka_t *rk, rd_kafka_admin_op_t for_api) {
 }
 
 void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options) {
-        if (options->consumer_group_states.u.PTR) {
-                rd_list_destroy(options->consumer_group_states.u.PTR);
+        if (options->match_consumer_group_states.u.PTR) {
+                rd_list_destroy(options->match_consumer_group_states.u.PTR);
         }
         rd_free(options);
 }
@@ -5653,7 +5653,7 @@ rd_kafka_admin_ListConsumerGroupsRequest(rd_kafka_broker_t *rkb,
         const char **states_str = NULL;
         int states_str_cnt      = 0;
         rd_list_t *states =
-            rd_kafka_confval_get_ptr(&options->consumer_group_states);
+            rd_kafka_confval_get_ptr(&options->match_consumer_group_states);
 
         /* Prepare list_options */
         if (states && rd_list_cnt(states) > 0) {

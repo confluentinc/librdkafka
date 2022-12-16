@@ -400,10 +400,10 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
-                if (rko->rko_u.admin_request.options.consumer_group_states.u
-                        .PTR) {
+                if (rko->rko_u.admin_request.options.match_consumer_group_states
+                        .u.PTR) {
                         rd_list_destroy(rko->rko_u.admin_request.options
-                                            .consumer_group_states.u.PTR);
+                                            .match_consumer_group_states.u.PTR);
                 }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);

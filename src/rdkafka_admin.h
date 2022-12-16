@@ -93,9 +93,10 @@ struct rd_kafka_AdminOptions_s {
                                      */
 
         rd_kafka_confval_t
-            consumer_group_states; /**< PTR: list of consumer group states.
-                                    * Valid for: ListConsumerGroups.
-                                    */
+            match_consumer_group_states; /**< PTR: list of consumer group states
+                                          *   to query for.
+                                          *   Valid for: ListConsumerGroups.
+                                          */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */

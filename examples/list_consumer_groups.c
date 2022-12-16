@@ -231,7 +231,7 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 goto exit;
         }
 
-        if ((error = rd_kafka_AdminOptions_set_consumer_group_states(
+        if ((error = rd_kafka_AdminOptions_set_match_consumer_group_states(
                  options, states, states_cnt))) {
                 fprintf(stderr, "%% Failed to set states: %s\n",
                         rd_kafka_error_string(error));

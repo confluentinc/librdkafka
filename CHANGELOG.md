@@ -2,8 +2,6 @@
 
 librdkafka v2.0.0 is a feature release:
 
- * Fixes to the transactional and idempotent producer.
- * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
  * [KIP-88](https://cwiki.apache.org/confluence/display/KAFKA/KIP-88%3A+OffsetFetch+Protocol+Update)
    OffsetFetch Protocol Update (#3995).
  * [KIP-222](https://cwiki.apache.org/confluence/display/KAFKA/KIP-222+-+Add+Consumer+Group+operations+to+Admin+API)
@@ -13,6 +11,8 @@ librdkafka v2.0.0 is a feature release:
  * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484)
    Partially implemented: support for AlterConsumerGroupOffsets
    (started by @lesterfan, #3995).
+ * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Upgrade considerations

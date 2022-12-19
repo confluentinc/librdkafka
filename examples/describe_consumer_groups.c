@@ -221,7 +221,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                             rd_kafka_MemberDescription_assignment(member);
                         const rd_kafka_topic_partition_list_t
                             *topic_partitions =
-                                rd_kafka_MemberAssignment_topic_partitions(
+                                rd_kafka_MemberAssignment_partitions(
                                     assignment);
                         if (!topic_partitions) {
                                 printf("    No assignment\n");

@@ -2731,8 +2731,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 if (i < known_groups) {
                         int member_count;
                         const rd_kafka_MemberDescription_t *member;
+                        const rd_kafka_MemberAssignment_t *assignment;
                         const char *client_id;
                         const char *group_instance_id;
+                        const rd_kafka_topic_partition_list_t *partitions;
 
                         TEST_ASSERT(state ==
                                         RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
@@ -2769,6 +2771,30 @@ static void do_test_DescribeConsumerGroups(const char *what,
                             "Expected group instance id \"%s\","
                             " got \"%s\".",
                             group_instance_ids[i], group_instance_id);
+
+                        assignment =
+                            rd_kafka_MemberDescription_assignment(member);
+                        TEST_ASSERT(assignment != NULL,
+                                    "Expected non-NULL member assignment");
+
+                        partitions =
+                            rd_kafka_MemberAssignment_partitions(assignment);
+                        TEST_ASSERT(partitions != NULL,
+                                    "Expected non-NULL member partitions");
+
+                        TEST_SAY(
+                            "Member client.id=\"%s\", "
+                            "group.instance.id=\"%s\", "
+                            "consumer_id=\"%s\", "
+                            "host=\"%s\", assignment:\n",
+                            rd_kafka_MemberDescription_client_id(member),
+                            rd_kafka_MemberDescription_group_instance_id(
+                                member),
+                            rd_kafka_MemberDescription_consumer_id(member),
+                            rd_kafka_MemberDescription_host(member));
+                        /* This is just to make sure the returned memory
+                         * is valid. */
+                        test_print_partition_list(partitions);
                 } else {
                         TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_DEAD,
                                     "Expected Dead state, got %s.",

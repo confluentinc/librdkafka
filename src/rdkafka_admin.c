@@ -5933,26 +5933,30 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
  * @param group_instance_id (optional) The group instance id
  *                          for static membership.
  * @param host The consumer host.
- * @param assignment A member assignment containing a list of topic-partitions.
+ * @param assignment The member's assigned partitions, or NULL if none.
+ *
  * @return A new allocated MemberDescription object.
  *         Use rd_kafka_MemberDescription_destroy() to free when done.
  */
-static rd_kafka_MemberDescription_t *
-rd_kafka_MemberDescription_new(const char *client_id,
-                               const char *consumer_id,
-                               const char *group_instance_id,
-                               const char *host,
-                               rd_kafka_MemberAssignment_t assignment) {
+static rd_kafka_MemberDescription_t *rd_kafka_MemberDescription_new(
+    const char *client_id,
+    const char *consumer_id,
+    const char *group_instance_id,
+    const char *host,
+    const rd_kafka_topic_partition_list_t *assignment) {
         rd_kafka_MemberDescription_t *member;
         member              = rd_calloc(1, sizeof(*member));
         member->client_id   = rd_strdup(client_id);
         member->consumer_id = rd_strdup(consumer_id);
         if (group_instance_id)
                 member->group_instance_id = rd_strdup(group_instance_id);
-        member->host       = rd_strdup(host);
-        member->assignment = assignment;
-        member->assignment.partitions =
-            rd_kafka_topic_partition_list_copy(member->assignment.partitions);
+        member->host = rd_strdup(host);
+        if (assignment)
+                member->assignment.partitions =
+                    rd_kafka_topic_partition_list_copy(assignment);
+        else
+                member->assignment.partitions =
+                    rd_kafka_topic_partition_list_new(0);
         return member;
 }
 
@@ -5968,7 +5972,7 @@ static rd_kafka_MemberDescription_t *
 rd_kafka_MemberDescription_copy(const rd_kafka_MemberDescription_t *src) {
         return rd_kafka_MemberDescription_new(src->client_id, src->consumer_id,
                                               src->group_instance_id, src->host,
-                                              src->assignment);
+                                              src->assignment.partitions);
 }
 
 /**
@@ -6024,8 +6028,7 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
         return &member->assignment;
 }
 
-const rd_kafka_topic_partition_list_t *
-rd_kafka_MemberAssignment_topic_partitions(
+const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment) {
         return assignment->partitions;
 }
@@ -6364,8 +6367,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             *group_instance_id = NULL;
                         rd_kafkap_bytes_t MemberMetadata, MemberAssignment;
                         rd_kafka_MemberDescription_t *member;
-                        rd_kafka_MemberAssignment_t assignment   = RD_ZERO_INIT;
-                        rd_kafka_topic_partition_list_t *toppars = NULL;
+                        rd_kafka_topic_partition_list_t *partitions = NULL;
                         rd_kafka_buf_t *rkbuf;
 
                         rd_kafka_buf_read_str(reply, &MemberId);
@@ -6392,16 +6394,13 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                 /* Decreased in rd_kafka_buf_destroy */
                                 rd_kafka_broker_keep(rkb);
                                 rd_kafka_buf_read_i16(rkbuf, &version);
-                                toppars = rd_kafka_buf_read_topic_partitions(
+                                partitions = rd_kafka_buf_read_topic_partitions(
                                     rkbuf, 0, rd_false, rd_false);
                                 rd_kafka_buf_destroy(rkbuf);
-                                if (!toppars) {
+                                if (!partitions)
                                         rd_kafka_buf_parse_fail(
                                             reply,
-                                            "Error reading topic "
-                                            "partitions");
-                                }
-                                assignment.partitions = toppars;
+                                            "Error reading topic partitions");
                         }
 
                         member_id = RD_KAFKAP_STR_DUP(&MemberId);
@@ -6414,11 +6413,11 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
                         member = rd_kafka_MemberDescription_new(
                             client_id, member_id, group_instance_id,
-                            client_host, assignment);
-                        rd_list_add(&members, member);
-                        if (assignment.partitions)
+                            client_host, partitions);
+                        if (partitions)
                                 rd_kafka_topic_partition_list_destroy(
-                                    assignment.partitions);
+                                    partitions);
+                        rd_list_add(&members, member);
                         rd_free(member_id);
                         rd_free(group_instance_id);
                         rd_free(client_id);

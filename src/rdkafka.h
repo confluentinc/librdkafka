@@ -8001,8 +8001,7 @@ const rd_kafka_MemberAssignment_t *rd_kafka_MemberDescription_assignment(
  *         as the lifetime of the \p assignment object.
  */
 RD_EXPORT
-const rd_kafka_topic_partition_list_t *
-rd_kafka_MemberAssignment_topic_partitions(
+const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
     const rd_kafka_MemberAssignment_t *assignment);
 
 /**@}*/

@@ -88,6 +88,7 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
  * Admin API DescribeGroups() now provides the group instance id
    for static members [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances) (#3995).
 
+
 ## Fixes
 
 ### General fixes

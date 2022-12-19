@@ -1403,15 +1403,18 @@ static int test_summary(int do_lock) {
 #else
                 sql_fp = popen(test_sql_cmd, "w");
 #endif
-
-                fprintf(sql_fp,
-                        "CREATE TABLE IF NOT EXISTS "
-                        "runs(runid text PRIMARY KEY, mode text, "
-                        "date datetime, cnt int, passed int, failed int, "
-                        "duration numeric);\n"
-                        "CREATE TABLE IF NOT EXISTS "
-                        "tests(runid text, mode text, name text, state text, "
-                        "extra text, duration numeric);\n");
+                if (!sql_fp)
+                        TEST_WARN("Failed to execute test.sql.command: %s",
+                                  test_sql_cmd);
+                else
+                        fprintf(sql_fp,
+                                "CREATE TABLE IF NOT EXISTS "
+                                "runs(runid text PRIMARY KEY, mode text, "
+                                "date datetime, cnt int, passed int, "
+                                "failed int, duration numeric);\n"
+                                "CREATE TABLE IF NOT EXISTS "
+                                "tests(runid text, mode text, name text, "
+                                "state text, extra text, duration numeric);\n");
         }
 
         if (show_summary)

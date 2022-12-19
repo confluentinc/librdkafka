@@ -61,7 +61,8 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
 ## Enhancements
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
- * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Updated to zlib 1.2.13, zstd 1.5.2, and curl 7.86.0 in self-contained
+   librdkafka bundles.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
  * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
@@ -69,6 +70,10 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
  * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * The librdkafka.redist NuGet package has been updated to have fewer external
+   dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
+   is now built-in. There are bundled builds with and without linking to
+   cyrus-sasl for maximum compatibility.
 
 ## Fixes
 

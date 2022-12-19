@@ -23,14 +23,19 @@ The trivup root directory is by default `tmp` in the current directory but
 may be specified by setting the `TRIVUP_ROOT` environment variable
 to alternate directory, e.g., `TRIVUP_ROOT=$HOME/trivup make full`.
 
-First install trivup:
+First install required Python packages (trivup with friends):
 
-    $ pip3 install trivup
+    $ python3 -m pip install -U -r requirements.txt
 
 Bring up a Kafka cluster (with the specified version) and start an interactive
 shell, when the shell is exited the cluster is brought down and deleted.
 
-    $ ./interactive_broker_version.py 2.3.0   # Broker version
+    $ python3 -m trivup.clusters.KafkaCluster 2.3.0   # Broker version
+    # You can also try adding:
+    #   --ssl    To enable SSL listeners
+    #   --sasl <mechanism>   To enable SASL authentication
+    #   --sr     To provide a Schema-Registry instance
+    #  .. and so on, see --help for more.
 
 In the trivup shell, run the test suite:
 

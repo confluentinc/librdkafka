@@ -23,8 +23,9 @@ librdkafka v2.0.0 is a feature release:
 
 The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
 changes the default set of available ciphers, in particular all obsolete
-or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html) manual page
-are now disabled by default.
+or insecure ciphers and algorithms as listed in the
+OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+manual page are now disabled by default.
 
 **WARNING**: These ciphers are disabled for security reasons and it is
 highly recommended NOT to use them.

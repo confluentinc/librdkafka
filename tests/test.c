@@ -5657,6 +5657,7 @@ rd_kafka_event_t *test_wait_admin_result(rd_kafka_queue_t *q,
  *
  *        Supported APIs:
  *        - AlterConfigs
+ *        - IncrementalAlterConfigs
  *        - CreatePartitions
  *        - CreateTopics
  *        - DeleteGroups
@@ -5740,6 +5741,14 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
 
                 cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT) {
+                const rd_kafka_IncrementalAlterConfigs_result_t *res;
+
+                if (!(res = rd_kafka_event_AlterConfigs_result(rkev)))
+                        TEST_FAIL("Expected a IncrementalAlterConfigs result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                cres = rd_kafka_IncrementalAlterConfigs_result_resources(res, &cres_cnt);
         } else if (evtype == RD_KAFKA_EVENT_CREATEACLS_RESULT) {
                 const rd_kafka_CreateAcls_result_t *res;
 
@@ -6379,6 +6388,95 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
 
         err = test_wait_topic_admin_result(
             q, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT, NULL, 15 * 1000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+/**
+ * @brief Delta Incremental Alter configuration for the given resource,
+ *        overwriting/setting the configs provided in \p configs.
+ *        Existing configuration remains intact.
+ *
+ * @param configs 'const char *name, const char *value' tuples
+ * @param config_cnt is the number of tuples in \p configs
+ */
+rd_kafka_resp_err_t test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                             rd_kafka_ResourceType_t restype,
+                                             const char *resname,
+                                             const char **configs,
+                                             size_t config_cnt) {
+        rd_kafka_queue_t *q;
+        rd_kafka_ConfigResource_t *confres;
+        rd_kafka_event_t *rkev;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_ConfigResource_t **results;
+        size_t result_cnt;
+        const rd_kafka_ConfigEntry_t **configents;
+        size_t configent_cnt;
+
+
+        q = rd_kafka_queue_new(rk);
+
+        TEST_SAY("Getting configuration for %d %s\n", restype, resname);
+
+        confres = rd_kafka_ConfigResource_new(restype, resname);
+        rd_kafka_DescribeConfigs(rk, &confres, 1, NULL, q);
+
+        err = test_wait_topic_admin_result(
+            q, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, &rkev, 15 * 1000);
+        if (err) {
+                rd_kafka_queue_destroy(q);
+                rd_kafka_ConfigResource_destroy(confres);
+                return err;
+        }
+
+        results = rd_kafka_DescribeConfigs_result_resources(
+            rd_kafka_event_DescribeConfigs_result(rkev), &result_cnt);
+        TEST_ASSERT(result_cnt == 1,
+                    "expected 1 DescribeConfigs result, not %" PRIusz,
+                    result_cnt);
+
+        configents =
+            rd_kafka_ConfigResource_configs(results[0], &configent_cnt);
+        TEST_ASSERT(configent_cnt > 0,
+                    "expected > 0 ConfigEntry:s, not %" PRIusz, configent_cnt);
+
+        TEST_SAY("Altering configuration for %d %s\n", restype, resname);
+
+        /* Apply all existing configuration entries to resource object that
+         * will later be passed to IncrementalAlterConfigs. */
+        for (i = 0; i < configent_cnt; i++) {
+                err = rd_kafka_ConfigResource_incremental_set_config(
+                    confres, rd_kafka_ConfigEntry_name(configents[i]),
+                    rd_kafka_ConfigEntry_value(configents[i]));
+                TEST_ASSERT(!err,
+                            "Failed to set read-back config %s=%s "
+                            "on local resource object",
+                            rd_kafka_ConfigEntry_name(configents[i]),
+                            rd_kafka_ConfigEntry_value(configents[i]));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        /* Then apply the configuration to change. */
+        for (i = 0; i < config_cnt; i += 2) {
+                err = rd_kafka_ConfigResource_incremental_set_config(confres, configs[i],
+                                                         configs[i + 1]);
+                TEST_ASSERT(!err,
+                            "Failed to set config %s=%s on "
+                            "local resource object",
+                            configs[i], configs[i + 1]);
+        }
+
+        rd_kafka_IncrementalAlterConfigs(rk, &confres, 1, NULL, q);
+
+        rd_kafka_ConfigResource_destroy(confres);
+
+        err = test_wait_topic_admin_result(
+            q, RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, NULL, 15 * 1000);
 
         rd_kafka_queue_destroy(q);
 

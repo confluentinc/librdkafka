@@ -4108,7 +4108,7 @@ rd_kafka_IncrementalAlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* config_operation */
-                        rd_kafka_buf_write_i8(rkbuf, entry->a.incremental_operation)
+                        rd_kafka_buf_write_i8(rkbuf, entry->a.incremental_operation);
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
                 }

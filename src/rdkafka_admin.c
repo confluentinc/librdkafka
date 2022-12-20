@@ -1918,9 +1918,9 @@ rd_kafka_admin_incremental_add_config0(rd_list_t *rl,
         if (!name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        entry              = rd_calloc(1, sizeof(*entry));
-        entry->kv          = rd_strtup_new(name, value);
-        entry->a.operation = operation;
+        entry                           = rd_calloc(1, sizeof(*entry));
+        entry->kv                       = rd_strtup_new(name, value);
+        entry->a.incremental_operation  = operation;
 
         rd_list_add(rl, entry);
 
@@ -2916,7 +2916,7 @@ rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_incremental_remove_config(rd_kafka_ConfigResource_t *config,
                                    const char *name) {
-        if (!name || !*name || !value)
+        if (!name || !*name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         return rd_kafka_admin_incremental_add_config0(&config->config, name, NULL,
@@ -2925,9 +2925,8 @@ rd_kafka_ConfigResource_incremental_remove_config(rd_kafka_ConfigResource_t *con
 
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
-        if (!name || !*name || !value)
+                                   const char *name) {
+        if (!name || !*name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         return rd_kafka_admin_incremental_add_config0(&config->config, name, NULL,
@@ -3373,7 +3372,7 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
         char errstr[256];
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_IncrementalAlterConfigsRequest,
-            rd_kafka_AlterConfigsResponse_parse,
+            rd_kafka_IncrementalAlterConfigsResponse_parse,
         };
 
         rd_assert(rkqu);

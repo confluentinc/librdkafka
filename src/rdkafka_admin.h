@@ -262,7 +262,7 @@ struct rd_kafka_AlterConfigs_result_s {
 
 struct rd_kafka_IncrementalAlterConfigs_result_s {
         rd_list_t resources; /**< Type (rd_kafka_ConfigResource_t *) */
-}
+};
 
 struct rd_kafka_ConfigResource_result_s {
         rd_list_t resources; /**< Type (struct rd_kafka_ConfigResource *):

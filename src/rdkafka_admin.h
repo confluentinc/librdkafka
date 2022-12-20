@@ -201,7 +201,7 @@ typedef enum rd_kafka_IncrementalAlterOperation_t {
         RD_KAFKA_INCREMENTAL_ALTER_OP_SET      = 0,
         RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE   = 1,
         RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND   = 2,
-        RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT = 2,
+        RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT = 3,
 } rd_kafka_IncrementalAlterOperation_t;
 
 struct rd_kafka_ConfigEntry_s {

@@ -298,7 +298,7 @@ blocks:
         commands:
           - Get-ChildItem . -include *.dll -recurse
           - Get-ChildItem . -include *.lib -recurse
-          - if ($env:SEMAPHORE_GIT_TAG_NAME != "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
+          - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MSVC x64'
           env_vars:

@@ -3298,7 +3298,9 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_throttle_time(reply);
 
         offsets = rd_kafka_buf_read_topic_partitions(
-            reply, 0, rd_true /*read_offset*/, rd_true /*read_part_errs*/);
+            reply, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR);
         if (!offsets)
                 rd_kafka_buf_parse_fail(reply,
                                         "Failed to parse topic partitions");
@@ -3879,7 +3881,8 @@ rd_kafka_OffsetDeleteResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_throttle_time(reply);
 
         partitions = rd_kafka_buf_read_topic_partitions(
-            reply, 16, rd_false /*no offset */, rd_true /*read error*/);
+            reply, 16, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR);
         if (!partitions) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to parse OffsetDeleteResponse partitions");

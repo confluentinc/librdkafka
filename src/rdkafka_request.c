@@ -201,25 +201,24 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
  * @brief Read a list of topic+partitions+extra from \p rkbuf.
  *
  * @param rkbuf buffer to read from
- * @param estimated_part_cnt estimated number of partitions to read.
- * @param read_part_errs whether or not to read an error per partition.
+ * @param fields An array of fields to read from the buffer and set on
+ *               the rktpar object, in the specified order, must end
+ *               with RD_KAFKA_TOPIC_PARTITION_FIELD_END.
  *
  * @returns a newly allocated list on success, or NULL on parse error.
  */
-rd_kafka_topic_partition_list_t *
-rd_kafka_buf_read_topic_partitions(rd_kafka_buf_t *rkbuf,
-                                   size_t estimated_part_cnt,
-                                   rd_bool_t read_offset,
-                                   rd_bool_t read_part_errs) {
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions0(
+    rd_kafka_buf_t *rkbuf,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields) {
         const int log_decode_errors = LOG_ERR;
-        int16_t ErrorCode           = 0;
         int32_t TopicArrayCnt;
         rd_kafka_topic_partition_list_t *parts = NULL;
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
         parts = rd_kafka_topic_partition_list_new(
-            RD_MAX(TopicArrayCnt, (int)estimated_part_cnt));
+            RD_MAX(TopicArrayCnt * 4, (int)estimated_part_cnt));
 
         while (TopicArrayCnt-- > 0) {
                 rd_kafkap_str_t kTopic;
@@ -233,24 +232,55 @@ rd_kafka_buf_read_topic_partitions(rd_kafka_buf_t *rkbuf,
                 RD_KAFKAP_STR_DUPA(&topic, &kTopic);
 
                 while (PartArrayCnt-- > 0) {
-                        int32_t Partition;
-                        int64_t Offset;
+                        int32_t Partition = -1, Epoch = -1234;
+                        int64_t Offset    = -1234;
+                        int16_t ErrorCode = 0;
                         rd_kafka_topic_partition_t *rktpar;
+                        int fi;
 
-                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        /*
+                         * Read requested fields
+                         */
+                        for (fi = 0;
+                             fields[fi] != RD_KAFKA_TOPIC_PARTITION_FIELD_END;
+                             fi++) {
+                                switch (fields[fi]) {
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION:
+                                        rd_kafka_buf_read_i32(rkbuf,
+                                                              &Partition);
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET:
+                                        rd_kafka_buf_read_i64(rkbuf, &Offset);
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH:
+                                        rd_kafka_buf_read_i32(rkbuf, &Epoch);
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_ERR:
+                                        rd_kafka_buf_read_i16(rkbuf,
+                                                              &ErrorCode);
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
+                                        rd_assert(!*"metadata not implemented");
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_END:
+                                        break;
+                                }
+                        }
 
                         rktpar = rd_kafka_topic_partition_list_add(parts, topic,
                                                                    Partition);
-
-                        if (read_offset) {
-                                rd_kafka_buf_read_i64(rkbuf, &Offset);
+                        /* Use dummy sentinel values that are unlikely to be
+                         * seen from the broker to know if we are to set these
+                         * fields or not. */
+                        if (Offset != -1234)
                                 rktpar->offset = Offset;
-                        }
+                        if (Epoch != -1234)
+                                rd_kafka_topic_partition_set_leader_epoch(
+                                    rktpar, Epoch);
+                        rktpar->err = ErrorCode;
 
-                        if (read_part_errs) {
-                                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-                                rktpar->err = ErrorCode;
-                        }
 
                         rd_kafka_buf_skip_tags(rkbuf);
                 }
@@ -275,22 +305,18 @@ err_parse:
  *
  * @remark The \p parts list MUST be sorted.
  */
-int rd_kafka_buf_write_topic_partitions(
+int rd_kafka_buf_write_topic_partitions0(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
-    rd_bool_t write_Offset,
-    rd_bool_t write_Epoch,
-    rd_bool_t write_Metadata) {
+    const rd_kafka_topic_partition_field_t *fields) {
         size_t of_TopicArrayCnt;
         size_t of_PartArrayCnt = 0;
         int TopicArrayCnt = 0, PartArrayCnt = 0;
         int i;
         const char *prev_topic = NULL;
         int cnt                = 0;
-        rd_bool_t partition_id_only =
-            !write_Offset && !write_Epoch && !write_Metadata;
 
         rd_assert(!only_invalid_offsets ||
                   (only_invalid_offsets != skip_invalid_offsets));
@@ -300,6 +326,7 @@ int rd_kafka_buf_write_topic_partitions(
 
         for (i = 0; i < parts->cnt; i++) {
                 const rd_kafka_topic_partition_t *rktpar = &parts->elems[i];
+                int fi;
 
                 if (rktpar->offset < 0) {
                         if (skip_invalid_offsets)
@@ -329,36 +356,56 @@ int rd_kafka_buf_write_topic_partitions(
                             rd_kafka_buf_write_arraycnt_pos(rkbuf);
                 }
 
-                /* Partition */
-                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
-                PartArrayCnt++;
 
-                /* Time/Offset */
-                if (write_Offset) {
-                        rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+                /*
+                 * Write requested fields
+                 */
+                for (fi = 0; fields[fi] != RD_KAFKA_TOPIC_PARTITION_FIELD_END;
+                     fi++) {
+                        switch (fields[fi]) {
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION:
+                                rd_kafka_buf_write_i32(rkbuf,
+                                                       rktpar->partition);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET:
+                                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH:
+                                rd_kafka_buf_write_i32(
+                                    rkbuf,
+                                    rd_kafka_topic_partition_get_leader_epoch(
+                                        rktpar));
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_ERR:
+                                rd_kafka_buf_write_i16(rkbuf, rktpar->err);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA:
+                                /* Java client 0.9.0 and broker <0.10.0 can't
+                                 * parse Null metadata fields, so as a
+                                 * workaround we send an empty string if
+                                 * it's Null. */
+                                if (!rktpar->metadata)
+                                        rd_kafka_buf_write_str(rkbuf, "", 0);
+                                else
+                                        rd_kafka_buf_write_str(
+                                            rkbuf, rktpar->metadata,
+                                            rktpar->metadata_size);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP:
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_END:
+                                break;
+                        }
                 }
 
-                if (write_Epoch) {
-                        /* CommittedLeaderEpoch */
-                        rd_kafka_buf_write_i32(rkbuf, -1);
-                }
 
-                if (write_Metadata) {
-                        /* Metadata */
-                        /* Java client 0.9.0 and broker <0.10.0 can't parse
-                         * Null metadata fields, so as a workaround we send an
-                         * empty string if it's Null. */
-                        if (!rktpar->metadata)
-                                rd_kafka_buf_write_str(rkbuf, "", 0);
-                        else
-                                rd_kafka_buf_write_str(rkbuf, rktpar->metadata,
-                                                       rktpar->metadata_size);
-                }
-
-                /* Tags for partition struct */
-                if (!partition_id_only)
+                if (fi > 1)
+                        /* If there was more than one field written
+                         * then this was a struct and thus needs the
+                         * struct suffix tags written. */
                         rd_kafka_buf_write_tags(rkbuf);
 
+                PartArrayCnt++;
                 cnt++;
         }
 
@@ -456,7 +503,8 @@ rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
                         int32_t kpartition;
                         int16_t ErrorCode;
                         int32_t OffsetArrayCnt;
-                        int64_t Offset = -1;
+                        int64_t Offset      = -1;
+                        int32_t LeaderEpoch = -1;
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &kpartition);
@@ -989,8 +1037,8 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
         /* Write partition list, filtering out partitions with valid offsets */
         PartCnt = rd_kafka_buf_write_topic_partitions(
             rkbuf, parts, rd_false /*include invalid offsets*/,
-            rd_false /*skip valid offsets */, rd_false /*don't write offsets*/,
-            rd_false /*don't write epoch */, rd_false /*don't write metadata*/);
+            rd_false /*skip valid offsets */,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
 
         if (ApiVersion >= 7) {
                 /* RequireStable */
@@ -3693,8 +3741,8 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_write_topic_partitions(
             rkbuf, partitions, rd_false /*don't skip invalid offsets*/,
-            rd_false /*any offset*/, rd_true /*do write offsets*/,
-            rd_false /*don't write epoch*/, rd_false /*don't write metadata*/);
+            rd_false /*any offset*/, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET);
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

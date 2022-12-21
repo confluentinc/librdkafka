@@ -148,9 +148,8 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
-                    rd_false /*any offset*/, rd_false /*don't write offsets*/,
-                    rd_false /*don't write epoch*/,
-                    rd_false /*don't write metadata*/);
+                    rd_false /*any offset*/,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);

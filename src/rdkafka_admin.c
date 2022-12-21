@@ -40,6 +40,7 @@ static const char *rd_kafka_admin_state_desc[] = {
     "initializing",           "waiting for broker",
     "waiting for controller", "waiting for fanouts",
     "constructing request",   "waiting for response from broker",
+    "waiting for a valid list of brokers to be available"
 };
 
 

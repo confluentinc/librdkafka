@@ -1153,6 +1153,7 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafkap_str_t topic;
                 char *topic_str;
@@ -1236,7 +1237,7 @@ err:
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
-            !(actions & RD_KAFKA_ERR_ACTION_PERMANENT) &&
+            !(actions & RD_KAFKA_ERR_ACTION_PERMANENT) && request != NULL &&
             rd_kafka_buf_retry(rkb, request))
                 return RD_KAFKA_RESP_ERR__IN_PROGRESS;
 

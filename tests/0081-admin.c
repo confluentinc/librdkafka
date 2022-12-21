@@ -3100,7 +3100,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                                               rd_kafka_t *rk,
                                               rd_kafka_queue_t *useq,
                                               int op_timeout,
-                                              rd_bool_t sub_consumer) {
+                                              rd_bool_t sub_consumer,
+                                              rd_bool_t create_topics) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
         rd_kafka_topic_partition_list_t *orig_offsets, *offsets, *to_alter,
@@ -3129,8 +3130,15 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                        rd_kafka_name(rk), what, op_timeout,
                        sub_consumer ? ", with subscribing consumer" : "");
 
-        if (sub_consumer)
+        if (!create_topics)
+                exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+        else if (sub_consumer)
                 exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+
+        if (sub_consumer && !create_topics)
+                TEST_FAIL(
+                    "Can't use set sub_consumer and unset create_topics at the "
+                    "same time");
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
@@ -3162,25 +3170,28 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 
         group_id = topics[0];
 
-        /* Create the topics first. */
-        test_CreateTopics_simple(rk, NULL, topics,
-                                 TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT,
-                                 partitions_cnt, NULL);
+        /* Create the topics first if needed. */
+        if (create_topics) {
+                test_CreateTopics_simple(
+                    rk, NULL, topics,
+                    TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT, partitions_cnt,
+                    NULL);
 
-        /* Verify that topics are reported by metadata */
-        test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
-                                  15 * 1000);
+                /* Verify that topics are reported by metadata */
+                test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
+                                          NULL, 0, 15 * 1000);
 
-        rd_sleep(1); /* Additional wait time for cluster propagation */
+                rd_sleep(1); /* Additional wait time for cluster propagation */
 
-        consumer = test_create_consumer(group_id, NULL, NULL, NULL);
+                consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
-        if (sub_consumer) {
-                TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
-                test_consumer_wait_assignment(consumer, rd_true);
+                if (sub_consumer) {
+                        TEST_CALL_ERR__(
+                            rd_kafka_subscribe(consumer, subscription));
+                        test_consumer_wait_assignment(consumer, rd_true);
+                }
         }
 
-        /* Commit some offsets */
         orig_offsets = rd_kafka_topic_partition_list_new(
             TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT * partitions_cnt);
         for (i = 0;
@@ -3191,22 +3202,25 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                                                   i % partitions_cnt)
                     ->offset = (i + 1) * 10;
 
-        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
+        /* Commit some offsets, if topics exists */
+        if (create_topics) {
+                TEST_CALL_ERR__(
+                    rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
 
-        /* Verify committed offsets match */
-        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
+                /* Verify committed offsets match */
+                committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+                TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                                   tmout_multip(5 * 1000)));
 
-        if (test_partition_list_cmp(committed, orig_offsets)) {
-                TEST_SAY("commit() list:\n");
-                test_print_partition_list(orig_offsets);
-                TEST_SAY("committed() list:\n");
-                test_print_partition_list(committed);
-                TEST_FAIL("committed offsets don't match");
+                if (test_partition_list_cmp(committed, orig_offsets)) {
+                        TEST_SAY("commit() list:\n");
+                        test_print_partition_list(orig_offsets);
+                        TEST_SAY("committed() list:\n");
+                        test_print_partition_list(committed);
+                        TEST_FAIL("committed offsets don't match");
+                }
+                rd_kafka_topic_partition_list_destroy(committed);
         }
-
-        rd_kafka_topic_partition_list_destroy(committed);
 
         /* Now alter second half of the commits */
         offsets  = rd_kafka_topic_partition_list_new(orig_offsets->cnt / 2);
@@ -3287,7 +3301,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 test_print_partition_list(alterd);
                 TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
                 test_print_partition_list(to_alter);
-                TEST_FAIL("alterd/requested offsets don't match");
+                TEST_FAIL("altered/requested offsets don't match");
         }
 
         /* Verify expected errors */
@@ -3310,26 +3324,28 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         rd_kafka_event_destroy(rkev);
 
 
-        /* Verify committed offsets match */
-        committed = rd_kafka_topic_partition_list_copy(orig_offsets);
-        TEST_CALL_ERR__(
-            rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
+        /* Verify committed offsets match, if topics exist. */
+        if (create_topics) {
+                committed = rd_kafka_topic_partition_list_copy(orig_offsets);
+                TEST_CALL_ERR__(rd_kafka_committed(consumer, committed,
+                                                   tmout_multip(5 * 1000)));
 
-        TEST_SAY("Original committed offsets:\n");
-        test_print_partition_list(orig_offsets);
+                TEST_SAY("Original committed offsets:\n");
+                test_print_partition_list(orig_offsets);
 
-        TEST_SAY("Committed offsets after alter:\n");
-        test_print_partition_list(committed);
-
-        if (test_partition_list_cmp(committed, offsets)) {
-                TEST_SAY("expected list:\n");
-                test_print_partition_list(offsets);
-                TEST_SAY("committed() list:\n");
+                TEST_SAY("Committed offsets after alter:\n");
                 test_print_partition_list(committed);
-                TEST_FAIL("committed offsets don't match");
+
+                if (test_partition_list_cmp(committed, offsets)) {
+                        TEST_SAY("expected list:\n");
+                        test_print_partition_list(offsets);
+                        TEST_SAY("committed() list:\n");
+                        test_print_partition_list(committed);
+                        TEST_FAIL("committed offsets don't match");
+                }
+                rd_kafka_topic_partition_list_destroy(committed);
         }
 
-        rd_kafka_topic_partition_list_destroy(committed);
         rd_kafka_topic_partition_list_destroy(offsets);
         rd_kafka_topic_partition_list_destroy(orig_offsets);
         rd_kafka_topic_partition_list_destroy(subscription);
@@ -3337,7 +3353,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         for (i = 0; i < TEST_ALTER_CONSUMER_GROUP_OFFSETS_TOPIC_CNT; i++)
                 rd_free(topics[i]);
 
-        rd_kafka_destroy(consumer);
+        if (create_topics) /* consumer is created only if topics are. */
+                rd_kafka_destroy(consumer);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
@@ -3672,15 +3689,19 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                     rd_true /*with subscribing consumer*/);
 
                 /* Alter committed offsets */
-                do_test_AlterConsumerGroupOffsets("temp queue, op timeout 0",
-                                                  rk, NULL, 0, rd_false);
+                do_test_AlterConsumerGroupOffsets(
+                    "temp queue, op timeout 0", rk, NULL, 0, rd_false, rd_true);
                 do_test_AlterConsumerGroupOffsets(
                     "main queue, op timeout "
                     "1500",
-                    rk, mainq, 1500, rd_false);
+                    rk, mainq, 1500, rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
+                    rd_false /* don't create topics */);
                 do_test_AlterConsumerGroupOffsets(
                     "main queue, op timeout 1500", rk, mainq, 1500,
-                    rd_true /*with subscribing consumer*/);
+                    rd_true, /*with subscribing consumer*/
+                    rd_true);
 
                 /* List committed offsets */
                 do_test_ListConsumerGroupOffsets("temp queue, op timeout 0", rk,

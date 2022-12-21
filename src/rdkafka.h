@@ -6822,6 +6822,8 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
  *
  * @return NULL on success, a new error instance that must be
  *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListConsumerGroups.
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(

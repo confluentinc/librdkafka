@@ -982,7 +982,8 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
-            32 /* GroupId */ + 4 + parts_size /* Topics */ + 1,
+            RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) /* GroupId */ + 4 +
+                parts_size /* Topics */ + 1,
             ApiVersion >= 6 /*flexver*/);
 
         /* ConsumerGroup */

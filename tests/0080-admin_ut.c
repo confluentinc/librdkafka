@@ -2141,11 +2141,14 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_CREATEACLS,                              \
                     RD_KAFKA_ADMIN_OP_DESCRIBEACLS,                            \
                     RD_KAFKA_ADMIN_OP_DELETEACLS,                              \
+                    RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,                \
+                    RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,               \
+                    RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS,                      \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */                   \
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[13];
+                const rd_kafka_admin_op_t valid_apis[16];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",

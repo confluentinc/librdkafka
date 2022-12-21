@@ -1640,10 +1640,10 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS)
                 rd_kafka_confval_init_ptr(&options->match_consumer_group_states,
-                                          "states");
+                                          "match_consumer_group_states");
         else
                 rd_kafka_confval_disable(&options->match_consumer_group_states,
-                                         "states");
+                                         "match_consumer_group_states");
 
         rd_kafka_confval_init_int(&options->broker, "broker", 0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
@@ -5276,13 +5276,6 @@ rd_kafka_AlterConsumerGroupOffsets_result_groups(
                                                 cntp);
 }
 
-void rd_kafka_AlterConsumerGroupOffsets(
-    rd_kafka_t *rk,
-    rd_kafka_AlterConsumerGroupOffsets_t **alter_grpoffsets,
-    size_t alter_grpoffsets_cnt,
-    const rd_kafka_AdminOptions_t *options,
-    rd_kafka_queue_t *rkqu);
-
 /**@}*/
 
 
@@ -5719,7 +5712,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                            rd_kafka_err2str(error_code));
         }
 
-        rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
+        rd_kafka_buf_read_arraycnt(reply, &cnt, RD_KAFKAP_GROUPS_MAX);
         rd_list_init(&valid, cnt, rd_kafka_ConsumerGroupListing_free);
         rd_list_init(&errors, 8, rd_free);
         if (error)

@@ -243,7 +243,7 @@ blocks:
           - cache store msys2-x64-${Env:ARTIFACT_KEY} c:/msys64
       epilogue:
         commands:
-          - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${Env:ARTIFACT_KEY}/'
+          - if ($env:SEMAPHORE_GIT_TAG_NAME -ne "") { artifact push workflow artifacts/ --destination artifacts/$Env:ARTIFACT_KEY/ }
       jobs:
         - name: 'Build: MinGW-w64 Dynamic'
           env_vars:

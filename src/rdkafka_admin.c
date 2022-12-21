@@ -5186,12 +5186,11 @@ rd_kafka_AlterConsumerGroupOffsetsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_topic_partition_list_destroy(partitions);
         *rko_resultp = rko_result;
 
-        if (reply->rkbuf_err) {
+        if (reply->rkbuf_err)
                 rd_snprintf(
                     errstr, errstr_size,
                     "AlterConsumerGroupOffset response parse failure: %s",
                     rd_kafka_err2str(reply->rkbuf_err));
-        }
 
         return reply->rkbuf_err;
 }

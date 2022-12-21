@@ -83,6 +83,17 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
 /**
+ * Protocol level sanity
+ */
+#define RD_KAFKAP_BROKERS_MAX    10000
+#define RD_KAFKAP_TOPICS_MAX     1000000
+#define RD_KAFKAP_PARTITIONS_MAX 100000
+
+
+#define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
+
+
+/**
  * @struct Represents a fetch position:
  *         an offset and an partition leader epoch (if known, else -1).
  */
@@ -109,16 +120,6 @@ typedef struct rd_kafka_fetch_pos_s {
 #include "rdkafka_assignment.h"
 #include "rdkafka_coord.h"
 #include "rdkafka_mock.h"
-
-/**
- * Protocol level sanity
- */
-#define RD_KAFKAP_BROKERS_MAX    10000
-#define RD_KAFKAP_TOPICS_MAX     1000000
-#define RD_KAFKAP_PARTITIONS_MAX 100000
-
-
-#define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
 
 

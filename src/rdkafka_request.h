@@ -130,6 +130,21 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  void *opaque);
 
 rd_kafka_resp_err_t
+rd_kafka_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *rkbuf,
+                                     rd_kafka_buf_t *request,
+                                     rd_kafka_topic_partition_list_t **offsets);
+void rd_kafka_OffsetForLeaderEpochRequest(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_topic_partition_list_t *parts,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
+
+rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                             rd_kafka_broker_t *rkb,
                             rd_kafka_resp_err_t err,

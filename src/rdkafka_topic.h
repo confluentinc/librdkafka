@@ -98,6 +98,17 @@ typedef struct rd_kafka_partition_msgid_s {
 } rd_kafka_partition_msgid_t;
 
 
+/**
+ * @struct Aux struct that holds a partition id and a leader epoch.
+ *         Used as temporary holding space for per-partition leader epochs
+ *         while parsing MetadataResponse.
+ */
+typedef struct rd_kafka_partition_leader_epoch_s {
+        int32_t partition_id;
+        int32_t leader_epoch;
+} rd_kafka_partition_leader_epoch_t;
+
+
 /*
  * @struct Internal representation of a topic.
  *
@@ -244,8 +255,10 @@ rd_kafka_topic_get_error(rd_kafka_topic_t *rkt) {
         return err;
 }
 
-int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
-                                    const struct rd_kafka_metadata_topic *mdt);
+int rd_kafka_topic_metadata_update2(
+    rd_kafka_broker_t *rkb,
+    const struct rd_kafka_metadata_topic *mdt,
+    const rd_kafka_partition_leader_epoch_t *leader_epochs);
 
 void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 

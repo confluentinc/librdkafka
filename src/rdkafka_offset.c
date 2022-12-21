@@ -52,6 +52,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_request.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -885,6 +886,309 @@ void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
                 rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_pos,
                                                err ? 100 : 0);
+}
+
+
+
+/**
+ * @brief Offset validation retry timer
+ */
+static void rd_kafka_offset_validate_tmr_cb(rd_kafka_timers_t *rkts,
+                                            void *arg) {
+        rd_kafka_toppar_t *rktp = arg;
+
+        rd_kafka_toppar_lock(rktp);
+        rd_kafka_offset_validate(rktp, "retrying offset validation");
+        rd_kafka_toppar_unlock(rktp);
+}
+
+
+
+/**
+ * @brief OffsetForLeaderEpochResponse handler that
+ *        pushes the matched toppar's to the next state.
+ *
+ * @locality rdkafka main thread
+ */
+static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
+                                                        rd_kafka_broker_t *rkb,
+                                                        rd_kafka_resp_err_t err,
+                                                        rd_kafka_buf_t *rkbuf,
+                                                        rd_kafka_buf_t *request,
+                                                        void *opaque) {
+        rd_kafka_topic_partition_list_t *parts = NULL;
+        rd_kafka_toppar_t *rktp                = opaque;
+        rd_kafka_topic_partition_t *rktpar;
+        int64_t end_offset;
+        int32_t leader_epoch;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                rd_kafka_toppar_destroy(rktp); /* Drop refcnt */
+                return;
+        }
+
+        err = rd_kafka_handle_OffsetForLeaderEpoch(rk, rkb, err, rkbuf, request,
+                                                   &parts);
+
+        rd_kafka_toppar_lock(rktp);
+
+        if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT)
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+
+        if (unlikely(!err && parts->cnt == 0))
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+        if (err) {
+                int actions;
+
+                rd_rkb_dbg(rkb, FETCH, "OFFSETVALID",
+                           "%.*s [%" PRId32
+                           "]: OffsetForLeaderEpoch requested failed: %s",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, rd_kafka_err2str(err));
+
+                if (err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE) {
+                        rd_rkb_dbg(rkb, FETCH, "VALIDATE",
+                                   "%.*s [%" PRId32
+                                   "]: offset and epoch validation not "
+                                   "supported by broker: validation skipped",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition);
+                        /* Reset the epoch to -1 since it can't be used with
+                         * older brokers. */
+                        rktp->rktp_next_fetch_start.leader_epoch = -1;
+                        rd_kafka_toppar_set_fetch_state(
+                            rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+                        goto done;
+
+                } else if (err == RD_KAFKA_RESP_ERR__OUTDATED) {
+                        /* Partition state has changed, this response
+                         * is outdated. */
+                        goto done;
+                }
+
+                actions = rd_kafka_err_action(
+                    rkb, err, request, RD_KAFKA_ERR_ACTION_REFRESH,
+                    RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH,
+                    RD_KAFKA_ERR_ACTION_REFRESH,
+                    RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH,
+                    RD_KAFKA_ERR_ACTION_END);
+
+
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+                        rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
+
+                if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                        /* No need for refcnt on rktp for timer opaque
+                         * since the timer resides on the rktp and will be
+                         * stopped on toppar remove. */
+                        rd_kafka_timer_start_oneshot(
+                            &rk->rk_timers, &rktp->rktp_validate_tmr, rd_false,
+                            500 * 1000 /* 500ms */,
+                            rd_kafka_offset_validate_tmr_cb, rktp);
+                        goto done;
+                }
+
+                /* Permanent error */
+                rd_kafka_offset_reset(
+                    rktp, rd_kafka_broker_id(rkb),
+                    RD_KAFKA_FETCH_POS(RD_KAFKA_OFFSET_INVALID,
+                                       rktp->rktp_leader_epoch),
+                    RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+                    "Unable to validate offset and epoch: %s",
+                    rd_kafka_err2str(err));
+                goto done;
+        }
+
+
+        rktpar       = &parts->elems[0];
+        end_offset   = rktpar->offset;
+        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(rktpar);
+
+        if (end_offset < 0 || leader_epoch < 0) {
+                rd_kafka_offset_reset(rktp, rd_kafka_broker_id(rkb),
+                                      rktp->rktp_next_fetch_start,
+                                      RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+                                      "Partition log truncation detected");
+
+        } else if (end_offset < rktp->rktp_next_fetch_start.offset) {
+
+                if (rktp->rktp_rkt->rkt_conf.auto_offset_reset ==
+                    RD_KAFKA_OFFSET_INVALID /* auto.offset.reset=error */) {
+                        rd_kafka_offset_reset(
+                            rktp, rd_kafka_broker_id(rkb),
+                            rktp->rktp_next_fetch_start,
+                            RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+                            "Partition log truncation detected at %s: "
+                            "broker end offset is %" PRId64
+                            " (leader epoch %" PRId32 ")",
+                            rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start),
+                            end_offset, leader_epoch);
+
+                } else {
+                        rd_kafka_error_t *error;
+
+                        rd_kafka_toppar_unlock(rktp);
+
+                        /* Seek to the updated end offset */
+                        error = rd_kafka_seek_partitions(rkb->rkb_rk, parts,
+                                                         RD_POLL_INFINITE);
+
+                        if (error) {
+                                rd_kafka_offset_reset(
+                                    rktp, rd_kafka_broker_id(rkb),
+                                    rktp->rktp_next_fetch_start,
+                                    RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
+                                    "Partition log truncation detected at %s: "
+                                    "broker end offset is %" PRId64
+                                    " (leader epoch %" PRId32
+                                    "): "
+                                    "attempted seek to end offset failed: %s",
+                                    rd_kafka_fetch_pos2str(
+                                        rktp->rktp_next_fetch_start),
+                                    end_offset, leader_epoch,
+                                    rd_kafka_error_string(error));
+                                rd_kafka_error_destroy(error);
+                        }
+
+                        rd_kafka_topic_partition_list_destroy(parts);
+                        rd_kafka_toppar_destroy(rktp);
+
+                        return;
+                }
+
+        } else {
+                rd_rkb_dbg(rkb, FETCH, "OFFSETVALID",
+                           "%.*s [%" PRId32
+                           "]: offset and epoch validation "
+                           "succeeded: broker end offset %" PRId64
+                           " (leader epoch %" PRId32 ")",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, end_offset, leader_epoch);
+
+                rktp->rktp_next_fetch_start.leader_epoch = leader_epoch;
+                rd_kafka_toppar_set_fetch_state(rktp,
+                                                RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+        }
+
+done:
+        rd_kafka_toppar_unlock(rktp);
+
+        if (parts)
+                rd_kafka_topic_partition_list_destroy(parts);
+        rd_kafka_toppar_destroy(rktp);
+}
+
+
+static rd_kafka_op_res_t rd_kafka_offset_validate_op_cb(rd_kafka_t *rk,
+                                                        rd_kafka_q_t *rkq,
+                                                        rd_kafka_op_t *rko) {
+        rd_kafka_toppar_t *rktp = rko->rko_rktp;
+        rd_kafka_toppar_lock(rktp);
+        rd_kafka_offset_validate(rktp, "%s", rko->rko_u.offset_reset.reason);
+        rd_kafka_toppar_unlock(rktp);
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+/**
+ * @brief Validate partition epoch and offset (KIP-320).
+ *
+ * @param rktp the toppar
+ * @param err Optional error code that triggered the validation.
+ * @param fmt a reason string for logging.
+ *
+ * @locality any. if not main thread, work will be enqued on main thread.
+ * @locks_required toppar_lock() MUST be held
+ */
+void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
+        rd_kafka_topic_partition_list_t *parts;
+        rd_kafka_topic_partition_t *rktpar;
+        char reason[512];
+        va_list ap;
+
+        if (rktp->rktp_rkt->rkt_rk->rk_type != RD_KAFKA_CONSUMER)
+                return;
+
+        va_start(ap, fmt);
+        rd_vsnprintf(reason, sizeof(reason), fmt, ap);
+        va_end(ap);
+
+        /* Enqueue op for toppar handler thread if we're on the wrong thread. */
+        if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
+                /* Reuse OP_OFFSET_RESET type */
+                rd_kafka_op_t *rko =
+                    rd_kafka_op_new(RD_KAFKA_OP_OFFSET_RESET | RD_KAFKA_OP_CB);
+                rko->rko_op_cb                 = rd_kafka_offset_validate_op_cb;
+                rko->rko_rktp                  = rd_kafka_toppar_keep(rktp);
+                rko->rko_u.offset_reset.reason = rd_strdup(reason);
+                rd_kafka_q_enq(rktp->rktp_ops, rko);
+                return;
+        }
+
+        if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
+                             "%.*s [%" PRId32
+                             "]: skipping offset "
+                             "validation in fetch state %s",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition,
+                             rd_kafka_fetch_states[rktp->rktp_fetch_state]);
+                return;
+        }
+
+        /* If the fetch start position does not have an epoch set then
+         * there is no point in doing validation.
+         * This is the case for epoch-less seek()s or epoch-less
+         * committed offsets. */
+        if (rktp->rktp_next_fetch_start.leader_epoch == -1) {
+                rd_kafka_dbg(
+                    rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
+                    "%.*s [%" PRId32
+                    "]: skipping offset "
+                    "validation for %s: no leader epoch set",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition,
+                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                return;
+        }
+
+        if (rktp->rktp_leader_id == -1 || !rktp->rktp_leader ||
+            rktp->rktp_leader->rkb_source == RD_KAFKA_INTERNAL) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
+                             "%.*s [%" PRId32
+                             "]: unable to perform offset "
+                             "validation: partition leader not available",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition);
+
+                rd_kafka_toppar_set_fetch_state(rktp,
+                                                RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+                return;
+        }
+
+        rd_kafka_toppar_set_fetch_state(
+            rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
+
+        /* Construct and send OffsetForLeaderEpochRequest */
+        parts  = rd_kafka_topic_partition_list_new(1);
+        rktpar = rd_kafka_topic_partition_list_add(
+            parts, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+        rd_kafka_topic_partition_set_leader_epoch(
+            rktpar, rktp->rktp_next_fetch_start.leader_epoch);
+        rd_kafka_toppar_keep(rktp); /* for request opaque */
+
+        rd_rkb_dbg(rktp->rktp_leader, FETCH, "VALIDATE",
+                   "%.*s [%" PRId32
+                   "]: querying broker for epoch "
+                   "validation of %s: %s",
+                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                   rktp->rktp_partition,
+                   rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start), reason);
+
+        rd_kafka_OffsetForLeaderEpochRequest(
+            rktp->rktp_leader, parts, RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+            rd_kafka_toppar_handle_OffsetForLeaderEpoch, rktp);
+        rd_kafka_topic_partition_list_destroy(parts);
 }
 
 

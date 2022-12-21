@@ -241,6 +241,8 @@ typedef struct rd_kafka_mock_partition_s {
         TAILQ_ENTRY(rd_kafka_mock_partition_s) leader_link;
         int32_t id;
 
+        int32_t leader_epoch;          /**< Leader epoch, bumped on each
+                                        *   partition leader change. */
         int64_t start_offset;          /**< Actual/leader start offset */
         int64_t end_offset;            /**< Actual/leader end offset */
         int64_t follower_start_offset; /**< Follower's start offset */
@@ -446,6 +448,10 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
                                    const rd_kafkap_bytes_t *records,
                                    const rd_kafkap_str_t *TransactionalId,
                                    int64_t *BaseOffset);
+
+rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
+    const rd_kafka_mock_partition_t *mpart,
+    int32_t leader_epoch);
 
 
 /**

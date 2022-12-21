@@ -110,8 +110,10 @@ struct rd_kafka_metadata_cache_entry {
         TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link; /* rkmc_expiry */
         rd_ts_t rkmce_ts_expires;                              /* Expire time */
         rd_ts_t rkmce_ts_insert;                               /* Insert time */
+        /** Last known leader epochs array (same size as the partition count),
+         *  or NULL if not known. */
         rd_kafka_metadata_topic_t rkmce_mtopic; /* Cached topic metadata */
-        /* rkmce_partitions memory points here. */
+        /* rkmce_topics.partitions memory points here. */
 };
 
 
@@ -152,6 +154,7 @@ struct rd_kafka_metadata_cache {
 
 
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
+int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
 void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
                                           const rd_kafka_metadata_topic_t *mdt,
                                           rd_bool_t propagate);

@@ -171,18 +171,43 @@ static void rd_kafka_fetch_reply_handle_partition_error(
     rd_kafka_resp_err_t err,
     int64_t HighwaterMarkOffset) {
 
+        rd_rkb_dbg(rkb, FETCH, "FETCHERR",
+                   "%.*s [%" PRId32 "]: Fetch failed at %s: %s",
+                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                   rktp->rktp_partition,
+                   rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos),
+                   rd_kafka_err2name(err));
+
         /* Some errors should be passed to the
          * application while some handled by rdkafka */
         switch (err) {
                 /* Errors handled by rdkafka */
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+                if (rktp->rktp_broker_id != rktp->rktp_leader_id)
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+
+                rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
+                break;
+
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
         case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
         case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
-        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
-                /* Request metadata information update*/
+                /* Request metadata information update and retry */
+                rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
+                rd_rkb_dbg(rkb, MSG | RD_KAFKA_DBG_CONSUMER, "FETCH",
+                           "Topic %s [%" PRId32
+                           "]: Fetch failed at %s: %s: broker %" PRId32
+                           "has not yet caught up on latest metadata: "
+                           "retrying",
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos),
+                           rd_kafka_err2str(err), rktp->rktp_broker_id);
                 rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
                 break;
 
@@ -658,6 +683,11 @@ err_parse:
 
 
 
+/**
+ * @broker FetchResponse handling.
+ *
+ * @locality broker thread  (or any thread if err == __DESTROY).
+ */
 static void rd_kafka_broker_fetch_reply(rd_kafka_t *rk,
                                         rd_kafka_broker_t *rkb,
                                         rd_kafka_resp_err_t err,
@@ -835,9 +865,11 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                 /* Partition */
                 rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
 
-                if (rd_kafka_buf_ApiVersion(rkbuf) >= 9)
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 9) {
                         /* CurrentLeaderEpoch */
-                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        rd_kafka_buf_write_i32(
+                            rkbuf, rktp->rktp_offsets.fetch_pos.leader_epoch);
+                }
 
                 /* FetchOffset */
                 rd_kafka_buf_write_i64(rkbuf,

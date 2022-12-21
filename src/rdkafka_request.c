@@ -514,6 +514,9 @@ rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
                                 int64_t Timestamp;
                                 rd_kafka_buf_read_i64(rkbuf, &Timestamp);
                                 rd_kafka_buf_read_i64(rkbuf, &Offset);
+                                if (api_version >= 4)
+                                        rd_kafka_buf_read_i32(rkbuf,
+                                                              &LeaderEpoch);
                         } else if (api_version == 0) {
                                 rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
                                 /* We only request one offset so just grab
@@ -521,13 +524,15 @@ rd_kafka_parse_ListOffsets(rd_kafka_buf_t *rkbuf,
                                 while (OffsetArrayCnt-- > 0)
                                         rd_kafka_buf_read_i64(rkbuf, &Offset);
                         } else {
-                                rd_kafka_assert(NULL, !*"NOTREACHED");
+                                RD_NOTREACHED();
                         }
 
                         rktpar = rd_kafka_topic_partition_list_add(
                             offsets, topic_name, kpartition);
                         rktpar->err    = ErrorCode;
                         rktpar->offset = Offset;
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar,
+                                                                  LeaderEpoch);
 
                         if (ErrorCode && !all_err)
                                 all_err = ErrorCode;
@@ -589,9 +594,13 @@ rd_kafka_handle_ListOffsets(rd_kafka_t *rk,
             RD_KAFKA_ERR_ACTION_REFRESH | RD_KAFKA_ERR_ACTION_RETRY,
             RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH,
 
+            RD_KAFKA_ERR_ACTION_REFRESH | RD_KAFKA_ERR_ACTION_RETRY,
+            RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH,
+
             RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR__TRANSPORT,
 
             RD_KAFKA_ERR_ACTION_RETRY, RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+
 
             RD_KAFKA_ERR_ACTION_END);
 
@@ -637,7 +646,7 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_ListOffsets, 0, 2, NULL);
+            rkb, RD_KAFKAP_ListOffsets, 0, 5, NULL);
         if (ApiVersion == -1)
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
 
@@ -676,6 +685,12 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                 /* Partition */
                 rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
                 part_cnt++;
+
+                if (ApiVersion >= 4)
+                        /* CurrentLeaderEpoch */
+                        rd_kafka_buf_write_i32(
+                            rkbuf,
+                            rd_kafka_topic_partition_get_leader_epoch(rktpar));
 
                 /* Time/Offset */
                 rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
@@ -734,6 +749,96 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
+
+
+/**
+ * @brief OffsetForLeaderEpochResponse handler.
+ */
+rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb,
+    rd_kafka_resp_err_t err,
+    rd_kafka_buf_t *rkbuf,
+    rd_kafka_buf_t *request,
+    rd_kafka_topic_partition_list_t **offsets) {
+        const int log_decode_errors = LOG_ERR;
+        int16_t ApiVersion;
+
+        if (err)
+                goto err;
+
+        ApiVersion = rkbuf->rkbuf_reqhdr.ApiVersion;
+
+        if (ApiVersion >= 2)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
+        *offsets = rd_kafka_buf_read_topic_partitions(
+            rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            ApiVersion >= 1 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET);
+        if (!*offsets)
+                goto err_parse;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err:
+        return err;
+
+err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
+}
+
+
+/**
+ * @brief Send OffsetForLeaderEpochRequest for partition(s).
+ *
+ */
+void rd_kafka_OffsetForLeaderEpochRequest(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_topic_partition_list_t *parts,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 2, NULL);
+        /* If the supported ApiVersions are not yet known,
+         * or this broker doesn't support it, we let this request
+         * succeed or fail later from the broker thread where the
+         * version is checked again. */
+        if (ApiVersion == -1)
+                ApiVersion = 2;
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 1, 4 + (parts->cnt * 64),
+            ApiVersion >= 4 /*flexver*/);
+
+        /* Sort partitions by topic */
+        rd_kafka_topic_partition_list_sort_by_topic(parts);
+
+        /* Write partition list */
+        rd_kafka_buf_write_topic_partitions(
+            rkbuf, parts, rd_false /*include invalid offsets*/,
+            rd_false /*skip valid offsets */,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            /* CurrentLeaderEpoch */
+            RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
+            /* LeaderEpoch */
+            RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        /* Let caller perform retries */
+        rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+}
+
 
 
 /**
@@ -1954,7 +2059,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 4, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 7, &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
                                          4 + (50 * topic_cnt) + 1);

@@ -122,6 +122,8 @@ void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
                            const char *fmt,
                            ...) RD_FORMAT(printf, 5, 6);
 
+void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...)
+    RD_FORMAT(printf, 2, 3);
 
 void rd_kafka_offset_query_tmr_cb(rd_kafka_timers_t *rkts, void *arg);
 

@@ -37,8 +37,10 @@
 
 #include "rdunittest.h"
 
-const char *rd_kafka_fetch_states[] = {"none",         "stopping",    "stopped",
-                                       "offset-query", "offset-wait", "active"};
+const char *rd_kafka_fetch_states[] = {"none",        "stopping",
+                                       "stopped",     "offset-query",
+                                       "offset-wait", "validate-epoch-wait",
+                                       "active"};
 
 
 static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
@@ -302,6 +304,8 @@ static void rd_kafka_toppar_remove(rd_kafka_toppar_t *rktp) {
                      rktp);
 
         rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+                            &rktp->rktp_validate_tmr, 1 /*lock*/);
+        rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
                             &rktp->rktp_offset_query_tmr, 1 /*lock*/);
         rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
                             &rktp->rktp_consumer_lag_tmr, 1 /*lock*/);
@@ -348,8 +352,8 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
 /**
  * Set toppar fetching state.
  *
- * Locality: broker thread
- * Locks: rd_kafka_toppar_lock() MUST be held.
+ * @locality any
+ * @locks_required rd_kafka_toppar_lock() MUST be held.
  */
 void rd_kafka_toppar_set_fetch_state(rd_kafka_toppar_t *rktp, int fetch_state) {
         rd_kafka_assert(NULL,

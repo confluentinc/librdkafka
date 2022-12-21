@@ -279,6 +279,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                RD_KAFKA_TOPPAR_FETCH_STOPPED,
                RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
                RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+               RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
                RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 
@@ -416,6 +417,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_kafka_timer_t rktp_offset_sync_tmr;   /* Offset file sync timer */
         rd_kafka_timer_t rktp_consumer_lag_tmr;  /* Consumer lag monitoring
                                                   * timer */
+        rd_kafka_timer_t rktp_validate_tmr;      /**< Offset and epoch
+                                                  *   validation retry timer */
 
         rd_interval_t rktp_lease_intvl;         /**< Preferred replica lease
                                                  *   period */

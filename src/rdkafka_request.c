@@ -753,7 +753,7 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                         int32_t partition;
                         rd_kafka_toppar_t *rktp;
                         rd_kafka_topic_partition_t *rktpar;
-                        int32_t LeaderEpoch;
+                        int32_t LeaderEpoch = -1;
                         int16_t err2;
 
                         rd_kafka_buf_read_i32(rkbuf, &partition);
@@ -788,21 +788,26 @@ rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
                                 rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                         else
                                 rktpar->offset = offset;
+
+                        rd_kafka_topic_partition_set_leader_epoch(rktpar,
+                                                                  LeaderEpoch);
                         rktpar->err = err2;
 
                         rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
                                    "OffsetFetchResponse: %s [%" PRId32
                                    "] "
-                                   "offset %" PRId64
+                                   "offset %" PRId64 ", leader epoch %" PRId32
                                    ", metadata %d byte(s): %s",
-                                   topic_name, partition, offset,
+                                   topic_name, partition, offset, LeaderEpoch,
                                    RD_KAFKAP_STR_LEN(&metadata),
                                    rd_kafka_err2name(rktpar->err));
 
                         if (update_toppar && !err2 && rktp) {
                                 /* Update toppar's committed offset */
                                 rd_kafka_toppar_lock(rktp);
-                                rktp->rktp_committed_offset = rktpar->offset;
+                                rktp->rktp_committed_pos =
+                                    rd_kafka_topic_partition_get_fetch_pos(
+                                        rktpar);
                                 rd_kafka_toppar_unlock(rktp);
                         }
 
@@ -922,8 +927,7 @@ void rd_kafka_op_handle_OffsetFetch(rd_kafka_t *rk,
                 err = rd_kafka_handle_OffsetFetch(
                     rkb->rkb_rk, rkb, err, rkbuf, request, &offsets,
                     rd_false /*dont update rktp*/, rd_false /*dont add part*/,
-                    /* Allow retries if replyq
-                     * is valid */
+                    /* Allow retries if replyq is valid */
                     rd_kafka_op_replyq_is_valid(rko));
                 if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
                         if (offsets)
@@ -1302,7 +1306,9 @@ int rd_kafka_OffsetCommitRequest(rd_kafka_broker_t *rkb,
 
                 /* v6: KIP-101 CommittedLeaderEpoch */
                 if (ApiVersion >= 6)
-                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        rd_kafka_buf_write_i32(
+                            rkbuf,
+                            rd_kafka_topic_partition_get_leader_epoch(rktpar));
 
                 /* v1: TimeStamp */
                 if (ApiVersion == 1)
@@ -1397,8 +1403,7 @@ rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, grpoffsets->partitions,
             rd_false /*dont skip invalid offsets*/, rd_false /*any offset*/,
-            rd_false /*dont write offsets*/, rd_false /*dont write epoch*/,
-            rd_false /*dont write metadata*/);
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1425,8 +1430,7 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rkgm->rkgm_assignment,
             rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
-            rd_false /*don't write offsets*/, rd_false /*don't write epoch*/,
-            rd_false /*don't write metadata*/);
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */

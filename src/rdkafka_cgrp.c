@@ -2832,7 +2832,8 @@ static int rd_kafka_cgrp_update_committed_offsets(
                         continue;
 
                 rd_kafka_toppar_lock(rktp);
-                rktp->rktp_committed_offset = rktpar->offset;
+                rktp->rktp_committed_pos =
+                    rd_kafka_topic_partition_get_fetch_pos(rktpar);
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_toppar_destroy(rktp); /* from get_toppar() */
@@ -3076,8 +3077,9 @@ static size_t rd_kafka_topic_partition_has_absolute_offset(
  *
  * \p rko...silent_empty: if there are no offsets to commit bail out
  *                        silently without posting an op on the reply queue.
- * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions from
- *                 the rktp's stored offset.
+ * \p set_offsets: set offsets and epochs in
+ *                 rko->rko_u.offset_commit.partitions from the rktp's
+ *                 stored offset.
  *
  * Locality: cgrp thread
  */

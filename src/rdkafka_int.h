@@ -82,6 +82,17 @@ struct rd_kafka_toppar_s;
 typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 
+/**
+ * @struct Represents a fetch position:
+ *         an offset and an partition leader epoch (if known, else -1).
+ */
+typedef struct rd_kafka_fetch_pos_s {
+        int64_t offset;
+        int32_t leader_epoch;
+} rd_kafka_fetch_pos_t;
+
+
+
 #include "rdkafka_op.h"
 #include "rdkafka_queue.h"
 #include "rdkafka_msg.h"

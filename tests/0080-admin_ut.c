@@ -2134,16 +2134,16 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,                        \
                     RD_KAFKA_ADMIN_OP_ALTERCONFIGS,                            \
                     RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,                         \
-                    RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS,                  \
-                    RD_KAFKA_ADMIN_OP_DELETEGROUPS,                            \
                     RD_KAFKA_ADMIN_OP_DELETERECORDS,                           \
-                    RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
                     RD_KAFKA_ADMIN_OP_CREATEACLS,                              \
                     RD_KAFKA_ADMIN_OP_DESCRIBEACLS,                            \
                     RD_KAFKA_ADMIN_OP_DELETEACLS,                              \
+                    RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS,                      \
+                    RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS,                  \
+                    RD_KAFKA_ADMIN_OP_DELETEGROUPS,                            \
                     RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,                \
                     RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,               \
-                    RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS,                      \
+                    RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */                   \
         }
         struct {

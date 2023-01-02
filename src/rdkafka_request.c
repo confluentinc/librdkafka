@@ -970,7 +970,7 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
-        size_t parts_size = 4;
+        size_t parts_size = 0;
         int PartCnt       = -1;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
@@ -982,9 +982,9 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetFetch, 1,
-            RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) /* GroupId */ + 4 +
-                parts_size /* Topics */ + 1,
-            ApiVersion >= 6 /*flexver*/);
+            /* GroupId + rd_kafka_buf_write_arraycnt_pos +
+             * Topics + RequireStable */
+            32 + 4 + parts_size + 1, ApiVersion >= 6 /*flexver*/);
 
         /* ConsumerGroup */
         rd_kafka_buf_write_str(rkbuf, group_id, -1);

@@ -146,6 +146,12 @@ create_txn_producer(rd_kafka_mock_cluster_t **mclusterp,
         test_conf_init(&conf, NULL, 60);
 
         test_conf_set(conf, "transactional.id", transactional_id);
+        /* When mock brokers are set to down state they're still binding
+         * the port, just not listening to it, which makes connection attempts
+         * stall until socket.connection.setup.timeout.ms expires.
+         * To speed up detection of brokers being down we reduce this timeout
+         * to just a couple of seconds. */
+        test_conf_set(conf, "socket.connection.setup.timeout.ms", "5000");
         /* Speed up reconnects */
         test_conf_set(conf, "reconnect.backoff.max.ms", "2000");
         test_conf_set(conf, "test.mock.num.brokers", numstr);
@@ -1686,6 +1692,60 @@ static void do_test_txns_send_offsets_concurrent_is_retried(void) {
 
 
 /**
+ * @brief Verify that send_offsets_to_transaction() with no eligible offsets
+ *        is handled properly - the call should succeed immediately and be
+ *        repeatable.
+ */
+static void do_test_txns_send_offsets_non_eligible(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, 5000);
+
+        /* Empty offsets list */
+        offsets = rd_kafka_topic_partition_list_new(0);
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+
+        /* Now call it again, should also succeed. */
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
+
+        /* All done */
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Verify that request timeouts don't cause crash (#2913).
  */
 static void do_test_txns_no_timeout_crash(void) {
@@ -2579,7 +2639,6 @@ static void do_test_commit_after_msg_timeout(void) {
         TEST_ASSERT(remains == 0, "%d message(s) were not flushed\n", remains);
 
         TEST_SAY("Attempting second transaction, which should succeed\n");
-        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = error_is_fatal_cb;
         test_curr->exp_dr_err  = RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -2592,6 +2651,7 @@ static void do_test_commit_after_msg_timeout(void) {
 
         rd_kafka_destroy(rk);
 
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
         test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
@@ -3051,6 +3111,67 @@ static void do_test_txn_coordinator_null_not_fatal(void) {
 
 
 /**
+ * @brief Simple test to make sure the init_transactions() timeout is honoured
+ *        and also not infinite.
+ */
+static void do_test_txn_resumable_init(void) {
+        rd_kafka_t *rk;
+        const char *transactional_id = "txnid";
+        rd_kafka_error_t *error;
+        test_timing_t duration;
+
+        SUB_TEST();
+
+        rd_kafka_conf_t *conf;
+
+        test_conf_init(&conf, NULL, 20);
+        test_conf_set(conf, "bootstrap.servers", "");
+        test_conf_set(conf, "transactional.id", transactional_id);
+        test_conf_set(conf, "transaction.timeout.ms", "4000");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* First make sure a lower timeout is honoured. */
+        TIMING_START(&duration, "init_transactions(1000)");
+        error = rd_kafka_init_transactions(rk, 1000);
+        TIMING_STOP(&duration);
+
+        if (error)
+                TEST_SAY("First init_transactions failed (as expected): %s\n",
+                         rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s",
+                    error ? rd_kafka_error_string(error) : "success");
+        rd_kafka_error_destroy(error);
+
+        TIMING_ASSERT(&duration, 900, 1500);
+
+        TEST_SAY(
+            "Performing second init_transactions() call now with an "
+            "infinite timeout: "
+            "should time out in 2 x transaction.timeout.ms\n");
+
+        TIMING_START(&duration, "init_transactions(infinite)");
+        error = rd_kafka_init_transactions(rk, -1);
+        TIMING_STOP(&duration);
+
+        if (error)
+                TEST_SAY("Second init_transactions failed (as expected): %s\n",
+                         rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected _TIMED_OUT, not %s",
+                    error ? rd_kafka_error_string(error) : "success");
+        rd_kafka_error_destroy(error);
+
+        TIMING_ASSERT(&duration, 2 * 4000 - 500, 2 * 4000 + 500);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Retries a transaction call until it succeeds or returns a
  *        non-retriable error - which will cause the test to fail.
  *
@@ -3180,6 +3301,87 @@ static void do_test_txn_resumable_calls_timeout(rd_bool_t do_commit) {
                     TXN_CALL_EXPECT_ERROR__(rd_kafka_commit_transaction(rk, -1),
                                             RD_KAFKA_RESP_ERR__CONFLICT));
         }
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify that resuming timed out calls that after the timeout, but
+ *        before the resuming call, would error out.
+ */
+static void do_test_txn_resumable_calls_timeout_error(rd_bool_t do_commit) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        int32_t coord_id             = 1;
+        const char *topic            = "test";
+        const char *transactional_id = "txnid";
+        int msgcnt                   = 1;
+        int remains                  = 0;
+        rd_kafka_error_t *error;
+
+        SUB_TEST_QUICK("%s_transaction", do_commit ? "commit" : "abort");
+
+        rk = create_txn_producer(&mcluster, transactional_id, 1, NULL);
+
+        err = rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        TEST_ASSERT(!err, "Failed to create topic: %s", rd_kafka_err2str(err));
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", transactional_id,
+                                      coord_id);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, coord_id);
+
+        TEST_SAY("Starting transaction\n");
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        test_produce_msgs2_nowait(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0,
+                                  msgcnt, NULL, 0, &remains);
+
+
+        TEST_SAY("Fail EndTxn fatally after 2000ms\n");
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_EndTxn, 1,
+            RD_KAFKA_RESP_ERR_INVALID_TXN_STATE, 2000);
+
+        if (do_commit) {
+                TEST_SAY("Committing transaction\n");
+
+                TXN_CALL_EXPECT_ERROR__(rd_kafka_commit_transaction(rk, 500),
+                                        RD_KAFKA_RESP_ERR__TIMED_OUT);
+
+                /* Sleep so that the background EndTxn fails locally and sets
+                 * an error result. */
+                rd_sleep(3);
+
+                error = rd_kafka_commit_transaction(rk, -1);
+
+        } else {
+                TEST_SAY("Aborting transaction\n");
+
+                TXN_CALL_EXPECT_ERROR__(rd_kafka_commit_transaction(rk, 500),
+                                        RD_KAFKA_RESP_ERR__TIMED_OUT);
+
+                /* Sleep so that the background EndTxn fails locally and sets
+                 * an error result. */
+                rd_sleep(3);
+
+                error = rd_kafka_commit_transaction(rk, -1);
+        }
+
+        TEST_ASSERT(error != NULL && rd_kafka_error_is_fatal(error),
+                    "Expected fatal error, not %s",
+                    rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_INVALID_TXN_STATE,
+                    "Expected error INVALID_TXN_STATE, got %s",
+                    rd_kafka_error_name(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_destroy(rk);
 
@@ -3522,6 +3724,83 @@ static void do_test_txn_fenced_abort(rd_kafka_resp_err_t error_code) {
 }
 
 
+/**
+ * @brief Test that the TxnOffsetCommit op doesn't retry without waiting
+ * if the coordinator is found but not available, causing too frequent retries.
+ */
+static void
+do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        rd_kafka_error_t *error;
+        int timeout;
+
+        SUB_TEST_QUICK("times_out=%s", RD_STR_ToF(times_out));
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
+                                RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "produce failed: %s", rd_kafka_err2str(err));
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, 5000);
+
+        /*
+         * Fail TxnOffsetCommit with COORDINATOR_NOT_AVAILABLE
+         * repeatedly.
+         */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_TxnOffsetCommit, 4,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic", 3)->offset = 1;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroupid");
+
+        /* The retry delay is 500ms, with 4 retries it should take at least
+         * 2000ms for this call to succeed. */
+        timeout = times_out ? 500 : 4000;
+        error   = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata,
+                                                     timeout);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        if (times_out) {
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+                            "expected %s, got: %s",
+                            rd_kafka_err2name(
+                                RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE),
+                            rd_kafka_err2str(rd_kafka_error_code(error)));
+        } else {
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "expected \"Success\", found: %s",
+                            rd_kafka_err2str(rd_kafka_error_code(error)));
+        }
+        rd_kafka_error_destroy(error);
+
+        /* All done */
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -3564,6 +3843,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txns_send_offsets_concurrent_is_retried();
 
+        do_test_txns_send_offsets_non_eligible();
+
         do_test_txn_coord_req_destroy();
 
         do_test_txn_coord_req_multi_find();
@@ -3604,6 +3885,11 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txn_resumable_calls_timeout(rd_false);
 
+        do_test_txn_resumable_calls_timeout_error(rd_true);
+
+        do_test_txn_resumable_calls_timeout_error(rd_false);
+        do_test_txn_resumable_init();
+
         do_test_txn_concurrent_operations(rd_true /*commit*/);
 
         do_test_txn_concurrent_operations(rd_false /*abort*/);
@@ -3611,6 +3897,10 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH);
 
         do_test_txn_fenced_abort(RD_KAFKA_RESP_ERR_PRODUCER_FENCED);
+
+        do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_true);
+
+        do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_false);
 
         return 0;
 }

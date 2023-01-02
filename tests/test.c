@@ -244,6 +244,7 @@ _TEST_DECL(0133_ssl_keys);
 _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
+_TEST_DECL(0137_barrier_batch_consume);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -486,6 +487,7 @@ struct test tests[] = {
     _TEST(0134_ssl_provider, TEST_F_LOCAL),
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
+    _TEST(0137_barrier_batch_consume, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -1401,15 +1403,18 @@ static int test_summary(int do_lock) {
 #else
                 sql_fp = popen(test_sql_cmd, "w");
 #endif
-
-                fprintf(sql_fp,
-                        "CREATE TABLE IF NOT EXISTS "
-                        "runs(runid text PRIMARY KEY, mode text, "
-                        "date datetime, cnt int, passed int, failed int, "
-                        "duration numeric);\n"
-                        "CREATE TABLE IF NOT EXISTS "
-                        "tests(runid text, mode text, name text, state text, "
-                        "extra text, duration numeric);\n");
+                if (!sql_fp)
+                        TEST_WARN("Failed to execute test.sql.command: %s",
+                                  test_sql_cmd);
+                else
+                        fprintf(sql_fp,
+                                "CREATE TABLE IF NOT EXISTS "
+                                "runs(runid text PRIMARY KEY, mode text, "
+                                "date datetime, cnt int, passed int, "
+                                "failed int, duration numeric);\n"
+                                "CREATE TABLE IF NOT EXISTS "
+                                "tests(runid text, mode text, name text, "
+                                "state text, extra text, duration numeric);\n");
         }
 
         if (show_summary)

@@ -126,7 +126,7 @@ EOF
 
     if [ $RET -gt 0 ]; then
 	echo -e "${RED}###"
-	echo -e "### Test $TEST in $mode mode FAILED! ###"
+	echo -e "### Test $TEST in $mode mode FAILED! (return code $RET) ###"
 	echo -e "###${CCLR}"
 	FAILED=1
     else

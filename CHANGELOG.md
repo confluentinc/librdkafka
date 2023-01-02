@@ -33,11 +33,37 @@ providers. As such librdkafka will emit a deprecation warning if
 OpenSSL providers may be configured with the new `ssl.providers`
 configuration property.
 
+### Broker TLS certificate hostname verification
+
+The default value for `ssl.endpoint.identification.algorithm` has been
+changed from `none` (no hostname verification) to `https`, which enables
+broker hostname verification (to counter man-in-the-middle
+impersonation attacks) by default.
+
+To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
+
+## Known Issues
+
+### Poor Consumer batch API messaging guarantees
+
+The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
+**pause**, **resume** or **rebalancing** operation is performed in parallel with any of
+the above APIs. Some of the messages might be lost, or erroneously returned to the 
+application, in the above scenario.
+
+It is strongly recommended to use the Consumer Batch APIs and the mentioned
+operations in sequential order in order to get consistent result.
+
+For **rebalancing** operation to work in sequencial manner, please set `rebalance_cb`
+configuration property (refer [examples/rdkafka_complex_consumer_example.c]
+(examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
 
 ## Enhancements
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
- * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Updated to zlib 1.2.13, zstd 1.5.2, and curl 7.86.0 in self-contained
+   librdkafka bundles.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
  * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
@@ -45,6 +71,10 @@ configuration property.
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
  * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * The librdkafka.redist NuGet package has been updated to have fewer external
+   dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
+   is now built-in. There are bundled builds with and without linking to
+   cyrus-sasl for maximum compatibility.
 
 ## Fixes
 
@@ -73,10 +103,24 @@ configuration property.
  * Timeouts for EndTxn requests (transaction commits and aborts) are now
    automatically retried and the error raised to the application is also
    a retriable error.
+ * TxnOffsetCommitRequests were retried immediately upon temporary errors in
+   `send_offsets_to_transactions()`, causing excessive network requests.
+   These retries are now delayed 500ms.
+ * If `init_transactions()` is called with an infinite timeout (-1),
+   the timeout will be limited to 2 * `transaction.timeout.ms`.
+   The application may retry and resume the call if a retriable error is
+   returned.
+
 
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` skipping
+   other partitions' offsets intermittently when **seek**, **pause**, **resume**
+   or **rebalancing** is used for a partition.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently returing incorrect partitions' messages if **rebalancing** 
+   happens during these operations.
  * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
 
 # librdkafka v1.9.2

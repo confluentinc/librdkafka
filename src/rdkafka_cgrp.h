@@ -117,7 +117,7 @@ typedef struct rd_kafka_cgrp_s {
 
         /* State when group leader */
         struct {
-                rd_kafka_group_member_t *members;
+                rd_kafka_group_member_internal_t *members;
                 int member_cnt;
         } rkcg_group_leader;
 
@@ -184,8 +184,6 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_assignor_t *rkcg_assignor; /**< The current partition
                                              *   assignor. used by both
                                              *   leader and members. */
-        void *rkcg_assignor_state;          /**< current partition
-                                             *   assignor state */
 
         int32_t rkcg_coord_id; /**< Current coordinator id,
                                 *   or -1 if not known. */

@@ -158,6 +158,8 @@ static void rd_kafka_global_init0(void) {
 #if WITH_CURL
         rd_http_global_init();
 #endif
+
+        rd_kafka_assignor_global_init();
 }
 
 /**

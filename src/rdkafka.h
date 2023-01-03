@@ -8488,6 +8488,183 @@ rd_kafka_error_t *rd_kafka_abort_transaction(rd_kafka_t *rk, int timeout_ms);
 
 /**@}*/
 
+/**
+ * @name Custom Consumer Partition Assignor API
+ * @{
+ */
+
+/**
+ * @enum rd_kafka_rebalance_protocol_t
+ *
+ * @brief Enumerates the different rebalance protocol types.
+ *
+ * @sa
+ * https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol
+ * @sa rd_kafka_rebalance_protocol()
+ */
+typedef enum rd_kafka_rebalance_protocol_t {
+        RD_KAFKA_REBALANCE_PROTOCOL_NONE,       /**< Rebalance protocol is
+                                                     unknown */
+        RD_KAFKA_REBALANCE_PROTOCOL_EAGER,      /**< Eager rebalance
+                                                     protocol */
+        RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE /**< Cooperative
+                                                     rebalance protocol*/
+} rd_kafka_rebalance_protocol_t;
+
+
+/**
+ * @brief Custom user data associated with a given member and preserved in Kafka
+ * itself.
+ */
+typedef struct rd_kafka_member_userdata_serialized_s {
+        /** Pointer to the serialized data. */
+        const void *data;
+        /** Length of the serialized data. */
+        size_t len;
+} rd_kafka_member_userdata_serialized_t;
+
+
+/**
+ * @brief Initializes user matadata object.
+ *
+ * @param data Pointer the serialized user data.
+ *             It can be NULL, in that case len must be 0.
+ * @param len Length of the serialized data.
+ *
+ * @returns A newly allocated object that could be returned from the
+ * rd_kafka_assignor_get_user_metadata_cb_t() callback or passed to the
+ * rd_kafka_assignor_assign_cb_t() callback.
+ *
+ * @remark Use rd_kafka_member_userdata_serialized_destroy() to free the
+ * resources.
+ */
+RD_EXPORT
+rd_kafka_member_userdata_serialized_t *
+rd_kafka_member_userdata_serialized_new(const void *data, size_t len);
+
+
+/**
+ * @brief Destroys object created with rd_kafka_member_userdata_serialized_new()
+ */
+RD_EXPORT
+void rd_kafka_member_userdata_serialized_destroy(
+    rd_kafka_member_userdata_serialized_t *mdata);
+
+
+/**
+ * @brief Represents a member of the assignment.
+ */
+typedef struct rd_kafka_group_member_s {
+        /** Subscribed topics (partition field is ignored). */
+        const rd_kafka_topic_partition_list_t *rkgm_subscription;
+        /** Partitions assigned to this member after running the assignor.
+         *  E.g., the current assignment coming out of the rebalance. */
+        rd_kafka_topic_partition_list_t *rkgm_assignment;
+        /** Partitions reported as currently owned by the member, read
+         *  from consumer metadata. E.g., the current assignment going into
+         *  the rebalance. */
+        const rd_kafka_topic_partition_list_t *rkgm_owned;
+        /** Member id (e.g., client.id-some-uuid). */
+        const char *rkgm_member_id;
+        /** Group instance id. */
+        const char *rkgm_group_instance_id;
+        /** Member-specific opaque userdata. */
+        const rd_kafka_member_userdata_serialized_t *rkgm_userdata;
+        /** Group generation id. */
+        int rkgm_generation;
+} rd_kafka_group_member_t;
+
+
+/**
+ * @brief Returns serialized member user metadata.
+ * This callback is called when member joins the group.
+ *
+ * @param opaque Opaque data passed to rd_kafka_assignor_register().
+ * @param member_id Name of the member ID.
+ * @param owned_partitions List of partitions the member is subscribed to.
+ * @param generation_id Consumer group generation ID.
+ *
+ * @remark It may return NULL if there's nothing to persist.
+ */
+typedef rd_kafka_member_userdata_serialized_t *(
+    *rd_kafka_assignor_get_user_metadata_cb_t)(
+    void *opaque,
+    const char *member_id,
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    int32_t generation_id);
+
+
+/**
+ * @brief Structure to hold metadata for a single topic and all its
+ * subscribing members.
+ */
+typedef struct rd_kafka_assignor_topic_s {
+        /** Topic information. */
+        const rd_kafka_metadata_topic_t *metadata;
+        /** List of members subscribed to the given topic. */
+        rd_kafka_group_member_t *members;
+        /** Number of elements in \p members. */
+        size_t member_cnt;
+} rd_kafka_assignor_topic_t;
+
+
+/**
+ * @brief rd_kafka_assignor_assign_cb_t is called to perform the group
+ * assignment given the member subscriptions and current cluster metadata. It
+ * does that by manipulating `members` argument.
+ */
+typedef rd_kafka_resp_err_t (*rd_kafka_assignor_assign_cb_t)(
+    /** Client instance. */
+    rd_kafka_t *rk,
+    /** Opaque data passed to rd_kafka_assignor_register(). */
+    void *opaque,
+    /** Member ID that builds consumer group assignment. */
+    const char *member_id,
+    /** Kafka cluster metadata. */
+    const rd_kafka_metadata_t *metadata,
+    /** List of members eligible for the assignment. This is an "output"
+       structure.  */
+    rd_kafka_group_member_t *members,
+    /** Number of elements in \p members. */
+    size_t member_cnt,
+    /**
+     * List of the eligible topics for the assignment.
+     * The callback is free manipulating `eligible_topics` in any way,
+     * it is not used by the caller but the resources are destroyed afterwards.
+     */
+    rd_kafka_assignor_topic_t *eligible_topics,
+    /** Number of elements in \p eligible_topics. */
+    size_t eligible_topic_cnt,
+    /** A human readable error string (nul-terminated) is written to
+     * this location (only written to if there is a fatal error).
+     */
+    char *errstr,
+    /** Writable size in \p errstr. */
+    size_t errstr_size);
+
+
+/**
+ * @brief Register new assignor.
+ *
+ * @param protocol_name Name of the assignor (as set via the
+ * "partition.assignment.strategy" option).
+ * @param rebalance_protocol Rebalance protocol option @sa
+ * rd_kafka_rebalance_protocol_t
+ * @param assign_cb Callback that decides consumer group assignment.
+ * @param get_user_metadata_cb Callback that generates consumer group member
+ * user data. It is an optional parameter and can be NULL.
+ * @param opaque An opaque data passed to the assignor callbacks.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_assignor_register(
+    const char *protocol_name,
+    rd_kafka_rebalance_protocol_t rebalance_protocol,
+    rd_kafka_assignor_assign_cb_t assign_cb,
+    rd_kafka_assignor_get_user_metadata_cb_t get_user_metadata_cb,
+    void *opaque);
+
+/**@}*/
+
 /* @cond NO_DOC */
 #ifdef __cplusplus
 }

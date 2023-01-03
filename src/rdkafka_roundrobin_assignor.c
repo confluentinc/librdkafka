@@ -51,28 +51,28 @@
 
 rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_assign_cb(
     rd_kafka_t *rk,
-    const rd_kafka_assignor_t *rkas,
+    void *opaque,
     const char *member_id,
     const rd_kafka_metadata_t *metadata,
     rd_kafka_group_member_t *members,
     size_t member_cnt,
-    rd_kafka_assignor_topic_t **eligible_topics,
+    rd_kafka_assignor_topic_t *eligible_topics,
     size_t eligible_topic_cnt,
     char *errstr,
-    size_t errstr_size,
-    void *opaque) {
+    size_t errstr_size) {
         unsigned int ti;
         int next = -1; /* Next member id */
 
         /* Sort topics by name */
-        qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
-              rd_kafka_assignor_topic_cmp);
+        qsort(eligible_topics, eligible_topic_cnt,
+              sizeof(rd_kafka_assignor_topic_t), rd_kafka_assignor_topic_cmp);
 
         /* Sort members by name */
         qsort(members, member_cnt, sizeof(*members), rd_kafka_group_member_cmp);
 
         for (ti = 0; ti < eligible_topic_cnt; ti++) {
-                rd_kafka_assignor_topic_t *eligible_topic = eligible_topics[ti];
+                rd_kafka_assignor_topic_t *eligible_topic =
+                    &eligible_topics[ti];
                 int partition;
 
                 /* For each topic+partition, assign one member (in a cyclic
@@ -95,7 +95,7 @@ rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_assign_cb(
                         rd_kafka_dbg(rk, CGRP, "ASSIGN",
                                      "roundrobin: Member \"%s\": "
                                      "assigned topic %s partition %d",
-                                     rkgm->rkgm_member_id->str,
+                                     rkgm->rkgm_member_id,
                                      eligible_topic->metadata->topic,
                                      partition);
 
@@ -114,10 +114,8 @@ rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_assign_cb(
 /**
  * @brief Initialzie and add roundrobin assignor.
  */
-rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init(rd_kafka_t *rk) {
-        return rd_kafka_assignor_add(
-            rk, "consumer", "roundrobin", RD_KAFKA_REBALANCE_PROTOCOL_EAGER,
-            rd_kafka_roundrobin_assignor_assign_cb,
-            rd_kafka_assignor_get_metadata_with_empty_userdata, NULL, NULL,
-            NULL, NULL);
+rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_register(void) {
+        return rd_kafka_assignor_register_internal(
+            "roundrobin", RD_KAFKA_REBALANCE_PROTOCOL_EAGER,
+            rd_kafka_roundrobin_assignor_assign_cb, NULL, NULL, NULL);
 }

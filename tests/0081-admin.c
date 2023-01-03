@@ -2845,7 +2845,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
 static void do_test_DeleteConsumerGroupOffsets(const char *what,
                                                rd_kafka_t *rk,
                                                rd_kafka_queue_t *useq,
-                                               int op_timeout,
+                                               int req_timeout_ms,
                                                rd_bool_t sub_consumer) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
@@ -2870,20 +2870,22 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         rd_kafka_t *consumer;
         char *groupid;
 
-        SUB_TEST_QUICK("%s DeleteConsumerGroupOffsets with %s, op_timeout %d%s",
-                       rd_kafka_name(rk), what, op_timeout,
-                       sub_consumer ? ", with subscribing consumer" : "");
+        SUB_TEST_QUICK(
+            "%s DeleteConsumerGroupOffsets with %s, req_timeout_ms %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
 
         if (sub_consumer)
                 exp_err = RD_KAFKA_RESP_ERR_GROUP_SUBSCRIBED_TO_TOPIC;
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
 
-                err = rd_kafka_AdminOptions_set_operation_timeout(
-                    options, op_timeout, errstr, sizeof(errstr));
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         }
 
@@ -3099,7 +3101,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 static void do_test_AlterConsumerGroupOffsets(const char *what,
                                               rd_kafka_t *rk,
                                               rd_kafka_queue_t *useq,
-                                              int op_timeout,
+                                              int req_timeout_ms,
                                               rd_bool_t sub_consumer,
                                               rd_bool_t create_topics) {
         rd_kafka_queue_t *q;
@@ -3123,12 +3125,14 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
         const rd_kafka_AlterConsumerGroupOffsets_result_t *res;
         const rd_kafka_group_result_t **gres;
         size_t gres_cnt;
-        rd_kafka_t *consumer;
+        rd_kafka_t *consumer = NULL;
         char *group_id;
 
-        SUB_TEST_QUICK("%s AlterConsumerGroupOffsets with %s, op_timeout %d%s",
-                       rd_kafka_name(rk), what, op_timeout,
-                       sub_consumer ? ", with subscribing consumer" : "");
+        SUB_TEST_QUICK(
+            "%s AlterConsumerGroupOffsets with %s, "
+            "request_timeout %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
 
         if (!create_topics)
                 exp_err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
@@ -3142,11 +3146,12 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
 
-                err = rd_kafka_AdminOptions_set_operation_timeout(
-                    options, op_timeout, errstr, sizeof(errstr));
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         }
 
@@ -3376,7 +3381,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 static void do_test_ListConsumerGroupOffsets(const char *what,
                                              rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,
-                                             int op_timeout,
+                                             int req_timeout_ms,
                                              rd_bool_t sub_consumer,
                                              rd_bool_t null_toppars) {
         rd_kafka_queue_t *q;
@@ -3403,17 +3408,20 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_t *consumer;
         char *group_id;
 
-        SUB_TEST_QUICK("%s ListConsumerGroupOffsets with %s, op_timeout %d%s",
-                       rd_kafka_name(rk), what, op_timeout,
-                       sub_consumer ? ", with subscribing consumer" : "");
+        SUB_TEST_QUICK(
+            "%s ListConsumerGroupOffsets with %s, "
+            "request timeout %d%s",
+            rd_kafka_name(rk), what, req_timeout_ms,
+            sub_consumer ? ", with subscribing consumer" : "");
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
+        if (req_timeout_ms != -1) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS);
 
-                err = rd_kafka_AdminOptions_set_operation_timeout(
-                    options, op_timeout, errstr, sizeof(errstr));
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         }
 
@@ -3678,49 +3686,43 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
                 /* Delete committed offsets */
+                do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                   rd_false);
+                do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
+                                                   1500, rd_false);
                 do_test_DeleteConsumerGroupOffsets(
-                    "temp queue, op timeout"
-                    "0",
-                    rk, NULL, 0, rd_false);
-                do_test_DeleteConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500, rd_false);
-                do_test_DeleteConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
+                    "main queue", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/);
 
                 /* Alter committed offsets */
-                do_test_AlterConsumerGroupOffsets(
-                    "temp queue, op timeout 0", rk, NULL, 0, rd_false, rd_true);
-                do_test_AlterConsumerGroupOffsets(
-                    "main queue, op timeout "
-                    "1500",
-                    rk, mainq, 1500, rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                  rd_false, rd_true);
                 do_test_AlterConsumerGroupOffsets(
                     "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
                     rd_false /* don't create topics */);
                 do_test_AlterConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
+                    "main queue", rk, mainq, 1500,
                     rd_true, /*with subscribing consumer*/
                     rd_true);
 
                 /* List committed offsets */
-                do_test_ListConsumerGroupOffsets("temp queue, op timeout 0", rk,
-                                                 NULL, 0, rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_false);
                 do_test_ListConsumerGroupOffsets(
                     "main queue, op timeout "
                     "1500",
                     rk, mainq, 1500, rd_false, rd_false);
                 do_test_ListConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
+                    "main queue", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/, rd_false);
-                do_test_ListConsumerGroupOffsets("temp queue, op timeout 0", rk,
-                                                 NULL, 0, rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                 rd_false, rd_true);
                 do_test_ListConsumerGroupOffsets(
-                    "main queue, op timeout "
-                    "1500",
-                    rk, mainq, 1500, rd_false, rd_true);
-                do_test_ListConsumerGroupOffsets(
-                    "main queue, op timeout 1500", rk, mainq, 1500,
+                    "main queue", rk, mainq, 1500,
                     rd_true /*with subscribing consumer*/, rd_true);
         }
 

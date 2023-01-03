@@ -1236,8 +1236,8 @@ err:
                                                   "OffsetCommitRequest failed");
         }
 
-        if (actions & RD_KAFKA_ERR_ACTION_RETRY &&
-            !(actions & RD_KAFKA_ERR_ACTION_PERMANENT) && request != NULL &&
+        if (!ignore_cgrp && actions & RD_KAFKA_ERR_ACTION_RETRY &&
+            !(actions & RD_KAFKA_ERR_ACTION_PERMANENT) &&
             rd_kafka_buf_retry(rkb, request))
                 return RD_KAFKA_RESP_ERR__IN_PROGRESS;
 

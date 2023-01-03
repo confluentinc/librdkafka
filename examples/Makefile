@@ -4,7 +4,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	producer consumer idempotent_producer transactions \
 	delete_records \
 	openssl_engine_example_cpp \
-	misc
+	misc producer_cpp rdkafka_consume_batch
 
 all: $(EXAMPLES)
 

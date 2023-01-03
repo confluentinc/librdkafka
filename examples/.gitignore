@@ -11,3 +11,5 @@ idempotent_producer
 rdkafka_consume_batch
 transactions
 delete_records
+misc
+openssl_engine_example_cpp

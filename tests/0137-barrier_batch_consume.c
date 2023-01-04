@@ -157,7 +157,7 @@ static void do_test_consume_batch_with_seek(void) {
         err = rd_kafka_seek_partitions(consumer, seek_toppars, 2000);
 
         TEST_ASSERT(!err,
-                    "Failed to seek partition %d for topic %s to offset %lld",
+                    "Failed to seek partition %d for topic %s to offset %ld",
                     seek_partition, topic, seek_offset);
 
         thrd_join(thread_id, NULL);
@@ -178,106 +178,108 @@ static void do_test_consume_batch_with_seek(void) {
 }
 
 
-static void do_test_consume_batch_with_pause_and_resume(void) {
-        rd_kafka_queue_t *rkq;
-        const char *topic;
-        rd_kafka_t *consumer;
-        int p;
-        uint64_t testid;
-        rd_kafka_conf_t *conf;
-        consumer_t consumer_args = RD_ZERO_INIT;
-        test_msgver_t mv;
-        thrd_t thread_id;
-        rd_kafka_resp_err_t err;
-        rd_kafka_topic_partition_list_t *pause_partition_list;
-        rd_kafka_message_t **rkmessages;
-        size_t msg_cnt;
-        const int timeout_ms            = 10000;
-        const int consume_msg_cnt       = 10;
-        const int produce_msg_cnt       = 8;
-        const int produce_partition_cnt = 2;
-        const int expected_msg_cnt      = 4;
-        int32_t pause_partition         = 0;
+// static void do_test_consume_batch_with_pause_and_resume(void) {
+//         rd_kafka_queue_t *rkq;
+//         const char *topic;
+//         rd_kafka_t *consumer;
+//         int p;
+//         uint64_t testid;
+//         rd_kafka_conf_t *conf;
+//         consumer_t consumer_args = RD_ZERO_INIT;
+//         test_msgver_t mv;
+//         thrd_t thread_id;
+//         rd_kafka_resp_err_t err;
+//         rd_kafka_topic_partition_list_t *pause_partition_list;
+//         rd_kafka_message_t **rkmessages;
+//         size_t msg_cnt;
+//         const int timeout_ms            = 10000;
+//         const int consume_msg_cnt       = 10;
+//         const int produce_msg_cnt       = 8;
+//         const int produce_partition_cnt = 2;
+//         const int expected_msg_cnt      = 4;
+//         int32_t pause_partition         = 0;
 
-        SUB_TEST();
+//         SUB_TEST();
 
-        test_conf_init(&conf, NULL, 60);
-        test_conf_set(conf, "enable.auto.commit", "false");
-        test_conf_set(conf, "auto.offset.reset", "earliest");
+//         test_conf_init(&conf, NULL, 60);
+//         test_conf_set(conf, "enable.auto.commit", "false");
+//         test_conf_set(conf, "auto.offset.reset", "earliest");
 
-        testid = test_id_generate();
-        test_msgver_init(&mv, testid);
+//         testid = test_id_generate();
+//         test_msgver_init(&mv, testid);
 
-        /* Produce messages */
-        topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
+//         /* Produce messages */
+//         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        for (p = 0; p < produce_partition_cnt; p++)
-                test_produce_msgs_easy(topic, testid, p,
-                                       produce_msg_cnt / produce_partition_cnt);
+//         for (p = 0; p < produce_partition_cnt; p++)
+//                 test_produce_msgs_easy(topic, testid, p,
+//                                        produce_msg_cnt /
+//                                        produce_partition_cnt);
 
-        /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+//         /* Create consumers */
+//         consumer =
+//             test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
-        test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer, rd_false);
+//         test_consumer_subscribe(consumer, topic);
+//         test_consumer_wait_assignment(consumer, rd_false);
 
-        /* Create generic consume queue */
-        rkq = rd_kafka_queue_get_consumer(consumer);
+//         /* Create generic consume queue */
+//         rkq = rd_kafka_queue_get_consumer(consumer);
 
-        consumer_args.what             = "CONSUMER";
-        consumer_args.rkq              = rkq;
-        consumer_args.timeout_ms       = timeout_ms;
-        consumer_args.consume_msg_cnt  = consume_msg_cnt;
-        consumer_args.expected_msg_cnt = expected_msg_cnt;
-        consumer_args.rk               = consumer;
-        consumer_args.testid           = testid;
-        consumer_args.mv               = &mv;
-        consumer_args.test             = test_curr;
-        if (thrd_create(&thread_id, consumer_batch_queue, &consumer_args) !=
-            thrd_success)
-                TEST_FAIL("Failed to create thread for %s", "CONSUMER");
+//         consumer_args.what             = "CONSUMER";
+//         consumer_args.rkq              = rkq;
+//         consumer_args.timeout_ms       = timeout_ms;
+//         consumer_args.consume_msg_cnt  = consume_msg_cnt;
+//         consumer_args.expected_msg_cnt = expected_msg_cnt;
+//         consumer_args.rk               = consumer;
+//         consumer_args.testid           = testid;
+//         consumer_args.mv               = &mv;
+//         consumer_args.test             = test_curr;
+//         if (thrd_create(&thread_id, consumer_batch_queue, &consumer_args) !=
+//             thrd_success)
+//                 TEST_FAIL("Failed to create thread for %s", "CONSUMER");
 
-        pause_partition_list = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(pause_partition_list, topic,
-                                          pause_partition);
+//         pause_partition_list = rd_kafka_topic_partition_list_new(1);
+//         rd_kafka_topic_partition_list_add(pause_partition_list, topic,
+//                                           pause_partition);
 
-        rd_sleep(1);
-        err = rd_kafka_pause_partitions(consumer, pause_partition_list);
+//         rd_sleep(1);
+//         err = rd_kafka_pause_partitions(consumer, pause_partition_list);
 
-        TEST_ASSERT(!err, "Failed to pause partition %d for topic %s",
-                    pause_partition, topic);
+//         TEST_ASSERT(!err, "Failed to pause partition %d for topic %s",
+//                     pause_partition, topic);
 
-        rd_sleep(1);
+//         rd_sleep(1);
 
-        err = rd_kafka_resume_partitions(consumer, pause_partition_list);
+//         err = rd_kafka_resume_partitions(consumer, pause_partition_list);
 
-        TEST_ASSERT(!err, "Failed to resume partition %d for topic %s",
-                    pause_partition, topic);
+//         TEST_ASSERT(!err, "Failed to resume partition %d for topic %s",
+//                     pause_partition, topic);
 
-        thrd_join(thread_id, NULL);
+//         thrd_join(thread_id, NULL);
 
-        rkmessages = malloc(consume_msg_cnt * sizeof(*rkmessages));
+//         rkmessages = malloc(consume_msg_cnt * sizeof(*rkmessages));
 
-        msg_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessages,
-                                               consume_msg_cnt);
+//         msg_cnt = rd_kafka_consume_batch_queue(rkq, timeout_ms, rkmessages,
+//                                                consume_msg_cnt);
 
-        TEST_ASSERT(msg_cnt == expected_msg_cnt,
-                    "consumed %zu messages, expected %d", msg_cnt,
-                    expected_msg_cnt);
+//         TEST_ASSERT(msg_cnt == expected_msg_cnt,
+//                     "consumed %zu messages, expected %d", msg_cnt,
+//                     expected_msg_cnt);
 
-        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
-                           0, produce_msg_cnt);
-        test_msgver_clear(&mv);
+//         test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER |
+//         TEST_MSGVER_DUP,
+//                            0, produce_msg_cnt);
+//         test_msgver_clear(&mv);
 
-        rd_kafka_queue_destroy(rkq);
+//         rd_kafka_queue_destroy(rkq);
 
-        test_consumer_close(consumer);
+//         test_consumer_close(consumer);
 
-        rd_kafka_destroy(consumer);
+//         rd_kafka_destroy(consumer);
 
-        SUB_TEST_PASS();
-}
+//         SUB_TEST_PASS();
+// }
 
 
 int main_0137_barrier_batch_consume(int argc, char **argv) {

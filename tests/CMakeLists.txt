@@ -128,6 +128,7 @@ set(
     0135-sasl_credentials.cpp
     0136-resolve_cb.c
     0137-barrier_batch_consume.c
+    0138-admin_mock.c
     8000-idle.cpp
     test.c
     testcpp.cpp

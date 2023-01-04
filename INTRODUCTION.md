@@ -1875,7 +1875,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-195 - AdminAPI: CreatePartitions                                     | 1.0.0                       | Supported                                                                                     |
 | KIP-204 - AdminAPI: DeleteRecords                                        | 1.1.0                       | Supported                                                                                     |
 | KIP-219 - Client-side throttling                                         | 2.0.0                       | Not supported                                                                                 |
-| KIP-222 - AdminAPI: Consumer group operations                            | 2.0.0                       | Not supported (but some APIs available outside Admin client)                                  |
+| KIP-222 - AdminAPI: Consumer group operations                            | 2.0.0                       | Supported                                                                                     |
 | KIP-223 - Consumer partition lead metric                                 | 2.0.0                       | Not supported                                                                                 |
 | KIP-226 - AdminAPI: Dynamic broker config                                | 1.1.0                       | Supported                                                                                     |
 | KIP-227 - Consumer Incremental Fetch                                     | 1.1.0                       | Not supported                                                                                 |
@@ -1902,7 +1902,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-389 - Consumer group max size                                        | 2.2.0                       | Supported (error is propagated to application, but the consumer does not raise a fatal error) |
 | KIP-392 - Allow consumers to fetch from closest replica                  | 2.4.0                       | Supported                                                                                     |
 | KIP-394 - Consumer: require member.id in JoinGroupRequest                | 2.2.0                       | Supported                                                                                     |
-| KIP-396 - AdminAPI: commit/list offsets                                  | 2.4.0                       | Not supported (but some APIs available outside Admin client)                                  |
+| KIP-396 - AdminAPI: commit/list offsets                                  | 2.4.0                       | Partially supported (remaining APIs available outside Admin client)                           |
 | KIP-412 - AdminAPI: adjust log levels                                    | 2.4.0                       | Not supported                                                                                 |
 | KIP-421 - Variables in client config files                               | 2.3.0                       | Not applicable (librdkafka, et.al, does not provide a config file interface, and shouldn't)   |
 | KIP-429 - Consumer: incremental rebalance protocol                       | 2.4.0                       | Supported                                                                                     |
@@ -1919,7 +1919,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-511 - Collect Client's Name and Version                              | 2.4.0                       | Supported                                                                                     |
 | KIP-514 - Bounded flush()                                                | 2.4.0                       | Supported                                                                                     |
 | KIP-517 - Consumer poll() metrics                                        | 2.4.0                       | Not supported                                                                                 |
-| KIP-518 - Allow listing consumer groups per state                        | 2.6.0                       | Not supported                                                                                 |
+| KIP-518 - Allow listing consumer groups per state                        | 2.6.0                       | Supported                                                                                     |
 | KIP-519 - Make SSL engine configurable                                   | 2.6.0                       | Supported                                                                                     |
 | KIP-525 - Return topic metadata and configs in CreateTopics response     | 2.4.0                       | Not supported                                                                                 |
 | KIP-526 - Reduce Producer Metadata Lookups for Large Number of Topics    | 2.5.0                       | Not supported                                                                                 |
@@ -1954,15 +1954,15 @@ release of librdkafka.
 | 1       | Fetch               | 11          | 11                      |
 | 2       | ListOffsets         | 5           | 1                       |
 | 3       | Metadata            | 8           | 2                       |
-| 8       | OffsetCommit        | 7           | 7                       |
-| 9       | OffsetFetch         | 5           | 1                       |
+| 8       | OffsetCommit        | 8           | 7                       |
+| 9       | OffsetFetch         | 8           | 7                       |
 | 10      | FindCoordinator     | 2           | 2                       |
 | 11      | JoinGroup           | 5           | 5                       |
 | 12      | Heartbeat           | 3           | 3                       |
 | 13      | LeaveGroup          | 3           | 1                       |
 | 14      | SyncGroup           | 3           | 3                       |
-| 15      | DescribeGroups      | 4           | 0                       |
-| 16      | ListGroups          | 2           | 0                       |
+| 15      | DescribeGroups      | 5           | 4                       |
+| 16      | ListGroups          | 4           | 4                       |
 | 17      | SaslHandshake       | 1           | 1                       |
 | 18      | ApiVersions         | 3           | 3                       |
 | 19      | CreateTopics        | 5           | 4                       |

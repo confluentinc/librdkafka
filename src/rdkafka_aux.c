@@ -222,3 +222,57 @@ void rd_kafka_acl_result_destroy(rd_kafka_acl_result_t *acl_res) {
 void rd_kafka_acl_result_free(void *ptr) {
         rd_kafka_acl_result_destroy((rd_kafka_acl_result_t *)ptr);
 }
+
+
+/**
+ * @brief Create a new Node object.
+ *
+ * @param id The node id.
+ * @param host The node host.
+ * @param port The node port.
+ * @param rack_id (optional) The node rack id.
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *rd_kafka_Node_new(int id,
+                                   const char *host,
+                                   uint16_t port,
+                                   const char *rack_id) {
+        rd_kafka_Node_t *ret = rd_calloc(1, sizeof(*ret));
+        ret->id              = id;
+        ret->port            = port;
+        ret->host            = rd_strdup(host);
+        if (rack_id != NULL)
+                ret->rack_id = rd_strdup(rack_id);
+        return ret;
+}
+
+/**
+ * @brief Copy \p src Node object
+ *
+ * @param src The Node to copy.
+ * @return A new allocated Node object.
+ *         Use rd_kafka_Node_destroy() to free when done.
+ */
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src) {
+        return rd_kafka_Node_new(src->id, src->host, src->port, src->rack_id);
+}
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node) {
+        rd_free(node->host);
+        if (node->rack_id)
+                rd_free(node->rack_id);
+        rd_free(node);
+}
+
+int rd_kafka_Node_id(const rd_kafka_Node_t *node) {
+        return node->id;
+}
+
+const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
+        return node->host;
+}
+
+uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
+        return node->port;
+}

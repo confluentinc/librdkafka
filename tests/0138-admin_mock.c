@@ -52,11 +52,10 @@ static void do_test_AlterConsumerGroupOffsets_errors(int req_timeout_ms) {
         size_t gres_cnt;
         char errstr[512];
         const char *bootstraps;
-        const char *topic                = "test";
-        const char *group_id             = topic;
-        rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_event_t *rkev           = NULL;
-        rd_kafka_resp_err_t err;
+        const char *topic                       = "test";
+        const char *group_id                    = topic;
+        rd_kafka_AdminOptions_t *options        = NULL;
+        rd_kafka_event_t *rkev                  = NULL;
         rd_kafka_resp_err_t errs[TEST_ERR_SIZE] = {
             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS,
             RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
@@ -87,9 +86,8 @@ static void do_test_AlterConsumerGroupOffsets_errors(int req_timeout_ms) {
                 /* Admin options */
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
-                err = rd_kafka_AdminOptions_set_request_timeout(
-                    options, req_timeout_ms, errstr, sizeof(errstr));
-                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, req_timeout_ms, errstr, sizeof(errstr)));
         }
 
 

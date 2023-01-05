@@ -175,16 +175,6 @@ static void rd_kafka_fetch_reply_handle_partition_error(
          * application while some handled by rdkafka */
         switch (err) {
                 /* Errors handled by rdkafka */
-        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-        case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-        case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
-        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
-                /* Request metadata information update*/
-                rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
-                break;
 
         case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
                 /* Occurs when:
@@ -194,7 +184,8 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                  *     yet available at that offset
                  *     (replica is out of sync).
                  *
-                 * Handle by retrying FETCH (with backoff).
+                 * Handle by requesting metadata update, changing back to the
+                 * leader, and then retrying FETCH (with backoff).
                  */
                 rd_rkb_dbg(rkb, MSG, "FETCH",
                            "Topic %s [%" PRId32 "]: Offset %" PRId64
@@ -204,7 +195,26 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rktp->rktp_offsets.fetch_offset,
                            rktp->rktp_broker_id, rktp->rktp_leader_id);
+                if (rktp->rktp_broker_id != rktp->rktp_leader_id) {
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+                }
+                rd_kafka_topic_fast_leader_query(rkb->rkb_rk);
                 break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+                if (rktp->rktp_broker_id != rktp->rktp_leader_id) {
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+                }
+                /* Request metadata information update*/
+                rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
+                break;
+
 
         case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE: {
                 int64_t err_offset;

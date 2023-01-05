@@ -263,8 +263,11 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
 
                         if (!all_err && !mpart)
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
-                        else if (!all_err && mpart->leader != mconn->broker &&
-                                 !on_follower)
+                        else if (!all_err &&
+                                 ((mpart->leader != mconn->broker &&
+                                   !on_follower) ||
+                                  (mpart->follower_id != mconn->broker->id) &&
+                                      on_follower))
                                 err =
                                     RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
 

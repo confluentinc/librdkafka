@@ -4180,19 +4180,21 @@ int test_consumer_poll_once(rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms) {
         return 1;
 }
 
-
 /**
  * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
  *              If false: poll until either one is reached.
+ * @param timeout_ms Each call to poll has a timeout set by this argument. The
+ *                   test fails if any poll times out.
  */
-int test_consumer_poll_exact(const char *what,
-                             rd_kafka_t *rk,
-                             uint64_t testid,
-                             int exp_eof_cnt,
-                             int exp_msg_base,
-                             int exp_cnt,
-                             rd_bool_t exact,
-                             test_msgver_t *mv) {
+int test_consumer_poll_exact_timeout(const char *what,
+                                     rd_kafka_t *rk,
+                                     uint64_t testid,
+                                     int exp_eof_cnt,
+                                     int exp_msg_base,
+                                     int exp_cnt,
+                                     rd_bool_t exact,
+                                     test_msgver_t *mv,
+                                     int timeout_ms) {
         int eof_cnt = 0;
         int cnt     = 0;
         test_timing_t t_cons;
@@ -4207,7 +4209,8 @@ int test_consumer_poll_exact(const char *what,
                (exact && (eof_cnt < exp_eof_cnt || cnt < exp_cnt))) {
                 rd_kafka_message_t *rkmessage;
 
-                rkmessage = rd_kafka_consumer_poll(rk, tmout_multip(10 * 1000));
+                rkmessage =
+                    rd_kafka_consumer_poll(rk, tmout_multip(timeout_ms));
                 if (!rkmessage) /* Shouldn't take this long to get a msg */
                         TEST_FAIL(
                             "%s: consumer_poll() timeout "
@@ -4269,6 +4272,23 @@ int test_consumer_poll_exact(const char *what,
 }
 
 
+/**
+ * @param exact Require exact exp_eof_cnt (unless -1) and exp_cnt (unless -1).
+ *              If false: poll until either one is reached.
+ */
+int test_consumer_poll_exact(const char *what,
+                             rd_kafka_t *rk,
+                             uint64_t testid,
+                             int exp_eof_cnt,
+                             int exp_msg_base,
+                             int exp_cnt,
+                             rd_bool_t exact,
+                             test_msgver_t *mv) {
+        return test_consumer_poll_exact_timeout(what, rk, testid, exp_eof_cnt,
+                                                exp_msg_base, exp_cnt, exact,
+                                                mv, 10 * 1000);
+}
+
 int test_consumer_poll(const char *what,
                        rd_kafka_t *rk,
                        uint64_t testid,
@@ -4279,6 +4299,19 @@ int test_consumer_poll(const char *what,
         return test_consumer_poll_exact(what, rk, testid, exp_eof_cnt,
                                         exp_msg_base, exp_cnt,
                                         rd_false /*not exact */, mv);
+}
+
+int test_consumer_poll_timeout(const char *what,
+                               rd_kafka_t *rk,
+                               uint64_t testid,
+                               int exp_eof_cnt,
+                               int exp_msg_base,
+                               int exp_cnt,
+                               test_msgver_t *mv,
+                               int timeout_ms) {
+        return test_consumer_poll_exact_timeout(
+            what, rk, testid, exp_eof_cnt, exp_msg_base, exp_cnt,
+            rd_false /*not exact */, mv, timeout_ms);
 }
 
 void test_consumer_close(rd_kafka_t *rk) {

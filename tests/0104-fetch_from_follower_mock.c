@@ -248,7 +248,7 @@ static void do_test_replica_not_available(void) {
         const char *topic = "test";
         const int msgcnt  = 1000;
 
-        TEST_SAY(_C_MAG "[ Test REPLICA_NOT_AVAIALBLE ]\n");
+        TEST_SAY(_C_MAG "[ Test REPLICA_NOT_AVAILABLE ]\n");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
 
@@ -283,7 +283,7 @@ static void do_test_replica_not_available(void) {
             RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE, 0);
 
 
-        test_consumer_assign_partition("REPLICA_NOT_AVAIALBLE", c, topic, 0,
+        test_consumer_assign_partition("REPLICA_NOT_AVAILABLE", c, topic, 0,
                                        RD_KAFKA_OFFSET_INVALID);
 
         test_consumer_poll_no_msgs("Wait initial metadata", c, 0, 2000);
@@ -300,7 +300,70 @@ static void do_test_replica_not_available(void) {
 
         test_mock_cluster_destroy(mcluster);
 
-        TEST_SAY(_C_GRN "[ Test REPLICA_NOT_AVAIALBLE PASSED ]\n");
+        TEST_SAY(_C_GRN "[ Test REPLICA_NOT_AVAILABLE PASSED ]\n");
+}
+
+
+static void do_test_not_leader_or_follower(void) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *c;
+        const char *topic = "test";
+        const int msgcnt  = 10;
+
+        TEST_SAY(_C_MAG "[ Test NOT_LEADER_OR_FOLLOWER ]\n");
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        /* Set partition leader to broker 1. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        rd_kafka_mock_partition_set_follower(mcluster, topic, 0, 2);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "client.rack", "myrack");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "60000");
+        test_conf_set(conf, "fetch.error.backoff.ms", "1000");
+        test_conf_set(conf, "fetch.message.max.bytes", "10");
+
+        c = test_create_consumer("mygroup", NULL, conf, NULL);
+
+        test_consumer_assign_partition("NOT_LEADER_FOR_PARTITION", c, topic, 0,
+                                       RD_KAFKA_OFFSET_INVALID);
+
+        /* Since there are no messages, this poll only waits for metadata, and
+         * then sets the preferred replica after the first fetch request. */
+        test_consumer_poll_no_msgs("Initial metadata and preferred replica set",
+                                   c, 0, 2000);
+
+        /* Change the follower, so that the preferred replica is no longer the
+         * leader or follower. */
+        rd_kafka_mock_partition_set_follower(mcluster, topic, 0, -1);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 1000,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "10", NULL);
+
+        /* On getting a NOT_LEADER_NOT_FOLLOWER error, we should change to the
+         * leader and fetch from there without timing out. */
+        test_msgver_t mv;
+        test_msgver_init(&mv, 0);
+        test_consumer_poll_timeout("from leader", c, 0, 1, 0, msgcnt, &mv,
+                                   2000);
+        test_msgver_verify0(
+            __FUNCTION__, __LINE__, "broker_id", &mv, TEST_MSGVER_BY_BROKER_ID,
+            (struct test_mv_vs) {
+                .msg_base = 0, .exp_cnt = msgcnt, .broker_id = 1});
+
+        test_consumer_close(c);
+
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_SAY(_C_GRN "[ Test NOT_LEADER_OR_FOLLOWER PASSED ]\n");
 }
 
 
@@ -319,6 +382,8 @@ int main_0104_fetch_from_follower_mock(int argc, char **argv) {
         do_test_unknown_follower();
 
         do_test_replica_not_available();
+
+        do_test_not_leader_or_follower();
 
         return 0;
 }

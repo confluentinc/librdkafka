@@ -421,7 +421,9 @@ typedef enum {
         RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE = 4,
         /** Leader not available */
         RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE = 5,
-        /** Not leader for partition */
+/** Not leader for partition */
+#define RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER                               \
+        RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION
         RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION = 6,
         /** Request timed out */
         RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT = 7,

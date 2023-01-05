@@ -195,12 +195,7 @@ static void rd_kafka_fetch_reply_handle_partition_error(
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rktp->rktp_offsets.fetch_offset,
                            rktp->rktp_broker_id, rktp->rktp_leader_id);
-                if (rktp->rktp_broker_id != rktp->rktp_leader_id) {
-                        rd_kafka_toppar_delegate_to_leader(rktp);
-                }
-                rd_kafka_topic_fast_leader_query(rkb->rkb_rk);
-                break;
-
+                /* Continue with next case */
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
         case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:

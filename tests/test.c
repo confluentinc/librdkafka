@@ -3587,6 +3587,38 @@ static int test_mv_mvec_verify_dup(test_msgver_t *mv,
         return fails;
 }
 
+/**
+ * @brief Verify that all messages are from the correct broker.
+ */
+static int test_mv_mvec_verify_broker(test_msgver_t *mv,
+                                      int flags,
+                                      struct test_mv_p *p,
+                                      struct test_mv_mvec *mvec,
+                                      struct test_mv_vs *vs) {
+        int mi;
+        int fails = 0;
+
+        /* Assume that the correct flag has been checked already. */
+
+
+        rd_assert(flags & TEST_MSGVER_BY_BROKER_ID);
+        for (mi = 0; mi < mvec->cnt; mi++) {
+                struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+                if (this->broker_id != vs->broker_id) {
+                        TEST_MV_WARN(
+                            mv,
+                            " %s [%" PRId32
+                            "] broker_id check: "
+                            "msgid #%d (at mi %d): "
+                            "broker_id %" PRId32
+                            " is not the expected broker_id %" PRId32 "\n",
+                            p ? p->topic : "*", p ? p->partition : -1,
+                            this->msgid, mi, this->broker_id, vs->broker_id);
+                        fails++;
+                }
+        }
+        return fails;
+}
 
 
 /**
@@ -3895,6 +3927,10 @@ int test_msgver_verify0(const char *func,
         if (flags & TEST_MSGVER_DUP)
                 fails +=
                     test_mv_p_verify_f(mv, flags, test_mv_mvec_verify_dup, &vs);
+
+        if (flags & TEST_MSGVER_BY_BROKER_ID)
+                fails += test_mv_p_verify_f(mv, flags,
+                                            test_mv_mvec_verify_broker, &vs);
 
         /* Checks across all partitions */
         if ((flags & TEST_MSGVER_RANGE) && vs.exp_cnt > 0) {

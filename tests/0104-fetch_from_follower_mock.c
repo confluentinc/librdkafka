@@ -323,6 +323,65 @@ static void do_test_replica_not_available(void) {
 }
 
 /**
+ * @brief With an error \p err on a Fetch request should query for the new
+ * leader or preferred replica and refresh metadata.
+ */
+static void do_test_delegate_to_leader_on_error(rd_kafka_resp_err_t err) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *c;
+        const char *topic  = "test";
+        const int msgcnt   = 1000;
+        const char *errstr = rd_kafka_err2name(err);
+
+        TEST_SAY(_C_MAG "[ Test %s ]\n", errstr);
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "10", NULL);
+
+        /* Set partition leader to broker 1. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "client.rack", "myrack");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "60000");
+        test_conf_set(conf, "fetch.error.backoff.ms", "1000");
+
+        c = test_create_consumer("mygroup", NULL, conf, NULL);
+
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1 /*Broker 1*/, 1 /*FetchRequest*/, 10, err, 0, err, 0,
+            err, 0, err, 0, err, 0, err, 0, err, 0, err, 0, err, 0, err, 0);
+
+
+        test_consumer_assign_partition(errstr, c, topic, 0,
+                                       RD_KAFKA_OFFSET_INVALID);
+
+        test_consumer_poll_no_msgs("Wait initial metadata", c, 0, 2000);
+
+        /* Switch leader to broker 2 so that metadata is updated,
+         * causing the consumer to start fetching from the new leader. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        test_consumer_poll_timeout("Consume", c, 0, 1, 0, msgcnt, NULL, 2000);
+
+        test_consumer_close(c);
+
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_SAY(_C_GRN "[ Test %s ]\n", errstr);
+}
+
+/**
  * @brief Test when the preferred replica is no longer a follower of the
  *        partition leader. We should try fetch from the leader instead.
  */
@@ -368,7 +427,7 @@ static void do_test_not_leader_or_follower(void) {
                                  "bootstrap.servers", bootstraps,
                                  "batch.num.messages", "10", NULL);
 
-        /* On getting a NOT_LEADER_NOT_FOLLOWER error, we should change to the
+        /* On getting a NOT_LEADER_OR_FOLLOWER error, we should change to the
          * leader and fetch from there without timing out. */
         test_msgver_t mv;
         test_msgver_init(&mv, 0);
@@ -479,6 +538,9 @@ int main_0104_fetch_from_follower_mock(int argc, char **argv) {
         do_test_unknown_follower();
 
         do_test_replica_not_available();
+
+        do_test_delegate_to_leader_on_error(
+            RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE);
 
         do_test_not_leader_or_follower();
 

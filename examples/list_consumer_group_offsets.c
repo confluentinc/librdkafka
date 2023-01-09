@@ -174,6 +174,7 @@ cmd_list_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_event_t *event; /* ListConsumerGroupOffsets result event */
         const int min_argc = 2;
         char *topic;
+        int i;
         int partition;
         int require_stable_offsets = 0, num_partitions = 0;
         rd_kafka_ListConsumerGroupOffsets_t *list_cgrp_offsets;

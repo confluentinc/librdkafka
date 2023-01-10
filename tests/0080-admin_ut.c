@@ -1622,7 +1622,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                     ->offset = 15;
                 rd_kafka_topic_partition_list_add(partitions_duplicate,
                                                   "topic1", 9)
-                    ->offset           = 1;
+                    ->offset = 1;
+
                 cgoffsets_duplicate[i] = rd_kafka_AlterConsumerGroupOffsets_new(
                     "mygroup", partitions_duplicate);
                 rd_kafka_topic_partition_list_destroy(partitions_duplicate);

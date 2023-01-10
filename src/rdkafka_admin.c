@@ -5210,6 +5210,7 @@ void rd_kafka_AlterConsumerGroupOffsets(
             rd_kafka_AlterConsumerGroupOffsetsResponse_parse,
         };
         rd_kafka_op_t *rko;
+        rd_kafka_topic_partition_list_t *copied_offsets;
 
         rd_assert(rkqu);
 
@@ -5243,6 +5244,18 @@ void rd_kafka_AlterConsumerGroupOffsets(
                         goto fail;
                 }
         }
+
+        /* Copy offsets list for checking duplicated */
+        copied_offsets =
+            rd_kafka_topic_partition_list_copy(alter_grpoffsets[0]->partitions);
+        if (rd_kafka_topic_partition_list_has_duplicates(
+                copied_offsets, rd_false /* ignore partition */)) {
+                rd_kafka_topic_partition_list_destroy(copied_offsets);
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate partitions not allowed");
+                goto fail;
+        }
+        rd_kafka_topic_partition_list_destroy(copied_offsets);
 
         rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
         rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;

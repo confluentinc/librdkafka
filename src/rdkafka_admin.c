@@ -5452,6 +5452,7 @@ void rd_kafka_ListConsumerGroupOffsets(
             rd_kafka_ListConsumerGroupOffsetsResponse_parse,
         };
         rd_kafka_op_t *rko;
+        rd_kafka_topic_partition_list_t *copied_offsets;
 
         rd_assert(rkqu);
 
@@ -5466,9 +5467,7 @@ void rd_kafka_ListConsumerGroupOffsets(
                                            "Exactly one "
                                            "ListConsumerGroupOffsets must "
                                            "be passed");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
+                goto fail;
         }
 
         if (list_grpoffsets[0]->partitions != NULL &&
@@ -5480,9 +5479,23 @@ void rd_kafka_ListConsumerGroupOffsets(
                     "NULL or "
                     "non-empty topic partition list must "
                     "be passed");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
+                goto fail;
+        }
+
+        /* TODO: add group id duplication check when implementing KIP-709 */
+        if (list_grpoffsets[0]->partitions != NULL) {
+                /* Copy offsets list for checking duplicated */
+                copied_offsets = rd_kafka_topic_partition_list_copy(
+                    list_grpoffsets[0]->partitions);
+                if (rd_kafka_topic_partition_list_has_duplicates(
+                        copied_offsets, rd_false /* ignore partition */)) {
+                        rd_kafka_topic_partition_list_destroy(copied_offsets);
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate partitions not allowed");
+                        goto fail;
+                }
+                rd_kafka_topic_partition_list_destroy(copied_offsets);
         }
 
         rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
@@ -5498,6 +5511,9 @@ void rd_kafka_ListConsumerGroupOffsets(
                     rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+fail:
+        rd_kafka_admin_common_worker_destroy(rk, rko, rd_true /*destroy*/);
 }
 
 

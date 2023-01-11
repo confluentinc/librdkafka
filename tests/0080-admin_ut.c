@@ -1819,10 +1819,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_queue_t *q;
 #define MY_LIST_CGRPOFFS_CNT 1
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_topic_partition_list_t *cgoffsets_empty_list;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
-        rd_kafka_ListConsumerGroupOffsets_t *cgoffsets_empty;
+        rd_kafka_ListConsumerGroupOffsets_t
+            *cgoffsets_empty[MY_LIST_CGRPOFFS_CNT];
         rd_kafka_ListConsumerGroupOffsets_t
             *cgoffsets_duplicate[MY_LIST_CGRPOFFS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
@@ -1839,11 +1839,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        cgoffsets_empty_list = rd_kafka_topic_partition_list_new(0);
-        cgoffsets_empty      = rd_kafka_ListConsumerGroupOffsets_new(
-            "mygroup", cgoffsets_empty_list);
-        rd_kafka_topic_partition_list_destroy(cgoffsets_empty_list);
-
         for (i = 0; i < MY_LIST_CGRPOFFS_CNT; i++) {
                 rd_kafka_topic_partition_list_t *partitions =
                     rd_kafka_topic_partition_list_new(3);
@@ -1858,6 +1853,12 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                             "mygroup", partitions);
                 }
                 rd_kafka_topic_partition_list_destroy(partitions);
+
+                rd_kafka_topic_partition_list_t *partitions_empty =
+                    rd_kafka_topic_partition_list_new(0);
+                cgoffsets_empty[i] = rd_kafka_ListConsumerGroupOffsets_new(
+                    "mygroup", partitions_empty);
+                rd_kafka_topic_partition_list_destroy(partitions_empty);
 
                 partitions = rd_kafka_topic_partition_list_new(3);
                 rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
@@ -1886,8 +1887,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         TEST_SAY(
             "Call ListConsumerGroupOffsets with empty topic-partition list.\n");
-        rd_kafka_ListConsumerGroupOffsets(rk, &cgoffsets_empty, 1, options, q);
-        rd_kafka_ListConsumerGroupOffsets_destroy(cgoffsets_empty);
+        rd_kafka_ListConsumerGroupOffsets(rk, cgoffsets_empty,
+                                          MY_LIST_CGRPOFFS_CNT, options, q);
+        rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets_empty,
+                                                        MY_LIST_CGRPOFFS_CNT);
         /* Poll result queue */
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TEST_SAY("ListConsumerGroupOffsets: got %s\n",

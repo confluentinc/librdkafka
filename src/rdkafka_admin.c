@@ -5262,11 +5262,14 @@ void rd_kafka_AlterConsumerGroupOffsets(
                 }
         }
 
+        /* TODO: add group id duplication check if in future more than one
+         * AlterConsumerGroupOffsets can be passed */
+
         /* Copy offsets list for checking duplicated */
         copied_offsets =
             rd_kafka_topic_partition_list_copy(alter_grpoffsets[0]->partitions);
         if (rd_kafka_topic_partition_list_has_duplicates(
-                copied_offsets, rd_false /* ignore partition */)) {
+                copied_offsets, rd_false /*check partition*/)) {
                 rd_kafka_topic_partition_list_destroy(copied_offsets);
                 rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
                                            "Duplicate partitions not allowed");
@@ -5505,7 +5508,7 @@ void rd_kafka_ListConsumerGroupOffsets(
                 copied_offsets = rd_kafka_topic_partition_list_copy(
                     list_grpoffsets[0]->partitions);
                 if (rd_kafka_topic_partition_list_has_duplicates(
-                        copied_offsets, rd_false /* ignore partition */)) {
+                        copied_offsets, rd_false /*check partition*/)) {
                         rd_kafka_topic_partition_list_destroy(copied_offsets);
                         rd_kafka_admin_result_fail(
                             rko, RD_KAFKA_RESP_ERR__INVALID_ARG,

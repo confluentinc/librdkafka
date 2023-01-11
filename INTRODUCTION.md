@@ -1943,7 +1943,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 
 ### Supported protocol versions
 
-"Kafka max" is the maximum ApiVersion supported in Apache Kafka 2.4.0, while
+"Kafka max" is the maximum ApiVersion supported in Apache Kafka 3.3.1, while
 "librdkafka max" is the maximum ApiVersion supported in the latest
 release of librdkafka.
 

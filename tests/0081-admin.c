@@ -3685,8 +3685,8 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
         /* List groups */
-        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, 0);
-        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, 1);
+        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
 
         /* Describe groups */
         do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);

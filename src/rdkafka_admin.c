@@ -1566,16 +1566,34 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
         rd_kafka_resp_err_t err;
         rd_list_t *states_list = rd_list_new(0, NULL);
         rd_list_init_int32(states_list, consumer_group_states_cnt);
+        uint64_t states_bitmask = 0;
+
+        if (RD_KAFKA_CONSUMER_GROUP_STATE__CNT >= 64) {
+                rd_assert("BUG: cannot handle states with a bitmask anymore");
+        }
+
         for (i = 0; i < consumer_group_states_cnt; i++) {
+                uint64_t state_bit;
                 rd_kafka_consumer_group_state_t state =
                     consumer_group_states[i];
+
                 if (state < 0 || state >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT) {
                         rd_list_destroy(states_list);
                         return rd_kafka_error_new(
                             RD_KAFKA_RESP_ERR__INVALID_ARG,
                             "Invalid group state value");
                 }
-                rd_list_set_int32(states_list, (int32_t)i, state);
+
+                state_bit = 1 << state;
+                if (states_bitmask & state_bit) {
+                        rd_list_destroy(states_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate states not allowed");
+                } else {
+                        states_bitmask = states_bitmask | state_bit;
+                        rd_list_set_int32(states_list, (int32_t)i, state);
+                }
         }
         err = rd_kafka_confval_set_type(&options->match_consumer_group_states,
                                         RD_KAFKA_CONFVAL_PTR, states_list,
@@ -5210,6 +5228,7 @@ void rd_kafka_AlterConsumerGroupOffsets(
             rd_kafka_AlterConsumerGroupOffsetsResponse_parse,
         };
         rd_kafka_op_t *rko;
+        rd_kafka_topic_partition_list_t *copied_offsets;
 
         rd_assert(rkqu);
 
@@ -5243,6 +5262,21 @@ void rd_kafka_AlterConsumerGroupOffsets(
                         goto fail;
                 }
         }
+
+        /* TODO: add group id duplication check if in future more than one
+         * AlterConsumerGroupOffsets can be passed */
+
+        /* Copy offsets list for checking duplicated */
+        copied_offsets =
+            rd_kafka_topic_partition_list_copy(alter_grpoffsets[0]->partitions);
+        if (rd_kafka_topic_partition_list_has_duplicates(
+                copied_offsets, rd_false /*check partition*/)) {
+                rd_kafka_topic_partition_list_destroy(copied_offsets);
+                rd_kafka_admin_result_fail(rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate partitions not allowed");
+                goto fail;
+        }
+        rd_kafka_topic_partition_list_destroy(copied_offsets);
 
         rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
         rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
@@ -5439,6 +5473,7 @@ void rd_kafka_ListConsumerGroupOffsets(
             rd_kafka_ListConsumerGroupOffsetsResponse_parse,
         };
         rd_kafka_op_t *rko;
+        rd_kafka_topic_partition_list_t *copied_offsets;
 
         rd_assert(rkqu);
 
@@ -5453,9 +5488,7 @@ void rd_kafka_ListConsumerGroupOffsets(
                                            "Exactly one "
                                            "ListConsumerGroupOffsets must "
                                            "be passed");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
+                goto fail;
         }
 
         if (list_grpoffsets[0]->partitions != NULL &&
@@ -5467,9 +5500,23 @@ void rd_kafka_ListConsumerGroupOffsets(
                     "NULL or "
                     "non-empty topic partition list must "
                     "be passed");
-                rd_kafka_admin_common_worker_destroy(rk, rko,
-                                                     rd_true /*destroy*/);
-                return;
+                goto fail;
+        }
+
+        /* TODO: add group id duplication check when implementing KIP-709 */
+        if (list_grpoffsets[0]->partitions != NULL) {
+                /* Copy offsets list for checking duplicated */
+                copied_offsets = rd_kafka_topic_partition_list_copy(
+                    list_grpoffsets[0]->partitions);
+                if (rd_kafka_topic_partition_list_has_duplicates(
+                        copied_offsets, rd_false /*check partition*/)) {
+                        rd_kafka_topic_partition_list_destroy(copied_offsets);
+                        rd_kafka_admin_result_fail(
+                            rko, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate partitions not allowed");
+                        goto fail;
+                }
+                rd_kafka_topic_partition_list_destroy(copied_offsets);
         }
 
         rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
@@ -5485,6 +5532,9 @@ void rd_kafka_ListConsumerGroupOffsets(
                     rd_kafka_ListConsumerGroupOffsets_copy(list_grpoffsets[0]));
 
         rd_kafka_q_enq(rk->rk_ops, rko);
+        return;
+fail:
+        rd_kafka_admin_common_worker_destroy(rk, rko, rd_true /*destroy*/);
 }
 
 

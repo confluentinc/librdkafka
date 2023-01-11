@@ -1573,9 +1573,9 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
         }
 
         for (i = 0; i < consumer_group_states_cnt; i++) {
+                uint64_t state_bit;
                 rd_kafka_consumer_group_state_t state =
                     consumer_group_states[i];
-                uint64_t state_bit = 1 << state;
 
                 if (state < 0 || state >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT) {
                         rd_list_destroy(states_list);
@@ -1584,6 +1584,7 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
                             "Invalid group state value");
                 }
 
+                state_bit = 1 << state;
                 if (states_bitmask & state_bit) {
                         rd_list_destroy(states_list);
                         return rd_kafka_error_new(

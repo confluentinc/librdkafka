@@ -527,13 +527,25 @@ static void do_test_ListConsumerGroups(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (with_options) {
+                rd_kafka_consumer_group_state_t duplicate[2] = {
+                    RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
+                    RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY};
+
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
+                /* Test duplicate error on match states */
+                rd_kafka_error_t *error =
+                    rd_kafka_AdminOptions_set_match_consumer_group_states(
+                        options, duplicate, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate states,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
-                err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
-                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr)));
 
                 if (useq) {
                         my_opaque = (void *)456;
@@ -2420,8 +2432,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                    rd_false);
         do_test_ListConsumerGroups("temp queue, options", rk, NULL, 1,
                                    rd_false);
-        do_test_ListConsumerGroups("main queue, options", rk, mainq, 1,
-                                   rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 0, rd_false);
 
         do_test_DescribeConsumerGroups("temp queue, no options", rk, NULL, 0,
                                        rd_false);

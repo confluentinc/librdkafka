@@ -2,8 +2,17 @@
 
 librdkafka v2.0.0 is a feature release:
 
- * Fixes to the transactional and idempotent producer.
+ * [KIP-88](https://cwiki.apache.org/confluence/display/KAFKA/KIP-88%3A+OffsetFetch+Protocol+Update)
+   OffsetFetch Protocol Update (#3995).
+ * [KIP-222](https://cwiki.apache.org/confluence/display/KAFKA/KIP-222+-+Add+Consumer+Group+operations+to+Admin+API)
+   Add Consumer Group operations to Admin API (started by @lesterfan, #3995).
+ * [KIP-518](https://cwiki.apache.org/confluence/display/KAFKA/KIP-518%3A+Allow+listing+consumer+groups+per+state)
+   Allow listing consumer groups per state (#3995).
+ * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484)
+   Partially implemented: support for AlterConsumerGroupOffsets
+   (started by @lesterfan, #3995).
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Upgrade considerations
@@ -14,8 +23,9 @@ librdkafka v2.0.0 is a feature release:
 
 The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
 changes the default set of available ciphers, in particular all obsolete
-or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html) manual page
-are now disabled by default.
+or insecure ciphers and algorithms as listed in the
+OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+manual page are now disabled by default.
 
 **WARNING**: These ciphers are disabled for security reasons and it is
 highly recommended NOT to use them.
@@ -42,11 +52,28 @@ impersonation attacks) by default.
 
 To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` to `none`.
 
+## Known Issues
+
+### Poor Consumer batch API messaging guarantees
+
+The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
+**pause**, **resume** or **rebalancing** operation is performed in parallel with any of
+the above APIs. Some of the messages might be lost, or erroneously returned to the 
+application, in the above scenario.
+
+It is strongly recommended to use the Consumer Batch APIs and the mentioned
+operations in sequential order in order to get consistent result.
+
+For **rebalancing** operation to work in sequencial manner, please set `rebalance_cb`
+configuration property (refer [examples/rdkafka_complex_consumer_example.c]
+(examples/rdkafka_complex_consumer_example.c) for the help with the usage) for the consumer.
 
 ## Enhancements
 
  * Self-contained static libraries can now be built on Linux arm64 (#4005).
- * Updated to zlib 1.2.13 and zstd 1.5.2 in self-contained librdkafka bundles.
+ * Updated to zlib 1.2.13, zstd 1.5.2, and curl 7.86.0 in self-contained
+   librdkafka bundles.
  * Added `on_broker_state_change()` interceptor
  * The C++ API no longer returns strings by const value, which enables better move optimization in callers.
  * Added `rd_kafka_sasl_set_credentials()` API to update SASL credentials.
@@ -54,6 +81,13 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
   Improvement in documentation for this property.
  * Added a `resolve_cb` configuration setting that permits using custom DNS resolution logic.
  * Added `rd_kafka_mock_broker_error_stack_cnt()`.
+ * The librdkafka.redist NuGet package has been updated to have fewer external
+   dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
+   is now built-in. There are bundled builds with and without linking to
+   cyrus-sasl for maximum compatibility.
+ * Admin API DescribeGroups() now provides the group instance id
+   for static members [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances) (#3995).
+
 
 ## Fixes
 
@@ -94,7 +128,12 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 ### Consumer fixes
 
  * Back-off and retry JoinGroup request if coordinator load is in progress.
-
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` skipping
+   other partitions' offsets intermittently when **seek**, **pause**, **resume**
+   or **rebalancing** is used for a partition.
+ * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently returing incorrect partitions' messages if **rebalancing** 
+   happens during these operations.
 
 # librdkafka v1.9.2
 

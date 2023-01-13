@@ -11,6 +11,8 @@ import sys
 import argparse
 import time
 import packaging
+import nugetpackage
+import staticpackage
 
 
 dry_run = False
@@ -20,8 +22,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--no-s3",
-        help="Don't collect from S3",
+        "--s3",
+        help="Collect artifacts from S3 bucket",
         action="store_true")
     parser.add_argument("--dry-run",
                         help="Locate artifacts but don't actually "
@@ -40,6 +42,11 @@ if __name__ == '__main__':
         help="Also match on this git sha1",
         default=None)
     parser.add_argument(
+        "--ignore-tag",
+        help="Ignore the artifacts' tag attribute (for devel use only)",
+        action="store_true",
+        default=False)
+    parser.add_argument(
         "--nuget-version",
         help="The nuget package version (defaults to same as tag)",
         default=None)
@@ -50,7 +57,7 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument(
         "--class",
-        help="Packaging class (see packaging.py)",
+        help="Packaging class (either NugetPackage or StaticPackage)",
         default="NugetPackage",
         dest="pkgclass")
     parser.add_argument(
@@ -66,11 +73,20 @@ if __name__ == '__main__':
     if not args.directory:
         args.directory = 'dl-%s' % args.tag
 
-    match = {'tag': args.tag}
+    match = {}
+    if not args.ignore_tag:
+        match['tag'] = args.tag
+
     if args.sha is not None:
         match['sha'] = args.sha
 
-    pkgclass = getattr(packaging, args.pkgclass)
+    if args.pkgclass == "NugetPackage":
+        pkgclass = nugetpackage.NugetPackage
+    elif args.pkgclass == "StaticPackage":
+        pkgclass = staticpackage.StaticPackage
+    else:
+        raise ValueError(f'Unknown packaging class {args.pkgclass}: '
+                         'should be one of NugetPackage or StaticPackage')
 
     try:
         match.update(getattr(pkgclass, 'match'))
@@ -83,7 +99,7 @@ if __name__ == '__main__':
     arts.collect_local('common', req_tag=False)
 
     while True:
-        if not args.no_s3:
+        if args.s3:
             arts.collect_s3()
 
         arts.collect_local(arts.dlpath)
@@ -96,9 +112,10 @@ if __name__ == '__main__':
             print(' %s' % a.lpath)
         print('')
 
-        package_version = match['tag']
         if args.nuget_version is not None:
             package_version = args.nuget_version
+        else:
+            package_version = args.tag
 
         print('')
 
@@ -112,7 +129,7 @@ if __name__ == '__main__':
             pkgfile = p.build(buildtype='release')
             break
         except packaging.MissingArtifactError as e:
-            if retries <= 0 or args.no_s3:
+            if retries <= 0 or not args.s3:
                 if not args.no_cleanup:
                     p.cleanup()
                 raise e

@@ -105,6 +105,7 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #define RD_KAFKAP_BROKERS_MAX    10000
 #define RD_KAFKAP_TOPICS_MAX     1000000
 #define RD_KAFKAP_PARTITIONS_MAX 100000
+#define RD_KAFKAP_GROUPS_MAX     100000
 
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)

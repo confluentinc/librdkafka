@@ -3,6 +3,11 @@
 # Check or apply/fix the project coding style to all files passed as arguments.
 # Uses clang-format for C/C++ and flake8 for Python.
 #
+# Requires clang-format version 10  (apt install clang-format-10).
+#
+
+
+CLANG_FORMAT=${CLANG_FORMAT:-clang-format}
 
 set -e
 
@@ -21,9 +26,9 @@ else
     fix=0
 fi
 
-clang_format_version=$(clang-format --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
-if ! [[ $clang_format_version == "10" ||  $clang_format_version == "11" ]]; then
-    echo "$0: clang-format version 10 or 11 required"
+clang_format_version=$(${CLANG_FORMAT} --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
+if [[ $clang_format_version != "10" ]] ; then
+    echo "$0: clang-format version 10, '$clang_format_version' detected"
     exit 1
 fi
 
@@ -87,7 +92,7 @@ for f in $*; do
 
         if [[ $lang == c ]]; then
             # Run clang-format to reformat the file
-            clang-format --style="$style" "$f" > _styletmp
+            ${CLANG_FORMAT} --style="$style" "$f" > _styletmp
 
         else
             # Run autopep8 to reformat the file.
@@ -113,7 +118,7 @@ for f in $*; do
 
         # Check style
         if [[ $lang == c ]]; then
-            if ! clang-format --style="$style" --Werror --dry-run "$f" ; then
+            if ! ${CLANG_FORMAT} --style="$style" --Werror --dry-run "$f" ; then
                 echo "$f: had style errors ($stylename): see clang-format output above"
                 ret=1
             fi

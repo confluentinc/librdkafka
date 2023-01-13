@@ -2949,8 +2949,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
-        err =
-            rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets);
+        err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request,
+                                           offsets, rd_false);
 
         /* Suppress empty commit debug logs if allowed */
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET ||
@@ -3091,6 +3091,7 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
         int r;
         rd_kafka_buf_t *rkbuf;
         rd_kafka_op_t *reply;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
 
         if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
                 /* wait_commit_cnt has already been increased for
@@ -3165,10 +3166,17 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
                    rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                    reason);
 
+        cgmetadata = rd_kafka_consumer_group_metadata_new_with_genid(
+            rkcg->rkcg_rk->rk_conf.group_id_str, rkcg->rkcg_generation_id,
+            rkcg->rkcg_member_id->str,
+            rkcg->rkcg_rk->rk_conf.group_instance_id);
+
         /* Send OffsetCommit */
-        r = rd_kafka_OffsetCommitRequest(
-            rkcg->rkcg_coord, rkcg, offsets, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
-            rd_kafka_cgrp_op_handle_OffsetCommit, rko, reason);
+        r = rd_kafka_OffsetCommitRequest(rkcg->rkcg_coord, cgmetadata, offsets,
+                                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                                         rd_kafka_cgrp_op_handle_OffsetCommit,
+                                         rko, reason);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
 
         /* Must have valid offsets to commit if we get here */
         rd_kafka_assert(NULL, r != 0);
@@ -4871,8 +4879,10 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
                 }
 
                 rd_kafka_OffsetFetchRequest(
-                    rkcg->rkcg_coord, rko->rko_u.offset_fetch.partitions,
-                    rko->rko_u.offset_fetch.require_stable,
+                    rkcg->rkcg_coord, rk->rk_group_id->str,
+                    rko->rko_u.offset_fetch.partitions,
+                    rko->rko_u.offset_fetch.require_stable_offsets,
+                    0, /* Timeout */
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_op_handle_OffsetFetch, rko);
                 rko = NULL; /* rko now owned by request */

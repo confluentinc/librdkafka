@@ -1,3 +1,11 @@
+# librdkafka v2.0.2
+
+librdkafka v2.0.2 is a bugfix release:
+
+* Fix OpenSSL version in Win32 nuget package (#4152).
+
+
+
 # librdkafka v2.0.1
 
 librdkafka v2.0.1 is a bugfix release:
@@ -67,7 +75,7 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
 are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
 **pause**, **resume** or **rebalancing** operation is performed in parallel with any of
-the above APIs. Some of the messages might be lost, or erroneously returned to the 
+the above APIs. Some of the messages might be lost, or erroneously returned to the
 application, in the above scenario.
 
 It is strongly recommended to use the Consumer Batch APIs and the mentioned
@@ -140,7 +148,7 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
    other partitions' offsets intermittently when **seek**, **pause**, **resume**
    or **rebalancing** is used for a partition.
  * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
-   intermittently returing incorrect partitions' messages if **rebalancing** 
+   intermittently returing incorrect partitions' messages if **rebalancing**
    happens during these operations.
 
 # librdkafka v1.9.2

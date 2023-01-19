@@ -92,7 +92,7 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-x64/native/centos7-librdkafka.so'),
         # Linux glibc centos7 arm64 without GSSAPI (no external deps)
-        Mapping({'arch': 'x64',
+        Mapping({'arch': 'arm64',
                  'plat': 'linux',
                  'dist': 'centos7',
                  'lnk': 'all'},

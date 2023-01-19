@@ -1,3 +1,11 @@
+# librdkafka v2.0.1
+
+librdkafka v2.0.1 is a bugfix release:
+
+* Fixed nuget package for Linux ARM64 release (#4150).
+
+
+
 # librdkafka v2.0.0
 
 librdkafka v2.0.0 is a feature release:

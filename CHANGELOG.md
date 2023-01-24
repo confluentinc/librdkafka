@@ -150,7 +150,6 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
  * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
    intermittently returing incorrect partitions' messages if **rebalancing**
    happens during these operations.
- * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
 
 # librdkafka v1.9.2
 

@@ -1258,7 +1258,7 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
         /* for each eligible (subscribed and available) topic (\p atopic):
          *   for each member subscribing to that topic:
          *     and for each partition of that topic:
-         *        add conusmer and partition to:
+         *        add consumer and partition to:
          *          partition2AllPotentialConsumers
          *          consumer2AllPotentialPartitions
          */

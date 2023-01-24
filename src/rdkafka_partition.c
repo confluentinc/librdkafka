@@ -1286,7 +1286,7 @@ void rd_kafka_toppar_offset_fetch(rd_kafka_toppar_t *rktp,
         rko->rko_replyq = replyq;
 
         rko->rko_u.offset_fetch.partitions = part;
-        rko->rko_u.offset_fetch.require_stable =
+        rko->rko_u.offset_fetch.require_stable_offsets =
             rk->rk_conf.isolation_level == RD_KAFKA_READ_COMMITTED;
         rko->rko_u.offset_fetch.do_free = 1;
 

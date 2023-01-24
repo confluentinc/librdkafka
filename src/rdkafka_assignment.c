@@ -536,9 +536,10 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                              partitions_to_query->cnt);
 
                 rd_kafka_OffsetFetchRequest(
-                    coord, partitions_to_query,
+                    coord, rk->rk_group_id->str, partitions_to_query,
                     rk->rk_conf.isolation_level ==
-                        RD_KAFKA_READ_COMMITTED /*require_stable*/,
+                        RD_KAFKA_READ_COMMITTED /*require_stable_offsets*/,
+                    0, /* Timeout */
                     RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                     rd_kafka_assignment_handle_OffsetFetch,
                     /* Must be freed by handler */

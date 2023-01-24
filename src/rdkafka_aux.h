@@ -99,4 +99,22 @@ rd_kafka_group_result_copy(const rd_kafka_group_result_t *groupres);
 void *rd_kafka_group_result_copy_opaque(const void *src_groupres, void *opaque);
 /**@}*/
 
+/**
+ * @struct Node represents a broker.
+ * It's the public type.
+ */
+typedef struct rd_kafka_Node_s {
+        int id;        /*< Node id */
+        char *host;    /*< Node host */
+        uint16_t port; /*< Node port */
+        char *rack_id; /*< (optional) Node rack id */
+} rd_kafka_Node_t;
+
+rd_kafka_Node_t *
+rd_kafka_Node_new(int id, const char *host, uint16_t port, const char *rack_id);
+
+rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
+
+void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
+
 #endif /* _RDKAFKA_AUX_H_ */

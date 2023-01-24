@@ -245,6 +245,7 @@ _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
+_TEST_DECL(0138_admin_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -488,6 +489,7 @@ struct test tests[] = {
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
+    _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -4472,6 +4474,35 @@ int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
         return 0;
 }
 
+/**
+ * @brief Compare two lists and their offsets, returning 0 if equal.
+ *
+ * @remark The lists may be sorted by this function.
+ */
+int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
+                                        rd_kafka_topic_partition_list_t *bl) {
+        int i;
+
+        if (al->cnt < bl->cnt)
+                return -1;
+        else if (al->cnt > bl->cnt)
+                return 1;
+        else if (al->cnt == 0)
+                return 0;
+
+        rd_kafka_topic_partition_list_sort(al, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(bl, NULL, NULL);
+
+        for (i = 0; i < al->cnt; i++) {
+                const rd_kafka_topic_partition_t *a = &al->elems[i];
+                const rd_kafka_topic_partition_t *b = &bl->elems[i];
+                if (a->partition != b->partition ||
+                    strcmp(a->topic, b->topic) || a->offset != b->offset)
+                        return -1;
+        }
+
+        return 0;
+}
 
 /**
  * @brief Execute script from the Kafka distribution bin/ path.
@@ -5649,9 +5680,13 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
         size_t aclres_cnt                      = 0;
         int errcnt                             = 0;
         rd_kafka_resp_err_t err;
-        const rd_kafka_group_result_t **gres           = NULL;
-        size_t gres_cnt                                = 0;
-        const rd_kafka_topic_partition_list_t *offsets = NULL;
+        const rd_kafka_group_result_t **gres               = NULL;
+        size_t gres_cnt                                    = 0;
+        const rd_kafka_ConsumerGroupDescription_t **gdescs = NULL;
+        size_t gdescs_cnt                                  = 0;
+        const rd_kafka_error_t **glists_errors             = NULL;
+        size_t glists_error_cnt                            = 0;
+        const rd_kafka_topic_partition_list_t *offsets     = NULL;
 
         rkev = test_wait_admin_result(q, evtype, tmout);
 
@@ -5713,7 +5748,24 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                                   rd_kafka_event_name(rkev));
 
                 aclres = rd_kafka_CreateAcls_result_acls(res, &aclres_cnt);
+        } else if (evtype == RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT) {
+                const rd_kafka_ListConsumerGroups_result_t *res;
+                if (!(res = rd_kafka_event_ListConsumerGroups_result(rkev)))
+                        TEST_FAIL(
+                            "Expected a ListConsumerGroups result, not %s",
+                            rd_kafka_event_name(rkev));
 
+                glists_errors = rd_kafka_ListConsumerGroups_result_errors(
+                    res, &glists_error_cnt);
+        } else if (evtype == RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT) {
+                const rd_kafka_DescribeConsumerGroups_result_t *res;
+                if (!(res = rd_kafka_event_DescribeConsumerGroups_result(rkev)))
+                        TEST_FAIL(
+                            "Expected a DescribeConsumerGroups result, not %s",
+                            rd_kafka_event_name(rkev));
+
+                gdescs = rd_kafka_DescribeConsumerGroups_result_groups(
+                    res, &gdescs_cnt);
         } else if (evtype == RD_KAFKA_EVENT_DELETEGROUPS_RESULT) {
                 const rd_kafka_DeleteGroups_result_t *res;
                 if (!(res = rd_kafka_event_DeleteGroups_result(rkev)))
@@ -5778,6 +5830,30 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                 if (error) {
                         TEST_WARN("AclResult error: %s: %s\n",
                                   rd_kafka_error_name(error),
+                                  rd_kafka_error_string(error));
+                        if (!(errcnt++))
+                                err = rd_kafka_error_code(error);
+                }
+        }
+
+        /* Check list groups errors */
+        for (i = 0; i < glists_error_cnt; i++) {
+                const rd_kafka_error_t *error = glists_errors[i];
+                TEST_WARN("%s error: %s\n", rd_kafka_event_name(rkev),
+                          rd_kafka_error_string(error));
+                if (!(errcnt++))
+                        err = rd_kafka_error_code(error);
+        }
+
+        /* Check describe groups errors */
+        for (i = 0; i < gdescs_cnt; i++) {
+                const rd_kafka_error_t *error;
+                if ((error =
+                         rd_kafka_ConsumerGroupDescription_error(gdescs[i]))) {
+                        TEST_WARN("%s result: %s: error: %s\n",
+                                  rd_kafka_event_name(rkev),
+                                  rd_kafka_ConsumerGroupDescription_group_id(
+                                      gdescs[i]),
                                   rd_kafka_error_string(error));
                         if (!(errcnt++))
                                 err = rd_kafka_error_code(error);
@@ -6077,7 +6153,7 @@ rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
 
         TEST_SAY("Deleting %" PRIusz " groups\n", group_cnt);
 
-        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, useq);
+        rd_kafka_DeleteGroups(rk, del_groups, group_cnt, options, q);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -6091,8 +6167,6 @@ rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
             q, RD_KAFKA_EVENT_DELETEGROUPS_RESULT, NULL, tmout + 5000);
 
         rd_kafka_queue_destroy(q);
-
-        rd_kafka_DeleteGroup_destroy_array(del_groups, group_cnt);
 
         if (err)
                 TEST_FAIL("Failed to delete groups: %s", rd_kafka_err2str(err));

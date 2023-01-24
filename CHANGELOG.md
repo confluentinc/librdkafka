@@ -1,9 +1,34 @@
+# librdkafka v2.0.2
+
+librdkafka v2.0.2 is a bugfix release:
+
+* Fix OpenSSL version in Win32 nuget package (#4152).
+
+
+
+# librdkafka v2.0.1
+
+librdkafka v2.0.1 is a bugfix release:
+
+* Fixed nuget package for Linux ARM64 release (#4150).
+
+
+
 # librdkafka v2.0.0
 
 librdkafka v2.0.0 is a feature release:
 
- * Fixes to the transactional and idempotent producer.
+ * [KIP-88](https://cwiki.apache.org/confluence/display/KAFKA/KIP-88%3A+OffsetFetch+Protocol+Update)
+   OffsetFetch Protocol Update (#3995).
+ * [KIP-222](https://cwiki.apache.org/confluence/display/KAFKA/KIP-222+-+Add+Consumer+Group+operations+to+Admin+API)
+   Add Consumer Group operations to Admin API (started by @lesterfan, #3995).
+ * [KIP-518](https://cwiki.apache.org/confluence/display/KAFKA/KIP-518%3A+Allow+listing+consumer+groups+per+state)
+   Allow listing consumer groups per state (#3995).
+ * [KIP-396](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=97551484)
+   Partially implemented: support for AlterConsumerGroupOffsets
+   (started by @lesterfan, #3995).
  * OpenSSL 3.0.x support - the maximum bundled OpenSSL version is now 3.0.7 (previously 1.1.1q).
+ * Fixes to the transactional and idempotent producer.
 
 
 ## Upgrade considerations
@@ -14,8 +39,9 @@ librdkafka v2.0.0 is a feature release:
 
 The introduction of OpenSSL 3.0.x in the self-contained librdkafka bundles
 changes the default set of available ciphers, in particular all obsolete
-or insecure ciphers and algorithms as listed in the OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html) manual page
-are now disabled by default.
+or insecure ciphers and algorithms as listed in the
+OpenSSL [legacy](https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html)
+manual page are now disabled by default.
 
 **WARNING**: These ciphers are disabled for security reasons and it is
 highly recommended NOT to use them.
@@ -49,7 +75,7 @@ To restore the previous behaviour, set `ssl.endpoint.identification.algorithm` t
 The Consumer Batch APIs `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
 are not thread safe if `rkmessages_size` is greater than 1 and any of the **seek**,
 **pause**, **resume** or **rebalancing** operation is performed in parallel with any of
-the above APIs. Some of the messages might be lost, or erroneously returned to the 
+the above APIs. Some of the messages might be lost, or erroneously returned to the
 application, in the above scenario.
 
 It is strongly recommended to use the Consumer Batch APIs and the mentioned
@@ -75,6 +101,9 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
    dependencies for its bundled librdkafka builds, as everything but cyrus-sasl
    is now built-in. There are bundled builds with and without linking to
    cyrus-sasl for maximum compatibility.
+ * Admin API DescribeGroups() now provides the group instance id
+   for static members [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances) (#3995).
+
 
 ## Fixes
 
@@ -119,7 +148,7 @@ configuration property (refer [examples/rdkafka_complex_consumer_example.c]
    other partitions' offsets intermittently when **seek**, **pause**, **resume**
    or **rebalancing** is used for a partition.
  * Fix `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
-   intermittently returing incorrect partitions' messages if **rebalancing** 
+   intermittently returing incorrect partitions' messages if **rebalancing**
    happens during these operations.
  * Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
 

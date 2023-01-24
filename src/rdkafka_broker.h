@@ -452,6 +452,9 @@ rd_kafka_broker_t *rd_kafka_broker_get_async(rd_kafka_t *rk,
                                              int state,
                                              rd_kafka_enq_once_t *eonce);
 
+rd_list_t *rd_kafka_brokers_get_nodeids_async(rd_kafka_t *rk,
+                                              rd_kafka_enq_once_t *eonce);
+
 rd_kafka_broker_t *
 rd_kafka_broker_controller(rd_kafka_t *rk, int state, rd_ts_t abs_timeout);
 rd_kafka_broker_t *rd_kafka_broker_controller_async(rd_kafka_t *rk,

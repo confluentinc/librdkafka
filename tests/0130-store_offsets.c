@@ -144,20 +144,22 @@ static void do_test_store_unassigned(void) {
         TEST_SAY(
             "Retrieving committed offset to verify empty committed offset "
             "metadata\n");
-        rd_kafka_topic_partition_list_destroy(committed_toppar);
-        committed_toppar = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(committed_toppar, topic, 0);
+        rd_kafka_topic_partition_list_t *committed_toppar_empty;
+        committed_toppar_empty = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(committed_toppar_empty, topic, 0);
         TEST_CALL_ERR__(
-            rd_kafka_committed(c, committed_toppar, tmout_multip(3000)));
-        TEST_ASSERT(committed_toppar->elems[0].offset == proper_offset + 1,
+            rd_kafka_committed(c, committed_toppar_empty, tmout_multip(3000)));
+        TEST_ASSERT(committed_toppar_empty->elems[0].offset == proper_offset + 1,
                     "Expected committed offset to be %" PRId64 ", not %" PRId64,
-                    proper_offset, committed_toppar->elems[0].offset);
-        TEST_ASSERT(committed_toppar->elems[0].metadata == NULL,
+                    proper_offset, committed_toppar_empty->elems[0].offset);
+        TEST_ASSERT(committed_toppar_empty->elems[0].metadata == NULL,
                     "Expected metadata to be NULL");
 
         rd_kafka_message_destroy(rkmessage);
 
         rd_kafka_topic_partition_list_destroy(parts);
+        rd_kafka_topic_partition_list_destroy(committed_toppar);
+        rd_kafka_topic_partition_list_destroy(committed_toppar_empty);
 
         rd_kafka_consumer_close(c);
         rd_kafka_destroy(c);

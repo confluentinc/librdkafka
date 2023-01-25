@@ -3394,7 +3394,7 @@ rd_kafka_committed(rd_kafka_t *rk,
                  * processing the op. */
                 rko->rko_u.offset_fetch.partitions =
                     rd_kafka_topic_partition_list_copy(partitions);
-                rko->rko_u.offset_fetch.require_stable =
+                rko->rko_u.offset_fetch.require_stable_offsets =
                     rk->rk_conf.isolation_level == RD_KAFKA_READ_COMMITTED;
                 rko->rko_u.offset_fetch.do_free = 1;
 
@@ -4577,6 +4577,28 @@ struct list_groups_state {
         int grplist_size;
 };
 
+static const char *rd_kafka_consumer_group_state_names[] = {
+    "Unknown", "PreparingRebalance", "CompletingRebalance", "Stable", "Dead",
+    "Empty"};
+
+const char *
+rd_kafka_consumer_group_state_name(rd_kafka_consumer_group_state_t state) {
+        if (state < 0 || state >= RD_KAFKA_CONSUMER_GROUP_STATE__CNT)
+                return NULL;
+        return rd_kafka_consumer_group_state_names[state];
+}
+
+rd_kafka_consumer_group_state_t
+rd_kafka_consumer_group_state_code(const char *name) {
+        size_t i;
+        for (i = 0; i < RD_KAFKA_CONSUMER_GROUP_STATE__CNT; i++) {
+                if (!rd_strcasecmp(rd_kafka_consumer_group_state_names[i],
+                                   name))
+                        return i;
+        }
+        return RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN;
+}
+
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb,
                                             rd_kafka_resp_err_t err,
@@ -4757,10 +4779,18 @@ static void rd_kafka_ListGroups_resp_cb(rd_kafka_t *rk,
         }
 
         if (i > 0) {
+                rd_kafka_error_t *error;
+
                 state->wait_cnt++;
-                rd_kafka_DescribeGroupsRequest(
-                    rkb, (const char **)grps, i, RD_KAFKA_REPLYQ(state->q, 0),
+                error = rd_kafka_DescribeGroupsRequest(
+                    rkb, 0, grps, i, RD_KAFKA_REPLYQ(state->q, 0),
                     rd_kafka_DescribeGroups_resp_cb, state);
+                if (error) {
+                        rd_kafka_DescribeGroups_resp_cb(
+                            rk, rkb, rd_kafka_error_code(error), reply, request,
+                            opaque);
+                        rd_kafka_error_destroy(error);
+                }
 
                 while (i-- > 0)
                         rd_free(grps[i]);
@@ -4821,6 +4851,7 @@ rd_kafka_list_groups(rd_kafka_t *rk,
         /* Query each broker for its list of groups */
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_error_t *error;
                 rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_nodeid == -1 || RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                         rd_kafka_broker_unlock(rkb);
@@ -4830,8 +4861,15 @@ rd_kafka_list_groups(rd_kafka_t *rk,
 
                 state.wait_cnt++;
                 rkb_cnt++;
-                rd_kafka_ListGroupsRequest(rkb, RD_KAFKA_REPLYQ(state.q, 0),
-                                           rd_kafka_ListGroups_resp_cb, &state);
+                error = rd_kafka_ListGroupsRequest(
+                    rkb, 0, NULL, 0, RD_KAFKA_REPLYQ(state.q, 0),
+                    rd_kafka_ListGroups_resp_cb, &state);
+                if (error) {
+                        rd_kafka_ListGroups_resp_cb(rk, rkb,
+                                                    rd_kafka_error_code(error),
+                                                    NULL, NULL, &state);
+                        rd_kafka_error_destroy(error);
+                }
         }
         rd_kafka_rdunlock(rk);
 

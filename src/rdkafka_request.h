@@ -60,19 +60,51 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
 
 const char *rd_kafka_actions2str(int actions);
 
-rd_kafka_topic_partition_list_t *
-rd_kafka_buf_read_topic_partitions(rd_kafka_buf_t *rkbuf,
-                                   size_t estimated_part_cnt,
-                                   rd_bool_t read_offset,
-                                   rd_bool_t read_part_errs);
-int rd_kafka_buf_write_topic_partitions(
+
+typedef enum {
+        /** Array end sentinel */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_END = 0,
+        /** Read/write int32_t for partition */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+        /** Read/write int64_t for offset */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+        /** Read/write int32_t for leader_epoch */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
+        /** Read/write int16_t for error code */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+        /** Read/write str for metadata */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA,
+        /** Noop, useful for ternary ifs */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+} rd_kafka_topic_partition_field_t;
+
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions0(
+    rd_kafka_buf_t *rkbuf,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields);
+
+#define rd_kafka_buf_read_topic_partitions(rkbuf, estimated_part_cnt, ...)     \
+        ({                                                                     \
+                rd_kafka_topic_partition_field_t _f[] = {                      \
+                    __VA_ARGS__, RD_KAFKA_TOPIC_PARTITION_FIELD_END};          \
+                rd_kafka_buf_read_topic_partitions0(rkbuf, estimated_part_cnt, \
+                                                    _f);                       \
+        })
+
+int rd_kafka_buf_write_topic_partitions0(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
-    rd_bool_t write_Offset,
-    rd_bool_t write_Epoch,
-    rd_bool_t write_Metadata);
+    const rd_kafka_topic_partition_field_t *fields);
+#define rd_kafka_buf_write_topic_partitions(rkbuf, parts, skip_invalid,        \
+                                            only_invalid, ...)                 \
+        ({                                                                     \
+                rd_kafka_topic_partition_field_t _f[] = {                      \
+                    __VA_ARGS__, RD_KAFKA_TOPIC_PARTITION_FIELD_END};          \
+                rd_kafka_buf_write_topic_partitions0(                          \
+                    rkbuf, parts, skip_invalid, only_invalid, _f);             \
+        })
 
 rd_kafka_resp_err_t
 rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
@@ -96,6 +128,21 @@ void rd_kafka_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *rkbuf,
+                                     rd_kafka_buf_t *request,
+                                     rd_kafka_topic_partition_list_t **offsets);
+void rd_kafka_OffsetForLeaderEpochRequest(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_topic_partition_list_t *parts,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,

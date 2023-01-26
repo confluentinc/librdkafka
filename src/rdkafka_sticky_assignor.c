@@ -1866,8 +1866,7 @@ static rd_kafkap_bytes_t *rd_kafka_sticky_assignor_get_metadata(
         rd_assert(state->prev_assignment != NULL);
         rd_kafka_buf_write_topic_partitions(
             rkbuf, state->prev_assignment, rd_false /*skip invalid offsets*/,
-            rd_false /*any offset*/, rd_false /*write offsets*/,
-            rd_false /*write epoch*/, rd_false /*write metadata*/);
+            rd_false /*any offset*/, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
         rd_kafka_buf_write_i32(rkbuf, state->generation_id);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */

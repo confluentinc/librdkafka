@@ -1506,7 +1506,7 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         if (!(assignment = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+                  rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION)))
                 goto err_parse;
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
 
@@ -1801,7 +1801,7 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
 
         if (Version >= 1 &&
             !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, rd_false, rd_false)))
+                  rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION)))
                 goto err;
 
         rd_kafka_buf_destroy(rkbuf);
@@ -2832,7 +2832,8 @@ static int rd_kafka_cgrp_update_committed_offsets(
                         continue;
 
                 rd_kafka_toppar_lock(rktp);
-                rktp->rktp_committed_offset = rktpar->offset;
+                rktp->rktp_committed_pos =
+                    rd_kafka_topic_partition_get_fetch_pos(rktpar);
                 rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_toppar_destroy(rktp); /* from get_toppar() */
@@ -3076,8 +3077,9 @@ static size_t rd_kafka_topic_partition_has_absolute_offset(
  *
  * \p rko...silent_empty: if there are no offsets to commit bail out
  *                        silently without posting an op on the reply queue.
- * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions from
- *                 the rktp's stored offset.
+ * \p set_offsets: set offsets and epochs in
+ *                 rko->rko_u.offset_commit.partitions from the rktp's
+ *                 stored offset.
  *
  * Locality: cgrp thread
  */
@@ -5300,9 +5302,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
                         result = rd_kafka_topic_partition_list_new(
                             rkcg->rkcg_group_assignment->cnt);
 
-                rd_kafka_topic_partition_list_add0(
-                    __FUNCTION__, __LINE__, result, curr->topic,
-                    curr->partition, curr->_private);
+                rd_kafka_topic_partition_list_add_copy(result, curr);
         }
 
         return result;

@@ -1496,8 +1496,9 @@ static void rd_kafka_txn_handle_TxnOffsetCommit(rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        partitions =
-            rd_kafka_buf_read_topic_partitions(rkbuf, 0, rd_false, rd_true);
+        partitions = rd_kafka_buf_read_topic_partitions(
+            rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR);
         if (!partitions)
                 goto err_parse;
 
@@ -1706,9 +1707,11 @@ rd_kafka_txn_send_TxnOffsetCommitRequest(rd_kafka_broker_t *rkb,
         /* Write per-partition offsets list */
         cnt = rd_kafka_buf_write_topic_partitions(
             rkbuf, rko->rko_u.txn.offsets, rd_true /*skip invalid offsets*/,
-            rd_false /*any offset*/, rd_true /*write offsets*/,
-            ApiVersion >= 2 /*write Epoch (-1) */, rd_true /*write Metadata*/);
-
+            rd_false /*any offset*/, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            ApiVersion >= 2 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
+                            : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_METADATA);
         if (!cnt) {
                 /* No valid partition offsets, don't commit. */
                 rd_kafka_buf_destroy(rkbuf);

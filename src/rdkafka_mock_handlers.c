@@ -896,6 +896,11 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
                         rd_kafka_buf_write_i32(resp, 0);
                 }
         }
+
+        if (ApiVersion >= 8) {
+                /* Response: Topics.TopicAuthorizedOperations */
+                rd_kafka_buf_write_i32(resp, INT32_MIN);
+        }
 }
 
 
@@ -1010,16 +1015,13 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                             mtopic, err ? err : mtopic->err);
                 }
 
-                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8) {
-                        /* TopicAuthorizedOperations */
-                        rd_kafka_buf_write_i32(resp, INT32_MIN);
-                }
         } else {
                 /* Response: #Topics: brokers only */
                 rd_kafka_buf_write_i32(resp, 0);
         }
 
-        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8) {
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8 &&
+            rkbuf->rkbuf_reqhdr.ApiVersion <= 10) {
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }

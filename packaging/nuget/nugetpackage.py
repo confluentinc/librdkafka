@@ -92,7 +92,7 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-x64/native/centos7-librdkafka.so'),
         # Linux glibc centos7 arm64 without GSSAPI (no external deps)
-        Mapping({'arch': 'x64',
+        Mapping({'arch': 'arm64',
                  'plat': 'linux',
                  'dist': 'centos7',
                  'lnk': 'all'},
@@ -193,12 +193,12 @@ class NugetPackage (Package):
                  'plat': 'win'},
                 'librdkafka.redist*',
                 'build/native/bin/v142/Win32/Release/libcrypto-3.dll',
-                'runtimes/win-x86/native/libcrypto-1_1.dll'),
+                'runtimes/win-x86/native/libcrypto-3.dll'),
         Mapping({'arch': 'x86',
                  'plat': 'win'},
                 'librdkafka.redist*',
                 'build/native/bin/v142/Win32/Release/libssl-3.dll',
-                'runtimes/win-x86/native/libssl-1_1.dll'),
+                'runtimes/win-x86/native/libssl-3.dll'),
 
         Mapping({'arch': 'x86',
                  'plat': 'win'},

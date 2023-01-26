@@ -28,6 +28,7 @@
 
 #include "test.h"
 #include "rdkafka.h"
+#include "../src/rdstring.h"
 
 /**
  * @brief Admin API integration tests.
@@ -2392,7 +2393,8 @@ static void do_test_DeleteGroups(const char *what,
 static void do_test_ListConsumerGroups(const char *what,
                                        rd_kafka_t *rk,
                                        rd_kafka_queue_t *useq,
-                                       int request_timeout) {
+                                       int request_timeout,
+                                       rd_bool_t match_states) {
 #define TEST_LIST_CONSUMER_GROUPS_CNT 4
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
@@ -2415,8 +2417,10 @@ static void do_test_ListConsumerGroups(const char *what,
         const rd_kafka_ListConsumerGroups_result_t *res;
         const rd_kafka_ConsumerGroupListing_t **groups;
 
-        SUB_TEST_QUICK("%s ListConsumerGroups with %s, request_timeout %d",
-                       rd_kafka_name(rk), what, request_timeout);
+        SUB_TEST_QUICK(
+            "%s ListConsumerGroups with %s, request_timeout %d"
+            ", match_states %s",
+            rd_kafka_name(rk), what, request_timeout, RD_STR_ToF(match_states));
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
@@ -2424,9 +2428,17 @@ static void do_test_ListConsumerGroups(const char *what,
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
-                err = rd_kafka_AdminOptions_set_request_timeout(
-                    options, request_timeout, errstr, sizeof(errstr));
-                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if (match_states) {
+                        rd_kafka_consumer_group_state_t empty =
+                            RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY;
+
+                        TEST_CALL_ERROR__(
+                            rd_kafka_AdminOptions_set_match_consumer_group_states(
+                                options, &empty, 1));
+                }
+
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr)));
         }
 
 
@@ -3673,8 +3685,8 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
         /* List groups */
-        do_test_ListConsumerGroups("temp queue", rk, NULL, -1);
-        do_test_ListConsumerGroups("main queue", rk, mainq, 1500);
+        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
 
         /* Describe groups */
         do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);

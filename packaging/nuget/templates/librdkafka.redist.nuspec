@@ -5,14 +5,14 @@
     <version>${version}</version>
     <title>librdkafka - redistributable</title>
     <authors>Magnus Edenhill, edenhill</authors>
-    <owners>Magnus Edenhill, edenhill</owners>
+    <owners>Confluent Inc.</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <licenseUrl>https://github.com/edenhill/librdkafka/blob/master/LICENSES.txt</licenseUrl>
-    <projectUrl>https://github.com/edenhill/librdkafka</projectUrl>
+    <licenseUrl>https://github.com/confluentinc/librdkafka/blob/master/LICENSES.txt</licenseUrl>
+    <projectUrl>https://github.com/confluentinc/librdkafka</projectUrl>
     <description>The Apache Kafka C/C++ client library - redistributable</description>
     <summary>The Apache Kafka C/C++ client library</summary>
     <releaseNotes>Release of librdkafka</releaseNotes>
-    <copyright>Copyright 2012-2017</copyright>
+    <copyright>Copyright 2012-2023</copyright>
     <tags>native apache kafka librdkafka C C++ nativepackage</tags>
   </metadata>
   <files>

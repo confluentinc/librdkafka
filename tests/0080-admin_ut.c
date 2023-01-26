@@ -527,13 +527,25 @@ static void do_test_ListConsumerGroups(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (with_options) {
+                rd_kafka_consumer_group_state_t duplicate[2] = {
+                    RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
+                    RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY};
+
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
+                /* Test duplicate error on match states */
+                rd_kafka_error_t *error =
+                    rd_kafka_AdminOptions_set_match_consumer_group_states(
+                        options, duplicate, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate states,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
-                err         = rd_kafka_AdminOptions_set_request_timeout(
-                    options, exp_timeout, errstr, sizeof(errstr));
-                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr)));
 
                 if (useq) {
                         my_opaque = (void *)456;
@@ -1556,6 +1568,8 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
             *cgoffsets_empty[MY_ALTER_CGRPOFFS_CNT];
         rd_kafka_AlterConsumerGroupOffsets_t
             *cgoffsets_negative[MY_ALTER_CGRPOFFS_CNT];
+        rd_kafka_AlterConsumerGroupOffsets_t
+            *cgoffsets_duplicate[MY_ALTER_CGRPOFFS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];
@@ -1608,6 +1622,23 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 cgoffsets_negative[i] = rd_kafka_AlterConsumerGroupOffsets_new(
                     "mygroup", partitions_negative);
                 rd_kafka_topic_partition_list_destroy(partitions_negative);
+
+                /* Call with duplicate partitions. */
+                rd_kafka_topic_partition_list_t *partitions_duplicate =
+                    rd_kafka_topic_partition_list_new(3);
+                rd_kafka_topic_partition_list_add(partitions_duplicate,
+                                                  "topic1", 9)
+                    ->offset = 9;
+                rd_kafka_topic_partition_list_add(partitions_duplicate,
+                                                  "topic3", 15)
+                    ->offset = 15;
+                rd_kafka_topic_partition_list_add(partitions_duplicate,
+                                                  "topic1", 9)
+                    ->offset = 1;
+
+                cgoffsets_duplicate[i] = rd_kafka_AlterConsumerGroupOffsets_new(
+                    "mygroup", partitions_duplicate);
+                rd_kafka_topic_partition_list_destroy(partitions_duplicate);
         }
 
         if (with_options) {
@@ -1696,6 +1727,38 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
             event_errstr_negative);
         rd_kafka_event_destroy(rkev);
 
+        /* Duplicate topic-partition offset */
+        TIMING_START(&timing, "AlterConsumerGroupOffsets");
+        TEST_SAY("Call AlterConsumerGroupOffsets, timeout is %dms\n",
+                 exp_timeout);
+        rd_kafka_AlterConsumerGroupOffsets(rk, cgoffsets_duplicate,
+                                           MY_ALTER_CGRPOFFS_CNT, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 10);
+        rd_kafka_AlterConsumerGroupOffsets_destroy_array(cgoffsets_duplicate,
+                                                         MY_ALTER_CGRPOFFS_CNT);
+        /* Poll result queue */
+        TIMING_START(&timing, "AlterConsumerGroupOffsets.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT(&timing, 0, 10);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("AlterConsumerGroupOffsets: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+        /* Convert event to proper result */
+        res = rd_kafka_event_AlterConsumerGroupOffsets_result(rkev);
+        TEST_ASSERT(res, "expected AlterConsumerGroupOffsets_result, not %s",
+                    rd_kafka_event_name(rkev));
+        /* Expecting error */
+        err                                = rd_kafka_event_error(rkev);
+        const char *event_errstr_duplicate = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err, "expected AlterConsumerGroupOffsets to fail");
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected RD_KAFKA_RESP_ERR__INVALID_ARG, not %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(strcmp(event_errstr_duplicate,
+                           "Duplicate partitions not allowed") == 0,
+                    "expected \"Duplicate partitions not allowed\", not \"%s\"",
+                    event_errstr_duplicate);
+        rd_kafka_event_destroy(rkev);
 
         /* Correct topic-partition list, local timeout */
         TIMING_START(&timing, "AlterConsumerGroupOffsets");
@@ -1756,10 +1819,12 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         rd_kafka_queue_t *q;
 #define MY_LIST_CGRPOFFS_CNT 1
         rd_kafka_AdminOptions_t *options = NULL;
-        rd_kafka_topic_partition_list_t *empty_cgoffsets_list;
         const rd_kafka_ListConsumerGroupOffsets_result_t *res;
         rd_kafka_ListConsumerGroupOffsets_t *cgoffsets[MY_LIST_CGRPOFFS_CNT];
-        rd_kafka_ListConsumerGroupOffsets_t *empty_cgoffsets;
+        rd_kafka_ListConsumerGroupOffsets_t
+            *cgoffsets_empty[MY_LIST_CGRPOFFS_CNT];
+        rd_kafka_ListConsumerGroupOffsets_t
+            *cgoffsets_duplicate[MY_LIST_CGRPOFFS_CNT];
         int exp_timeout = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];
@@ -1774,11 +1839,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         q = useq ? useq : rd_kafka_queue_new(rk);
 
-        empty_cgoffsets_list = rd_kafka_topic_partition_list_new(0);
-        empty_cgoffsets      = rd_kafka_ListConsumerGroupOffsets_new(
-            "mygroup", empty_cgoffsets_list);
-        rd_kafka_topic_partition_list_destroy(empty_cgoffsets_list);
-
         for (i = 0; i < MY_LIST_CGRPOFFS_CNT; i++) {
                 rd_kafka_topic_partition_list_t *partitions =
                     rd_kafka_topic_partition_list_new(3);
@@ -1792,6 +1852,20 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                         cgoffsets[i] = rd_kafka_ListConsumerGroupOffsets_new(
                             "mygroup", partitions);
                 }
+                rd_kafka_topic_partition_list_destroy(partitions);
+
+                rd_kafka_topic_partition_list_t *partitions_empty =
+                    rd_kafka_topic_partition_list_new(0);
+                cgoffsets_empty[i] = rd_kafka_ListConsumerGroupOffsets_new(
+                    "mygroup", partitions_empty);
+                rd_kafka_topic_partition_list_destroy(partitions_empty);
+
+                partitions = rd_kafka_topic_partition_list_new(3);
+                rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+                rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
+                rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+                cgoffsets_duplicate[i] = rd_kafka_ListConsumerGroupOffsets_new(
+                    "mygroup", partitions);
                 rd_kafka_topic_partition_list_destroy(partitions);
         }
 
@@ -1813,7 +1887,10 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         TEST_SAY(
             "Call ListConsumerGroupOffsets with empty topic-partition list.\n");
-        rd_kafka_ListConsumerGroupOffsets(rk, &empty_cgoffsets, 1, options, q);
+        rd_kafka_ListConsumerGroupOffsets(rk, cgoffsets_empty,
+                                          MY_LIST_CGRPOFFS_CNT, options, q);
+        rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets_empty,
+                                                        MY_LIST_CGRPOFFS_CNT);
         /* Poll result queue */
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TEST_SAY("ListConsumerGroupOffsets: got %s\n",
@@ -1833,11 +1910,39 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         rd_kafka_event_destroy(rkev);
 
+
+        TEST_SAY(
+            "Call ListConsumerGroupOffsets with topic-partition list"
+            "containing duplicates.\n");
+        rd_kafka_ListConsumerGroupOffsets(rk, cgoffsets_duplicate, 1, options,
+                                          q);
+        rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets_duplicate,
+                                                        MY_LIST_CGRPOFFS_CNT);
+        /* Poll result queue */
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TEST_SAY("ListConsumerGroupOffsets: got %s\n",
+                 rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        err = rd_kafka_event_error(rkev);
+        TEST_ASSERT(err, "expected ListConsumerGroupOffsets to fail");
+
+        errstr_ptr = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(!strcmp(errstr_ptr, "Duplicate partitions not allowed"),
+                    "expected error string \"Duplicate partitions not allowed\""
+                    ", not %s",
+                    errstr_ptr);
+
+        rd_kafka_event_destroy(rkev);
+
+
         TIMING_START(&timing, "ListConsumerGroupOffsets");
         TEST_SAY("Call ListConsumerGroupOffsets, timeout is %dms\n",
                  exp_timeout);
         rd_kafka_ListConsumerGroupOffsets(rk, cgoffsets, MY_LIST_CGRPOFFS_CNT,
                                           options, q);
+        rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets,
+                                                        MY_LIST_CGRPOFFS_CNT);
         TIMING_ASSERT_LATER(&timing, 0, 10);
 
         /* Poll result queue */
@@ -1876,10 +1981,6 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
-
-        rd_kafka_ListConsumerGroupOffsets_destroy(empty_cgoffsets);
-        rd_kafka_ListConsumerGroupOffsets_destroy_array(cgoffsets,
-                                                        MY_LIST_CGRPOFFS_CNT);
 
 #undef MY_LIST_CGRPOFFS_CNT
 
@@ -2334,8 +2435,7 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                    rd_false);
         do_test_ListConsumerGroups("temp queue, options", rk, NULL, 1,
                                    rd_false);
-        do_test_ListConsumerGroups("main queue, options", rk, mainq, 1,
-                                   rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 0, rd_false);
 
         do_test_DescribeConsumerGroups("temp queue, no options", rk, NULL, 0,
                                        rd_false);

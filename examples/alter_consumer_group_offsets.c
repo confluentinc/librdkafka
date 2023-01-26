@@ -264,14 +264,14 @@ cmd_alter_consumer_group_offsets(rd_kafka_conf_t *conf, int argc, char **argv) {
                  * partitions may have errors. */
                 const rd_kafka_AlterConsumerGroupOffsets_result_t *result;
                 const rd_kafka_group_result_t **groups;
-                size_t n_groups;
+                size_t n_groups, i;
 
                 result = rd_kafka_event_AlterConsumerGroupOffsets_result(event);
                 groups = rd_kafka_AlterConsumerGroupOffsets_result_groups(
                     result, &n_groups);
 
                 printf("AlterConsumerGroupOffsets results:\n");
-                for (size_t i = 0; i < n_groups; i++) {
+                for (i = 0; i < n_groups; i++) {
                         const rd_kafka_group_result_t *group = groups[i];
                         const rd_kafka_topic_partition_list_t *partitions =
                             rd_kafka_group_result_partitions(group);

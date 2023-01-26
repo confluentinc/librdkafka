@@ -1953,7 +1953,7 @@ release of librdkafka.
 | 0       | Produce             | 9           | 7                       |
 | 1       | Fetch               | 13          | 11                      |
 | 2       | ListOffsets         | 7           | 2                       |
-| 3       | Metadata            | 12          | 4                       |
+| 3       | Metadata            | 12          | 9                       |
 | 8       | OffsetCommit        | 8           | 7                       |
 | 9       | OffsetFetch         | 8           | 7                       |
 | 10      | FindCoordinator     | 4           | 2                       |

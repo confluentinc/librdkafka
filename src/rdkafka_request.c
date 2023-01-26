@@ -2181,15 +2181,17 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
+        size_t of_TopicArrayCnt;
         int features;
         int topic_cnt  = topics ? rd_list_cnt(topics) : 0;
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 7, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 8, &features);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
-                                         4 + (50 * topic_cnt) + 1);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
+                                                 4 + (50 * topic_cnt) + 1,
+                                                 ApiVersion >= 9);
 
         if (!reason)
                 reason = "";
@@ -2197,9 +2199,11 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         rkbuf->rkbuf_u.Metadata.reason      = rd_strdup(reason);
         rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
 
+        /* TopicArrayCnt */
+        of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+
         if (!topics && ApiVersion >= 1) {
                 /* a null(0) array (in the protocol) represents no topics */
-                rd_kafka_buf_write_i32(rkbuf, 0);
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for brokers only: %s", reason);
                 full_incr =
@@ -2210,10 +2214,13 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                         full_incr = &rkb->rkb_rk->rk_metadata_cache
                                          .rkmc_full_topics_sent;
 
-                if (topic_cnt == 0 && ApiVersion >= 1)
-                        rd_kafka_buf_write_i32(rkbuf, -1); /* Null: all topics*/
-                else
-                        rd_kafka_buf_write_i32(rkbuf, topic_cnt);
+                if (topic_cnt == 0 && ApiVersion >= 1 && ApiVersion < 9) {
+                        rd_kafka_buf_update_i32(rkbuf,
+                                of_TopicArrayCnt, -1);  /* Null: all topics*/
+                } else {
+                        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
+                                                       topic_cnt);
+                }
 
                 if (topic_cnt == 0) {
                         rkbuf->rkbuf_u.Metadata.all_topics = 1;
@@ -2265,6 +2272,9 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 
                 RD_LIST_FOREACH(topic, topics, i)
                 rd_kafka_buf_write_str(rkbuf, topic, -1);
+
+                /* Tags for previous topic */
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         if (ApiVersion >= 4) {
@@ -2286,6 +2296,20 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                            "on broker auto.create.topics.enable configuration");
         }
 
+        if (ApiVersion >= 8 && ApiVersion < 10) {
+                /* TODO: implement KIP-430 */
+                /* IncludeClusterAuthorizedOperations */
+                rd_kafka_buf_write_bool(rkbuf, rd_false);
+        }
+
+        if (ApiVersion >= 8) {
+                /* TODO: implement KIP-430 */
+                /* IncludeTopicAuthorizedOperations */
+                rd_kafka_buf_write_bool(rkbuf, rd_false);
+        }
+
+        /* Tags for the request */
+        rd_kafka_buf_write_tags(rkbuf);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

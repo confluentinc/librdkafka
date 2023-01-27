@@ -6287,6 +6287,7 @@ typedef rd_kafka_resp_err_t(rd_kafka_interceptor_f_on_thread_exit_t)(
  * @param secproto The security protocol.
  * @param name The original name of the broker.
  * @param port The port of the broker.
+ * @param state Broker state name.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
  * @returns an error code on failure, the error is logged but otherwise ignored.

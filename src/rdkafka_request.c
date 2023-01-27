@@ -2215,8 +2215,8 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                          .rkmc_full_topics_sent;
 
                 if (topic_cnt == 0 && ApiVersion >= 1 && ApiVersion < 9) {
-                        rd_kafka_buf_update_i32(rkbuf,
-                                of_TopicArrayCnt, -1);  /* Null: all topics*/
+                        rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt,
+                                                -1); /* Null: all topics*/
                 } else {
                         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
                                                        topic_cnt);

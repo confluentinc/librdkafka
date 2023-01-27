@@ -422,19 +422,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         }
 
                         /* Replicas */
-                        rd_kafka_buf_read_i32a(
-                            rkbuf, md->topics[i].partitions[j].replica_cnt);
-                        if (md->topics[i].partitions[j].replica_cnt >
-                            RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(
-                                    rkbuf,
-                                    "TopicMetadata[%i]."
-                                    "PartitionMetadata[%i]."
-                                    "Replica_cnt "
-                                    "%i > BROKERS_MAX %i",
-                                    i, j,
-                                    md->topics[i].partitions[j].replica_cnt,
-                                    RD_KAFKAP_BROKERS_MAX);
+                        rd_kafka_buf_read_arraycnt(
+                            rkbuf, &md->topics[i].partitions[j].replica_cnt,
+                            RD_KAFKAP_BROKERS_MAX);
 
                         if (!(md->topics[i].partitions[j].replicas =
                                   rd_tmpabuf_alloc(
@@ -460,18 +450,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                     md->topics[i].partitions[j].replicas[k]);
 
                         /* Isrs */
-                        rd_kafka_buf_read_i32a(
-                            rkbuf, md->topics[i].partitions[j].isr_cnt);
-                        if (md->topics[i].partitions[j].isr_cnt >
-                            RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(
-                                    rkbuf,
-                                    "TopicMetadata[%i]."
-                                    "PartitionMetadata[%i]."
-                                    "Isr_cnt "
-                                    "%i > BROKERS_MAX %i",
-                                    i, j, md->topics[i].partitions[j].isr_cnt,
-                                    RD_KAFKAP_BROKERS_MAX);
+                        rd_kafka_buf_read_arraycnt(
+                            rkbuf, &md->topics[i].partitions[j].isr_cnt,
+                            RD_KAFKAP_BROKERS_MAX);
 
                         if (!(md->topics[i]
                                   .partitions[j]
@@ -500,8 +481,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                 int32_t offline_replicas_cnt;
 
                                 /* #OfflineReplicas */
-                                rd_kafka_buf_read_i32(rkbuf,
-                                                      &offline_replicas_cnt);
+                                rd_kafka_buf_read_arraycnt(
+                                    rkbuf, &offline_replicas_cnt,
+                                    RD_KAFKAP_BROKERS_MAX);
                                 rd_kafka_buf_skip(rkbuf, offline_replicas_cnt *
                                                              sizeof(int32_t));
                         }

@@ -861,7 +861,7 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
                 rd_kafka_buf_write_bool(resp, rd_false);
         }
         /* Response: Topics.#Partitions */
-        rd_kafka_buf_write_i32(resp, partition_cnt);
+        rd_kafka_buf_write_arraycnt(resp, partition_cnt);
 
         for (i = 0; mtopic && i < partition_cnt; i++) {
                 const rd_kafka_mock_partition_t *mpart = &mtopic->partitions[i];
@@ -881,26 +881,30 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_buf_t *resp,
                 }
 
                 /* Response: ..Partitions.#ReplicaNodes */
-                rd_kafka_buf_write_i32(resp, mpart->replica_cnt);
+                rd_kafka_buf_write_arraycnt(resp, mpart->replica_cnt);
                 for (r = 0; r < mpart->replica_cnt; r++)
                         rd_kafka_buf_write_i32(resp, mpart->replicas[r]->id);
 
                 /* Response: ..Partitions.#IsrNodes */
                 /* Let Replicas == ISRs for now */
-                rd_kafka_buf_write_i32(resp, mpart->replica_cnt);
+                rd_kafka_buf_write_arraycnt(resp, mpart->replica_cnt);
                 for (r = 0; r < mpart->replica_cnt; r++)
                         rd_kafka_buf_write_i32(resp, mpart->replicas[r]->id);
 
                 if (ApiVersion >= 5) {
                         /* Response: ...OfflineReplicas */
-                        rd_kafka_buf_write_i32(resp, 0);
+                        rd_kafka_buf_write_arraycnt(resp, 0);
                 }
+
+                rd_kafka_buf_write_tags(resp);
         }
 
         if (ApiVersion >= 8) {
                 /* Response: Topics.TopicAuthorizedOperations */
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
+
+        rd_kafka_buf_write_tags(resp);
 }
 
 
@@ -925,7 +929,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Response: #Brokers */
-        rd_kafka_buf_write_i32(resp, mcluster->broker_cnt);
+        rd_kafka_buf_write_arraycnt(resp, mcluster->broker_cnt);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
                 /* Response: Brokers.Nodeid */
@@ -938,6 +942,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                         /* Response: Brokers.Rack (Matt's going to love this) */
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                 }
+                rd_kafka_buf_write_tags(resp);
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
@@ -951,7 +956,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         }
 
         /* #Topics */
-        rd_kafka_buf_read_i32(rkbuf, &TopicsCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
 
         if (TopicsCnt > 0)
                 requested_topics = rd_kafka_topic_partition_list_new(TopicsCnt);
@@ -967,6 +972,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
                 rd_kafka_topic_partition_list_add(requested_topics, topic,
                                                   RD_KAFKA_PARTITION_UA);
+                rd_kafka_buf_skip_tags(rkbuf);
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4)
@@ -984,7 +990,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         if (list_all_topics) {
                 rd_kafka_mock_topic_t *mtopic;
                 /* Response: #Topics */
-                rd_kafka_buf_write_i32(resp, mcluster->topic_cnt);
+                rd_kafka_buf_write_arraycnt(resp, mcluster->topic_cnt);
 
                 TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
                         rd_kafka_mock_buf_write_Metadata_Topic(
@@ -994,7 +1000,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         } else if (requested_topics) {
                 /* Response: #Topics */
-                rd_kafka_buf_write_i32(resp, requested_topics->cnt);
+                rd_kafka_buf_write_arraycnt(resp, requested_topics->cnt);
 
                 for (i = 0; i < requested_topics->cnt; i++) {
                         const rd_kafka_topic_partition_t *rktpar =
@@ -1017,7 +1023,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         } else {
                 /* Response: #Topics: brokers only */
-                rd_kafka_buf_write_i32(resp, 0);
+                rd_kafka_buf_write_arraycnt(resp, 0);
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8 &&
@@ -1025,6 +1031,9 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
+
+        rd_kafka_buf_skip_tags(rkbuf);
+        rd_kafka_buf_write_tags(resp);
 
         if (requested_topics)
                 rd_kafka_topic_partition_list_destroy(requested_topics);

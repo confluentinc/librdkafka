@@ -815,7 +815,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 } else {                                                       \
                         rd_kafka_buf_read_i32(rkbuf, arrcnt);                  \
                 }                                                              \
-                if (*(arrcnt) < 0 || ((maxval) != -1 && *(arrcnt) > (maxval))) \
+                if (*(arrcnt) < -1 ||                                          \
+                    ((maxval) != -1 && *(arrcnt) > (maxval)))                  \
                         rd_kafka_buf_parse_fail(                               \
                             rkbuf, "ApiArrayCnt %" PRId32 " out of range",     \
                             *(arrcnt));                                        \

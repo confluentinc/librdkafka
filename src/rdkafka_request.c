@@ -2187,7 +2187,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         int *full_incr = NULL;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Metadata, 0, 8, &features);
+            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_Metadata, 1,
                                                  4 + (50 * topic_cnt) + 1,
@@ -2202,37 +2202,48 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
-        if (!topics && ApiVersion >= 1) {
-                /* a null(0) array (in the protocol) represents no topics */
+        if (!topics) {
+                /* v0: keep 0, brokers only not available,
+                 * request all topics */
+                /* v1-8: 0 means empty array, brokers only */
+                if (ApiVersion >= 9) {
+                        /* v9+: varint encoded empty array (1), brokers only */
+                        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
+                                                       topic_cnt);
+                }
+
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for brokers only: %s", reason);
                 full_incr =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_brokers_sent;
 
-        } else {
-                if (topic_cnt == 0 && !rko)
+        } else if (topic_cnt == 0) {
+                /* v0: keep 0, request all topics */
+                if (ApiVersion >= 1 && ApiVersion < 9) {
+                        /* v1-8: update to -1, all topics */
+                        rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, -1);
+                }
+                /* v9+: keep 0, varint encoded null, all topics */
+
+                rkbuf->rkbuf_u.Metadata.all_topics = 1;
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Request metadata for all topics: "
+                           "%s",
+                           reason);
+
+                if (!rko)
                         full_incr = &rkb->rkb_rk->rk_metadata_cache
                                          .rkmc_full_topics_sent;
 
-                if (topic_cnt == 0 && ApiVersion >= 1 && ApiVersion < 9) {
-                        rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt,
-                                                -1); /* Null: all topics*/
-                } else {
-                        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
-                                                       topic_cnt);
-                }
+        } else {
+                /* request cnt topics */
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt,
+                                               topic_cnt);
 
-                if (topic_cnt == 0) {
-                        rkbuf->rkbuf_u.Metadata.all_topics = 1;
-                        rd_rkb_dbg(rkb, METADATA, "METADATA",
-                                   "Request metadata for all topics: "
-                                   "%s",
-                                   reason);
-                } else
-                        rd_rkb_dbg(rkb, METADATA, "METADATA",
-                                   "Request metadata for %d topic(s): "
-                                   "%s",
-                                   topic_cnt, reason);
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Request metadata for %d topic(s): "
+                           "%s",
+                           topic_cnt, reason);
         }
 
         if (full_incr) {
@@ -2270,11 +2281,11 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.topics =
                     rd_list_copy(topics, rd_list_string_copy, NULL);
 
-                RD_LIST_FOREACH(topic, topics, i)
-                rd_kafka_buf_write_str(rkbuf, topic, -1);
-
-                /* Tags for previous topic */
-                rd_kafka_buf_write_tags(rkbuf);
+                RD_LIST_FOREACH(topic, topics, i) {
+                        rd_kafka_buf_write_str(rkbuf, topic, -1);
+                        /* Tags for previous topic */
+                        rd_kafka_buf_write_tags(rkbuf);
+                }
         }
 
         if (ApiVersion >= 4) {

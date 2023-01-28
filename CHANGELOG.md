@@ -1,3 +1,9 @@
+# librdkafka v2.6.0
+
+librdkafka v2.6.0 is a feature release.
+
+* Support versions of OpenSSL without the ENGINE component. (Chris Novakovic, #3535)
+
 # librdkafka v2.5.3
 
 librdkafka v2.5.3 is a feature release.

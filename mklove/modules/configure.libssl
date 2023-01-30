@@ -70,6 +70,16 @@ function manual_checks {
 #if OPENSSL_VERSION_NUMBER < 0x1000100fL
 #error \"Requires OpenSSL version >= v1.0.1\"
 #endif"
+
+    # Silence OpenSSL 3.0.0 deprecation warnings since they'll make
+    # -Werror fail.
+    if ! mkl_compile_check --sub "libcrypto" "" "" CC "-lcrypto" "
+#include <openssl/ssl.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#error \"OpenSSL version >= v3.0.0 needs OPENSSL_SUPPRESS_DEPRECATED\"
+#endif"; then
+            mkl_mkvar_prepend CFLAGS CFLAGS "-DOPENSSL_SUPPRESS_DEPRECATED"
+    fi
 }
 
 

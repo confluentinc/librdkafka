@@ -2416,6 +2416,8 @@ static void do_test_ListConsumerGroups(const char *what,
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         const rd_kafka_ListConsumerGroups_result_t *res;
         const rd_kafka_ConsumerGroupListing_t **groups;
+        rd_bool_t has_match_states =
+            test_broker_version >= TEST_BRKVER(2, 7, 0, 0);
 
         SUB_TEST_QUICK(
             "%s ListConsumerGroups with %s, request_timeout %d"
@@ -2537,6 +2539,9 @@ static void do_test_ListConsumerGroups(const char *what,
                                             "expected a normal group,"
                                             " got a simple group");
 
+                                if (!has_match_states)
+                                        break;
+
                                 TEST_ASSERT(
                                     state ==
                                         RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
@@ -2614,6 +2619,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
         char client_ids[TEST_DESCRIBE_CONSUMER_GROUPS_CNT][512];
         rd_kafka_t *rks[TEST_DESCRIBE_CONSUMER_GROUPS_CNT];
         const rd_kafka_DescribeConsumerGroups_result_t *res;
+        rd_bool_t has_group_instance_id =
+            test_broker_version >= TEST_BRKVER(2, 4, 0, 0);
 
         SUB_TEST_QUICK("%s DescribeConsumerGroups with %s, request_timeout %d",
                        rd_kafka_name(rk), what, request_timeout);
@@ -2775,14 +2782,17 @@ static void do_test_DescribeConsumerGroups(const char *what,
                                     " got \"%s\".",
                                     client_ids[i], client_id);
 
-                        group_instance_id =
-                            rd_kafka_MemberDescription_group_instance_id(
-                                member);
-                        TEST_ASSERT(
-                            !strcmp(group_instance_id, group_instance_ids[i]),
-                            "Expected group instance id \"%s\","
-                            " got \"%s\".",
-                            group_instance_ids[i], group_instance_id);
+                        if (has_group_instance_id) {
+                                group_instance_id =
+                                    rd_kafka_MemberDescription_group_instance_id(
+                                        member);
+                                TEST_ASSERT(!strcmp(group_instance_id,
+                                                    group_instance_ids[i]),
+                                            "Expected group instance id \"%s\","
+                                            " got \"%s\".",
+                                            group_instance_ids[i],
+                                            group_instance_id);
+                        }
 
                         assignment =
                             rd_kafka_MemberDescription_assignment(member);

@@ -149,7 +149,8 @@ static void do_test_store_unassigned(void) {
         rd_kafka_topic_partition_list_add(committed_toppar_empty, topic, 0);
         TEST_CALL_ERR__(
             rd_kafka_committed(c, committed_toppar_empty, tmout_multip(3000)));
-        TEST_ASSERT(committed_toppar_empty->elems[0].offset == proper_offset + 1,
+        TEST_ASSERT(committed_toppar_empty->elems[0].offset ==
+                        proper_offset + 1,
                     "Expected committed offset to be %" PRId64 ", not %" PRId64,
                     proper_offset, committed_toppar_empty->elems[0].offset);
         TEST_ASSERT(committed_toppar_empty->elems[0].metadata == NULL,

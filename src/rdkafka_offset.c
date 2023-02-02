@@ -553,7 +553,13 @@ rd_kafka_offset_broker_commit(rd_kafka_toppar_t *rktp, const char *reason) {
         offsets = rd_kafka_topic_partition_list_new(1);
         rktpar  = rd_kafka_topic_partition_list_add(
             offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        rktpar->offset = rktp->rktp_committing_offset;
+        rktpar->offset        = rktp->rktp_committing_offset;
+        rktpar->metadata_size = rktp->rktp_stored_metadata_size;
+        if (rktp->rktp_stored_metadata) {
+                rktpar->metadata = rd_malloc(rktp->rktp_stored_metadata_size);
+                memcpy(rktpar->metadata, rktp->rktp_stored_metadata,
+                       rktpar->metadata_size);
+        }
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSETCMT",
                      "%.*s [%" PRId32 "]: committing offset %" PRId64 ": %s",
@@ -646,7 +652,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *app_rkt,
         }
         rd_kafka_topic_rdunlock(rkt);
 
-        err = rd_kafka_offset_store0(rktp, offset + 1,
+        err = rd_kafka_offset_store0(rktp, offset + 1, NULL, 0,
                                      rd_false /* Don't force */, RD_DO_LOCK);
 
         rd_kafka_toppar_destroy(rktp);
@@ -677,9 +683,10 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
                         continue;
                 }
 
-                rktpar->err = rd_kafka_offset_store0(rktp, rktpar->offset,
-                                                     rd_false /* don't force */,
-                                                     RD_DO_LOCK);
+                rktpar->err = rd_kafka_offset_store0(
+                    rktp, rktpar->offset, rktpar->metadata,
+                    rktpar->metadata_size, rd_false /* don't force */,
+                    RD_DO_LOCK);
                 rd_kafka_toppar_destroy(rktp);
 
                 if (rktpar->err)
@@ -1066,7 +1073,8 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop(rd_kafka_toppar_t *rktp) {
             rktp->rktp_stored_offset == RD_KAFKA_OFFSET_INVALID &&
             rktp->rktp_offsets_fin.eof_offset > 0)
                 rd_kafka_offset_store0(rktp, rktp->rktp_offsets_fin.eof_offset,
-                                       rd_true /* force */, RD_DONT_LOCK);
+                                       NULL, 0, rd_true /* force */,
+                                       RD_DONT_LOCK);
 
         /* Commit offset to backing store.
          * This might be an async operation. */

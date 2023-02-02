@@ -72,6 +72,8 @@ const char *rd_kafka_offset2str(int64_t offset);
  *      the stored offset to .._INVALID to provide a clean state.
  *
  * @param offset Offset to set, may be an absolute offset or .._INVALID.
+ * @param metadata Metadata to be set, may be NULL
+ * @param metadata_size Size of the metadata to be set
  * @param force Forcibly set \p offset regardless of assignment state.
  * @param do_lock Whether to lock the \p rktp or not (already locked by caller).
  *
@@ -83,6 +85,8 @@ const char *rd_kafka_offset2str(int64_t offset);
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_offset_store0(rd_kafka_toppar_t *rktp,
                        int64_t offset,
+                       void *metadata,
+                       size_t metadata_size,
                        rd_bool_t force,
                        rd_dolock_t do_lock) {
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -94,9 +98,19 @@ rd_kafka_offset_store0(rd_kafka_toppar_t *rktp,
                      !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED) &&
                      !rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk)))
                 err = RD_KAFKA_RESP_ERR__STATE;
-        else
-                rktp->rktp_stored_offset = offset;
-
+        else {
+                if (rktp->rktp_stored_metadata) {
+                        rd_free(rktp->rktp_stored_metadata);
+                        rktp->rktp_stored_metadata = NULL;
+                }
+                rktp->rktp_stored_offset        = offset;
+                rktp->rktp_stored_metadata_size = metadata_size;
+                if (metadata) {
+                        rktp->rktp_stored_metadata = rd_malloc(metadata_size);
+                        memcpy(rktp->rktp_stored_metadata, metadata,
+                               rktp->rktp_stored_metadata_size);
+                }
+        }
         if (do_lock)
                 rd_kafka_toppar_unlock(rktp);
 

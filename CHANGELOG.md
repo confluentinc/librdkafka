@@ -1,3 +1,11 @@
+# librdkafka v2.1.0
+
+### Consumer fixes
+
+* Store offset commit metadata in `rd_kafka_offsets_store` (#4084).
+
+
+
 # librdkafka v2.0.2
 
 librdkafka v2.0.2 is a bugfix release:

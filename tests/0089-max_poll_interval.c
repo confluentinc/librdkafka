@@ -28,6 +28,7 @@
 
 #include "test.h"
 #include "rdkafka.h"
+#include "rdstring.h"
 
 /**
  * Verify that long-processing consumer leaves the group during
@@ -42,18 +43,21 @@
  */
 
 
-
-int main_0089_max_poll_interval(int argc, char **argv) {
-        const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
+void do_test_with_optional_queue(rd_bool_t use_log_queue) {
+                const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         uint64_t testid;
         const int msgcnt = 10;
         rd_kafka_t *c[2];
         rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *logq[2];
         int64_t ts_next[2]    = {0, 0};
         int64_t ts_exp_msg[2] = {0, 0};
         int cmsgcnt           = 0;
         int i;
         int bad = -1;
+        char errstr[512];
+
+        SUB_TEST("use_log_queue = %s", RD_STR_ToF(use_log_queue));
 
         testid = test_id_generate();
 
@@ -66,21 +70,33 @@ int main_0089_max_poll_interval(int argc, char **argv) {
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "10000" /*10s*/);
         test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "log.queue", use_log_queue ? "true" : "false");
 
         c[0] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
         c[1] = test_create_consumer(topic, NULL, conf, NULL);
 
-        test_consumer_subscribe(c[0], topic);
-        test_consumer_subscribe(c[1], topic);
+
+        for (i = 0; i < 2; i++) {
+                if (use_log_queue) {
+                        logq[i] = rd_kafka_queue_new(c[i]);
+                        TEST_CALL__(rd_kafka_set_log_queue(c[i], logq[i]));
+                }
+                test_consumer_subscribe(c[i], topic);
+        }
 
         while (1) {
                 for (i = 0; i < 2; i++) {
                         int64_t now;
                         rd_kafka_message_t *rkm;
 
-                        /* Consumer is "processing" */
-                        if (ts_next[i] > test_clock())
+                        /* Consumer is "processing".
+                         * When we are "processing", we poll the log queue. */
+                        if (ts_next[i] > test_clock()) {
+                                if (use_log_queue) {
+                                        rd_kafka_queue_poll(logq[i], 100);
+                                }
                                 continue;
+                        }
 
                         rkm = rd_kafka_consumer_poll(c[i], 100);
                         if (!rkm)
@@ -179,8 +195,18 @@ done:
         }
 
 
-        for (i = 0; i < 2; i++)
+        for (i = 0; i < 2; i++) {
                 rd_kafka_destroy_flags(c[i],
                                        RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+                if (use_log_queue)
+                        rd_kafka_queue_destroy(logq[i]);
+        }
+
+        SUB_TEST_PASS();
+}
+
+int main_0089_max_poll_interval(int argc, char **argv) {
+        do_test_with_optional_queue(rd_false);
+        do_test_with_optional_queue(rd_true);
         return 0;
 }

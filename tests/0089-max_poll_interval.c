@@ -92,9 +92,10 @@ void do_test_with_optional_queue(rd_bool_t use_log_queue) {
                         /* Consumer is "processing".
                          * When we are "processing", we poll the log queue. */
                         if (ts_next[i] > test_clock()) {
-                                if (use_log_queue) {
-                                        rd_kafka_queue_poll(logq[i], 100);
-                                }
+                                if (use_log_queue)
+                                        rd_kafka_event_destroy(
+                                                rd_kafka_queue_poll(
+                                                        logq[i], 100));
                                 continue;
                         }
 
@@ -198,6 +199,7 @@ done:
         for (i = 0; i < 2; i++) {
                 rd_kafka_destroy_flags(c[i],
                                        RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+
                 if (use_log_queue)
                         rd_kafka_queue_destroy(logq[i]);
         }

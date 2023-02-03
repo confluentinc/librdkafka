@@ -44,7 +44,7 @@
 
 
 void do_test_with_optional_queue(rd_bool_t use_log_queue) {
-                const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
+        const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         uint64_t testid;
         const int msgcnt = 10;
         rd_kafka_t *c[2];
@@ -94,8 +94,7 @@ void do_test_with_optional_queue(rd_bool_t use_log_queue) {
                         if (ts_next[i] > test_clock()) {
                                 if (use_log_queue)
                                         rd_kafka_event_destroy(
-                                                rd_kafka_queue_poll(
-                                                        logq[i], 100));
+                                            rd_kafka_queue_poll(logq[i], 100));
                                 continue;
                         }
 

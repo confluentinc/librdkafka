@@ -516,10 +516,8 @@ static void do_message_timeout_transaction_timeout_checks(void){
         test_conf_set(conf, "reconnect.backoff.max.ms", "2000");
         
         rd_snprintf(numstr, sizeof(numstr), "%d", 2);
-        test_conf_set(conf, "test.mock.num.brokers", numstr);
         test_conf_set(conf, "message.timeout.ms", "10000");
         test_conf_set(conf, "transaction.timeout.ms", "7000");
-        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         if (!strcmp(test_conf_get(conf, "client.id"), "rdkafka"))
                         test_conf_set(conf, "client.id", test_curr->name);
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));

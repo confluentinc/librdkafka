@@ -889,5 +889,7 @@ int main_0004_conf(int argc, char **argv) {
 
         do_message_timeout_linger_checks();
 
+        do_message_timeout_transaction_timeout_checks();
+
         return 0;
 }

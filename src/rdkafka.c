@@ -1590,20 +1590,19 @@ static void rd_kafka_stats_emit_broker_reqs(struct _stats_emit *st,
                 },
             [3 /*hide-unless-non-zero*/] = {
                 /* Hide Admin requests unless they've been used */
-                [RD_KAFKAP_CreateTopics]     = rd_true,
-                [RD_KAFKAP_DeleteTopics]     = rd_true,
-                [RD_KAFKAP_DeleteRecords]    = rd_true,
-                [RD_KAFKAP_CreatePartitions] = rd_true,
-                [RD_KAFKAP_DescribeAcls]     = rd_true,
-                [RD_KAFKAP_CreateAcls]       = rd_true,
-                [RD_KAFKAP_DeleteAcls]       = rd_true,
-                [RD_KAFKAP_DescribeConfigs]  = rd_true,
-                [RD_KAFKAP_AlterConfigs]     = rd_true,
-                [RD_KAFKAP_IncrementalAlterConfigs] =
-                        rd_true,
-                [RD_KAFKAP_DeleteGroups]     = rd_true,
-                [RD_KAFKAP_ListGroups]       = rd_true,
-                [RD_KAFKAP_DescribeGroups]   = rd_true}};
+                [RD_KAFKAP_CreateTopics]            = rd_true,
+                [RD_KAFKAP_DeleteTopics]            = rd_true,
+                [RD_KAFKAP_DeleteRecords]           = rd_true,
+                [RD_KAFKAP_CreatePartitions]        = rd_true,
+                [RD_KAFKAP_DescribeAcls]            = rd_true,
+                [RD_KAFKAP_CreateAcls]              = rd_true,
+                [RD_KAFKAP_DeleteAcls]              = rd_true,
+                [RD_KAFKAP_DescribeConfigs]         = rd_true,
+                [RD_KAFKAP_AlterConfigs]            = rd_true,
+                [RD_KAFKAP_IncrementalAlterConfigs] = rd_true,
+                [RD_KAFKAP_DeleteGroups]            = rd_true,
+                [RD_KAFKAP_ListGroups]              = rd_true,
+                [RD_KAFKAP_DescribeGroups]          = rd_true}};
         int i;
         int cnt = 0;
 

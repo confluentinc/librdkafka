@@ -5745,10 +5745,12 @@ rd_kafka_resp_err_t test_wait_topic_admin_result(rd_kafka_queue_t *q,
                 const rd_kafka_IncrementalAlterConfigs_result_t *res;
 
                 if (!(res = rd_kafka_event_AlterConfigs_result(rkev)))
-                        TEST_FAIL("Expected a IncrementalAlterConfigs result, not %s",
-                                  rd_kafka_event_name(rkev));
+                        TEST_FAIL(
+                            "Expected a IncrementalAlterConfigs result, not %s",
+                            rd_kafka_event_name(rkev));
 
-                cres = rd_kafka_IncrementalAlterConfigs_result_resources(res, &cres_cnt);
+                cres = rd_kafka_IncrementalAlterConfigs_result_resources(
+                    res, &cres_cnt);
         } else if (evtype == RD_KAFKA_EVENT_CREATEACLS_RESULT) {
                 const rd_kafka_CreateAcls_result_t *res;
 
@@ -6402,11 +6404,12 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
  * @param configs 'const char *name, const char *value' tuples
  * @param config_cnt is the number of tuples in \p configs
  */
-rd_kafka_resp_err_t test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
-                                             rd_kafka_ResourceType_t restype,
-                                             const char *resname,
-                                             const char **configs,
-                                             size_t config_cnt) {
+rd_kafka_resp_err_t
+test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
+                                    rd_kafka_ResourceType_t restype,
+                                    const char *resname,
+                                    const char **configs,
+                                    size_t config_cnt) {
         rd_kafka_queue_t *q;
         rd_kafka_ConfigResource_t *confres;
         rd_kafka_event_t *rkev;
@@ -6463,8 +6466,8 @@ rd_kafka_resp_err_t test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
 
         /* Then apply the configuration to change. */
         for (i = 0; i < config_cnt; i += 2) {
-                err = rd_kafka_ConfigResource_incremental_set_config(confres, configs[i],
-                                                         configs[i + 1]);
+                err = rd_kafka_ConfigResource_incremental_set_config(
+                    confres, configs[i], configs[i + 1]);
                 TEST_ASSERT(!err,
                             "Failed to set config %s=%s on "
                             "local resource object",

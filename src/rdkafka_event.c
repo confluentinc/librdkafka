@@ -333,7 +333,8 @@ rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev) {
 
 const rd_kafka_IncrementalAlterConfigs_result_t *
 rd_kafka_event_IncrementalAlterConfigs_result(rd_kafka_event_t *rkev) {
-        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT)
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT)
                 return NULL;
         else
                 return (const rd_kafka_IncrementalAlterConfigs_result_t *)rkev;

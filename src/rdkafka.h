@@ -5283,8 +5283,8 @@ typedef int rd_kafka_event_type_t;
 /** AlterConsumerGroupOffsets_result_t */
 #define RD_KAFKA_EVENT_ALTERCONSUMERGROUPOFFSETS_RESULT 0x10000
 
-#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT                            \
-        0x20000                                          /**< IncrementalAlterConfigs_result_t */
+#define RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT                          \
+        0x20000 /**< IncrementalAlterConfigs_result_t */
 
 /**
  * @returns the event type for the given event.
@@ -5605,8 +5605,8 @@ rd_kafka_event_AlterConfigs_result(rd_kafka_event_t *rkev);
 /**
  * @brief Get IncrementalAlterConfigs result.
  *
- * @returns the result of a IncrementalAlterConfigs request, or NULL if event is of
- *          different type.
+ * @returns the result of a IncrementalAlterConfigs request, or NULL if event is
+ * of different type.
  *
  * Event types:
  *   RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT
@@ -6640,9 +6640,9 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
         RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS,
         /**< IncrementalAlterConfigs */
-        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
-        RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
-        RD_KAFKA_ADMIN_OP_DELETEGROUPS,     /**< DeleteGroups */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS, /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP_DELETERECORDS,   /**< DeleteRecords */
+        RD_KAFKA_ADMIN_OP_DELETEGROUPS,    /**< DeleteGroups */
         /** DeleteConsumerGroupOffsets */
         RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,
         RD_KAFKA_ADMIN_OP_CREATEACLS,             /**< CreateAcls */
@@ -6790,8 +6790,8 @@ rd_kafka_AdminOptions_set_validate_only(rd_kafka_AdminOptions_t *options,
  * the following exceptions:
  *   - AlterConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
- *   - IncrementalAlterConfigs with a BROKER resource are sent to the broker id set
- *     as the resource name.
+ *   - IncrementalAlterConfigs with a BROKER resource are sent to the broker id
+ * set as the resource name.
  *   - DescribeConfigs with a BROKER resource are sent to the broker id set
  *     as the resource name.
  *
@@ -7423,7 +7423,7 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
  * @param value Configuration value, depends on resource type and \p name.
- *              Set to \c NULL or use 
+ *              Set to \c NULL or use
  *              rd_kafka_ConfigResource_incremental_delete_config
  *              to revert configuration value to default.
  *
@@ -7432,10 +7432,10 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_set_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value);
 
 
 /**
@@ -7451,15 +7451,15 @@ rd_kafka_ConfigResource_incremental_set_config(rd_kafka_ConfigResource_t *config
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if configs were added to resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_append_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value);
 
 
 /**
- * @brief (For list-type configuration entries only) Removes the specified values
- *        from the current value of the configuration entry.
+ * @brief (For list-type configuration entries only) Removes the specified
+ * values from the current value of the configuration entry.
  *
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
@@ -7471,9 +7471,10 @@ rd_kafka_ConfigResource_incremental_append_config(rd_kafka_ConfigResource_t *con
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value);
+rd_kafka_ConfigResource_incremental_subtract_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value);
 
 
 /**
@@ -7487,9 +7488,9 @@ rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *c
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was deleted from resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_delete_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_delete_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name);
 
 
 /**
@@ -7600,9 +7601,9 @@ rd_kafka_AlterConfigs_result_resources(
 /**
  * @brief Incrementally update the configuration for the specified resources.
  *        Updates are not transactional so they may succeed for some resources
- *        while fail for others. The configs for a particular resource are updated atomically,
- *        replacing values using the provided ConfigEntrys and reverting
- *        unspecified ConfigEntrys to their default values.
+ *        while fail for others. The configs for a particular resource are
+ * updated atomically, replacing values using the provided ConfigEntrys and
+ * reverting unspecified ConfigEntrys to their default values.
  *
  * @remark Requires broker version >=2.3.0
  *
@@ -7618,10 +7619,10 @@ rd_kafka_AlterConfigs_result_resources(
  */
 RD_EXPORT
 void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
-                           rd_kafka_ConfigResource_t **configs,
-                           size_t config_cnt,
-                           const rd_kafka_AdminOptions_t *options,
-                           rd_kafka_queue_t *rkqu);
+                                      rd_kafka_ConfigResource_t **configs,
+                                      size_t config_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu);
 
 
 /*
@@ -7629,7 +7630,8 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
  */
 
 /**
- * @brief Get an array of resource results from a IncrementalAlterConfigs result.
+ * @brief Get an array of resource results from a IncrementalAlterConfigs
+ * result.
  *
  * Use \c rd_kafka_ConfigResource_error() and
  * \c rd_kafka_ConfigResource_error_string() to extract per-resource error

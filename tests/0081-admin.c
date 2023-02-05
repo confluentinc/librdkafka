@@ -899,7 +899,8 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 /**
  * @brief Test IncrementalAlterConfigs
  */
-static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
+static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
+                                            rd_kafka_queue_t *rkqu) {
 #define MY_CONFRES_CNT 3
         char *topics[MY_CONFRES_CNT];
         rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
@@ -934,12 +935,12 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rk
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_incremental_set_config(configs[ci],
-                                                 "compression.type", "gzip");
+        err = rd_kafka_ConfigResource_incremental_set_config(
+            configs[ci], "compression.type", "gzip");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-        err = rd_kafka_ConfigResource_incremental_set_config(configs[ci], "flush.ms",
-                                                 "12345678");
+        err = rd_kafka_ConfigResource_incremental_set_config(
+            configs[ci], "flush.ms", "12345678");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
         exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -973,8 +974,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rk
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_incremental_set_config(configs[ci],
-                                                 "compression.type", "lz4");
+        err = rd_kafka_ConfigResource_incremental_set_config(
+            configs[ci], "compression.type", "lz4");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
         err = rd_kafka_ConfigResource_incremental_set_config(
@@ -991,7 +992,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rk
         /*
          * Timeout options
          */
-        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS);
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS);
         err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
@@ -1007,8 +1009,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rk
         /*
          * Wait for result
          */
-        rkev = test_wait_admin_result(rkqu, RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT,
-                                      10000 + 1000);
+        rkev = test_wait_admin_result(
+            rkqu, RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, 10000 + 1000);
 
         /*
          * Extract result
@@ -1022,7 +1024,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rk
         TEST_ASSERT(!err, "Expected success, not %s: %s",
                     rd_kafka_err2name(err), errstr2);
 
-        rconfigs = rd_kafka_IncrementalAlterConfigs_result_resources(res, &rconfig_cnt);
+        rconfigs = rd_kafka_IncrementalAlterConfigs_result_resources(
+            res, &rconfig_cnt);
         TEST_ASSERT((int)rconfig_cnt == ci,
                     "Expected %d result resources, got %" PRIusz "\n", ci,
                     rconfig_cnt);

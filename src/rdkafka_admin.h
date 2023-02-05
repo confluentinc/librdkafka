@@ -212,8 +212,9 @@ struct rd_kafka_ConfigEntry_s {
         /* Attributes: this is a struct for easy copying */
         struct {
                 rd_kafka_AlterOperation_t operation; /**< Operation */
-                rd_kafka_IncrementalAlterOperation_t incremental_operation; /**< IncrementalOperation */
-                rd_kafka_ConfigSource_t source;      /**< Config source */
+                rd_kafka_IncrementalAlterOperation_t
+                    incremental_operation;      /**< IncrementalOperation */
+                rd_kafka_ConfigSource_t source; /**< Config source */
                 rd_bool_t is_readonly;  /**< Value is read-only (on broker) */
                 rd_bool_t is_default;   /**< Value is at its default */
                 rd_bool_t is_sensitive; /**< Value is sensitive */

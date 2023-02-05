@@ -657,7 +657,6 @@ rd_kafka_admin_request_op_new(rd_kafka_t *rk,
 
         rko->rko_u.admin_request.state = RD_KAFKA_ADMIN_STATE_INIT;
         return rko;
-
 }
 
 
@@ -1906,21 +1905,22 @@ rd_kafka_admin_add_config0(rd_list_t *rl,
 
 
 /**
- * @brief Generic constructor of ConfigEntry for Incremental Alter Operations which is also added to \p rl
+ * @brief Generic constructor of ConfigEntry for Incremental Alter Operations
+ * which is also added to \p rl
  */
-static rd_kafka_resp_err_t
-rd_kafka_admin_incremental_add_config0(rd_list_t *rl,
-                           const char *name,
-                           const char *value,
-                           rd_kafka_IncrementalAlterOperation_t operation) {
+static rd_kafka_resp_err_t rd_kafka_admin_incremental_add_config0(
+    rd_list_t *rl,
+    const char *name,
+    const char *value,
+    rd_kafka_IncrementalAlterOperation_t operation) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        entry                           = rd_calloc(1, sizeof(*entry));
-        entry->kv                       = rd_strtup_new(name, value);
-        entry->a.incremental_operation  = operation;
+        entry                          = rd_calloc(1, sizeof(*entry));
+        entry->kv                      = rd_strtup_new(name, value);
+        entry->a.incremental_operation = operation;
 
         rd_list_add(rl, entry);
 
@@ -2870,15 +2870,15 @@ rd_kafka_ConfigResource_add_config(rd_kafka_ConfigResource_t *config,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_append_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
+rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_append_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value) {
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_incremental_add_config0(&config->config, name, value,
-                                          RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND);
+        return rd_kafka_admin_incremental_add_config0(
+            &config->config, name, value, RD_KAFKA_INCREMENTAL_ALTER_OP_APPEND);
 }
 
 rd_kafka_resp_err_t
@@ -2892,15 +2892,15 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
                                           RD_KAFKA_ALTER_OP_SET);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_set_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
+rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_set_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value) {
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_incremental_add_config0(&config->config, name, value,
-                                          RD_KAFKA_INCREMENTAL_ALTER_OP_SET);
+        return rd_kafka_admin_incremental_add_config0(
+            &config->config, name, value, RD_KAFKA_INCREMENTAL_ALTER_OP_SET);
 }
 
 rd_kafka_resp_err_t
@@ -2913,25 +2913,26 @@ rd_kafka_ConfigResource_delete_config(rd_kafka_ConfigResource_t *config,
                                           RD_KAFKA_ALTER_OP_DELETE);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_delete_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name) {
+rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_delete_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name) {
         if (!name || !*name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_incremental_add_config0(&config->config, name, NULL,
-                                          RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE);
+        return rd_kafka_admin_incremental_add_config0(
+            &config->config, name, NULL, RD_KAFKA_INCREMENTAL_ALTER_OP_REMOVE);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *config,
-                                   const char *name,
-                                   const char *value) {
+rd_kafka_resp_err_t rd_kafka_ConfigResource_incremental_subtract_config(
+    rd_kafka_ConfigResource_t *config,
+    const char *name,
+    const char *value) {
         if (!name || !*name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        return rd_kafka_admin_incremental_add_config0(&config->config, name, value,
-                                          RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT);
+        return rd_kafka_admin_incremental_add_config0(
+            &config->config, name, value,
+            RD_KAFKA_INCREMENTAL_ALTER_OP_SUBTRACT);
 }
 
 
@@ -3242,10 +3243,10 @@ const rd_kafka_ConfigResource_t **rd_kafka_AlterConfigs_result_resources(
  */
 static rd_kafka_resp_err_t
 rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
-                                    rd_kafka_op_t **rko_resultp,
-                                    rd_kafka_buf_t *reply,
-                                    char *errstr,
-                                    size_t errstr_size) {
+                                               rd_kafka_op_t **rko_resultp,
+                                               rd_kafka_buf_t *reply,
+                                               char *errstr,
+                                               size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_broker_t *rkb      = reply->rkbuf_rkb;
         rd_kafka_t *rk              = rkb->rkb_rk;
@@ -3353,9 +3354,10 @@ err_parse:
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
 
-        rd_snprintf(errstr, errstr_size,
-                    "IncrementalAlterConfigs response protocol parse failure: %s",
-                    rd_kafka_err2str(reply->rkbuf_err));
+        rd_snprintf(
+            errstr, errstr_size,
+            "IncrementalAlterConfigs response protocol parse failure: %s",
+            rd_kafka_err2str(reply->rkbuf_err));
 
         return reply->rkbuf_err;
 }
@@ -3363,10 +3365,10 @@ err_parse:
 
 
 void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
-                           rd_kafka_ConfigResource_t **configs,
-                           size_t config_cnt,
-                           const rd_kafka_AdminOptions_t *options,
-                           rd_kafka_queue_t *rkqu) {
+                                      rd_kafka_ConfigResource_t **configs,
+                                      size_t config_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         size_t i;
         rd_kafka_resp_err_t err;
@@ -3378,9 +3380,10 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
 
         rd_assert(rkqu);
 
-        rko = rd_kafka_admin_request_op_new(rk, RD_KAFKA_OP_INCREMENTALALTERCONFIGS,
-                                            RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT,
-                                            &cbs, options, rkqu->rkqu_q);
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_INCREMENTALALTERCONFIGS,
+            RD_KAFKA_EVENT_INCREMENTALALTERCONFIGS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
 
         rd_list_init(&rko->rko_u.admin_request.args, (int)config_cnt,
                      rd_kafka_ConfigResource_free);
@@ -3408,7 +3411,8 @@ void rd_kafka_IncrementalAlterConfigs(rd_kafka_t *rk,
 }
 
 
-const rd_kafka_ConfigResource_t **rd_kafka_IncrementalAlterConfigs_result_resources(
+const rd_kafka_ConfigResource_t **
+rd_kafka_IncrementalAlterConfigs_result_resources(
     const rd_kafka_IncrementalAlterConfigs_result_t *result,
     size_t *cntp) {
         return rd_kafka_admin_result_ret_resources(

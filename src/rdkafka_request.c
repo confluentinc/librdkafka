@@ -4053,15 +4053,15 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_IncrementalAlterConfigsRequest(rd_kafka_broker_t *rkb,
-                             const rd_list_t *configs /*(ConfigResource_t*)*/,
-                             rd_kafka_AdminOptions_t *options,
-                             char *errstr,
-                             size_t errstr_size,
-                             rd_kafka_replyq_t replyq,
-                             rd_kafka_resp_cb_t *resp_cb,
-                             void *opaque) {
+rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *configs /*(ConfigResource_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         int i;
@@ -4085,8 +4085,8 @@ rd_kafka_IncrementalAlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_IncrementalAlterConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_IncrementalAlterConfigs,
+                                         1, rd_list_cnt(configs) * 200);
 
         /* #resources */
         rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
@@ -4108,7 +4108,8 @@ rd_kafka_IncrementalAlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* config_operation */
-                        rd_kafka_buf_write_i8(rkbuf, entry->a.incremental_operation);
+                        rd_kafka_buf_write_i8(rkbuf,
+                                              entry->a.incremental_operation);
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
                 }

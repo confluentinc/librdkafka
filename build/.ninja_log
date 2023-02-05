@@ -1,0 +1,6 @@
+# ninja log v5
+5	605	1669717103433544918	src/CMakeFiles/rdkafka.dir/rdcrc32.c.o	df3185b670030d09
+4	607	1669717103435653445	src/CMakeFiles/rdkafka.dir/crc32c.c.o	6d0801aac798a619
+4	608	1669717103436539480	src/CMakeFiles/rdkafka.dir/rdaddr.c.o	e6acc24718583879
+5	606	1669717103434293412	src/CMakeFiles/rdkafka.dir/rdfnv1a.c.o	69cad039211db31b
+5	688	1669717103516115464	src/CMakeFiles/rdkafka.dir/rdbuf.c.o	a69ce40f07bd56cc

@@ -1,0 +1,3 @@
+[2023-01-29 22:58:42,803] INFO [ControllerEventThread controllerId=4] Starting (kafka.controller.ControllerEventManager$ControllerEventThread)
+[2023-01-29 22:58:42,848] DEBUG [Controller id=4] Broker 3 was elected as controller instead of broker 4 (kafka.controller.KafkaController)
+org.apache.kafka.common.errors.ControllerMovedException: Controller moved to another broker. Aborting controller startup procedure

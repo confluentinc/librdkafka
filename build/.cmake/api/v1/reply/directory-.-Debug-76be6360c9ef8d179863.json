@@ -1,0 +1,89 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 265,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 270,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 276,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/RdKafka",
+			"paths" : 
+			[
+				"build/generated/RdKafkaConfig.cmake",
+				"build/generated/RdKafkaConfigVersion.cmake",
+				"packaging/cmake/Modules/FindLZ4.cmake"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/RdKafka",
+			"exportName" : "RdKafkaTargets",
+			"exportTargets" : 
+			[
+				{
+					"id" : "rdkafka::@145eef247bfb46b6828c",
+					"index" : 6
+				},
+				{
+					"id" : "rdkafka++::@fdf6894f388940599170",
+					"index" : 7
+				}
+			],
+			"paths" : 
+			[
+				"CMakeFiles/Export/a1c6bd80150ccef2e736c8ff7566f1db/RdKafkaTargets.cmake"
+			],
+			"type" : "export"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "share/licenses/librdkafka",
+			"paths" : 
+			[
+				"LICENSES.txt"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : ".",
+		"source" : "."
+	}
+}

@@ -7418,12 +7418,14 @@ rd_kafka_ConfigResource_set_config(rd_kafka_ConfigResource_t *config,
 
 
 /**
- * @brief Set configuration name value pair with Incremental Alter.
+ * @brief Set the value of the configuration entry.
  *
  * @param config ConfigResource to set config property on.
  * @param name Configuration name, depends on resource type.
  * @param value Configuration value, depends on resource type and \p name.
- *              Set to \c NULL to revert configuration value to default.
+ *              Set to \c NULL or use 
+ *              rd_kafka_ConfigResource_incremental_delete_config
+ *              to revert configuration value to default.
  *
  * This will overwrite the current value.
  *
@@ -7435,6 +7437,59 @@ rd_kafka_ConfigResource_incremental_set_config(rd_kafka_ConfigResource_t *config
                                    const char *name,
                                    const char *value);
 
+
+/**
+ * @brief (For list-type configuration entries only) Add the specified
+ *        values to the current value of the configuration entry.
+ *
+ * @param config ConfigResource to append config properties on.
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration values, depends on resource type and \p name.
+ *
+ * This will append to the current list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if configs were added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_append_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value);
+
+
+/**
+ * @brief (For list-type configuration entries only) Removes the specified values
+ *        from the current value of the configuration entry.
+ *
+ * @param config ConfigResource to set config property on.
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration values, depends on resource type and \p name.
+ *
+ * This will subtract from the current list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if configs were subtracted from resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_subtract_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name,
+                                   const char *value);
+
+
+/**
+ * @brief Revert the configuration entry to the default value (possibly NULL).
+ *
+ * @param config ConfigResource to set config property on.
+ * @param name Configuration name, depends on resource type.
+ *
+ * This will set the value to default or NULL.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was deleted from resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_incremental_delete_config(rd_kafka_ConfigResource_t *config,
+                                   const char *name);
 
 
 /**

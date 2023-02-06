@@ -1,3 +1,11 @@
+# librdkafka v2.0.3
+
+librdkafka v2.0.3 is a bugfix release:
+
+* Fix CMake pkg-config issue with cURL require (#4180).
+
+
+
 # librdkafka v2.0.2
 
 librdkafka v2.0.2 is a bugfix release:

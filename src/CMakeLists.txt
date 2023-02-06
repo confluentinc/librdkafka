@@ -296,7 +296,7 @@ if(NOT RDKAFKA_BUILD_STATIC)
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
 
   if(WITH_CURL)
-    string(APPEND PKG_CONFIG_REQUIRES "curl ")
+    string(APPEND PKG_CONFIG_REQUIRES "libcurl ")
   endif()
 
   if(WITH_ZLIB)

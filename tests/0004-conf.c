@@ -521,7 +521,6 @@ static void do_message_timeout_transaction_timeout_checks(void) {
                     "rdkafka instance created. Expected it to fail: "
                     "message.timeout.ms <= transaction.timeout.ms is not "
                     "enforced");
-        TEST_SAY("message.timeout.ms <= transaction.timeout.ms is enforced\n");
         rd_kafka_conf_destroy(conf);
         SUB_TEST_PASS();
 }

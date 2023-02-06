@@ -505,28 +505,24 @@ static void do_message_timeout_linger_checks(void) {
 static void do_message_timeout_transaction_timeout_checks(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
-        char numstr[8];
         char errstr[512];
         const char *transactional_id = "txnid";
 
         SUB_TEST_QUICK();
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "transactional.id", transactional_id);
-        test_conf_set(conf, "socket.connection.setup.timeout.ms", "5000");
-        test_conf_set(conf, "reconnect.backoff.max.ms", "2000");
 
-        rd_snprintf(numstr, sizeof(numstr), "%d", 2);
         test_conf_set(conf, "message.timeout.ms", "10000");
         test_conf_set(conf, "transaction.timeout.ms", "7000");
-        if (!strcmp(test_conf_get(conf, "client.id"), "rdkafka"))
-                test_conf_set(conf, "client.id", test_curr->name);
+        test_conf_set(conf, "client.id", test_curr->name);
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if (rk)
                 TEST_FAIL(
-                    "rdkafka instance created. Expected test to fail: "
+                    "rdkafka instance created. Expected it to fail: "
                     "message.timeout.ms <= transaction.timeout.ms is not "
                     "enforced");
         TEST_SAY("message.timeout.ms <= transaction.timeout.ms is enforced\n");
+        rd_kafka_conf_destroy(conf);
         SUB_TEST_PASS();
 }
 

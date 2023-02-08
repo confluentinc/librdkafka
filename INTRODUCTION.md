@@ -1974,7 +1974,7 @@ release of librdkafka.
 | 26      | EndTxn              | 3           | 1                       |
 | 28      | TxnOffsetCommit     | 3           | 3                       |
 | 32      | DescribeConfigs     | 4           | 1                       |
-| 33      | AlterConfigs        | 2           | 0                       |
+| 33      | AlterConfigs        | 2           | 1                       |
 | 36      | SaslAuthenticate    | 2           | 0                       |
 | 37      | CreatePartitions    | 3           | 0                       |
 | 42      | DeleteGroups        | 2           | 1                       |

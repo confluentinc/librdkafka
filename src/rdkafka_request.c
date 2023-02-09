@@ -2260,7 +2260,7 @@ void rd_kafka_ApiVersionRequest(rd_kafka_broker_t *rkb,
                 ApiVersion = 3;
 
         rkbuf = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_ApiVersion, 1, 4, ApiVersion >= 3 /*flexver*/);
+            rkb, RD_KAFKAP_ApiVersion, 1, 3, ApiVersion >= 3 /*flexver*/);
 
         if (ApiVersion >= 3) {
                 /* KIP-511 adds software name and version through the optional

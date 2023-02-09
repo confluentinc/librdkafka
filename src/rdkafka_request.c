@@ -3975,7 +3975,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AlterConfigs, 0, 0, NULL);
+            rkb, RD_KAFKAP_AlterConfigs, 0, 1, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
@@ -3984,13 +3984,12 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        /* incremental requires ApiVersion > FIXME */
-        if (ApiVersion < 1 /* FIXME */ &&
-            rd_kafka_confval_get_int(&options->incremental)) {
+        /* Incremental requires IncrementalAlterConfigs */
+        if (rd_kafka_confval_get_int(&options->incremental)) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs.incremental=true (KIP-248) "
                             "not supported by broker, "
-                            "requires broker version >= 2.0.0");
+                            "replaced by IncrementalAlterConfigs");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
@@ -4020,15 +4019,12 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        if (ApiVersion == 1)
-                                rd_kafka_buf_write_i8(rkbuf,
-                                                      entry->a.operation);
-                        else if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
+                        if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
                                 rd_snprintf(errstr, errstr_size,
-                                            "Broker version >= 2.0.0 required "
+                                            "IncrementalAlterConfigs required "
                                             "for add/delete config "
                                             "entries: only set supported "
-                                            "by this broker");
+                                            "by this operation");
                                 rd_kafka_buf_destroy(rkbuf);
                                 rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;

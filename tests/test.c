@@ -6355,7 +6355,7 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
                     rd_kafka_ConfigEntry_name(configents[i]);
 
                 if (test_broker_version >= TEST_BRKVER(3, 2, 0, 0)) {
-                        /* Skip entries that are ovewrwritten to
+                        /* Skip entries that are overwritten to
                          * avoid duplicates, that cause an error since
                          * this broker version. */
                         size_t j;

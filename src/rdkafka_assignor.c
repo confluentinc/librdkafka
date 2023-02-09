@@ -59,6 +59,9 @@ void rd_kafka_group_member_clear(rd_kafka_group_member_t *rkgm) {
         if (rkgm->rkgm_member_metadata)
                 rd_kafkap_bytes_destroy(rkgm->rkgm_member_metadata);
 
+        if (rkgm->rack_id)
+                rd_kafkap_str_destroy(rkgm->rack_id);
+
         memset(rkgm, 0, sizeof(*rkgm));
 }
 
@@ -106,7 +109,9 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
     const rd_list_t *topics,
     const void *userdata,
     size_t userdata_size,
-    const rd_kafka_topic_partition_list_t *owned_partitions) {
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    int generation,
+    const rd_kafkap_str_t *rack_id) {
 
         rd_kafka_buf_t *rkbuf;
         rd_kafkap_bytes_t *kbytes;
@@ -124,12 +129,14 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
          *   OwnedPartitions => [Topic Partitions] // added in v1
          *     Topic => string
          *     Partitions => [int32]
+         *   GenerationId => int32 // added in v2
+         *   RackId => string // added in v3
          */
 
         rkbuf = rd_kafka_buf_new(1, 100 + (topic_cnt * 100) + userdata_size);
 
         /* Version */
-        rd_kafka_buf_write_i16(rkbuf, 1);
+        rd_kafka_buf_write_i16(rkbuf, 3);
         rd_kafka_buf_write_i32(rkbuf, topic_cnt);
         RD_LIST_FOREACH(tinfo, topics, i)
         rd_kafka_buf_write_str(rkbuf, tinfo->topic, -1);
@@ -154,6 +161,12 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                     rd_false /*any offset*/, fields);
         }
 
+        /* Following data is ignored by consumer version < 2 */
+        rd_kafka_buf_write_i32(rkbuf, generation);
+
+        /* Following data is ignored by consumer version < 3 */
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
         len    = rd_slice_remains(&rkbuf->rkbuf_reader);
@@ -170,9 +183,13 @@ rd_kafkap_bytes_t *rd_kafka_assignor_get_metadata_with_empty_userdata(
     const rd_kafka_assignor_t *rkas,
     void *assignor_state,
     const rd_list_t *topics,
-    const rd_kafka_topic_partition_list_t *owned_partitions) {
-        return rd_kafka_consumer_protocol_member_metadata_new(topics, NULL, 0,
-                                                              owned_partitions);
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    const rd_kafkap_str_t *rack_id) {
+        /* Generation was earlier populated inside userData, and older versions
+         * of clients still expect that. So, in case the userData is empty, we
+         * set the explicit generation field to the default value, -1 */
+        return rd_kafka_consumer_protocol_member_metadata_new(
+            topics, NULL, 0, owned_partitions, -1 /* generation */, rack_id);
 }
 
 
@@ -485,7 +502,8 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         const struct rd_kafka_assignor_s *rkas,
         void *assignor_state,
         const rd_list_t *topics,
-        const rd_kafka_topic_partition_list_t *owned_partitions),
+        const rd_kafka_topic_partition_list_t *owned_partitions,
+        const rd_kafkap_str_t *rack_id),
     void (*on_assignment_cb)(const struct rd_kafka_assignor_s *rkas,
                              void **assignor_state,
                              const rd_kafka_topic_partition_list_t *assignment,

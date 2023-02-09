@@ -1582,7 +1582,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(
                     rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                    rk->rk_cgrp->rkcg_group_assignment);
+                    rk->rk_cgrp->rkcg_group_assignment,
+                    rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }

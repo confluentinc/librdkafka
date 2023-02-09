@@ -1774,9 +1774,12 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         rkbuf = rd_kafka_buf_new_shadow(
             MemberMetadata->data, RD_KAFKAP_BYTES_LEN(MemberMetadata), NULL);
 
-        /* Protocol parser needs a broker handle to log errors on. */
-        rkbuf->rkbuf_rkb = rkb;
-        rd_kafka_broker_keep(rkb);
+        /* Protocol parser needs a broker handle to log errors on.
+         * If none is provided, don't log errors (mainly for unit tests). */
+        if (rkb) {
+                rkbuf->rkbuf_rkb = rkb;
+                rd_kafka_broker_keep(rkb);
+        }
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         rd_kafka_buf_read_i32(rkbuf, &subscription_cnt);
@@ -1804,6 +1807,16 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
                   rkbuf, 0, rd_false, rd_false)))
                 goto err;
 
+        if (Version >= 2) {
+                rd_kafka_buf_read_i32(rkbuf, &rkgm->rkgm_generation);
+        }
+
+        if (Version >= 3) {
+                rd_kafkap_str_t RackId = RD_KAFKAP_STR_INITIALIZER;
+                rd_kafka_buf_read_str(rkbuf, &RackId);
+                rkgm->rack_id = rd_kafkap_str_copy(&RackId);
+        }
+
         rd_kafka_buf_destroy(rkbuf);
 
         return 0;
@@ -1812,10 +1825,11 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 err:
-        rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
-                   "Failed to parse MemberMetadata for \"%.*s\": %s",
-                   RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-                   rd_kafka_err2str(err));
+        if (rkb)
+                rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
+                           "Failed to parse MemberMetadata for \"%.*s\": %s",
+                           RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+                           rd_kafka_err2str(err));
         if (rkgm->rkgm_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkgm->rkgm_subscription);
                 rkgm->rkgm_subscription = NULL;
@@ -5892,6 +5906,75 @@ static int unittest_list_to_map(void) {
         RD_UT_PASS();
 }
 
+int unittest_member_metadata_serdes(void) {
+        const rd_list_t *topics =
+            rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+        const rd_kafka_topic_partition_list_t *owned_partitions =
+            rd_list_new(0, rd_kafka_topic_partition_destroy);
+        const rd_kafkap_str_t *rack_id = rd_kafkap_str_new("myrack", -1);
+        const void *userdata           = NULL;
+        const size_t userdata_size     = 0;
+        const int generation           = 3;
+        const char topic_name[]        = "mytopic";
+        rd_kafka_group_member_t *rkgm;
+        int version;
+
+        rd_list_add(topics, rd_kafka_topic_info_new(topic_name, 3));
+        rd_kafka_topic_partition_list_add(owned_partitions, topic_name, 0);
+        rkgm = rd_calloc(1, sizeof(*rkgm));
+
+        /* Note that the version variable doesn't actually change the Version
+         *  field in the serialized message. It only runs the tests with/without
+         *  additional fields added in that particular version. */
+        for (version = 0; version <= 3; version++) {
+                rd_kafkap_bytes_t *member_metadata;
+
+                /* Serialize. */
+                member_metadata =
+                    rd_kafka_consumer_protocol_member_metadata_new(
+                        topics, userdata, userdata_size,
+                        version >= 1 ? owned_partitions : NULL,
+                        version >= 2 ? generation : -1,
+                        version >= 3 ? rack_id : NULL);
+
+                /* Deserialize. */
+                rd_kafka_group_MemberMetadata_consumer_read(NULL, rkgm,
+                                                            member_metadata);
+
+                /* Compare results. */
+                RD_UT_ASSERT(rkgm->rkgm_subscription->cnt ==
+                                 rd_list_cnt(topics),
+                             "subscription size should be correct");
+                RD_UT_ASSERT(!strcmp(topic_name,
+                                     rkgm->rkgm_subscription->elems[0].topic),
+                             "subscriptions should be correct");
+                RD_UT_ASSERT(rkgm->rkgm_userdata->len == userdata_size,
+                             "userdata should have the size 0");
+                if (version >= 1)
+                        RD_UT_ASSERT(!rd_kafka_topic_partition_list_cmp(
+                                         rkgm->rkgm_owned, owned_partitions,
+                                         rd_kafka_topic_partition_cmp),
+                                     "owned partitions should be same");
+                if (version >= 2)
+                        RD_UT_ASSERT(generation == rkgm->rkgm_generation,
+                                     "generation should be same");
+                if (version >= 3)
+                        RD_UT_ASSERT(!rd_kafkap_str_cmp(rack_id, rkgm->rack_id),
+                                     "rack id should be same");
+
+                rd_kafka_group_member_clear(rkgm);
+                rd_kafkap_bytes_destroy(member_metadata);
+        }
+
+        /* Clean up. */
+        rd_list_destroy(topics);
+        rd_kafka_topic_partition_list_destroy(owned_partitions);
+        rd_kafkap_str_destroy(rack_id);
+        rd_free(rkgm);
+
+        RD_UT_PASS();
+}
+
 
 /**
  * @brief Consumer group unit tests
@@ -5904,6 +5987,7 @@ int unittest_cgrp(void) {
         fails += unittest_set_subtract();
         fails += unittest_map_to_list();
         fails += unittest_list_to_map();
+        fails += unittest_member_metadata_serdes();
 
         return fails;
 }

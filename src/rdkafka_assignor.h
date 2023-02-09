@@ -69,6 +69,8 @@ typedef struct rd_kafka_group_member_s {
         rd_kafkap_bytes_t *rkgm_member_metadata;
         /** Group generation id. */
         int rkgm_generation;
+        /** Member rack id. */
+        rd_kafkap_str_t *rack_id;
 } rd_kafka_group_member_t;
 
 
@@ -120,7 +122,8 @@ typedef struct rd_kafka_assignor_s {
             const struct rd_kafka_assignor_s *rkas,
             void *assignor_state,
             const rd_list_t *topics,
-            const rd_kafka_topic_partition_list_t *owned_partitions);
+            const rd_kafka_topic_partition_list_t *owned_partitions,
+            const rd_kafkap_str_t *rack_id);
 
         void (*rkas_on_assignment_cb)(
             const struct rd_kafka_assignor_s *rkas,
@@ -158,7 +161,8 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         const struct rd_kafka_assignor_s *rkas,
         void *assignor_state,
         const rd_list_t *topics,
-        const rd_kafka_topic_partition_list_t *owned_partitions),
+        const rd_kafka_topic_partition_list_t *owned_partitions,
+        const rd_kafkap_str_t *rack_id),
     void (*on_assignment_cb)(const struct rd_kafka_assignor_s *rkas,
                              void **assignor_state,
                              const rd_kafka_topic_partition_list_t *assignment,
@@ -172,13 +176,16 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
     const rd_list_t *topics,
     const void *userdata,
     size_t userdata_size,
-    const rd_kafka_topic_partition_list_t *owned_partitions);
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    int generation,
+    const rd_kafkap_str_t *rack_id);
 
 rd_kafkap_bytes_t *rd_kafka_assignor_get_metadata_with_empty_userdata(
     const rd_kafka_assignor_t *rkas,
     void *assignor_state,
     const rd_list_t *topics,
-    const rd_kafka_topic_partition_list_t *owned_partitions);
+    const rd_kafka_topic_partition_list_t *owned_partitions,
+    const rd_kafkap_str_t *rack_id);
 
 
 void rd_kafka_assignor_update_subscription(

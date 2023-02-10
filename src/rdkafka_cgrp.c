@@ -1505,8 +1505,11 @@ static void rd_kafka_cgrp_handle_SyncGroup_memberstate(
                 rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkcg->rkcg_rk);
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
-        if (!(assignment = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION)))
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        if (!(assignment =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err_parse;
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
 
@@ -1799,9 +1802,12 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         if (Version >= 1 &&
-            !(rkgm->rkgm_owned = rd_kafka_buf_read_topic_partitions(
-                  rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION)))
+            !(rkgm->rkgm_owned =
+                  rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields)))
                 goto err;
 
         rd_kafka_buf_destroy(rkbuf);

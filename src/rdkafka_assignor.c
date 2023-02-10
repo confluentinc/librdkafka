@@ -144,12 +144,15 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                 /* If there are no owned partitions, this is specified as an
                  * empty array, not NULL. */
                 rd_kafka_buf_write_i32(rkbuf, 0); /* Topic count */
-        else
+        else {
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
-                    rd_false /*any offset*/,
-                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
+                    rd_false /*any offset*/, fields);
+        }
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);

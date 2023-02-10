@@ -78,33 +78,17 @@ typedef enum {
         RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
 } rd_kafka_topic_partition_field_t;
 
-rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions0(
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
-#define rd_kafka_buf_read_topic_partitions(rkbuf, estimated_part_cnt, ...)     \
-        ({                                                                     \
-                rd_kafka_topic_partition_field_t _f[] = {                      \
-                    __VA_ARGS__, RD_KAFKA_TOPIC_PARTITION_FIELD_END};          \
-                rd_kafka_buf_read_topic_partitions0(rkbuf, estimated_part_cnt, \
-                                                    _f);                       \
-        })
-
-int rd_kafka_buf_write_topic_partitions0(
+int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
     rd_bool_t only_invalid_offsets,
     const rd_kafka_topic_partition_field_t *fields);
-#define rd_kafka_buf_write_topic_partitions(rkbuf, parts, skip_invalid,        \
-                                            only_invalid, ...)                 \
-        ({                                                                     \
-                rd_kafka_topic_partition_field_t _f[] = {                      \
-                    __VA_ARGS__, RD_KAFKA_TOPIC_PARTITION_FIELD_END};          \
-                rd_kafka_buf_write_topic_partitions0(                          \
-                    rkbuf, parts, skip_invalid, only_invalid, _f);             \
-        })
 
 rd_kafka_resp_err_t
 rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,

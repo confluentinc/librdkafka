@@ -102,11 +102,16 @@ rd_kafka_fetch_pos_make(int64_t offset, int32_t leader_epoch) {
         return fetchpos;
 }
 
+#ifdef RD_HAS_STATEMENT_EXPRESSIONS
 #define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
         ({                                                                     \
                 rd_kafka_fetch_pos_t _fetchpos = {offset, leader_epoch};       \
                 _fetchpos;                                                     \
         })
+#else
+#define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
+        rd_kafka_fetch_pos_make(offset, leader_epoch)
+#endif
 
 
 

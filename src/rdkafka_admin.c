@@ -3576,10 +3576,13 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_throttle_time(reply);
 
-        offsets = rd_kafka_buf_read_topic_partitions(
-            reply, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR);
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        offsets = rd_kafka_buf_read_topic_partitions(reply, 0, fields);
         if (!offsets)
                 rd_kafka_buf_parse_fail(reply,
                                         "Failed to parse topic partitions");
@@ -4159,9 +4162,12 @@ rd_kafka_OffsetDeleteResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_throttle_time(reply);
 
-        partitions = rd_kafka_buf_read_topic_partitions(
-            reply, 16, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR);
+
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        partitions = rd_kafka_buf_read_topic_partitions(reply, 16, fields);
         if (!partitions) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to parse OffsetDeleteResponse partitions");
@@ -6445,8 +6451,11 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                 /* Decreased in rd_kafka_buf_destroy */
                                 rd_kafka_broker_keep(rkb);
                                 rd_kafka_buf_read_i16(rkbuf, &version);
+                                const rd_kafka_topic_partition_field_t fields[] =
+                                    {RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                                     RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                                 partitions = rd_kafka_buf_read_topic_partitions(
-                                    rkbuf, 0, rd_false, rd_false);
+                                    rkbuf, 0, fields);
                                 rd_kafka_buf_destroy(rkbuf);
                                 if (!partitions)
                                         rd_kafka_buf_parse_fail(

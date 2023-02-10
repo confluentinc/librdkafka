@@ -207,7 +207,7 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
  *
  * @returns a newly allocated list on success, or NULL on parse error.
  */
-rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions0(
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields) {
@@ -305,7 +305,7 @@ err_parse:
  *
  * @remark The \p parts list MUST be sorted.
  */
-int rd_kafka_buf_write_topic_partitions0(
+int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
     rd_bool_t skip_invalid_offsets,
@@ -772,12 +772,14 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
         if (ApiVersion >= 2)
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
-        *offsets = rd_kafka_buf_read_topic_partitions(
-            rkbuf, 0, RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             ApiVersion >= 1 ? RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH
                             : RD_KAFKA_TOPIC_PARTITION_FIELD_NOOP,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET);
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        *offsets = rd_kafka_buf_read_topic_partitions(rkbuf, 0, fields);
         if (!*offsets)
                 goto err_parse;
 
@@ -822,14 +824,16 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         rd_kafka_topic_partition_list_sort_by_topic(parts);
 
         /* Write partition list */
-        rd_kafka_buf_write_topic_partitions(
-            rkbuf, parts, rd_false /*include invalid offsets*/,
-            rd_false /*skip valid offsets */,
+        const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             /* CurrentLeaderEpoch */
             RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
             /* LeaderEpoch */
-            RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH);
+            RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+        rd_kafka_buf_write_topic_partitions(
+            rkbuf, parts, rd_false /*include invalid offsets*/,
+            rd_false /*skip valid offsets */, fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1152,10 +1156,12 @@ void rd_kafka_OffsetFetchRequest(rd_kafka_broker_t *rkb,
 
                 /* Write partition list, filtering out partitions with valid
                  * offsets */
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
                 PartCnt = rd_kafka_buf_write_topic_partitions(
                     rkbuf, parts, rd_false /*include invalid offsets*/,
-                    rd_false /*skip valid offsets */,
-                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
+                    rd_false /*skip valid offsets */, fields);
         } else {
                 rd_kafka_buf_write_arraycnt_pos(rkbuf);
         }
@@ -1590,10 +1596,13 @@ rd_kafka_OffsetDeleteRequest(rd_kafka_broker_t *rkb,
         /* GroupId */
         rd_kafka_buf_write_str(rkbuf, grpoffsets->group, -1);
 
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, grpoffsets->partitions,
             rd_false /*dont skip invalid offsets*/, rd_false /*any offset*/,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
+            fields);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1617,10 +1626,13 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
         rd_assert(rkgm->rkgm_assignment);
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, rkgm->rkgm_assignment,
             rd_false /*don't skip invalid offsets*/, rd_false /* any offset */,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION);
+            fields);
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
         /* Get pointer to binary buffer */
@@ -4006,10 +4018,13 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteRecords, 1,
                                          4 + (partitions->cnt * 100) + 4);
 
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         rd_kafka_buf_write_topic_partitions(
             rkbuf, partitions, rd_false /*don't skip invalid offsets*/,
-            rd_false /*any offset*/, RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
-            RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET);
+            rd_false /*any offset*/, fields);
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

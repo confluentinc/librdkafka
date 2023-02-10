@@ -92,6 +92,7 @@ typedef SSIZE_T ssize_t;
 #define RD_DEPRECATED __attribute__((deprecated))
 
 #if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+#define RD_HAS_STATEMENT_EXPRESSIONS
 #define RD_FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #else
 #define RD_FORMAT(...)

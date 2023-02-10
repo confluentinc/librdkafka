@@ -95,18 +95,18 @@ blocks:
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
 
 
-  - name: 'Linux Ubuntu x64: source build'
+  - name: 'Linux Ubuntu x64: Full integration tests'
     dependencies: []
     skip:
       # Skip for release tags, we don't want flaky CI tests
       # to fail the release build.
-      when: "tag =~ '^v[0-9]\\.'"
+      when: "branch = 'master' OR tag =~ '^full-integration-tests$'"
     task:
       agent:
         machine:
           type: s1-prod-ubuntu20-04-amd64-2
       jobs:
-        - name: 'Build and integration tests'
+        - name: 'Full integration tests'
           commands:
             - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
             - sudo dpkg -i rapidjson-dev.deb
@@ -126,7 +126,7 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.1.0 --cmd 'make quick')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.1.0 --cmd 'make full')
 
 
   - name: 'Linux x64: release artifact docker builds'

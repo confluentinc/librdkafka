@@ -6420,13 +6420,31 @@ rd_kafka_resp_err_t test_AlterConfigs_simple(rd_kafka_t *rk,
         /* Apply all existing configuration entries to resource object that
          * will later be passed to AlterConfigs. */
         for (i = 0; i < configent_cnt; i++) {
+                const char *entry_name =
+                    rd_kafka_ConfigEntry_name(configents[i]);
+
+                if (test_broker_version >= TEST_BRKVER(3, 2, 0, 0)) {
+                        /* Skip entries that are overwritten to
+                         * avoid duplicates, that cause an error since
+                         * this broker version. */
+                        size_t j;
+                        for (j = 0; j < config_cnt; j += 2) {
+                                if (!strcmp(configs[j], entry_name)) {
+                                        break;
+                                }
+                        }
+
+                        if (j < config_cnt)
+                                continue;
+                }
+
                 err = rd_kafka_ConfigResource_set_config(
-                    confres, rd_kafka_ConfigEntry_name(configents[i]),
+                    confres, entry_name,
                     rd_kafka_ConfigEntry_value(configents[i]));
                 TEST_ASSERT(!err,
                             "Failed to set read-back config %s=%s "
                             "on local resource object",
-                            rd_kafka_ConfigEntry_name(configents[i]),
+                            entry_name,
                             rd_kafka_ConfigEntry_value(configents[i]));
         }
 

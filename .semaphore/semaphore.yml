@@ -94,13 +94,44 @@ blocks:
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
 
-
-  - name: 'Linux Ubuntu x64: Full integration tests'
+  - name: 'Linux Ubuntu x64: source build'
     dependencies: []
     skip:
       # Skip for release tags, we don't want flaky CI tests
       # to fail the release build.
-      when: "branch = 'master' OR tag =~ '^full-integration-tests$'"
+      when: "branch = 'master' OR tag = 'full-integration-tests' OR tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu20-04-amd64-2
+      jobs:
+        - name: 'Build and quick integration tests'
+          commands:
+            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+            - sudo dpkg -i rapidjson-dev.deb
+            - python3 -m pip install -U pip
+            - python3 -m pip -V
+            - python3 -m pip install -r tests/requirements.txt
+            - ./configure --install-deps
+            # split these up
+            - ./packaging/tools/rdutcoverage.sh
+            - make copyright-check
+            - make -j all examples check
+            - echo "Verifying that CONFIGURATION.md does not have manual changes"
+            - git diff --exit-code CONFIGURATION.md
+            - examples/rdkafka_example -X builtin.features
+            - ldd src/librdkafka.so.1
+            - ldd src-cpp/librdkafka++.so.1
+            - make -j -C tests build
+            - make -C tests run_local_quick
+            - DESTDIR="$PWD/dest" make install
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.1.0 --cmd 'make quick')
+
+  - name: 'Linux Ubuntu x64: Full integration tests'
+    dependencies: []
+    run:
+      # Run on master branch or with the 'full-integration-tests' tag.
+      when: "branch = 'master' OR tag = 'full-integration-tests'"
     task:
       agent:
         machine:
@@ -126,7 +157,7 @@ blocks:
             - make -j -C tests build
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.1.0 --cmd 'make full')
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.1.0 --cmd './run-test.sh')
 
 
   - name: 'Linux x64: release artifact docker builds'

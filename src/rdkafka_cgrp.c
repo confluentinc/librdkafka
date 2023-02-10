@@ -2734,6 +2734,10 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_kafka_toppar_lock(rktp);
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
+        /* Partition is stopped, so rktp->rktp_fetchq->rkq_fwdq is NULL.
+         * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+         * while holding locks, to avoid circular references */
+        rd_kafka_q_purge(rktp->rktp_fetchq);
         rd_kafka_toppar_unlock(rktp);
 
         rd_list_remove(&rkcg->rkcg_toppars, rktp);

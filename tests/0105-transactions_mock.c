@@ -3533,7 +3533,14 @@ static void do_test_txn_concurrent_operations(rd_bool_t do_commit) {
 
         test_timeout_set(90);
 
-        rk = create_txn_producer(&mcluster, transactional_id, 1, NULL);
+        /* We need to override the value of socket.connection.setup.timeout.ms
+         * to be twice the RTT of the mock broker. This is because the first
+         * ApiVersion request will fail, since we make the request with v3, and
+         * the mock broker's MaxVersion is 2, so the request is retried with v0.
+         */
+        rk = create_txn_producer(&mcluster, transactional_id, 1,
+                                 "socket.connection.setup.timeout.ms", "10000",
+                                 NULL);
 
         /* Set broker RTT to 5s so that the background thread has ample
          * time to call its conflicting APIs. */

@@ -347,7 +347,7 @@ static void rd_kafka_coord_req_handle_FindCoordinator(rd_kafka_t *rk,
         char errstr[256] = "";
         int actions;
         rd_kafka_broker_t *coord;
-        rd_kafka_metadata_broker_t mdb = RD_ZERO_INIT;
+        rd_kafka_metadata_broker_internal_t mdb = RD_ZERO_INIT;
 
         /* If creq has finished (possibly because of an earlier FindCoordinator
          * response or a broker state broadcast we simply ignore the

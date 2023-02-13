@@ -373,7 +373,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_METADATA:
-                RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                RD_IF_FREE(rko->rko_u.metadata.md,
+                           rd_kafka_metadata_internal_destroy);
                 break;
 
         case RD_KAFKA_OP_LOG:

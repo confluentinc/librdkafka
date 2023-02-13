@@ -276,3 +276,58 @@ const char *rd_kafka_Node_host(const rd_kafka_Node_t *node) {
 uint16_t rd_kafka_Node_port(const rd_kafka_Node_t *node) {
         return node->port;
 }
+
+void rd_kafka_metadata_broker_internal_destroy(
+    rd_kafka_metadata_broker_internal_t *mdb_internal) {
+        if (!mdb_internal)
+                return;
+
+        rd_free(mdb_internal->host);
+        rd_free(mdb_internal);
+}
+
+void rd_kafka_metadata_partition_internal_destroy(
+    rd_kafka_metadata_partition_internal_t *mdp_internal) {
+        if (!mdp_internal)
+                return;
+
+        rd_free(mdp_internal->isrs);
+        rd_free(mdp_internal->replicas);
+        rd_free(mdp_internal);
+}
+
+void rd_kafka_metadata_topic_internal_destroy(
+    rd_kafka_metadata_topic_internal_t *mdt_internal) {
+        int i;
+
+        if (!mdt_internal)
+                return;
+
+        for (i = 0; i < mdt_internal->partition_cnt; i++) {
+                rd_kafka_metadata_partition_internal_destroy(
+                    &mdt_internal->partitions[i]);
+        }
+
+        rd_free(mdt_internal->topic);
+        rd_free(mdt_internal);
+}
+
+void rd_kafka_metadata_internal_destroy(
+    rd_kafka_metadata_internal_t *md_internal) {
+        // int i;
+
+        // if (!md_internal)
+        //         return;
+
+        // for (i = 0; i < md_internal->broker_cnt; i++) {
+        //         rd_kafka_metadata_broker_internal_destroy(&md_internal->brokers[i]);
+        // }
+
+        // for (i = 0; i < md_internal->topic_cnt; i++) {
+        //         rd_kafka_metadata_topic_internal_destroy(&md_internal->topics[i]);
+        // }
+
+        // RD_IF_FREE(md_internal->rack_id, rd_kafkap_str_destroy);
+        // rd_free(md_internal->orig_broker_name);
+        rd_free(md_internal);
+}

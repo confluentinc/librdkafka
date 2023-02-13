@@ -605,9 +605,9 @@ static void rd_kafka_cgrp_handle_FindCoordinator(rd_kafka_t *rk,
         int32_t CoordId;
         rd_kafkap_str_t CoordHost = RD_ZERO_INIT;
         int32_t CoordPort;
-        rd_kafka_cgrp_t *rkcg               = opaque;
-        struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;
-        char *errstr                        = NULL;
+        rd_kafka_cgrp_t *rkcg                        = opaque;
+        struct rd_kafka_metadata_broker_internal mdb = RD_ZERO_INIT;
+        char *errstr                                 = NULL;
         int actions;
 
         if (likely(!(ErrorCode = err))) {
@@ -1659,7 +1659,7 @@ err_parse:
 static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
                                        rd_kafka_assignor_t *rkas,
                                        rd_kafka_resp_err_t err,
-                                       rd_kafka_metadata_t *metadata,
+                                       rd_kafka_metadata_internal_t *metadata,
                                        rd_kafka_group_member_t *members,
                                        int member_cnt) {
         char errstr[512];

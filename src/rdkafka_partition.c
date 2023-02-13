@@ -3236,8 +3236,8 @@ static rd_bool_t rd_kafka_topic_partition_list_get_leaders(
                 rd_kafka_broker_t *rkb = NULL;
                 struct rd_kafka_partition_leader leader_skel;
                 struct rd_kafka_partition_leader *leader;
-                const rd_kafka_metadata_topic_t *mtopic;
-                const rd_kafka_metadata_partition_t *mpart;
+                const rd_kafka_metadata_topic_internal_t *mtopic;
+                const rd_kafka_metadata_partition_internal_t *mpart;
                 rd_bool_t topic_wait_cache;
 
                 rd_kafka_metadata_cache_topic_partition_get(

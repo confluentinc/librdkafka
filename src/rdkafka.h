@@ -4853,6 +4853,15 @@ rd_kafka_metadata(rd_kafka_t *rk,
 RD_EXPORT
 void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata);
 
+
+typedef struct rd_kafka_metadata_internal rd_kafka_metadata_internal_t;
+typedef struct rd_kafka_metadata_broker_internal
+    rd_kafka_metadata_broker_internal_t;
+typedef struct rd_kafka_metadata_partition_internal
+    rd_kafka_metadata_partition_internal_t;
+typedef struct rd_kafka_metadata_topic_internal
+    rd_kafka_metadata_topic_internal_t;
+
 /**
  * @brief Node (broker) information.
  */

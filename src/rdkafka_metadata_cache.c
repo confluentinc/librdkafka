@@ -182,7 +182,7 @@ rd_kafka_metadata_cache_find(rd_kafka_t *rk, const char *topic, int valid) {
  * @brief Partition (id) comparator
  */
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b) {
-        const rd_kafka_metadata_partition_t *a = _a, *b = _b;
+        const rd_kafka_metadata_partition_internal_t *a = _a, *b = _b;
         return RD_CMP(a->id, b->id);
 }
 
@@ -196,7 +196,7 @@ int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b) {
  */
 static struct rd_kafka_metadata_cache_entry *
 rd_kafka_metadata_cache_insert(rd_kafka_t *rk,
-                               const rd_kafka_metadata_topic_t *mtopic,
+                               const rd_kafka_metadata_topic_internal_t *mtopic,
                                rd_ts_t now,
                                rd_ts_t ts_expires) {
         struct rd_kafka_metadata_cache_entry *rkmce, *old;
@@ -321,9 +321,10 @@ void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk) {
  *
  * @locks rd_kafka_wrlock()
  */
-void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
-                                          const rd_kafka_metadata_topic_t *mdt,
-                                          rd_bool_t propagate) {
+void rd_kafka_metadata_cache_topic_update(
+    rd_kafka_t *rk,
+    const rd_kafka_metadata_topic_internal_t *mdt,
+    rd_bool_t propagate) {
         rd_ts_t now        = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
         int changed        = 1;
@@ -354,7 +355,7 @@ void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
  * @locks rd_kafka_wrlock()
  */
 void rd_kafka_metadata_cache_update(rd_kafka_t *rk,
-                                    const rd_kafka_metadata_t *md,
+                                    const rd_kafka_metadata_internal_t *md,
                                     int abs_update) {
         struct rd_kafka_metadata_cache_entry *rkmce;
         rd_ts_t now        = rd_clock();
@@ -453,8 +454,8 @@ int rd_kafka_metadata_cache_hint(rd_kafka_t *rk,
         int cnt = 0;
 
         RD_LIST_FOREACH(topic, topics, i) {
-                rd_kafka_metadata_topic_t mtopic = {.topic = (char *)topic,
-                                                    .err   = err};
+                rd_kafka_metadata_topic_internal_t mtopic = {
+                    .topic = (char *)topic, .err = err};
                 /*const*/ struct rd_kafka_metadata_cache_entry *rkmce;
 
                 /* !replace: Dont overwrite valid entries */
@@ -631,7 +632,7 @@ void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk) {
  *
  * @locks rd_kafka_*lock()
  */
-const rd_kafka_metadata_topic_t *
+const rd_kafka_metadata_topic_internal_t *
 rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk,
                                   const char *topic,
                                   int valid) {
@@ -662,15 +663,15 @@ rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk,
  */
 int rd_kafka_metadata_cache_topic_partition_get(
     rd_kafka_t *rk,
-    const rd_kafka_metadata_topic_t **mtopicp,
-    const rd_kafka_metadata_partition_t **mpartp,
+    const rd_kafka_metadata_topic_internal_t **mtopicp,
+    const rd_kafka_metadata_partition_internal_t **mpartp,
     const char *topic,
     int32_t partition,
     int valid) {
 
-        const rd_kafka_metadata_topic_t *mtopic;
-        const rd_kafka_metadata_partition_t *mpart;
-        rd_kafka_metadata_partition_t skel = {.id = partition};
+        const rd_kafka_metadata_topic_internal_t *mtopic;
+        const rd_kafka_metadata_partition_internal_t *mpart;
+        rd_kafka_metadata_partition_internal_t skel = {.id = partition};
 
         *mtopicp = NULL;
         *mpartp  = NULL;

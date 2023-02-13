@@ -48,10 +48,10 @@ const char *rd_kafka_topic_state_names[] = {"unknown", "exists", "notexists",
                                             "error"};
 
 
-static int
-rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
-                               const struct rd_kafka_metadata_topic *mdt,
-                               rd_ts_t ts_insert);
+static int rd_kafka_topic_metadata_update(
+    rd_kafka_topic_t *rkt,
+    const struct rd_kafka_metadata_topic_internal *mdt,
+    rd_ts_t ts_insert);
 
 
 /**
@@ -1194,10 +1194,10 @@ rd_bool_t rd_kafka_topic_set_error(rd_kafka_topic_t *rkt,
  *
  * @locks rd_kafka_*lock() MUST be held.
  */
-static int
-rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
-                               const struct rd_kafka_metadata_topic *mdt,
-                               rd_ts_t ts_age) {
+static int rd_kafka_topic_metadata_update(
+    rd_kafka_topic_t *rkt,
+    const struct rd_kafka_metadata_topic_internal *mdt,
+    rd_ts_t ts_age) {
         rd_kafka_t *rk = rkt->rkt_rk;
         int upd        = 0;
         int j;
@@ -1336,8 +1336,9 @@ rd_kafka_topic_metadata_update(rd_kafka_topic_t *rkt,
  * @sa rd_kafka_topic_metadata_update()
  * @locks none
  */
-int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
-                                    const struct rd_kafka_metadata_topic *mdt) {
+int rd_kafka_topic_metadata_update2(
+    rd_kafka_broker_t *rkb,
+    const struct rd_kafka_metadata_topic_internal *mdt) {
         rd_kafka_topic_t *rkt;
         int r;
 
@@ -1826,9 +1827,9 @@ void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
 void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
                                         int partition_cnt,
                                         int32_t leader_id) {
-        struct rd_kafka_metadata_topic mdt = {.topic =
-                                                  (char *)rkt->rkt_topic->str,
-                                              .partition_cnt = partition_cnt};
+        struct rd_kafka_metadata_topic_internal mdt = {
+            .topic         = (char *)rkt->rkt_topic->str,
+            .partition_cnt = partition_cnt};
         int i;
 
         mdt.partitions = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);

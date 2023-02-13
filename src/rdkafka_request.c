@@ -1906,9 +1906,9 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
-        struct rd_kafka_metadata *md = NULL;
-        const rd_list_t *topics      = request->rkbuf_u.Metadata.topics;
+        rd_kafka_op_t *rko                    = opaque; /* Possibly NULL */
+        struct rd_kafka_metadata_internal *md = NULL;
+        const rd_list_t *topics = request->rkbuf_u.Metadata.topics;
         int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||

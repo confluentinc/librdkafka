@@ -244,8 +244,9 @@ rd_kafka_topic_get_error(rd_kafka_topic_t *rkt) {
         return err;
 }
 
-int rd_kafka_topic_metadata_update2(rd_kafka_broker_t *rkb,
-                                    const struct rd_kafka_metadata_topic *mdt);
+int rd_kafka_topic_metadata_update2(
+    rd_kafka_broker_t *rkb,
+    const struct rd_kafka_metadata_topic_internal *mdt);
 
 void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 

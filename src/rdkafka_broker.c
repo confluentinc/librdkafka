@@ -5271,7 +5271,7 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist) {
  */
 void rd_kafka_broker_update(rd_kafka_t *rk,
                             rd_kafka_secproto_t proto,
-                            const struct rd_kafka_metadata_broker *mdb,
+                            const struct rd_kafka_metadata_broker_internal *mdb,
                             rd_kafka_broker_t **rkbp) {
         rd_kafka_broker_t *rkb;
         char nodename[RD_KAFKA_NODENAME_SIZE];

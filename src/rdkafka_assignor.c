@@ -181,7 +181,7 @@ rd_kafkap_bytes_t *rd_kafka_assignor_get_metadata_with_empty_userdata(
 static int rd_kafka_member_subscription_match(
     rd_kafka_cgrp_t *rkcg,
     rd_kafka_group_member_t *rkgm,
-    const rd_kafka_metadata_topic_t *topic_metadata,
+    const rd_kafka_metadata_topic_internal_t *topic_metadata,
     rd_kafka_assignor_topic_t *eligible_topic) {
         int i;
         int has_regex = 0;
@@ -237,7 +237,7 @@ int rd_kafka_assignor_topic_cmp(const void *_a, const void *_b) {
 static void
 rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
                                   rd_list_t *eligible_topics,
-                                  const rd_kafka_metadata_t *metadata,
+                                  const rd_kafka_metadata_internal_t *metadata,
                                   rd_kafka_group_member_t *members,
                                   int member_cnt) {
         int ti;
@@ -293,13 +293,14 @@ rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
 }
 
 
-rd_kafka_resp_err_t rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
-                                          const rd_kafka_assignor_t *rkas,
-                                          rd_kafka_metadata_t *metadata,
-                                          rd_kafka_group_member_t *members,
-                                          int member_cnt,
-                                          char *errstr,
-                                          size_t errstr_size) {
+rd_kafka_resp_err_t
+rd_kafka_assignor_run(rd_kafka_cgrp_t *rkcg,
+                      const rd_kafka_assignor_t *rkas,
+                      rd_kafka_metadata_internal_t *metadata,
+                      rd_kafka_group_member_t *members,
+                      int member_cnt,
+                      char *errstr,
+                      size_t errstr_size) {
         rd_kafka_resp_err_t err;
         rd_ts_t ts_start = rd_clock();
         int i;
@@ -471,7 +472,7 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         rd_kafka_t *rk,
         const struct rd_kafka_assignor_s *rkas,
         const char *member_id,
-        const rd_kafka_metadata_t *metadata,
+        const rd_kafka_metadata_internal_t *metadata,
         rd_kafka_group_member_t *members,
         size_t member_cnt,
         rd_kafka_assignor_topic_t **eligible_topics,
@@ -879,7 +880,7 @@ static int ut_assignors(void) {
         /* Run through test cases */
         for (i = 0; tests[i].name; i++) {
                 int ie, it, im;
-                rd_kafka_metadata_t metadata;
+                rd_kafka_metadata_internal_t metadata;
                 rd_kafka_group_member_t *members;
 
                 /* Create topic metadata */

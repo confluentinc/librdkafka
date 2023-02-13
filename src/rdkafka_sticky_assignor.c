@@ -1580,7 +1580,7 @@ rd_kafka_resp_err_t
 rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                                    const rd_kafka_assignor_t *rkas,
                                    const char *member_id,
-                                   const rd_kafka_metadata_t *metadata,
+                                   const rd_kafka_metadata_internal_t *metadata,
                                    rd_kafka_group_member_t *members,
                                    size_t member_cnt,
                                    rd_kafka_assignor_topic_t **eligible_topics,
@@ -1935,11 +1935,12 @@ static void ut_set_owned(rd_kafka_group_member_t *rkgm) {
  * @remark Also updates the members owned partitions to the assignment.
  */
 
-static int verifyValidityAndBalance0(const char *func,
-                                     int line,
-                                     rd_kafka_group_member_t *members,
-                                     size_t member_cnt,
-                                     const rd_kafka_metadata_t *metadata) {
+static int
+verifyValidityAndBalance0(const char *func,
+                          int line,
+                          rd_kafka_group_member_t *members,
+                          size_t member_cnt,
+                          const rd_kafka_metadata_internal_t *metadata) {
         int fails = 0;
         int i;
         rd_bool_t verbose = rd_false; /* Enable for troubleshooting */
@@ -2196,7 +2197,7 @@ static int ut_testOneConsumerNoTopic(rd_kafka_t *rk,
                                      const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata = rd_kafka_metadata_new_topic_mock(NULL, 0);
@@ -2212,7 +2213,7 @@ static int ut_testOneConsumerNoTopic(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2222,7 +2223,7 @@ static int ut_testOneConsumerNonexistentTopic(rd_kafka_t *rk,
                                               const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 0);
@@ -2238,7 +2239,7 @@ static int ut_testOneConsumerNonexistentTopic(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2249,7 +2250,7 @@ static int ut_testOneConsumerOneTopic(rd_kafka_t *rk,
                                       const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
@@ -2270,7 +2271,7 @@ static int ut_testOneConsumerOneTopic(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2282,7 +2283,7 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
 
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata =
@@ -2301,7 +2302,7 @@ static int ut_testOnlyAssignsPartitionsFromSubscribedTopics(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2311,7 +2312,7 @@ static int ut_testOneConsumerMultipleTopics(rd_kafka_t *rk,
                                             const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata =
@@ -2330,7 +2331,7 @@ static int ut_testOneConsumerMultipleTopics(rd_kafka_t *rk,
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2340,7 +2341,7 @@ ut_testTwoConsumersOneTopicOnePartition(rd_kafka_t *rk,
                                         const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 1);
@@ -2360,7 +2361,7 @@ ut_testTwoConsumersOneTopicOnePartition(rd_kafka_t *rk,
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2371,7 +2372,7 @@ ut_testTwoConsumersOneTopicTwoPartitions(rd_kafka_t *rk,
                                          const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 2);
@@ -2391,7 +2392,7 @@ ut_testTwoConsumersOneTopicTwoPartitions(rd_kafka_t *rk,
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2403,7 +2404,7 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
 
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[3];
 
         metadata =
@@ -2427,7 +2428,7 @@ static int ut_testMultipleConsumersMixedTopicSubscriptions(
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
         rd_kafka_group_member_clear(&members[2]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2438,7 +2439,7 @@ ut_testTwoConsumersTwoTopicsSixPartitions(rd_kafka_t *rk,
                                           const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
 
         metadata =
@@ -2461,7 +2462,7 @@ ut_testTwoConsumersTwoTopicsSixPartitions(rd_kafka_t *rk,
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2471,7 +2472,7 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
                                             const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
@@ -2517,7 +2518,7 @@ static int ut_testAddRemoveConsumerOneTopic(rd_kafka_t *rk,
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2548,7 +2549,7 @@ ut_testPoorRoundRobinAssignmentScenario(rd_kafka_t *rk,
                                         const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[4];
 
         metadata = rd_kafka_metadata_new_topic_mockv(
@@ -2580,7 +2581,7 @@ ut_testPoorRoundRobinAssignmentScenario(rd_kafka_t *rk,
         rd_kafka_group_member_clear(&members[1]);
         rd_kafka_group_member_clear(&members[2]);
         rd_kafka_group_member_clear(&members[3]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2591,7 +2592,7 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
                                              const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
@@ -2613,7 +2614,7 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
          * Add topic2
          */
         RD_UT_SAY("Adding topic2");
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
         metadata =
             rd_kafka_metadata_new_topic_mockv(2, "topic1", 3, "topic2", 3);
 
@@ -2636,7 +2637,7 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
          * Remove topic1
          */
         RD_UT_SAY("Removing topic1");
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic2", 3);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
@@ -2653,7 +2654,7 @@ static int ut_testAddRemoveTopicTwoConsumers(rd_kafka_t *rk,
 
         rd_kafka_group_member_clear(&members[0]);
         rd_kafka_group_member_clear(&members[1]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2664,10 +2665,10 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
                                           const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[19];
         int member_cnt = RD_ARRAYSIZE(members);
-        rd_kafka_metadata_topic_t mt[19];
+        rd_kafka_metadata_topic_internal_t mt[19];
         int topic_cnt = RD_ARRAYSIZE(mt);
         int i;
 
@@ -2723,7 +2724,7 @@ ut_testReassignmentAfterOneConsumerLeaves(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2734,7 +2735,7 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
                                          const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[9];
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
@@ -2776,7 +2777,7 @@ ut_testReassignmentAfterOneConsumerAdded(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2786,10 +2787,10 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
                                     const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[9];
         int member_cnt = RD_ARRAYSIZE(members);
-        rd_kafka_metadata_topic_t mt[15];
+        rd_kafka_metadata_topic_internal_t mt[15];
         int topic_cnt = RD_ARRAYSIZE(mt);
         rd_kafka_topic_partition_list_t *subscription =
             rd_kafka_topic_partition_list_new(topic_cnt);
@@ -2838,7 +2839,7 @@ static int ut_testSameSubscriptions(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
         rd_kafka_topic_partition_list_destroy(subscription);
 
         RD_UT_PASS();
@@ -2851,10 +2852,10 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
 
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[200];
         int member_cnt = RD_ARRAYSIZE(members);
-        rd_kafka_metadata_topic_t mt[40];
+        rd_kafka_metadata_topic_internal_t mt[40];
         int topic_cnt = RD_ARRAYSIZE(mt);
         int i;
 
@@ -2913,7 +2914,7 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2923,7 +2924,7 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
                                   const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[3];
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
@@ -2975,7 +2976,7 @@ static int ut_testNewSubscription(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -2985,7 +2986,7 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
                                           const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[4];
         int member_cnt                                  = RD_ARRAYSIZE(members);
         rd_kafka_topic_partition_list_t *assignments[4] = RD_ZERO_INIT;
@@ -3058,7 +3059,7 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
                 if (assignments[i])
                         rd_kafka_topic_partition_list_destroy(assignments[i]);
         }
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -3068,7 +3069,7 @@ static int ut_testMoveExistingAssignments(rd_kafka_t *rk,
 static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[3];
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
@@ -3113,7 +3114,7 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -3125,7 +3126,7 @@ static int ut_testStickiness(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[3];
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
@@ -3196,7 +3197,7 @@ static int ut_testStickiness2(rd_kafka_t *rk, const rd_kafka_assignor_t *rkas) {
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -3207,7 +3208,7 @@ ut_testAssignmentUpdatedForDeletedTopic(rd_kafka_t *rk,
                                         const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata =
@@ -3228,7 +3229,7 @@ ut_testAssignmentUpdatedForDeletedTopic(rd_kafka_t *rk,
                      members[0].rkgm_assignment->cnt);
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -3240,7 +3241,7 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
 
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[1];
 
         metadata = rd_kafka_metadata_new_topic_mockv(1, "topic1", 3);
@@ -3258,7 +3259,7 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
         /*
          * Remove topic
          */
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
         metadata = rd_kafka_metadata_new_topic_mock(NULL, 0);
 
         err = rd_kafka_assignor_run(rk->rk_cgrp, rkas, metadata, members,
@@ -3270,7 +3271,7 @@ static int ut_testNoExceptionThrownWhenOnlySubscribedTopicDeleted(
         isFullyBalanced(members, RD_ARRAYSIZE(members));
 
         rd_kafka_group_member_clear(&members[0]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }
@@ -3281,7 +3282,7 @@ ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
                                       const rd_kafka_assignor_t *rkas) {
         rd_kafka_resp_err_t err;
         char errstr[512];
-        rd_kafka_metadata_t *metadata;
+        rd_kafka_metadata_internal_t *metadata;
         rd_kafka_group_member_t members[2];
         int member_cnt = RD_ARRAYSIZE(members);
         int i;
@@ -3331,7 +3332,7 @@ ut_testConflictingPreviousAssignments(rd_kafka_t *rk,
 
         for (i = 0; i < member_cnt; i++)
                 rd_kafka_group_member_clear(&members[i]);
-        rd_kafka_metadata_destroy(metadata);
+        rd_kafka_metadata_internal_destroy(metadata);
 
         RD_UT_PASS();
 }

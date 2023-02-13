@@ -117,4 +117,74 @@ rd_kafka_Node_t *rd_kafka_Node_copy(const rd_kafka_Node_t *src);
 
 void rd_kafka_Node_destroy(rd_kafka_Node_t *node);
 
+/**
+ * Structures used to store metadata.
+ */
+
+/**
+ * @brief Broker information
+ */
+typedef struct rd_kafka_metadata_broker_internal {
+        int32_t id; /**< Broker Id */
+        char *host; /**< Broker hostname */
+        int port;   /**< Broker listening port */
+
+        /* Internal fields should be added below this point */
+} rd_kafka_metadata_broker_internal_t;
+
+
+/**
+ * @brief Partition information
+ */
+typedef struct rd_kafka_metadata_partition_internal {
+        int32_t id;              /**< Partition Id */
+        rd_kafka_resp_err_t err; /**< Partition error reported by broker */
+        int32_t leader;          /**< Leader broker */
+        int replica_cnt;         /**< Number of brokers in \p replicas */
+        int32_t *replicas;       /**< Replica brokers */
+        int isr_cnt;             /**< Number of ISR brokers in \p isrs */
+        int32_t *isrs;           /**< In-Sync-Replica brokers */
+
+        /* Internal fields should be added below this point */
+} rd_kafka_metadata_partition_internal_t;
+
+
+/**
+ * @brief Topic information
+ */
+typedef struct rd_kafka_metadata_topic_internal {
+        char *topic;       /**< Topic name */
+        int partition_cnt; /**< Number of partitions in \p partitions*/
+        rd_kafka_metadata_partition_internal_t *partitions; /**< Partitions */
+        rd_kafka_resp_err_t err; /**< Topic error reported by broker */
+
+        /* Internal fields should be added below this point */
+} rd_kafka_metadata_topic_internal_t;
+
+/**
+ * @brief Metadata container
+ */
+typedef struct rd_kafka_metadata_internal {
+        int broker_cnt; /**< Number of brokers in \p brokers */
+        rd_kafka_metadata_broker_internal_t *brokers; /**< Brokers */
+
+        int topic_cnt; /**< Number of topics in \p topics */
+        rd_kafka_metadata_topic_internal_t *topics; /**< Topics */
+
+        int32_t orig_broker_id; /**< Broker originating this metadata */
+        char *orig_broker_name; /**< Name of originating broker */
+
+        /* Internal field should be added below this point */
+        rd_kafkap_str_t *rack_id;
+} rd_kafka_metadata_internal_t;
+
+void rd_kafka_metadata_topic_internal_destroy(
+    rd_kafka_metadata_topic_internal_t *mdt_internal);
+void rd_kafka_metadata_broker_internal_destroy(
+    rd_kafka_metadata_broker_internal_t *mdb_internal);
+void rd_kafka_metadata_partition_internal_destroy(
+    rd_kafka_metadata_partition_internal_t *mdp_internal);
+void rd_kafka_metadata_internal_destroy(
+    rd_kafka_metadata_internal_t *md_internal);
+
 #endif /* _RDKAFKA_AUX_H_ */

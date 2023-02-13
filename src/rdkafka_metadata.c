@@ -38,6 +38,76 @@
 #include <string.h>
 #include <stdarg.h>
 
+static void rd_kafka_internal_partition_to_public_metadata(
+    rd_kafka_metadata_partition_internal_t *mdp_internal,
+    struct rd_kafka_metadata_partition *mdp,
+    rd_bool_t destroy) {
+        memcpy(mdp, mdp_internal, sizeof(struct rd_kafka_metadata_partition));
+        if (destroy)
+                rd_kafka_metadata_partition_internal_destroy(mdp_internal);
+}
+
+static void rd_kafka_internal_broker_to_public_metadata(
+    rd_kafka_metadata_broker_internal_t *mdb_internal,
+    struct rd_kafka_metadata_broker *mdb,
+    rd_bool_t destroy) {
+        memcpy(mdb, mdb_internal, sizeof(struct rd_kafka_metadata_broker));
+        mdb->host = mdb_internal->host;
+
+        if (destroy)
+                rd_kafka_metadata_broker_internal_destroy(mdb_internal);
+}
+
+static void rd_kafka_internal_topic_to_public_metadata(
+    rd_kafka_metadata_topic_internal_t *mdt_internal,
+    struct rd_kafka_metadata_topic *mdt,
+    rd_bool_t destroy) {
+        int i;
+
+        memcpy(mdt, mdt_internal, sizeof(struct rd_kafka_metadata_topic));
+        mdt->partitions = rd_calloc(sizeof(struct rd_kafka_metadata_partition),
+                                    mdt_internal->partition_cnt);
+
+        for (i = 0; i < mdt_internal->partition_cnt; i++) {
+                rd_kafka_internal_partition_to_public_metadata(
+                    &mdt_internal->partitions[i], &mdt->partitions[i],
+                    rd_false);
+        }
+
+        if (destroy)
+                rd_kafka_metadata_topic_internal_destroy(mdt_internal);
+}
+
+
+static void rd_kafka_internal_metadata_to_public_metadata(
+    rd_kafka_metadata_internal_t *md_internal,
+    struct rd_kafka_metadata *md,
+    rd_bool_t destroy) {
+        int i;
+
+        memcpy(md, md_internal, sizeof(struct rd_kafka_metadata));
+
+        md->orig_broker_name = rd_strdup(md_internal->orig_broker_name);
+        md->topics =
+            rd_calloc(sizeof(struct rd_kafka_metadata_topic), md->topic_cnt);
+        md->brokers =
+            rd_calloc(sizeof(struct rd_kafka_metadata_broker), md->broker_cnt);
+
+        for (i = 0; i < md_internal->broker_cnt; i++) {
+                rd_kafka_internal_broker_to_public_metadata(
+                    &md_internal->brokers[i], &md->brokers[i], rd_false);
+        }
+
+        for (i = 0; i < md_internal->topic_cnt; i++) {
+                rd_kafka_internal_topic_to_public_metadata(
+                    &md_internal->topics[i], &md->topics[i], rd_false);
+        }
+
+        if (destroy)
+                rd_kafka_metadata_internal_destroy(md_internal);
+}
+
+
 
 rd_kafka_resp_err_t
 rd_kafka_metadata(rd_kafka_t *rk,
@@ -111,9 +181,15 @@ rd_kafka_metadata(rd_kafka_t *rk,
                 return err;
         }
 
-        /* Reply: pass metadata pointer to application who now owns it*/
+        /* Destroy internal metadata and create public metadata */
         rd_kafka_assert(rk, rko->rko_u.metadata.md);
-        *metadatap             = rko->rko_u.metadata.md;
+        struct rd_kafka_metadata *md_v =
+            rd_malloc(sizeof(struct rd_kafka_metadata));
+        rd_kafka_internal_metadata_to_public_metadata(
+            rko->rko_u.metadata.md, md_v, rd_true /* destroy */);
+
+        /* Reply: pass metadata pointer to application who now owns it*/
+        *metadatap             = md_v;
         rko->rko_u.metadata.md = NULL;
         rd_kafka_op_destroy(rko);
 
@@ -130,9 +206,10 @@ void rd_kafka_metadata_destroy(const struct rd_kafka_metadata *metadata) {
 /**
  * @returns a newly allocated copy of metadata \p src of size \p size
  */
-struct rd_kafka_metadata *
-rd_kafka_metadata_copy(const struct rd_kafka_metadata *src, size_t size) {
-        struct rd_kafka_metadata *md;
+struct rd_kafka_metadata_internal *
+rd_kafka_metadata_copy(const struct rd_kafka_metadata_internal *src,
+                       size_t size) {
+        struct rd_kafka_metadata_internal *md;
         rd_tmpabuf_t tbuf;
         int i;
 
@@ -205,7 +282,8 @@ rd_kafka_metadata_copy(const struct rd_kafka_metadata *src, size_t size) {
  *
  * @param topics are the requested topics (may be NULL)
  *
- * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
+ * The metadata will be marshalled into 'struct rd_kafka_metadata_internal*'
+ structs.
  *
  * The marshalled metadata is returned in \p *mdp, (NULL on error).
 
@@ -213,14 +291,15 @@ rd_kafka_metadata_copy(const struct rd_kafka_metadata *src, size_t size) {
  *
  * @locality rdkafka main thread
  */
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp) {
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        struct rd_kafka_metadata_internal **mdp) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
-        struct rd_kafka_metadata *md;
+        struct rd_kafka_metadata_internal *md;
         size_t rkb_namelen;
         const int log_decode_errors       = LOG_ERR;
         rd_list_t *missing_topics         = NULL;
@@ -463,7 +542,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
         /* Update partition count and leader for each topic we know about */
         for (i = 0; i < md->topic_cnt; i++) {
-                rd_kafka_metadata_topic_t *mdt = &md->topics[i];
+                rd_kafka_metadata_topic_internal_t *mdt = &md->topics[i];
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "  Topic #%i/%i: %s with %i partitions%s%s", i,
                            md->topic_cnt, mdt->topic, mdt->partition_cnt,
@@ -590,7 +669,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                                1 /*abs update*/);
 
                 if (rkb->rkb_rk->rk_full_metadata)
-                        rd_kafka_metadata_destroy(
+                        rd_kafka_metadata_internal_destroy(
                             rkb->rkb_rk->rk_full_metadata);
                 rkb->rkb_rk->rk_full_metadata =
                     rd_kafka_metadata_copy(md, tbuf.of);
@@ -690,7 +769,7 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                               rd_kafka_topic_partition_list_t *errored) {
         int ti, i;
         size_t cnt = 0;
-        const struct rd_kafka_metadata *metadata;
+        const struct rd_kafka_metadata_internal *metadata;
         rd_kafka_topic_partition_list_t *unmatched;
 
         rd_kafka_rdlock(rk);
@@ -785,7 +864,7 @@ rd_kafka_metadata_topic_filter(rd_kafka_t *rk,
         /* For each topic in match, look up the topic in the cache. */
         for (i = 0; i < match->cnt; i++) {
                 const char *topic = match->elems[i].topic;
-                const rd_kafka_metadata_topic_t *mtopic;
+                const rd_kafka_metadata_topic_internal_t *mtopic;
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -818,7 +897,7 @@ rd_kafka_metadata_topic_filter(rd_kafka_t *rk,
 
 void rd_kafka_metadata_log(rd_kafka_t *rk,
                            const char *fac,
-                           const struct rd_kafka_metadata *md) {
+                           const struct rd_kafka_metadata_internal *md) {
         int i;
 
         rd_kafka_dbg(rk, METADATA, fac,
@@ -1268,14 +1347,14 @@ void rd_kafka_metadata_fast_leader_query(rd_kafka_t *rk) {
  * @param topic_cnt is the number of topic elements in \p topics.
  *
  * @returns a newly allocated metadata object that must be freed with
- *          rd_kafka_metadata_destroy().
+ *          rd_kafka_metadata_internal_destroy().
  *
  * @sa rd_kafka_metadata_copy()
  */
-rd_kafka_metadata_t *
-rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
-                                 size_t topic_cnt) {
-        rd_kafka_metadata_t *md;
+rd_kafka_metadata_internal_t *rd_kafka_metadata_new_topic_mock(
+    const rd_kafka_metadata_topic_internal_t *topics,
+    size_t topic_cnt) {
+        rd_kafka_metadata_internal_t *md;
         rd_tmpabuf_t tbuf;
         size_t topic_names_size = 0;
         int total_partition_cnt = 0;
@@ -1341,12 +1420,13 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
  * @param topic_cnt is the number of topic,partition_cnt tuples.
  *
  * @returns a newly allocated metadata object that must be freed with
- *          rd_kafka_metadata_destroy().
+ *          rd_kafka_metadata_internal_destroy().
  *
  * @sa rd_kafka_metadata_new_topic_mock()
  */
-rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...) {
-        rd_kafka_metadata_topic_t *topics;
+rd_kafka_metadata_internal_t *
+rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...) {
+        rd_kafka_metadata_topic_internal_t *topics;
         va_list ap;
         size_t i;
 

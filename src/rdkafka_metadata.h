@@ -30,14 +30,17 @@
 #define _RDKAFKA_METADATA_H_
 
 #include "rdavl.h"
+#include "rdkafka_aux.h"
 
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp);
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        struct rd_kafka_metadata_internal **mdp);
 
-struct rd_kafka_metadata *
-rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);
+struct rd_kafka_metadata_internal *
+rd_kafka_metadata_copy(const struct rd_kafka_metadata_internal *md,
+                       size_t size);
 
 size_t
 rd_kafka_metadata_topic_match(rd_kafka_t *rk,
@@ -52,7 +55,7 @@ rd_kafka_metadata_topic_filter(rd_kafka_t *rk,
 
 void rd_kafka_metadata_log(rd_kafka_t *rk,
                            const char *fac,
-                           const struct rd_kafka_metadata *md);
+                           const struct rd_kafka_metadata_internal *md);
 
 
 
@@ -93,10 +96,11 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
 
 int rd_kafka_metadata_partition_id_cmp(const void *_a, const void *_b);
 
-rd_kafka_metadata_t *
-rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
-                                 size_t topic_cnt);
-rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
+rd_kafka_metadata_internal_t *rd_kafka_metadata_new_topic_mock(
+    const rd_kafka_metadata_topic_internal_t *topics,
+    size_t topic_cnt);
+rd_kafka_metadata_internal_t *
+rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
 
 
 /**
@@ -110,7 +114,8 @@ struct rd_kafka_metadata_cache_entry {
         TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link; /* rkmc_expiry */
         rd_ts_t rkmce_ts_expires;                              /* Expire time */
         rd_ts_t rkmce_ts_insert;                               /* Insert time */
-        rd_kafka_metadata_topic_t rkmce_mtopic; /* Cached topic metadata */
+        rd_kafka_metadata_topic_internal_t
+            rkmce_mtopic; /* Cached topic metadata */
         /* rkmce_partitions memory points here. */
 };
 
@@ -150,13 +155,13 @@ struct rd_kafka_metadata_cache {
 };
 
 
-
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
-void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
-                                          const rd_kafka_metadata_topic_t *mdt,
-                                          rd_bool_t propagate);
+void rd_kafka_metadata_cache_topic_update(
+    rd_kafka_t *rk,
+    const rd_kafka_metadata_topic_internal_t *mdt,
+    rd_bool_t propagate);
 void rd_kafka_metadata_cache_update(rd_kafka_t *rk,
-                                    const rd_kafka_metadata_t *md,
+                                    const rd_kafka_metadata_internal_t *md,
                                     int abs_update);
 void rd_kafka_metadata_cache_propagate_changes(rd_kafka_t *rk);
 struct rd_kafka_metadata_cache_entry *
@@ -175,12 +180,12 @@ int rd_kafka_metadata_cache_hint_rktparlist(
     rd_list_t *dst,
     int replace);
 
-const rd_kafka_metadata_topic_t *
+const rd_kafka_metadata_topic_internal_t *
 rd_kafka_metadata_cache_topic_get(rd_kafka_t *rk, const char *topic, int valid);
 int rd_kafka_metadata_cache_topic_partition_get(
     rd_kafka_t *rk,
-    const rd_kafka_metadata_topic_t **mtopicp,
-    const rd_kafka_metadata_partition_t **mpartp,
+    const rd_kafka_metadata_topic_internal_t **mtopicp,
+    const rd_kafka_metadata_partition_internal_t **mpartp,
     const char *topic,
     int32_t partition,
     int valid);

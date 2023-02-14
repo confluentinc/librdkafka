@@ -2739,28 +2739,34 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
 
-        /* Partition is stopped, so rktp->rktp_fetchq->rkq_fwdq is NULL.
-         * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
-         * while holding lock, to avoid circular references */
-        rkq = rktp->rktp_fetchq;
-        mtx_lock(&rkq->rkq_lock);
-        rd_assert(!rkq->rkq_fwdq);
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE) {
+                /* Partition is being removed from the cluster and it's stopped,
+                 * so rktp->rktp_fetchq->rkq_fwdq is NULL.
+                 * Purge remaining operations in rktp->rktp_fetchq->rkq_q,
+                 * while holding lock, to avoid circular references */
+                rkq = rktp->rktp_fetchq;
+                mtx_lock(&rkq->rkq_lock);
+                rd_assert(!rkq->rkq_fwdq);
 
-        next = TAILQ_FIRST(&rkq->rkq_q);
-        while ((rko = next)) {
-                rd_assert(rko->rko_type == RD_KAFKA_OP_BARRIER);
-                next = TAILQ_NEXT(next, rko_link);
-                cnt++;
-        }
+                next = TAILQ_FIRST(&rkq->rkq_q);
+                while ((rko = next)) {
+                        rd_assert(rko->rko_type == RD_KAFKA_OP_BARRIER);
+                        next = TAILQ_NEXT(next, rko_link);
+                        cnt++;
+                }
 
-        mtx_unlock(&rkq->rkq_lock);
+                mtx_unlock(&rkq->rkq_lock);
 
-        if (cnt) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
-                             "Purge toppar buffer containing %d "
-                             "barrier(s) to avoid circular references",
-                             cnt);
-                rd_kafka_q_purge(rktp->rktp_fetchq);
+                if (cnt) {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Purge toppar buffer containing %d "
+                                     "barrier(s) to avoid circular references",
+                                     cnt);
+                        rd_kafka_q_purge(rktp->rktp_fetchq);
+                } else {
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
+                                     "Not purging toppar buffer");
+                }
         }
 
         rd_kafka_toppar_unlock(rktp);

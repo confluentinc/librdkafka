@@ -98,7 +98,8 @@ blocks:
     dependencies: []
     skip:
       # Skip for release tags, we don't want flaky CI tests
-      # to fail the release build.
+      # to fail the release build. Skip also on master and the
+      # 'full-integration-tests' tag, it's going to run the full suite instead.
       when: "branch = 'master' OR tag = 'full-integration-tests' OR tag =~ '^v[0-9]\\.'"
     task:
       agent:

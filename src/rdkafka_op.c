@@ -373,6 +373,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_METADATA:
+                if (rko->rko_u.metadata.broker_rack_pair) {
+                        rd_kafka_broker_rack_pair_destroy_cnt(
+                            rko->rko_u.metadata.broker_rack_pair,
+                            rko->rko_u.metadata.broker_rack_pair_cnt);
+                }
+
                 RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
                 break;
 

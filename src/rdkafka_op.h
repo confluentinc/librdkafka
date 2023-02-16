@@ -38,6 +38,7 @@
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_broker_id_rack_pair rd_kafka_broker_id_rack_pair_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -370,6 +371,11 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
+                        size_t broker_rack_pair_cnt;
+                        rd_kafka_broker_id_rack_pair_t
+                            *broker_rack_pair; /* mapping of broker id -> rack
+                                                  string as seen in metadata,
+                                                  sorted by broker id. */
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;

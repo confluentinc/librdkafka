@@ -1659,12 +1659,15 @@ err_parse:
 /**
  * @brief Run group assignment.
  */
-static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
-                                       rd_kafka_assignor_t *rkas,
-                                       rd_kafka_resp_err_t err,
-                                       rd_kafka_metadata_t *metadata,
-                                       rd_kafka_group_member_t *members,
-                                       int member_cnt) {
+static void
+rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
+                           rd_kafka_assignor_t *rkas,
+                           rd_kafka_resp_err_t err,
+                           rd_kafka_metadata_t *metadata,
+                           rd_kafka_group_member_t *members,
+                           int member_cnt,
+                           rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+                           size_t broker_rack_pair_cnt) {
         char errstr[512];
 
         if (err) {
@@ -1678,6 +1681,7 @@ static void rd_kafka_cgrp_assignor_run(rd_kafka_cgrp_t *rkcg,
 
         /* Run assignor */
         err = rd_kafka_assignor_run(rkcg, rkas, metadata, members, member_cnt,
+                                    broker_rack_pair, broker_rack_pair_cnt,
                                     errstr, sizeof(errstr));
 
         if (err) {
@@ -1744,10 +1748,11 @@ rd_kafka_cgrp_assignor_handle_Metadata_op(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
-        rd_kafka_cgrp_assignor_run(rkcg, rkcg->rkcg_assignor, rko->rko_err,
-                                   rko->rko_u.metadata.md,
-                                   rkcg->rkcg_group_leader.members,
-                                   rkcg->rkcg_group_leader.member_cnt);
+        rd_kafka_cgrp_assignor_run(
+            rkcg, rkcg->rkcg_assignor, rko->rko_err, rko->rko_u.metadata.md,
+            rkcg->rkcg_group_leader.members, rkcg->rkcg_group_leader.member_cnt,
+            rko->rko_u.metadata.broker_rack_pair,
+            rko->rko_u.metadata.broker_rack_pair_cnt);
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
@@ -1820,7 +1825,7 @@ static int rd_kafka_group_MemberMetadata_consumer_read(
         if (Version >= 3) {
                 rd_kafkap_str_t RackId = RD_KAFKAP_STR_INITIALIZER;
                 rd_kafka_buf_read_str(rkbuf, &RackId);
-                rkgm->rack_id = rd_kafkap_str_copy(&RackId);
+                rkgm->rkgm_rack_id = rd_kafkap_str_copy(&RackId);
         }
 
         rd_kafka_buf_destroy(rkbuf);
@@ -5967,15 +5972,14 @@ static int unittest_list_to_map(void) {
 }
 
 int unittest_member_metadata_serdes(void) {
-        const rd_list_t *topics =
-            rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
-        const rd_kafka_topic_partition_list_t *owned_partitions =
-            rd_list_new(0, rd_kafka_topic_partition_destroy);
-        const rd_kafkap_str_t *rack_id = rd_kafkap_str_new("myrack", -1);
-        const void *userdata           = NULL;
-        const size_t userdata_size     = 0;
-        const int generation           = 3;
-        const char topic_name[]        = "mytopic";
+        rd_list_t *topics = rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
+        rd_kafka_topic_partition_list_t *owned_partitions =
+            rd_kafka_topic_partition_list_new(0);
+        rd_kafkap_str_t *rack_id    = rd_kafkap_str_new("myrack", -1);
+        const void *userdata        = NULL;
+        const int32_t userdata_size = 0;
+        const int generation        = 3;
+        const char topic_name[]     = "mytopic";
         rd_kafka_group_member_t *rkgm;
         int version;
 
@@ -6019,8 +6023,9 @@ int unittest_member_metadata_serdes(void) {
                         RD_UT_ASSERT(generation == rkgm->rkgm_generation,
                                      "generation should be same");
                 if (version >= 3)
-                        RD_UT_ASSERT(!rd_kafkap_str_cmp(rack_id, rkgm->rack_id),
-                                     "rack id should be same");
+                        RD_UT_ASSERT(
+                            !rd_kafkap_str_cmp(rack_id, rkgm->rkgm_rack_id),
+                            "rack id should be same");
 
                 rd_kafka_group_member_clear(rkgm);
                 rd_kafkap_bytes_destroy(member_metadata);

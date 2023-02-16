@@ -58,6 +58,8 @@ rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_assign_cb(
     size_t member_cnt,
     rd_kafka_assignor_topic_t **eligible_topics,
     size_t eligible_topic_cnt,
+    rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+    size_t broker_rack_pair_cnt,
     char *errstr,
     size_t errstr_size,
     void *opaque) {

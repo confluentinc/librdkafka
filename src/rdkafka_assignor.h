@@ -70,7 +70,7 @@ typedef struct rd_kafka_group_member_s {
         /** Group generation id. */
         int rkgm_generation;
         /** Member rack id. */
-        rd_kafkap_str_t *rack_id;
+        rd_kafkap_str_t *rkgm_rack_id;
 } rd_kafka_group_member_t;
 
 
@@ -80,6 +80,22 @@ int rd_kafka_group_member_find_subscription(rd_kafka_t *rk,
                                             const rd_kafka_group_member_t *rkgm,
                                             const char *topic);
 
+/**
+ * Struct to hold information about the racks on which brokers are.
+ */
+typedef struct rd_kafka_broker_id_rack_pair {
+        int32_t broker_id;
+        rd_kafkap_str_t *rack;
+} rd_kafka_broker_id_rack_pair;
+
+/**
+ * Destroys cnt broker_rack_pairs, includng the destruction of the rack.
+ */
+void rd_kafka_broker_rack_pair_destroy_cnt(
+    rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+    size_t cnt);
+
+int rd_kafka_broker_id_rack_pair_cmp(const void *_a, const void *_b);
 
 /**
  * Structure to hold metadata for a single topic and all its
@@ -114,6 +130,8 @@ typedef struct rd_kafka_assignor_s {
             size_t member_cnt,
             rd_kafka_assignor_topic_t **eligible_topics,
             size_t eligible_topic_cnt,
+            rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+            size_t broker_rack_pair_cnt,
             char *errstr,
             size_t errstr_size,
             void *opaque);
@@ -154,6 +172,8 @@ rd_kafka_resp_err_t rd_kafka_assignor_add(
         size_t member_cnt,
         rd_kafka_assignor_topic_t **eligible_topics,
         size_t eligible_topic_cnt,
+        rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+        size_t broker_rack_pair_cnt,
         char *errstr,
         size_t errstr_size,
         void *opaque),
@@ -193,13 +213,16 @@ void rd_kafka_assignor_update_subscription(
     const rd_kafka_topic_partition_list_t *subscription);
 
 
-rd_kafka_resp_err_t rd_kafka_assignor_run(struct rd_kafka_cgrp_s *rkcg,
-                                          const rd_kafka_assignor_t *rkas,
-                                          rd_kafka_metadata_t *metadata,
-                                          rd_kafka_group_member_t *members,
-                                          int member_cnt,
-                                          char *errstr,
-                                          size_t errstr_size);
+rd_kafka_resp_err_t
+rd_kafka_assignor_run(struct rd_kafka_cgrp_s *rkcg,
+                      const rd_kafka_assignor_t *rkas,
+                      rd_kafka_metadata_t *metadata,
+                      rd_kafka_group_member_t *members,
+                      int member_cnt,
+                      rd_kafka_broker_id_rack_pair_t *broker_rack_pair,
+                      size_t broker_rack_pair_cnt,
+                      char *errstr,
+                      size_t errstr_size);
 
 rd_kafka_assignor_t *rd_kafka_assignor_find(rd_kafka_t *rk,
                                             const char *protocol);

@@ -277,15 +277,21 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
  * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
  *
  * The marshalled metadata is returned in \p *mdp, (NULL on error).
-
+ *
+ * Information about the racks-per-broker is returned in \p *broker_rack_pair_p
+ * if it's not NULL. The count of racks-per-broker is equal to mdp->broker_cnt,
+ * and the pairs are sorted by broker id.
+ *
  * @returns an error code on parse failure, else NO_ERRRO.
  *
  * @locality rdkafka main thread
  */
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp) {
+rd_kafka_resp_err_t
+rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
+                        rd_kafka_buf_t *request,
+                        rd_kafka_buf_t *rkbuf,
+                        struct rd_kafka_metadata **mdp,
+                        rd_kafka_broker_id_rack_pair_t **broker_rack_pair_p) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
@@ -358,6 +364,11 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                         "%d brokers: tmpabuf memory shortage",
                                         md->broker_cnt);
 
+        if (ApiVersion >= 1 && broker_rack_pair_p) {
+                *broker_rack_pair_p = rd_malloc(
+                    sizeof(rd_kafka_broker_id_rack_pair_t) * md->broker_cnt);
+        }
+
         for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
                 rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf,
@@ -367,6 +378,12 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 if (ApiVersion >= 1) {
                         rd_kafkap_str_t rack;
                         rd_kafka_buf_read_str(rkbuf, &rack);
+                        if (broker_rack_pair_p) {
+                                (*broker_rack_pair_p)[i].broker_id =
+                                    md->brokers[i].id;
+                                (*broker_rack_pair_p)[i].rack =
+                                    rd_kafkap_str_copy(&rack);
+                        }
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -382,7 +399,10 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                            RD_KAFKAP_STR_PR(&cluster_id), controller_id);
         }
 
-
+        if (broker_rack_pair_p)
+                qsort(*broker_rack_pair_p, md->broker_cnt,
+                      sizeof(rd_kafka_broker_id_rack_pair_t),
+                      rd_kafka_broker_id_rack_pair_cmp);
 
         /* Read TopicMetadata */
         rd_kafka_buf_read_arraycnt(rkbuf, &md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
@@ -767,6 +787,15 @@ err:
 
         if (leader_epochs)
                 rd_free(leader_epochs);
+
+        if (broker_rack_pair_p && *broker_rack_pair_p) {
+                /* md must be allocated if *broker_rack_pair_p != NULL
+                            since md->brokers_cnt is used to allocate it */
+                rd_assert(md);
+                rd_kafka_broker_rack_pair_destroy_cnt(*broker_rack_pair_p,
+                                                      md->broker_cnt);
+                *broker_rack_pair_p = NULL;
+        }
 
         rd_tmpabuf_destroy(&tbuf);
 

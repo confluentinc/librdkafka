@@ -5282,6 +5282,7 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist) {
  *
  * @param rkbp if non-NULL, will be set to the broker object with
  *             refcount increased, or NULL on error.
+ * @param rack if non-NULL, it will set the rack of the broker object.
  *
  * @locks none
  * @locality any

@@ -199,7 +199,7 @@ target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
 
 if(WITH_CURL)
   find_package(CURL REQUIRED)
-  target_include_directories(rdkafka PUBLIC ${CURL_INCLUDE_DIRS})
+  target_include_directories(rdkafka PRIVATE ${CURL_INCLUDE_DIRS})
   target_link_libraries(rdkafka PUBLIC ${CURL_LIBRARIES})
 endif()
 

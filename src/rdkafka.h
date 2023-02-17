@@ -6936,6 +6936,23 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
     int true_or_false);
 
 /**
+ * @brief Whether broker should return authorized operations
+ *        (DescribeConsumerGroups).
+ *
+ * @param options Admin options.
+ * @param true_or_false Defaults to false.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for DescribeConsumerGroups.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_include_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false);
+
+/**
  * @brief Set consumer groups states to query for.
  *
  * @param options Admin options.
@@ -8383,6 +8400,29 @@ RD_EXPORT
 const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc);
 
+/**
+ * @brief Gets count of authorized operations for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ *
+ * @return count of Authorized operations allowed, 0 if authorized operations list is NULL or empty.
+ */
+RD_EXPORT
+size_t rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc);
+
+/**
+ * @brief Gets operation at idx index of authorized operations for the \p grpdesc group.
+ *
+ * @param grpdesc The group description.
+ * @param idx The index for which element is needed.
+ *
+ * @return Authorized operation at given index.
+ */
+RD_EXPORT
+int rd_kafka_ConsumerGroupDescription_authorized_operation(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc,
+    size_t idx);
 
 /**
  * @brief Gets state for the \p grpdesc group.

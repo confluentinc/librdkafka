@@ -73,7 +73,8 @@ static void usage(const char *reason, ...) {
         fprintf(stderr,
                 "Describe groups usage examples\n"
                 "\n"
-                "Usage: %s <options> <group1> <group2> ...\n"
+                "Usage: %s <options> <include_authorized_operations> <group1> "
+                "<group2> ...\n"
                 "\n"
                 "Options:\n"
                 "   -b <brokers>    Bootstrap server list to connect to.\n"
@@ -167,7 +168,8 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
         }
 
         for (i = 0; i < result_groups_cnt; i++) {
-                int j, member_cnt;
+                int j, member_cnt, authorized_operation_count,
+                    acl_operation;
                 const rd_kafka_error_t *error;
                 const rd_kafka_ConsumerGroupDescription_t *group =
                     result_groups[i];
@@ -179,6 +181,8 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                     rd_kafka_ConsumerGroupDescription_partition_assignor(group);
                 rd_kafka_consumer_group_state_t state =
                     rd_kafka_ConsumerGroupDescription_state(group);
+                authorized_operation_count = 
+                    rd_kafka_ConsumerGroupDescription_authorized_operations_count(group);
                 member_cnt =
                     rd_kafka_ConsumerGroupDescription_member_count(group);
                 error = rd_kafka_ConsumerGroupDescription_error(group);
@@ -197,10 +201,19 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 }
                 printf(
                     "Group \"%s\", partition assignor \"%s\", "
-                    "state %s%s, with %" PRId32 " member(s)",
+                    " state %s%s, with %" PRId32 " member(s)\n",
                     group_id, partition_assignor,
                     rd_kafka_consumer_group_state_name(state), coordinator_desc,
                     member_cnt);
+                for(j=0;j<authorized_operation_count;j++){
+                        acl_operation = 
+                                rd_kafka_ConsumerGroupDescription_authorized_operation(group,j);
+                        if(acl_operation==-1)
+                                fprintf(stderr, "Out of bounds access to authorized_operations list\n");
+                        else
+                                printf("%s operation is allowed\n",
+                                rd_kafka_AclOperation_name(acl_operation));
+                }
                 if (error)
                         printf(" error[%" PRId32 "]: %s",
                                rd_kafka_error_code(error),
@@ -262,12 +275,19 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
-        int retval              = 0;
-        int groups_cnt          = 0;
+        rd_kafka_error_t *error;
+        int retval     = 0;
+        int groups_cnt = 0;
+
+        int include_authorized_operations =
+            parse_int("include_authorized_operations", argv[0]);
+        if (include_authorized_operations < 0 ||
+            include_authorized_operations > 1)
+                usage("Require stable not a 0-1 int");
 
         if (argc >= 1) {
-                groups     = (const char **)&argv[0];
-                groups_cnt = argc;
+                groups     = (const char **)&argv[1];
+                groups_cnt = argc - 1;
         }
 
         /*
@@ -295,6 +315,14 @@ cmd_describe_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
+        }
+        if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
+                 options, include_authorized_operations))) {
+                fprintf(stderr,
+                        "%% Failed to set require authorized operations: %s\n",
+                        rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+                exit(1);
         }
 
         rd_kafka_DescribeConsumerGroups(rk, groups, groups_cnt, options, queue);
@@ -348,7 +376,10 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-
+        conf_set(conf, "sasl.username", "broker");
+        conf_set(conf, "sasl.password", "broker");
+        conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
+        conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
 
         /*
          * Parse common options

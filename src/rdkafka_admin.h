@@ -91,6 +91,12 @@ struct rd_kafka_AdminOptions_s {
                                      * Valid for:
                                      *     ListConsumerGroupOffsets
                                      */
+        rd_kafka_confval_t
+            include_authorized_operations; /**< BOOL: Whether broker should
+                                            * return authorized operations.
+                                            * Valid for:
+                                            *     DescribeConsumerGroups
+                                            */
 
         rd_kafka_confval_t
             match_consumer_group_states; /**< PTR: list of consumer group states
@@ -473,6 +479,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_consumer_group_state_t state;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
+        /** Authorized operations. */
+        rd_list_t* authorized_operations;
         /** Group specific error. */
         rd_kafka_error_t *error;
 };

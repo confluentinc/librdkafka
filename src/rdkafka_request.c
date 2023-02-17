@@ -1843,13 +1843,15 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  * @return NULL on success, a new error instance that must be
  *         released with rd_kafka_error_destroy() in case of error.
  */
-rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
-                                                 int16_t max_ApiVersion,
-                                                 char **groups,
-                                                 size_t group_cnt,
-                                                 rd_kafka_replyq_t replyq,
-                                                 rd_kafka_resp_cb_t *resp_cb,
-                                                 void *opaque) {
+rd_kafka_error_t *
+rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
+                               int16_t max_ApiVersion,
+                               char **groups,
+                               size_t group_cnt,
+                               rd_bool_t include_authorized_operations,
+                               rd_kafka_replyq_t replyq,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         size_t of_GroupsArrayCnt;
@@ -1887,7 +1889,7 @@ rd_kafka_error_t *rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
         /* write IncludeAuthorizedOperations */
         if (ApiVersion >= 3) {
                 /* TODO: implement KIP-430 */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

@@ -230,11 +230,12 @@ static const char *rd_kafka_admin_state_desc[] = {
  * @enum Admin request target broker. Must be negative values since the field
  *       used is broker_id.
  */
-enum { RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
-       RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
-       RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
-                                                *   and has no target broker */
-       RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
+enum {
+        RD_KAFKA_ADMIN_TARGET_CONTROLLER  = -1, /**< Cluster controller */
+        RD_KAFKA_ADMIN_TARGET_COORDINATOR = -2, /**< (Group) Coordinator */
+        RD_KAFKA_ADMIN_TARGET_FANOUT      = -3, /**< This rko is a fanout and
+                                                 *   and has no target broker */
+        RD_KAFKA_ADMIN_TARGET_ALL = -4,         /**< All available brokers */
 };
 
 /**
@@ -1556,6 +1557,15 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
             &true_or_false, errstr, sizeof(errstr));
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
+rd_kafka_error_t *rd_kafka_AdminOptions_set_include_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false) {
+        char errstr[512];
+        rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+            &options->include_authorized_operations, RD_KAFKA_CONFVAL_INT,
+            &true_or_false, errstr, sizeof(errstr));
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
 
 rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
@@ -1656,6 +1666,15 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         else
                 rd_kafka_confval_disable(&options->require_stable_offsets,
                                          "require_stable_offsets");
+
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS)
+                rd_kafka_confval_init_int(
+                    &options->include_authorized_operations,
+                    "include_authorized_operations", 0, 1, 0);
+        else
+                rd_kafka_confval_disable(&options->require_stable_offsets,
+                                         "include_authorized_operations");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS)
@@ -6090,6 +6109,7 @@ const rd_kafka_topic_partition_list_t *rd_kafka_MemberAssignment_partitions(
  * @param members List of members (rd_kafka_MemberDescription_t) of this
  *                group.
  * @param partition_assignor (optional) Chosen assignor.
+ * @param authorized_operations authorized operations.
  * @param state Group state.
  * @param coordinator (optional) Group coordinator.
  * @param error (optional) Error received for this group.
@@ -6101,6 +6121,7 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
                                       rd_bool_t is_simple_consumer_group,
                                       const rd_list_t *members,
                                       const char *partition_assignor,
+                                      rd_list_t* authorized_operations,
                                       rd_kafka_consumer_group_state_t state,
                                       const rd_kafka_Node_t *coordinator,
                                       rd_kafka_error_t *error) {
@@ -6116,10 +6137,11 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
                 rd_list_copy_to(&grpdesc->members, members,
                                 rd_kafka_MemberDescription_list_copy, NULL);
         }
-        grpdesc->partition_assignor = !partition_assignor
-                                          ? (char *)partition_assignor
-                                          : rd_strdup(partition_assignor);
-        grpdesc->state = state;
+        grpdesc->partition_assignor    = !partition_assignor
+                                             ? (char *)partition_assignor
+                                             : rd_strdup(partition_assignor);
+        grpdesc->authorized_operations = authorized_operations;
+        grpdesc->state                 = state;
         if (coordinator != NULL)
                 grpdesc->coordinator = rd_kafka_Node_copy(coordinator);
         grpdesc->error =
@@ -6140,7 +6162,7 @@ static rd_kafka_ConsumerGroupDescription_t *
 rd_kafka_ConsumerGroupDescription_new_error(const char *group_id,
                                             rd_kafka_error_t *error) {
         return rd_kafka_ConsumerGroupDescription_new(
-            group_id, rd_false, NULL, NULL,
+            group_id, rd_false, NULL, NULL, NULL,
             RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN, NULL, error);
 }
 
@@ -6155,7 +6177,8 @@ rd_kafka_ConsumerGroupDescription_copy(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
         return rd_kafka_ConsumerGroupDescription_new(
             grpdesc->group_id, grpdesc->is_simple_consumer_group,
-            &grpdesc->members, grpdesc->partition_assignor, grpdesc->state,
+            &grpdesc->members, grpdesc->partition_assignor,
+            grpdesc->authorized_operations, grpdesc->state,
             grpdesc->coordinator, grpdesc->error);
 }
 
@@ -6208,6 +6231,19 @@ const char *rd_kafka_ConsumerGroupDescription_partition_assignor(
         return grpdesc->partition_assignor;
 }
 
+size_t rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
+        if(grpdesc->authorized_operations)
+                return grpdesc->authorized_operations->rl_cnt;
+        return 0;
+}
+
+int rd_kafka_ConsumerGroupDescription_authorized_operation(
+    const rd_kafka_ConsumerGroupDescription_t *grpdesc,
+    size_t idx) {
+        rd_kafka_AclOperation_t* entry = rd_list_elem(grpdesc->authorized_operations, idx);
+        return *entry;
+}
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc) {
@@ -6305,7 +6341,7 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
     rd_kafka_replyq_t replyq,
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque) {
-        int i;
+        int i, include_authorized_operations;
         char *group;
         rd_kafka_resp_err_t err;
         int groups_cnt          = rd_list_cnt(groups);
@@ -6315,7 +6351,10 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         RD_LIST_FOREACH(group, groups, i) {
                 groups_arr[i] = rd_list_elem(groups, i);
         }
+        include_authorized_operations =
+            rd_kafka_confval_get_int(&options->include_authorized_operations);
         error = rd_kafka_DescribeGroupsRequest(rkb, -1, groups_arr, groups_cnt,
+                                               include_authorized_operations,
                                                replyq, resp_cb, opaque);
         rd_free(groups_arr);
 
@@ -6330,6 +6369,28 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Parse authorized_operations returned in DescribeConsumerGroups
+ * @returns array of rd_bool_t of size RD_KAFKA_ACL_OPERATIONS__CNT
+ */
+rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
+        int i, bit;
+        rd_list_t* authorized_operations_list = NULL;
+        rd_kafka_AclOperation_t* entry;
+        /* in case of authorized_operations not requested, return NULL*/
+        if(authorized_operations<0)
+                return NULL;
+        authorized_operations_list = rd_list_new(0, NULL);
+        for(i=0; i<RD_KAFKA_ACL_OPERATION__CNT; i++){
+                bit = (authorized_operations >> i) & 1;
+                if(bit){
+                        entry = malloc(sizeof(rd_kafka_AclOperation_t));
+                        *entry = i;
+                        rd_list_add(authorized_operations_list, entry);
+                }
+        }
+        return authorized_operations_list;
+}
 /**
  * @brief Parse DescribeConsumerGroupsResponse and create ADMIN_RESULT op.
  */
@@ -6371,6 +6432,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         node = rd_kafka_Node_new(nodeid, host, port, NULL);
         while (cnt-- > 0) {
                 int16_t error_code;
+                int32_t authorized_operations = 0;
+                rd_list_t* authorized_operations_list;
                 rd_kafkap_str_t GroupId, GroupState, ProtocolType, ProtocolData;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 int32_t member_cnt;
@@ -6478,13 +6541,19 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
                 if (api_version >= 3) {
                         /* TODO: implement KIP-430 */
-                        int32_t authorized_operations;
                         rd_kafka_buf_read_i32(reply, &authorized_operations);
+                        /* assert that the last 3 bits are never set*/
+                        rd_assert(!((authorized_operations >> 0) & 1));
+                        rd_assert(!((authorized_operations >> 1) & 1));
+                        rd_assert(!((authorized_operations >> 2) & 1));
+                        /* authorized_operations is -2147483648 in case of not requested, list has no elements in that case*/
+                        authorized_operations_list = rd_kafka_AuthorizedOperations_parse(authorized_operations);
                 }
 
                 if (error == NULL) {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new(
                             group_id, is_simple_consumer_group, &members, proto,
+                            authorized_operations_list,
                             rd_kafka_consumer_group_state_code(group_state),
                             node, error);
                 } else {

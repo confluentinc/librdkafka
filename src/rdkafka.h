@@ -918,10 +918,10 @@ void rd_kafka_topic_partition_destroy(rd_kafka_topic_partition_t *rktpar);
 
 
 /**
- * @brief Sets the partition's leader epoch (use -1 to clear).
+ * @brief Sets the offset leader epoch (use -1 to clear).
  *
  * @param rktpar Partition object.
- * @param leader_epoch Partition leader epoch, use -1 to reset.
+ * @param leader_epoch Offset leader epoch, use -1 to reset.
  *
  * @remark See KIP-320 for more information.
  */
@@ -931,7 +931,7 @@ void rd_kafka_topic_partition_set_leader_epoch(
     int32_t leader_epoch);
 
 /**
- * @returns the partition's leader epoch, if relevant and known,
+ * @returns the offset leader epoch, if relevant and known,
  *          else -1.
  *
  * @param rktpar Partition object.
@@ -942,6 +942,31 @@ RD_EXPORT
 int32_t rd_kafka_topic_partition_get_leader_epoch(
     const rd_kafka_topic_partition_t *rktpar);
 
+
+/**
+ * @brief Sets the partition leader current epoch (use -1 to clear).
+ *
+ * @param rktpar Partition object.
+ * @param leader_epoch Partition leader current epoch, use -1 to reset.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+void rd_kafka_topic_partition_set_current_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t leader_epoch);
+
+/**
+ * @returns the partition leader current epoch, if relevant and known,
+ *          else -1.
+ *
+ * @param rktpar Partition object.
+ *
+ * @remark See KIP-320 for more information.
+ */
+RD_EXPORT
+int32_t rd_kafka_topic_partition_get_current_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar);
 
 /**
  * @brief A growable list of Topic+Partitions.

@@ -232,9 +232,10 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                 RD_KAFKAP_STR_DUPA(&topic, &kTopic);
 
                 while (PartArrayCnt-- > 0) {
-                        int32_t Partition = -1, Epoch = -1234;
-                        int64_t Offset    = -1234;
-                        int16_t ErrorCode = 0;
+                        int32_t Partition = -1, Epoch = -1234,
+                                CurrentLeaderEpoch = -1234;
+                        int64_t Offset             = -1234;
+                        int16_t ErrorCode          = 0;
                         rd_kafka_topic_partition_t *rktpar;
                         int fi;
 
@@ -251,6 +252,10 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                                         break;
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET:
                                         rd_kafka_buf_read_i64(rkbuf, &Offset);
+                                        break;
+                                case RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH:
+                                        rd_kafka_buf_read_i32(
+                                            rkbuf, &CurrentLeaderEpoch);
                                         break;
                                 case RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH:
                                         rd_kafka_buf_read_i32(rkbuf, &Epoch);
@@ -279,6 +284,9 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
                         if (Epoch != -1234)
                                 rd_kafka_topic_partition_set_leader_epoch(
                                     rktpar, Epoch);
+                        if (CurrentLeaderEpoch != -1234)
+                                rd_kafka_topic_partition_set_current_leader_epoch(
+                                    rktpar, CurrentLeaderEpoch);
                         rktpar->err = ErrorCode;
 
 
@@ -369,6 +377,12 @@ int rd_kafka_buf_write_topic_partitions(
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET:
                                 rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+                                break;
+                        case RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH:
+                                rd_kafka_buf_write_i32(
+                                    rkbuf,
+                                    rd_kafka_topic_partition_get_current_leader_epoch(
+                                        rktpar));
                                 break;
                         case RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH:
                                 rd_kafka_buf_write_i32(
@@ -690,7 +704,8 @@ rd_kafka_make_ListOffsetsRequest(rd_kafka_broker_t *rkb,
                         /* CurrentLeaderEpoch */
                         rd_kafka_buf_write_i32(
                             rkbuf,
-                            rd_kafka_topic_partition_get_leader_epoch(rktpar));
+                            rd_kafka_topic_partition_get_current_leader_epoch(
+                                rktpar));
 
                 /* Time/Offset */
                 rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
@@ -827,7 +842,7 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             /* CurrentLeaderEpoch */
-            RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH,
             /* LeaderEpoch */
             RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};

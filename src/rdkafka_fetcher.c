@@ -861,8 +861,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
                 if (rd_kafka_buf_ApiVersion(rkbuf) >= 9) {
                         /* CurrentLeaderEpoch */
-                        rd_kafka_buf_write_i32(
-                            rkbuf, rktp->rktp_offsets.fetch_pos.leader_epoch);
+                        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_leader_epoch);
                 }
 
                 /* FetchOffset */
@@ -878,12 +877,13 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                            "Fetch topic %.*s [%" PRId32 "] at offset %" PRId64
-                           " (leader epoch %" PRId32 ", v%d)",
+                           " (leader epoch %" PRId32
+                           ", current leader epoch %" PRId32 ", v%d)",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                            rktp->rktp_partition,
                            rktp->rktp_offsets.fetch_pos.offset,
                            rktp->rktp_offsets.fetch_pos.leader_epoch,
-                           rktp->rktp_fetch_version);
+                           rktp->rktp_leader_epoch, rktp->rktp_fetch_version);
 
                 /* We must have a valid fetch offset when we get here */
                 rd_dassert(rktp->rktp_offsets.fetch_pos.offset >= 0);

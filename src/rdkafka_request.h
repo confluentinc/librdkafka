@@ -68,8 +68,10 @@ typedef enum {
         RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
         /** Read/write int64_t for offset */
         RD_KAFKA_TOPIC_PARTITION_FIELD_OFFSET,
-        /** Read/write int32_t for leader_epoch */
+        /** Read/write int32_t for offset leader_epoch */
         RD_KAFKA_TOPIC_PARTITION_FIELD_EPOCH,
+        /** Read/write int32_t for current leader_epoch */
+        RD_KAFKA_TOPIC_PARTITION_FIELD_CURRENT_EPOCH,
         /** Read/write int16_t for error code */
         RD_KAFKA_TOPIC_PARTITION_FIELD_ERR,
         /** Read/write str for metadata */

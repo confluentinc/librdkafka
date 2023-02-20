@@ -920,7 +920,7 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp                = opaque;
         rd_kafka_topic_partition_t *rktpar;
         int64_t end_offset;
-        int32_t leader_epoch;
+        int32_t end_offset_leader_epoch;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_kafka_toppar_destroy(rktp); /* Drop refcnt */
@@ -1001,11 +1001,12 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         }
 
 
-        rktpar       = &parts->elems[0];
-        end_offset   = rktpar->offset;
-        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(rktpar);
+        rktpar     = &parts->elems[0];
+        end_offset = rktpar->offset;
+        end_offset_leader_epoch =
+            rd_kafka_topic_partition_get_leader_epoch(rktpar);
 
-        if (end_offset < 0 || leader_epoch < 0) {
+        if (end_offset < 0 || end_offset_leader_epoch < 0) {
                 rd_kafka_offset_reset(rktp, rd_kafka_broker_id(rkb),
                                       rktp->rktp_next_fetch_start,
                                       RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
@@ -1023,7 +1024,7 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                             "broker end offset is %" PRId64
                             " (leader epoch %" PRId32 ")",
                             rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start),
-                            end_offset, leader_epoch);
+                            end_offset, end_offset_leader_epoch);
 
                 } else {
                         rd_kafka_error_t *error;
@@ -1046,7 +1047,7 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                                     "attempted seek to end offset failed: %s",
                                     rd_kafka_fetch_pos2str(
                                         rktp->rktp_next_fetch_start),
-                                    end_offset, leader_epoch,
+                                    end_offset, end_offset_leader_epoch,
                                     rd_kafka_error_string(error));
                                 rd_kafka_error_destroy(error);
                         }
@@ -1064,9 +1065,11 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                            "succeeded: broker end offset %" PRId64
                            " (leader epoch %" PRId32 ")",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition, end_offset, leader_epoch);
+                           rktp->rktp_partition, end_offset,
+                           end_offset_leader_epoch);
 
-                rktp->rktp_next_fetch_start.leader_epoch = leader_epoch;
+                rktp->rktp_next_fetch_start.leader_epoch =
+                    end_offset_leader_epoch;
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
         }
@@ -1175,6 +1178,8 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
             parts, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rd_kafka_topic_partition_set_leader_epoch(
             rktpar, rktp->rktp_next_fetch_start.leader_epoch);
+        rd_kafka_topic_partition_set_current_leader_epoch(
+            rktpar, rktp->rktp_leader_epoch);
         rd_kafka_toppar_keep(rktp); /* for request opaque */
 
         rd_rkb_dbg(rktp->rktp_leader, FETCH, "VALIDATE",

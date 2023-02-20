@@ -123,6 +123,7 @@ static void rd_kafka_toppar_lag_handle_Offset(rd_kafka_t *rk,
  */
 static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
         rd_kafka_topic_partition_list_t *partitions;
+        rd_kafka_topic_partition_t *rktpar;
 
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
@@ -153,9 +154,11 @@ static void rd_kafka_toppar_consumer_lag_req(rd_kafka_toppar_t *rktp) {
         rktp->rktp_wait_consumer_lag_resp = 1;
 
         partitions = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(
-            partitions, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition)
-            ->offset = RD_KAFKA_OFFSET_BEGINNING;
+        rktpar     = rd_kafka_topic_partition_list_add(
+            partitions, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+        rktpar->offset = RD_KAFKA_OFFSET_BEGINNING;
+        rd_kafka_topic_partition_set_current_leader_epoch(
+            rktpar, rktp->rktp_leader_epoch);
 
         /* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
@@ -1281,7 +1284,7 @@ void rd_kafka_toppar_offset_fetch(rd_kafka_toppar_t *rktp,
         part = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add0(__FUNCTION__, __LINE__, part,
                                            rktp->rktp_rkt->rkt_topic->str,
-                                           rktp->rktp_partition, rktp);
+                                           rktp->rktp_partition, rktp, NULL);
 
         rko             = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
         rko->rko_rktp   = rd_kafka_toppar_keep(rktp);
@@ -1561,6 +1564,8 @@ void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
                     offsets, rktp->rktp_rkt->rkt_topic->str,
                     rktp->rktp_partition);
                 rd_kafka_topic_partition_set_from_fetch_pos(rktpar, query_pos);
+                rd_kafka_topic_partition_set_current_leader_epoch(
+                    rktpar, rktp->rktp_leader_epoch);
 
                 rd_kafka_ListOffsetsRequest(
                     rkb, offsets,
@@ -2653,6 +2658,30 @@ void rd_kafka_topic_partition_set_leader_epoch(
         parpriv->leader_epoch = leader_epoch;
 }
 
+int32_t rd_kafka_topic_partition_get_current_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar) {
+        const rd_kafka_topic_partition_private_t *parpriv;
+
+        if (!(parpriv = rktpar->_private))
+                return -1;
+
+        return parpriv->current_leader_epoch;
+}
+
+void rd_kafka_topic_partition_set_current_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t current_leader_epoch) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        /* Avoid allocating private_t if clearing the epoch */
+        if (current_leader_epoch == -1 && !rktpar->_private)
+                return;
+
+        parpriv = rd_kafka_topic_partition_get_private(rktpar);
+
+        parpriv->current_leader_epoch = current_leader_epoch;
+}
+
 /**
  * @brief Set offset and leader epoch from a fetchpos.
  */
@@ -2726,13 +2755,14 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr) {
  *
  * @returns a pointer to the added element.
  */
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0(const char *func,
-                                   int line,
-                                   rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic,
-                                   int32_t partition,
-                                   rd_kafka_toppar_t *rktp) {
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
+    const char *func,
+    int line,
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition,
+    rd_kafka_toppar_t *rktp,
+    const rd_kafka_topic_partition_private_t *parpriv) {
         rd_kafka_topic_partition_t *rktpar;
         if (rktparlist->cnt == rktparlist->size)
                 rd_kafka_topic_partition_list_grow(rktparlist, 1);
@@ -2744,9 +2774,20 @@ rd_kafka_topic_partition_list_add0(const char *func,
         rktpar->partition = partition;
         rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
 
-        if (rktp)
-                rd_kafka_topic_partition_get_private(rktpar)->rktp =
-                    rd_kafka_toppar_keep_fl(func, line, rktp);
+        if (parpriv) {
+                rd_kafka_topic_partition_private_t *parpriv_copy =
+                    rd_kafka_topic_partition_get_private(rktpar);
+                if (parpriv->rktp) {
+                        parpriv_copy->rktp =
+                            rd_kafka_toppar_keep_fl(func, line, parpriv->rktp);
+                }
+                parpriv_copy->leader_epoch         = parpriv->leader_epoch;
+                parpriv_copy->current_leader_epoch = parpriv->leader_epoch;
+        } else if (rktp) {
+                rd_kafka_topic_partition_private_t *parpriv_copy =
+                    rd_kafka_topic_partition_get_private(rktpar);
+                parpriv_copy->rktp = rd_kafka_toppar_keep_fl(func, line, rktp);
+        }
 
         return rktpar;
 }
@@ -2757,7 +2798,7 @@ rd_kafka_topic_partition_list_add(rd_kafka_topic_partition_list_t *rktparlist,
                                   const char *topic,
                                   int32_t partition) {
         return rd_kafka_topic_partition_list_add0(
-            __FUNCTION__, __LINE__, rktparlist, topic, partition, NULL);
+            __FUNCTION__, __LINE__, rktparlist, topic, partition, NULL, NULL);
 }
 
 
@@ -2798,10 +2839,9 @@ void rd_kafka_topic_partition_list_add_copy(
     const rd_kafka_topic_partition_t *rktpar) {
         rd_kafka_topic_partition_t *dst;
 
-        dst = rd_kafka_topic_partition_list_add0(__FUNCTION__, __LINE__,
-                                                 rktparlist, rktpar->topic,
-                                                 rktpar->partition, NULL);
-
+        dst = rd_kafka_topic_partition_list_add0(
+            __FUNCTION__, __LINE__, rktparlist, rktpar->topic,
+            rktpar->partition, NULL, rktpar->_private);
         rd_kafka_topic_partition_update(dst, rktpar);
 }
 

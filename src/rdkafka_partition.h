@@ -457,6 +457,26 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         } rktp_c;
 };
 
+/**
+ * @struct This is a separately allocated glue object used in
+ *         rd_kafka_topic_partition_t._private to allow referencing both
+ *         an rktp and/or a leader epoch. Both are optional.
+ *         The rktp, if non-NULL, owns a refcount.
+ *
+ * This glue object is not always set in ._private, but allocated on demand
+ * as necessary.
+ */
+typedef struct rd_kafka_topic_partition_private_s {
+        /** Reference to a toppar. Optional, may be NULL. */
+        rd_kafka_toppar_t *rktp;
+        /** Current Leader epoch, if known, else -1.
+         *  this is set when the API needs to send the last epoch known
+         *  by the client. */
+        int32_t current_leader_epoch;
+        /** Leader epoch if known, else -1. */
+        int32_t leader_epoch;
+} rd_kafka_topic_partition_private_t;
+
 
 /**
  * Check if toppar is paused (consumer).
@@ -646,13 +666,14 @@ void rd_kafka_topic_partition_list_destroy_free(void *ptr);
 void rd_kafka_topic_partition_list_clear(
     rd_kafka_topic_partition_list_t *rktparlist);
 
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_add0(const char *func,
-                                   int line,
-                                   rd_kafka_topic_partition_list_t *rktparlist,
-                                   const char *topic,
-                                   int32_t partition,
-                                   rd_kafka_toppar_t *rktp);
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_add0(
+    const char *func,
+    int line,
+    rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition,
+    rd_kafka_toppar_t *rktp,
+    const rd_kafka_topic_partition_private_t *parpriv);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_upsert(
     rd_kafka_topic_partition_list_t *rktparlist,
@@ -725,25 +746,6 @@ int rd_kafka_topic_partition_list_count_abs_offsets(
 int rd_kafka_topic_partition_list_cmp(const void *_a,
                                       const void *_b,
                                       int (*cmp)(const void *, const void *));
-
-
-/**
- * @struct This is a separately allocated glue object used in
- *         rd_kafka_topic_partition_t._private to allow referencing both
- *         an rktp and/or a leader epoch. Both are optional.
- *         The rktp, if non-NULL, owns a refcount.
- *
- * This glue object is not always set in ._private, but allocated on demand
- * as necessary.
- */
-typedef struct rd_kafka_topic_partition_private_s {
-        /** Reference to a toppar. Optional, may be NULL. */
-        rd_kafka_toppar_t *rktp;
-        /** Leader epoch if known, else -1. */
-        int32_t leader_epoch;
-} rd_kafka_topic_partition_private_t;
-
-
 
 /**
  * @returns (and creates if necessary) the ._private glue object.

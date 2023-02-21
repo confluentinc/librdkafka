@@ -208,11 +208,8 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                 for(j=0;j<authorized_operation_count;j++){
                         acl_operation = 
                                 rd_kafka_ConsumerGroupDescription_authorized_operation(group,j);
-                        if(acl_operation==-1)
-                                fprintf(stderr, "Out of bounds access to authorized_operations list\n");
-                        else
-                                printf("%s operation is allowed\n",
-                                rd_kafka_AclOperation_name(acl_operation));
+                        printf("%s operation is allowed\n",
+                        rd_kafka_AclOperation_name(acl_operation));
                 }
                 if (error)
                         printf(" error[%" PRId32 "]: %s",

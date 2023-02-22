@@ -834,7 +834,7 @@ rd_kafka_op_res_t rd_kafka_op_handle_std(rd_kafka_t *rk,
         else if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
                 /* Control messages must not be exposed to the application
                  * but we need to store their offsets. */
-                rd_kafka_fetch_op_app_prepare(rk, rko);
+                rd_kafka_fetch_op_app_prepare(rk, rko, rd_true /* default */);
                 return RD_KAFKA_OP_RES_HANDLED;
         } else if (cb_type != RD_KAFKA_Q_CB_EVENT &&
                    rko->rko_type & RD_KAFKA_OP_CB)
@@ -903,13 +903,18 @@ rd_kafka_op_res_t rd_kafka_op_handle(rd_kafka_t *rk,
  *        This must be called just prior to passing/returning a consumed
  *        message to the application.
  *
+ * @param update_store_offsets Added control for the caller to specify
+ * whether to store offset or not.
+ *
  * Performs:
  *  - Store offset for fetched message + 1.
  *  - Updates the application offset (rktp_app_offset).
  *
  * @locks rktp_lock and rk_lock MUST NOT be held
  */
-void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
+void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk,
+                                   rd_kafka_op_t *rko,
+                                   rd_bool_t update_store_offsets) {
         rd_kafka_toppar_t *rktp;
         int64_t offset;
 
@@ -925,7 +930,7 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_app_offset = offset;
-        if (rk->rk_conf.enable_auto_offset_store)
+        if (rk->rk_conf.enable_auto_offset_store && update_store_offsets)
                 rd_kafka_offset_store0(rktp, offset,
                                        /* force: ignore assignment state */
                                        rd_true, RD_DONT_LOCK);

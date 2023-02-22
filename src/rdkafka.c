@@ -3003,7 +3003,7 @@ static rd_kafka_op_res_t rd_kafka_consume_cb(rd_kafka_t *rk,
 
         rkmessage = rd_kafka_message_get(rko);
 
-        rd_kafka_fetch_op_app_prepare(rk, rko);
+        rd_kafka_fetch_op_app_prepare(rk, rko, rd_true /*defautl*/);
 
         ctx->consume_cb(rkmessage, ctx->opaque);
 
@@ -3136,7 +3136,7 @@ rd_kafka_consume0(rd_kafka_t *rk, rd_kafka_q_t *rkq, int timeout_ms) {
         rkmessage = rd_kafka_message_get(rko);
 
         /* Store offset, etc */
-        rd_kafka_fetch_op_app_prepare(rk, rko);
+        rd_kafka_fetch_op_app_prepare(rk, rko, rd_true /*default*/);
 
         rd_kafka_set_last_error(0, 0);
 

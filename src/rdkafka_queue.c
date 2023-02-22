@@ -581,6 +581,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
+        int i;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -651,7 +652,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {
                         /* Store offset, etc. */
-                        rd_kafka_fetch_op_app_prepare(rk, rko);
+                        rd_kafka_fetch_op_app_prepare(rk, rko, rd_false);
 
                         /* If this is a control messages, don't return
                          * message to application, only store the offset */
@@ -663,6 +664,20 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 /* Get rkmessage from rko and append to array. */
                 rkmessages[cnt++] = rd_kafka_message_get(rko);
+        }
+
+        if (rk->rk_conf.enable_auto_offset_store) {
+                for (i = cnt - 1; i >= 0; i--) {
+                        rko = (rd_kafka_op_t *)rkmessages[i]->_private;
+                        rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                        int64_t offset          = rkmessages[i]->offset;
+                        if (unlikely(rktp->rktp_stored_offset <= offset)) {
+                                rd_kafka_offset_store0(
+                                    rko->rko_rktp, offset + 1,
+                                    /* force: ignore assignment state */
+                                    rd_true, RD_DO_LOCK);
+                        }
+                }
         }
 
         /* Discard non-desired and already handled ops */

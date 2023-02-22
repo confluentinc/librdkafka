@@ -125,7 +125,7 @@ const rd_kafka_message_t *rd_kafka_event_message_next(rd_kafka_event_t *rkev) {
                         return NULL;
 
                 /* Store offset, etc. */
-                rd_kafka_fetch_op_app_prepare(NULL, rko);
+                rd_kafka_fetch_op_app_prepare(NULL, rko, rd_true /* default */);
 
                 return rkmessage;
 

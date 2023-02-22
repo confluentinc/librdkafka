@@ -741,7 +741,9 @@ extern rd_atomic32_t rd_kafka_op_cnt;
 
 void rd_kafka_op_print(FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
-void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
+void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk,
+                                   rd_kafka_op_t *rko,
+                                   rd_bool_t update_store_offsets);
 
 
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \

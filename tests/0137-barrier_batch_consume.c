@@ -282,8 +282,84 @@ static void do_test_consume_batch_with_seek(void) {
 // }
 
 
+static void do_test_consume_batch_store_offset(void) {
+        rd_kafka_queue_t *rkq;
+        const char *topic;
+        rd_kafka_t *consumer;
+        int p;
+        int i;
+        uint64_t testid;
+        rd_kafka_conf_t *conf;
+        consumer_t consumer_args = RD_ZERO_INIT;
+        test_msgver_t mv;
+        thrd_t thread_id;
+        rd_kafka_error_t *err;
+        const int produce_partition_cnt = 1;
+        const int timeout_ms            = 10000;
+        const int consume_msg_cnt       = 4;
+        const int no_of_consume         = 2;
+        const int produce_msg_cnt       = 8;
+        const int expected_msg_cnt      = produce_msg_cnt;
+
+        SUB_TEST();
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "enable.auto.offset.store", "true");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+
+        testid = test_id_generate();
+        test_msgver_init(&mv, testid);
+
+        /* Produce messages */
+        topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
+
+        for (p = 0; p < produce_partition_cnt; p++)
+                test_produce_msgs_easy(topic, testid, p,
+                                       produce_msg_cnt / produce_partition_cnt);
+
+        for (i = 0; i < no_of_consume; i++) {
+
+                /* Create consumers */
+                consumer = test_create_consumer(topic, NULL,
+                                                rd_kafka_conf_dup(conf), NULL);
+                test_consumer_subscribe(consumer, topic);
+                test_consumer_wait_assignment(consumer, rd_false);
+
+                /* Create generic consume queue */
+                rkq = rd_kafka_queue_get_consumer(consumer);
+
+                consumer_args.what            = "CONSUMER";
+                consumer_args.rkq             = rkq;
+                consumer_args.timeout_ms      = timeout_ms;
+                consumer_args.consume_msg_cnt = consume_msg_cnt;
+                consumer_args.expected_msg_cnt =
+                    produce_msg_cnt / no_of_consume;
+                consumer_args.rk     = consumer;
+                consumer_args.testid = testid;
+                consumer_args.mv     = &mv;
+                consumer_args.test   = test_curr;
+
+                consumer_batch_queue(&consumer_args);
+                rd_kafka_commit(consumer, NULL, rd_false);
+
+                rd_kafka_queue_destroy(rkq);
+                test_consumer_close(consumer);
+                rd_kafka_destroy(consumer);
+        }
+
+        test_msgver_verify("CONSUME", &mv,
+                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+                               TEST_MSGVER_BY_OFFSET,
+                           0, expected_msg_cnt);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0137_barrier_batch_consume(int argc, char **argv) {
         do_test_consume_batch_with_seek();
+        do_test_consume_batch_store_offset();
         // FIXME: Run this test once consume batch is fully fixed.
         // do_test_consume_batch_with_pause_and_resume();
         return 0;

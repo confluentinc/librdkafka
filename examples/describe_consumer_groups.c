@@ -49,7 +49,7 @@
 
 
 const char *argv0;
-
+typedef struct rd_kafka_topic_authorized_operations_pair rd_kafka_topic_authorized_operations_pair_t;
 static rd_kafka_queue_t *queue; /** Admin result queue.
                                  *  This is a global so we can
                                  *  yield in stop() */
@@ -236,6 +236,85 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
         }
         return 0;
 }
+/**
+ * @brief Parse an integer or fail.
+ */
+int64_t parse_int(const char *what, const char *str) {
+        char *end;
+        unsigned long n = strtoull(str, &end, 0);
+
+        if (end != str + strlen(str)) {
+                fprintf(stderr, "%% Invalid input for %s: %s: not an integer\n",
+                        what, str);
+                exit(1);
+        }
+
+        return (int64_t)n;
+}
+/**
+ * @brief Call rd_kafka_DescribeConsumerGroups() with a list of
+ * groups.
+ */
+static void
+cmd_metadata_request(rd_kafka_conf_t *conf, int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_conf_t *topic_conf;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_topic_authorized_operations_pair_t* res;
+        const struct rd_kafka_metadata *metadatap;
+        const char **topics = NULL;
+        char errstr[512];
+        int retval     = 0;
+        int topic_cnt = 0;
+        int i;
+
+        int allow_auto_topic_creation, include_cluster_authorized_operations, 
+            include_topic_authorized_operations;
+
+        metadatap = malloc(sizeof(*metadatap));
+        allow_auto_topic_creation =
+            parse_int("allow_auto_topic_creation", argv[0]);
+        include_cluster_authorized_operations =
+            parse_int("include_cluster_authorized_operations", argv[1]);
+        include_topic_authorized_operations =
+            parse_int("include_topic_authorized_operations", argv[2]);
+
+        if (allow_auto_topic_creation < 0 ||
+            allow_auto_topic_creation > 1)
+                usage("Require allow_auto_topic_creation not a 0-1 int");
+
+        if (include_cluster_authorized_operations < 0 ||
+            include_cluster_authorized_operations > 1)
+                usage("Require include_cluster_authorized_operations not a 0-1 int");
+
+        if (include_topic_authorized_operations < 0 ||
+            include_topic_authorized_operations > 1)
+                usage("Require include_topic_authorized_operations not a 0-1 int");
+
+        
+        if (argc >= 1) {
+                topics     = (const char **)&argv[3];
+                topic_cnt = argc - 3;
+        }
+
+        // topic_conf = rd_kafka_topic_conf_new();
+        // rkt        = rd_kafka_topic_new(rk, topics[0], topic_conf);
+        
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        if (!rk)
+                fatal("Failed to create new consumer: %s", errstr);
+
+        rd_kafka_metadata(rk, 1, NULL, &metadatap, 100000);
+        //rd_kafka_metadata(rk, 0, rkt, &metadatap, 100000);
+        if(metadatap->orig_broker_name)
+                printf("%s\n", metadatap->orig_broker_name);
+        printf("Topic count: %d\n", metadatap->topic_cnt);
+exit:
+        /* Destroy the client instance */
+        rd_kafka_destroy(rk);
+
+        exit(retval);
+}
 
 /**
  * @brief Call rd_kafka_DescribeConsumerGroups() with a list of
@@ -334,7 +413,10 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-
+        conf_set(conf, "sasl.username", "broker");
+        conf_set(conf, "sasl.password", "broker");
+        conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
+        conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
 
         /*
          * Parse common options
@@ -367,7 +449,7 @@ int main(int argc, char **argv) {
                 }
         }
 
-        cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
-
+        //cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
+        cmd_metadata_request(conf, argc - optind, &argv[optind]);
         return 0;
 }

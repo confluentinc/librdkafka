@@ -36,7 +36,9 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *request,
                                             rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp);
+                                            struct rd_kafka_metadata **mdp,
+                                            rd_kafka_topic_authorized_operations_pair_t** topic_authorized_operations,
+                                            int32_t* cluster_authorized_operations);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);
@@ -87,6 +89,8 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
+                          rd_bool_t include_cluster_authorized_operations,
+                          rd_bool_t include_topic_authorized_operations,
                           rd_bool_t cgrp_update,
                           const char *reason,
                           rd_kafka_op_t *rko);
@@ -100,7 +104,16 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                                  size_t topic_cnt);
 rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
 
+/**
+ * @{
+ *
+ * @brief Metadata topic name and authorized operations pair
+ */
 
+typedef struct rd_kafka_topic_authorized_operations_pair {
+        char* topic_name;
+        int32_t authorized_operations;
+}rd_kafka_topic_authorized_operations_pair;
 /**
  * @{
  *

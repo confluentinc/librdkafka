@@ -2086,6 +2086,8 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      void *opaque) {
         rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
         struct rd_kafka_metadata *md = NULL;
+        rd_kafka_topic_authorized_operations_pair_t* topic_authorized_operations = NULL;
+        int32_t cluster_authorized_operations;
         const rd_list_t *topics      = request->rkbuf_u.Metadata.topics;
         int actions;
 
@@ -2113,7 +2115,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md, &topic_authorized_operations,&cluster_authorized_operations);
         if (err)
                 goto err;
 
@@ -2122,7 +2124,8 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                  * Reuse requesting rko for the reply. */
                 rko->rko_err           = err;
                 rko->rko_u.metadata.md = md;
-
+                rko->rko_u.metadata.cluster_authorized_operations = cluster_authorized_operations;
+                rko->rko_u.metadata.topic_authorized_operations = topic_authorized_operations;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
@@ -2155,6 +2158,8 @@ err:
                 if (rko && rko->rko_replyq.q) {
                         rko->rko_err           = err;
                         rko->rko_u.metadata.md = NULL;
+                        rko->rko_u.metadata.topic_authorized_operations = NULL;
+                        rko->rko_u.metadata.cluster_authorized_operations = -1;
                         rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                         rko = NULL;
                 }
@@ -2199,6 +2204,8 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const rd_list_t *topics,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
+                                             rd_bool_t include_cluster_authorized_operations,
+                                             rd_bool_t include_topic_authorized_operations,
                                              rd_bool_t cgrp_update,
                                              rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
@@ -2332,13 +2339,15 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 8 && ApiVersion < 10) {
                 /* TODO: implement KIP-430 */
                 /* IncludeClusterAuthorizedOperations */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                printf("include cluster authorized operations is: %d\n", include_cluster_authorized_operations);
+                rd_kafka_buf_write_bool(rkbuf, include_cluster_authorized_operations);
         }
 
         if (ApiVersion >= 8) {
                 /* TODO: implement KIP-430 */
                 /* IncludeTopicAuthorizedOperations */
-                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                printf("include topic authorized operations is: %d\n", include_topic_authorized_operations);
+                rd_kafka_buf_write_bool(rkbuf, include_topic_authorized_operations);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

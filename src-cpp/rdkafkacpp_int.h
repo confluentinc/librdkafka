@@ -540,6 +540,21 @@ class MessageImpl : public Message {
     return rd_kafka_message_broker_id(rkmessage_);
   }
 
+  int32_t leader_epoch() const {
+    return rd_kafka_message_leader_epoch(rkmessage_);
+  }
+
+
+  Error *offset_store() {
+    rd_kafka_error_t *c_error;
+
+    c_error = rd_kafka_offset_store_message(rkmessage_);
+
+    if (c_error)
+      return new ErrorImpl(c_error);
+    else
+      return NULL;
+  }
 
   RdKafka::Topic *topic_;
   rd_kafka_message_t *rkmessage_;
@@ -1227,21 +1242,24 @@ class TopicPartitionImpl : public TopicPartition {
       topic_(topic),
       partition_(partition),
       offset_(RdKafka::Topic::OFFSET_INVALID),
-      err_(ERR_NO_ERROR) {
+      err_(ERR_NO_ERROR),
+      leader_epoch_(-1) {
   }
 
   TopicPartitionImpl(const std::string &topic, int partition, int64_t offset) :
       topic_(topic),
       partition_(partition),
       offset_(offset),
-      err_(ERR_NO_ERROR) {
+      err_(ERR_NO_ERROR),
+      leader_epoch_(-1) {
   }
 
   TopicPartitionImpl(const rd_kafka_topic_partition_t *c_part) {
-    topic_     = std::string(c_part->topic);
-    partition_ = c_part->partition;
-    offset_    = c_part->offset;
-    err_       = static_cast<ErrorCode>(c_part->err);
+    topic_        = std::string(c_part->topic);
+    partition_    = c_part->partition;
+    offset_       = c_part->offset;
+    err_          = static_cast<ErrorCode>(c_part->err);
+    leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(c_part);
     // FIXME: metadata
   }
 
@@ -1266,6 +1284,14 @@ class TopicPartitionImpl : public TopicPartition {
     offset_ = offset;
   }
 
+  int32_t get_leader_epoch() {
+    return leader_epoch_;
+  }
+
+  void set_leader_epoch(int32_t leader_epoch) {
+    leader_epoch_ = leader_epoch_;
+  }
+
   std::ostream &operator<<(std::ostream &ostrm) const {
     return ostrm << topic_ << " [" << partition_ << "]";
   }
@@ -1274,6 +1300,7 @@ class TopicPartitionImpl : public TopicPartition {
   int partition_;
   int64_t offset_;
   ErrorCode err_;
+  int32_t leader_epoch_;
 };
 
 

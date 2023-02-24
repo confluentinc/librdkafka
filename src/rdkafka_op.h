@@ -38,6 +38,7 @@
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_topic_authorized_operations_pair rd_kafka_topic_authorized_operations_pair_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -370,6 +371,8 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
+                        rd_kafka_topic_authorized_operations_pair_t* topic_authorized_operations;
+                        int32_t cluster_authorized_operations;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;
@@ -387,13 +390,13 @@ struct rd_kafka_op_s {
                 } node;
 
                 struct {
-                        int64_t offset;
+                        rd_kafka_fetch_pos_t pos;
                         int32_t broker_id; /**< Originating broker, or -1 */
                         char *reason;
                 } offset_reset;
 
                 struct {
-                        int64_t offset;
+                        rd_kafka_fetch_pos_t pos;
                         struct rd_kafka_cgrp_s *rkcg;
                 } fetch_start; /* reused for SEEK */
 
@@ -757,5 +760,22 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
 #define rd_kafka_op_replyq_is_valid(RKO)                                       \
         (rd_kafka_replyq_is_valid(&(RKO)->rko_replyq) &&                       \
          !rd_kafka_op_version_outdated((RKO), 0))
+
+
+
+/**
+ * @returns the rko for a consumer message (RD_KAFKA_OP_FETCH).
+ */
+static RD_UNUSED rd_kafka_op_t *
+rd_kafka_message2rko(rd_kafka_message_t *rkmessage) {
+        rd_kafka_op_t *rko = rkmessage->_private;
+
+        if (!rko || rko->rko_type != RD_KAFKA_OP_FETCH)
+                return NULL;
+
+        return rko;
+}
+
+
 
 #endif /* _RDKAFKA_OP_H_ */

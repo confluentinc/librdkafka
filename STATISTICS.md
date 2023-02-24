@@ -179,13 +179,16 @@ query_offset | int gauge | | Current/Last logical offset query
 next_offset | int gauge | | Next offset to fetch
 app_offset | int gauge | | Offset of last message passed to application + 1
 stored_offset | int gauge | | Offset to be committed
+stored_leader_epoch | int | | Partition leader epoch of stored offset
 committed_offset | int gauge | | Last committed offset
+committed_leader_epoch | int | | Partition leader epoch of committed offset
 eof_offset | int gauge | | Last PARTITION_EOF signaled offset
 lo_offset | int gauge | | Partition's low watermark offset on broker
 hi_offset | int gauge | | Partition's high watermark offset on broker
 ls_offset | int gauge | | Partition's last stable offset on broker, or same as hi_offset is broker version is less than 0.11.0.0.
 consumer_lag | int gauge | | Difference between (hi_offset or ls_offset) and committed_offset). hi_offset is used when isolation.level=read_uncommitted, otherwise ls_offset.
 consumer_lag_stored | int gauge | | Difference between (hi_offset or ls_offset) and stored_offset. See consumer_lag and stored_offset.
+leader_epoch | int | | Last known partition leader epoch, or -1 if unknown.
 txmsgs | int | | Total number of messages transmitted (produced)
 txbytes | int | | Total number of bytes transmitted for txmsgs
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc).

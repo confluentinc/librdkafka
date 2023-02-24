@@ -34,7 +34,9 @@
 rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *request,
                                             rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp);
+                                            struct rd_kafka_metadata **mdp,
+                                            rd_kafka_topic_authorized_operations_pair_t** topic_authorized_operations,
+                                            int32_t* cluster_authorized_operations);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);
@@ -85,6 +87,8 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
                           rd_kafka_broker_t *rkb,
                           const rd_list_t *topics,
                           rd_bool_t allow_auto_create_topics,
+                          rd_bool_t include_cluster_authorized_operations,
+                          rd_bool_t include_topic_authorized_operations,
                           rd_bool_t cgrp_update,
                           const char *reason,
                           rd_kafka_op_t *rko);
@@ -98,7 +102,16 @@ rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
                                  size_t topic_cnt);
 rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
 
+/**
+ * @{
+ *
+ * @brief Metadata topic name and authorized operations pair
+ */
 
+typedef struct rd_kafka_topic_authorized_operations_pair {
+        char* topic_name;
+        int32_t authorized_operations;
+}rd_kafka_topic_authorized_operations_pair;
 /**
  * @{
  *
@@ -110,8 +123,10 @@ struct rd_kafka_metadata_cache_entry {
         TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link; /* rkmc_expiry */
         rd_ts_t rkmce_ts_expires;                              /* Expire time */
         rd_ts_t rkmce_ts_insert;                               /* Insert time */
+        /** Last known leader epochs array (same size as the partition count),
+         *  or NULL if not known. */
         rd_kafka_metadata_topic_t rkmce_mtopic; /* Cached topic metadata */
-        /* rkmce_partitions memory points here. */
+        /* rkmce_topics.partitions memory points here. */
 };
 
 
@@ -152,6 +167,7 @@ struct rd_kafka_metadata_cache {
 
 
 void rd_kafka_metadata_cache_expiry_start(rd_kafka_t *rk);
+int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts);
 void rd_kafka_metadata_cache_topic_update(rd_kafka_t *rk,
                                           const rd_kafka_metadata_topic_t *mdt,
                                           rd_bool_t propagate);

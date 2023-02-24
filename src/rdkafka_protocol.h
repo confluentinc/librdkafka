@@ -105,7 +105,16 @@
 #define RD_KAFKAP_AlterIsr                     56
 #define RD_KAFKAP_UpdateFeatures               57
 #define RD_KAFKAP_Envelope                     58
-#define RD_KAFKAP__NUM                         59
+#define RD_KAFKAP_FetchSnapshot                59
+#define RD_KAFKAP_DescribeCluster              60
+#define RD_KAFKAP_DescribeProducers            61
+#define RD_KAFKAP_BrokerHeartbeat              63
+#define RD_KAFKAP_UnregisterBroker             64
+#define RD_KAFKAP_DescribeTransactions         65
+#define RD_KAFKAP_ListTransactions             66
+#define RD_KAFKAP_AllocateProducerIds          67
+
+#define RD_KAFKAP__NUM 68
 
 
 #endif /* _RDKAFKA_PROTOCOL_H_ */

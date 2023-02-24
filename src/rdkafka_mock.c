@@ -365,6 +365,26 @@ static void
 rd_kafka_mock_partition_set_leader0(rd_kafka_mock_partition_t *mpart,
                                     rd_kafka_mock_broker_t *mrkb) {
         mpart->leader = mrkb;
+        mpart->leader_epoch++;
+}
+
+
+/**
+ * @brief Verifies that the client-provided leader_epoch matches that of the
+ *        partition, else returns the appropriate error.
+ */
+rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
+    const rd_kafka_mock_partition_t *mpart,
+    int32_t leader_epoch) {
+        if (likely(leader_epoch == -1 || mpart->leader_epoch == leader_epoch))
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        else if (mpart->leader_epoch < leader_epoch)
+                return RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH;
+        else if (mpart->leader_epoch > leader_epoch)
+                return RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH;
+
+        /* NOTREACHED, but avoids warning */
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
@@ -494,7 +514,9 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
         mpart->topic = mtopic;
         mpart->id    = id;
 
-        mpart->follower_id = -1;
+        mpart->follower_id  = -1;
+        mpart->leader_epoch = -1; /* Start at -1 since assign_replicas() will
+                                   * bump it right away to 0. */
 
         TAILQ_INIT(&mpart->msgsets);
 
@@ -514,7 +536,7 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
 rd_kafka_mock_partition_t *
 rd_kafka_mock_partition_find(const rd_kafka_mock_topic_t *mtopic,
                              int32_t partition) {
-        if (partition < 0 || partition >= mtopic->partition_cnt)
+        if (!mtopic || partition < 0 || partition >= mtopic->partition_cnt)
                 return NULL;
 
         return (rd_kafka_mock_partition_t *)&mtopic->partitions[partition];

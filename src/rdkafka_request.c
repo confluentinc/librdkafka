@@ -2346,9 +2346,6 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_bool(rkbuf, rd_false);
         }
 
-        /* Tags for the request */
-        rd_kafka_buf_write_tags(rkbuf);
-
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         /* Metadata requests are part of the important control plane

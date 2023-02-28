@@ -861,7 +861,23 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
                 if (rd_kafka_buf_ApiVersion(rkbuf) >= 9) {
                         /* CurrentLeaderEpoch */
-                        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_leader_epoch);
+                        if (rktp->rktp_leader_epoch < 0 &&
+                            rd_kafka_has_reliable_leader_epochs(rkb)) {
+                                /* If current leader epoch is set to -1 and
+                                 * the broker has reliable leader epochs,
+                                 * send 0 instead, so that epoch is checked
+                                 * and optionally metadata is refreshed.
+                                 * This can happen if metadata is read initially
+                                 * without an existing topic (see
+                                 * rd_kafka_topic_metadata_update2).
+                                 * TODO: have a private metadata struct that
+                                 * stores leader epochs before topic creation.
+                                 */
+                                rd_kafka_buf_write_i32(rkbuf, 0);
+                        } else {
+                                rd_kafka_buf_write_i32(rkbuf,
+                                                       rktp->rktp_leader_epoch);
+                        }
                 }
 
                 /* FetchOffset */

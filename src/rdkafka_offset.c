@@ -800,8 +800,6 @@ void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
         rd_vsnprintf(reason, sizeof(reason), fmt, ap);
         va_end(ap);
 
-        rd_assert(err != RD_KAFKA_RESP_ERR__LOG_TRUNCATION);
-
         /* Enqueue op for toppar handler thread if we're on the wrong thread. */
         if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
                 rd_kafka_op_t *rko =

@@ -1439,6 +1439,8 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
         if (msetr->msetr_next_offset > rktp->rktp_offsets.fetch_pos.offset)
                 rktp->rktp_offsets.fetch_pos.offset = msetr->msetr_next_offset;
 
+        rktp->rktp_offsets.fetch_pos.leader_epoch = msetr->msetr_leader_epoch;
+
         rd_kafka_q_destroy_owner(&msetr->msetr_rkq);
 
         /* Skip remaining part of slice so caller can continue

@@ -248,6 +248,26 @@ static void rd_kafka_parse_Metadata_update_topic(
         }
 }
 
+/**
+ * @brief Only brokers with Metadata version >= 9 have reliable leader
+ *        epochs. Before that version, leader epoch must be treated
+ *        as missing (-1).
+ *
+ * @param rkb The broker
+ * @return Is this a broker version with reliable leader epochs?
+ *
+ * @locality rdkafka main thread
+ */
+rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
+        int features;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
+
+        return ApiVersion >= 9;
+}
+
 
 /**
  * @brief Handle a Metadata response message.
@@ -512,7 +532,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         continue;
                 }
 
-                if (leader_epochs_size > 0 && ApiVersion < 9) {
+                if (leader_epochs_size > 0 &&
+                    !rd_kafka_has_reliable_leader_epochs(rkb)) {
                         /* Prior to Kafka version 2.4 (which coincides with
                          * Metadata version 9), the broker does not propagate
                          * leader epoch information accurately while a

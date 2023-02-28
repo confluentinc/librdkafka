@@ -54,6 +54,7 @@ typedef enum {
         RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
         RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_REQ,
+        RD_KAFKA_BROKER_STATE_REAUTH,
 } rd_kafka_broker_state_t;
 
 /**
@@ -324,12 +325,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 int cnt;                 /**< Number of identical errors */
         } rkb_last_err;
 
-        struct {
-                rd_kafka_bufq_t rkb_req_during_auth; /*Did not get sent due to reauth*/
-                rd_kafka_bufq_t rkb_recv_reauth_buf; /*Responses received during reauth*/
-                int64_t session_lifetime_ms; /*Lifetime of the current token*/
-                int auth_in_progress; /*1 if auth is ongoing, 0 if auth is complete*/
-        } rkb_sasl;
+
+        rd_kafka_timer_t rkb_sasl_reauth_tmr;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -608,6 +605,11 @@ void rd_kafka_broker_monitor_add(rd_kafka_broker_monitor_t *rkbmon,
                                  void (*callback)(rd_kafka_broker_t *rkb));
 
 void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon);
+
+void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
+                                        int64_t connections_max_reauth_ms);
+
+void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
 
 int unittest_broker(void);
 

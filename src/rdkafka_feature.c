@@ -49,10 +49,7 @@ static const char *rd_kafka_feature_names[] = {"MsgVer1",
                                                NULL};
 
 
-/* KIP-368: Disabling const modifier for KIP-368 feature rollout.
- * RD_KAFKAP_SaslAuthenticate MaxVer will be updated from 0 to 1
- * when conf.sasl.enable_refresh is set to true. */
-static /*const*/ struct rd_kafka_feature_map {
+static const struct rd_kafka_feature_map {
         /* RD_KAFKA_FEATURE_... */
         int feature;
 
@@ -207,7 +204,7 @@ static /*const*/ struct rd_kafka_feature_map {
         .depends =
             {
                 {RD_KAFKAP_SaslHandshake, 1, 1},
-                {RD_KAFKAP_SaslAuthenticate, 0, 0},
+                {RD_KAFKAP_SaslAuthenticate, 0, 1},
                 {-1},
             },
     },
@@ -357,30 +354,6 @@ rd_kafka_ApiVersion_check(const struct rd_kafka_ApiVersion *apis,
         return match->MinVer <= api->MaxVer && api->MinVer <= match->MaxVer;
 }
 
-/**
- * @brief Updates SASLAuthenticate feature version to suppport KIP 368
- *
- * @returns void.
- */
-void rd_kafka_features_sasl_authenticate_update_kip368() {
-        int i;
-        /* Scan through features. */
-        for (i = 0; rd_kafka_feature_map[i].feature != 0; i++) {
-                if (rd_kafka_feature_map[i].feature ==
-                    RD_KAFKA_FEATURE_SASL_AUTH_REQ) {
-                        struct rd_kafka_ApiVersion *match;
-                        for (match = &rd_kafka_feature_map[i].depends[0];
-                             match->ApiKey != -1; match++) {
-                                if (match->ApiKey ==
-                                    RD_KAFKAP_SaslAuthenticate) {
-                                        match->MaxVer = 1;
-                                        break;
-                                }
-                        }
-                        break;
-                }
-        }
-}
 
 /**
  * @brief Compare broker's supported API versions to our feature request map

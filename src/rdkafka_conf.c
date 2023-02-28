@@ -974,12 +974,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This builtin handler should only be used for development "
      "or testing, and not in production.",
      0, 1, 0, _UNSUPPORTED_OAUTHBEARER},
-    {_RK_GLOBAL, "enable.sasl.token.refresh", _RK_C_BOOL,
-     _RK(sasl.enable_refresh),
-     "Enable token refresh for SASL connections. "
-     "This verification can be extended by the application by "
-     "implementing a oauthbearer_token_refresh_cb.",
-     0, 1, 0, _UNSUPPORTED_OAUTHBEARER},
     {_RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
      _RK(sasl.oauthbearer.token_refresh_cb),
      "SASL/OAUTHBEARER token refresh callback (set with "

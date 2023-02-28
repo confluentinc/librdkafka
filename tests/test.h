@@ -756,6 +756,8 @@ void test_headers_dump(const char *what,
 
 int32_t *test_get_broker_ids(rd_kafka_t *use_rk, size_t *cntp);
 
+char *test_get_broker_config_entry(rd_kafka_t *use_rk, int32_t broker_id, const char *key);
+
 void test_wait_metadata_update(rd_kafka_t *rk,
                                rd_kafka_metadata_topic_t *topics,
                                size_t topic_cnt,

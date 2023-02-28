@@ -79,9 +79,9 @@
 static const int rd_kafka_max_block_ms = 1000;
 
 const char *rd_kafka_broker_state_names[] = {
-    "INIT",        "DOWN", "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",
-    "AUTH_LEGACY", "UP",   "UPDATE",      "APIVERSION_QUERY", "AUTH_HANDSHAKE",
-    "AUTH_REQ"};
+    "INIT",        "DOWN",  "TRY_CONNECT", "CONNECT",          "SSL_HANDSHAKE",
+    "AUTH_LEGACY", "UP",    "UPDATE",      "APIVERSION_QUERY", "AUTH_HANDSHAKE",
+    "AUTH_REQ",    "REAUTH"};
 
 const char *rd_kafka_secproto_names[] = {
     [RD_KAFKA_PROTO_PLAINTEXT]      = "plaintext",
@@ -1805,8 +1805,7 @@ rd_kafka_broker_controller(rd_kafka_t *rk, int state, rd_ts_t abs_timeout) {
  * Find a waitresp (rkbuf awaiting response) by the correlation id.
  */
 static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
-                                              int32_t corrid,
-                                              rd_bool_t skipStats) {
+                                              int32_t corrid) {
         rd_kafka_buf_t *rkbuf;
         rd_ts_t now = rd_clock();
 
@@ -1815,10 +1814,8 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
         TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
         if (rkbuf->rkbuf_corrid == corrid) {
                 /* Convert ts_sent to RTT */
-                if (unlikely(!skipStats)) {
-                    rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
-                    rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
-                }
+                rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
+                rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
 
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
                     rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 1)
@@ -1830,72 +1827,22 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find(rd_kafka_broker_t *rkb,
         return NULL;
 }
 
-/**
- * Find a waitresp (rkbuf awaiting response) by the correlation id.
- */
-static rd_kafka_buf_t *rd_kafka_waitresp_find_peek(rd_kafka_broker_t *rkb,
-                                                   int32_t corrid) {
-        rd_kafka_buf_t *rkbuf;
-        rd_ts_t now = rd_clock();
-        rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-        TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
-        if (rkbuf->rkbuf_corrid == corrid) {
-                /* Convert ts_sent to RTT */
-                rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
-                rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
-                return rkbuf;
-        }
-        return NULL;
-}
+
 
 /**
  * Map a response message to a request.
  */
 static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
-                                 rd_kafka_buf_t *rkbuf,
-                                 rd_bool_t replay) {
-        rd_kafka_buf_t *req = NULL;
+                                 rd_kafka_buf_t *rkbuf) {
+        rd_kafka_buf_t *req   = NULL;
         int log_decode_errors = LOG_ERR;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-        
-    if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
-                if (rkb->rkb_sasl.auth_in_progress == 1) {
-                        /* Find corresponding request message by correlation id
-                         */
-                        if (unlikely(!(req = rd_kafka_waitresp_find_peek(
-                                           rkb, rkbuf->rkbuf_reshdr.CorrId)))) {
-                                /* unknown response. probably due to request
-                                 * timeout */
-                                rd_atomic64_add(&rkb->rkb_c.rx_corrid_err, 1);
-                                rd_rkb_dbg(
-                                    rkb, BROKER, "RESPONSE",
-                                    "Response for unknown CorrId %" PRId32
-                                    " (timed out?)",
-                                    rkbuf->rkbuf_reshdr.CorrId);
-                                rd_kafka_buf_destroy(rkbuf);
-                                return -1;
-                        }
-
-                        /*if not related to sasl reauth (handshake or request)*/
-                        if ((req->rkbuf_reqhdr.ApiKey !=
-                             RD_KAFKAP_SaslAuthenticate) &&
-                            (req->rkbuf_reqhdr.ApiKey !=
-                             RD_KAFKAP_SaslHandshake)) {
-                                rkbuf->rkbuf_ts_sent =
-                                    req->rkbuf_ts_sent; /* copy rtt */
-                                /*hold these requests into another queue*/
-                                rd_kafka_bufq_enq(
-                                    &rkb->rkb_sasl.rkb_recv_reauth_buf, rkbuf);
-                                return 0;
-                        }
-                }
-        }
 
         /* Find corresponding request message by correlation id */
         if (unlikely(!(req = rd_kafka_waitresp_find(
-                           rkb, rkbuf->rkbuf_reshdr.CorrId, replay)))) {
+                           rkb, rkbuf->rkbuf_reshdr.CorrId)))) {
                 /* unknown response. probably due to request timeout */
                 rd_atomic64_add(&rkb->rkb_c.rx_corrid_err, 1);
                 rd_rkb_dbg(rkb, BROKER, "RESPONSE",
@@ -1964,18 +1911,6 @@ int rd_kafka_recv(rd_kafka_broker_t *rkb) {
         rd_kafka_resp_err_t err     = RD_KAFKA_RESP_ERR_NO_ERROR;
         const int log_decode_errors = LOG_ERR;
 
-        /* if auth not in progress, drain queue */
-        if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
-                if (rkb->rkb_sasl.auth_in_progress == 0) {
-                        TAILQ_FOREACH(
-                            rkbuf, &rkb->rkb_sasl.rkb_recv_reauth_buf.rkbq_bufs,
-                            rkbuf_link) {
-                                rd_kafka_req_response(rkb, rkbuf, rd_true);
-                                rd_kafka_bufq_deq(
-                                    &rkb->rkb_sasl.rkb_recv_reauth_buf, rkbuf);
-                        }
-                }
-        }
 
         /* It is impossible to estimate the correct size of the response
          * so we split the read up in two parts: first we read the protocol
@@ -2074,7 +2009,7 @@ int rd_kafka_recv(rd_kafka_broker_t *rkb) {
                 rd_atomic64_add(&rkb->rkb_c.rx, 1);
                 rd_atomic64_add(&rkb->rkb_c.rx_bytes,
                                 rd_buf_write_pos(&rkbuf->rkbuf_buf));
-                rd_kafka_req_response(rkb, rkbuf, rd_false);
+                rd_kafka_req_response(rkb, rkbuf);
         }
 
         return 1;
@@ -2293,36 +2228,6 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
         return 1;
 }
 
-/**
- * @brief Drain the requests that were received during the reauthentication process
- *
- * @locality Broker thread
- */
-void rd_kafka_broker_drain_reauth_requests(rd_kafka_broker_t *rkb) {
-
-        rd_kafka_buf_t *rkbuf;
-        /*Add reauth queue to original queue*/
-        while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
-               rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-               (rkbuf = TAILQ_FIRST(
-                    &rkb->rkb_sasl.rkb_req_during_auth.rkbq_bufs))) {
-
-                /*Remove from current reauth queue*/
-                rd_kafka_bufq_deq(&rkb->rkb_sasl.rkb_req_during_auth, rkbuf);
-
-                /*Hold these requests into outbuf queue*/
-                TAILQ_INSERT_HEAD(&rkb->rkb_outbufs.rkbq_bufs, rkbuf,
-                                  rkbuf_link);
-                rd_atomic32_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
-                if (rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Produce)
-                        rd_atomic32_add(
-                            &rkb->rkb_outbufs.rkbq_msg_cnt,
-                            rd_kafka_msgq_len(&rkbuf->rkbuf_batch.msgq));
-        }
-
-        /*Set auth to complete*/
-        rkb->rkb_sasl.auth_in_progress = 0;
-}
 
 /**
  * @brief Call when connection is ready to transition to fully functional
@@ -2331,10 +2236,6 @@ void rd_kafka_broker_drain_reauth_requests(rd_kafka_broker_t *rkb) {
  * @locality Broker thread
  */
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
-
-        if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
-                rd_kafka_broker_drain_reauth_requests(rkb);
-        }
 
         rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
 
@@ -2473,13 +2374,6 @@ static void rd_kafka_broker_connect_auth(rd_kafka_broker_t *rkb) {
                                 ? RD_KAFKA_BROKER_STATE_AUTH_REQ
                                 : RD_KAFKA_BROKER_STATE_AUTH_LEGACY);
                         rd_kafka_broker_unlock(rkb);
-
-                        // Check if reauth is in progress, if so then client close
-                        if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
-                                if (rkb->rkb_sasl.session_lifetime_ms > 0) {
-                                        rd_kafka_sasl_close(rkb->rkb_transport);
-                                }
-                        }
 
                         if (rd_kafka_sasl_client_new(
                                 rkb->rkb_transport, sasl_errstr,
@@ -2845,65 +2739,6 @@ int rd_kafka_send(rd_kafka_broker_t *rkb) {
                             rkbuf->rkbuf_corrid, pre_of,
                             rd_slice_size(&rkbuf->rkbuf_reader));
                 }
-
-                 if (rkb->rkb_rk->rk_conf.sasl.enable_refresh) {
-                        if ((rkb->rkb_sasl.auth_in_progress == 0)) {
-                                rd_ts_t now_wallclock;
-                                now_wallclock = rd_uclock();
-
-                                if ((rkb->rkb_rk->rk_conf.sasl
-                                         .oauthbearer.token_refresh_cb &&
-                                     rkb->rkb_sasl.session_lifetime_ms > 0 &&
-                                     now_wallclock >
-                                         rkb->rkb_sasl.session_lifetime_ms)) {
-
-                                    rd_rkb_log(rkb, LOG_INFO, "SASL",
-                                                   "Reauthenticating SASL "
-                                                   "connection.");
-
-                                        /*begin reauth*/
-                                        rkb->rkb_sasl.auth_in_progress = 1;
-                                        rd_kafka_broker_connect_auth(rkb);
-                                }
-                        }
-
-                        // Check here to block requests during reauth
-                        if (rkb->rkb_sasl.auth_in_progress == 1) {
-                                // if not related to sasl reauth (handshake or
-                                // request)
-                                if ((rkbuf->rkbuf_reqhdr.ApiKey !=
-                                     RD_KAFKAP_SaslAuthenticate) &&
-                                    (rkbuf->rkbuf_reqhdr.ApiKey !=
-                                     RD_KAFKAP_SaslHandshake)) {
-                                        // remove from current queue
-                                        rd_kafka_bufq_deq(&rkb->rkb_outbufs,
-                                                          rkbuf);
-
-                                        // hold these requests into another
-                                        // queue
-                                        TAILQ_INSERT_HEAD(
-                                            &rkb->rkb_sasl.rkb_req_during_auth
-                                                 .rkbq_bufs,
-                                            rkbuf, rkbuf_link);
-                                        rd_atomic32_add(
-                                            &rkb->rkb_sasl.rkb_req_during_auth
-                                                 .rkbq_cnt,
-                                            1);
-                                        if (rkbuf->rkbuf_reqhdr.ApiKey ==
-                                            RD_KAFKAP_Produce)
-                                                rd_atomic32_add(
-                                                    &rkb->rkb_sasl
-                                                         .rkb_req_during_auth
-                                                         .rkbq_msg_cnt,
-                                                    rd_kafka_msgq_len(
-                                                        &rkbuf->rkbuf_batch
-                                                             .msgq));
-
-                                        continue;
-                                }
-                        }
-                }
-
 
                 if ((r = rd_kafka_broker_send(rkb, &rkbuf->rkbuf_reader)) == -1)
                         return -1;
@@ -3612,6 +3447,20 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
                 /* Expedite next reconnect */
                 rkb->rkb_ts_reconnect = 0;
+
+                wakeup = rd_true;
+                break;
+
+        case RD_KAFKA_OP_SASL_REAUTH:
+                rd_rkb_dbg(rkb, BROKER, "REAUTH", "Received REAUTH op");
+
+                /* We don't need a lock for rkb_max_inflight. It's changed only
+                 * on the broker thread. */
+                rkb->rkb_max_inflight = 1;
+
+                rd_kafka_broker_lock(rkb);
+                rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_REAUTH);
+                rd_kafka_broker_unlock(rkb);
 
                 wakeup = rd_true;
                 break;
@@ -4709,6 +4558,20 @@ static int rd_kafka_broker_thread_main(void *arg) {
 
                         break;
 
+                case RD_KAFKA_BROKER_STATE_REAUTH:
+                        /* Since we've already authenticated once, the provider
+                         * should be ready. */
+                        rd_assert(rd_kafka_sasl_ready(rkb->rkb_rk));
+
+                        /* Since we aren't disconnecting, the transport isn't
+                         * destroyed, and as a consequence, some of the SASL
+                         * state leaks unless we destroy it before the reauth.
+                         */
+                        rd_kafka_sasl_close(rkb->rkb_transport);
+
+                        rd_kafka_broker_connect_auth(rkb);
+                        break;
+
                 case RD_KAFKA_BROKER_STATE_UPDATE:
                         /* FALLTHRU */
                 case RD_KAFKA_BROKER_STATE_UP:
@@ -4837,6 +4700,9 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         mtx_unlock(&rkb->rkb_logname_lock);
         mtx_destroy(&rkb->rkb_logname_lock);
 
+        rd_kafka_timer_stop(&rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr,
+                            1 /*lock*/);
+
         mtx_destroy(&rkb->rkb_lock);
 
         rd_refcnt_destroy(&rkb->rkb_refcnt);
@@ -4902,8 +4768,6 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_proto    = proto;
         rkb->rkb_port     = port;
         rkb->rkb_origname = rd_strdup(name);
-        rkb->rkb_sasl.auth_in_progress    = 0;
-        rkb->rkb_sasl.session_lifetime_ms = 0;
 
         mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
@@ -4914,8 +4778,6 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_kafka_bufq_init(&rkb->rkb_outbufs);
         rd_kafka_bufq_init(&rkb->rkb_waitresps);
         rd_kafka_bufq_init(&rkb->rkb_retrybufs);
-        rd_kafka_bufq_init(&rkb->rkb_sasl.rkb_req_during_auth);
-        rd_kafka_bufq_init(&rkb->rkb_sasl.rkb_recv_reauth_buf);
         rkb->rkb_ops = rd_kafka_q_new(rk);
         rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE, 0, 100 * 1000, 2,
                     rk->rk_conf.stats_interval_ms ? 1 : 0);
@@ -6018,6 +5880,42 @@ void rd_kafka_broker_monitor_del(rd_kafka_broker_monitor_t *rkbmon) {
         rd_kafka_broker_unlock(rkb);
 
         rd_kafka_broker_destroy(rkb);
+}
+
+/**
+ * @brief Starts the reauth timer for this broker.
+ *        If connections_max_reauth_ms=0, then no timer is set.
+ *
+ * @locks none
+ * @locality broker thread
+ */
+void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
+                                        int64_t connections_max_reauth_ms) {
+        /* Timer should not already be started in any case. */
+        rd_assert(!rd_kafka_timer_is_started(&rkb->rkb_rk->rk_timers,
+                                             &rkb->rkb_sasl_reauth_tmr));
+        if (connections_max_reauth_ms == 0) {
+                return;
+        }
+
+        rd_kafka_timer_start_oneshot(
+            &rkb->rkb_rk->rk_timers, &rkb->rkb_sasl_reauth_tmr, rd_false,
+            connections_max_reauth_ms * 900 /* 90% * microsecond*/,
+            rd_kafka_broker_start_reauth_cb, (void *)rkb);
+}
+
+/**
+ * @brief Starts the reauth process for the broker rkb.
+ *
+ * @locks none
+ * @locality main thread
+ */
+void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *_rkb) {
+        rd_kafka_op_t *rko     = NULL;
+        rd_kafka_broker_t *rkb = (rd_kafka_broker_t *)_rkb;
+        rd_dassert(rkb);
+        rko = rd_kafka_op_new(RD_KAFKA_OP_SASL_REAUTH);
+        rd_kafka_q_enq(rkb->rkb_ops, rko);
 }
 
 /**

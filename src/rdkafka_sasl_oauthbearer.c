@@ -1300,6 +1300,16 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
         rd_list_init(&handle->extensions, 0,
                      (void (*)(void *))rd_strtup_destroy);
 
+
+        if (rk->rk_conf.sasl.enable_callback_queue) {
+                /* SASL specific callback queue enabled */
+                rk->rk_sasl.callback_q = rd_kafka_q_new(rk);
+                handle->callback_q = rd_kafka_q_keep(rk->rk_sasl.callback_q);
+        } else {
+                /* Use main queue */
+                handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
+        }
+
         rd_kafka_timer_start(
             &rk->rk_timers, &handle->token_refresh_tmr, 1 * 1000 * 1000,
             rd_kafka_sasl_oauthbearer_token_refresh_tmr_cb, rk);
@@ -1316,14 +1326,6 @@ static int rd_kafka_sasl_oauthbearer_init(rd_kafka_t *rk,
                 return 0;
         }
 
-        if (rk->rk_conf.sasl.enable_callback_queue) {
-                /* SASL specific callback queue enabled */
-                rk->rk_sasl.callback_q = rd_kafka_q_new(rk);
-                handle->callback_q = rd_kafka_q_keep(rk->rk_sasl.callback_q);
-        } else {
-                /* Use main queue */
-                handle->callback_q = rd_kafka_q_keep(rk->rk_rep);
-        }
 
 #if WITH_OAUTHBEARER_OIDC
         if (rk->rk_conf.sasl.oauthbearer.method ==

@@ -68,11 +68,13 @@ def test_version(version, cmd=None, deploy=True, conf={}, debug=False,
         # Configure rack & replica selector if broker supports
         # fetch-from-follower
         if version_as_number(version) >= 2.4:
+            curr_conf = defconf.get('conf', list())
             defconf.update(
                 {
                     'conf': [
                         'broker.rack=RACK${appid}',
-                        'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})  # noqa: E501
+                        'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector'] + curr_conf})  # noqa: E501
+            print(defconf)
         brokers.append(KafkaBrokerApp(cluster, defconf))
 
     cmd_env = os.environ.copy()
@@ -268,7 +270,12 @@ if __name__ == '__main__':
                         help='Dont deploy applications, '
                         'assume already deployed.')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
-                        help='JSON config object (not file)')
+                        help='''
+    JSON config object (not file).
+    This does not translate to broker configs directly.
+    If broker config properties are to be specified,
+    they should be specified with
+    --conf \'{"conf": ["key=value", "key=value"]}\'''')
     parser.add_argument('--scenario', type=str, dest='scenario',
                         default='default',
                         help='Test scenario (see scenarios/ directory)')
@@ -318,6 +325,14 @@ if __name__ == '__main__':
         default=None,
         help='OAUTHBEARER/OIDC method (DEFAULT, OIDC), \
              must config SASL mechanism to OAUTHBEARER')
+    parser.add_argument(
+        '--max-reauth-ms',
+        dest='reauth_ms',
+        type=int,
+        default='10000',
+        help='''
+        Sets the value of connections.max.reauth.ms on the brokers.
+        Set 0 to disable.''')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -349,7 +364,13 @@ if __name__ == '__main__':
         args.conf['sasl_oauthbearer_method'] = \
             args.sasl_oauthbearer_method
 
-    args.conf.get('conf', list()).append("log.retention.bytes=1000000000")
+    if 'conf' not in args.conf:
+        args.conf['conf'] = []
+
+    args.conf['conf'].append(
+        "connections.max.reauth.ms={}".format(
+            args.reauth_ms))
+    args.conf['conf'].append("log.retention.bytes=1000000000")
 
     for version in args.versions:
         r = test_version(version, cmd=args.cmd, deploy=args.deploy,

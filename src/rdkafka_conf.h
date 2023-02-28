@@ -295,7 +295,6 @@ struct rd_kafka_conf_s {
 #endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;
-                int enable_refresh;
                 int enable_callback_queue;
                 struct {
                         rd_kafka_oauthbearer_method_t method;

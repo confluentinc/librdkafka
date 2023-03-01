@@ -183,49 +183,58 @@ static void rd_kafka_fetch_reply_handle_partition_error(
         switch (err) {
                 /* Errors handled by rdkafka */
         case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
-                /* Occurs when:
-                 *   - Msg exists on broker but
-                 *     offset > HWM, or:
-                 *   - HWM is >= offset, but msg not
-                 *     yet available at that offset
-                 *     (replica is out of sync).
-                 *   - partition leader is out of sync.
-                 *
-                 * Handle by requesting metadata update, changing back to the
-                 * leader, and then retrying FETCH (with backoff).
-                 */
-                rd_rkb_dbg(rkb, MSG, "FETCH",
-                           "Topic %s [%" PRId32
-                           "]: %s not "
-                           "available on broker %" PRId32 " (leader %" PRId32
-                           "): updating metadata and retrying",
-                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos),
-                           rktp->rktp_broker_id, rktp->rktp_leader_id);
-                /* Continue with next case */
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
         case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
         case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
         case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+                if (err == RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE) {
+                        /* Occurs when:
+                         *   - Msg exists on broker but
+                         *     offset > HWM, or:
+                         *   - HWM is >= offset, but msg not
+                         *     yet available at that offset
+                         *     (replica is out of sync).
+                         *   - partition leader is out of sync.
+                         *
+                         * Handle by requesting metadata update, changing back
+                         * to the leader, and then retrying FETCH
+                         * (with backoff).
+                         */
+                        rd_rkb_dbg(rkb, MSG, "FETCH",
+                                   "Topic %s [%" PRId32
+                                   "]: %s not "
+                                   "available on broker %" PRId32
+                                   " (leader %" PRId32
+                                   "): updating metadata and retrying",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition,
+                                   rd_kafka_fetch_pos2str(
+                                       rktp->rktp_offsets.fetch_pos),
+                                   rktp->rktp_broker_id, rktp->rktp_leader_id);
+                }
+
+                if (err == RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH) {
+                        rd_rkb_dbg(rkb, MSG | RD_KAFKA_DBG_CONSUMER, "FETCH",
+                                   "Topic %s [%" PRId32
+                                   "]: Fetch failed at %s: %s: broker %" PRId32
+                                   "has not yet caught up on latest metadata: "
+                                   "retrying",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition,
+                                   rd_kafka_fetch_pos2str(
+                                       rktp->rktp_offsets.fetch_pos),
+                                   rd_kafka_err2str(err), rktp->rktp_broker_id);
+                }
+
                 if (rktp->rktp_broker_id != rktp->rktp_leader_id) {
                         rd_kafka_toppar_delegate_to_leader(rktp);
                 }
                 /* Request metadata information update*/
                 rd_kafka_toppar_leader_unavailable(rktp, "fetch", err);
-                break;
-
-        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
-                rd_rkb_dbg(rkb, MSG | RD_KAFKA_DBG_CONSUMER, "FETCH",
-                           "Topic %s [%" PRId32
-                           "]: Fetch failed at %s: %s: broker %" PRId32
-                           "has not yet caught up on latest metadata: "
-                           "retrying",
-                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           rd_kafka_fetch_pos2str(rktp->rktp_offsets.fetch_pos),
-                           rd_kafka_err2str(err), rktp->rktp_broker_id);
                 break;
 
         case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE: {

@@ -291,9 +291,11 @@ rd_kafka_resp_err_t rd_kafka_topics_leader_query_sync(rd_kafka_t *rk,
                                                       int timeout_ms);
 void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
                                   rd_kafka_topic_t *rkt,
-                                  int do_rk_lock);
+                                  int do_rk_lock,
+                                  rd_bool_t force);
 #define rd_kafka_topic_leader_query(rk, rkt)                                   \
-        rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/)
+        rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/,                      \
+                                     rd_false /*dont force*/)
 
 #define rd_kafka_topic_fast_leader_query(rk)                                   \
         rd_kafka_metadata_fast_leader_query(rk)

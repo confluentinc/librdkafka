@@ -1820,16 +1820,16 @@ int rd_kafka_topic_match(rd_kafka_t *rk,
  */
 void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
                                   rd_kafka_topic_t *rkt,
-                                  int do_rk_lock) {
+                                  int do_rk_lock,
+                                  rd_bool_t force) {
         rd_list_t topics;
 
         rd_list_init(&topics, 1, rd_free);
         rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
 
         rd_kafka_metadata_refresh_topics(
-            rk, NULL, &topics, rd_false /*dont force*/,
-            rk->rk_conf.allow_auto_create_topics, rd_false /*!cgrp_update*/,
-            "leader query");
+            rk, NULL, &topics, force, rk->rk_conf.allow_auto_create_topics,
+            rd_false /*!cgrp_update*/, "leader query");
 
         rd_list_destroy(&topics);
 }

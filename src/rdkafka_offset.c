@@ -936,6 +936,10 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         if (unlikely(!err && parts->cnt == 0))
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
+        if (!err) {
+                err = (&parts->elems[0])->err;
+        }
+
         if (err) {
                 int actions;
 

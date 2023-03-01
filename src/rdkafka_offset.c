@@ -1150,6 +1150,9 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
         rd_kafka_toppar_set_fetch_state(
             rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
 
+        rd_kafka_toppar_set_next_fetch_position(rktp,
+                                                rktp->rktp_offsets.fetch_pos);
+
         /* Construct and send OffsetForLeaderEpochRequest */
         parts  = rd_kafka_topic_partition_list_new(1);
         rktpar = rd_kafka_topic_partition_list_add(

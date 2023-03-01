@@ -999,8 +999,8 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         }
 
 
-        rktpar     = &parts->elems[0];
-        end_offset = rktpar->offset;
+        /* Validation succeeded, replace leader epoch */
+        rktp->rktp_leader_epoch = rktp->rktp_next_leader_epoch;
         end_offset_leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(rktpar);
 
@@ -1160,7 +1160,7 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
         rd_kafka_topic_partition_set_leader_epoch(
             rktpar, rktp->rktp_next_fetch_start.leader_epoch);
         rd_kafka_topic_partition_set_current_leader_epoch(
-            rktpar, rktp->rktp_leader_epoch);
+            rktpar, rktp->rktp_next_leader_epoch);
         rd_kafka_toppar_keep(rktp); /* for request opaque */
 
         rd_rkb_dbg(rktp->rktp_leader, FETCH, "VALIDATE",

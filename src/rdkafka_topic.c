@@ -683,8 +683,8 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition, rktp->rktp_leader_id,
                              rktp->rktp_leader_epoch, leader_id, leader_epoch);
-                rktp->rktp_leader_epoch = leader_epoch;
-                need_epoch_validation   = rd_true;
+                rktp->rktp_next_leader_epoch = leader_epoch;
+                need_epoch_validation        = rd_true;
         }
 
         fetching_from_follower =

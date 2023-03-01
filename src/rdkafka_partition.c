@@ -218,11 +218,12 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
 
         rktp = rd_calloc(1, sizeof(*rktp));
 
-        rktp->rktp_partition    = partition;
-        rktp->rktp_rkt          = rkt;
-        rktp->rktp_leader_id    = -1;
-        rktp->rktp_broker_id    = -1;
-        rktp->rktp_leader_epoch = -1;
+        rktp->rktp_partition         = partition;
+        rktp->rktp_rkt               = rkt;
+        rktp->rktp_leader_id         = -1;
+        rktp->rktp_broker_id         = -1;
+        rktp->rktp_leader_epoch      = -1;
+        rktp->rktp_next_leader_epoch = -1;
         rd_interval_init(&rktp->rktp_lease_intvl);
         rd_interval_init(&rktp->rktp_new_lease_intvl);
         rd_interval_init(&rktp->rktp_new_lease_log_intvl);

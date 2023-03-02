@@ -1013,10 +1013,8 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
         }
 
 
-        /* Validation succeeded, replace leader epoch */
-        rktp->rktp_leader_epoch = rktp->rktp_next_leader_epoch;
-        rktpar                  = &parts->elems[0];
-        end_offset              = rktpar->offset;
+        rktpar     = &parts->elems[0];
+        end_offset = rktpar->offset;
         end_offset_leader_epoch =
             rd_kafka_topic_partition_get_leader_epoch(rktpar);
 
@@ -1142,21 +1140,6 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
                 return;
         }
 
-        /* If the fetch start position does not have an epoch set then
-         * there is no point in doing validation.
-         * This is the case for epoch-less seek()s or epoch-less
-         * committed offsets. */
-        if (rktp->rktp_next_fetch_start.leader_epoch == -1) {
-                rd_kafka_dbg(
-                    rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
-                    "%.*s [%" PRId32
-                    "]: skipping offset "
-                    "validation for %s: no leader epoch set",
-                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                    rktp->rktp_partition,
-                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
-                return;
-        }
 
         if (rktp->rktp_leader_id == -1 || !rktp->rktp_leader ||
             rktp->rktp_leader->rkb_source == RD_KAFKA_INTERNAL) {
@@ -1172,11 +1155,33 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
                 return;
         }
 
+        /* Update next fetch position, that could be stale since last
+         * fetch start. Only if the offset is real. */
+        if (rktp->rktp_offsets.fetch_pos.offset > 0) {
+                rd_kafka_toppar_set_next_fetch_position(
+                    rktp, rktp->rktp_offsets.fetch_pos);
+        }
+
+        /* If the fetch start position does not have an epoch set then
+         * there is no point in doing validation.
+         * This is the case for epoch-less seek()s or epoch-less
+         * committed offsets. */
+        if (rktp->rktp_next_fetch_start.leader_epoch == -1) {
+                rd_kafka_dbg(
+                    rktp->rktp_rkt->rkt_rk, FETCH, "VALIDATE",
+                    "%.*s [%" PRId32
+                    "]: skipping offset "
+                    "validation for %s: no leader epoch set",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition,
+                    rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start));
+                rd_kafka_toppar_set_fetch_state(rktp,
+                                                RD_KAFKA_TOPPAR_FETCH_ACTIVE);
+                return;
+        }
+
         rd_kafka_toppar_set_fetch_state(
             rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
-
-        rd_kafka_toppar_set_next_fetch_position(rktp,
-                                                rktp->rktp_offsets.fetch_pos);
 
         /* Construct and send OffsetForLeaderEpochRequest */
         parts  = rd_kafka_topic_partition_list_new(1);
@@ -1185,7 +1190,7 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
         rd_kafka_topic_partition_set_leader_epoch(
             rktpar, rktp->rktp_next_fetch_start.leader_epoch);
         rd_kafka_topic_partition_set_current_leader_epoch(
-            rktpar, rktp->rktp_next_leader_epoch);
+            rktpar, rktp->rktp_leader_epoch);
         rd_kafka_toppar_keep(rktp); /* for request opaque */
 
         rd_rkb_dbg(rktp->rktp_leader, FETCH, "VALIDATE",

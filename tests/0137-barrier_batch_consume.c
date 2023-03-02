@@ -164,7 +164,8 @@ static void do_test_consume_batch_with_seek(void) {
 
         thrd_join(thread_id, NULL);
 
-        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,
+        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+                               TEST_MSGVER_BY_OFFSET,
                            0, expected_msg_cnt);
         test_msgver_clear(&mv);
 
@@ -192,7 +193,6 @@ static void do_test_consume_batch_with_pause_and_resume(void) {
         thrd_t thread_id;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *pause_partition_list;
-        rd_kafka_message_t **rkmessages;
         const int timeout_ms       = 2000;
         const int consume_msg_cnt  = 10;
         const int produce_msg_cnt  = 8;

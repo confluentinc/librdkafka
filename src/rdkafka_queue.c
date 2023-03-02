@@ -666,16 +666,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rko = (rd_kafka_op_t *)rkmessages[i]->_private;
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset          = rkmessages[i]->offset + 1;
-                if (unlikely(rktp->rktp_app_offset < offset)) {
-                        rd_kafka_toppar_lock(rktp);
-                        rktp->rktp_app_offset = offset;
-                        if (rk->rk_conf.enable_auto_offset_store)
-                                rd_kafka_offset_store0(
-                                    rktp, offset,
-                                    /* force: ignore assignment state */
-                                    rd_true, RD_DONT_LOCK);
-                        rd_kafka_toppar_unlock(rktp);
-                }
+                if (unlikely(rktp->rktp_app_offset < offset))
+                        rd_kafka_update_app_offset(rk, rktp, offset,
+                                                   RD_DO_LOCK);
         }
 
         /* Discard non-desired and already handled ops */
@@ -687,16 +680,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                         rd_kafka_toppar_t *rktp = rko->rko_rktp;
                         int64_t offset =
                             rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
-                        if (unlikely(rktp->rktp_app_offset < offset)) {
-                                rd_kafka_toppar_lock(rktp);
-                                rktp->rktp_app_offset = offset;
-                                if (rk->rk_conf.enable_auto_offset_store)
-                                        rd_kafka_offset_store0(
-                                            rktp, offset,
-                                            /* force: ignore assignment state */
-                                            rd_true, RD_DONT_LOCK);
-                                rd_kafka_toppar_unlock(rktp);
-                        }
+                        if (unlikely(rktp->rktp_app_offset < offset))
+                                rd_kafka_update_app_offset(rk, rktp, offset,
+                                                           RD_DO_LOCK);
                 }
                 rd_kafka_op_destroy(rko);
         }

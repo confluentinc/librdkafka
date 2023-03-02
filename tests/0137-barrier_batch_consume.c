@@ -164,7 +164,8 @@ static void do_test_consume_batch_with_seek(void) {
 
         thrd_join(thread_id, NULL);
 
-        test_msgver_verify("CONSUME", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+        test_msgver_verify("CONSUME", &mv,
+                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
                                TEST_MSGVER_BY_OFFSET,
                            0, expected_msg_cnt);
         test_msgver_clear(&mv);

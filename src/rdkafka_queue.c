@@ -581,6 +581,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
+        int i;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -649,20 +650,32 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 }
                 rd_dassert(res == RD_KAFKA_OP_RES_PASS);
 
-                if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {
-                        /* Store offset, etc. */
-                        rd_kafka_fetch_op_app_prepare(rk, rko);
-
-                        /* If this is a control messages, don't return
-                         * message to application, only store the offset */
-                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
-                                rd_kafka_op_destroy(rko);
-                                continue;
-                        }
+                /* If this is a control messages, don't return
+                 * message to application. Add it to the tmp queue
+                 * from where we can store the offset and destroy them */
+                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                        continue;
                 }
 
                 /* Get rkmessage from rko and append to array. */
                 rkmessages[cnt++] = rd_kafka_message_get(rko);
+        }
+
+        for (i = cnt - 1; i >= 0; i--) {
+                rko = (rd_kafka_op_t *)rkmessages[i]->_private;
+                rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                int64_t offset          = rkmessages[i]->offset + 1;
+                if (unlikely(rktp->rktp_app_offset < offset)) {
+                        rd_kafka_toppar_lock(rktp);
+                        rktp->rktp_app_offset = offset;
+                        if (rk->rk_conf.enable_auto_offset_store)
+                                rd_kafka_offset_store0(
+                                    rktp, offset,
+                                    /* force: ignore assignment state */
+                                    rd_true, RD_DONT_LOCK);
+                        rd_kafka_toppar_unlock(rktp);
+                }
         }
 
         /* Discard non-desired and already handled ops */
@@ -670,6 +683,21 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         while (next) {
                 rko  = next;
                 next = TAILQ_NEXT(next, rko_link);
+                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                        rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                        int64_t offset =
+                            rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+                        if (unlikely(rktp->rktp_app_offset < offset)) {
+                                rd_kafka_toppar_lock(rktp);
+                                rktp->rktp_app_offset = offset;
+                                if (rk->rk_conf.enable_auto_offset_store)
+                                        rd_kafka_offset_store0(
+                                            rktp, offset,
+                                            /* force: ignore assignment state */
+                                            rd_true, RD_DONT_LOCK);
+                                rd_kafka_toppar_unlock(rktp);
+                        }
+                }
                 rd_kafka_op_destroy(rko);
         }
 

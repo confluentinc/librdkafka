@@ -200,6 +200,7 @@ static void do_test_consume_batch_with_pause_and_resume(void) {
         const int partition_cnt    = 2;
         const int expected_msg_cnt = 4;
         int32_t pause_partition    = 0;
+        int32_t running_partition  = 1;
 
         SUB_TEST();
 
@@ -254,24 +255,26 @@ static void do_test_consume_batch_with_pause_and_resume(void) {
 
         thrd_join(thread_id, NULL);
 
-        test_msgver_verify("CONSUME", &mv,
-                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
-                               TEST_MSGVER_BY_OFFSET,
-                           0, expected_msg_cnt);
+        test_msgver_verify_part("CONSUME", &mv,
+                                TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+                                    TEST_MSGVER_BY_OFFSET,
+                                topic, running_partition, 0, expected_msg_cnt);
+
+        test_msgver_clear(&mv);
+        test_msgver_init(&mv, testid);
+        consumer_args.mv = &mv;
 
         err = rd_kafka_resume_partitions(consumer, pause_partition_list);
 
         TEST_ASSERT(!err, "Failed to resume partition %d for topic %s",
                     pause_partition, topic);
 
-        rd_sleep(2);
-
         consumer_batch_queue(&consumer_args);
 
-        test_msgver_verify("CONSUME", &mv,
-                           TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
-                               TEST_MSGVER_BY_OFFSET,
-                           0, produce_msg_cnt);
+        test_msgver_verify_part("CONSUME", &mv,
+                                TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
+                                    TEST_MSGVER_BY_OFFSET,
+                                topic, pause_partition, 0, expected_msg_cnt);
 
         rd_kafka_topic_partition_list_destroy(pause_partition_list);
 

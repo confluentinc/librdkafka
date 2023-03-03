@@ -3936,6 +3936,7 @@ const char *rd_kafka_topic_partition_list_str(
  *  - metadata
  *  - metadata_size
  *  - offset
+ *  - offset leader epoch
  *  - err
  *
  * Will only update partitions that are in both dst and src, other partitions
@@ -3949,6 +3950,7 @@ void rd_kafka_topic_partition_list_update(
         for (i = 0; i < dst->cnt; i++) {
                 rd_kafka_topic_partition_t *d = &dst->elems[i];
                 rd_kafka_topic_partition_t *s;
+                rd_kafka_topic_partition_private_t *s_priv, *d_priv;
 
                 if (!(s = rd_kafka_topic_partition_list_find(
                           (rd_kafka_topic_partition_list_t *)src, d->topic,
@@ -3968,6 +3970,10 @@ void rd_kafka_topic_partition_list_update(
                         memcpy((void *)d->metadata, s->metadata,
                                s->metadata_size);
                 }
+
+                s_priv               = rd_kafka_topic_partition_get_private(s);
+                d_priv               = rd_kafka_topic_partition_get_private(d);
+                d_priv->leader_epoch = s_priv->leader_epoch;
         }
 }
 

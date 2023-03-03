@@ -4503,10 +4503,13 @@ void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions) {
         int i;
         for (i = 0; i < partitions->cnt; i++) {
-                TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 "%s%s\n",
+                TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
+                         ") %s%s\n",
                          partitions->elems[i].topic,
                          partitions->elems[i].partition,
                          partitions->elems[i].offset,
+                         rd_kafka_topic_partition_get_leader_epoch(
+                             &partitions->elems[i]),
                          partitions->elems[i].err ? ": " : "",
                          partitions->elems[i].err
                              ? rd_kafka_err2str(partitions->elems[i].err)
@@ -4566,7 +4569,9 @@ int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
                 const rd_kafka_topic_partition_t *a = &al->elems[i];
                 const rd_kafka_topic_partition_t *b = &bl->elems[i];
                 if (a->partition != b->partition ||
-                    strcmp(a->topic, b->topic) || a->offset != b->offset)
+                    strcmp(a->topic, b->topic) || a->offset != b->offset ||
+                    rd_kafka_topic_partition_get_leader_epoch(a) !=
+                        rd_kafka_topic_partition_get_leader_epoch(b))
                         return -1;
         }
 

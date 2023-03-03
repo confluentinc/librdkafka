@@ -845,7 +845,7 @@ void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
                  *       target as new messages are produced. */
                 extra            = "cached BEGINNING offset ";
                 pos.offset       = rktp->rktp_lo_offset;
-                pos.leader_epoch = rktp->rktp_leader_epoch;
+                pos.leader_epoch = -1;
                 rd_kafka_toppar_next_offset_handle(rktp, pos);
 
         } else {

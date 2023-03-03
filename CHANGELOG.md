@@ -1,3 +1,11 @@
+# librdkakfa v2.0.3
+
+librdkafka v2.0.3 is a bugfix release:
+
+* Fix a protocol issue with ListGroups protocol request, where some extra
+  fields were appended for API Versions greater than or equal to 3.
+
+
 # librdkafka v2.0.2
 
 librdkafka v2.0.2 is a bugfix release:

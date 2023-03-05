@@ -306,12 +306,17 @@ struct rd_kafka_s {
         rd_kafka_type_t rk_type;
         struct timeval rk_tv_state_change;
 
-        rd_atomic64_t rk_ts_last_poll; /**< Timestamp of last application
-                                        *   consumer_poll() call
-                                        *   (or equivalent).
-                                        *   Used to enforce
-                                        *   max.poll.interval.ms.
-                                        *   Only relevant for consumer. */
+        rd_atomic32_t rk_polled_flag; /** Flag that application
+                                       * has recently made a
+                                       * consumer_poll() call (or
+                                       * equivalent). Used to enforce
+                                       * max.poll.interval.ms.
+                                       * Only relevant for consumer. */
+        int64_t rk_ts_last_poll; /* Aproximate timestamp of last application
+                                    consumer_poll() call. That is used only by
+                                    rd_kafka_max_poll_exceeded, to store the
+                                    actual timestamp when noticing a flag */
+
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -957,25 +962,38 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt(rd_kafka_topic_t *rkt);
  *          was exceeded, or 0 if not exceeded.
  *
  * @remark Only relevant for high-level consumer.
- *
- * @locality any
+
+ * @locality rdkafka main thread
  * @locks none
  */
 static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
-        rd_ts_t last_poll;
+        int32_t polled;
         int exceeded;
+        rd_ts_t current_clock;
 
         if (rk->rk_type != RD_KAFKA_CONSUMER)
                 return 0;
 
-        last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
+        polled = rd_atomic32_get(&rk->rk_polled_flag);
 
         /* Application is blocked in librdkafka function, see
          * rd_kafka_app_poll_blocking(). */
-        if (last_poll == INT64_MAX)
+        if (polled == 1)
                 return 0;
 
-        exceeded = (int)((rd_clock() - last_poll) / 1000ll) -
+        current_clock = rd_clock();
+
+        if (polled == 2) {
+                // We'll store the current clock and notice if that exceeds.
+                // Doing this instead of storing rd_clock value on consumer
+                // polling allows us to avoid clock calls on polling, as those
+                // are costly compared to other operations done during polling.
+                rk->rk_ts_last_poll = current_clock;
+                rd_atomic32_set(&rk->rk_polled_flag, 0);
+                return 0;
+        }
+
+        exceeded = (int)((current_clock - rk->rk_ts_last_poll) / 1000ll) -
                    rk->rk_conf.max_poll_interval_ms;
 
         if (unlikely(exceeded > 0))
@@ -999,11 +1017,12 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
         if (rk->rk_type == RD_KAFKA_CONSUMER)
-                rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+                rd_atomic32_set(&rk->rk_polled_flag, 1);
 }
 
 /**
- * @brief Set the last application poll time to now.
+ * @brief Flag that we recently polled.
+ * This will be used to enforce max.poll.interval.ms
  *
  * @remark Only relevant for high-level consumer.
  *
@@ -1012,7 +1031,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
         if (rk->rk_type == RD_KAFKA_CONSUMER)
-                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+                rd_atomic32_set(&rk->rk_polled_flag, 2);
 }
 
 

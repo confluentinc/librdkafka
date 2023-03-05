@@ -1150,7 +1150,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "offsets (using offsets_store()) *after* message processing, to "
      "make sure offsets are not auto-committed prior to processing "
      "has finished. "
-     "The interval is checked two times per second. "
+     "Whether we recently polled is checked four times per second. "
+     "It takes at most 500ms to notice that application code hasn't "
+     "polled recently enough. "
      "See KIP-62 for more information.",
      1, 86400 * 1000, 300000},
 

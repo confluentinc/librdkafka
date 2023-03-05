@@ -2185,8 +2185,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
          */
         rk = rd_calloc(1, sizeof(*rk));
 
-        rk->rk_type       = type;
-        rk->rk_ts_created = rd_clock();
+        rk->rk_type         = type;
+        rk->rk_ts_created   = rd_clock();
+        rk->rk_ts_last_poll = rk->rk_ts_created;
 
         /* Struct-copy the config object. */
         rk->rk_conf = *conf;
@@ -2222,7 +2223,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
-        rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
+        rd_atomic32_init(&rk->rk_polled_flag, 0);
         rd_atomic32_init(&rk->rk_flushing, 0);
 
         rk->rk_rep             = rd_kafka_q_new(rk);

@@ -1160,8 +1160,6 @@ void rd_kafka_update_app_offset(rd_kafka_t *rk,
                                 int64_t offset,
                                 rd_dolock_t do_lock) {
 
-        rd_assert(rk == rktp->rktp_rkt->rkt_rk);
-
         if (do_lock)
                 rd_kafka_toppar_lock(rktp);
 

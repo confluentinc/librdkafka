@@ -652,7 +652,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 /* If this is a control messages, don't return
                  * message to application. Add it to the tmp queue
-                 * from where we can store the offset and destroy them */
+                 * from where we can store the offset and destroy the op */
                 if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
@@ -676,7 +676,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         while (next) {
                 rko  = next;
                 next = TAILQ_NEXT(next, rko_link);
-                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                if (rd_kafka_op_is_ctrl_msg(rko)) {
                         rd_kafka_toppar_t *rktp = rko->rko_rktp;
                         int64_t offset =
                             rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;

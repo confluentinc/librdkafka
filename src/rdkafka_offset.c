@@ -1049,7 +1049,12 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                         rd_kafka_toppar_unlock(rktp);
 
                         /* Seek to the updated end offset */
-                        rd_kafka_seek_partitions(rkb->rkb_rk, parts, 0);
+                        rd_kafka_fetch_pos_t fetch_pos =
+                            rd_kafka_topic_partition_get_fetch_pos(rktpar);
+                        fetch_pos.validated = rd_true;
+
+                        rd_kafka_toppar_op_seek(rktp, fetch_pos,
+                                                RD_KAFKA_NO_REPLYQ);
 
                         rd_kafka_topic_partition_list_destroy(parts);
                         rd_kafka_toppar_destroy(rktp);
@@ -1153,13 +1158,6 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
                 rd_kafka_toppar_set_fetch_state(rktp,
                                                 RD_KAFKA_TOPPAR_FETCH_ACTIVE);
                 return;
-        }
-
-        /* Update next fetch position, that could be stale since last
-         * fetch start. Only if the offset is real. */
-        if (rktp->rktp_offsets.fetch_pos.offset > 0) {
-                rd_kafka_toppar_set_next_fetch_position(
-                    rktp, rktp->rktp_offsets.fetch_pos);
         }
 
         /* If the fetch start position does not have an epoch set then

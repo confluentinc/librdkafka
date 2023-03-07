@@ -4277,9 +4277,11 @@ int test_consumer_poll_exact_timeout(const char *what,
                         TEST_SAYL(4,
                                   "%s: consumed message on %s [%" PRId32
                                   "] "
-                                  "at offset %" PRId64 "\n",
+                                  "at offset %" PRId64 " (leader epoch %" PRId32
+                                  ")\n",
                                   what, rd_kafka_topic_name(rkmessage->rkt),
-                                  rkmessage->partition, rkmessage->offset);
+                                  rkmessage->partition, rkmessage->offset,
+                                  rd_kafka_message_leader_epoch(rkmessage));
 
                         if (!mv || test_msgver_add_msg(rk, mv, rkmessage))
                                 cnt++;

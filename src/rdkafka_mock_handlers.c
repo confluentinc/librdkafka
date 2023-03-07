@@ -292,7 +292,7 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                                     "] fetch err %s for offset %" PRId64
                                     " mset %p, on_follower %d, "
                                     "start %" PRId64 ", end_offset %" PRId64
-                                    " epoch %" PRId32,
+                                    ", current epoch %" PRId32,
                                     RD_KAFKAP_STR_PR(&Topic), Partition,
                                     rd_kafka_err2name(err), FetchOffset, mset,
                                     on_follower, mpart->start_offset,
@@ -2018,6 +2018,94 @@ err_parse:
         return -1;
 }
 
+static int
+rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
+                                          rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+        int32_t TopicsCnt, i;
+
+        /* Response: ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* #Topics */
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
+
+        /* Response: #Topics */
+        rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        for (i = 0; i < TopicsCnt; i++) {
+                rd_kafkap_str_t Topic;
+                int32_t PartitionsCnt, j;
+                rd_kafka_mock_topic_t *mtopic;
+
+                /* Topic */
+                rd_kafka_buf_read_str(rkbuf, &Topic);
+
+                mtopic = rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
+
+                /* Response: Topic */
+                rd_kafka_buf_write_kstr(resp, &Topic);
+
+                /* #Partitions */
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionsCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
+
+                /* Response: #Partitions */
+                rd_kafka_buf_write_arraycnt(resp, PartitionsCnt);
+
+                for (j = 0; j < PartitionsCnt; j++) {
+                        rd_kafka_mock_partition_t *mpart;
+                        int32_t Partition, CurrentLeaderEpoch, LeaderEpoch;
+                        int64_t EndOffset = -1;
+
+                        /* Partition */
+                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        /* CurrentLeaderEpoch */
+                        rd_kafka_buf_read_i32(rkbuf, &CurrentLeaderEpoch);
+                        /* LeaderEpoch */
+                        rd_kafka_buf_read_i32(rkbuf, &LeaderEpoch);
+
+                        mpart = rd_kafka_mock_partition_find(mtopic, Partition);
+                        if (!err && !mpart)
+                                err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                        if (!err && mpart)
+                                err =
+                                    rd_kafka_mock_partition_leader_epoch_check(
+                                        mpart, CurrentLeaderEpoch);
+
+                        if (!err && mpart) {
+                                EndOffset =
+                                    rd_kafka_mock_partition_offset_for_leader_epoch(
+                                        mpart, LeaderEpoch);
+                        }
+
+                        /* Response: ErrorCode */
+                        rd_kafka_buf_write_i16(resp, err);
+                        /* Response: Partition */
+                        rd_kafka_buf_write_i32(resp, Partition);
+                        /* Response: LeaderEpoch */
+                        rd_kafka_buf_write_i32(resp, LeaderEpoch);
+                        /* Response: Partition */
+                        rd_kafka_buf_write_i64(resp, EndOffset);
+                }
+        }
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
 
 /**
  * @brief Default request handlers
@@ -2047,6 +2135,8 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_TxnOffsetCommit] = {0, 3, 3,
                                        rd_kafka_mock_handle_TxnOffsetCommit},
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
+        [RD_KAFKAP_OffsetForLeaderEpoch] =
+            {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
 };
 
 

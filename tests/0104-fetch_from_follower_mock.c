@@ -523,6 +523,71 @@ static void do_test_follower_down(void) {
 }
 
 
+/**
+ * @brief When a seek is done with a leader epoch,
+ *        the expected behavior is to validate it and
+ *        start fetching from the end offset of that epoch if
+ *        less than current offset.
+ *        This is possible in case of external group offsets storage,
+ *        associated with an unclean leader election.
+ */
+static void do_test_seek_to_offset_with_previous_epoch(void) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *c;
+        const char *topic    = "test";
+        const int msgcnt     = 10;
+        const size_t msgsize = 1000;
+        rd_kafka_topic_partition_list_t *rktpars;
+        rd_kafka_topic_partition_t *rktpar;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+
+        c = test_create_consumer("mygroup", NULL, conf, NULL);
+
+        test_consumer_assign_partition("zero", c, topic, 0,
+                                       RD_KAFKA_OFFSET_INVALID);
+
+        test_consumer_poll("first", c, 0, 0, msgcnt, msgcnt, NULL);
+
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        /* Seed the topic with messages */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, msgsize,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        test_consumer_poll("second", c, 0, 0, msgcnt, msgcnt, NULL);
+
+        rktpars        = rd_kafka_topic_partition_list_new(1);
+        rktpar         = rd_kafka_topic_partition_list_add(rktpars, topic, 0);
+        rktpar->offset = msgcnt * 2;
+        /* Will validate the offset at start fetching again
+         * from offset 'msgcnt'. */
+        rd_kafka_topic_partition_set_leader_epoch(rktpar, 0);
+        rd_kafka_seek_partitions(c, rktpars, -1);
+
+        test_consumer_poll("third", c, 0, 0, msgcnt, msgcnt, NULL);
+
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0104_fetch_from_follower_mock(int argc, char **argv) {
 
         if (test_needs_auth()) {
@@ -545,6 +610,8 @@ int main_0104_fetch_from_follower_mock(int argc, char **argv) {
         do_test_not_leader_or_follower();
 
         do_test_follower_down();
+
+        do_test_seek_to_offset_with_previous_epoch();
 
         return 0;
 }

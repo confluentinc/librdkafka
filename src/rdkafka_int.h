@@ -100,6 +100,7 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 typedef struct rd_kafka_fetch_pos_s {
         int64_t offset;
         int32_t leader_epoch;
+        rd_bool_t validated;
 } rd_kafka_fetch_pos_t;
 
 

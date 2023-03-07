@@ -217,6 +217,7 @@ typedef struct rd_kafka_mock_msgset_s {
         TAILQ_ENTRY(rd_kafka_mock_msgset_s) link;
         int64_t first_offset; /**< First offset in batch */
         int64_t last_offset;  /**< Last offset in batch */
+        int32_t leader_epoch; /**< Msgset leader epoch */
         rd_kafkap_bytes_t bytes;
         /* Space for bytes.data is allocated after the msgset_t */
 } rd_kafka_mock_msgset_t;
@@ -233,6 +234,8 @@ typedef struct rd_kafka_mock_committed_offset_s {
         rd_kafkap_str_t *metadata; /**< Metadata, allocated separately */
 } rd_kafka_mock_committed_offset_t;
 
+
+TAILQ_HEAD(rd_kafka_mock_msgset_tailq_s, rd_kafka_mock_msgset_s);
 
 /**
  * @struct Mock partition
@@ -254,7 +257,7 @@ typedef struct rd_kafka_mock_partition_s {
                                                  *   in synch with end_offset
                                                  */
 
-        TAILQ_HEAD(, rd_kafka_mock_msgset_s) msgsets;
+        struct rd_kafka_mock_msgset_tailq_s msgsets;
         size_t size;     /**< Total size of all .msgsets */
         size_t cnt;      /**< Total count of .msgsets */
         size_t max_size; /**< Maximum size of all .msgsets, may be overshot. */
@@ -450,6 +453,10 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
                                    int64_t *BaseOffset);
 
 rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
+    const rd_kafka_mock_partition_t *mpart,
+    int32_t leader_epoch);
+
+int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
     const rd_kafka_mock_partition_t *mpart,
     int32_t leader_epoch);
 

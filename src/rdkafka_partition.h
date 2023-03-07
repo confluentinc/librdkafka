@@ -97,21 +97,27 @@ rd_kafka_fetch_pos_init(rd_kafka_fetch_pos_t *fetchpos) {
 const char *rd_kafka_fetch_pos2str(const rd_kafka_fetch_pos_t fetchpos);
 
 static RD_UNUSED RD_INLINE rd_kafka_fetch_pos_t
-rd_kafka_fetch_pos_make(int64_t offset, int32_t leader_epoch) {
-        rd_kafka_fetch_pos_t fetchpos = {offset, leader_epoch};
+rd_kafka_fetch_pos_make(int64_t offset,
+                        int32_t leader_epoch,
+                        rd_bool_t validated) {
+        rd_kafka_fetch_pos_t fetchpos = {offset, leader_epoch, validated};
         return fetchpos;
 }
 
 #ifdef RD_HAS_STATEMENT_EXPRESSIONS
-#define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
+#define RD_KAFKA_FETCH_POS0(offset, leader_epoch, validated)                   \
         ({                                                                     \
-                rd_kafka_fetch_pos_t _fetchpos = {offset, leader_epoch};       \
+                rd_kafka_fetch_pos_t _fetchpos = {offset, leader_epoch,        \
+                                                  validated};                  \
                 _fetchpos;                                                     \
         })
 #else
-#define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
-        rd_kafka_fetch_pos_make(offset, leader_epoch)
+#define RD_KAFKA_FETCH_POS0(offset, leader_epoch, validated)                   \
+        rd_kafka_fetch_pos_make(offset, leader_epoch, validated)
 #endif
+
+#define RD_KAFKA_FETCH_POS(offset, leader_epoch)                               \
+        RD_KAFKA_FETCH_POS0(offset, leader_epoch, rd_false)
 
 
 

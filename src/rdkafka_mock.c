@@ -93,6 +93,7 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
         rd_kafka_mock_msgset_t *mset;
         size_t totsize = sizeof(*mset) + RD_KAFKAP_BYTES_LEN(bytes);
         int64_t BaseOffset;
+        int32_t PartitionLeaderEpoch;
         int64_t orig_start_offset = mpart->start_offset;
 
         rd_assert(!RD_KAFKAP_BYTES_IS_NULL(bytes));
@@ -107,7 +108,8 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
                 mpart->follower_end_offset = mpart->end_offset;
         mpart->cnt++;
 
-        mset->bytes.len = bytes->len;
+        mset->bytes.len    = bytes->len;
+        mset->leader_epoch = mpart->leader_epoch;
 
 
         mset->bytes.data = (void *)(mset + 1);
@@ -118,7 +120,11 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
          * actual absolute log offset. */
         BaseOffset = htobe64(mset->first_offset);
         memcpy((void *)mset->bytes.data, &BaseOffset, sizeof(BaseOffset));
-
+        /* Update the base PartitionLeaderEpoch in the MessageSet with the
+         * actual partition leader epoch. */
+        PartitionLeaderEpoch = htobe32(mset->leader_epoch);
+        memcpy(((char *)mset->bytes.data) + 12, &PartitionLeaderEpoch,
+               sizeof(PartitionLeaderEpoch));
 
         /* Remove old msgsets until within limits */
         while (mpart->cnt > 1 &&
@@ -385,6 +391,32 @@ rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
 
         /* NOTREACHED, but avoids warning */
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Returns the end offset (last offset + 1)
+ *        for the passed leader epoch in the mock partition.
+ *
+ * @param mpart The mock partition
+ * @param leader_epoch The leader epoch
+ *
+ * @return The end offset for the passed \p leader_epoch in \p mpart
+ */
+int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
+    const rd_kafka_mock_partition_t *mpart,
+    int32_t leader_epoch) {
+        const rd_kafka_mock_msgset_t *mset = NULL;
+
+        if (leader_epoch < 0)
+                return -1;
+
+        TAILQ_FOREACH_REVERSE(mset, &mpart->msgsets,
+                              rd_kafka_mock_msgset_tailq_s, link) {
+                if (mset->leader_epoch == leader_epoch)
+                        return mset->last_offset + 1;
+        }
+
+        return -1;
 }
 
 

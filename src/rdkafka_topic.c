@@ -671,8 +671,10 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition, leader_epoch,
                              rktp->rktp_leader_epoch);
-                rd_kafka_toppar_unlock(rktp);
-                return 0;
+                if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
+                        rd_kafka_toppar_unlock(rktp);
+                        return 0;
+                }
         }
 
         if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT)
@@ -722,8 +724,15 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                                                   "leader updated");
         }
 
-        if (need_epoch_validation)
+        if (need_epoch_validation) {
+                /* Update next fetch position, that could be stale since last
+                 * fetch start. Only if the offset is real. */
+                if (rktp->rktp_offsets.fetch_pos.offset > 0) {
+                        rd_kafka_toppar_set_next_fetch_position(
+                            rktp, rktp->rktp_offsets.fetch_pos);
+                }
                 rd_kafka_offset_validate(rktp, "epoch updated from metadata");
+        }
 
         rd_kafka_toppar_unlock(rktp);
 

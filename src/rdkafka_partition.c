@@ -1792,9 +1792,14 @@ void rd_kafka_toppar_seek(rd_kafka_toppar_t *rktp,
                 rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
                                     &rktp->rktp_offset_query_tmr, 1 /*lock*/);
 
-
-        rd_kafka_toppar_next_offset_handle(rktp, pos);
-
+        if (pos.offset <= 0 || pos.validated) {
+                rd_kafka_toppar_next_offset_handle(rktp, pos);
+        } else {
+                rd_kafka_toppar_set_fetch_state(
+                    rktp, RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT);
+                rd_kafka_toppar_set_next_fetch_position(rktp, pos);
+                rd_kafka_offset_validate(rktp, "seek");
+        }
 
         /* Signal back to caller thread that seek has commenced, or err */
 err_reply:

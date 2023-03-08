@@ -2726,8 +2726,8 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
  */
 static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
                                         rd_kafka_toppar_t *rktp) {
-        int cnt = 0;
-        rd_kafka_op_t *rko, *next;
+        int cnt = 0, barrier_cnt = 0, message_cnt = 0, other_cnt = 0;
+        rd_kafka_op_t *rko;
         rd_kafka_q_t *rkq;
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
@@ -2748,17 +2748,25 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
                 mtx_lock(&rkq->rkq_lock);
                 rd_assert(!rkq->rkq_fwdq);
 
-                next = TAILQ_FIRST(&rkq->rkq_q);
-                while ((rko = next)) {
+                rko = TAILQ_FIRST(&rkq->rkq_q);
+                while (rko) {
                         if (rko->rko_type != RD_KAFKA_OP_BARRIER &&
                             rko->rko_type != RD_KAFKA_OP_FETCH) {
                                 rd_kafka_log(
                                     rkcg->rkcg_rk, LOG_WARNING, "PARTDEL",
-                                    "Purging toppar fetch queue buffer message"
+                                    "Purging toppar fetch queue buffer op"
                                     "with unexpected type: %s",
                                     rd_kafka_op2str(rko->rko_type));
                         }
-                        next = TAILQ_NEXT(next, rko_link);
+
+                        if (rko->rko_type == RD_KAFKA_OP_BARRIER)
+                                barrier_cnt++;
+                        else if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                                message_cnt++;
+                        else
+                                other_cnt++;
+
+                        rko = TAILQ_NEXT(rko, rko_link);
                         cnt++;
                 }
 
@@ -2767,13 +2775,16 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
                 if (cnt) {
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
                                      "Purge toppar fetch queue buffer "
-                                     "containing %d message(s) to avoid "
+                                     "containing %d op(s) "
+                                     "(%d barrier(s), %d message(s), %d other)"
+                                     " to avoid "
                                      "circular references",
-                                     cnt);
+                                     cnt, barrier_cnt, message_cnt, other_cnt);
                         rd_kafka_q_purge(rktp->rktp_fetchq);
                 } else {
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
-                                     "Not purging toppar fetch queue buffer");
+                                     "Not purging toppar fetch queue buffer."
+                                     " No ops present in the buffer.");
                 }
         }
 

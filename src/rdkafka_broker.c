@@ -5294,12 +5294,6 @@ void rd_kafka_broker_update(rd_kafka_t *rk,
                  * the hostname. */
                 if (strcmp(rkb->rkb_nodename, nodename))
                         needs_update = 1;
-        } else if ((rkb = rd_kafka_broker_find(rk, proto, mdb->host,
-                                               mdb->port))) {
-                /* Broker matched by hostname (but not by nodeid),
-                 * update the nodeid. */
-                needs_update = 1;
-
         } else if ((rkb = rd_kafka_broker_add(rk, RD_KAFKA_LEARNED, proto,
                                               mdb->host, mdb->port, mdb->id))) {
                 rd_kafka_broker_keep(rkb);

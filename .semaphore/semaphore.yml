@@ -259,7 +259,6 @@ blocks:
           commands:
             - C:\msys64\usr\bin\bash -lc './packaging/mingw-w64/semaphoreci-build.sh --static ./artifacts/librdkafka.tgz'
 
-
   #  Disabled because of CoApp discontinuation, need to find an alternative
   #  before next release.
   #
@@ -283,7 +282,7 @@ blocks:
   #         # Setup vcpkg
   #         - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
   #         - cd librdkafka
-  #         #- runas /user:Administrator ..\vcpkg\vcpkg integrate install
+  #         - ..\vcpkg\vcpkg integrate install
   #         # Install required packages.
   #         - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
   #         - cd ..
@@ -296,7 +295,7 @@ blocks:
   #         - pwd
   #         - cd librdkafka
   #         # coapp is needed for creating the intermediary nuget packages.
-  #         - "& .\\win32\\install-coapp.ps1"
+  #         #- "& .\\win32\\install-coapp.ps1"
   #     epilogue:
   #       commands:
   #         - Get-ChildItem . -include *.dll -recurse
@@ -311,7 +310,9 @@ blocks:
   #             value: p-librdkafka__plat-windows__dist-msvc__arch-x64__lnk-std
   #         commands:
   #           - "& .\\win32\\msbuild.ps1 -config Release -platform x64"
-  #           - "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
+  #           # Disabled because of CoApp discontinuation, need to find an alternative
+  #           #  before next release.
+  #           #- "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
   #       - name: 'Build: MSVC x86'
   #         env_vars:
   #           - name: triplet
@@ -320,7 +321,9 @@ blocks:
   #             value: p-librdkafka__plat-windows__dist-msvc__arch-x86__lnk-std
   #         commands:
   #           - "& .\\win32\\msbuild.ps1 -config Release -platform Win32"
-  #           - "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
+  #           # Disabled because of CoApp discontinuation, need to find an alternative
+  #           #  before next release.
+  #           #- "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
 
   - name: 'Packaging'
     dependencies:
@@ -332,6 +335,7 @@ blocks:
       - 'Windows x64: MinGW-w64'
       #  Disabled because of CoApp discontinuation, need to find an alternative
       #  before next release.
+      #
       #- 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     run:
       when: "tag =~ '^v[0-9]\\.'"

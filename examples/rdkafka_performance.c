@@ -823,12 +823,21 @@ static void do_sleep(int sleep_us) {
         }
 }
 
+static void make_random_key(char *buf, int buflen) {
+        for (int i = 0; i < buflen; i++) {
+                buf[i] = rand() >> 7; // throw away low bits which are worse
+        }
+}
+
 
 int main(int argc, char **argv) {
         char *brokers   = NULL;
         char mode       = 'C';
         char *topic     = NULL;
-        const char *key = NULL;
+        // if non-null, use this same key for every message
+        const char *fixedkey = NULL;
+        // if non-zero, use a different random key of the given length for every message
+        int randkey     = 0;
         int *partitions = NULL;
         int opt;
         int sendflags     = 0;
@@ -892,7 +901,7 @@ int main(int argc, char **argv) {
         topics = rd_kafka_topic_partition_list_new(1);
 
         while ((opt = getopt(argc, argv,
-                             "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
+                             "PCG:t:p:b:s:k:K:c:fi:MDd:m:S:x:"
                              "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
                 switch (opt) {
                 case 'G':
@@ -925,7 +934,10 @@ int main(int argc, char **argv) {
                         msgsize = atoi(optarg);
                         break;
                 case 'k':
-                        key = optarg;
+                        fixedkey = optarg;
+                        break;
+                case 'K':
+                        randkey = atoi(optarg);
                         break;
                 case 'c':
                         msgcnt = atoi(optarg);
@@ -1212,6 +1224,11 @@ int main(int argc, char **argv) {
         signal(SIGUSR1, sig_usr1);
 #endif
 
+        if (fixedkey && randkey) {
+                fprintf(stderr, "%% -k and -K options are mutually exclusive\n");
+                exit(1);
+        }
+
 
         if (debug && rd_kafka_conf_set(conf, "debug", debug, errstr,
                                        sizeof(errstr)) != RD_KAFKA_CONF_OK) {
@@ -1338,7 +1355,17 @@ int main(int argc, char **argv) {
                 char *sbuf;
                 char *pbuf;
                 int outq;
-                int keylen  = key ? (int)strlen(key) : 0;
+
+                int keylen = 0;
+                const char *key = NULL;
+                if (randkey) {
+                        key = malloc(randkey);
+                        keylen = randkey;
+                } else if (fixedkey) {
+                        key = fixedkey;
+                        keylen = (int)strlen(fixedkey);
+                }
+
                 off_t rof   = 0;
                 size_t plen = strlen(msgpattern);
                 int partition =
@@ -1431,6 +1458,10 @@ int main(int argc, char **argv) {
 
                         if (msgsize == 0)
                                 pbuf = NULL;
+
+                        if (randkey) {
+                                make_random_key((char *)key, keylen);
+                        }
 
                         cnt.tx++;
                         while (run && (err = do_produce(

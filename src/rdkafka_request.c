@@ -1972,7 +1972,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         size_t i;
-        rd_bool_t is_flexver = rd_false;
 
         if (max_ApiVersion < 0)
                 max_ApiVersion = 4;
@@ -1983,7 +1982,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                  * in the application thread reliably . */
                 ApiVersion = rd_kafka_broker_ApiVersion_supported(
                     rkb, RD_KAFKAP_ListGroups, 0, max_ApiVersion, NULL);
-                is_flexver = ApiVersion >= 3;
         }
 
         if (ApiVersion == -1) {
@@ -1995,7 +1993,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ListGroups, 1,
             /* rd_kafka_buf_write_arraycnt_pos + tags + StatesFilter */
-            4 + 1 + 32 * states_cnt, is_flexver);
+            4 + 1 + 32 * states_cnt, ApiVersion >= 3 /* is_flexver */);
 
         if (ApiVersion >= 4) {
                 size_t of_GroupsArrayCnt =
@@ -2004,9 +2002,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
-        }
-        if (is_flexver) {
-                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

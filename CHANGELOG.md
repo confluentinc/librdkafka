@@ -4,6 +4,10 @@ librdkafka v2.1.0 is a feature release:
 
 * [KIP-320](https://cwiki.apache.org/confluence/display/KAFKA/KIP-320%3A+Allow+fetchers+to+detect+and+handle+log+truncation)
   Allow fetchers to detect and handle log truncation (#4122).
+* Fix a reference count issue blocking the consumer from closing (#4187).
+* Fix a protocol issue with ListGroups API, where an extra
+  field was appended for API Versions greater than or equal to 3 (#4207).
+
 
 ## Enhancements
 
@@ -16,6 +20,15 @@ librdkafka v2.1.0 is a feature release:
    - `rd_kafka_offsets_for_times()` will return per-partition leader-epochs.
    - `leader_epoch`, `stored_leader_epoch`, and `committed_leader_epoch`
      added to per-partition statistics.
+
+
+## Fixes
+
+### Consumer fixes
+
+ * A reference count issue was blocking the consumer from closing.
+   The problem would happen when a partition is lost, because forcibly
+   unassigned from the consumer or if the corresponding topic is deleted.
 
 
 

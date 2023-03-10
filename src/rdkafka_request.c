@@ -1789,7 +1789,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         size_t i;
-        rd_bool_t is_flexver = rd_false;
 
         if (max_ApiVersion < 0)
                 max_ApiVersion = 4;
@@ -1800,7 +1799,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                  * in the application thread reliably . */
                 ApiVersion = rd_kafka_broker_ApiVersion_supported(
                     rkb, RD_KAFKAP_ListGroups, 0, max_ApiVersion, NULL);
-                is_flexver = ApiVersion >= 3;
         }
 
         if (ApiVersion == -1) {
@@ -1812,7 +1810,7 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_ListGroups, 1,
             /* rd_kafka_buf_write_arraycnt_pos + tags + StatesFilter */
-            4 + 1 + 32 * states_cnt, is_flexver);
+            4 + 1 + 32 * states_cnt, ApiVersion >= 3 /* is_flexver */);
 
         if (ApiVersion >= 4) {
                 size_t of_GroupsArrayCnt =
@@ -1821,9 +1819,6 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, states[i], -1);
                 }
                 rd_kafka_buf_finalize_arraycnt(rkbuf, of_GroupsArrayCnt, i);
-        }
-        if (is_flexver) {
-                rd_kafka_buf_write_tags(rkbuf);
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
@@ -2260,7 +2255,7 @@ void rd_kafka_ApiVersionRequest(rd_kafka_broker_t *rkb,
                 ApiVersion = 3;
 
         rkbuf = rd_kafka_buf_new_flexver_request(
-            rkb, RD_KAFKAP_ApiVersion, 1, 4, ApiVersion >= 3 /*flexver*/);
+            rkb, RD_KAFKAP_ApiVersion, 1, 3, ApiVersion >= 3 /*flexver*/);
 
         if (ApiVersion >= 3) {
                 /* KIP-511 adds software name and version through the optional
@@ -3975,7 +3970,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AlterConfigs, 0, 0, NULL);
+            rkb, RD_KAFKAP_AlterConfigs, 0, 1, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
@@ -3984,13 +3979,12 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        /* incremental requires ApiVersion > FIXME */
-        if (ApiVersion < 1 /* FIXME */ &&
-            rd_kafka_confval_get_int(&options->incremental)) {
+        /* Incremental requires IncrementalAlterConfigs */
+        if (rd_kafka_confval_get_int(&options->incremental)) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs.incremental=true (KIP-248) "
                             "not supported by broker, "
-                            "requires broker version >= 2.0.0");
+                            "replaced by IncrementalAlterConfigs");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
@@ -4020,15 +4014,12 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        if (ApiVersion == 1)
-                                rd_kafka_buf_write_i8(rkbuf,
-                                                      entry->a.operation);
-                        else if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
+                        if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
                                 rd_snprintf(errstr, errstr_size,
-                                            "Broker version >= 2.0.0 required "
+                                            "IncrementalAlterConfigs required "
                                             "for add/delete config "
                                             "entries: only set supported "
-                                            "by this broker");
+                                            "by this operation");
                                 rd_kafka_buf_destroy(rkbuf);
                                 rd_kafka_replyq_destroy(&replyq);
                                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;

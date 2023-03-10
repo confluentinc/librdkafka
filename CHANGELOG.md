@@ -3,6 +3,18 @@
 librdkafka v2.0.3 is a bugfix release:
 
 * Fix CMake pkg-config issue with cURL require (#4180).
+* Fix a reference count issue blocking the consumer from closing (#4187).
+* Fix a protocol issue with ListGroups API, where an extra
+  field was appended for API Versions greater than or equal to 3 (#4207).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * A reference count issue was blocking the consumer from closing.
+   The problem would happen when a partition is lost, because forcibly
+   unassigned from the consumer or if the corresponding topic is deleted.
 
 
 

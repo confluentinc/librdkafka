@@ -1,3 +1,20 @@
+# librdkafka v2.0.3
+
+librdkafka v2.0.3 is a bugfix release:
+
+* Fix a reference count issue blocking the consumer from closing (#4187).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * A reference count issue was blocking the consumer from closing.
+   The problem would happen when a partition is lost, because forcibly
+   unassigned from the consumer or if the corresponding topic is deleted.
+
+
+
 # librdkafka v2.0.2
 
 librdkafka v2.0.2 is a bugfix release:

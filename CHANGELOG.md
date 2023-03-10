@@ -3,6 +3,8 @@
 librdkafka v2.0.3 is a bugfix release:
 
 * Fix a reference count issue blocking the consumer from closing (#4187).
+* Fix a protocol issue with ListGroups API, where an extra
+  field was appended for API Versions greater than or equal to 3.
 
 
 ## Fixes

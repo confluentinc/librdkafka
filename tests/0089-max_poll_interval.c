@@ -41,8 +41,10 @@
  *    and the partition is assigned to the other consumer.
  */
 
-/* Test without log queue. */
-void do_test(void) {
+/**
+ *  @brief Test max.poll.interval.ms without any additional polling.
+ */
+static void do_test(void) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         uint64_t testid;
         const int msgcnt = 10;
@@ -188,8 +190,10 @@ done:
 }
 
 
-/* Test while polling log queue. */
-void do_test_with_log_queue(void) {
+/**
+ *  @brief Test max.poll.interval.ms while polling log queue.
+ */
+static void do_test_with_log_queue(void) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
         uint64_t testid;
         const int msgcnt = 10;

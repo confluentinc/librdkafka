@@ -3184,7 +3184,7 @@ static void rd_kafka_cgrp_offsets_commit(rd_kafka_cgrp_t *rkcg,
                 rkcg->rkcg_rk->rk_consumer.wait_commit_cnt++;
         }
 
-        /* Don't attempt auto commit when rebalancing or initializing since
+        /* Don't attempt commit when rebalancing or initializing since
          * the rkcg_generation_id is most likely in flux. */
         if (rkcg->rkcg_subscription &&
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STEADY) {

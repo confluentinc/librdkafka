@@ -2034,7 +2034,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                      * avoid triggering a rejoin or error propagation
                      * on receiving the response since some topics
                      * may be missing. */
-                    rd_false, rko);
+                    rd_false, rko, NULL, 0, NULL);
                 rd_list_destroy(&topics);
 
         } else {

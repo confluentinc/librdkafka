@@ -91,6 +91,21 @@ struct rd_kafka_AdminOptions_s {
                                      * Valid for:
                                      *     ListConsumerGroupOffsets
                                      */
+        
+        rd_kafka_confval_t
+            include_topic_authorized_operations; /**< BOOL: Whether broker should return
+                                     * topic authorized operations.
+                                     * Valid for:
+                                     *     DescribeTopic
+                                     *     MetadataRequest
+                                     */
+        rd_kafka_confval_t
+                include_cluster_authorized_operations; /**< BOOL: Whether broker should return
+                                     * cluster authorized operations.
+                                     * Valid for:
+                                     *     DescribeCluster
+                                     *     MetadataRequest
+                                     */
 
         rd_kafka_confval_t
             match_consumer_group_states; /**< PTR: list of consumer group states
@@ -475,6 +490,40 @@ struct rd_kafka_ConsumerGroupDescription_s {
         rd_kafka_Node_t *coordinator;
         /** Group specific error. */
         rd_kafka_error_t *error;
+};
+
+/**@}*/
+
+/**
+ * @name DescribeTopics
+ * @{
+ */
+/**
+ * @struct DescribeTopics result
+ */
+struct rd_kafka_TopicDescription_s {
+        char *topic;       /**< Topic name */
+        int partition_cnt; /**< Number of partitions in \p partitions*/
+        struct rd_kafka_metadata_partition *partitions; /**< Partitions */
+        rd_kafka_resp_err_t err; /**< Topic error reported by broker */
+        rd_list_t* topic_authorized_operations; /**< ACL operations allowed for topics */
+};
+
+/**@}*/
+
+/**
+ * @name DescribeCluster
+ * @{
+ */
+/**
+ * @struct DescribeCluster result
+ */
+struct rd_kafka_ClusterDescription_s {
+        char *cluster_id;       /**< current cluster id in \p cluster*/
+        int controller_id; /**< current controller id in \p cluster*/
+        int node_cnt;    /**< Number of brokers in \p cluster*/
+        rd_kafka_Node_t *Nodes; /**< Nodes */
+        rd_list_t* cluster_authorized_operations; /**< ACL operations allowed for cluster */
 };
 
 /**@}*/

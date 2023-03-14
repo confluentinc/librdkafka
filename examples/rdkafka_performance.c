@@ -1708,6 +1708,17 @@ int main(int argc, char **argv) {
                                                     rkmessages[i]);
                                         }
                                 }
+
+                                if (r == -1)
+                                        fprintf(stderr, "%% Error: %s\n",
+                                                rd_kafka_err2str(
+                                                    rd_kafka_last_error()));
+                                else if (r > 0 && rate_sleep) {
+                                        /* Simulate processing time
+                                         * if `-r <rate>` was set. */
+                                        do_sleep(rate_sleep);
+                                }
+
                         } else {
                                 rkmessages[0] =
                                     rd_kafka_consumer_poll(rk, 1000);

@@ -38,7 +38,10 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *rkbuf,
                                             struct rd_kafka_metadata **mdp,
                                             rd_kafka_topic_authorized_operations_pair_t** topic_authorized_operations,
-                                            int32_t* cluster_authorized_operations);
+                                            int32_t* cluster_authorized_operations,
+                                            rd_list_t* request_topics,
+                                            char** rk_cluster_id,
+                                            int* rk_controller_id);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);

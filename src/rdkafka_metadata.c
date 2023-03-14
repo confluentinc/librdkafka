@@ -92,7 +92,7 @@ rd_kafka_metadata(rd_kafka_t *rk,
                                   * topics in the cluster, since a
                                   * partial request may make it seem
                                   * like some subscribed topics are missing. */
-                                 all_topics ? rd_true : rd_false, rko);
+                                 all_topics ? rd_true : rd_false, rko, NULL, 0, NULL);
 
         rd_list_destroy(&topics);
         rd_kafka_broker_destroy(rkb);
@@ -275,7 +275,11 @@ rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
  * @brief Handle a Metadata response message.
  *
  * @param topics are the requested topics (may be NULL)
- *
+ * @param topic_authorized_operations topics mapped to their acl operations allowed
+ * @param cluster_authorized_operations acl operations allowed for cluster
+ * @param rk_cluster_id returns the current cluster_id (char*)
+ * @param rk_controller_id returns the current controller_id (int)
+ * 
  * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
  *
  * The marshalled metadata is returned in \p *mdp, (NULL on error).
@@ -289,7 +293,10 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                             rd_kafka_buf_t *rkbuf,
                                             struct rd_kafka_metadata **mdp,
                                             rd_kafka_topic_authorized_operations_pair_t** topic_authorized_operations,
-                                            int32_t* cluster_authorized_operations) {
+                                            int32_t* cluster_authorized_operations,
+                                            rd_list_t* request_topics,
+                                            char** rk_cluster_id,
+                                            int* rk_controller_id) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
@@ -297,14 +304,16 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         size_t rkb_namelen;
         const int log_decode_errors       = LOG_ERR;
         rd_list_t *missing_topics         = NULL;
-        const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
-        rd_bool_t all_topics = request->rkbuf_u.Metadata.all_topics;
-        rd_bool_t cgrp_update =
-            request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp;
-        const char *reason = request->rkbuf_u.Metadata.reason
+        const rd_list_t *requested_topics = request ? request->rkbuf_u.Metadata.topics 
+                                : request_topics;
+        rd_bool_t all_topics = request ? request->rkbuf_u.Metadata.all_topics : rd_false;
+        rd_bool_t cgrp_update = request ? 
+            (request->rkbuf_u.Metadata.cgrp_update && rk->rk_cgrp) : rd_false;
+        const char *reason = request ? (request->rkbuf_u.Metadata.reason
                                  ? request->rkbuf_u.Metadata.reason
-                                 : "(no reason)";
-        int ApiVersion             = request->rkbuf_reqhdr.ApiVersion;
+                                 : "(no reason)") : "(admin request)";
+        /* changed from request->rkbuf_reqhdr.ApiVersion as request buffer may be NULL*/
+        int ApiVersion             = rkbuf->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id      = -1;
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -376,11 +385,15 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        if (ApiVersion >= 2)
+        if (ApiVersion >= 2){
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
+                *rk_cluster_id = RD_KAFKAP_STR_DUP(&cluster_id);
+        }
+                
 
         if (ApiVersion >= 1) {
                 rd_kafka_buf_read_i32(rkbuf, &controller_id);
+                *rk_controller_id = controller_id;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "ClusterId: %.*s, ControllerId: %" PRId32,
                            RD_KAFKAP_STR_PR(&cluster_id), controller_id);
@@ -400,7 +413,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
         if ((ApiVersion >= 8 && ApiVersion <= 10) && topic_authorized_operations){
                 *topic_authorized_operations = rd_malloc(sizeof(rd_kafka_topic_authorized_operations_pair_t) * md->topic_cnt);
-        } 
+        }
 
         for (i = 0; i < md->topic_cnt; i++) {
                 rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
@@ -526,9 +539,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                               &TopicAuthorizedOperations);
                         (*topic_authorized_operations)[i].topic_name = md->topics[i].topic;
                         (*topic_authorized_operations)[i].authorized_operations = TopicAuthorizedOperations;
-                        printf("%s topic has %d authorized operations\n", 
-                                (*topic_authorized_operations)[i].topic_name, 
-                                (*topic_authorized_operations)[i].authorized_operations);
                 }
 
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -602,7 +612,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_read_i32(rkbuf, &ClusterAuthorizedOperations);
                 *cluster_authorized_operations = ClusterAuthorizedOperations;
-                printf("Cluster authorized operations: %d\n", ClusterAuthorizedOperations);
         }
 
         rd_kafka_buf_skip_tags(rkbuf);
@@ -1058,7 +1067,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
         rd_kafka_MetadataRequest(rkb, &q_topics, reason, allow_auto_create,
                                 rd_true /*include cluster authorized operations */,
                                 rd_true /*include topic authorized operations */,
-                                 cgrp_update, NULL);
+                                 cgrp_update, NULL, NULL, 0, NULL);
 
         rd_list_destroy(&q_topics);
 
@@ -1239,7 +1248,7 @@ rd_kafka_resp_err_t rd_kafka_metadata_refresh_all(rd_kafka_t *rk,
                                  rd_false /*no auto create*/,
                                  rd_true /*include cluster authorized operations */,
                                  rd_true /*include topic authorized operations */,
-                                 rd_true /*cgrp update*/, NULL);
+                                 rd_true /*cgrp update*/, NULL, NULL, 0, NULL);
         rd_list_destroy(&topics);
 
         if (destroy_rkb)
@@ -1281,7 +1290,7 @@ rd_kafka_metadata_request(rd_kafka_t *rk,
         rd_kafka_MetadataRequest(rkb, topics, reason, allow_auto_create_topics, 
                                 include_cluster_authorized_operations,
                                 include_topic_authorized_operations,
-                                 cgrp_update, rko);
+                                 cgrp_update, rko, NULL, 0, NULL);
 
         if (destroy_rkb)
                 rd_kafka_broker_destroy(rkb);

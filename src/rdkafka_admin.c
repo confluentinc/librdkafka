@@ -1557,6 +1557,26 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_require_stable_offsets(
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
+rd_kafka_error_t *rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false) {
+        char errstr[512];
+        rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+            &options->include_topic_authorized_operations, RD_KAFKA_CONFVAL_INT,
+            &true_or_false, errstr, sizeof(errstr));
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
+    rd_kafka_AdminOptions_t *options,
+    int true_or_false) {
+        char errstr[512];
+        rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+            &options->include_cluster_authorized_operations, RD_KAFKA_CONFVAL_INT,
+            &true_or_false, errstr, sizeof(errstr));
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
 rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     rd_kafka_AdminOptions_t *options,
     const rd_kafka_consumer_group_state_t *consumer_group_states,
@@ -1656,6 +1676,21 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
         else
                 rd_kafka_confval_disable(&options->require_stable_offsets,
                                          "require_stable_offsets");
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_DESCRIBETOPICS)
+                rd_kafka_confval_init_int(&options->include_topic_authorized_operations,
+                                        "include_topic_authorized_operations",0,1,0);
+        else
+                rd_kafka_confval_disable(&options->include_topic_authorized_operations,
+                                        "include_topic_authorized_operations");
+        
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER)
+                rd_kafka_confval_init_int(&options->include_cluster_authorized_operations,
+                                        "include_cluster_authorized_operations",0,1,0);
+        else
+                rd_kafka_confval_disable(&options->include_cluster_authorized_operations,
+                                        "include_cluster_authorized_operations");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS)
@@ -5982,6 +6017,32 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
  */
 
 /**
+ * @brief Parse authorized_operations returned in 
+ * - DescribeConsumerGroups
+ * - DescribeTopics
+ * - DescribeCluster
+ * @returns list of acl operations
+ */
+rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
+        int i, bit;
+        rd_list_t* authorized_operations_list = NULL;
+        rd_kafka_AclOperation_t* entry;
+        /* in case of authorized_operations not requested, return NULL*/
+        if(authorized_operations<0)
+                return NULL;
+        authorized_operations_list = rd_list_new(0, rd_free);
+        for(i=0; i<RD_KAFKA_ACL_OPERATION__CNT; i++){
+                bit = (authorized_operations >> i) & 1;
+                if(bit){
+                        entry = malloc(sizeof(rd_kafka_AclOperation_t));
+                        *entry = i;
+                        rd_list_add(authorized_operations_list, entry);
+                }
+        }
+        return authorized_operations_list;
+}
+
+/**
  * @brief Create a new MemberDescription object. This object is used for
  *        creating a ConsumerGroupDescription.
  *
@@ -6665,4 +6726,752 @@ rd_kafka_DescribeConsumerGroups_result_groups(
             rko->rko_u.admin_result.results.rl_elems;
 }
 
+/**@}*/
+
+/**
+ * @name Describe Topic
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+const int rd_kafka_TopicDescription_authorized_operation_idx(
+    const rd_kafka_TopicDescription_t *topicdesc,
+    size_t idx) {
+        rd_kafka_AclOperation_t* entry = rd_list_elem(topicdesc->topic_authorized_operations, idx);
+        return *entry;
+}
+
+const int rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        if(topicdesc->topic_authorized_operations)
+                return rd_list_cnt(topicdesc->topic_authorized_operations);
+        return 0;
+}
+
+const int rd_kafka_TopicDescription_partiton_id(
+    const rd_kafka_TopicDescription_t *topicdesc, int idx) {
+        return topicdesc->partitions[idx].id;
+}
+
+const int rd_kafka_TopicDescription_partiton_leader(
+    const rd_kafka_TopicDescription_t *topicdesc, int idx) {
+        return topicdesc->partitions[idx].leader;
+}
+
+const int rd_kafka_TopicDescription_partiton_isr_cnt(
+    const rd_kafka_TopicDescription_t *topicdesc, int idx) {
+        return topicdesc->partitions[idx].isr_cnt;
+}
+
+const int rd_kafka_TopicDescription_partiton_replica_cnt(
+    const rd_kafka_TopicDescription_t *topicdesc, int idx) {
+        return topicdesc->partitions[idx].replica_cnt;
+}
+
+const int rd_kafka_TopicDescription_partiton_isrs_idx(
+    const rd_kafka_TopicDescription_t *topicdesc, int partition_idx, int isr_idx) {
+        return topicdesc->partitions[partition_idx].isrs[isr_idx];
+}
+
+const int rd_kafka_TopicDescription_partiton_replica_idx(
+    const rd_kafka_TopicDescription_t *topicdesc, int partition_idx, int replica_idx) {
+        return topicdesc->partitions[partition_idx].replicas[replica_idx];
+}
+
+const rd_kafka_error_t *rd_kafka_TopicDescription_partition_error(
+    const rd_kafka_TopicDescription_t *topicdesc, int idx) {
+        return rd_kafka_error_new(topicdesc->partitions[idx].err, NULL);
+}
+
+const int rd_kafka_TopicDescription_topic_partition_cnt(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return topicdesc->partition_cnt;
+}
+
+const char *rd_kafka_TopicDescription_topic_name(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return topicdesc->topic;
+}
+
+const rd_kafka_error_t *rd_kafka_TopicDescription_error(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return rd_kafka_error_new(topicdesc->err, NULL);
+}
+const rd_kafka_TopicDescription_t **
+rd_kafka_DescribeTopics_result_topics(
+    const rd_kafka_DescribeTopics_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBETOPICS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_TopicDescription_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+static void rd_kafka_TopicDescription_destroy(
+    rd_kafka_TopicDescription_t *topicdesc) {
+        int i;
+        if (likely(topicdesc->topic != NULL))
+                rd_free(topicdesc->topic);
+        // if (likely(topicdesc->err != NULL))
+        //         rd_kafka_error_destroy(topicdesc->err);
+        for(i=0;i<topicdesc->partition_cnt;i++){
+                if(likely(topicdesc->partitions[i].isrs != NULL))
+                        rd_free(topicdesc->partitions[i].isrs);
+                if(likely(topicdesc->partitions[i].replicas != NULL))
+                        rd_free(topicdesc->partitions[i].replicas);
+        }
+        if(likely(topicdesc->partitions != NULL))
+                rd_free(topicdesc->partitions);
+        if(likely(topicdesc->topic_authorized_operations != NULL))
+                rd_list_destroy(topicdesc->topic_authorized_operations);
+        rd_free(topicdesc);
+}
+static void rd_kafka_TopicDescription_free(void *ptr) {
+        rd_kafka_TopicDescription_destroy(ptr);
+}
+
+/**
+ * @brief Topics arguments comparator for DescribeTopics args
+ */
+static int rd_kafka_DescribeTopics_cmp(const void *a, const void *b) {
+        return strcmp(a, b);
+}
+/**
+ * @brief Create a new ConsumerGroupDescription object.
+ *
+ * @param topic topic name
+ * @param partitions Array of partition metadata (rd_kafka_metadata_partition).
+ * @param partition_cnt Number of partitons in partition metadata.
+ * @param topic_authorized_operations acl operations allowed for topic.
+ * @param err Topic error reported by broker.
+ * @return A new allocated TopicDescription object.
+ *         Use rd_kafka_TopicDescription_destroy() to free when done.
+ */
+static rd_kafka_TopicDescription_t *
+rd_kafka_TopicDescription_new(const char *topic,
+                        struct rd_kafka_metadata_partition* partitions,
+                        int partition_cnt,
+                        rd_list_t* topic_authorized_operations,
+                        rd_kafka_resp_err_t err) {
+        rd_kafka_TopicDescription_t *topicdesc;
+        int i,j;
+        topicdesc                           = rd_calloc(1, sizeof(*topicdesc));
+        topicdesc->topic                 = rd_strdup(topic);
+        topicdesc->partition_cnt = partition_cnt;
+        topicdesc->err = err;
+        if(topic_authorized_operations){
+                topicdesc->topic_authorized_operations = 
+                        rd_list_new(rd_list_cnt(topic_authorized_operations), rd_free);
+                for(i=0;i<rd_list_cnt(topic_authorized_operations); i++){
+                        int* entry = rd_list_elem(topic_authorized_operations, i);
+                        int* oper = rd_malloc(sizeof(int));
+                        *oper = *entry;
+                        rd_list_add(topicdesc->topic_authorized_operations, 
+                                oper);
+                }
+        }
+        else    
+                topicdesc->topic_authorized_operations = NULL;
+
+        if (partitions == NULL) {
+                topicdesc->partitions = NULL;
+        } else {
+                topicdesc->partitions = rd_malloc(sizeof(*partitions) * partition_cnt);
+                for(i=0; i < partition_cnt; i++){
+                        topicdesc->partitions[i].err = partitions[i].err;
+                        topicdesc->partitions[i].id = partitions[i].id;
+                        topicdesc->partitions[i].isr_cnt = partitions[i].isr_cnt;
+                        topicdesc->partitions[i].isrs = 
+                                rd_malloc(sizeof(int32_t) * topicdesc->partitions[i].isr_cnt);
+                        for(j=0; j<topicdesc->partitions[i].isr_cnt; j++){
+                                topicdesc->partitions[i].isrs[j] = 
+                                        partitions[i].isrs[j];
+                        }
+                        topicdesc->partitions[i].leader = partitions[i].leader;
+                        topicdesc->partitions[i].replica_cnt = partitions[i].replica_cnt;
+                        topicdesc->partitions[i].replicas = 
+                                rd_malloc(sizeof(int32_t) * topicdesc->partitions[i].replica_cnt);
+                        for(j=0; j<topicdesc->partitions[i].replica_cnt; j++){
+                                topicdesc->partitions[i].replicas[j] = 
+                                        partitions[i].replicas[j];
+                        }
+
+                }
+        }
+        return topicdesc;
+}
+/**
+ * @brief Copy \p desc TopicDescription.
+ *
+ * @param desc The topic description to copy.
+ * @return A new allocated copy of the passed TopicDescription.
+ */
+static rd_kafka_TopicDescription_t *
+rd_kafka_TopicDescription_copy(
+    const rd_kafka_TopicDescription_t *topicdesc) {
+        return rd_kafka_TopicDescription_new(
+            topicdesc->topic, topicdesc->partitions,
+            topicdesc->partition_cnt, topicdesc->topic_authorized_operations,
+            topicdesc->err);
+}
+/**
+ * @brief Same as rd_kafka_TopicDescription_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_TopicDescription_copy_opaque(const void *topicdesc,
+                                                           void *opaque) {
+        return rd_kafka_TopicDescription_copy(topicdesc);
+}
+/**
+ * @brief New instance of TopicDescription from an error.
+ *
+ * @param group_id The topic.
+ * @param error The error.
+ * @return A new allocated TopicDescription with the passed error.
+ */
+static rd_kafka_TopicDescription_t *
+rd_kafka_TopicDescription_new_error(const char *topic,
+                                rd_kafka_resp_err_t err) {
+        return rd_kafka_TopicDescription_new(
+            topic, NULL, 0, NULL, err);
+}
+/** @brief Merge the DescribeTopics response from a single broker
+ *         into the user response list.
+ */
+static void rd_kafka_DescribeTopics_response_merge(
+    rd_kafka_op_t *rko_fanout,
+    const rd_kafka_op_t *rko_partial) {
+        rd_kafka_TopicDescription_t *topicres = NULL;
+        rd_kafka_TopicDescription_t *newtopicres;
+        const char *topic = rko_partial->rko_u.admin_result.opaque;
+        int orig_pos;
+
+        rd_assert(rko_partial->rko_evtype ==
+                  RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT);
+
+        if (!rko_partial->rko_err) {
+                /* Proper results.
+                 * We only send one topic per request, make sure it matches */
+                topicres =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
+                rd_assert(topicres);
+                rd_assert(!strcmp(topicres->topic, topic));
+                newtopicres = rd_kafka_TopicDescription_copy(topicres);
+        } else {
+                /* Op errored, e.g. timeout */
+                rd_kafka_error_t *error =
+                    rd_kafka_error_new(rko_partial->rko_err, NULL);
+                newtopicres =
+                    rd_kafka_TopicDescription_new_error(topic, error->code);
+                rd_kafka_error_destroy(error);
+        }
+
+        /* As a convenience to the application we insert group result
+         * in the same order as they were requested. */
+        orig_pos = rd_list_index(&rko_fanout->rko_u.admin_request.args, topic,
+                                 rd_kafka_DescribeTopics_cmp);
+        rd_assert(orig_pos != -1);
+
+        /* Make sure result is not already set */
+        rd_assert(rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,
+                               orig_pos) == NULL);
+
+        rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, orig_pos,
+                    newtopicres);
+}
+/**
+ * @brief Construct and send DescribeTopicsRequest to \p rkb
+ *        with the topics (char *) in \p groups, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+static rd_kafka_resp_err_t rd_kafka_admin_DescribeTopicsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics /*(char*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque){
+        int i;
+        rd_kafka_resp_err_t err;
+        int include_topic_authorized_operations;
+
+        include_topic_authorized_operations = 
+                rd_kafka_confval_get_int(&options->include_topic_authorized_operations);
+        /* resp_cb = rd_kafka_admin_handle_response; */
+        
+        // error = Call metadata request
+        err = rd_kafka_MetadataRequest(rkb, topics,
+                                                "describe topics",
+                                                rd_false,
+                                                rd_false,
+                                                include_topic_authorized_operations,
+                                                rd_false,
+                                                NULL,
+                                                resp_cb, 0, opaque);
+
+        if (err) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_err2str(err));
+                return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Parse DescribeTopicsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
+                                              rd_kafka_op_t **rko_resultp,
+                                              rd_kafka_buf_t *reply,
+                                              char *errstr,
+                                              size_t errstr_size){
+        struct rd_kafka_metadata *md = NULL;
+        rd_kafka_resp_err_t err;
+        rd_list_t topics = rko_req->rko_u.admin_request.args;
+        rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
+        rd_kafka_topic_authorized_operations_pair_t* topic_authorized_operations = NULL;
+        int32_t cluster_authorized_operations;
+        char* cluster_id = NULL;
+        int controller_id;
+        int i, cnt;
+        rd_kafka_op_t *rko_result = NULL;
+        // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
+        //                           thrd_is_current(rk->rk_thread));
+        // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY);
+
+        err = rd_kafka_parse_Metadata(rkb, NULL, reply, &md, &topic_authorized_operations,&cluster_authorized_operations, &topics, 
+                        &cluster_id, &controller_id);
+        if (err)
+                goto err;
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, md->topic_cnt,
+                rd_kafka_TopicDescription_free);                
+        cnt = md->topic_cnt;
+        i=0;
+        while(cnt--){
+                rd_kafka_TopicDescription_t *topicdesc = NULL;
+                /* topics in md should be in the same order as in topic_authorized_operations*/
+                rd_assert(strcmp(md->topics[i].topic, topic_authorized_operations[i].topic_name) == 0);
+                if(md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR){
+                        rd_list_t* authorized_operations;
+                        authorized_operations = 
+                                rd_kafka_AuthorizedOperations_parse(
+                                        topic_authorized_operations[i].authorized_operations);
+                        topicdesc = rd_kafka_TopicDescription_new(md->topics[i].topic,
+                                                        md->topics[i].partitions,
+                                                        md->topics[i].partition_cnt,
+                                                        authorized_operations,
+                                                        md->topics[i].err);
+                        rd_list_destroy(authorized_operations);
+                }
+                else
+                        topicdesc = rd_kafka_TopicDescription_new_error(md->topics[i].topic,
+                                                        md->topics[i].err);
+                rd_list_add(&rko_result->rko_u.admin_result.results, topicdesc);
+        }
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(
+                errstr, errstr_size,
+                "DescribeTopics response protocol parse failure: %s",
+                rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+void rd_kafka_DescribeTopics(rd_kafka_t *rk,
+                                const char** topics,
+                                size_t topics_cnt,
+                                const rd_kafka_AdminOptions_t *options,
+                                rd_kafka_queue_t *rkqu){
+        rd_kafka_op_t *rko_fanout;
+        rd_list_t dup_list;
+        size_t i;
+        
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_DescribeTopics_response_merge,
+            rd_kafka_TopicDescription_copy_opaque};
+
+        rd_assert(rkqu);
+
+        rko_fanout = rd_kafka_admin_fanout_op_new(
+            rk, RD_KAFKA_OP_DESCRIBETOPICS,
+            RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &fanout_cbs, options,
+            rkqu->rkqu_q);
+
+        if (topics_cnt == 0) {
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No topics to describe");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* Copy topic list and store it on the request op.
+         * Maintain original ordering. */
+        rd_list_init(&rko_fanout->rko_u.admin_request.args, (int)topics_cnt,
+                     rd_free);
+        for (i = 0; i < topics_cnt; i++)
+                rd_list_add(&rko_fanout->rko_u.admin_request.args,
+                            rd_strdup(topics[i]));
+
+        /* Check for duplicates.
+         * Make a temporary copy of the topic list and sort it to check for
+         * duplicates, we don't want the original list sorted since we want
+         * to maintain ordering. */
+        rd_list_init(&dup_list,
+                     rd_list_cnt(&rko_fanout->rko_u.admin_request.args), NULL);
+        rd_list_copy_to(&dup_list, &rko_fanout->rko_u.admin_request.args, NULL,
+                        NULL);
+        rd_list_sort(&dup_list, rd_kafka_DescribeTopics_cmp);
+        if (rd_list_find_duplicate(&dup_list,
+                                   rd_kafka_DescribeTopics_cmp)) {
+                rd_list_destroy(&dup_list);
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate topics not allowed");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        rd_list_destroy(&dup_list);
+
+        /* Prepare results list where fanned out op's results will be
+         * accumulated. */
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
+                     (int)topics_cnt, rd_kafka_TopicDescription_free);
+        rko_fanout->rko_u.admin_request.fanout.outstanding = (int)topics_cnt;
+
+        /* Create individual request ops for each topic.
+         * FIXME: A future optimization is to coalesce all topic for a single
+         *        coordinator into one op. */
+        for (i = 0; i < topics_cnt; i++) {
+                static const struct rd_kafka_admin_worker_cbs cbs = {
+                    rd_kafka_admin_DescribeTopicsRequest,
+                    rd_kafka_DescribeTopicsResponse_parse,
+                };
+                char *topic =
+                    rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
+                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
+                    rk, RD_KAFKA_OP_DESCRIBETOPICS,
+                    RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT, &cbs, options,
+                    rk->rk_ops);
+
+                rko->rko_u.admin_request.fanout_parent = rko_fanout;
+                // rko->rko_u.admin_request.broker_id =
+                //     RD_KAFKA_ADMIN_TARGET_COORDINATOR;
+                rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_GROUP;
+                rko->rko_u.admin_request.coordkey  = rd_strdup(topic);
+
+                /* Set the topic name as the opaque so the fanout worker use it
+                 * to fill in errors.
+                 * References rko_fanout's memory, which will always outlive
+                 * the fanned out op. */
+                rd_kafka_AdminOptions_set_opaque(
+                    &rko->rko_u.admin_request.options, topic);
+
+                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_strdup(topics[i]));
+
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        }
+
+}
+
+/**@}*/
+
+/**
+ * @name Describe cluster
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+const rd_kafka_Node_t *rd_kafka_ClusterDescription_node_idx(
+    const rd_kafka_ClusterDescription_t *clusterdesc, int idx) {
+        return &(clusterdesc->Nodes[idx]);
+}
+
+const int rd_kafka_ClusterDescription_authorized_operation_idx(
+    const rd_kafka_ClusterDescription_t *clusterdesc,
+    size_t idx) {
+        rd_kafka_AclOperation_t* entry = rd_list_elem(clusterdesc->cluster_authorized_operations, idx);
+        return *entry;
+}
+
+const char *rd_kafka_ClusterDescription_cluster_id(
+    const rd_kafka_ClusterDescription_t *clusterdesc) {
+        return clusterdesc->cluster_id;
+}
+const int rd_kafka_ClusterDescription_controller_id(
+    const rd_kafka_ClusterDescription_t *clusterdesc) {
+        return clusterdesc->controller_id;
+}
+const int rd_kafka_ClusterDescription_cluster_acl_operations_cnt(
+    const rd_kafka_ClusterDescription_t *clusterdesc) {
+        if(clusterdesc->cluster_authorized_operations)
+                return rd_list_cnt(clusterdesc->cluster_authorized_operations);
+        return 0;
+}
+const int rd_kafka_ClusterDescription_node_cnt(
+    const rd_kafka_ClusterDescription_t *clusterdesc) {
+        return clusterdesc->node_cnt;
+}
+
+const rd_kafka_ClusterDescription_t *
+rd_kafka_DescribeCluster_result_description(
+    const rd_kafka_DescribeTopics_result_t *result) {
+        int cluster_result_cnt;
+        const rd_kafka_ClusterDescription_t* clusterdesc;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBECLUSTER);
+
+        cluster_result_cnt = rd_list_cnt(
+                &rko->rko_u.admin_result.results);
+        printf("%d is the value\n", cluster_result_cnt);
+        rd_assert(cluster_result_cnt == 1);
+        clusterdesc = rd_list_elem(
+                &rko->rko_u.admin_result.results, 0);
+        
+        return clusterdesc;
+}
+
+/**
+ * @brief Copy \p desc ClusterDescription.
+ *
+ * @param desc The cluster description to copy.
+ * @return A new allocated copy of the passed ClusterDescription.
+ */
+static rd_kafka_ClusterDescription_t *
+rd_kafka_ClusterDescription_copy(
+                const rd_kafka_ClusterDescription_t *desc) {
+        rd_kafka_ClusterDescription_t *clusterdesc;
+        int i;
+        clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
+
+        clusterdesc->cluster_id = rd_strdup(desc->cluster_id);
+        clusterdesc->controller_id = desc->controller_id;
+        
+        if(desc->cluster_authorized_operations){
+                clusterdesc->cluster_authorized_operations = 
+                        rd_list_new(rd_list_cnt(desc->cluster_authorized_operations), rd_free);
+                for(i=0;i<rd_list_cnt(desc->cluster_authorized_operations); i++){
+                        int* entry = rd_list_elem(desc->cluster_authorized_operations, i);
+                        int* oper = malloc(sizeof(int));
+                        *oper = *entry;
+                        rd_list_add(clusterdesc->cluster_authorized_operations, 
+                                oper);
+                }
+        }
+        else
+                clusterdesc->cluster_authorized_operations = NULL;
+
+        clusterdesc->node_cnt = desc->node_cnt;
+        clusterdesc->Nodes = malloc(sizeof(rd_kafka_Node_t) * desc->node_cnt);
+        for(i=0;i<desc->node_cnt;i++){
+                clusterdesc->Nodes[i].host = rd_strdup(desc->Nodes[i].host);
+                clusterdesc->Nodes[i].port = desc->Nodes[i].port;
+                clusterdesc->Nodes[i].id = desc->Nodes[i].id;
+        }
+        return clusterdesc;
+}
+
+/**
+ * @brief Create a new ClusterDescription object.
+ *
+ * @param cluster_id current cluster_id
+ * @param controller_id current controller_id.
+ * @param md metadata struct returned by parse_metadata().
+ *  
+ * @returns new ClusterDescription object.
+ */
+static rd_kafka_ClusterDescription_t *
+rd_kafka_ClusterDescription_new(const char *cluster_id,
+                int controller_id,
+                rd_list_t* cluster_authorized_operations,
+                struct rd_kafka_metadata *md) {
+        rd_kafka_ClusterDescription_t *clusterdesc;
+        int i;
+        clusterdesc = rd_calloc(1, sizeof(*clusterdesc));
+
+        clusterdesc->cluster_id = rd_strdup(cluster_id);
+        clusterdesc->controller_id = controller_id;
+        
+        if(cluster_authorized_operations){
+                clusterdesc->cluster_authorized_operations = 
+                        rd_list_new(rd_list_cnt(cluster_authorized_operations), rd_free);
+                for(i=0;i<rd_list_cnt(cluster_authorized_operations); i++){
+                        int* entry = rd_list_elem(cluster_authorized_operations, i);
+                        int* oper = malloc(sizeof(int));
+                        *oper = *entry;
+                        rd_list_add(clusterdesc->cluster_authorized_operations, 
+                                oper);
+                }
+        }
+        else
+                clusterdesc->cluster_authorized_operations = NULL;
+
+        clusterdesc->node_cnt = md->broker_cnt;
+        clusterdesc->Nodes = malloc(sizeof(rd_kafka_Node_t) * md->broker_cnt);
+        for(i=0;i<md->broker_cnt;i++){
+                clusterdesc->Nodes[i].host = rd_strdup(md->brokers[i].host);
+                clusterdesc->Nodes[i].port = md->brokers[i].port;
+                clusterdesc->Nodes[i].id = md->brokers[i].id;
+        }
+        return clusterdesc;
+}
+
+static void rd_kafka_ClusterDescription_destroy(
+    rd_kafka_ClusterDescription_t *clusterdesc) {
+        int i;
+        RD_IF_FREE(clusterdesc->cluster_id, rd_free);
+        if(clusterdesc->cluster_authorized_operations)
+                rd_list_destroy(clusterdesc->cluster_authorized_operations);
+        for(i=0;i<clusterdesc->node_cnt;i++){
+                rd_kafka_Node_destroy(&clusterdesc->Nodes[i]);
+        }
+        rd_free(clusterdesc);
+}
+static void rd_kafka_ClusterDescription_free(void *ptr) {
+        rd_kafka_ClusterDescription_destroy(ptr);
+}
+/**
+ * @brief Send DescribeClusterRequest. Admin worker compatible callback.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_DescribeClusterRequest(rd_kafka_broker_t *rkb,
+                                         const rd_list_t *topics /*(char*)*/,
+                                         rd_kafka_AdminOptions_t *options,
+                                         char *errstr,
+                                         size_t errstr_size,
+                                         rd_kafka_replyq_t replyq,
+                                         rd_kafka_resp_cb_t *resp_cb,
+                                         void *opaque) {
+        rd_kafka_resp_err_t err;
+        int include_topic_authorized_operations, cluster_authorized_operations;
+
+        include_topic_authorized_operations = 
+                rd_kafka_confval_get_int(&options->include_topic_authorized_operations);
+        cluster_authorized_operations = 
+                rd_kafka_confval_get_int(&options->include_cluster_authorized_operations);
+        /* resp_cb = rd_kafka_admin_handle_response; */
+        
+        // err = Call metadata request with NULL topics
+        err = rd_kafka_MetadataRequest(rkb, NULL,
+                                                "describe cluster",
+                                                rd_false,
+                                                cluster_authorized_operations,
+                                                include_topic_authorized_operations,
+                                                rd_false,
+                                                NULL,
+                                                resp_cb, 1, opaque);
+
+        if (err) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_err2str(err));
+                return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+/**
+ * @brief Parse DescribeCluster and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
+                                              rd_kafka_op_t **rko_resultp,
+                                              rd_kafka_buf_t *reply,
+                                              char *errstr,
+                                              size_t errstr_size){
+        struct rd_kafka_metadata *md = NULL;
+        rd_kafka_resp_err_t err;
+        rd_kafka_ClusterDescription_t *clusterdesc = NULL;
+        rd_list_t topics = rko_req->rko_u.admin_request.args;
+        rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
+        rd_kafka_topic_authorized_operations_pair_t* topic_authorized_operations = NULL;
+        int32_t cluster_authorized_operations;
+        char* cluster_id = NULL;
+        int controller_id;
+        int i;
+        rd_kafka_op_t *rko_result = NULL;
+        // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
+        //                           thrd_is_current(rk->rk_thread));
+        // rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY);
+
+        err = rd_kafka_parse_Metadata(rkb, NULL, reply, &md, &topic_authorized_operations,&cluster_authorized_operations, &topics,
+                        &cluster_id, &controller_id);
+        if (err)
+                goto err;
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                rd_kafka_ClusterDescription_free);  
+
+        rd_list_t* authorized_operations;
+        authorized_operations = 
+                rd_kafka_AuthorizedOperations_parse(cluster_authorized_operations);              
+
+        clusterdesc = rd_kafka_ClusterDescription_new(cluster_id,
+                        controller_id, authorized_operations, md);
+        rd_free(cluster_id);
+        
+        rd_list_add(&rko_result->rko_u.admin_result.results, clusterdesc);
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(
+                errstr, errstr_size,
+                "DescribeTopics response protocol parse failure: %s",
+                rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+void rd_kafka_DescribeCluster(rd_kafka_t *rk,
+                                 const rd_kafka_AdminOptions_t *options,
+                                 rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_admin_DescribeClusterRequest,
+            rd_kafka_DescribeClusterResponse_parse};
+        // static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+        //     rd_kafka_ClusterDescription_response_merge,
+        //     rd_kafka_ClusterDescription_copy_opaque,
+        // };
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBECLUSTER,
+            RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+        // rko = rd_kafka_admin_request_op_target_all_new(
+        //     rk, RD_KAFKA_OP_DESCRIBECLUSTER,
+        //     RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT, &cbs, &fanout_cbs,
+        //     rd_kafka_ClusterDescriptionResult_free, options, rkqu->rkqu_q);
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
 /**@}*/

@@ -442,6 +442,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
         char *t;
+        int num;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
         rd_snprintf(name, sizeof(name), "%s",
@@ -451,14 +452,14 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         /* Remove ":9092" port suffix from nodename */
         if ((t = strrchr(name, ':')))
                 *t = '\0';
+        num = (/*ipv6*/ (strchr(name, ':') &&
+                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
+                            strlen(name)) ||
+               /*ipv4*/ strspn(name, "0123456789.") == strlen(name));
 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name, ':') &&
-                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name)) ||
-              /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+        if (!num && !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
                 goto fail;
 #endif
 
@@ -466,16 +467,16 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
-                goto fail;
-#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
                 X509_VERIFY_PARAM *param;
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
-
-                if (!X509_VERIFY_PARAM_set1_host(param, name, 0))
+                /* If non-numerical hostname validate hostname SAN */
+                if (!num && !X509_VERIFY_PARAM_set1_host(param, name, 0))
+                        goto fail;
+                /* else validate address SAN */
+                else if (num && !X509_VERIFY_PARAM_set1_ip_asc(param, name))
                         goto fail;
         }
 #else
@@ -487,7 +488,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s", name);
+                   "Enabled endpoint identification using %s %s",
+                   num ? "address" : "hostname", name);
 
         return 0;
 

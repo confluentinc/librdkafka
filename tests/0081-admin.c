@@ -3007,8 +3007,18 @@ static void do_test_DescribeTopics(const char *what, rd_kafka_t *rk, rd_kafka_qu
             q, RD_KAFKA_EVENT_CREATEACLS_RESULT, 10000 + 1000);
         acl_res = rd_kafka_event_CreateAcls_result(rkev_acl_create);
         acl_res_acls = rd_kafka_CreateAcls_result_acls(acl_res, &resacl_cnt);
+        for (i = 0; i < resacl_cnt; i++) {
+                const rd_kafka_acl_result_t *acl_res_acl = *(acl_res_acls + i);
+                const rd_kafka_error_t *error_acl =
+                    rd_kafka_acl_result_error(acl_res_acl);
+
+                TEST_ASSERT(!error_acl,
+                            "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
+                            rd_kafka_error_string(error));
+        }
         rd_kafka_event_destroy(rkev_acl_create);
         rd_kafka_AdminOptions_destroy(admin_options);
+        rd_kafka_AclBinding_destroy(acl_bindings[0]);
         /*
          * Timeout options
          */
@@ -3113,9 +3123,19 @@ static void do_test_DescribeTopics(const char *what, rd_kafka_t *rk, rd_kafka_qu
             q, RD_KAFKA_EVENT_CREATEACLS_RESULT, 10000 + 1000);
         acl_res = rd_kafka_event_CreateAcls_result(rkev_acl_create);
         acl_res_acls = rd_kafka_CreateAcls_result_acls(acl_res, &resacl_cnt);
+        for (i = 0; i < resacl_cnt; i++) {
+                const rd_kafka_acl_result_t *acl_res_acl = *(acl_res_acls + i);
+                const rd_kafka_error_t *error_acl =
+                    rd_kafka_acl_result_error(acl_res_acl);
+
+                TEST_ASSERT(!error_acl,
+                            "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
+                            rd_kafka_error_string(error));
+        }
         rd_kafka_event_destroy(rkev_acl_create);
         rd_kafka_AdminOptions_destroy(admin_options);
         rd_kafka_event_destroy(rkev);
+        rd_kafka_AclBinding_destroy(acl_bindings[0]);
         test_DeleteTopics_simple(rk, q, topics, 1, NULL);
         
         TEST_LATER_CHECK();
@@ -3146,6 +3166,14 @@ static void do_test_DescribeCluster(const char *what, rd_kafka_t *rk, rd_kafka_q
         const rd_kafka_acl_result_t **acl_res_acls;
         rd_kafka_event_t *rkev_acl_create;
         size_t resacl_cnt;
+        rd_kafka_AdminOptions_t *admin_options_delete;
+        rd_kafka_AclBindingFilter_t *acl_bindings_delete;
+        rd_kafka_event_t *rkev_acl_delete;
+        const rd_kafka_DeleteAcls_result_t *acl_delete_result;
+        const rd_kafka_DeleteAcls_result_response_t *
+            *DeleteAcls_result_responses;
+        const rd_kafka_DeleteAcls_result_response_t *DeleteAcls_result_response;
+        size_t DeleteAcls_result_responses_cntp;
         int i;
         int initial_acl_cnt, final_acl_cnt;
 
@@ -3224,7 +3252,7 @@ static void do_test_DescribeCluster(const char *what, rd_kafka_t *rk, rd_kafka_q
 
         acl_bindings[0] = rd_kafka_AclBinding_new(
                     RD_KAFKA_RESOURCE_BROKER, "kafka-cluster", RD_KAFKA_RESOURCE_PATTERN_LITERAL, 
-                    user_test1, "*", RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                    user_test1, "*", RD_KAFKA_ACL_OPERATION_ALTER,
                     RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW, NULL, 0);
         admin_options =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATEACLS);
@@ -3236,8 +3264,18 @@ static void do_test_DescribeCluster(const char *what, rd_kafka_t *rk, rd_kafka_q
             q, RD_KAFKA_EVENT_CREATEACLS_RESULT, 10000 + 1000);
         acl_res = rd_kafka_event_CreateAcls_result(rkev_acl_create);
         acl_res_acls = rd_kafka_CreateAcls_result_acls(acl_res, &resacl_cnt);
+        for (i = 0; i < resacl_cnt; i++) {
+                const rd_kafka_acl_result_t *acl_res_acl = *(acl_res_acls + i);
+                const rd_kafka_error_t *error_acl =
+                    rd_kafka_acl_result_error(acl_res_acl);
+
+                TEST_ASSERT(!error_acl,
+                            "Expected RD_KAFKA_RESP_ERR_NO_ERROR, not %s",
+                            rd_kafka_error_string(error));
+        }
         rd_kafka_event_destroy(rkev_acl_create);
         rd_kafka_AdminOptions_destroy(admin_options);
+        rd_kafka_AclBinding_destroy(acl_bindings[0]);
         /*
          * Timeout options
          */
@@ -3303,18 +3341,63 @@ static void do_test_DescribeCluster(const char *what, rd_kafka_t *rk, rd_kafka_q
 
         /*
          * Initally count should be 7. After createAcls call with 
-         * only RD_KAFKA_ACL_OPERATION_DESCRIBE allowed, it should reduce
-         * to 1 (describe). 7>1 should hold.
+         * only RD_KAFKA_ACL_OPERATION_ALTER allowed, it should reduce
+         * to 2 (DESCRIBE is implicitly derived, and ALTER ). 7>2 should hold.
          */
         TEST_SAY("final count is: %d\n", final_acl_cnt);
-        // TEST_ASSERT(initial_acl_cnt > final_acl_cnt,
-        //     "Expected the acl operations allowed to have reduced after"
-        //     " call to CreateAcls");
+        TEST_ASSERT(initial_acl_cnt > final_acl_cnt,
+            "Expected the acl operations allowed to have reduced after"
+            " call to CreateAcls");
         
         rd_kafka_event_destroy(rkev);
-        
+
+        /*
+         * Remove the previously created Acl so that it doesn't affect other tests
+        */
+        admin_options_delete =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEACLS);
+        rd_kafka_AdminOptions_set_request_timeout(admin_options_delete, 10000,
+                                                  errstr, sizeof(errstr));
+
+        acl_bindings_delete = rd_kafka_AclBindingFilter_new(
+            RD_KAFKA_RESOURCE_BROKER, "kafka-cluster", RD_KAFKA_RESOURCE_PATTERN_MATCH, 
+            user_test1 ,"*", RD_KAFKA_ACL_OPERATION_ALTER, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW,
+            NULL, 0);
+
+        TIMING_START(&timing, "DeleteAcls");
+        rd_kafka_DeleteAcls(rk, &acl_bindings_delete, 1, admin_options_delete,
+                            q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /*
+         * Wait for result
+         */
+        rkev_acl_delete = test_wait_admin_result(
+            q, RD_KAFKA_EVENT_DELETEACLS_RESULT, 10000 + 1000);
+
+        acl_delete_result = rd_kafka_event_DeleteAcls_result(rkev_acl_delete);
+
+        TEST_ASSERT(acl_delete_result, "acl_delete_result should not be NULL");
+
+        DeleteAcls_result_responses_cntp = 0;
+        DeleteAcls_result_responses      = rd_kafka_DeleteAcls_result_responses(
+            acl_delete_result, &DeleteAcls_result_responses_cntp);
+
+        TEST_ASSERT(DeleteAcls_result_responses_cntp == 1,
+                    "DeleteAcls_result_responses_cntp should be 1, not %zu\n",
+                    DeleteAcls_result_responses_cntp);
+
+        DeleteAcls_result_response = DeleteAcls_result_responses[0];
+
+        TEST_CALL_ERROR__(rd_kafka_DeleteAcls_result_response_error(
+            DeleteAcls_result_response));
+        rd_kafka_event_destroy(rkev_acl_delete);
+        rd_kafka_AclBinding_destroy(acl_bindings_delete);
+        rd_kafka_AdminOptions_destroy(admin_options_delete);
         TEST_LATER_CHECK();
 
+        if (!rkqu)
+                rd_kafka_queue_destroy(q);
         SUB_TEST_PASS();
 }
 
@@ -4133,113 +4216,113 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         mainq = rd_kafka_queue_get_main(rk);
 
-        // /* Create topics */
-        // do_test_CreateTopics("temp queue, op timeout 0", rk, NULL, 0, 0);
-        // do_test_CreateTopics("temp queue, op timeout 15000", rk, NULL, 15000,
-        //                      0);
-        // do_test_CreateTopics(
-        //     "temp queue, op timeout 300, "
-        //     "validate only",
-        //     rk, NULL, 300, rd_true);
-        // do_test_CreateTopics("temp queue, op timeout 9000, validate_only", rk,
-        //                      NULL, 9000, rd_true);
-        // do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
+        /* Create topics */
+        do_test_CreateTopics("temp queue, op timeout 0", rk, NULL, 0, 0);
+        do_test_CreateTopics("temp queue, op timeout 15000", rk, NULL, 15000,
+                             0);
+        do_test_CreateTopics(
+            "temp queue, op timeout 300, "
+            "validate only",
+            rk, NULL, 300, rd_true);
+        do_test_CreateTopics("temp queue, op timeout 9000, validate_only", rk,
+                             NULL, 9000, rd_true);
+        do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
 
-        // /* Delete topics */
-        // do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
-        // do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
+        /* Delete topics */
+        do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
 
-        // if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
-        //         /* Create Partitions */
-        //         do_test_CreatePartitions("temp queue, op timeout 6500", rk,
-        //                                  NULL, 6500);
-        //         do_test_CreatePartitions("main queue, op timeout 0", rk, mainq,
-        //                                  0);
-        // }
+        if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
+                /* Create Partitions */
+                do_test_CreatePartitions("temp queue, op timeout 6500", rk,
+                                         NULL, 6500);
+                do_test_CreatePartitions("main queue, op timeout 0", rk, mainq,
+                                         0);
+        }
 
-        // /* CreateAcls */
-        // do_test_CreateAcls(rk, mainq, 0);
-        // do_test_CreateAcls(rk, mainq, 1);
+        /* CreateAcls */
+        do_test_CreateAcls(rk, mainq, 0);
+        do_test_CreateAcls(rk, mainq, 1);
 
-        // /* DescribeAcls */
-        // do_test_DescribeAcls(rk, mainq, 0);
-        // do_test_DescribeAcls(rk, mainq, 1);
+        /* DescribeAcls */
+        do_test_DescribeAcls(rk, mainq, 0);
+        do_test_DescribeAcls(rk, mainq, 1);
 
-        // /* DeleteAcls */
-        // do_test_DeleteAcls(rk, mainq, 0);
-        // do_test_DeleteAcls(rk, mainq, 1);
+        /* DeleteAcls */
+        do_test_DeleteAcls(rk, mainq, 0);
+        do_test_DeleteAcls(rk, mainq, 1);
 
-        // /* AlterConfigs */
-        // do_test_AlterConfigs(rk, mainq);
+        /* AlterConfigs */
+        do_test_AlterConfigs(rk, mainq);
 
-        // /* DescribeConfigs */
-        // do_test_DescribeConfigs(rk, mainq);
+        /* DescribeConfigs */
+        do_test_DescribeConfigs(rk, mainq);
 
-        // /* Delete records */
-        // do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
-        // do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
+        /* Delete records */
+        do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
-        // /* List groups */
-        // do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
-        // do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
+        /* List groups */
+        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
 
         /* Describe groups */
-        // do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-        // do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
-        // /* Describe topics */
-        // do_test_DescribeTopics("temp queue", rk, NULL, 15000);
-        // do_test_DescribeTopics("main queue", rk, mainq, 15000);
+        /* Describe topics */
+        do_test_DescribeTopics("temp queue", rk, NULL, 15000);
+        do_test_DescribeTopics("main queue", rk, mainq, 15000);
 
         /* Describe cluster */
         do_test_DescribeCluster("temp queue", rk, NULL, 1500);
         do_test_DescribeCluster("main queue", rk, mainq, 1500);
 
-        // /* Delete groups */
-        // do_test_DeleteGroups("temp queue", rk, NULL, -1);
-        // do_test_DeleteGroups("main queue", rk, mainq, 1500);
+        /* Delete groups */
+        do_test_DeleteGroups("temp queue", rk, NULL, -1);
+        do_test_DeleteGroups("main queue", rk, mainq, 1500);
 
-        // if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
-        //         /* Delete committed offsets */
-        //         do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                            rd_false);
-        //         do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
-        //                                            1500, rd_false);
-        //         do_test_DeleteConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/);
+        if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
+                /* Delete committed offsets */
+                do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                   rd_false);
+                do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
+                                                   1500, rd_false);
+                do_test_DeleteConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/);
 
-        //         /* Alter committed offsets */
-        //         do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                           rd_false, rd_true);
-        //         do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
-        //                                           rd_false, rd_true);
-        //         do_test_AlterConsumerGroupOffsets(
-        //             "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
-        //             rd_false /* don't create topics */);
-        //         do_test_AlterConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true, /*with subscribing consumer*/
-        //             rd_true);
+                /* Alter committed offsets */
+                do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
+                    rd_false /* don't create topics */);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true, /*with subscribing consumer*/
+                    rd_true);
 
-        //         /* List committed offsets */
-        //         do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                          rd_false, rd_false);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue, op timeout "
-        //             "1500",
-        //             rk, mainq, 1500, rd_false, rd_false);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/, rd_false);
-        //         do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                          rd_false, rd_true);
-        //         do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
-        //                                          rd_false, rd_true);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/, rd_true);
-        // }
+                /* List committed offsets */
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_true);
+        }
 
         rd_kafka_queue_destroy(mainq);
 

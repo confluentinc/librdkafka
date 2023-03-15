@@ -539,15 +539,17 @@ int rd_kafka_q_serve(rd_kafka_q_t *rkq,
  *
  * @locality Any thread.
  */
-static size_t rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
-                                               int32_t version,
-                                               rd_kafka_message_t **rkmessages,
-                                               size_t cnt) {
+static size_t
+rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
+                                 int32_t version,
+                                 rd_kafka_message_t **rkmessages,
+                                 size_t cnt,
+                                 struct rd_kafka_op_tailq ctrl_msg_q) {
         size_t valid_count = 0;
         size_t i;
+        rd_kafka_op_t *rko, *next;
 
         for (i = 0; i < cnt; i++) {
-                rd_kafka_op_t *rko;
                 rko = rkmessages[i]->_private;
                 if (rko->rko_rktp == rktp &&
                     rd_kafka_op_version_outdated(rko, version)) {
@@ -559,6 +561,17 @@ static size_t rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
                         valid_count++;
                 }
         }
+
+        /* Discard outdated control msgs ops */
+        next = TAILQ_FIRST(&ctrl_msg_q);
+        while (next && next->rko_rktp == rktp &&
+               rd_kafka_op_version_outdated(next, version)) {
+                rko  = next;
+                next = TAILQ_NEXT(rko, rko_link);
+                TAILQ_REMOVE(&ctrl_msg_q, rko, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
         return valid_count;
 }
 
@@ -577,6 +590,8 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                                 size_t rkmessages_size) {
         unsigned int cnt = 0;
         TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
+        struct rd_kafka_op_tailq ctrl_msg_q =
+            TAILQ_HEAD_INITIALIZER(ctrl_msg_q);
         rd_kafka_op_t *rko, *next;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
@@ -625,7 +640,8 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
                 if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
                         cnt = (unsigned int)rd_kafka_purge_outdated_messages(
-                            rko->rko_rktp, rko->rko_version, rkmessages, cnt);
+                            rko->rko_rktp, rko->rko_version, rkmessages, cnt,
+                            ctrl_msg_q);
                         rd_kafka_op_destroy(rko);
                         continue;
                 }
@@ -650,11 +666,11 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 }
                 rd_dassert(res == RD_KAFKA_OP_RES_PASS);
 
-                /* If this is a control messages, don't return
-                 * message to application. Add it to the tmp queue
-                 * from where we can store the offset and destroy the op */
+                /* If this is a control messages, don't return message to
+                 * application. Add it to a tmp queue from where we can store
+                 * the offset and destroy the op */
                 if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
-                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                        TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
                         continue;
                 }
 
@@ -676,14 +692,19 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         while (next) {
                 rko  = next;
                 next = TAILQ_NEXT(next, rko_link);
-                if (rd_kafka_op_is_ctrl_msg(rko)) {
-                        rd_kafka_toppar_t *rktp = rko->rko_rktp;
-                        int64_t offset =
-                            rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
-                        if (unlikely(rktp->rktp_app_offset < offset))
-                                rd_kafka_update_app_offset(rk, rktp, offset,
-                                                           RD_DO_LOCK);
-                }
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Discard ctrl msgs */
+        next = TAILQ_FIRST(&ctrl_msg_q);
+        while (next) {
+                rko                     = next;
+                next                    = TAILQ_NEXT(next, rko_link);
+                rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                int64_t offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+                if (unlikely(rktp->rktp_app_offset < offset))
+                        rd_kafka_update_app_offset(rk, rktp, offset,
+                                                   RD_DO_LOCK);
                 rd_kafka_op_destroy(rko);
         }
 

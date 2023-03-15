@@ -49,6 +49,7 @@
 
 
 const char *argv0;
+
 static rd_kafka_queue_t *queue; /** Admin result queue.
                                  *  This is a global so we can
                                  *  yield in stop() */
@@ -347,10 +348,7 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-        conf_set(conf, "sasl.username", "broker");
-        conf_set(conf, "sasl.password", "broker");
-        conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
-        conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
+
 
         /*
          * Parse common options
@@ -384,5 +382,6 @@ int main(int argc, char **argv) {
         }
 
         cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
+
         return 0;
 }

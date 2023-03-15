@@ -7254,7 +7254,6 @@ rd_kafka_DescribeCluster_result_description(
 
         cluster_result_cnt = rd_list_cnt(
                 &rko->rko_u.admin_result.results);
-        printf("%d is the value\n", cluster_result_cnt);
         rd_assert(cluster_result_cnt == 1);
         clusterdesc = rd_list_elem(
                 &rko->rko_u.admin_result.results, 0);

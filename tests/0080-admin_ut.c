@@ -633,9 +633,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
         char errstr[512];
         const char *errstr2;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         test_timing_t timing;
         rd_kafka_event_t *rkev;
-        const rd_kafka_DeleteGroups_result_t *res;
+        const rd_kafka_DescribeConsumerGroups_result_t *res;
         const rd_kafka_ConsumerGroupDescription_t **resgroups;
         size_t resgroup_cnt;
         void *my_opaque = NULL, *opaque;
@@ -657,6 +658,15 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if ((error = 
+                        rd_kafka_AdminOptions_set_include_authorized_operations(
+                                options, 0))) {
+                        fprintf(stderr,
+                                "%% Failed to set require authorized operations: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        TEST_FAIL("Failed to set include authorized operations\n");
+                }
 
                 if (useq) {
                         my_opaque = (void *)456;
@@ -724,6 +734,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     group_names[i],
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
+                TEST_ASSERT(
+                        rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+                                resgroups[i]) == 0, "Got authorized operations"
+                                "when not requested");
         }
 
         rd_kafka_event_destroy(rkev);

@@ -1,7 +1,7 @@
 # Download the CoApp tools.
 $msiPath = "$($env:USERPROFILE)\\CoApp.Tools.Powershell.msi"
 
-(New-Object Net.WebClient).DownloadFile('http://coapp.org/files/CoApp.Tools.Powershell.msi', $msiPath)
+(New-Object Net.WebClient).DownloadFile('https://github.com/coapp/coapp.github.io/blob/master/files/Latest.CoApp.Tools.Powershell.msi', $msiPath)
 
 # Install the CoApp tools from the downloaded .msi.
 Start-Process -FilePath msiexec -ArgumentList /i, $msiPath, /quiet -Wait

@@ -670,6 +670,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                  * application. Add it to a tmp queue from where we can store
                  * the offset and destroy the op */
                 if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                        /* FIXME: Fix TAILQ_REMOVE call to handle this case */
+                        if (TAILQ_FIRST(&ctrl_msg_q) == NULL)
+                                TAILQ_INIT(&ctrl_msg_q);
                         TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
                         continue;
                 }
@@ -702,7 +705,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 next                    = TAILQ_NEXT(next, rko_link);
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
-                if (unlikely(rktp->rktp_app_offset < offset))
+                if (rktp->rktp_app_offset < offset)
                         rd_kafka_update_app_offset(rk, rktp, offset,
                                                    RD_DO_LOCK);
                 rd_kafka_op_destroy(rko);

@@ -6053,7 +6053,7 @@ rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
         for(i=0; i<RD_KAFKA_ACL_OPERATION__CNT; i++){
                 bit = (authorized_operations >> i) & 1;
                 if(bit){
-                        entry = malloc(sizeof(rd_kafka_AclOperation_t));
+                        entry = rd_malloc(sizeof(rd_kafka_AclOperation_t));
                         *entry = i;
                         rd_list_add(authorized_operations_list, entry);
                 }
@@ -6457,31 +6457,6 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-/**
- * @brief Parse authorized_operations returned in 
- * - DescribeConsumerGroups
- * - DescribeTopics
- * - DescribeCluster
- * @returns list of acl operations
- */
-rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
-        int i, bit;
-        rd_list_t* authorized_operations_list = NULL;
-        rd_kafka_AclOperation_t* entry;
-        /* in case of authorized_operations not requested, return NULL*/
-        if(authorized_operations<0)
-                return NULL;
-        authorized_operations_list = rd_list_new(0, rd_free);
-        for(i=0; i<RD_KAFKA_ACL_OPERATION__CNT; i++){
-                bit = (authorized_operations >> i) & 1;
-                if(bit){
-                        entry = rd_malloc(sizeof(rd_kafka_AclOperation_t));
-                        *entry = i;
-                        rd_list_add(authorized_operations_list, entry);
-                }
-        }
-        return authorized_operations_list;
-}
 /**
  * @brief Parse DescribeConsumerGroupsResponse and create ADMIN_RESULT op.
  */

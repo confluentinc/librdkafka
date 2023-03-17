@@ -7079,7 +7079,8 @@ rd_kafka_DescribeTopicsResponse_parse(rd_kafka_op_t *rko_req,
                                                         md->topics[i].partition_cnt,
                                                         authorized_operations,
                                                         md->topics[i].err);
-                        rd_list_destroy(authorized_operations);
+                        if(authorized_operations)
+                                rd_list_destroy(authorized_operations);
                 }
                 else
                         topicdesc = rd_kafka_TopicDescription_new_error(md->topics[i].topic,
@@ -7437,6 +7438,8 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
 
         clusterdesc = rd_kafka_ClusterDescription_new(cluster_id,
                         controller_id, authorized_operations, md);
+        if(authorized_operations)
+                rd_list_destroy(authorized_operations);
         rd_free(cluster_id);
         
         rd_list_add(&rko_result->rko_u.admin_result.results, clusterdesc);

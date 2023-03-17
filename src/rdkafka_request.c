@@ -1836,6 +1836,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
  *        with the groups (const char *) in \p groups.
  *        Uses \p max_ApiVersion as maximum API version,
  *        pass -1 to use the maximum available version.
+ *        Uses \p include_authorized_operations to get
+ *        group ACL authorized operations, 1 to request.
  *
  *        The response (unparsed) will be enqueued on \p replyq
  *        for handling by \p resp_cb (with \p opaque passed).
@@ -1888,7 +1890,6 @@ rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
 
         /* write IncludeAuthorizedOperations */
         if (ApiVersion >= 3) {
-                /* TODO: implement KIP-430 */
                 rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
         }
 

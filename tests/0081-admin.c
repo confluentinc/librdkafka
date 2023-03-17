@@ -2848,6 +2848,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_free(expected[i].group_id);
         }
 
+        test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
+
         rd_free(topic);
 
         if (options)
@@ -2923,11 +2925,11 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
                  options, 1))) {
-                fprintf(stderr,
-                        "%% Failed to set require authorized operations: %s\n",
-                        rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
-                TEST_FAIL("Failed to set include authorized operations\n");
+                    fprintf(stderr,
+                            "%% Failed to set require authorized operations: %s\n",
+                            rd_kafka_error_string(error));
+                    rd_kafka_error_destroy(error);
+                    TEST_FAIL("Failed to set include authorized operations\n");
                 }
         }
      
@@ -3058,12 +3060,10 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     TEST_ASSERT(
                         rd_kafka_ConsumerGroupDescription_authorized_operations_count(act) != 0,
                         "Authorized operations not returned when requested\n");
-                    for(j=0;j< rd_kafka_ConsumerGroupDescription_authorized_operations_count(act);j++){
-                        acl_operation = 
-                                rd_kafka_ConsumerGroupDescription_authorized_operation(act,j);
-                        TEST_SAY("%s operation is allowed\n",
-                                rd_kafka_AclOperation_name(acl_operation));
-                    }
+                    TEST_ASSERT(
+                        rd_kafka_ConsumerGroupDescription_authorized_operations_count(act) < 3,
+                        "Expected only READ and DESCRIBE operations after createAcl(), got DELETE"
+                        "as well\n");
                 }
                     
         }
@@ -3103,6 +3103,8 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                 rd_free(expected[i].group_id);
         }
 
+        test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
+        
         rd_free(topic);
 
         if (options)
@@ -3896,122 +3898,117 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                  "which will be used for replica sets\n",
                  avail_broker_cnt);
 
-        // do_test_unclean_destroy(cltype, 0 /*tempq*/);
-        // do_test_unclean_destroy(cltype, 1 /*mainq*/);
+        do_test_unclean_destroy(cltype, 0 /*tempq*/);
+        do_test_unclean_destroy(cltype, 1 /*mainq*/);
 
         test_conf_init(&conf, NULL, 180);
-        // test_conf_set(conf, "sasl.username", "broker");
-        // test_conf_set(conf, "sasl.password", "broker");
-        // test_conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
-        // test_conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
-        // test_conf_set(conf, "bootstrap.servers", "localhost:9092");
         test_conf_set(conf, "socket.timeout.ms", "10000");
         rk = test_create_handle(cltype, conf);
 
         mainq = rd_kafka_queue_get_main(rk);
 
-        // /* Create topics */
-        // do_test_CreateTopics("temp queue, op timeout 0", rk, NULL, 0, 0);
-        // do_test_CreateTopics("temp queue, op timeout 15000", rk, NULL, 15000,
-        //                      0);
-        // do_test_CreateTopics(
-        //     "temp queue, op timeout 300, "
-        //     "validate only",
-        //     rk, NULL, 300, rd_true);
-        // do_test_CreateTopics("temp queue, op timeout 9000, validate_only", rk,
-        //                      NULL, 9000, rd_true);
-        // do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
+        /* Create topics */
+        do_test_CreateTopics("temp queue, op timeout 0", rk, NULL, 0, 0);
+        do_test_CreateTopics("temp queue, op timeout 15000", rk, NULL, 15000,
+                             0);
+        do_test_CreateTopics(
+            "temp queue, op timeout 300, "
+            "validate only",
+            rk, NULL, 300, rd_true);
+        do_test_CreateTopics("temp queue, op timeout 9000, validate_only", rk,
+                             NULL, 9000, rd_true);
+        do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
 
-        // /* Delete topics */
-        // do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
-        // do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
+        /* Delete topics */
+        do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
 
-        // if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
-        //         /* Create Partitions */
-        //         do_test_CreatePartitions("temp queue, op timeout 6500", rk,
-        //                                  NULL, 6500);
-        //         do_test_CreatePartitions("main queue, op timeout 0", rk, mainq,
-        //                                  0);
-        // }
+        if (test_broker_version >= TEST_BRKVER(1, 0, 0, 0)) {
+                /* Create Partitions */
+                do_test_CreatePartitions("temp queue, op timeout 6500", rk,
+                                         NULL, 6500);
+                do_test_CreatePartitions("main queue, op timeout 0", rk, mainq,
+                                         0);
+        }
 
-        // /* CreateAcls */
-        // do_test_CreateAcls(rk, mainq, 0);
-        // do_test_CreateAcls(rk, mainq, 1);
+        /* CreateAcls */
+        do_test_CreateAcls(rk, mainq, 0);
+        do_test_CreateAcls(rk, mainq, 1);
 
-        // /* DescribeAcls */
-        // do_test_DescribeAcls(rk, mainq, 0);
-        // do_test_DescribeAcls(rk, mainq, 1);
+        /* DescribeAcls */
+        do_test_DescribeAcls(rk, mainq, 0);
+        do_test_DescribeAcls(rk, mainq, 1);
 
-        // /* DeleteAcls */
-        // do_test_DeleteAcls(rk, mainq, 0);
-        // do_test_DeleteAcls(rk, mainq, 1);
+        /* DeleteAcls */
+        do_test_DeleteAcls(rk, mainq, 0);
+        do_test_DeleteAcls(rk, mainq, 1);
 
-        // /* AlterConfigs */
-        // do_test_AlterConfigs(rk, mainq);
+        /* AlterConfigs */
+        do_test_AlterConfigs(rk, mainq);
 
-        // /* DescribeConfigs */
-        // do_test_DescribeConfigs(rk, mainq);
+        /* DescribeConfigs */
+        do_test_DescribeConfigs(rk, mainq);
 
-        // /* Delete records */
-        // do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
-        // do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
+        /* Delete records */
+        do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteRecords("main queue, op timeout 1500", rk, mainq, 1500);
 
-        // /* List groups */
-        // do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
-        // do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
+        /* List groups */
+        do_test_ListConsumerGroups("temp queue", rk, NULL, -1, rd_false);
+        do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true);
 
         /* Describe groups */
-        //do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-        //do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         do_test_DescribeConsumerGroups_with_authorized_ops("temp queue", rk, NULL, -1, rd_false);
         do_test_DescribeConsumerGroups_with_authorized_ops("main queue", rk, mainq, 1500, rd_true);
 
         /* Delete groups */
-        // do_test_DeleteGroups("temp queue", rk, NULL, -1);
-        // do_test_DeleteGroups("main queue", rk, mainq, 1500);
+        do_test_DeleteGroups("temp queue", rk, NULL, -1);
+        do_test_DeleteGroups("main queue", rk, mainq, 1500);
 
-        // if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
-        //         /* Delete committed offsets */
-        //         do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                            rd_false);
-        //         do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
-        //                                            1500, rd_false);
-        //         do_test_DeleteConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/);
+        if (test_broker_version >= TEST_BRKVER(2, 4, 0, 0)) {
+                /* Delete committed offsets */
+                do_test_DeleteConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                   rd_false);
+                do_test_DeleteConsumerGroupOffsets("main queue", rk, mainq,
+                                                   1500, rd_false);
+                do_test_DeleteConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/);
 
-        //         /* Alter committed offsets */
-        //         do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                           rd_false, rd_true);
-        //         do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
-        //                                           rd_false, rd_true);
-        //         do_test_AlterConsumerGroupOffsets(
-        //             "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
-        //             rd_false /* don't create topics */);
-        //         do_test_AlterConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true, /*with subscribing consumer*/
-        //             rd_true);
+                /* Alter committed offsets */
+                do_test_AlterConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                  rd_false, rd_true);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue, nonexistent topics", rk, mainq, 1500, rd_false,
+                    rd_false /* don't create topics */);
+                do_test_AlterConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true, /*with subscribing consumer*/
+                    rd_true);
 
-        //         /* List committed offsets */
-        //         do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                          rd_false, rd_false);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue, op timeout "
-        //             "1500",
-        //             rk, mainq, 1500, rd_false, rd_false);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/, rd_false);
-        //         do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
-        //                                          rd_false, rd_true);
-        //         do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
-        //                                          rd_false, rd_true);
-        //         do_test_ListConsumerGroupOffsets(
-        //             "main queue", rk, mainq, 1500,
-        //             rd_true /*with subscribing consumer*/, rd_true);
-        // }
+                /* List committed offsets */
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue, op timeout "
+                    "1500",
+                    rk, mainq, 1500, rd_false, rd_false);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_false);
+                do_test_ListConsumerGroupOffsets("temp queue", rk, NULL, -1,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets("main queue", rk, mainq, 1500,
+                                                 rd_false, rd_true);
+                do_test_ListConsumerGroupOffsets(
+                    "main queue", rk, mainq, 1500,
+                    rd_true /*with subscribing consumer*/, rd_true);
+        }
 
         rd_kafka_queue_destroy(mainq);
 

@@ -243,6 +243,7 @@ print_groups_info(const rd_kafka_DescribeConsumerGroups_result_t *grpdesc,
                                                      0, "      ");
                         }
                 }
+                printf("\n");
         }
         return 0;
 }
@@ -410,6 +411,5 @@ int main(int argc, char **argv) {
         }
 
         cmd_describe_consumer_groups(conf, argc - optind, &argv[optind]);
-
         return 0;
 }

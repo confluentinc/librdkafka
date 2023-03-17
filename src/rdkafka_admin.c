@@ -6196,6 +6196,7 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
                                       const rd_kafka_Node_t *coordinator,
                                       rd_kafka_error_t *error) {
         rd_kafka_ConsumerGroupDescription_t *grpdesc;
+        int i;
         grpdesc                           = rd_calloc(1, sizeof(*grpdesc));
         grpdesc->group_id                 = rd_strdup(group_id);
         grpdesc->is_simple_consumer_group = is_simple_consumer_group;
@@ -6210,7 +6211,19 @@ rd_kafka_ConsumerGroupDescription_new(const char *group_id,
         grpdesc->partition_assignor    = !partition_assignor
                                              ? (char *)partition_assignor
                                              : rd_strdup(partition_assignor);
-        grpdesc->authorized_operations = authorized_operations;
+        if(authorized_operations == NULL)
+                grpdesc->authorized_operations = authorized_operations;
+        else{
+                grpdesc->authorized_operations = 
+                        rd_list_new(rd_list_cnt(authorized_operations), rd_free);
+                for(i=0;i<rd_list_cnt(authorized_operations); i++){
+                        int* entry = rd_list_elem(authorized_operations, i);
+                        int* oper = rd_malloc(sizeof(int));
+                        *oper = *entry;
+                        rd_list_add(grpdesc->authorized_operations, 
+                                oper);
+                }
+        }
         grpdesc->state                 = state;
         if (coordinator != NULL)
                 grpdesc->coordinator = rd_kafka_Node_copy(coordinator);
@@ -6272,6 +6285,8 @@ static void rd_kafka_ConsumerGroupDescription_destroy(
                 rd_kafka_error_destroy(grpdesc->error);
         if (grpdesc->coordinator)
                 rd_kafka_Node_destroy(grpdesc->coordinator);
+        if(likely(grpdesc->authorized_operations != NULL))
+                rd_list_destroy(grpdesc->authorized_operations);
         rd_free(grpdesc);
 }
 
@@ -6311,8 +6326,11 @@ size_t rd_kafka_ConsumerGroupDescription_authorized_operations_count(
 int rd_kafka_ConsumerGroupDescription_authorized_operation(
     const rd_kafka_ConsumerGroupDescription_t *grpdesc,
     size_t idx) {
-        rd_kafka_AclOperation_t* entry = rd_list_elem(grpdesc->authorized_operations, idx);
-        return *entry;
+        if(grpdesc->authorized_operations){
+                rd_kafka_AclOperation_t* entry = rd_list_elem(grpdesc->authorized_operations, idx);
+                return *entry;
+        }
+        return 0;
 }
 
 rd_kafka_consumer_group_state_t rd_kafka_ConsumerGroupDescription_state(
@@ -6440,8 +6458,11 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
 }
 
 /**
- * @brief Parse authorized_operations returned in DescribeConsumerGroups
- * @returns array of rd_bool_t of size RD_KAFKA_ACL_OPERATIONS__CNT
+ * @brief Parse authorized_operations returned in 
+ * - DescribeConsumerGroups
+ * - DescribeTopics
+ * - DescribeCluster
+ * @returns list of acl operations
  */
 rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
         int i, bit;
@@ -6450,11 +6471,11 @@ rd_list_t* rd_kafka_AuthorizedOperations_parse(int32_t authorized_operations){
         /* in case of authorized_operations not requested, return NULL*/
         if(authorized_operations<0)
                 return NULL;
-        authorized_operations_list = rd_list_new(0, NULL);
+        authorized_operations_list = rd_list_new(0, rd_free);
         for(i=0; i<RD_KAFKA_ACL_OPERATION__CNT; i++){
                 bit = (authorized_operations >> i) & 1;
                 if(bit){
-                        entry = malloc(sizeof(rd_kafka_AclOperation_t));
+                        entry = rd_malloc(sizeof(rd_kafka_AclOperation_t));
                         *entry = i;
                         rd_list_add(authorized_operations_list, entry);
                 }
@@ -6503,7 +6524,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
         while (cnt-- > 0) {
                 int16_t error_code;
                 int32_t authorized_operations = 0;
-                rd_list_t* authorized_operations_list;
+                rd_list_t* authorized_operations_list = NULL;
                 rd_kafkap_str_t GroupId, GroupState, ProtocolType, ProtocolData;
                 rd_bool_t is_simple_consumer_group, is_consumer_protocol_type;
                 int32_t member_cnt;
@@ -6613,14 +6634,15 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 }
 
                 if (api_version >= 3) {
-                        /* TODO: implement KIP-430 */
                         rd_kafka_buf_read_i32(reply, &authorized_operations);
                         /* assert that the last 3 bits are never set*/
                         rd_assert(!((authorized_operations >> 0) & 1));
                         rd_assert(!((authorized_operations >> 1) & 1));
                         rd_assert(!((authorized_operations >> 2) & 1));
-                        /* authorized_operations is -2147483648 in case of not requested, list has no elements in that case*/
-                        authorized_operations_list = rd_kafka_AuthorizedOperations_parse(authorized_operations);
+                        /* authorized_operations is -2147483648 
+                        * in case of not requested, list has no elements in that case*/
+                        authorized_operations_list =
+                                rd_kafka_AuthorizedOperations_parse(authorized_operations);
                 }
 
                 if (error == NULL) {
@@ -6629,6 +6651,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                             authorized_operations_list,
                             rd_kafka_consumer_group_state_code(group_state),
                             node, error);
+                        if(authorized_operations_list)
+                                rd_list_destroy(authorized_operations_list);
                 } else {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new_error(
                             group_id, error);

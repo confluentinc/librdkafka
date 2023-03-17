@@ -2848,6 +2848,8 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_free(expected[i].group_id);
         }
 
+        test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
+
         rd_free(topic);
 
         if (options)
@@ -3465,11 +3467,11 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 if ((error = rd_kafka_AdminOptions_set_include_authorized_operations(
                  options, 1))) {
-                fprintf(stderr,
-                        "%% Failed to set require authorized operations: %s\n",
-                        rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
-                TEST_FAIL("Failed to set include authorized operations\n");
+                    fprintf(stderr,
+                            "%% Failed to set require authorized operations: %s\n",
+                            rd_kafka_error_string(error));
+                    rd_kafka_error_destroy(error);
+                    TEST_FAIL("Failed to set include authorized operations\n");
                 }
         }
      
@@ -3600,12 +3602,10 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                     TEST_ASSERT(
                         rd_kafka_ConsumerGroupDescription_authorized_operations_count(act) != 0,
                         "Authorized operations not returned when requested\n");
-                    for(j=0;j< rd_kafka_ConsumerGroupDescription_authorized_operations_count(act);j++){
-                        acl_operation = 
-                                rd_kafka_ConsumerGroupDescription_authorized_operation(act,j);
-                        TEST_SAY("%s operation is allowed\n",
-                                rd_kafka_AclOperation_name(acl_operation));
-                    }
+                    TEST_ASSERT(
+                        rd_kafka_ConsumerGroupDescription_authorized_operations_count(act) < 3,
+                        "Expected only READ and DESCRIBE operations after createAcl(), got DELETE"
+                        "as well\n");
                 }
                     
         }
@@ -3645,6 +3645,8 @@ static void do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
                 rd_free(expected[i].group_id);
         }
 
+        test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
+        
         rd_free(topic);
 
         if (options)
@@ -4468,11 +4470,6 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_unclean_destroy(cltype, 1 /*mainq*/);
 
         test_conf_init(&conf, NULL, 180);
-        // test_conf_set(conf, "sasl.username", "broker");
-        // test_conf_set(conf, "sasl.password", "broker");
-        // test_conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
-        // test_conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
-        // test_conf_set(conf, "bootstrap.servers", "localhost:9092");
         test_conf_set(conf, "socket.timeout.ms", "10000");
         rk = test_create_handle(cltype, conf);
 

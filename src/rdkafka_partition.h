@@ -769,6 +769,31 @@ rd_kafka_topic_partition_get_private(rd_kafka_topic_partition_t *rktpar) {
 
 
 /**
+ * @returns the partition leader current epoch, if relevant and known,
+ *          else -1.
+ *
+ * @param rktpar Partition object.
+ *
+ * @remark See KIP-320 for more information.
+ */
+int32_t rd_kafka_topic_partition_get_current_leader_epoch(
+    const rd_kafka_topic_partition_t *rktpar);
+
+
+/**
+ * @brief Sets the partition leader current epoch (use -1 to clear).
+ *
+ * @param rktpar Partition object.
+ * @param leader_epoch Partition leader current epoch, use -1 to reset.
+ *
+ * @remark See KIP-320 for more information.
+ */
+void rd_kafka_topic_partition_set_current_leader_epoch(
+    rd_kafka_topic_partition_t *rktpar,
+    int32_t leader_epoch);
+
+
+/**
  * @returns the partition's rktp if set (no refcnt increase), else NULL.
  */
 static RD_INLINE RD_UNUSED rd_kafka_toppar_t *

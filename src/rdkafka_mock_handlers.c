@@ -276,14 +276,11 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
 
                         /* Find MessageSet for FetchOffset */
                         if (!err && FetchOffset != mpart->end_offset) {
-                                if (on_follower &&
-                                    FetchOffset <= mpart->end_offset &&
-                                    FetchOffset > mpart->follower_end_offset)
-                                        err =
-                                            RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE;
-                                else if (!(mset = rd_kafka_mock_msgset_find(
-                                               mpart, FetchOffset,
-                                               on_follower)))
+                                /* Kafka currently only returns
+                                 * OFFSET_NOT_AVAILABLE
+                                 * in ListOffsets calls */
+                                if (!(mset = rd_kafka_mock_msgset_find(
+                                          mpart, FetchOffset, on_follower)))
                                         err =
                                             RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE;
                                 rd_kafka_dbg(

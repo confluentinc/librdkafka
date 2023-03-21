@@ -32,23 +32,23 @@
  * @name Test rd_kafka_purge()
  *
  * Local test:
- *  - produce 20 messages (that will be held up in queues),
+ *  - produce 19 messages (that will be held up in queues),
  *    for specific partitions and UA.
  *  - purge(INFLIGHT) => no change in len()
  *  - purge(QUEUE) => len() should drop to 0, dr errs should be ERR__PURGE_QUEUE
  *
  * Remote test (WITH_SOCKEM):
  *  - Limit in-flight messages to 10
- *  - Produce 20 messages to the same partition, in batches of 10.
+ *  - Produce 19 messages to the same partition, in batches of 10.
  *  - Make sure only first batch is sent.
  *  - purge(QUEUE) => len should drop to 10, dr err ERR__PURGE_QUEUE
  *  - purge(INFLIGHT|QUEUE) => len should drop to 0, ERR__PURGE_INFLIGHT
  */
 
 
-static const int msgcnt = 20;
+static const int msgcnt = 19;
 struct waitmsgs {
-        rd_kafka_resp_err_t exp_err[20];
+        rd_kafka_resp_err_t exp_err[19];
         int cnt;
 };
 
@@ -203,7 +203,7 @@ do_test_purge(const char *what, int remote, int idempotence, int gapless) {
 
         test_conf_set(conf, "batch.num.messages", "10");
         test_conf_set(conf, "max.in.flight", "1");
-        test_conf_set(conf, "linger.ms", "500");
+        test_conf_set(conf, "linger.ms", "5000");
         test_conf_set(conf, "enable.idempotence",
                       idempotence ? "true" : "false");
         test_conf_set(conf, "enable.gapless.guarantee",

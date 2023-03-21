@@ -160,7 +160,7 @@ static void do_test_consume_batch_with_seek(void) {
         err = rd_kafka_seek_partitions(consumer, seek_toppars, 2000);
 
         TEST_ASSERT(!err,
-                    "Failed to seek partition %d for topic %s to offset %lld",
+                    "Failed to seek partition %d for topic %s to offset %ld",
                     seek_partition, topic, seek_offset);
 
         thrd_join(thread_id, NULL);
@@ -580,7 +580,7 @@ static void do_test_consume_batch_control_msgs(void) {
         rd_kafka_committed(consumer, pause_partition_list, timeout_ms);
 
         TEST_ASSERT(pause_partition_list->elems[0].offset == expected_offset,
-                    "Expected offset should be %lld, but it is %lld",
+                    "Expected offset should be %ld, but it is %ld",
                     expected_offset, pause_partition_list->elems[0].offset);
 
         rd_kafka_topic_partition_list_destroy(pause_partition_list);

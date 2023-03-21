@@ -90,7 +90,7 @@ static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
         mtx_unlock(&produce_req_lock);
 
         /* Stall the connection */
-        test_socket_sockem_set(sockfd, "delay", 5000);
+        test_socket_sockem_set(sockfd, "delay", 50000);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

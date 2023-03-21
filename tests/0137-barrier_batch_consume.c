@@ -87,6 +87,8 @@ static int consumer_batch_queue(void *arg) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
+        rd_free(rkmessage);
+
         return 0;
 }
 
@@ -130,8 +132,7 @@ static void do_test_consume_batch_with_seek(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -221,8 +222,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -327,8 +327,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -457,6 +456,10 @@ static void do_test_consume_batch_store_offset(void) {
                            TEST_MSGVER_ORDER | TEST_MSGVER_DUP |
                                TEST_MSGVER_BY_OFFSET,
                            0, expected_msg_cnt);
+
+        test_msgver_clear(&mv);
+
+        rd_kafka_conf_destroy(conf);
 
         SUB_TEST_PASS();
 }

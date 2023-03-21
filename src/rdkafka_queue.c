@@ -544,7 +544,7 @@ rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
                                  int32_t version,
                                  rd_kafka_message_t **rkmessages,
                                  size_t cnt,
-                                 struct rd_kafka_op_tailq ctrl_msg_q) {
+                                 struct rd_kafka_op_tailq *ctrl_msg_q) {
         size_t valid_count = 0;
         size_t i;
         rd_kafka_op_t *rko, *next;
@@ -563,13 +563,15 @@ rd_kafka_purge_outdated_messages(rd_kafka_toppar_t *rktp,
         }
 
         /* Discard outdated control msgs ops */
-        next = TAILQ_FIRST(&ctrl_msg_q);
-        while (next && next->rko_rktp == rktp &&
-               rd_kafka_op_version_outdated(next, version)) {
+        next = TAILQ_FIRST(ctrl_msg_q);
+        while (next) {
                 rko  = next;
                 next = TAILQ_NEXT(rko, rko_link);
-                TAILQ_REMOVE(&ctrl_msg_q, rko, rko_link);
-                rd_kafka_op_destroy(rko);
+                if (rko->rko_rktp == rktp &&
+                    rd_kafka_op_version_outdated(rko, version)) {
+                        TAILQ_REMOVE(ctrl_msg_q, rko, rko_link);
+                        rd_kafka_op_destroy(rko);
+                }
         }
 
         return valid_count;
@@ -641,7 +643,7 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 if (unlikely(rko->rko_type == RD_KAFKA_OP_BARRIER)) {
                         cnt = (unsigned int)rd_kafka_purge_outdated_messages(
                             rko->rko_rktp, rko->rko_version, rkmessages, cnt,
-                            ctrl_msg_q);
+                            &ctrl_msg_q);
                         rd_kafka_op_destroy(rko);
                         continue;
                 }
@@ -670,9 +672,6 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                  * application. Add it to a tmp queue from where we can store
                  * the offset and destroy the op */
                 if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
-                        /* FIXME: Fix TAILQ_REMOVE call to handle this case */
-                        if (TAILQ_FIRST(&ctrl_msg_q) == NULL)
-                                TAILQ_INIT(&ctrl_msg_q);
                         TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
                         continue;
                 }

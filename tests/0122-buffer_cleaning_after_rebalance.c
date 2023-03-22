@@ -87,6 +87,8 @@ static int consumer_batch_queue(void *arg) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
+        free(rkmessage);
+
         return 0;
 }
 

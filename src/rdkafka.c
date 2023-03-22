@@ -2884,7 +2884,8 @@ rd_kafka_seek_partitions(rd_kafka_t *rk,
         while (cnt > 0) {
                 rd_kafka_op_t *rko;
 
-                rko = rd_kafka_q_pop(tmpq, rd_timeout_remains(abs_timeout), 0);
+                rko =
+                    rd_kafka_q_pop(tmpq, rd_timeout_remains_us(abs_timeout), 0);
                 if (!rko) {
                         rd_kafka_q_destroy_owner(tmpq);
 

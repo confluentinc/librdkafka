@@ -1022,9 +1022,11 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                 rd_kafka_offset_reset(
                     rktp, rd_kafka_broker_id(rkb), rktp->rktp_next_fetch_start,
                     RD_KAFKA_RESP_ERR__LOG_TRUNCATION,
-                    "Partition log truncation detected "
-                    "at %s: broker end offset is %" PRId64
-                    " (offset leader epoch %" PRId32 ")",
+                    "No epoch found less or equal to "
+                    "%s: broker end offset is %" PRId64
+                    " (offset leader epoch %" PRId32
+                    ")."
+                    " Reset using configured policy.",
                     rd_kafka_fetch_pos2str(rktp->rktp_next_fetch_start),
                     end_offset, end_offset_leader_epoch);
 

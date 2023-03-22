@@ -1,10 +1,12 @@
-# librdkafka v2.0.3
+# librdkafka v2.1.0
 
-librdkafka v2.0.3 is a bugfix release:
+librdkafka v2.1.0 is a feature release:
 
+* [KIP-320](https://cwiki.apache.org/confluence/display/KAFKA/KIP-320%3A+Allow+fetchers+to+detect+and+handle+log+truncation)
+  Allow fetchers to detect and handle log truncation (#4122).
 * Fix a reference count issue blocking the consumer from closing (#4187).
 * Fix a protocol issue with ListGroups API, where an extra
-  field was appended for API Versions greater than or equal to 3.
+  field was appended for API Versions greater than or equal to 3 (#4207).
 * Fix an issue with `max.poll.interval.ms`, where polling any queue would cause
   the timeout to be reset (#4176).
 * Fix seek partition timeout, was one thousand times lower than the passed
@@ -14,6 +16,18 @@ librdkafka v2.0.3 is a bugfix release:
   (by @filimonov, #4232).
 * Upgrade OpenSSL to v3.0.8 with various security fixes,
   check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
+
+## Enhancements
+
+ * Added `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`).
+ * Added partition leader epoch APIs:
+   - `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`)
+   - `rd_kafka_message_leader_epoch()`
+   - `rd_kafka_*assign()` and `rd_kafka_seek_partitions()` now supports
+     partitions with a leader epoch set.
+   - `rd_kafka_offsets_for_times()` will return per-partition leader-epochs.
+   - `leader_epoch`, `stored_leader_epoch`, and `committed_leader_epoch`
+     added to per-partition statistics.
 
 
 ## Fixes

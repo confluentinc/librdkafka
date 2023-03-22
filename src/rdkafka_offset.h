@@ -71,7 +71,8 @@ const char *rd_kafka_offset2str(int64_t offset);
  *   4. background rebalance assigns the partition again, but forcibly sets
  *      the stored offset to .._INVALID to provide a clean state.
  *
- * @param offset Offset to set, may be an absolute offset or .._INVALID.
+ * @param pos Offset and leader epoch to set, may be an absolute offset
+ *            or .._INVALID.
  * @param force Forcibly set \p offset regardless of assignment state.
  * @param do_lock Whether to lock the \p rktp or not (already locked by caller).
  *
@@ -82,7 +83,7 @@ const char *rd_kafka_offset2str(int64_t offset);
  */
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_offset_store0(rd_kafka_toppar_t *rktp,
-                       int64_t offset,
+                       const rd_kafka_fetch_pos_t pos,
                        rd_bool_t force,
                        rd_dolock_t do_lock) {
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -90,12 +91,13 @@ rd_kafka_offset_store0(rd_kafka_toppar_t *rktp,
         if (do_lock)
                 rd_kafka_toppar_lock(rktp);
 
-        if (unlikely(!force && !RD_KAFKA_OFFSET_IS_LOGICAL(offset) &&
+        if (unlikely(!force && !RD_KAFKA_OFFSET_IS_LOGICAL(pos.offset) &&
                      !(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED) &&
-                     !rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk)))
+                     !rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk))) {
                 err = RD_KAFKA_RESP_ERR__STATE;
-        else
-                rktp->rktp_stored_offset = offset;
+        } else {
+                rktp->rktp_stored_pos = pos;
+        }
 
         if (do_lock)
                 rd_kafka_toppar_unlock(rktp);
@@ -115,15 +117,19 @@ void rd_kafka_offset_store_init(rd_kafka_toppar_t *rktp);
 
 void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
                            int32_t broker_id,
-                           int64_t err_offset,
+                           rd_kafka_fetch_pos_t err_pos,
                            rd_kafka_resp_err_t err,
-                           const char *reason);
+                           const char *fmt,
+                           ...) RD_FORMAT(printf, 5, 6);
+
+void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...)
+    RD_FORMAT(printf, 2, 3);
 
 void rd_kafka_offset_query_tmr_cb(rd_kafka_timers_t *rkts, void *arg);
 
-void rd_kafka_update_app_offset(rd_kafka_t *rk,
-                                rd_kafka_toppar_t *rktp,
-                                int64_t offset,
-                                rd_dolock_t do_lock);
+void rd_kafka_update_app_pos(rd_kafka_t *rk,
+                             rd_kafka_toppar_t *rktp,
+                             rd_kafka_fetch_pos_t pos,
+                             rd_dolock_t do_lock);
 
 #endif /* _RDKAFKA_OFFSET_H_ */

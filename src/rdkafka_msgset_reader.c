@@ -168,6 +168,9 @@ typedef struct rd_kafka_msgset_reader_s {
         const struct rd_kafka_toppar_ver *msetr_tver; /**< Toppar op version of
                                                        *   request. */
 
+        int32_t msetr_leader_epoch; /**< Current MessageSet's partition
+                                     *   leader epoch (or -1). */
+
         int32_t msetr_broker_id;       /**< Broker id (of msetr_rkb) */
         rd_kafka_broker_t *msetr_rkb;  /* @warning Not a refcounted
                                         *          reference! */
@@ -230,6 +233,7 @@ static void rd_kafka_msgset_reader_init(rd_kafka_msgset_reader_t *msetr,
         memset(msetr, 0, sizeof(*msetr));
 
         msetr->msetr_rkb          = rkbuf->rkbuf_rkb;
+        msetr->msetr_leader_epoch = -1;
         msetr->msetr_broker_id    = rd_kafka_broker_id(msetr->msetr_rkb);
         msetr->msetr_rktp         = rktp;
         msetr->msetr_aborted_txns = aborted_txns;
@@ -647,7 +651,8 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
          *       the messageset, and it also means
          *       we cant perform this offset check here
          *       in that case. */
-        if (!relative_offsets && hdr.Offset < rktp->rktp_offsets.fetch_offset)
+        if (!relative_offsets &&
+            hdr.Offset < rktp->rktp_offsets.fetch_pos.offset)
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */
 
         /* Handle compressed MessageSet */
@@ -669,7 +674,8 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
             (size_t)RD_KAFKAP_BYTES_LEN(&Value),
             RD_KAFKAP_BYTES_IS_NULL(&Value) ? NULL : Value.data);
 
-        rkm->rkm_broker_id = msetr->msetr_broker_id;
+        rkm->rkm_u.consumer.leader_epoch = msetr->msetr_leader_epoch;
+        rkm->rkm_broker_id               = msetr->msetr_broker_id;
 
         /* Assign message timestamp.
          * If message was in a compressed MessageSet and the outer/wrapper
@@ -738,13 +744,13 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
         hdr.Offset = msetr->msetr_v2_hdr->BaseOffset + hdr.OffsetDelta;
 
         /* Skip message if outdated */
-        if (hdr.Offset < rktp->rktp_offsets.fetch_offset) {
+        if (hdr.Offset < rktp->rktp_offsets.fetch_pos.offset) {
                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
                            "%s [%" PRId32
                            "]: "
                            "Skip offset %" PRId64 " < fetch_offset %" PRId64,
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           hdr.Offset, rktp->rktp_offsets.fetch_offset);
+                           hdr.Offset, rktp->rktp_offsets.fetch_pos.offset);
                 rd_kafka_buf_skip_to(rkbuf, message_end);
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */
         }
@@ -905,7 +911,8 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
             (size_t)RD_KAFKAP_BYTES_LEN(&hdr.Value),
             RD_KAFKAP_BYTES_IS_NULL(&hdr.Value) ? NULL : hdr.Value.data);
 
-        rkm->rkm_broker_id = msetr->msetr_broker_id;
+        rkm->rkm_u.consumer.leader_epoch = msetr->msetr_leader_epoch;
+        rkm->rkm_broker_id               = msetr->msetr_broker_id;
 
         /* Store pointer to unparsed message headers, they will
          * be parsed on the first access.
@@ -1045,6 +1052,8 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                         RD_KAFKAP_MSGSET_V2_SIZE - 8 - 4);
 
         rd_kafka_buf_read_i32(rkbuf, &hdr.PartitionLeaderEpoch);
+        msetr->msetr_leader_epoch = hdr.PartitionLeaderEpoch;
+
         rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
         rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
 
@@ -1105,7 +1114,7 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                     hdr.BaseOffset, payload_size);
 
         /* If entire MessageSet contains old outdated offsets, skip it. */
-        if (LastOffset < rktp->rktp_offsets.fetch_offset) {
+        if (LastOffset < rktp->rktp_offsets.fetch_pos.offset) {
                 rd_kafka_buf_skip(rkbuf, payload_size);
                 goto done;
         }
@@ -1215,7 +1224,8 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                            (int)*MagicBytep, Offset, read_offset,
                            rd_slice_size(&rkbuf->rkbuf_reader));
 
-                if (Offset >= msetr->msetr_rktp->rktp_offsets.fetch_offset) {
+                if (Offset >=
+                    msetr->msetr_rktp->rktp_offsets.fetch_pos.offset) {
                         rd_kafka_consumer_err(
                             &msetr->msetr_rkq, msetr->msetr_broker_id,
                             RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
@@ -1224,7 +1234,7 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                             "at offset %" PRId64,
                             (int)*MagicBytep, Offset);
                         /* Skip message(set) */
-                        msetr->msetr_rktp->rktp_offsets.fetch_offset =
+                        msetr->msetr_rktp->rktp_offsets.fetch_pos.offset =
                             Offset + 1;
                 }
 
@@ -1311,7 +1321,7 @@ static void rd_kafka_msgset_reader_postproc(rd_kafka_msgset_reader_t *msetr,
                          * fetch offset. */
                         rd_kafka_q_fix_offsets(
                             &msetr->msetr_rkq,
-                            msetr->msetr_rktp->rktp_offsets.fetch_offset,
+                            msetr->msetr_rktp->rktp_offsets.fetch_pos.offset,
                             msetr->msetr_outer.offset - *last_offsetp);
                 }
         }
@@ -1376,11 +1386,11 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                             &msetr->msetr_rkq, msetr->msetr_broker_id,
                             RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
                             msetr->msetr_tver->version, NULL, rktp,
-                            rktp->rktp_offsets.fetch_offset,
+                            rktp->rktp_offsets.fetch_pos.offset,
                             "Message at offset %" PRId64
                             " might be too large to fetch, try increasing "
                             "receive.message.max.bytes",
-                            rktp->rktp_offsets.fetch_offset);
+                            rktp->rktp_offsets.fetch_pos.offset);
 
                 } else if (msetr->msetr_aborted_cnt > 0) {
                         /* Noop */
@@ -1421,13 +1431,15 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                 /* Update partition's fetch offset based on
                  * last message's offest. */
                 if (likely(last_offset != -1))
-                        rktp->rktp_offsets.fetch_offset = last_offset + 1;
+                        rktp->rktp_offsets.fetch_pos.offset = last_offset + 1;
         }
 
         /* Adjust next fetch offset if outlier code has indicated
          * an even later next offset. */
-        if (msetr->msetr_next_offset > rktp->rktp_offsets.fetch_offset)
-                rktp->rktp_offsets.fetch_offset = msetr->msetr_next_offset;
+        if (msetr->msetr_next_offset > rktp->rktp_offsets.fetch_pos.offset)
+                rktp->rktp_offsets.fetch_pos.offset = msetr->msetr_next_offset;
+
+        rktp->rktp_offsets.fetch_pos.leader_epoch = msetr->msetr_leader_epoch;
 
         rd_kafka_q_destroy_owner(&msetr->msetr_rkq);
 

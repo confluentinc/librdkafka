@@ -554,6 +554,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
         va_list ap;
         rd_kafka_bufq_t tmpq_waitresp, tmpq;
         int old_state;
+        rd_kafka_toppar_t *rktp;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -641,6 +642,22 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 rd_kafka_bufq_dump(rkb, "BRKOUTBUFS", &rkb->rkb_outbufs);
         }
 
+        /* If this broker acts as the preferred (follower) replica for any
+         * partition, delegate the partition back to the leader. */
+        TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+                rd_kafka_toppar_lock(rktp);
+                if (unlikely(rktp->rktp_broker != rkb)) {
+                        /* Currently migrating away from this
+                         * broker, skip. */
+                        rd_kafka_toppar_unlock(rktp);
+                        continue;
+                }
+                rd_kafka_toppar_unlock(rktp);
+
+                if (rktp->rktp_leader_id != rktp->rktp_broker_id) {
+                        rd_kafka_toppar_delegate_to_leader(rktp);
+                }
+        }
 
         /* Query for topic leaders to quickly pick up on failover. */
         if (err != RD_KAFKA_RESP_ERR__DESTROY &&

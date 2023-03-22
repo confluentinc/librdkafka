@@ -911,7 +911,7 @@ rd_kafka_op_res_t rd_kafka_op_handle(rd_kafka_t *rk,
  */
 void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rd_kafka_toppar_t *rktp;
-        int64_t offset;
+        rd_kafka_fetch_pos_t pos;
 
         if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
                 return;
@@ -921,7 +921,8 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         if (unlikely(!rk))
                 rk = rktp->rktp_rkt->rkt_rk;
 
-        offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.offset       = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
+        pos.leader_epoch = rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch;
 
-        rd_kafka_update_app_offset(rk, rktp, offset, RD_DO_LOCK);
+        rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
 }

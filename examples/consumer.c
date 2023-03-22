@@ -225,9 +225,10 @@ int main(int argc, char **argv) {
                 }
 
                 /* Proper message. */
-                printf("Message on %s [%" PRId32 "] at offset %" PRId64 ":\n",
+                printf("Message on %s [%" PRId32 "] at offset %" PRId64
+                       " (leader epoch %" PRId32 "):\n",
                        rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                       rkm->offset);
+                       rkm->offset, rd_kafka_message_leader_epoch(rkm));
 
                 /* Print the message key. */
                 if (rkm->key && is_printable(rkm->key, rkm->key_len))

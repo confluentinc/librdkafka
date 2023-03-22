@@ -87,6 +87,8 @@ static int consumer_batch_queue(void *arg) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
+        rd_free(rkmessage);
+
         return 0;
 }
 
@@ -130,8 +132,7 @@ static void do_test_consume_batch_with_seek(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -159,7 +160,7 @@ static void do_test_consume_batch_with_seek(void) {
         err = rd_kafka_seek_partitions(consumer, seek_toppars, 2000);
 
         TEST_ASSERT(!err,
-                    "Failed to seek partition %d for topic %s to offset %lld",
+                    "Failed to seek partition %d for topic %s to offset %ld",
                     seek_partition, topic, seek_offset);
 
         thrd_join(thread_id, NULL);
@@ -221,8 +222,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -327,8 +327,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
                                        produce_msg_cnt / partition_cnt);
 
         /* Create consumers */
-        consumer =
-            test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
         test_consumer_wait_assignment(consumer, rd_false);
@@ -458,6 +457,10 @@ static void do_test_consume_batch_store_offset(void) {
                                TEST_MSGVER_BY_OFFSET,
                            0, expected_msg_cnt);
 
+        test_msgver_clear(&mv);
+
+        rd_kafka_conf_destroy(conf);
+
         SUB_TEST_PASS();
 }
 
@@ -577,7 +580,7 @@ static void do_test_consume_batch_control_msgs(void) {
         rd_kafka_committed(consumer, pause_partition_list, timeout_ms);
 
         TEST_ASSERT(pause_partition_list->elems[0].offset == expected_offset,
-                    "Expected offset should be %lld, but it is %lld",
+                    "Expected offset should be %ld, but it is %ld",
                     expected_offset, pause_partition_list->elems[0].offset);
 
         rd_kafka_topic_partition_list_destroy(pause_partition_list);

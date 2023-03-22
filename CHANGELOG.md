@@ -12,6 +12,10 @@ librdkafka v2.1.0 is a feature release:
 * Fix seek partition timeout, was one thousand times lower than the passed
   value (#4230).
 * Batch consumer fixes: TODO: describe (#4208).
+* Update lz4.c from upstream. Fixes [CVE-2021-3520](https://github.com/advisories/GHSA-gmc7-pqv9-966m)
+  (by @filimonov, #4232).
+* Upgrade OpenSSL to v3.0.8 with various security fixes,
+  check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
 
 ## Enhancements
 

@@ -9,6 +9,7 @@ librdkafka v2.0.3 is a bugfix release:
   the timeout to be reset (#4176).
 * Fix seek partition timeout, was one thousand times lower than the passed
   value (#4230).
+* Batch consumer fixes: TODO: describe (#4208).
 
 
 ## Fixes

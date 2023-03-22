@@ -10,6 +10,8 @@ librdkafka v2.0.3 is a bugfix release:
 * Fix seek partition timeout, was one thousand times lower than the passed
   value (#4230).
 * Batch consumer fixes: TODO: describe (#4208).
+* Upgrade OpenSSL to v3.0.8 with various security fixes,
+  check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
 
 
 ## Fixes

@@ -127,9 +127,9 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...)
 
 void rd_kafka_offset_query_tmr_cb(rd_kafka_timers_t *rkts, void *arg);
 
-void rd_kafka_update_app_offset(rd_kafka_t *rk,
-                                rd_kafka_toppar_t *rktp,
-                                int64_t offset,
-                                rd_dolock_t do_lock);
+void rd_kafka_update_app_pos(rd_kafka_t *rk,
+                             rd_kafka_toppar_t *rktp,
+                             rd_kafka_fetch_pos_t pos,
+                             rd_dolock_t do_lock);
 
 #endif /* _RDKAFKA_OFFSET_H_ */

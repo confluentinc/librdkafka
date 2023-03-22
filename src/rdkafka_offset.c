@@ -1524,21 +1524,20 @@ void rd_kafka_offset_store_init(rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Update toppar app_offset and store_offset (if enabled) to the provided
- * offset.
- *
+ * Update toppar app_pos and store_offset (if enabled) to the provided
+ * offset and epoch.
  */
-void rd_kafka_update_app_offset(rd_kafka_t *rk,
-                                rd_kafka_toppar_t *rktp,
-                                int64_t offset,
-                                rd_dolock_t do_lock) {
+void rd_kafka_update_app_pos(rd_kafka_t *rk,
+                             rd_kafka_toppar_t *rktp,
+                             rd_kafka_fetch_pos_t pos,
+                             rd_dolock_t do_lock) {
 
         if (do_lock)
                 rd_kafka_toppar_lock(rktp);
 
-        rktp->rktp_app_offset = offset;
+        rktp->rktp_app_pos = pos;
         if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, offset,
+                rd_kafka_offset_store0(rktp, pos,
                                        /* force: ignore assignment state */
                                        rd_true, RD_DONT_LOCK);
 

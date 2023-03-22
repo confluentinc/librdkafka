@@ -684,9 +684,13 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rko = (rd_kafka_op_t *)rkmessages[i]->_private;
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset          = rkmessages[i]->offset + 1;
-                if (unlikely(rktp->rktp_app_offset < offset))
-                        rd_kafka_update_app_offset(rk, rktp, offset,
-                                                   RD_DO_LOCK);
+                if (unlikely(rktp->rktp_app_pos.offset < offset))
+                        rd_kafka_update_app_pos(
+                            rk, rktp,
+                            RD_KAFKA_FETCH_POS(
+                                offset,
+                                rd_kafka_message_leader_epoch(rkmessages[i])),
+                            RD_DO_LOCK);
         }
 
         /* Discard non-desired and already handled ops */
@@ -704,9 +708,14 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 next                    = TAILQ_NEXT(next, rko_link);
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
-                if (rktp->rktp_app_offset < offset)
-                        rd_kafka_update_app_offset(rk, rktp, offset,
-                                                   RD_DO_LOCK);
+                if (rktp->rktp_app_pos.offset < offset)
+                        rd_kafka_update_app_pos(
+                            rk, rktp,
+                            RD_KAFKA_FETCH_POS(
+                                offset,
+                                rd_kafka_message_leader_epoch(
+                                    &rko->rko_u.fetch.rkm.rkm_rkmessage)),
+                            RD_DO_LOCK);
                 rd_kafka_op_destroy(rko);
         }
 

@@ -924,12 +924,5 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         pos.offset       = rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1;
         pos.leader_epoch = rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch;
 
-        rd_kafka_toppar_lock(rktp);
-        rktp->rktp_app_pos = pos;
-
-        if (rk->rk_conf.enable_auto_offset_store)
-                rd_kafka_offset_store0(rktp, pos,
-                                       /* force: ignore assignment state */
-                                       rd_true, RD_DONT_LOCK);
-        rd_kafka_toppar_unlock(rktp);
+        rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
 }

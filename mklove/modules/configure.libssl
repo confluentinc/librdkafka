@@ -78,7 +78,7 @@ function manual_checks {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #error \"OpenSSL version >= v3.0.0 needs OPENSSL_SUPPRESS_DEPRECATED\"
 #endif"; then
-            mkl_mkvar_prepend CFLAGS CFLAGS "-DOPENSSL_SUPPRESS_DEPRECATED"
+            mkl_define_set "libcrypto" OPENSSL_SUPPRESS_DEPRECATED
     fi
 }
 
@@ -102,9 +102,6 @@ function libcrypto_install_source {
     fi
 
     if [[ $ver == 3.* ]]; then
-        # Silence OpenSSL 3.0.0 deprecation warnings since they'll make
-        # -Werror fail.
-        mkl_define_set "libcrypto" OPENSSL_SUPPRESS_DEPRECATED
         # Make sure legacy provider (et.al) are built-in, since we're building
         # a static library we don't want to rely on dynamically loaded modules.
         conf_args="${conf_args} no-module"

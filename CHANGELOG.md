@@ -7,7 +7,11 @@ librdkafka v2.1.0 is a feature release:
 * Fix a reference count issue blocking the consumer from closing (#4187).
 * Fix a protocol issue with ListGroups API, where an extra
   field was appended for API Versions greater than or equal to 3 (#4207).
-
+* Fix an issue with `max.poll.interval.ms`, where polling any queue would cause
+  the timeout to be reset (#4176).
+* Fix seek partition timeout, was one thousand times lower than the passed
+  value (#4230).
+* Batch consumer fixes: TODO: describe (#4208).
 
 ## Enhancements
 
@@ -29,6 +33,9 @@ librdkafka v2.1.0 is a feature release:
  * A reference count issue was blocking the consumer from closing.
    The problem would happen when a partition is lost, because forcibly
    unassigned from the consumer or if the corresponding topic is deleted.
+ * When using `rd_kafka_seek_partitions`, the remaining timeout was
+   converted from microseconds to milliseconds but the expected unit
+   for that parameter is microseconds.
 
 
 

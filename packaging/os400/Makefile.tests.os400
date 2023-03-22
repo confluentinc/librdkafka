@@ -1,0 +1,167 @@
+.PHONY : all        \
+         prebuild   \
+         tests
+
+DBGVIEW=*NONE
+NDEBUG=-DNDEBUG
+#NDEBUG=
+MAKEFILE=./../packaging/os400/Makefile.tests.os400
+
+iccflags = -v                             \
+            -qDTAMDL=*P128                 \
+            -qDBGVIEW=$(DBGVIEW)           \
+            -qENUM=*INT                    \
+            -qPACKSTRUCT=1                 \
+            -qOUTPUT=*PRINT                \
+            -qTGTCCSID=37                  \
+            -I.                            \
+            -I../src                       \
+            -I/QIBM/ProdData/qadrt/include \
+            -qINCDIRFIRST                  \
+            -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
+
+testlib=RDKAFKATST
+
+all: prebuild \
+     tests
+
+prebuild:
+	-system "CRTLIB $(testlib)"
+	-mkdir $(testlib)
+
+tests_objects = $(testlib)/test.o                                 \
+                $(testlib)/rusage.o                               \
+                $(testlib)/test-0000-unittests.o                  \
+                $(testlib)/test-0001-multiobj.o                   \
+                $(testlib)/test-0002-unkpart.o                    \
+                $(testlib)/test-0003-msgmaxsize.o                 \
+                $(testlib)/test-0004-conf.o                       \
+                $(testlib)/test-0005-order.o                      \
+                $(testlib)/test-0006-symbols.o                    \
+                $(testlib)/test-0007-autotopic.o                  \
+                $(testlib)/test-0008-reqacks.o                    \
+                $(testlib)/test-0009-mock_cluster.o               \
+                $(testlib)/test-0011-produce_batch.o              \
+                $(testlib)/test-0012-produce_consume.o            \
+                $(testlib)/test-0013-null-msgs.o                  \
+                $(testlib)/test-0014-reconsume-191.o              \
+                $(testlib)/test-0015-offset_seeks.o               \
+                $(testlib)/test-0016-client_swname.o              \
+                $(testlib)/test-0017-compression.o                \
+                $(testlib)/test-0018-cgrp_term.o                  \
+                $(testlib)/test-0019-list_groups.o                \
+                $(testlib)/test-0020-destroy_hang.o               \
+                $(testlib)/test-0021-rkt_destroy.o                \
+                $(testlib)/test-0022-consume_batch.o              \
+                $(testlib)/test-0025-timers.o                     \
+                $(testlib)/test-0026-consume_pause.o              \
+                $(testlib)/test-0028-long_topicnames.o            \
+                $(testlib)/test-0029-assign_offset.o              \
+                $(testlib)/test-0030-offset_commit.o              \
+                $(testlib)/test-0031-get_offsets.o                \
+                $(testlib)/test-0033-regex_subscribe.o            \
+                $(testlib)/test-0034-offset_reset.o               \
+                $(testlib)/test-0035-api_version.o                \
+                $(testlib)/test-0036-partial_fetch.o              \
+                $(testlib)/test-0037-destroy_hang_local.o         \
+                $(testlib)/test-0038-performance.o                \
+                $(testlib)/test-0039-event.o                      \
+                $(testlib)/test-0040-io_event.o                   \
+                $(testlib)/test-0041-fetch_max_bytes.o            \
+                $(testlib)/test-0042-many_topics.o                \
+                $(testlib)/test-0043-no_connection.o              \
+                $(testlib)/test-0044-partition_cnt.o              \
+                $(testlib)/test-0045-subscribe_update.o           \
+                $(testlib)/test-0046-rkt_cache.o                  \
+                $(testlib)/test-0047-partial_buf_tmout.o          \
+                $(testlib)/test-0048-partitioner.o                \
+                $(testlib)/test-0049-consume_conn_close.o         \
+                $(testlib)/test-0050-subscribe_adds.o             \
+                $(testlib)/test-0051-assign_adds.o                \
+                $(testlib)/test-0052-msg_timestamps.o             \
+                $(testlib)/test-0055-producer_latency.o           \
+                $(testlib)/test-0056-balanced_group_mt.o          \
+                $(testlib)/test-0062-stats_event.o                \
+                $(testlib)/test-0064-interceptors.o               \
+                $(testlib)/test-0068-produce_timeout.o            \
+                $(testlib)/test-0069-consumer_add_parts.o         \
+                $(testlib)/test-0072-headers_ut.o                 \
+                $(testlib)/test-0073-headers.o                    \
+                $(testlib)/test-0074-producev.o                   \
+                $(testlib)/test-0075-retry.o                      \
+                $(testlib)/test-0076-produce_retry.o              \
+                $(testlib)/test-0077-compaction.o                 \
+                $(testlib)/test-0079-fork.o                       \
+                $(testlib)/test-0080-admin_ut.o                   \
+                $(testlib)/test-0081-admin.o                      \
+                $(testlib)/test-0083-cb_event.o                   \
+                $(testlib)/test-0084-destroy_flags.o              \
+                $(testlib)/test-0086-purge.o                      \
+                $(testlib)/test-0088-produce_metadata_timeout.o   \
+                $(testlib)/test-0089-max_poll_interval.o          \
+                $(testlib)/test-0090-idempotence.o                \
+                $(testlib)/test-0091-max_poll_interval_timeout.o  \
+                $(testlib)/test-0092-mixed_msgver.o               \
+                $(testlib)/test-0093-holb.o                       \
+                $(testlib)/test-0094-idempotence_msg_timeout.o    \
+                $(testlib)/test-0099-commit_metadata.o            \
+                $(testlib)/test-0102-static_group_rebalance.o     \
+                $(testlib)/test-0103-transactions.o               \
+                $(testlib)/test-0104-fetch_from_follower_mock.o   \
+                $(testlib)/test-0105-transactions_mock.o          \
+                $(testlib)/test-0106-cgrp_sess_timeout.o          \
+                $(testlib)/test-0107-topic_recreate.o             \
+                $(testlib)/test-0112-assign_unknown_part.o        \
+                $(testlib)/test-0117-mock_errors.o                \
+                $(testlib)/test-0118-commit_rebalance.o           \
+                $(testlib)/test-0120-asymmetric_subscription.o    \
+                $(testlib)/test-0121-clusterid.o                  \
+                $(testlib)/test-0122-buffer_cleaning_after_rebalance.o \
+                $(testlib)/test-0123-connections_max_idle.o       \
+
+
+
+$(testlib)/test-%.o : %.c            $(MAKEFILE)
+	icc -o $(testlib)/$(@F) -c $<      \
+            -v                             \
+            -qDTAMDL=*P128                 \
+            -qDBGVIEW=$(DBGVIEW)           \
+            -qENUM=*INT                    \
+            -qPACKSTRUCT=1                 \
+            -qOUTPUT=*PRINT                \
+            -qTGTCCSID=37                  \
+            -I.                            \
+            -I../src                       \
+            -I/QIBM/ProdData/qadrt/include \
+            -qINCDIRFIRST                  \
+            -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
+
+
+
+$(testlib)/%.o : %.c            $(MAKEFILE)
+	icc -o $(testlib)/$(@F) -c $<      \
+            -v                             \
+            -qDTAMDL=*P128                 \
+            -qDBGVIEW=$(DBGVIEW)           \
+            -qENUM=*INT                    \
+            -qPACKSTRUCT=1                 \
+            -qOUTPUT=*PRINT                \
+            -qTGTCCSID=37                  \
+            -I.                            \
+            -I../src                       \
+            -I/QIBM/ProdData/qadrt/include \
+            -qINCDIRFIRST                  \
+            -D__cplusplus__strings__       \
+            $(NDEBUG)                      \
+
+tests: $(testlib)/test
+
+$(testlib)/test: $(tests_objects)
+	icc -v -o $(testlib)/test                     \
+             -rQADRTTS                                \
+             -rRDKAFKA                                \
+             -qACTGRP=*ENTMOD                         \
+             -qENTMOD=QADRT/QADRTMAIN2                \
+             $(tests_objects)

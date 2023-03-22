@@ -40,6 +40,14 @@
 #include <errno.h>
 #include <string.h>
 
+#ifdef __OS400__
+#include <except.h>
+#include <QWVRCSTK.h>
+#include <qusec.h>
+#include <strings.h>
+#include "os400_assert.h"
+#endif
+
 /**
  * Types
  */
@@ -49,43 +57,104 @@
  * Annotations, attributes, optimizers
  */
 #ifndef likely
+#ifndef __OS400__
 #define likely(x) __builtin_expect((x), 1)
+#else
+#define likely(x)   x
+#endif
 #endif
 #ifndef unlikely
+#ifndef __OS400__
 #define unlikely(x) __builtin_expect((x), 0)
+#else
+#define unlikely(x)   x
+#endif
 #endif
 
+#ifndef __OS400__
 #define RD_UNUSED             __attribute__((unused))
 #define RD_INLINE             inline
 #define RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #define RD_NORETURN           __attribute__((noreturn))
+#else
+#define RD_UNUSED
+#define RD_INLINE             inline
+#define RD_WARN_UNUSED_RESULT
+#define RD_NORETURN
+#endif
 #define RD_IS_CONSTANT(p)     __builtin_constant_p((p))
 #define RD_TLS                __thread
 
 /**
  * Allocation
  */
-#if !defined(__FreeBSD__) && !defined(__OpenBSD__)
+#if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__OS400__)
 /* alloca(3) is in stdlib on FreeBSD */
 #include <alloca.h>
 #endif
 
+#ifndef __OS400__
 #define rd_alloca(N) alloca(N)
-
+#else
+/* we have no alloca function on OS400 - we'll use malloc/free pair */
+#define rd_alloca(N) (N?malloc(N):NULL)
+#define rd_free_alloca(P) {if(P) free(P);}
+#endif
 
 /**
  * Strings, formatting, printf, ..
  */
 
 /* size_t and ssize_t format strings */
+#ifndef __OS400__
 #define PRIusz "zu"
 #define PRIdsz "zd"
+#else
+#define PRIusz  "u"
+#define PRIdsz  "d"
+#endif
 
 #ifndef RD_FORMAT
+#ifndef __OS400__
 #define RD_FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#else
+#define RD_FORMAT(...)
 #endif
+#endif
+#ifndef __OS400__
 #define rd_snprintf(...)  snprintf(__VA_ARGS__)
 #define rd_vsnprintf(...) vsnprintf(__VA_ARGS__)
+#else
+/* we have no qadrt equivalent for (v)snprintf.                */
+/* in this case we only can detect harmful results of overflow */
+static int guard_snprintf(int got, 
+                          int desired, 
+                          char *file, 
+                          int line, 
+                          const char *format, ...) {
+
+        if(got>desired) {
+                printf("\n\nALARM! (v)snprintf overflow at %s(%d). "
+                       "Available space=%d, printed=%d\n", 
+                       file, line, desired, got);
+                return desired;
+        }
+
+        return got;
+}
+#define rd_snprintf(s, n, ...)  (n)? \
+                                (guard_snprintf(sprintf(s, __VA_ARGS__), \
+                                                n, \
+                                                __FILE__, __LINE__, __VA_ARGS__)) \
+                                :(n)
+
+#define rd_vsnprintf(s, n, ...) (n)? \
+                                (guard_snprintf(vsprintf(s, __VA_ARGS__), \
+                                                n, \
+                                                __FILE__, __LINE__, __VA_ARGS__)) \
+                                :(n)
+#endif
+
 
 #define rd_strcasecmp(A, B)     strcasecmp(A, B)
 #define rd_strncasecmp(A, B, N) strncasecmp(A, B, N)
@@ -137,6 +206,7 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
  * Misc
  */
 
+#ifndef __OS400__
 /**
  * Microsecond sleep.
  * Will retry on signal interrupt unless *terminate is true.
@@ -149,6 +219,9 @@ static RD_INLINE RD_UNUSED void rd_usleep(int usec, rd_atomic32_t *terminate) {
                (errno == EINTR && (!terminate || !rd_atomic32_get(terminate))))
                 ;
 }
+#else
+#define rd_usleep(usec,terminate)  usleep((usec))
+#endif
 
 
 

@@ -29,6 +29,10 @@
 /**
  * Tests messages are produced in order.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 
 #include "test.h"
@@ -316,7 +320,11 @@ static void dr_per_message_partition_cb(rd_kafka_t *rk,
                     "(at msg offset #%" PRId64 ")\n",
                     rkmessage->offset);
 
+#ifndef __OS400__
         TEST_ASSERT(rkmessage->partition < topic_num_partitions);
+#else
+        TEST_ASSERT(rkmessage->partition < topic_num_partitions, "");
+#endif
         msgcounter--;
 
         dr_partition_count[rkmessage->partition]++;

@@ -25,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 /**
  * Mocks
@@ -1307,7 +1310,11 @@ static int rd_kafka_mock_cluster_io_poll(rd_kafka_mock_cluster_t *mcluster,
 }
 
 
+#ifndef __OS400__
 static int rd_kafka_mock_cluster_thread_main(void *arg) {
+#else
+static void *rd_kafka_mock_cluster_thread_main (void *arg) {
+#endif
         rd_kafka_mock_cluster_t *mcluster = arg;
 
         rd_kafka_set_thread_name("mock");
@@ -1343,8 +1350,11 @@ static int rd_kafka_mock_cluster_thread_main(void *arg) {
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
         rd_kafka_mock_cluster_destroy0(mcluster);
-
+#ifndef __OS400__
         return 0;
+#else
+        return NULL;
+#endif
 }
 
 
@@ -1831,6 +1841,9 @@ void rd_kafka_mock_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
         va_end(ap);
 
         rd_kafka_mock_push_request_errors_array(mcluster, ApiKey, cnt, errors);
+#ifdef __OS400__
+        rd_free_alloca(errors);
+#endif
 }
 
 
@@ -2342,7 +2355,11 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_coord_t *mcoord;
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
+#ifndef __OS400__
         int ret;
+#else
+        void *ret;
+#endif
 
         while ((mtopic = TAILQ_FIRST(&mcluster->topics)))
                 rd_kafka_mock_topic_destroy(mtopic);
@@ -2397,7 +2414,11 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
 
 void rd_kafka_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster) {
+#ifndef __OS400__
         int res;
+#else
+        void *res;
+#endif
         rd_kafka_op_t *rko;
 
         rd_kafka_dbg(mcluster->rk, MOCK, "MOCK", "Destroying cluster");
@@ -2432,8 +2453,14 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         mcluster->dummy_rkb =
             rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL, RD_KAFKA_PROTO_PLAINTEXT,
                                 "mock", 0, RD_KAFKA_NODEID_UA);
+#ifndef __OS400__
         rd_snprintf(mcluster->id, sizeof(mcluster->id), "mockCluster%lx",
                     (intptr_t)mcluster >> 2);
+#else
+        /* trick with 16-byte pointer */
+        rd_snprintf(mcluster->id, sizeof(mcluster->id), "mockCluster%llx", 
+                    ((long long *)rk)[1] ^ ((long long *)mcluster)[1]);
+#endif
 
         TAILQ_INIT(&mcluster->brokers);
 

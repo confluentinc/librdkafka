@@ -104,7 +104,11 @@ rd_tmpabuf_alloc0(const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
         }
 
         ptr = (void *)(tab->buf + tab->of);
+#ifndef __OS400__
         tab->of += RD_ROUNDUP(size, 8);
+#else
+	tab->of += RD_ROUNDUP(size, 16);
+#endif
 
         return ptr;
 }
@@ -437,6 +441,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 /**
  * @name Fail buffer reading due to buffer underflow.
  */
+#ifndef __OS400__
 #define rd_kafka_buf_underflow_fail(rkbuf, wantedlen, ...)                     \
         do {                                                                   \
                 if (log_decode_errors > 0 && rkbuf->rkbuf_rkb) {               \
@@ -468,7 +473,39 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__UNDERFLOW;             \
                 goto err_parse;                                                \
         } while (0)
-
+#else
+/* compiler specific changes */
+#define rd_kafka_buf_underflow_fail(rkbuf,wantedlen,...) do {           \
+                if (log_decode_errors > 0) {                            \
+                        rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);        \
+                        char __tmpstr[256];                             \
+                        rd_snprintf(__tmpstr, sizeof(__tmpstr),         \
+                                    ": ", ## __VA_ARGS__);               \
+                        if (strlen(__tmpstr) == 2) __tmpstr[0] = '\0';  \
+                        rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
+                                   "PROTOUFLOW",                        \
+                                   "Protocol read buffer underflow "    \
+                                   "for %s v%hd "                       \
+                                   "at %"PRIusz"/%"PRIusz" (%s:%i): "   \
+                                   "expected %"PRIusz" bytes > "        \
+                                   "%"PRIusz" remaining bytes (%s)%s",  \
+                                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr. \
+                                                       ApiKey),         \
+                                   rkbuf->rkbuf_reqhdr.ApiVersion,      \
+                                   rd_slice_offset(&rkbuf->rkbuf_reader), \
+                                   rd_slice_size(&rkbuf->rkbuf_reader), \
+                                   __FUNCTION__, __LINE__,              \
+                                   wantedlen,                           \
+                                   rd_slice_remains(&rkbuf->rkbuf_reader), \
+                                   rkbuf->rkbuf_uflow_mitigation ?      \
+                                   rkbuf->rkbuf_uflow_mitigation :      \
+                                   "incorrect broker.version.fallback?", \
+                                   __tmpstr);                           \
+                }                                                       \
+                (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__UNDERFLOW;      \
+                goto err_parse;                                         \
+        } while (0)
+#endif
 
 /**
  * Returns the number of remaining bytes available to read.
@@ -478,6 +515,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 /**
  * Checks that at least 'len' bytes remain to be read in buffer, else fails.
  */
+#ifndef __OS400__
 #define rd_kafka_buf_check_len(rkbuf, len)                                     \
         do {                                                                   \
                 size_t __len0 = (size_t)(len);                                 \
@@ -485,6 +523,15 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_kafka_buf_underflow_fail(rkbuf, __len0);            \
                 }                                                              \
         } while (0)
+#else
+/* Compiler specific changes */
+#define rd_kafka_buf_check_len(rkbuf,len) do {                          \
+                size_t __len0 = (size_t)(len);                          \
+                if (unlikely(__len0 > rd_kafka_buf_read_remain(rkbuf))) { \
+                        rd_kafka_buf_underflow_fail(rkbuf, __len0, NULL); \
+                }                                                       \
+        } while (0)
+#endif
 
 /**
  * Skip (as in read and ignore) the next 'len' bytes.
@@ -554,6 +601,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 *_vp = be64toh(_v);                                            \
         } while (0)
 
+#ifndef __OS400__
 #define rd_kafka_buf_read_i32(rkbuf, dstptr)                                   \
         do {                                                                   \
                 int32_t _v;                                                    \
@@ -569,6 +617,25 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));                 \
                 *_vp = be32toh(_v);                                            \
         } while (0)
+#else
+#define rd_kafka_buf_read_i32(rkbuf, dstptr)                                   \
+        do {                                                                   \
+                int32_t _v;                                                    \
+                int32_t *_vp = (void *) dstptr;                                \
+                rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));                     \
+                *_vp = be32toh(_v);                                            \
+        } while (0)
+
+#define rd_kafka_buf_peek_i32(rkbuf, of, dstptr)                               \
+        do {                                                                   \
+                int32_t _v;                                                    \
+                int32_t *_vp = (void *)dstptr;                                 \
+                rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));                 \
+                *_vp = be32toh(_v);                                            \
+        } while (0)
+
+#endif
+
 
 
 /* Same as .._read_i32 but does a direct assignment.

@@ -37,7 +37,9 @@
 #include <unistd.h>
 #endif
 #include <errno.h>
+#ifndef __OS400__
 #include <assert.h>
+#endif
 #include <time.h>
 #include <ctype.h>
 

@@ -43,7 +43,11 @@ typedef struct consumer_s {
         struct test *test;
 } consumer_t;
 
+#ifndef __OS400__
 static int consumer_batch_queue(void *arg) {
+#else
+static void *consumer_batch_queue(void *arg) {
+#endif
         consumer_t *arguments = arg;
         int msg_cnt           = 0;
         int i;
@@ -87,7 +91,11 @@ static int consumer_batch_queue(void *arg) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
+#ifndef __OS400__
         return 0;
+#else
+        return NULL;
+#endif
 }
 
 

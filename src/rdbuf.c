@@ -26,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdbuf.h"
@@ -96,7 +99,11 @@ static rd_segment_t *rd_buf_append_segment(rd_buf_t *rbuf, rd_segment_t *seg) {
  * @remark the returned pointer is memory-aligned to be safe.
  */
 static void *extra_alloc(rd_buf_t *rbuf, size_t size) {
+#ifndef __OS400__
         size_t of = RD_ROUNDUP(rbuf->rbuf_extra_len, 8); /* FIXME: 32-bit */
+#else
+        size_t of = RD_ROUNDUP(rbuf->rbuf_extra_len, 16); /* OS400 *p128 uses 16-bytes pointers alignment */
+#endif
         void *p;
 
         if (of + size > rbuf->rbuf_extra_size)
@@ -213,7 +220,7 @@ void rd_buf_write_ensure(rd_buf_t *rbuf, size_t min_size, size_t max_size) {
  */
 rd_segment_t *rd_buf_get_segment_at_offset(const rd_buf_t *rbuf,
                                            const rd_segment_t *hint,
-                                           size_t absof) {
+                              size_t absof) {
         const rd_segment_t *seg = hint;
 
         if (unlikely(absof >= rbuf->rbuf_len))
@@ -1076,7 +1083,7 @@ int rd_slice_narrow(rd_slice_t *slice, rd_slice_t *save_slice, size_t size) {
  */
 int rd_slice_narrow_relative(rd_slice_t *slice,
                              rd_slice_t *save_slice,
-                             size_t relsize) {
+                               size_t relsize) {
         return rd_slice_narrow(slice, save_slice,
                                rd_slice_offset(slice) + relsize);
 }
@@ -1103,7 +1110,7 @@ void rd_slice_widen(rd_slice_t *slice, const rd_slice_t *save_slice) {
  */
 int rd_slice_narrow_copy(const rd_slice_t *orig,
                          rd_slice_t *new_slice,
-                         size_t size) {
+                          size_t size) {
         if (unlikely(orig->start + size > orig->end))
                 return 0;
         *new_slice     = *orig;
@@ -1117,8 +1124,8 @@ int rd_slice_narrow_copy(const rd_slice_t *orig,
  *        the current read position.
  */
 int rd_slice_narrow_copy_relative(const rd_slice_t *orig,
-                                  rd_slice_t *new_slice,
-                                  size_t relsize) {
+                                    rd_slice_t *new_slice,
+                                    size_t relsize) {
         return rd_slice_narrow_copy(orig, new_slice,
                                     rd_slice_offset(orig) + relsize);
 }
@@ -1370,7 +1377,7 @@ static int do_unittest_write_read(void) {
 static int do_unittest_read_verify0(const rd_buf_t *b,
                                     size_t absof,
                                     size_t len,
-                                    const char *verify) {
+                          const char *verify) {
         rd_slice_t slice, sub;
         char buf[1024];
         size_t half;
@@ -1489,7 +1496,7 @@ static int do_unittest_write_split_seek(void) {
         RD_UT_ASSERT(pos == 200 + 100, "pos() returned position %" PRIusz, pos);
 
         /* Split buffer, write position is now at split where writes
-         * are not allowed (mid buffer). */
+        * are not allowed (mid buffer). */
         seg = rd_buf_get_segment_at_offset(&b, NULL, 50);
         RD_UT_ASSERT(seg->seg_of != 0, "assumed mid-segment");
         newseg = rd_segment_split(&b, seg, 50);
@@ -1615,7 +1622,7 @@ static int do_unittest_write_read_payload_correctness(void) {
         } while (0)
 static int
 do_unittest_iov_verify0(rd_buf_t *b, size_t exp_iovcnt, size_t exp_totsize) {
-#define MY_IOV_MAX 16
+        #define MY_IOV_MAX 16
         struct iovec iov[MY_IOV_MAX];
         size_t iovcnt;
         size_t i;
@@ -1691,95 +1698,95 @@ static int do_unittest_erase(void) {
 
                 const char *expect;
         } in[] = {/* 12|3|45
-                   *  x x xx */
+                 *  x x xx */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{1, 4, 4}},
                       .expect   = "1",
-                  },
-                  /* 12|3|45
-                   * xx */
+                },
+                /* 12|3|45
+                 * xx */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{0, 2, 2}},
                       .expect   = "345",
-                  },
-                  /* 12|3|45
-                   *      xx */
+                },
+                /* 12|3|45
+                 *      xx */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{3, 2, 2}},
                       .expect   = "123",
-                  },
-                  /* 12|3|45
-                   *  x
-                   * 1 |3|45
-                   *    x
-                   * 1 |  45
-                   *       x */
+                },
+                /* 12|3|45
+                 *  x
+                 * 1 |3|45
+                 *    x
+                 * 1 |  45
+                 *       x */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{1, 1, 1}, {1, 1, 1}, {2, 1, 1}},
                       .expect   = "14",
-                  },
-                  /* 12|3|45
-                   * xxxxxxx */
+                },
+                /* 12|3|45
+                 * xxxxxxx */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{0, 5, 5}},
                       .expect   = "",
-                  },
-                  /* 12|3|45
-                   * x       */
+                },
+                /* 12|3|45
+                 * x       */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{0, 1, 1}},
                       .expect   = "2345",
-                  },
-                  /* 12|3|45
-                   *       x  */
+                },
+                /* 12|3|45
+                 *       x  */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{4, 1, 1}},
                       .expect   = "1234",
-                  },
-                  /* 12|3|45
-                   *        x  */
+                },
+                /* 12|3|45
+                 *        x  */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{5, 10, 0}},
                       .expect   = "12345",
-                  },
-                  /* 12|3|45
-                   *       xxx */
+                },
+                /* 12|3|45
+                 *       xxx */
                   {
                       .segs     = {"12", "3", "45"},
                       .erasures = {{4, 3, 1}, {4, 3, 0}, {4, 3, 0}},
                       .expect   = "1234",
-                  },
-                  /* 1
-                   * xxx */
+                },
+                /* 1
+                 * xxx */
                   {
                       .segs     = {"1"},
                       .erasures = {{0, 3, 1}},
                       .expect   = "",
-                  },
-                  /* 123456
-                   * xxxxxx */
+                },
+                /* 123456
+                 * xxxxxx */
                   {
                       .segs     = {"123456"},
                       .erasures = {{0, 6, 6}},
                       .expect   = "",
-                  },
-                  /* 123456789a
-                   *     xxx    */
+                },
+                /* 123456789a
+                 *     xxx    */
                   {
                       .segs     = {"123456789a"},
                       .erasures = {{4, 3, 3}},
                       .expect   = "123489a",
-                  },
-                  /* 1234|5678
-                   *    x xx   */
+                },
+                /* 1234|5678
+                 *    x xx   */
                   {.segs     = {"1234", "5678"},
                    .erasures = {{3, 3, 3}},
                    .writes   = {"9abc"},
@@ -1829,7 +1836,7 @@ static int do_unittest_erase(void) {
                 /* Read back and verify */
                 r2 = rd_slice_init(&s, &b, 0, rd_buf_len(&b));
                 RD_UT_ASSERT((r2 == -1 && rd_buf_len(&b) == 0) ||
-                                 (r2 == 0 && rd_buf_len(&b) > 0),
+                             (r2 == 0 && rd_buf_len(&b) > 0),
                              "slice_init(%" PRIusz ") returned %d for i=%d",
                              rd_buf_len(&b), r2, i);
                 if (r2 == -1)

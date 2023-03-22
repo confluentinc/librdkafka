@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 
@@ -2912,7 +2916,11 @@ struct some_state {
         const char *grpid;
 };
 
+#ifndef __OS400__
 static int delayed_up_cb(void *arg) {
+#else
+static void *delayed_up_cb(void *arg) {
+#endif
         struct some_state *state = arg;
         rd_sleep(3);
         if (state->switch_coord) {
@@ -2940,7 +2948,11 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
         struct some_state state = RD_ZERO_INIT;
         test_timing_t timing;
         thrd_t thrd;
+#ifndef __OS400__
         int ret;
+#else
+        void *ret;
+#endif
 
         SUB_TEST_QUICK("switch_coord=%s", RD_STR_ToF(switch_coord));
 
@@ -3412,7 +3424,11 @@ struct _txn_concurrent_state {
         struct test *test;
 };
 
+#ifndef __OS400__
 static int txn_concurrent_thread_main(void *arg) {
+#else
+static void *txn_concurrent_thread_main(void *arg) {
+#endif
         struct _txn_concurrent_state *state = arg;
         static const char *apis[]           = {
             "init_transactions",           "begin_transaction",

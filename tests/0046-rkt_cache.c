@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdkafka.h"
@@ -53,7 +57,11 @@ int main_0046_rkt_cache(int argc, char **argv) {
                 rd_kafka_topic_t *rkt2;
 
                 rkt2 = rd_kafka_topic_new(rk, topic, NULL);
+#ifndef __OS400__
                 TEST_ASSERT(rkt2 != NULL);
+#else
+		TEST_ASSERT(rkt2 != NULL, "");
+#endif
 
                 rd_kafka_topic_destroy(rkt2);
         }

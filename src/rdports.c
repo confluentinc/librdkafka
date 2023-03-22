@@ -29,6 +29,9 @@
 /**
  * System portability
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 

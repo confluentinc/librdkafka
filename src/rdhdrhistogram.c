@@ -26,7 +26,7 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- */
+*/
 
 /*
  * librdkafka - Apache Kafka C library
@@ -68,11 +68,22 @@
  *
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rd.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#ifdef __OS400__
+/* handmade log2 */
+static double log2( double n )  {
+        return log( n ) / log( 2 );  
+} 
+#endif
 
 #include "rdhdrhistogram.h"
 #include "rdunittest.h"
@@ -84,7 +95,7 @@ void rd_hdr_histogram_destroy(rd_hdr_histogram_t *hdr) {
 
 rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
                                          int64_t maxValue,
-                                         int significantFigures) {
+                                          int significantFigures) {
         rd_hdr_histogram_t *hdr;
         int64_t largestValueWithSingleUnitResolution;
         int32_t subBucketCountMagnitude;
@@ -102,7 +113,7 @@ rd_hdr_histogram_t *rd_hdr_histogram_new(int64_t minValue,
                 return NULL;
 
         largestValueWithSingleUnitResolution =
-            (int64_t)(2.0 * pow(10.0, (double)significantFigures));
+                (int64_t)(2.0 * pow(10.0, (double)significantFigures));
 
         subBucketCountMagnitude =
             (int32_t)ceil(log2((double)largestValueWithSingleUnitResolution));
@@ -240,7 +251,7 @@ rd_hdr_lowestEquivalentValue(const rd_hdr_histogram_t *hdr, int64_t v) {
 static RD_INLINE int64_t
 rd_hdr_nextNonEquivalentValue(const rd_hdr_histogram_t *hdr, int64_t v) {
         return rd_hdr_lowestEquivalentValue(hdr, v) +
-               rd_hdr_sizeOfEquivalentValueRange(hdr, v);
+                rd_hdr_sizeOfEquivalentValueRange(hdr, v);
 }
 
 
@@ -252,7 +263,7 @@ rd_hdr_highestEquivalentValue(const rd_hdr_histogram_t *hdr, int64_t v) {
 static RD_INLINE int64_t
 rd_hdr_medianEquivalentValue(const rd_hdr_histogram_t *hdr, int64_t v) {
         return rd_hdr_lowestEquivalentValue(hdr, v) +
-               (rd_hdr_sizeOfEquivalentValueRange(hdr, v) >> 1);
+                (rd_hdr_sizeOfEquivalentValueRange(hdr, v) >> 1);
 }
 
 
@@ -299,7 +310,7 @@ static int rd_hdr_iter_next(rd_hdr_iter_t *it) {
         it->valueFromIdx =
             rd_hdr_valueFromIndex(hdr, it->bucketIdx, it->subBucketIdx);
         it->highestEquivalentValue =
-            rd_hdr_highestEquivalentValue(hdr, it->valueFromIdx);
+                rd_hdr_highestEquivalentValue(hdr, it->valueFromIdx);
 
         return 1;
 }
@@ -419,7 +430,7 @@ int64_t rd_hdr_histogram_quantile(const rd_hdr_histogram_t *hdr, double q) {
                 q = 100.0;
 
         countAtPercentile =
-            (int64_t)(((q / 100.0) * (double)hdr->totalCount) + 0.5);
+                (int64_t)(((q / 100.0) * (double)hdr->totalCount) + 0.5);
 
         while (rd_hdr_iter_next(&it)) {
                 total += it.countAtIdx;
@@ -448,7 +459,7 @@ static int ut_high_sigfig(void) {
         rd_hdr_histogram_t *hdr;
         const int64_t input[] = {
             459876,  669187,  711612,  816326,  931423,
-            1033197, 1131895, 2477317, 3964974, 12718782,
+                1033197, 1131895, 2477317, 3964974, 12718782,
         };
         size_t i;
         int64_t v;
@@ -610,6 +621,8 @@ static int ut_reset(void) {
 }
 
 
+#ifndef __OS400__
+/* isnan is not implemented on OS400 */
 static int ut_nan(void) {
         rd_hdr_histogram_t *hdr = rd_hdr_histogram_new(1, 100000, 3);
         double v;
@@ -622,6 +635,7 @@ static int ut_nan(void) {
         rd_hdr_histogram_destroy(hdr);
         RD_UT_PASS();
 }
+#endif
 
 
 static int ut_sigfigs(void) {
@@ -709,7 +723,10 @@ int unittest_rdhdrhistogram(void) {
         fails += ut_max();
         fails += ut_min();
         fails += ut_reset();
+#ifndef __OS400__
+        /* isnan is not implemented on OS400 */
         fails += ut_nan();
+#endif
         fails += ut_sigfigs();
         fails += ut_minmax_trackable();
         fails += ut_unitmagnitude_overflow();

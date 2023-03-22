@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 
 /**
  * @name Transaction Manager
@@ -309,7 +313,11 @@ void rd_kafka_txn_set_fatal_error(rd_kafka_t *rk,
         va_list ap;
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#else
+        rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#endif
         va_end(ap);
 
         rd_kafka_log(rk, LOG_ALERT, "TXNERR",
@@ -365,7 +373,11 @@ void rd_kafka_txn_set_abortable_error0(rd_kafka_t *rk,
         }
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#else
+        rd_vsnprintf(errstr, sizeof(errstr), fmt, ap);
+#endif
         va_end(ap);
 
         rd_kafka_wrlock(rk);
@@ -3086,7 +3098,11 @@ rd_bool_t rd_kafka_txn_coord_set(rd_kafka_t *rk,
         va_list ap;
 
         va_start(ap, fmt);
+#ifndef __OS400__
         vsnprintf(buf, sizeof(buf), fmt, ap);
+#else
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+#endif
         va_end(ap);
 
 

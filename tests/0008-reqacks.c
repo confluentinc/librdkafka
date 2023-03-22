@@ -29,7 +29,10 @@
 /**
  * Tests request.required.acks (issue #75)
  */
-
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 

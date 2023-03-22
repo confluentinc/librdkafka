@@ -25,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdrand.h"
@@ -67,4 +70,8 @@ void rd_array_shuffle(void *base, size_t nmemb, size_t entry_size) {
                        (char *)base + (j * entry_size), entry_size);
                 memcpy((char *)base + (j * entry_size), tmp, entry_size);
         }
+#ifdef __OS400__
+        rd_free_alloca(tmp);
+#endif
+
 }

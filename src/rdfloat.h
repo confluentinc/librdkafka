@@ -38,7 +38,7 @@
  *  http://docs.sun.com/source/806-3568/ncg_goldberg.html
  */
 static RD_INLINE RD_UNUSED int rd_dbl_eq0(double a, double b, double prec) {
-        return fabs(a - b) < prec;
+  return fabs(a - b) < prec;
 }
 
 /* A default 'good' double-equality precision value.

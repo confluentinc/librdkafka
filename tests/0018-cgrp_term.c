@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 #include "rdstring.h"
@@ -128,8 +132,11 @@ struct args {
         rd_kafka_t *c;
         rd_kafka_queue_t *queue;
 };
-
+#ifndef __OS400__
 static int poller_thread_main(void *p) {
+#else
+static void *poller_thread_main(void *p) {
+#endif
         struct args *args = (struct args *)p;
 
         while (!rd_kafka_consumer_closed(args->c)) {
@@ -142,7 +149,11 @@ static int poller_thread_main(void *p) {
                         rd_kafka_message_destroy(rkm);
         }
 
+#ifndef __OS400__
         return 0;
+#else
+        return NULL;
+#endif
 }
 
 /**
@@ -154,7 +165,11 @@ static void consumer_close_queue(rd_kafka_t *c) {
         rd_kafka_queue_t *queue = rd_kafka_queue_get_consumer(c);
         struct args args        = {c, queue};
         thrd_t thrd;
+#ifndef __OS400__
         int ret;
+#else
+        void *ret;
+#endif
 
         /* Spin up poller thread */
         if (thrd_create(&thrd, poller_thread_main, (void *)&args) !=

@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -1843,4 +1847,7 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         rd_kafka_metadata_cache_topic_update(rkt->rkt_rk, &mdt, rd_true);
         rd_kafka_topic_metadata_update(rkt, &mdt, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
+#ifdef __OS400__
+        rd_free_alloca(mdt.partitions);
+#endif
 }

@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 
 /**
  * Builtin SASL SCRAM support when Cyrus SASL is not available
@@ -287,6 +291,9 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
                   salt->size + 4, tempres, &ressize)) {
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
                            "HMAC priming failed");
+#ifdef __OS400__
+                free(saltplus);
+#endif
                 return -1;
         }
 
@@ -302,6 +309,9 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
                                    NULL))) {
                         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SCRAM",
                                    "Hi() HMAC #%d/%d failed", i, itcnt);
+#ifdef __OS400__
+                        free(saltplus);
+#endif
                         return -1;
                 }
 
@@ -314,6 +324,9 @@ static int rd_kafka_sasl_scram_Hi(rd_kafka_transport_t *rktrans,
 
         out->size = ressize;
 
+#ifdef __OS400__
+        free(saltplus);
+#endif
         return 0;
 }
 
@@ -438,16 +451,37 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         /* SaltedPassword  := Hi(Normalize(password), salt, i) */
         if (rd_kafka_sasl_scram_Hi(rktrans, &SaslPassword, salt, itcnt,
                                    &SaltedPassword) == -1)
+#ifndef __OS400__
                 return -1;
-
+#else
+        {
+free_rd_alloca_and_return:
+                rd_free_alloca(SaltedPassword.ptr);
+                rd_free_alloca(ClientKey.ptr);
+                rd_free_alloca(ServerKey.ptr);
+                rd_free_alloca(StoredKey.ptr);
+                rd_free_alloca(ClientSignature.ptr);
+                rd_free_alloca(ServerSignature.ptr);
+                rd_free_alloca(ClientProof.ptr);
+                return -1;
+        }
+#endif
         /* ClientKey       := HMAC(SaltedPassword, "Client Key") */
         if (rd_kafka_sasl_scram_HMAC(rktrans, &SaltedPassword,
                                      &ClientKeyVerbatim, &ClientKey) == -1)
+#ifndef __OS400__
                 return -1;
+#else
+                goto free_rd_alloca_and_return;
+#endif
 
         /* StoredKey       := H(ClientKey) */
         if (rd_kafka_sasl_scram_H(rktrans, &ClientKey, &StoredKey) == -1)
+#ifndef __OS400__
                 return -1;
+#else
+                goto free_rd_alloca_and_return;
+#endif
 
         /* client-final-message-without-proof */
         rd_kafka_sasl_scram_build_client_final_message_wo_proof(
@@ -475,6 +509,10 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         if (rd_kafka_sasl_scram_HMAC(rktrans, &SaltedPassword,
                                      &ServerKeyVerbatim, &ServerKey) == -1) {
                 rd_free(client_final_msg_wo_proof.ptr);
+#ifdef __OS400__
+                rd_free_alloca(AuthMessage.ptr);
+                goto free_rd_alloca_and_return;
+#endif
                 return -1;
         }
 
@@ -482,6 +520,10 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         if (rd_kafka_sasl_scram_HMAC(rktrans, &ServerKey, &AuthMessage,
                                      &ServerSignature) == -1) {
                 rd_free(client_final_msg_wo_proof.ptr);
+#ifdef __OS400__
+                rd_free_alloca(AuthMessage.ptr);
+                goto free_rd_alloca_and_return;
+#endif
                 return -1;
         }
 
@@ -489,6 +531,10 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         state->ServerSignatureB64 = rd_base64_encode(&ServerSignature);
         if (state->ServerSignatureB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
+#ifdef __OS400__
+                rd_free_alloca(AuthMessage.ptr);
+                goto free_rd_alloca_and_return;
+#endif
                 return -1;
         }
 
@@ -500,6 +546,10 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         if (rd_kafka_sasl_scram_HMAC(rktrans, &StoredKey, &AuthMessage,
                                      &ClientSignature) == -1) {
                 rd_free(client_final_msg_wo_proof.ptr);
+#ifdef __OS400__
+                rd_free_alloca(AuthMessage.ptr);
+                goto free_rd_alloca_and_return;
+#endif
                 return -1;
         }
 
@@ -514,6 +564,10 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         ClientProofB64 = rd_base64_encode(&ClientProof);
         if (ClientProofB64 == NULL) {
                 rd_free(client_final_msg_wo_proof.ptr);
+#ifdef __OS400__
+                rd_free_alloca(AuthMessage.ptr);
+                goto free_rd_alloca_and_return;
+#endif
                 return -1;
         }
 
@@ -528,6 +582,16 @@ static int rd_kafka_sasl_scram_build_client_final_message(
         rd_free(ClientProofB64);
         rd_free(client_final_msg_wo_proof.ptr);
 
+#ifdef __OS400__
+        rd_free_alloca(AuthMessage.ptr);
+        rd_free_alloca(SaltedPassword.ptr);
+        rd_free_alloca(ClientKey.ptr);
+        rd_free_alloca(ServerKey.ptr);
+        rd_free_alloca(StoredKey.ptr);
+        rd_free_alloca(ClientSignature.ptr);
+        rd_free_alloca(ServerSignature.ptr);
+        rd_free_alloca(ClientProof.ptr);
+#endif
         return 0;
 }
 

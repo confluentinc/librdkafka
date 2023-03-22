@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -90,7 +94,11 @@ rd_kafka_check_produce(rd_kafka_t *rk, rd_kafka_error_t **errorp) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         /* Transactional state forbids producing */
+#ifndef __OS400__
         rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__STATE, ENOEXEC);
+#else
+        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__STATE, EPERM);
+#endif
 
         if (errorp) {
                 rd_kafka_rdlock(rk);

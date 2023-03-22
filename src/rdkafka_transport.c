@@ -25,6 +25,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#define MSG_DONTWAIT 0
+#endif
+
 #ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
 #endif
@@ -181,8 +186,11 @@ static ssize_t rd_kafka_transport_socket_send0(rd_kafka_transport_t *rktrans,
         while ((rlen = rd_slice_peeker(slice, &p))) {
                 ssize_t r;
                 size_t r2;
-
+#ifndef __OS400__
                 r = send(rktrans->rktrans_s, p,
+#else
+                r = send(rktrans->rktrans_s, (char *)p,
+#endif
 #ifdef _WIN32
                          (int)rlen, (int)0
 #else
@@ -575,7 +583,11 @@ void rd_kafka_transport_post_connect_setup(rd_kafka_transport_t *rktrans) {
         slen = sizeof(rktrans->rktrans_rcvbuf_size);
         if (getsockopt(rktrans->rktrans_s, SOL_SOCKET, SO_RCVBUF,
                        (void *)&rktrans->rktrans_rcvbuf_size,
+#ifndef __OS400__
                        &slen) == RD_SOCKET_ERROR) {
+#else
+                       (int *)&slen) == RD_SOCKET_ERROR) {
+#endif
                 rd_rkb_log(rkb, LOG_WARNING, "RCVBUF",
                            "Failed to get socket receive "
                            "buffer size: %s: assuming 1MB",
@@ -588,7 +600,11 @@ void rd_kafka_transport_post_connect_setup(rd_kafka_transport_t *rktrans) {
         slen = sizeof(rktrans->rktrans_sndbuf_size);
         if (getsockopt(rktrans->rktrans_s, SOL_SOCKET, SO_SNDBUF,
                        (void *)&rktrans->rktrans_sndbuf_size,
+#ifndef __OS400__
                        &slen) == RD_SOCKET_ERROR) {
+#else
+                       (int *)&slen) == RD_SOCKET_ERROR) {
+#endif
                 rd_rkb_log(rkb, LOG_WARNING, "RCVBUF",
                            "Failed to get socket send "
                            "buffer size: %s: assuming 1MB",

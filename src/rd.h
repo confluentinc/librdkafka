@@ -30,6 +30,10 @@
 #ifndef _RD_H_
 #define _RD_H_
 
+#ifdef __OS400__
+#include <string.h>
+#endif
+
 #ifndef _WIN32
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE /* for strndup() */
@@ -50,7 +54,11 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#ifndef __OS400__
 #include <assert.h>
+#else
+#include "os400_assert.h"
+#endif
 #include <limits.h>
 
 #include "tinycthread.h"
@@ -59,6 +67,9 @@
 #ifdef _WIN32
 /* Visual Studio */
 #include "win32_config.h"
+#elif __OS400__
+/* IBMi OS400 */
+#include "os400_config.h"
 #else
 /* POSIX / UNIX based systems */
 #include "../config.h" /* mklove output */
@@ -209,7 +220,7 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #ifdef __APPLE__
 /* Some versions of MacOSX dont have IOV_MAX */
 #define IOV_MAX 1024
-#elif defined(_WIN32) || defined(__GNU__)
+#elif defined(_WIN32) || defined(__GNU__) || defined(__OS400__)
 /* There is no IOV_MAX on MSVC or GNU but it is used internally in librdkafka */
 #define IOV_MAX 1024
 #else

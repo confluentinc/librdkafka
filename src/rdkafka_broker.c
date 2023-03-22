@@ -26,6 +26,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 #if defined(__MINGW32__)
 #include <ws2tcpip.h>
 #endif
@@ -2297,6 +2301,10 @@ static void rd_kafka_broker_handle_SaslHandshake(rd_kafka_t *rk,
 
         /* Circle back to connect_auth() to start proper AUTH state. */
         rd_kafka_broker_connect_auth(rkb);
+#ifdef __OS400__
+        rd_free_alloca(mechs);  /* allocated by rd_alloca */
+#endif
+
         return;
 
 err_parse:
@@ -2307,6 +2315,9 @@ err:
                              "broker's supported mechanisms: %s",
                              rkb->rkb_rk->rk_conf.sasl.mechanisms,
                              rd_kafka_err2str(err), mechs);
+#ifdef __OS400__
+        rd_free_alloca(mechs); /* allocated by rd_alloca */
+#endif
 }
 
 
@@ -4374,8 +4385,11 @@ rd_kafka_broker_addresses_exhausted(const rd_kafka_broker_t *rkb) {
                rkb->rkb_rsal->rsal_curr + 1 == rkb->rkb_rsal->rsal_cnt;
 }
 
-
+#ifndef __OS400__
 static int rd_kafka_broker_thread_main(void *arg) {
+#else
+static void *rd_kafka_broker_thread_main (void *arg) {
+#endif
         rd_kafka_broker_t *rkb = arg;
         rd_kafka_t *rk         = rkb->rkb_rk;
 
@@ -4604,7 +4618,11 @@ static int rd_kafka_broker_thread_main(void *arg) {
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
+#ifndef __OS400__
         return 0;
+#else
+	return NULL;
+#endif
 }
 
 

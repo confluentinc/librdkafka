@@ -25,8 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdaddr.h"
@@ -37,30 +38,30 @@
 #endif
 
 const char *rd_sockaddr2str(const void *addr, int flags) {
-        const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
-        static RD_TLS char ret[32][256];
+	const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
+	static RD_TLS char ret[32][256];
         static RD_TLS int reti = 0;
-        char portstr[32];
+	char portstr[32];
         int of      = 0;
-        int niflags = NI_NUMERICSERV;
+	int niflags = NI_NUMERICSERV;
         int r;
 
-        reti = (reti + 1) % 32;
-
+	reti = (reti + 1) % 32;
+	
         switch (a->sinx_family) {
-        case AF_INET:
-        case AF_INET6:
-                if (flags & RD_SOCKADDR2STR_F_FAMILY)
+	case AF_INET:
+	case AF_INET6:
+		if (flags & RD_SOCKADDR2STR_F_FAMILY)
                         of += rd_snprintf(&ret[reti][of],
                                           sizeof(ret[reti]) - of, "ipv%i#",
-                                          a->sinx_family == AF_INET ? 4 : 6);
+				      a->sinx_family == AF_INET ? 4 : 6);
 
-                if ((flags & RD_SOCKADDR2STR_F_PORT) &&
-                    a->sinx_family == AF_INET6)
-                        ret[reti][of++] = '[';
+		if ((flags & RD_SOCKADDR2STR_F_PORT) &&
+		    a->sinx_family == AF_INET6)
+			ret[reti][of++] = '[';
 
-                if (!(flags & RD_SOCKADDR2STR_F_RESOLVE))
-                        niflags |= NI_NUMERICHOST;
+		if (!(flags & RD_SOCKADDR2STR_F_RESOLVE))
+			niflags |= NI_NUMERICHOST;
 
         retry:
                 if ((r = getnameinfo(
@@ -72,7 +73,7 @@ const char *rd_sockaddr2str(const void *addr, int flags) {
 
                          (flags & RD_SOCKADDR2STR_F_PORT) ? sizeof(portstr) : 0,
 
-                         niflags))) {
+                             niflags))) {
 
                         if (r == EAI_AGAIN && !(niflags & NI_NUMERICHOST)) {
                                 /* If unable to resolve name, retry without
@@ -83,73 +84,85 @@ const char *rd_sockaddr2str(const void *addr, int flags) {
                         break;
                 }
 
-
-                if (flags & RD_SOCKADDR2STR_F_PORT) {
-                        size_t len = strlen(ret[reti]);
-                        rd_snprintf(
-                            ret[reti] + len, sizeof(ret[reti]) - len, "%s:%s",
-                            a->sinx_family == AF_INET6 ? "]" : "", portstr);
+#ifdef __OS400__
+                /* getnameinfo has no Ascii eqivalent in Qadrt               */
+                /* we have to convert returned name and port string to ascii */
+                {
+                   int namelength = strlen(ret[reti]+of);
+  		   QadrtConvertE2A(ret[reti]+of, ret[reti]+of, namelength, namelength);
+                   if(flags & RD_SOCKADDR2STR_F_PORT) {
+                      namelength = strlen(portstr);
+    		      QadrtConvertE2A(portstr, portstr, namelength, namelength);
+                   }
                 }
+#endif
+		if (flags & RD_SOCKADDR2STR_F_PORT) {
+			size_t len = strlen(ret[reti]);
+			rd_snprintf(ret[reti]+len, sizeof(ret[reti])-len,
+				 "%s:%s",
+				 a->sinx_family == AF_INET6 ? "]" : "",
+				 portstr);
+		}
+	
+		return ret[reti];
+	}
+	
 
-                return ret[reti];
-        }
-
-
-        /* Error-case */
-        rd_snprintf(ret[reti], sizeof(ret[reti]), "<unsupported:%s>",
-                    rd_family2str(a->sinx_family));
-
-        return ret[reti];
+	/* Error-case */
+	rd_snprintf(ret[reti], sizeof(ret[reti]), "<unsupported:%s>",
+		 rd_family2str(a->sinx_family));
+	
+	return ret[reti];
 }
 
 
 const char *rd_addrinfo_prepare(const char *nodesvc, char **node, char **svc) {
-        static RD_TLS char snode[256];
-        static RD_TLS char ssvc[64];
-        const char *t;
-        const char *svct = NULL;
+	static RD_TLS char snode[256];
+	static RD_TLS char ssvc[64];
+	const char *t;
+	const char *svct = NULL;
         size_t nodelen   = 0;
 
-        *snode = '\0';
+	*snode = '\0';
         *ssvc  = '\0';
 
-        if (*nodesvc == '[') {
-                /* "[host]".. (enveloped node name) */
+	if (*nodesvc == '[') {
+		/* "[host]".. (enveloped node name) */
                 if (!(t = strchr(nodesvc, ']')))
-                        return "Missing close-']'";
-                nodesvc++;
+			return "Missing close-']'";
+		nodesvc++;
                 nodelen = t - nodesvc;
                 svct    = t + 1;
 
         } else if (*nodesvc == ':' && *(nodesvc + 1) != ':') {
-                /* ":"..  (port only) */
-                nodelen = 0;
+		/* ":"..  (port only) */
+		nodelen = 0;
                 svct    = nodesvc;
-        }
-
+	}
+		
         if ((svct = strrchr(svct ? svct : nodesvc, ':')) &&
             (*(svct - 1) != ':') && *(++svct)) {
-                /* Optional ":service" definition. */
-                if (strlen(svct) >= sizeof(ssvc))
-                        return "Service name too long";
-                strcpy(ssvc, svct);
-                if (!nodelen)
-                        nodelen = svct - nodesvc - 1;
+		/* Optional ":service" definition. */
+		if (strlen(svct) >= sizeof(ssvc))
+			return "Service name too long";
+		strcpy(ssvc, svct);
+		if (!nodelen)
+			nodelen = svct - nodesvc - 1;
 
-        } else if (!nodelen)
-                nodelen = strlen(nodesvc);
+	} else if (!nodelen)
+		nodelen = strlen(nodesvc);
 
-        if (nodelen) {
-                /* Truncate nodename if necessary. */
+	if (nodelen) {
+		/* Truncate nodename if necessary. */
                 nodelen = RD_MIN(nodelen, sizeof(snode) - 1);
-                memcpy(snode, nodesvc, nodelen);
-                snode[nodelen] = '\0';
-        }
+		memcpy(snode, nodesvc, nodelen);
+		snode[nodelen] = '\0';
+	}
 
-        *node = snode;
+	*node = snode;
         *svc  = ssvc;
 
-        return NULL;
+	return NULL;
 }
 
 
@@ -167,69 +180,95 @@ rd_getaddrinfo(const char *nodesvc,
                                  struct addrinfo **res,
                                  void *opaque),
                void *opaque,
-               const char **errstr) {
-        struct addrinfo hints;
-        memset(&hints, 0, sizeof(hints));
+				    const char **errstr) {
+	struct addrinfo hints;
+    	memset(&hints, 0, sizeof(hints));
         hints.ai_family   = family;
-        hints.ai_socktype = socktype;
-        hints.ai_protocol = protocol;
+	hints.ai_socktype = socktype;
+	hints.ai_protocol = protocol;
         hints.ai_flags    = flags;
 
-        struct addrinfo *ais, *ai;
-        char *node, *svc;
-        int r;
-        int cnt = 0;
-        rd_sockaddr_list_t *rsal;
+	struct addrinfo *ais, *ai;
+	char *node, *svc;
+	int r;
+	int cnt = 0;
+	rd_sockaddr_list_t *rsal;
+#ifdef __OS400__       
+        char *node_e, *defsvc_e; /* to convert to ebcdic */
+        int cvtlength;
+#endif
 
-        if ((*errstr = rd_addrinfo_prepare(nodesvc, &node, &svc))) {
-                errno = EINVAL;
-                return NULL;
-        }
+	if ((*errstr = rd_addrinfo_prepare(nodesvc, &node, &svc))) {
+		errno = EINVAL;
+		return NULL;
+	}
 
-        if (*svc)
-                defsvc = svc;
-
+	if (*svc)
+		defsvc = svc;
+		
         if (resolve_cb) {
                 r = resolve_cb(node, defsvc, &hints, &ais, opaque);
         } else {
-                r = getaddrinfo(node, defsvc, &hints, &ais);
+#ifndef __OS400__
+	r = getaddrinfo(node, defsvc, &hints, &ais);
+#else
+        /* getaddrinfo has no Ascii eqivalent in Qadrt               */
+        /* we have to convert name and service string to ascii       */
+        node_e=strdup(node);
+        cvtlength = strlen(node_e);
+        QadrtConvertA2E(node_e, node_e, cvtlength, cvtlength);
+        defsvc_e=strdup(defsvc);
+        cvtlength = strlen(defsvc_e);
+        QadrtConvertA2E(defsvc_e, defsvc_e, cvtlength, cvtlength);
+	r = getaddrinfo(node_e, defsvc_e, &hints, &ais);
+#endif
         }
 
         if (r) {
 #ifdef EAI_SYSTEM
-                if (r == EAI_SYSTEM)
+		if (r == EAI_SYSTEM)
 #else
-                if (0)
+		if (0)
 #endif
-                        *errstr = rd_strerror(errno);
-                else {
+			*errstr = rd_strerror(errno);
+		else {
 #ifdef _WIN32
-                        *errstr = gai_strerrorA(r);
+			*errstr = gai_strerrorA(r);
 #else
-                        *errstr = gai_strerror(r);
+			*errstr = gai_strerror(r);
 #endif
-                        errno = EFAULT;
-                }
-                return NULL;
-        }
-
-        /* Count number of addresses */
+			errno = EFAULT;
+		}
+#ifdef __OS400__
+                /* cleanup strdup copies */
+                free(node_e); 
+                free(defsvc_e); 
+#endif
+		return NULL;
+	}
+#ifdef __OS400__
+        /* cleanup strdup copies */
+        free(node_e); 
+        free(defsvc_e); 
+#endif
+	
+	/* Count number of addresses */
         for (ai = ais; ai != NULL; ai = ai->ai_next)
-                cnt++;
+		cnt++;
 
-        if (cnt == 0) {
-                /* unlikely? */
+	if (cnt == 0) {
+		/* unlikely? */
                 if (resolve_cb)
                         resolve_cb(NULL, NULL, NULL, &ais, opaque);
                 else
-                        freeaddrinfo(ais);
+		freeaddrinfo(ais);
                 errno   = ENOENT;
-                *errstr = "No addresses";
-                return NULL;
-        }
+		*errstr = "No addresses";
+		return NULL;
+	}
 
 
-        rsal = rd_calloc(1, sizeof(*rsal) + (sizeof(*rsal->rsal_addr) * cnt));
+	rsal = rd_calloc(1, sizeof(*rsal) + (sizeof(*rsal->rsal_addr) * cnt));
 
         for (ai = ais; ai != NULL; ai = ai->ai_next)
                 memcpy(&rsal->rsal_addr[rsal->rsal_cnt++], ai->ai_addr,
@@ -238,18 +277,18 @@ rd_getaddrinfo(const char *nodesvc,
         if (resolve_cb)
                 resolve_cb(NULL, NULL, NULL, &ais, opaque);
         else
-                freeaddrinfo(ais);
+	freeaddrinfo(ais);
 
-        /* Shuffle address list for proper round-robin */
-        if (!(flags & RD_AI_NOSHUFFLE))
-                rd_array_shuffle(rsal->rsal_addr, rsal->rsal_cnt,
-                                 sizeof(*rsal->rsal_addr));
+	/* Shuffle address list for proper round-robin */
+	if (!(flags & RD_AI_NOSHUFFLE))
+		rd_array_shuffle(rsal->rsal_addr, rsal->rsal_cnt,
+				 sizeof(*rsal->rsal_addr));
 
-        return rsal;
+	return rsal;
 }
 
 
 
 void rd_sockaddr_list_destroy(rd_sockaddr_list_t *rsal) {
-        rd_free(rsal);
+	rd_free(rsal);
 }

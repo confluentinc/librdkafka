@@ -30,6 +30,9 @@
  * Mocks - protocol request handlers
  *
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rdkafka_int.h"
 #include "rdbuf.h"
@@ -1446,7 +1449,11 @@ err_parse:
 /**
  * @brief Generate a unique ProducerID
  */
+#ifndef __OS400__
 static const rd_kafka_pid_t
+#else
+static rd_kafka_pid_t
+#endif
 rd_kafka_mock_pid_new(rd_kafka_mock_cluster_t *mcluster,
                       const rd_kafkap_str_t *TransactionalId) {
         size_t tidlen =

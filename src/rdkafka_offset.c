@@ -45,6 +45,9 @@
  *  - If offset.store.sync.interval.ms is configured the main rdkafka thread
  *    will also make sure to fsync() each offset file accordingly. (file)
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 
 #include "rdkafka_int.h"

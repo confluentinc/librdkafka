@@ -28,6 +28,11 @@
 #ifndef _TESTSHARED_H_
 #define _TESTSHARED_H_
 
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
+
 /**
  * C variables and functions shared with C++ tests
  */
@@ -154,6 +159,7 @@ void test_fail0(const char *file,
                 fprintf(stderr, "\033[0m");                                    \
         } while (0)
 
+#ifndef __OS400__
 /* "..." is a failure reason in printf format, include as much info as needed */
 #define TEST_ASSERT(expr, ...)                                                 \
         do {                                                                   \
@@ -173,6 +179,21 @@ void test_fail0(const char *file,
                                    "\": " __VA_ARGS__);                        \
                 }                                                              \
         } while (0)
+#else
+#define TEST_ASSERT(expr,...) do {            \
+        if (!(expr)) {                        \
+                      TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
+                                ## __VA_ARGS__);                        \
+                      }                                                 \
+        } while (0)
+#define TEST_ASSERT_LATER(expr,...) do {                                \
+                if (!(expr)) {                                          \
+                        TEST_FAIL0(__FILE__, __LINE__, 1, 0,            \
+                                   "Test assertion failed: \"" # expr  "\": " \
+                                   ## __VA_ARGS__);                      \
+                }                                                       \
+        } while (0)
+#endif
 
 
 void test_SAY(const char *file, int line, int level, const char *str);
@@ -241,11 +262,13 @@ extern const char *test_curr_name(void);
  */
 static RD_INLINE int64_t test_clock(void)
 #ifndef _MSC_VER
+#ifndef __OS400__
     __attribute__((unused))
+#endif
 #endif
     ;
 static RD_INLINE int64_t test_clock(void) {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__OS400__)
         /* No monotonic clock on Darwin */
         struct timeval tv;
         gettimeofday(&tv, NULL);

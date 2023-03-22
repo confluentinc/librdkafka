@@ -220,7 +220,12 @@ struct LZ4HC_CCtx_internal
 /* Do not use these definitions directly !
  * Declare or allocate an LZ4_streamHC_t instead.
  */
+#ifndef __OS400__
 #define LZ4_STREAMHCSIZE       262200  /* static size, for inter-version compatibility */
+#else
+#define LZ4_STREAMHCSIZE       262200*2  /* not enough for IBMi */
+#endif
+
 #define LZ4_STREAMHCSIZE_VOIDP (LZ4_STREAMHCSIZE / sizeof(void*))
 union LZ4_streamHC_u {
     void* table[LZ4_STREAMHCSIZE_VOIDP];

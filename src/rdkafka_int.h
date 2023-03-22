@@ -547,7 +547,11 @@ struct rd_kafka_s {
         struct {
                 rd_kafka_q_t *q; /**< Queue served by background thread. */
                 thrd_t thread;   /**< Background thread. */
+#ifdef __OS400__
+                pthread_id_np_t   thread_tid;
+#endif
                 int calling;     /**< Indicates whether the event callback
+
                                   *   is being called, reset back to 0
                                   *   when the callback returns.
                                   *   This can be used for troubleshooting
@@ -1022,7 +1026,11 @@ void rd_kafka_term_sig_handler(int sig);
 /**
  * rdkafka_background.c
  */
+#ifndef __OS400__
 int rd_kafka_background_thread_main(void *arg);
+#else
+void *rd_kafka_background_thread_main(void *arg);
+#endif
 rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);

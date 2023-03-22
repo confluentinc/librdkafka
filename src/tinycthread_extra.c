@@ -30,6 +30,9 @@
 /**
  * @brief Extra methods added to tinycthread/c11threads
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdtime.h"
@@ -53,6 +56,8 @@ int thrd_setname(const char *name) {
 int thrd_is_current(thrd_t thr) {
 #if defined(_TTHREAD_WIN32_)
         return GetThreadId(thr) == GetCurrentThreadId();
+#elif defined(__OS400__)
+        return pthread_equal(pthread_self(), thr);
 #else
         return (pthread_self() == thr);
 #endif

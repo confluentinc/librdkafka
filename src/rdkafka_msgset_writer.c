@@ -25,6 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
+
 
 #include "rd.h"
 #include "rdkafka_int.h"
@@ -1079,12 +1083,18 @@ rd_kafka_msgset_writer_compress_snappy(rd_kafka_msgset_writer_t *msetw,
                            len, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                            rktp->rktp_partition, rd_strerror(-r));
                 rd_free(ciov->iov_base);
+#ifdef __OS400__
+                rd_free_alloca(iov);
+#endif
                 return -1;
         }
 
         /* rd_free snappy environment */
         rd_kafka_snappy_free_env(&senv);
 
+#ifdef __OS400__
+        rd_free_alloca(iov);
+#endif
         return 0;
 }
 #endif

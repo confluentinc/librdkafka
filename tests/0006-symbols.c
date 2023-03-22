@@ -30,6 +30,10 @@
  * Makes sure all symbols in the public API actually resolves during linking.
  * This test needs to be updated manually when new symbols are added.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#include "os400_assert.h"
+#endif
 
 #include "test.h"
 

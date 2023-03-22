@@ -25,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdunittest.h"
@@ -61,6 +64,7 @@ uint32_t rd_murmur2(const void *key, size_t len) {
         uint32_t h          = seed ^ (uint32_t)len;
         const unsigned char *tail;
 
+#ifndef __OS400__
         if (likely(((intptr_t)key & 0x3) == 0)) {
                 /* Input is 32-bit word aligned. */
                 const uint32_t *data = (const uint32_t *)key;
@@ -76,6 +80,9 @@ uint32_t rd_murmur2(const void *key, size_t len) {
 
                 tail = (const unsigned char *)data;
 
+#else
+        if(0) { /* we'll try to use OS400 builtin implementation later */
+#endif
         } else {
                 /* Unaligned slower variant */
                 const unsigned char *data = (const unsigned char *)key;

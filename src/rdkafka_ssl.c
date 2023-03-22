@@ -744,6 +744,10 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
         wstore_name = rd_alloca(sizeof(*wstore_name) * wsize);
         werr        = mbstowcs_s(NULL, wstore_name, wsize, store_name,
                           strlen(store_name));
+#ifdef __OS400__
+        if(!werr)
+           rd_free_alloca(wstore_name);
+#endif
         rd_assert(!werr);
 
         w_store = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0,
@@ -758,6 +762,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
                     "%s store: %s",
                     store_name,
                     rd_strerror_w32(GetLastError(), errstr, sizeof(errstr)));
+#ifdef __OS400__
+                rd_free_alloca(wstore_name);
+#endif
                 return -1;
         }
 
@@ -796,6 +803,9 @@ static int rd_kafka_ssl_win_load_cert_store(rd_kafka_t *rk,
                      "Windows Certificate %s store, %d failed",
                      cnt, store_name, fail_cnt);
 
+#ifdef __OS400__
+        rd_free_alloca(wstore_name);
+#endif
         if (cnt == 0 && fail_cnt > 0)
                 return -1;
 

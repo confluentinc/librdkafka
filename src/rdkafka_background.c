@@ -31,6 +31,9 @@
  *
  * See rdkafka.h's rd_kafka_conf_set_background_event_cb() for details.
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 #include "rd.h"
 #include "rdkafka_int.h"
@@ -65,10 +68,10 @@ static RD_INLINE void rd_kafka_call_background_event_cb(rd_kafka_t *rk,
  */
 static rd_kafka_op_res_t
 rd_kafka_background_queue_serve(rd_kafka_t *rk,
-                                rd_kafka_q_t *rkq,
-                                rd_kafka_op_t *rko,
-                                rd_kafka_q_cb_type_t cb_type,
-                                void *opaque) {
+                                 rd_kafka_q_t *rkq,
+                                 rd_kafka_op_t *rko,
+                                 rd_kafka_q_cb_type_t cb_type,
+                                 void *opaque) {
         rd_kafka_op_res_t res;
 
         /*
@@ -106,7 +109,11 @@ rd_kafka_background_queue_serve(rd_kafka_t *rk,
 /**
  * @brief Main loop for background queue thread.
  */
+#ifndef __OS400__
 int rd_kafka_background_thread_main(void *arg) {
+#else
+void *rd_kafka_background_thread_main (void *arg) {
+#endif
         rd_kafka_t *rk = arg;
 
         rd_kafka_set_thread_name("background");
@@ -147,7 +154,11 @@ int rd_kafka_background_thread_main(void *arg) {
 
         rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
+#ifdef __OS400__
+        return NULL;
+#else
         return 0;
+#endif
 }
 
 

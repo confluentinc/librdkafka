@@ -31,6 +31,9 @@
  *  - xxHash homepage: http://www.xxhash.com
  *  - xxHash source repository : https://github.com/Cyan4973/xxHash
  */
+#ifdef __OS400__
+#pragma convert(819)
+#endif
 
 
 /* *************************************

@@ -32,6 +32,11 @@ librdkafka v2.1.0 is a feature release:
 
 ## Fixes
 
+### OpenSSL fixes
+
+ * Fixed OpenSSL static build not able to include new modules like FIPS
+   provider module.
+
 ### Consumer fixes
 
  * A reference count issue was blocking the consumer from closing.

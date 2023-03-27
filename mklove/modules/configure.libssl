@@ -101,11 +101,7 @@ function libcrypto_install_source {
         conf_args="${conf_args} no-krb5"
     fi
 
-    if [[ $ver == 3.* ]]; then
-        # Make sure legacy provider (et.al) are built-in, since we're building
-        # a static library we don't want to rely on dynamically loaded modules.
-        conf_args="${conf_args} no-module"
-    else
+    if [[ $ver != 3.* ]]; then
         # OpenSSL 3 deprecates ENGINE support, but we still need it, so only
         # add no-deprecated to non-3.x builds.
         conf_args="${conf_args} no-deprecated"

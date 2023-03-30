@@ -1539,6 +1539,26 @@ the original fatal error code and reason.
 To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
 
 
+### Note on Batch consume APIs
+
+Using multiple instances of `rd_kafka_consume_batch()` and/or `rd_kafka_consume_batch_queue()`
+APIs concurrently is not thread safe and will result in undefined behaviour. We strongly recommend a
+single instance of these APIs to be used at a given time. This usecase is not supported and will not
+be supported in future as well. There are different ways to achieve similar result:
+
+* Create multiple consumers reading from different partitions. In this way, different partitions
+  are read by different consumers and each consumer can run its own batch call.
+* Create multiple consumers in same consumer group. In this way, partitions are assigned to
+  different consumers and each consumer can run its own batch call.
+* Create single consumer and read data from single batch call and process this data in parallel.
+
+Even after this if you feel the need to use multiple instances of these APIs for the same consumer
+concurrently, then don't use any of the **seek**, **pause**, **resume** or **rebalancing** operation
+in conjunction with these API calls. For **rebalancing** operation to work in sequencial manner, please
+set `rebalance_cb` configuration property (refer [examples/rdkafka_complex_consumer_example.c](examples/rdkafka_complex_consumer_example.c)
+for the help with the usage) for the consumer.
+
+
 ### Topics
 
 #### Unknown or unauthorized topics

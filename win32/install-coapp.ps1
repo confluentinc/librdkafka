@@ -8,4 +8,9 @@ Start-Process -FilePath msiexec -ArgumentList /i, $msiPath, /quiet -Wait
 
 # Make the tools available for later PS scripts to use.
 $env:PSModulePath = $env:PSModulePath + ';C:\\Program Files (x86)\\Outercurve Foundation\\Modules'
+
+Get-module -ListAvailable
+
+Get-ChildItem C:\\ -include *CoApp* -recurse
+
 Import-Module CoApp

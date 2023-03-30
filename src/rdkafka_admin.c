@@ -1708,7 +1708,7 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                     &options->include_authorized_operations,
                     "include_authorized_operations", 0, 1, 0);
         else
-                rd_kafka_confval_disable(&options->require_stable_offsets,
+                rd_kafka_confval_disable(&options->include_authorized_operations,
                                          "include_authorized_operations");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||

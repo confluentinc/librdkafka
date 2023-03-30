@@ -11,7 +11,8 @@ librdkafka v2.1.0 is a feature release:
   the timeout to be reset (#4176).
 * Fix seek partition timeout, was one thousand times lower than the passed
   value (#4230).
-* Batch consumer fixes: TODO: describe (#4208).
+* Fix multiple inconsistent behaviour in batch APIs during **pause** or **resume** operations (#4208).
+  See **Consumer fixes** section below for more information.
 * Update lz4.c from upstream. Fixes [CVE-2021-3520](https://github.com/advisories/GHSA-gmc7-pqv9-966m)
   (by @filimonov, #4232).
 * Upgrade OpenSSL to v3.0.8 with various security fixes,
@@ -45,6 +46,23 @@ librdkafka v2.1.0 is a feature release:
  * When using `rd_kafka_seek_partitions`, the remaining timeout was
    converted from microseconds to milliseconds but the expected unit
    for that parameter is microseconds.
+ * Fixed known issues related to Batch Consume APIs mentioned in v2.0.0
+   release notes.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently updating `app_offset` and `store_offset` incorrectly when
+   **pause** or **resume** was being used for a partition.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently skipping offsets when **pause** or **resume** was being
+   used for a partition.
+
+
+## Known Issues
+
+### Consume Batch API
+
+ * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
+   any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
+   interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
 
 
 

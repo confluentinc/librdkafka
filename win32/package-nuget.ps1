@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
 
-   Create NuGet package using CoApp
+   Create NuGet package
 
 
 .DESCRIPTION
@@ -12,19 +12,19 @@
 
    Use build.bat to build
 
-
-   Requires CoApp
 #>
 
 param(
-    [string]$version='0.0.0',
-    [string]$destdir='.\artifacts'
+    [string]$config='Release',
+    [string]$platform='x64',
+    [string]$toolset='v142',
+    [string]$version='0.0.0'
 )
 
-$autopkgFile = "win32/librdkafka.autopkg"
-cat ($autopkgFile + ".template") | % { $_ -replace "@version", $version } > $autopkgFile
+$msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe)
 
-Write-NuGetPackage $autopkgFile
+echo "Packaging $config $platform $toolset"
 
-Move-Item -Path .\*.nupkg -Destination $destdir
+& $msbuild win32\librdkafka.vcxproj /p:Configuration=$config /p:Platform=$platform /p:PlatformToolset=$toolset /p:RestorePackagesConfig=true /t:restore
+& $msbuild win32\librdkafka.vcxproj /p:Configuration=$config /p:Platform=$platform /p:PlatformToolset=$toolset /p:ProductVersion=$version /t:pack
 

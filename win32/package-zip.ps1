@@ -43,4 +43,4 @@ Copy-Item "${srcdir}\librdkafka.dll","${srcdir}\librdkafkacpp.dll",
 
 Copy-Item "${srcdir}\librdkafka.lib","${srcdir}\librdkafkacpp.lib" -Destination $libdir
 
-Compress-Archive -Path "build" -DestinationPath "artifacts\librdkafka.redist.zip"
+7z.exe a "artifacts\librdkafka.redist.zip" "build"

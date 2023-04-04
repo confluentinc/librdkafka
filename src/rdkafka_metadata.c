@@ -201,6 +201,75 @@ rd_kafka_metadata_copy(const struct rd_kafka_metadata *src, size_t size) {
 
 
 /**
+ * @brief Partition (id) comparator for partition_id_leader_epoch struct.
+ */
+static int rd_kafka_metadata_partition_leader_epoch_cmp(const void *_a,
+                                                        const void *_b) {
+        const rd_kafka_partition_leader_epoch_t *a = _a, *b = _b;
+        return RD_CMP(a->partition_id, b->partition_id);
+}
+
+
+
+/**
+ * @brief Update topic state and information based on topic metadata.
+ *
+ * @param mdt Topic metadata.
+ * @param leader_epochs Per-partition leader epoch array, or NULL if not known.
+ *
+ * @locality rdkafka main thread
+ * @locks_acquired rd_kafka_wrlock(rk)
+ */
+static void rd_kafka_parse_Metadata_update_topic(
+    rd_kafka_broker_t *rkb,
+    const rd_kafka_metadata_topic_t *mdt,
+    const rd_kafka_partition_leader_epoch_t *leader_epochs) {
+
+        rd_rkb_dbg(rkb, METADATA, "METADATA",
+                   /* The indent below is intentional */
+                   "  Topic %s with %i partitions%s%s", mdt->topic,
+                   mdt->partition_cnt, mdt->err ? ": " : "",
+                   mdt->err ? rd_kafka_err2str(mdt->err) : "");
+
+        /* Ignore metadata completely for temporary errors. (issue #513)
+         *   LEADER_NOT_AVAILABLE: Broker is rebalancing
+         */
+        if (mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE &&
+            mdt->partition_cnt == 0) {
+                rd_rkb_dbg(rkb, TOPIC, "METADATA",
+                           "Temporary error in metadata reply for "
+                           "topic %s (PartCnt %i): %s: ignoring",
+                           mdt->topic, mdt->partition_cnt,
+                           rd_kafka_err2str(mdt->err));
+        } else {
+                /* Update local topic & partition state based
+                 * on metadata */
+                rd_kafka_topic_metadata_update2(rkb, mdt, leader_epochs);
+        }
+}
+
+/**
+ * @brief Only brokers with Metadata version >= 9 have reliable leader
+ *        epochs. Before that version, leader epoch must be treated
+ *        as missing (-1).
+ *
+ * @param rkb The broker
+ * @return Is this a broker version with reliable leader epochs?
+ *
+ * @locality rdkafka main thread
+ */
+rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb) {
+        int features;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_Metadata, 0, 9, &features);
+
+        return ApiVersion >= 9;
+}
+
+
+/**
  * @brief Handle a Metadata response message.
  *
  * @param topics are the requested topics (may be NULL)
@@ -220,7 +289,7 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
-        struct rd_kafka_metadata *md;
+        struct rd_kafka_metadata *md = NULL;
         size_t rkb_namelen;
         const int log_decode_errors       = LOG_ERR;
         rd_list_t *missing_topics         = NULL;
@@ -237,6 +306,18 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         rd_kafka_resp_err_t err    = RD_KAFKA_RESP_ERR_NO_ERROR;
         int broker_changes         = 0;
         int cache_changes          = 0;
+        /** This array is reused and resized as necessary to hold per-partition
+         *  leader epochs (ApiVersion >= 7). */
+        rd_kafka_partition_leader_epoch_t *leader_epochs = NULL;
+        /** Number of allocated elements in leader_epochs. */
+        size_t leader_epochs_size = 0;
+        rd_ts_t ts_start          = rd_clock();
+
+        /* Ignore metadata updates when terminating */
+        if (rd_kafka_terminating(rkb->rkb_rk)) {
+                err = RD_KAFKA_RESP_ERR__DESTROY;
+                goto done;
+        }
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -268,10 +349,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         /* Read Brokers */
-        rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
-        if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
-                rd_kafka_buf_parse_fail(rkbuf, "Broker_cnt %i > BROKERS_MAX %i",
-                                        md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
+        rd_kafka_buf_read_arraycnt(rkbuf, &md->broker_cnt,
+                                   RD_KAFKAP_BROKERS_MAX);
 
         if (!(md->brokers = rd_tmpabuf_alloc(&tbuf, md->broker_cnt *
                                                         sizeof(*md->brokers))))
@@ -289,6 +368,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                         rd_kafkap_str_t rack;
                         rd_kafka_buf_read_str(rkbuf, &rack);
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);
         }
 
         if (ApiVersion >= 2)
@@ -304,14 +385,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
 
 
         /* Read TopicMetadata */
-        rd_kafka_buf_read_i32a(rkbuf, md->topic_cnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
         rd_rkb_dbg(rkb, METADATA, "METADATA", "%i brokers, %i topics",
                    md->broker_cnt, md->topic_cnt);
-
-        if (md->topic_cnt > RD_KAFKAP_TOPICS_MAX)
-                rd_kafka_buf_parse_fail(
-                    rkbuf, "TopicMetadata_cnt %" PRId32 " > TOPICS_MAX %i",
-                    md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
         if (!(md->topics =
                   rd_tmpabuf_alloc(&tbuf, md->topic_cnt * sizeof(*md->topics))))
@@ -328,14 +404,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 }
 
                 /* PartitionMetadata */
-                rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partition_cnt);
-                if (md->topics[i].partition_cnt > RD_KAFKAP_PARTITIONS_MAX)
-                        rd_kafka_buf_parse_fail(rkbuf,
-                                                "TopicMetadata[%i]."
-                                                "PartitionMetadata_cnt %i "
-                                                "> PARTITIONS_MAX %i",
-                                                i, md->topics[i].partition_cnt,
-                                                RD_KAFKAP_PARTITIONS_MAX);
+                rd_kafka_buf_read_arraycnt(rkbuf, &md->topics[i].partition_cnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
 
                 if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
                           &tbuf, md->topics[i].partition_cnt *
@@ -346,6 +416,17 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                                 md->topics[i].topic,
                                                 md->topics[i].partition_cnt);
 
+                /* Resize reused leader_epochs array to fit this partition's
+                 * leader epochs. */
+                if (ApiVersion >= 7 && md->topics[i].partition_cnt > 0 &&
+                    (size_t)md->topics[i].partition_cnt > leader_epochs_size) {
+                        leader_epochs_size =
+                            RD_MAX(32, md->topics[i].partition_cnt);
+                        leader_epochs =
+                            rd_realloc(leader_epochs, sizeof(*leader_epochs) *
+                                                          leader_epochs_size);
+                }
+
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
                         rd_kafka_buf_read_i16a(rkbuf,
                                                md->topics[i].partitions[j].err);
@@ -353,21 +434,17 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                                md->topics[i].partitions[j].id);
                         rd_kafka_buf_read_i32a(
                             rkbuf, md->topics[i].partitions[j].leader);
+                        if (ApiVersion >= 7) {
+                                leader_epochs[j].partition_id =
+                                    md->topics[i].partitions[j].id;
+                                rd_kafka_buf_read_i32(
+                                    rkbuf, &leader_epochs[j].leader_epoch);
+                        }
 
                         /* Replicas */
-                        rd_kafka_buf_read_i32a(
-                            rkbuf, md->topics[i].partitions[j].replica_cnt);
-                        if (md->topics[i].partitions[j].replica_cnt >
-                            RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(
-                                    rkbuf,
-                                    "TopicMetadata[%i]."
-                                    "PartitionMetadata[%i]."
-                                    "Replica_cnt "
-                                    "%i > BROKERS_MAX %i",
-                                    i, j,
-                                    md->topics[i].partitions[j].replica_cnt,
-                                    RD_KAFKAP_BROKERS_MAX);
+                        rd_kafka_buf_read_arraycnt(
+                            rkbuf, &md->topics[i].partitions[j].replica_cnt,
+                            RD_KAFKAP_BROKERS_MAX);
 
                         if (!(md->topics[i].partitions[j].replicas =
                                   rd_tmpabuf_alloc(
@@ -393,18 +470,9 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                                     md->topics[i].partitions[j].replicas[k]);
 
                         /* Isrs */
-                        rd_kafka_buf_read_i32a(
-                            rkbuf, md->topics[i].partitions[j].isr_cnt);
-                        if (md->topics[i].partitions[j].isr_cnt >
-                            RD_KAFKAP_BROKERS_MAX)
-                                rd_kafka_buf_parse_fail(
-                                    rkbuf,
-                                    "TopicMetadata[%i]."
-                                    "PartitionMetadata[%i]."
-                                    "Isr_cnt "
-                                    "%i > BROKERS_MAX %i",
-                                    i, j, md->topics[i].partitions[j].isr_cnt,
-                                    RD_KAFKAP_BROKERS_MAX);
+                        rd_kafka_buf_read_arraycnt(
+                            rkbuf, &md->topics[i].partitions[j].isr_cnt,
+                            RD_KAFKAP_BROKERS_MAX);
 
                         if (!(md->topics[i]
                                   .partitions[j]
@@ -427,22 +495,105 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                              k++)
                                 rd_kafka_buf_read_i32a(
                                     rkbuf, md->topics[i].partitions[j].isrs[k]);
+
+                        if (ApiVersion >= 5) {
+                                /* OfflineReplicas int32 array (ignored) */
+                                int32_t offline_replicas_cnt;
+
+                                /* #OfflineReplicas */
+                                rd_kafka_buf_read_arraycnt(
+                                    rkbuf, &offline_replicas_cnt,
+                                    RD_KAFKAP_BROKERS_MAX);
+                                rd_kafka_buf_skip(rkbuf, offline_replicas_cnt *
+                                                             sizeof(int32_t));
+                        }
+
+                        rd_kafka_buf_skip_tags(rkbuf);
                 }
+
+                if (ApiVersion >= 8) {
+                        int32_t TopicAuthorizedOperations;
+                        /* TopicAuthorizedOperations */
+                        rd_kafka_buf_read_i32(rkbuf,
+                                              &TopicAuthorizedOperations);
+                }
+
+                rd_kafka_buf_skip_tags(rkbuf);
+
+                /* Ignore topics in blacklist */
+                if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+                    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
+                                           md->topics[i].topic)) {
+                        rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_METADATA,
+                                   "BLACKLIST",
+                                   "Ignoring blacklisted topic \"%s\" "
+                                   "in metadata",
+                                   md->topics[i].topic);
+                        continue;
+                }
+
+                if (leader_epochs_size > 0 &&
+                    !rd_kafka_has_reliable_leader_epochs(rkb)) {
+                        /* Prior to Kafka version 2.4 (which coincides with
+                         * Metadata version 9), the broker does not propagate
+                         * leader epoch information accurately while a
+                         * reassignment is in progress. Relying on a stale
+                         * epoch can lead to FENCED_LEADER_EPOCH errors which
+                         * can prevent consumption throughout the course of
+                         * a reassignment. It is safer in this case to revert
+                         * to the behavior in previous protocol versions
+                         * which checks leader status only. */
+                        leader_epochs_size = 0;
+                        rd_free(leader_epochs);
+                        leader_epochs = NULL;
+                }
+
 
                 /* Sort partitions by partition id */
                 qsort(md->topics[i].partitions, md->topics[i].partition_cnt,
                       sizeof(*md->topics[i].partitions),
                       rd_kafka_metadata_partition_id_cmp);
+                if (leader_epochs_size > 0) {
+                        /* And sort leader_epochs by partition id */
+                        qsort(leader_epochs, md->topics[i].partition_cnt,
+                              sizeof(*leader_epochs),
+                              rd_kafka_metadata_partition_leader_epoch_cmp);
+                }
+
+                /* Update topic state based on the topic metadata */
+                rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
+                                                     leader_epochs);
+
+
+                if (requested_topics) {
+                        rd_list_free_cb(missing_topics,
+                                        rd_list_remove_cmp(missing_topics,
+                                                           md->topics[i].topic,
+                                                           (void *)strcmp));
+                        if (!all_topics) {
+                                /* Only update cache when not asking
+                                 * for all topics. */
+
+                                rd_kafka_wrlock(rk);
+                                rd_kafka_metadata_cache_topic_update(
+                                    rk, &md->topics[i],
+                                    rd_false /*propagate later*/);
+                                cache_changes++;
+                                rd_kafka_wrunlock(rk);
+                        }
+                }
         }
+
+        if (ApiVersion >= 8 && ApiVersion <= 10) {
+                int32_t ClusterAuthorizedOperations;
+                /* ClusterAuthorizedOperations */
+                rd_kafka_buf_read_i32(rkbuf, &ClusterAuthorizedOperations);
+        }
+
+        rd_kafka_buf_skip_tags(rkbuf);
 
         /* Entire Metadata response now parsed without errors:
          * update our internal state according to the response. */
-
-        /* Avoid metadata updates when we're terminating. */
-        if (rd_kafka_terminating(rkb->rkb_rk)) {
-                err = RD_KAFKA_RESP_ERR__DESTROY;
-                goto done;
-        }
 
         if (md->broker_cnt == 0 && md->topic_cnt == 0) {
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
@@ -460,58 +611,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
                                        &md->brokers[i], NULL);
         }
-
-        /* Update partition count and leader for each topic we know about */
-        for (i = 0; i < md->topic_cnt; i++) {
-                rd_kafka_metadata_topic_t *mdt = &md->topics[i];
-                rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "  Topic #%i/%i: %s with %i partitions%s%s", i,
-                           md->topic_cnt, mdt->topic, mdt->partition_cnt,
-                           mdt->err ? ": " : "",
-                           mdt->err ? rd_kafka_err2str(mdt->err) : "");
-
-                /* Ignore topics in blacklist */
-                if (rkb->rkb_rk->rk_conf.topic_blacklist &&
-                    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
-                                           mdt->topic)) {
-                        rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
-                                   "Ignoring blacklisted topic \"%s\" "
-                                   "in metadata",
-                                   mdt->topic);
-                        continue;
-                }
-
-                /* Ignore metadata completely for temporary errors. (issue #513)
-                 *   LEADER_NOT_AVAILABLE: Broker is rebalancing
-                 */
-                if (mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE &&
-                    mdt->partition_cnt == 0) {
-                        rd_rkb_dbg(rkb, TOPIC, "METADATA",
-                                   "Temporary error in metadata reply for "
-                                   "topic %s (PartCnt %i): %s: ignoring",
-                                   mdt->topic, mdt->partition_cnt,
-                                   rd_kafka_err2str(mdt->err));
-                } else {
-                        /* Update local topic & partition state based
-                         * on metadata */
-                        rd_kafka_topic_metadata_update2(rkb, mdt);
-                }
-
-                if (requested_topics) {
-                        rd_list_free_cb(missing_topics,
-                                        rd_list_remove_cmp(missing_topics,
-                                                           mdt->topic,
-                                                           (void *)strcmp));
-                        if (!all_topics) {
-                                rd_kafka_wrlock(rk);
-                                rd_kafka_metadata_cache_topic_update(
-                                    rk, mdt, rd_false /*propagate later*/);
-                                cache_changes++;
-                                rd_kafka_wrunlock(rk);
-                        }
-                }
-        }
-
 
         /* Requested topics not seen in metadata? Propogate to topic code. */
         if (missing_topics) {
@@ -586,8 +685,8 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
         }
 
         if (all_topics) {
-                rd_kafka_metadata_cache_update(rkb->rkb_rk, md,
-                                               1 /*abs update*/);
+                /* Expire all cache entries that were not updated. */
+                rd_kafka_metadata_cache_evict_by_age(rkb->rkb_rk, ts_start);
 
                 if (rkb->rkb_rk->rk_full_metadata)
                         rd_kafka_metadata_destroy(
@@ -639,6 +738,9 @@ done:
         if (missing_topics)
                 rd_list_destroy(missing_topics);
 
+        if (leader_epochs)
+                rd_free(leader_epochs);
+
         /* This metadata request was triggered by someone wanting
          * the metadata information back as a reply, so send that reply now.
          * In this case we must not rd_free the metadata memory here,
@@ -662,6 +764,9 @@ err:
 
         if (missing_topics)
                 rd_list_destroy(missing_topics);
+
+        if (leader_epochs)
+                rd_free(leader_epochs);
 
         rd_tmpabuf_destroy(&tbuf);
 

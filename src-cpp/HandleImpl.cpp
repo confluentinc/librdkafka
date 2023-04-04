@@ -391,6 +391,8 @@ rd_kafka_topic_partition_list_t *partitions_to_c_parts(
     rd_kafka_topic_partition_t *rktpar = rd_kafka_topic_partition_list_add(
         c_parts, tpi->topic_.c_str(), tpi->partition_);
     rktpar->offset = tpi->offset_;
+    if (tpi->leader_epoch_ != -1)
+      rd_kafka_topic_partition_set_leader_epoch(rktpar, tpi->leader_epoch_);
   }
 
   return c_parts;
@@ -412,8 +414,9 @@ void update_partitions_from_c_parts(
           dynamic_cast<RdKafka::TopicPartitionImpl *>(partitions[j]);
       if (!strcmp(p->topic, pp->topic_.c_str()) &&
           p->partition == pp->partition_) {
-        pp->offset_ = p->offset;
-        pp->err_    = static_cast<RdKafka::ErrorCode>(p->err);
+        pp->offset_       = p->offset;
+        pp->err_          = static_cast<RdKafka::ErrorCode>(p->err);
+        pp->leader_epoch_ = rd_kafka_topic_partition_get_leader_epoch(p);
       }
     }
   }

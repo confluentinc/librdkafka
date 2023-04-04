@@ -152,13 +152,21 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
                 "DescribeUserScramCredentialsRequest",
             [RD_KAFKAP_AlterUserScramCredentials] =
                 "AlterUserScramCredentialsRequest",
-            [RD_KAFKAP_Vote]             = "VoteRequest",
-            [RD_KAFKAP_BeginQuorumEpoch] = "BeginQuorumEpochRequest",
-            [RD_KAFKAP_EndQuorumEpoch]   = "EndQuorumEpochRequest",
-            [RD_KAFKAP_DescribeQuorum]   = "DescribeQuorumRequest",
-            [RD_KAFKAP_AlterIsr]         = "AlterIsrRequest",
-            [RD_KAFKAP_UpdateFeatures]   = "UpdateFeaturesRequest",
-            [RD_KAFKAP_Envelope]         = "EnvelopeRequest",
+            [RD_KAFKAP_Vote]                 = "VoteRequest",
+            [RD_KAFKAP_BeginQuorumEpoch]     = "BeginQuorumEpochRequest",
+            [RD_KAFKAP_EndQuorumEpoch]       = "EndQuorumEpochRequest",
+            [RD_KAFKAP_DescribeQuorum]       = "DescribeQuorumRequest",
+            [RD_KAFKAP_AlterIsr]             = "AlterIsrRequest",
+            [RD_KAFKAP_UpdateFeatures]       = "UpdateFeaturesRequest",
+            [RD_KAFKAP_Envelope]             = "EnvelopeRequest",
+            [RD_KAFKAP_FetchSnapshot]        = "FetchSnapshot",
+            [RD_KAFKAP_DescribeCluster]      = "DescribeCluster",
+            [RD_KAFKAP_DescribeProducers]    = "DescribeProducers",
+            [RD_KAFKAP_BrokerHeartbeat]      = "BrokerHeartbeat",
+            [RD_KAFKAP_UnregisterBroker]     = "UnregisterBroker",
+            [RD_KAFKAP_DescribeTransactions] = "DescribeTransactions",
+            [RD_KAFKAP_ListTransactions]     = "ListTransactions",
+            [RD_KAFKAP_AllocateProducerIds]  = "AllocateProducerIds",
         };
         static RD_TLS char ret[64];
 

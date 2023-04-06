@@ -1,3 +1,11 @@
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a bugfix release:
+
+ * Fix segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
+
+
 # librdkafka v2.1.0
 
 librdkafka v2.1.0 is a feature release:
@@ -63,6 +71,10 @@ librdkafka v2.1.0 is a feature release:
  * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
    any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
    interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
+
+### Consume API
+  * Segmentation fault when subscribing to a non-existent topic and
+    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
 
 
 

@@ -370,8 +370,7 @@ rd_kafka_event_DescribeConsumerGroups_result(rd_kafka_event_t *rkev) {
 
 const rd_kafka_DescribeTopics_result_t *
 rd_kafka_event_DescribeTopics_result(rd_kafka_event_t *rkev) {
-        if (!rkev ||
-            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT)
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT)
                 return NULL;
         else
                 return (const rd_kafka_DescribeTopics_result_t *)rkev;
@@ -379,8 +378,7 @@ rd_kafka_event_DescribeTopics_result(rd_kafka_event_t *rkev) {
 
 const rd_kafka_DescribeCluster_result_t *
 rd_kafka_event_DescribeCluster_result(rd_kafka_event_t *rkev) {
-        if (!rkev ||
-            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT)
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT)
                 return NULL;
         else
                 return (const rd_kafka_DescribeCluster_result_t *)rkev;

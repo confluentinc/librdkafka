@@ -84,9 +84,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = "REPLY:LISTCONSUMERGROUPS",
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 "REPLY:DESCRIBECONSUMERGROUPS",
-            [RD_KAFKA_OP_DESCRIBETOPICS] = "REPLY:DESCRIBETOPICS",
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = "REPLY:DESCRIBETOPICS",
             [RD_KAFKA_OP_DESCRIBECLUSTER] = "REPLY:DESCRIBECLUSTER",
-            [RD_KAFKA_OP_DELETEGROUPS] = "REPLY:DELETEGROUPS",
+            [RD_KAFKA_OP_DELETEGROUPS]    = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
             [RD_KAFKA_OP_CREATEACLS]   = "REPLY:CREATEACLS",
@@ -235,9 +235,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DESCRIBETOPICS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBECLUSTER] = sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETEGROUPS]    = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),

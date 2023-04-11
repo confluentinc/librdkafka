@@ -2220,11 +2220,11 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
                                  rd_kafka_cgrp_handle_Metadata_op);
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
-        err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
-                                        rd_false /*!allow auto create */,
-                                        rd_true /*include cluster authorized operations */,
-                                        rd_true /*include topic authorized operations */,
-                                        rd_true /*cgrp_update*/, reason, rko);
+        err = rd_kafka_metadata_request(
+            rkcg->rkcg_rk, NULL, &topics, rd_false /*!allow auto create */,
+            rd_true /*include cluster authorized operations */,
+            rd_true /*include topic authorized operations */,
+            rd_true /*cgrp_update*/, reason, rko);
         if (err) {
                 rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_METADATA, "CGRPMETADATA",
                              "%s: need to refresh metadata (%dms old) "

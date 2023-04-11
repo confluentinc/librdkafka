@@ -38,7 +38,8 @@
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
-typedef struct rd_kafka_topic_authorized_operations_pair rd_kafka_topic_authorized_operations_pair_t;
+typedef struct rd_kafka_topic_authorized_operations_pair
+    rd_kafka_topic_authorized_operations_pair_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -138,10 +139,10 @@ typedef enum {
         RD_KAFKA_OP_DESCRIBECONSUMERGROUPS, /**< Admin:
                                              *   DescribeConsumerGroups
                                              *   u.admin_request */
-        RD_KAFKA_OP_DESCRIBETOPICS,     /**< Admin:
+        RD_KAFKA_OP_DESCRIBETOPICS,         /**< Admin:
                                              *   DescribeTopics
                                              *   u.admin_request */
-        RD_KAFKA_OP_DESCRIBECLUSTER,     /**< Admin:
+        RD_KAFKA_OP_DESCRIBECLUSTER,        /**< Admin:
                                              *   DescribeCluster
                                              *   u.admin_request */
         RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
@@ -377,7 +378,8 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
-                        rd_kafka_topic_authorized_operations_pair_t* topic_authorized_operations;
+                        rd_kafka_topic_authorized_operations_pair_t
+                            *topic_authorized_operations;
                         int32_t cluster_authorized_operations;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
@@ -448,13 +450,14 @@ struct rd_kafka_op_s {
                         struct rd_kafka_admin_worker_cbs *cbs;
 
                         /** Worker state */
-                        enum { RD_KAFKA_ADMIN_STATE_INIT,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
-                               RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
-                               RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
-                               RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
-                               RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
+                        enum {
+                                RD_KAFKA_ADMIN_STATE_INIT,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_FANOUTS,
+                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
+                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER_LIST,
                         } state;
 
                         int32_t broker_id; /**< Requested broker id to
@@ -544,16 +547,17 @@ struct rd_kafka_op_s {
 
                 /**< Mock cluster command */
                 struct {
-                        enum { RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
-                               RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
-                               RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
-                               RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
-                               RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
-                               RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
-                               RD_KAFKA_MOCK_CMD_COORD_SET,
-                               RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                        enum {
+                                RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
+                                RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
+                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
+                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
+                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
+                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
+                                RD_KAFKA_MOCK_CMD_COORD_SET,
+                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:

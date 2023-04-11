@@ -33,15 +33,16 @@
 
 rd_bool_t rd_kafka_has_reliable_leader_epochs(rd_kafka_broker_t *rkb);
 
-rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
-                                            rd_kafka_buf_t *request,
-                                            rd_kafka_buf_t *rkbuf,
-                                            struct rd_kafka_metadata **mdp,
-                                            rd_kafka_topic_authorized_operations_pair_t** topic_authorized_operations,
-                                            int32_t* cluster_authorized_operations,
-                                            rd_list_t* request_topics,
-                                            char** rk_cluster_id,
-                                            int* rk_controller_id);
+rd_kafka_resp_err_t rd_kafka_parse_Metadata(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_buf_t *request,
+    rd_kafka_buf_t *rkbuf,
+    struct rd_kafka_metadata **mdp,
+    rd_kafka_topic_authorized_operations_pair_t **topic_authorized_operations,
+    int32_t *cluster_authorized_operations,
+    rd_list_t *request_topics,
+    char **rk_cluster_id,
+    int *rk_controller_id);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy(const struct rd_kafka_metadata *md, size_t size);
@@ -114,9 +115,9 @@ rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
  */
 
 typedef struct rd_kafka_topic_authorized_operations_pair {
-        char* topic_name;
+        char *topic_name;
         int32_t authorized_operations;
-}rd_kafka_topic_authorized_operations_pair;
+} rd_kafka_topic_authorized_operations_pair;
 /**
  * @{
  *

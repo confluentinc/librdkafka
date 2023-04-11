@@ -72,7 +72,7 @@ static void usage(const char *reason, ...) {
         fprintf(stderr,
                 "Describe topics usage examples\n"
                 "\n"
-                "Usage: %s <options> <include_topic_authorized_operations>\n" 
+                "Usage: %s <options> <include_topic_authorized_operations>\n"
                 "<topic1> <topic2> ...\n"
                 "\n"
                 "Options:\n"
@@ -136,9 +136,8 @@ int64_t parse_int(const char *what, const char *str) {
 /**
  * @brief Print topics information.
  */
-static int
-print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
-                  int topic_cnt) {
+static int print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
+                             int topic_cnt) {
         size_t i, j;
         const rd_kafka_TopicDescription_t **result_topics;
         size_t result_topics_cnt;
@@ -157,68 +156,87 @@ print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
         for (i = 0; i < result_topics_cnt; i++) {
                 int j, acl_operation;
                 const rd_kafka_error_t *error;
-                const rd_kafka_TopicDescription_t *topic =
-                    result_topics[i];
+                const rd_kafka_TopicDescription_t *topic = result_topics[i];
                 const char *topic_name =
                     rd_kafka_TopicDescription_topic_name(topic);
-                int topic_authorized_operations_cnt = rd_kafka_TopicDescription_topic_authorized_operations_cnt(topic);
-                int partition_cnt = rd_kafka_TopicDescription_topic_partition_cnt(topic);
+                int topic_authorized_operations_cnt =
+                    rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+                        topic);
+                int partition_cnt =
+                    rd_kafka_TopicDescription_topic_partition_cnt(topic);
                 error = rd_kafka_TopicDescription_error(topic);
-                
-                if (rd_kafka_error_code(error)){
+
+                if (rd_kafka_error_code(error)) {
                         printf("Topic: %s has error[%" PRId32 "]: %s\n",
-                                topic_name,
-                               rd_kafka_error_code(error),
+                               topic_name, rd_kafka_error_code(error),
                                rd_kafka_error_string(error));
                         continue;
                 }
 
-                printf("Topic: %s succeeded, has %d topic authorized operations allowed, they are:\n", 
-                        topic_name, topic_authorized_operations_cnt);
-                for(j=0;j<topic_authorized_operations_cnt;j++){
-                        acl_operation = 
-                                rd_kafka_TopicDescription_authorized_operation_idx(topic,j);
+                printf(
+                    "Topic: %s succeeded, has %d topic authorized operations "
+                    "allowed, they are:\n",
+                    topic_name, topic_authorized_operations_cnt);
+                for (j = 0; j < topic_authorized_operations_cnt; j++) {
+                        acl_operation =
+                            rd_kafka_TopicDescription_authorized_operation_idx(
+                                topic, j);
                         printf("\t%s operation is allowed\n",
-                        rd_kafka_AclOperation_name(acl_operation));
+                               rd_kafka_AclOperation_name(acl_operation));
                 }
 
                 printf("partiton count is: %d\n", partition_cnt);
-                for(j=0; j<partition_cnt;j++){
+                for (j = 0; j < partition_cnt; j++) {
                         const rd_kafka_error_t *partition_error;
                         int leader, id, isr_cnt, replica_cnt, k;
-                        partition_error = rd_kafka_TopicDescription_partition_error(topic, j);
+                        partition_error =
+                            rd_kafka_TopicDescription_partition_error(topic, j);
 
-                        if (rd_kafka_error_code(partition_error)){
-                                printf("\tPartition at index %d has error[%" PRId32 "]: %s\n",
-                                        j, rd_kafka_error_code(partition_error),
-                                        rd_kafka_error_string(partition_error));
+                        if (rd_kafka_error_code(partition_error)) {
+                                printf(
+                                    "\tPartition at index %d has error[%" PRId32
+                                    "]: %s\n",
+                                    j, rd_kafka_error_code(partition_error),
+                                    rd_kafka_error_string(partition_error));
                                 continue;
                         }
                         printf("\tPartition at index %d succeeded\n", j);
                         id = rd_kafka_TopicDescription_partiton_id(topic, j);
-                        leader = rd_kafka_TopicDescription_partiton_leader(topic, j);
-                        isr_cnt = rd_kafka_TopicDescription_partiton_isr_cnt(topic, j);
-                        replica_cnt = rd_kafka_TopicDescription_partiton_replica_cnt(topic, j);
-                        printf("\tPartition has id: %d with leader: %d\n", id, leader);
-                        if(isr_cnt){
-                                printf("\tThe in-sync replica count is: %d, they are: ", isr_cnt);
-                                for(k=0; k<isr_cnt; k++)
-                                        printf("%d ", rd_kafka_TopicDescription_partiton_isrs_idx(topic, j, k));
+                        leader =
+                            rd_kafka_TopicDescription_partiton_leader(topic, j);
+                        isr_cnt = rd_kafka_TopicDescription_partiton_isr_cnt(
+                            topic, j);
+                        replica_cnt =
+                            rd_kafka_TopicDescription_partiton_replica_cnt(
+                                topic, j);
+                        printf("\tPartition has id: %d with leader: %d\n", id,
+                               leader);
+                        if (isr_cnt) {
+                                printf(
+                                    "\tThe in-sync replica count is: %d, they "
+                                    "are: ",
+                                    isr_cnt);
+                                for (k = 0; k < isr_cnt; k++)
+                                        printf(
+                                            "%d ",
+                                            rd_kafka_TopicDescription_partiton_isrs_idx(
+                                                topic, j, k));
                                 printf("\n");
-                        }
-                        else
+                        } else
                                 printf("\tThe in-sync replica count is 0\n");
 
-                        if(replica_cnt){
-                                printf("\tThe replica count is: %d, they are: ", replica_cnt);
-                                for(k=0; k<replica_cnt; k++)
-                                        printf("%d ", rd_kafka_TopicDescription_partiton_replica_idx(topic, j, k));
+                        if (replica_cnt) {
+                                printf("\tThe replica count is: %d, they are: ",
+                                       replica_cnt);
+                                for (k = 0; k < replica_cnt; k++)
+                                        printf(
+                                            "%d ",
+                                            rd_kafka_TopicDescription_partiton_replica_idx(
+                                                topic, j, k));
                                 printf("\n");
-                        }
-                        else
+                        } else
                                 printf("\tThe replica count is 0\n");
                         printf("\n");
-                        
                 }
                 printf("\n");
         }
@@ -228,8 +246,7 @@ print_topics_info(const rd_kafka_DescribeTopics_result_t *topicdesc,
  * @brief Call rd_kafka_DescribeTopics() with a list of
  * topics.
  */
-static void
-cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
+static void cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
         int i;
         const char **topics = NULL;
@@ -268,18 +285,20 @@ cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         /* Signal handler for clean shutdown */
         signal(SIGINT, stop);
 
-        options = rd_kafka_AdminOptions_new(
-            rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
 
         if (rd_kafka_AdminOptions_set_request_timeout(
                 options, 10 * 1000 /* 10s */, errstr, sizeof(errstr))) {
                 fprintf(stderr, "%% Failed to set timeout: %s\n", errstr);
                 goto exit;
         }
-        if ((error = rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-                 options, include_topic_authorized_operations))) {
+        if ((error =
+                 rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+                     options, include_topic_authorized_operations))) {
                 fprintf(stderr,
-                        "%% Failed to set require topic authorized operations: %s\n",
+                        "%% Failed to set require topic authorized operations: "
+                        "%s\n",
                         rd_kafka_error_string(error));
                 rd_kafka_error_destroy(error);
                 exit(1);
@@ -300,8 +319,7 @@ cmd_describe_topics(rd_kafka_conf_t *conf, int argc, char **argv) {
         } else if (rd_kafka_event_error(event)) {
                 rd_kafka_resp_err_t err = rd_kafka_event_error(event);
                 /* DescribeTopics request failed */
-                fprintf(stderr,
-                        "%% DescribeTopics failed[%" PRId32 "]: %s\n",
+                fprintf(stderr, "%% DescribeTopics failed[%" PRId32 "]: %s\n",
                         err, rd_kafka_event_error_string(event));
                 goto exit;
 
@@ -336,10 +354,6 @@ int main(int argc, char **argv) {
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
-        conf_set(conf, "sasl.username", "broker");
-        conf_set(conf, "sasl.password", "broker");
-        conf_set(conf, "sasl.mechanism", "SCRAM-SHA-256");
-        conf_set(conf, "security.protocol", "SASL_PLAINTEXT");
 
         /*
          * Parse common options

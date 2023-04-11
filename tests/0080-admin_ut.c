@@ -658,14 +658,16 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error = 
-                        rd_kafka_AdminOptions_set_include_authorized_operations(
-                                options, 0))) {
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
+                             options, 0))) {
                         fprintf(stderr,
-                                "%% Failed to set require authorized operations: %s\n",
+                                "%% Failed to set require authorized "
+                                "operations: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
-                        TEST_FAIL("Failed to set include authorized operations\n");
+                        TEST_FAIL(
+                            "Failed to set include authorized operations\n");
                 }
 
                 if (useq) {
@@ -735,9 +737,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
                 TEST_ASSERT(
-                        rd_kafka_ConsumerGroupDescription_authorized_operations_count(
-                                resgroups[i]) == 0, "Got authorized operations"
-                                "when not requested");
+                    rd_kafka_ConsumerGroupDescription_authorized_operations_count(
+                        resgroups[i]) == 0,
+                    "Got authorized operations"
+                    "when not requested");
         }
 
         rd_kafka_event_destroy(rkev);
@@ -764,10 +767,10 @@ destroy:
  *
  */
 static void do_test_DescribeTopics(const char *what,
-                                           rd_kafka_t *rk,
-                                           rd_kafka_queue_t *useq,
-                                           int with_options,
-                                           rd_bool_t destroy) {
+                                   rd_kafka_t *rk,
+                                   rd_kafka_queue_t *useq,
+                                   int with_options,
+                                   rd_bool_t destroy) {
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 4
         const char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
@@ -802,14 +805,16 @@ static void do_test_DescribeTopics(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error = 
-                        rd_kafka_AdminOptions_set_include_topic_authorized_operations(
-                                options, 0))) {
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_topic_authorized_operations(
+                             options, 0))) {
                         fprintf(stderr,
-                                "%% Failed to set topic authorized operations: %s\n",
+                                "%% Failed to set topic authorized operations: "
+                                "%s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
-                        TEST_FAIL("Failed to set topic authorized operations\n");
+                        TEST_FAIL(
+                            "Failed to set topic authorized operations\n");
                 }
 
                 if (useq) {
@@ -820,8 +825,8 @@ static void do_test_DescribeTopics(const char *what,
 
         TIMING_START(&timing, "DescribeTopics");
         TEST_SAY("Call DescribeTopics, timeout is %dms\n", exp_timeout);
-        rd_kafka_DescribeTopics(
-            rk, topic_names, TEST_DESCRIBE_TOPICS_CNT, options, q);
+        rd_kafka_DescribeTopics(rk, topic_names, TEST_DESCRIBE_TOPICS_CNT,
+                                options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         if (destroy)
@@ -832,8 +837,8 @@ static void do_test_DescribeTopics(const char *what,
         rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
         TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
-        TEST_SAY("DescribeTopics: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+        TEST_SAY("DescribeTopics: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
 
         /* Convert event to proper result */
         res = rd_kafka_event_DescribeTopics_result(rkev);
@@ -847,17 +852,14 @@ static void do_test_DescribeTopics(const char *what,
         /* Expecting no error (errors will be per-topic) */
         err     = rd_kafka_event_error(rkev);
         errstr2 = rd_kafka_event_error_string(rkev);
-        TEST_ASSERT(
-            err == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "expected DescribeTopics to return error %s, not %s (%s)",
-            rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR), rd_kafka_err2str(err),
-            err ? errstr2 : "n/a");
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected DescribeTopics to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
 
         /* Extract topics, should return TEST_DESCRIBE_TOPICS_CNT topics. */
-        restopics =
-            rd_kafka_DescribeTopics_result_topics(res, &restopic_cnt);
-        TEST_ASSERT(restopics &&
-                        restopic_cnt == TEST_DESCRIBE_TOPICS_CNT,
+        restopics = rd_kafka_DescribeTopics_result_topics(res, &restopic_cnt);
+        TEST_ASSERT(restopics && restopic_cnt == TEST_DESCRIBE_TOPICS_CNT,
                     "expected %d result_topics, got %p cnt %" PRIusz,
                     TEST_DESCRIBE_TOPICS_CNT, restopics, restopic_cnt);
 
@@ -866,22 +868,21 @@ static void do_test_DescribeTopics(const char *what,
         for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
                 TEST_ASSERT(
                     !strcmp(topic_names[i],
-                            rd_kafka_TopicDescription_topic_name(
-                                restopics[i])),
+                            rd_kafka_TopicDescription_topic_name(restopics[i])),
                     "expected topic '%s' at position %d, not '%s'",
                     topic_names[i], i,
                     rd_kafka_TopicDescription_topic_name(restopics[i]));
+                TEST_ASSERT(rd_kafka_error_code(rd_kafka_TopicDescription_error(
+                                restopics[i])) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                            "expected topic '%s' to have timed out, got %s",
+                            topic_names[i],
+                            rd_kafka_error_string(
+                                rd_kafka_TopicDescription_error(restopics[i])));
                 TEST_ASSERT(
-                    rd_kafka_error_code(rd_kafka_TopicDescription_error(
-                        restopics[i])) == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "expected topic '%s' to have timed out, got %s",
-                    topic_names[i],
-                    rd_kafka_error_string(
-                        rd_kafka_TopicDescription_error(restopics[i])));
-                TEST_ASSERT(
-                        rd_kafka_TopicDescription_topic_authorized_operations_cnt(
-                                restopics[i]) == 0, "Got topic authorized operations"
-                                "when not requested");
+                    rd_kafka_TopicDescription_topic_authorized_operations_cnt(
+                        restopics[i]) == 0,
+                    "Got topic authorized operations"
+                    "when not requested");
         }
 
         rd_kafka_event_destroy(rkev);
@@ -908,10 +909,10 @@ destroy:
  *
  */
 static void do_test_DescribeCluster(const char *what,
-                                           rd_kafka_t *rk,
-                                           rd_kafka_queue_t *useq,
-                                           int with_options,
-                                           rd_bool_t destroy) {
+                                    rd_kafka_t *rk,
+                                    rd_kafka_queue_t *useq,
+                                    int with_options,
+                                    rd_bool_t destroy) {
         rd_kafka_queue_t *q;
         rd_kafka_AdminOptions_t *options = NULL;
         int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
@@ -939,14 +940,16 @@ static void do_test_DescribeCluster(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
-                if ((error = 
-                        rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
-                                options, 0))) {
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_cluster_authorized_operations(
+                             options, 0))) {
                         fprintf(stderr,
-                                "%% Failed to set cluster authorized operations: %s\n",
+                                "%% Failed to set cluster authorized "
+                                "operations: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
-                        TEST_FAIL("Failed to set cluster authorized operations\n");
+                        TEST_FAIL(
+                            "Failed to set cluster authorized operations\n");
                 }
 
                 if (useq) {
@@ -984,9 +987,9 @@ static void do_test_DescribeCluster(const char *what,
         err     = rd_kafka_event_error(rkev);
         errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                "expected DescribeCluster to return error %s, not %s (%s)",
-                rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
-                rd_kafka_err2str(err), err ? errstr2 : "n/a");
+                    "expected DescribeCluster to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
 
         rd_kafka_event_destroy(rkev);
 
@@ -2702,19 +2705,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_DescribeConsumerGroups("main queue, options", rk, mainq, 1,
                                        rd_false);
 
-        do_test_DescribeTopics("temp queue, no options", rk, NULL, 0,
-                                       rd_false);
-        do_test_DescribeTopics("temp queue, options", rk, NULL, 1,
-                                       rd_false);
-        do_test_DescribeTopics("main queue, options", rk, mainq, 1,
-                                       rd_false);
+        do_test_DescribeTopics("temp queue, no options", rk, NULL, 0, rd_false);
+        do_test_DescribeTopics("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_DescribeTopics("main queue, options", rk, mainq, 1, rd_false);
 
         do_test_DescribeCluster("temp queue, no options", rk, NULL, 0,
-                                       rd_false);
-        do_test_DescribeCluster("temp queue, options", rk, NULL, 1,
-                                       rd_false);
-        do_test_DescribeCluster("main queue, options", rk, mainq, 1,
-                                       rd_false);
+                                rd_false);
+        do_test_DescribeCluster("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_DescribeCluster("main queue, options", rk, mainq, 1, rd_false);
 
         do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);

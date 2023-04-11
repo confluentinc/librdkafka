@@ -2,7 +2,8 @@
 
 librdkafka v2.1.1 is a maintenance release:
 
-* Fix CMake pkg-config issue with cURL require (#4180).
+* Fix CMake pkg-config cURL requires (@FantasqueX,
+  @stertingen, #4180).
 
 
 

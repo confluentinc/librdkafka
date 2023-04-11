@@ -7406,7 +7406,7 @@ rd_kafka_ClusterDescription_new(const char *cluster_id,
                 clusterdesc->cluster_authorized_operations = NULL;
 
         clusterdesc->node_cnt = md->broker_cnt;
-        clusterdesc->Nodes = malloc(sizeof(rd_kafka_Node_t) * md->broker_cnt);
+        clusterdesc->Nodes = rd_malloc(sizeof(rd_kafka_Node_t) * md->broker_cnt);
         for(i=0;i<md->broker_cnt;i++){
                 clusterdesc->Nodes[i].host = rd_strdup(md->brokers[i].host);
                 clusterdesc->Nodes[i].port = md->brokers[i].port;
@@ -7421,8 +7421,13 @@ static void rd_kafka_ClusterDescription_destroy(
         RD_IF_FREE(clusterdesc->cluster_id, rd_free);
         if(clusterdesc->cluster_authorized_operations)
                 rd_list_destroy(clusterdesc->cluster_authorized_operations);
-        for(i=0;i<clusterdesc->node_cnt;i++){
-                rd_kafka_Node_destroy(&clusterdesc->Nodes[i]);
+        if (clusterdesc->Nodes) {
+            for (i = 0; i < clusterdesc->node_cnt; i++) {
+                rd_kafka_Node_t *node = &(clusterdesc->Nodes[i]);
+                RD_IF_FREE(node->host, rd_free);
+                RD_IF_FREE(node->rack_id, rd_free);
+            }
+            RD_IF_FREE(clusterdesc->Nodes, rd_free);
         }
         rd_free(clusterdesc);
 }

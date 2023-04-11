@@ -588,10 +588,10 @@ static void do_test_ListConsumerGroups(const char *what,
             err ? errstr2 : "n/a");
 
         errors = rd_kafka_ListConsumerGroups_result_errors(rkev, &errors_cnt);
-        TEST_ASSERT(errors_cnt == 1, "expected one error, got %" PRIu64,
+        TEST_ASSERT(errors_cnt == 1, "expected one error, got %" PRIusz,
                     errors_cnt);
         rd_kafka_ListConsumerGroups_result_valid(rkev, &valid_cnt);
-        TEST_ASSERT(valid_cnt == 0, "expected zero valid groups, got %" PRIu64,
+        TEST_ASSERT(valid_cnt == 0, "expected zero valid groups, got %" PRIusz,
                     valid_cnt);
 
         err     = rd_kafka_error_code(errors[0]);

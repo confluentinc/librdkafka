@@ -259,7 +259,6 @@ blocks:
           commands:
             - C:\msys64\usr\bin\bash -lc './packaging/mingw-w64/semaphoreci-build.sh --static ./artifacts/librdkafka.tgz'
 
-
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
     task:
@@ -292,8 +291,6 @@ blocks:
           - cache store vcpkg-archives-$Env:ARTIFACT_KEY C:/Users/semaphore/AppData/Local/vcpkg/archives
           - pwd
           - cd librdkafka
-          # coapp is needed for creating the intermediary nuget packages.
-          - "& .\\win32\\install-coapp.ps1"
       epilogue:
         commands:
           - Get-ChildItem . -include *.dll -recurse
@@ -307,9 +304,8 @@ blocks:
             - name: ARTIFACT_KEY
               value: p-librdkafka__plat-windows__dist-msvc__arch-x64__lnk-std
           commands:
-            - "& .\\win32\\msbuild.ps1 -config Release -platform x64"
-            - "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
-
+            - "& .\\win32\\msbuild.ps1 -platform x64"
+            - "& .\\win32\\package-zip.ps1 -platform x64"
         - name: 'Build: MSVC x86'
           env_vars:
             - name: triplet
@@ -317,8 +313,8 @@ blocks:
             - name: ARTIFACT_KEY
               value: p-librdkafka__plat-windows__dist-msvc__arch-x86__lnk-std
           commands:
-            - "& .\\win32\\msbuild.ps1 -config Release -platform Win32"
-            - "& .\\win32\\package-nuget.ps1 -destdir .\\artifacts\\"
+            - "& .\\win32\\msbuild.ps1 -platform Win32"
+            - "& .\\win32\\package-zip.ps1 -platform Win32"
 
   - name: 'Packaging'
     dependencies:

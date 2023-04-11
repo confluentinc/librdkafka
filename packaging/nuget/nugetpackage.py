@@ -119,7 +119,8 @@ class NugetPackage (Package):
                  'plat': 'win'},
                 'msvcr140.zip',
                 'msvcp140.dll', 'runtimes/win-x64/native/msvcp140.dll'),
-        # matches librdkafka.redist.{VER}.nupkg
+
+        # matches x64 librdkafka.redist.zip
         Mapping({'arch': 'x64',
                  'plat': 'win'},
                 'librdkafka.redist*',
@@ -155,19 +156,19 @@ class NugetPackage (Package):
                 'librdkafka.redist*',
                 'build/native/bin/v142/x64/Release/libcurl.dll',
                 'runtimes/win-x64/native/libcurl.dll'),
-        # matches librdkafka.{VER}.nupkg
+        # matches x64 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x64',
                  'plat': 'win'},
-                'librdkafka*.nupkg',
+                'librdkafka.redist*',
                 'build/native/lib/v142/x64/Release/librdkafka.lib',
-                'build/native/lib/win/x64/win-x64-Release/v142/librdkafka.lib',  # noqa: E501
-                artifact_fname_excludes=['redist', 'symbols']),
+                'build/native/lib/win/x64/win-x64-Release/v142/librdkafka.lib'  # noqa: E501
+                ),
         Mapping({'arch': 'x64',
                  'plat': 'win'},
-                'librdkafka*.nupkg',
+                'librdkafka.redist*',
                 'build/native/lib/v142/x64/Release/librdkafkacpp.lib',
-                'build/native/lib/win/x64/win-x64-Release/v142/librdkafkacpp.lib',  # noqa: E501
-                artifact_fname_excludes=['redist', 'symbols']),
+                'build/native/lib/win/x64/win-x64-Release/v142/librdkafkacpp.lib'  # noqa: E501
+                ),
 
         Mapping({'arch': 'x86',
                  'plat': 'win'},
@@ -178,7 +179,8 @@ class NugetPackage (Package):
                  'plat': 'win'},
                 'msvcr140.zip',
                 'msvcp140.dll', 'runtimes/win-x86/native/msvcp140.dll'),
-        # matches librdkafka.redist.{VER}.nupkg
+
+        # matches Win32 librdkafka.redist.zip
         Mapping({'arch': 'x86',
                  'plat': 'win'},
                 'librdkafka.redist*',
@@ -216,20 +218,19 @@ class NugetPackage (Package):
                 'build/native/bin/v142/Win32/Release/libcurl.dll',
                 'runtimes/win-x86/native/libcurl.dll'),
 
-        # matches librdkafka.{VER}.nupkg
+        # matches Win32 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x86',
                  'plat': 'win'},
-                'librdkafka*.nupkg',
+                'librdkafka.redist*',
                 'build/native/lib/v142/Win32/Release/librdkafka.lib',
-                'build/native/lib/win/x86/win-x86-Release/v142/librdkafka.lib',  # noqa: E501
-                artifact_fname_excludes=['redist', 'symbols']),
-
+                'build/native/lib/win/x86/win-x86-Release/v142/librdkafka.lib'  # noqa: E501
+                ),
         Mapping({'arch': 'x86',
                  'plat': 'win'},
-                'librdkafka*.nupkg',
+                'librdkafka.redist*',
                 'build/native/lib/v142/Win32/Release/librdkafkacpp.lib',
-                'build/native/lib/win/x86/win-x86-Release/v142/librdkafkacpp.lib',  # noqa: E501
-                artifact_fname_excludes=['redist', 'symbols'])
+                'build/native/lib/win/x86/win-x86-Release/v142/librdkafkacpp.lib'  # noqa: E501
+                )
     ]
 
     def __init__(self, version, arts):

@@ -126,7 +126,7 @@ static void rd_kafka_metadata_cache_evict_tmr_cb(rd_kafka_timers_t *rkts,
  *
  * @returns the number of entries evicted.
  *
- * @locks rd_kafka_wrlock()
+ * @locks_required rd_kafka_wrlock()
  */
 static int rd_kafka_metadata_cache_evict(rd_kafka_t *rk) {
         int cnt     = 0;
@@ -152,6 +152,50 @@ static int rd_kafka_metadata_cache_evict(rd_kafka_t *rk) {
                      "Expired %d entries from metadata cache "
                      "(%d entries remain)",
                      cnt, rk->rk_metadata_cache.rkmc_cnt);
+
+        if (cnt)
+                rd_kafka_metadata_cache_propagate_changes(rk);
+
+        return cnt;
+}
+
+
+/**
+ * @brief Evict timed out entries from cache based on their insert/update time
+ *        rather than expiry time. Any entries older than \p ts will be evicted.
+ *
+ * @returns the number of entries evicted.
+ *
+ * @locks_required rd_kafka_wrlock()
+ */
+int rd_kafka_metadata_cache_evict_by_age(rd_kafka_t *rk, rd_ts_t ts) {
+        int cnt = 0;
+        struct rd_kafka_metadata_cache_entry *rkmce, *tmp;
+
+        TAILQ_FOREACH_SAFE(rkmce, &rk->rk_metadata_cache.rkmc_expiry,
+                           rkmce_link, tmp) {
+                if (rkmce->rkmce_ts_insert <= ts) {
+                        rd_kafka_metadata_cache_delete(rk, rkmce, 1);
+                        cnt++;
+                }
+        }
+
+        /* Update expiry timer */
+        rkmce = TAILQ_FIRST(&rk->rk_metadata_cache.rkmc_expiry);
+        if (rkmce)
+                rd_kafka_timer_start(&rk->rk_timers,
+                                     &rk->rk_metadata_cache.rkmc_expiry_tmr,
+                                     rkmce->rkmce_ts_expires - rd_clock(),
+                                     rd_kafka_metadata_cache_evict_tmr_cb, rk);
+        else
+                rd_kafka_timer_stop(&rk->rk_timers,
+                                    &rk->rk_metadata_cache.rkmc_expiry_tmr, 1);
+
+        rd_kafka_dbg(rk, METADATA, "METADATA",
+                     "Expired %d entries older than %dms from metadata cache "
+                     "(%d entries remain)",
+                     cnt, (int)((rd_clock() - ts) / 1000),
+                     rk->rk_metadata_cache.rkmc_cnt);
 
         if (cnt)
                 rd_kafka_metadata_cache_propagate_changes(rk);

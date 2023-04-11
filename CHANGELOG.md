@@ -1,20 +1,76 @@
-# librdkafka v2.0.3
+# librdkafka v2.1.1
 
-librdkafka v2.0.3 is a bugfix release:
+librdkafka v2.1.1 is a maintenance release:
 
 * Fix CMake pkg-config issue with cURL require (#4180).
+
+
+
+# librdkafka v2.1.0
+
+librdkafka v2.1.0 is a feature release:
+
+* [KIP-320](https://cwiki.apache.org/confluence/display/KAFKA/KIP-320%3A+Allow+fetchers+to+detect+and+handle+log+truncation)
+  Allow fetchers to detect and handle log truncation (#4122).
 * Fix a reference count issue blocking the consumer from closing (#4187).
 * Fix a protocol issue with ListGroups API, where an extra
   field was appended for API Versions greater than or equal to 3 (#4207).
+* Fix an issue with `max.poll.interval.ms`, where polling any queue would cause
+  the timeout to be reset (#4176).
+* Fix seek partition timeout, was one thousand times lower than the passed
+  value (#4230).
+* Fix multiple inconsistent behaviour in batch APIs during **pause** or **resume** operations (#4208).
+  See **Consumer fixes** section below for more information.
+* Update lz4.c from upstream. Fixes [CVE-2021-3520](https://github.com/advisories/GHSA-gmc7-pqv9-966m)
+  (by @filimonov, #4232).
+* Upgrade OpenSSL to v3.0.8 with various security fixes,
+  check the [release notes](https://www.openssl.org/news/cl30.txt) (#4215).
+
+## Enhancements
+
+ * Added `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`).
+ * Added partition leader epoch APIs:
+   - `rd_kafka_topic_partition_get_leader_epoch()` (and `set..()`)
+   - `rd_kafka_message_leader_epoch()`
+   - `rd_kafka_*assign()` and `rd_kafka_seek_partitions()` now supports
+     partitions with a leader epoch set.
+   - `rd_kafka_offsets_for_times()` will return per-partition leader-epochs.
+   - `leader_epoch`, `stored_leader_epoch`, and `committed_leader_epoch`
+     added to per-partition statistics.
 
 
 ## Fixes
+
+### OpenSSL fixes
+
+ * Fixed OpenSSL static build not able to use external modules like FIPS
+   provider module.
 
 ### Consumer fixes
 
  * A reference count issue was blocking the consumer from closing.
    The problem would happen when a partition is lost, because forcibly
    unassigned from the consumer or if the corresponding topic is deleted.
+ * When using `rd_kafka_seek_partitions`, the remaining timeout was
+   converted from microseconds to milliseconds but the expected unit
+   for that parameter is microseconds.
+ * Fixed known issues related to Batch Consume APIs mentioned in v2.0.0
+   release notes.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently updating `app_offset` and `store_offset` incorrectly when
+   **pause** or **resume** was being used for a partition.
+ * Fixed `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()`
+   intermittently skipping offsets when **pause** or **resume** was being
+   used for a partition.
+
+
+## Known Issues
+
+### Consume Batch API
+
+ * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
+   any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
+   interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
 
 
 

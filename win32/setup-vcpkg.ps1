@@ -2,12 +2,12 @@
 
 if (!(Test-Path -Path vcpkg/.git)) {
     git clone https://github.com/Microsoft/vcpkg.git
-} else {
-    echo "Updating vcpkg git repo"
-    cd vcpkg
-    git pull
-    cd ..
 }
+
+cd vcpkg
+# latest version is having an issue while doing vcpkg integrate install
+git checkout 328bd79eb8340b8958f567aaf5f8ffb81056cd36
+cd ..
 
 .\vcpkg\bootstrap-vcpkg.bat
 

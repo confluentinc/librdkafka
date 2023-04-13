@@ -215,4 +215,81 @@ rd_kafka_resp_err_t rd_kafka_range_assignor_init(rd_kafka_t *rk);
 rd_kafka_resp_err_t rd_kafka_roundrobin_assignor_init(rd_kafka_t *rk);
 rd_kafka_resp_err_t rd_kafka_sticky_assignor_init(rd_kafka_t *rk);
 
+/**
+ * @name Common unit test functions to use across assignors.
+ *
+ *
+ *
+ */
+
+
+void ut_set_owned(rd_kafka_group_member_t *rkgm);
+
+void ut_print_toppar_list(const rd_kafka_topic_partition_list_t *partitions);
+
+void ut_init_member(rd_kafka_group_member_t *rkgm, const char *member_id, ...);
+
+void ut_init_member_with_rackv(rd_kafka_group_member_t *rkgm,
+                               const char *member_id,
+                               const rd_kafkap_str_t *rack_id,
+                               ...);
+
+void ut_init_member_with_rack(rd_kafka_group_member_t *rkgm,
+                              const char *member_id,
+                              const rd_kafkap_str_t *rack_id,
+                              char *topics[],
+                              size_t topic_cnt);
+
+int verifyAssignment0(const char *function,
+                      int line,
+                      rd_kafka_group_member_t *rkgm,
+                      ...);
+
+int verifyMultipleAssignment0(const char *function,
+                              int line,
+                              rd_kafka_group_member_t *rkgms,
+                              size_t member_cnt,
+                              ...);
+
+#define verifyAssignment(rkgm, ...)                                            \
+        do {                                                                   \
+                if (verifyAssignment0(__FUNCTION__, __LINE__, rkgm,            \
+                                      __VA_ARGS__))                            \
+                        return 1;                                              \
+        } while (0)
+
+#define verifyMultipleAssignment(rkgms, member_cnt, ...)                       \
+        do {                                                                   \
+                if (verifyMultipleAssignment0(__FUNCTION__, __LINE__, rkgms,   \
+                                              member_cnt, __VA_ARGS__))        \
+                        return 1;                                              \
+        } while (0)
+
+int verifyValidityAndBalance0(const char *func,
+                              int line,
+                              rd_kafka_group_member_t *members,
+                              size_t member_cnt,
+                              const rd_kafka_metadata_t *metadata);
+
+#define verifyValidityAndBalance(members, member_cnt, metadata)                \
+        do {                                                                   \
+                if (verifyValidityAndBalance0(__FUNCTION__, __LINE__, members, \
+                                              member_cnt, metadata))           \
+                        return 1;                                              \
+        } while (0)
+
+int isFullyBalanced0(const char *function,
+                     int line,
+                     const rd_kafka_group_member_t *members,
+                     size_t member_cnt);
+
+#define isFullyBalanced(members, member_cnt)                                   \
+        do {                                                                   \
+                if (isFullyBalanced0(__FUNCTION__, __LINE__, members,          \
+                                     member_cnt))                              \
+                        return 1;                                              \
+        } while (0)
+
+
+
 #endif /* _RDKAFKA_ASSIGNOR_H_ */

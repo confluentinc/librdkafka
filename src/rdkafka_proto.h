@@ -341,6 +341,11 @@ static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp(const rd_kafkap_str_t *a,
                 return RD_CMP(a->len, b->len);
 }
 
+static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp2(const void *a,
+                                                  const void *b) {
+        return rd_kafkap_str_cmp((rd_kafkap_str_t *)a, (rd_kafkap_str_t *)b);
+}
+
 static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str(const rd_kafkap_str_t *a,
                                                      const char *str) {
         int len    = (int)strlen(str);

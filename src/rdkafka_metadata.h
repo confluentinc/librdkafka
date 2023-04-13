@@ -161,8 +161,21 @@ int rd_kafka_metadata_broker_internal_cmp(const void *_a, const void *_b);
 
 rd_kafka_metadata_t *
 rd_kafka_metadata_new_topic_mock(const rd_kafka_metadata_topic_t *topics,
-                                 size_t topic_cnt);
+                                 size_t topic_cnt,
+                                 int replication_factor,
+                                 int num_brokers);
 rd_kafka_metadata_t *rd_kafka_metadata_new_topic_mockv(size_t topic_cnt, ...);
+rd_kafka_metadata_t *rd_kafka_metadata_new_topic_with_partition_replicas_mockv(
+    int replication_factor,
+    int num_brokers,
+    size_t topic_cnt,
+    ...);
+rd_kafka_metadata_t *
+rd_kafka_metadata_new_topic_with_partition_replicas_mock(int replication_factor,
+                                                         int num_brokers,
+                                                         char *topic_names[],
+                                                         int *partition_cnts,
+                                                         size_t topic_cnt);
 
 /**
  * @{

@@ -655,6 +655,371 @@ void rd_kafka_assignors_term(rd_kafka_t *rk) {
 }
 
 
+/**
+ * @brief Set a member's owned partitions based on its assignment.
+ *
+ * For use between assignor_run(). This is mimicing a consumer receiving
+ * its new assignment and including it in the next rebalance as its
+ * owned-partitions.
+ */
+void ut_set_owned(rd_kafka_group_member_t *rkgm) {
+        if (rkgm->rkgm_owned)
+                rd_kafka_topic_partition_list_destroy(rkgm->rkgm_owned);
+
+        rkgm->rkgm_owned =
+            rd_kafka_topic_partition_list_copy(rkgm->rkgm_assignment);
+}
+
+
+void ut_print_toppar_list(const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+
+        for (i = 0; i < partitions->cnt; i++)
+                RD_UT_SAY(" %s [%" PRId32 "]", partitions->elems[i].topic,
+                          partitions->elems[i].partition);
+}
+
+
+/* Implementation for ut_init_member and ut_init_member_with_rackv =*/
+static void ut_init_member_internal(rd_kafka_group_member_t *rkgm,
+                                    const char *member_id,
+                                    const rd_kafkap_str_t *rack_id,
+                                    va_list ap) {
+        const char *topic;
+
+        memset(rkgm, 0, sizeof(*rkgm));
+
+        rkgm->rkgm_member_id         = rd_kafkap_str_new(member_id, -1);
+        rkgm->rkgm_group_instance_id = rd_kafkap_str_new(member_id, -1);
+        rkgm->rkgm_rack_id = rack_id ? rd_kafkap_str_copy(rack_id) : NULL;
+
+        rd_list_init(&rkgm->rkgm_eligible, 0, NULL);
+
+        rkgm->rkgm_subscription = rd_kafka_topic_partition_list_new(4);
+
+        while ((topic = va_arg(ap, const char *)))
+                rd_kafka_topic_partition_list_add(rkgm->rkgm_subscription,
+                                                  topic, RD_KAFKA_PARTITION_UA);
+
+        rkgm->rkgm_assignment =
+            rd_kafka_topic_partition_list_new(rkgm->rkgm_subscription->size);
+}
+
+/**
+ * @brief Initialize group member struct for testing.
+ *
+ * va-args is a NULL-terminated list of (const char *) topics.
+ *
+ * Use rd_kafka_group_member_clear() to free fields.
+ */
+void ut_init_member(rd_kafka_group_member_t *rkgm, const char *member_id, ...) {
+        va_list ap;
+        va_start(ap, member_id);
+        ut_init_member_internal(rkgm, member_id, NULL, ap);
+        va_end(ap);
+}
+
+/**
+ * @brief Initialize group member struct for testing with a rackid.
+ *
+ * va-args is a NULL-terminated list of (const char *) topics.
+ *
+ * Use rd_kafka_group_member_clear() to free fields.
+ */
+void ut_init_member_with_rackv(rd_kafka_group_member_t *rkgm,
+                               const char *member_id,
+                               const rd_kafkap_str_t *rack_id,
+                               ...) {
+        va_list ap;
+        va_start(ap, rack_id);
+        ut_init_member_internal(rkgm, member_id, rack_id, ap);
+        va_end(ap);
+}
+
+/**
+ * @brief Initialize group member struct for testing with a rackid.
+ *
+ * Topics that the member is subscribed to are specified in an array with the
+ * size specified separately.
+ *
+ * Use rd_kafka_group_member_clear() to free fields.
+ */
+void ut_init_member_with_rack(rd_kafka_group_member_t *rkgm,
+                              const char *member_id,
+                              const rd_kafkap_str_t *rack_id,
+                              char *topics[],
+                              size_t topic_cnt) {
+        size_t i;
+
+        memset(rkgm, 0, sizeof(*rkgm));
+
+        rkgm->rkgm_member_id         = rd_kafkap_str_new(member_id, -1);
+        rkgm->rkgm_group_instance_id = rd_kafkap_str_new(member_id, -1);
+        rkgm->rkgm_rack_id = rack_id ? rd_kafkap_str_copy(rack_id) : NULL;
+        rd_list_init(&rkgm->rkgm_eligible, 0, NULL);
+
+        rkgm->rkgm_subscription = rd_kafka_topic_partition_list_new(4);
+
+        for (i = 0; i < topic_cnt; i++) {
+                rd_kafka_topic_partition_list_add(
+                    rkgm->rkgm_subscription, topics[i], RD_KAFKA_PARTITION_UA);
+        }
+        rkgm->rkgm_assignment =
+            rd_kafka_topic_partition_list_new(rkgm->rkgm_subscription->size);
+}
+
+/**
+ * @brief Verify that member's assignment matches the expected partitions.
+ *
+ * The va-list is a NULL-terminated list of (const char *topic, int partition)
+ * tuples.
+ *
+ * @returns 0 on success, else raises a unittest error and returns 1.
+ */
+int verifyAssignment0(const char *function,
+                      int line,
+                      rd_kafka_group_member_t *rkgm,
+                      ...) {
+        va_list ap;
+        int cnt = 0;
+        const char *topic;
+        int fails = 0;
+
+        va_start(ap, rkgm);
+        while ((topic = va_arg(ap, const char *))) {
+                int partition = va_arg(ap, int);
+                cnt++;
+
+                if (!rd_kafka_topic_partition_list_find(rkgm->rkgm_assignment,
+                                                        topic, partition)) {
+                        RD_UT_WARN(
+                            "%s:%d: Expected %s [%d] not found in %s's "
+                            "assignment (%d partition(s))",
+                            function, line, topic, partition,
+                            rkgm->rkgm_member_id->str,
+                            rkgm->rkgm_assignment->cnt);
+                        fails++;
+                }
+        }
+        va_end(ap);
+
+        if (cnt != rkgm->rkgm_assignment->cnt) {
+                RD_UT_WARN(
+                    "%s:%d: "
+                    "Expected %d assigned partition(s) for %s, not %d",
+                    function, line, cnt, rkgm->rkgm_member_id->str,
+                    rkgm->rkgm_assignment->cnt);
+                fails++;
+        }
+
+        if (fails)
+                ut_print_toppar_list(rkgm->rkgm_assignment);
+
+        RD_UT_ASSERT(!fails, "%s:%d: See previous errors", function, line);
+
+        return 0;
+}
+
+/**
+ * @brief Verify that all members' assignment matches the expected partitions.
+ *
+ * The va-list is a list of (const char *topic, int partition)
+ * tuples, and NULL to demarcate different members' assignment.
+ *
+ * @returns 0 on success, else raises a unittest error and returns 1.
+ */
+int verifyMultipleAssignment0(const char *function,
+                              int line,
+                              rd_kafka_group_member_t *rkgms,
+                              size_t member_cnt,
+                              ...) {
+        va_list ap;
+        const char *topic;
+        int fails = 0;
+        size_t i  = 0;
+
+        if (member_cnt == 0) {
+                return 0;
+        }
+
+        va_start(ap, member_cnt);
+        for (i = 0; i < member_cnt; i++) {
+                rd_kafka_group_member_t *rkgm = &rkgms[i];
+                int cnt                       = 0;
+                int local_fails               = 0;
+
+                while ((topic = va_arg(ap, const char *))) {
+                        int partition = va_arg(ap, int);
+                        cnt++;
+
+                        if (!rd_kafka_topic_partition_list_find(
+                                rkgm->rkgm_assignment, topic, partition)) {
+                                RD_UT_WARN(
+                                    "%s:%d: Expected %s [%d] not found in %s's "
+                                    "assignment (%d partition(s))",
+                                    function, line, topic, partition,
+                                    rkgm->rkgm_member_id->str,
+                                    rkgm->rkgm_assignment->cnt);
+                                local_fails++;
+                        }
+                }
+
+                if (cnt != rkgm->rkgm_assignment->cnt) {
+                        RD_UT_WARN(
+                            "%s:%d: "
+                            "Expected %d assigned partition(s) for %s, not %d",
+                            function, line, cnt, rkgm->rkgm_member_id->str,
+                            rkgm->rkgm_assignment->cnt);
+                        fails++;
+                }
+
+                if (local_fails)
+                        ut_print_toppar_list(rkgm->rkgm_assignment);
+                fails += local_fails;
+        }
+        va_end(ap);
+
+        RD_UT_ASSERT(!fails, "%s:%d: See previous errors", function, line);
+
+        return 0;
+}
+
+int verifyValidityAndBalance0(const char *func,
+                              int line,
+                              rd_kafka_group_member_t *members,
+                              size_t member_cnt,
+                              const rd_kafka_metadata_t *metadata) {
+        int fails = 0;
+        int i;
+        rd_bool_t verbose = rd_false; /* Enable for troubleshooting */
+
+        RD_UT_SAY("%s:%d: verifying assignment for %d member(s):", func, line,
+                  (int)member_cnt);
+
+        for (i = 0; i < (int)member_cnt; i++) {
+                const char *consumer = members[i].rkgm_member_id->str;
+                const rd_kafka_topic_partition_list_t *partitions =
+                    members[i].rkgm_assignment;
+                int p, j;
+
+                if (verbose)
+                        RD_UT_SAY(
+                            "%s:%d:   "
+                            "consumer \"%s\", %d subscribed topic(s), "
+                            "%d assigned partition(s):",
+                            func, line, consumer,
+                            members[i].rkgm_subscription->cnt, partitions->cnt);
+
+                for (p = 0; p < partitions->cnt; p++) {
+                        const rd_kafka_topic_partition_t *partition =
+                            &partitions->elems[p];
+
+                        if (verbose)
+                                RD_UT_SAY("%s:%d:     %s [%" PRId32 "]", func,
+                                          line, partition->topic,
+                                          partition->partition);
+
+                        if (!rd_kafka_topic_partition_list_find(
+                                members[i].rkgm_subscription, partition->topic,
+                                RD_KAFKA_PARTITION_UA)) {
+                                RD_UT_WARN("%s [%" PRId32
+                                           "] is assigned to "
+                                           "%s but it is not subscribed to "
+                                           "that topic",
+                                           partition->topic,
+                                           partition->partition, consumer);
+                                fails++;
+                        }
+                }
+
+                /* Update the member's owned partitions to match
+                 * the assignment. */
+                ut_set_owned(&members[i]);
+
+                if (i == (int)member_cnt - 1)
+                        continue;
+
+                for (j = i + 1; j < (int)member_cnt; j++) {
+                        const char *otherConsumer =
+                            members[j].rkgm_member_id->str;
+                        const rd_kafka_topic_partition_list_t *otherPartitions =
+                            members[j].rkgm_assignment;
+                        rd_bool_t balanced =
+                            abs(partitions->cnt - otherPartitions->cnt) <= 1;
+
+                        for (p = 0; p < partitions->cnt; p++) {
+                                const rd_kafka_topic_partition_t *partition =
+                                    &partitions->elems[p];
+
+                                if (rd_kafka_topic_partition_list_find(
+                                        otherPartitions, partition->topic,
+                                        partition->partition)) {
+                                        RD_UT_WARN(
+                                            "Consumer %s and %s are both "
+                                            "assigned %s [%" PRId32 "]",
+                                            consumer, otherConsumer,
+                                            partition->topic,
+                                            partition->partition);
+                                        fails++;
+                                }
+
+
+                                /* If assignment is imbalanced and this topic
+                                 * is also subscribed by the other consumer
+                                 * it means the assignment strategy failed to
+                                 * properly balance the partitions. */
+                                if (!balanced &&
+                                    rd_kafka_topic_partition_list_find_topic(
+                                        otherPartitions, partition->topic)) {
+                                        RD_UT_WARN(
+                                            "Some %s partition(s) can be "
+                                            "moved from "
+                                            "%s (%d partition(s)) to "
+                                            "%s (%d partition(s)) to "
+                                            "achieve a better balance",
+                                            partition->topic, consumer,
+                                            partitions->cnt, otherConsumer,
+                                            otherPartitions->cnt);
+                                        fails++;
+                                }
+                        }
+                }
+        }
+
+        RD_UT_ASSERT(!fails, "%s:%d: See %d previous errors", func, line,
+                     fails);
+
+        return 0;
+}
+
+/**
+ * @brief Checks that all assigned partitions are fully balanced.
+ *
+ * Only works for symmetrical subscriptions.
+ */
+int isFullyBalanced0(const char *function,
+                     int line,
+                     const rd_kafka_group_member_t *members,
+                     size_t member_cnt) {
+        int min_assignment = INT_MAX;
+        int max_assignment = -1;
+        size_t i;
+
+        for (i = 0; i < member_cnt; i++) {
+                int size = members[i].rkgm_assignment->cnt;
+                if (size < min_assignment)
+                        min_assignment = size;
+                if (size > max_assignment)
+                        max_assignment = size;
+        }
+
+        RD_UT_ASSERT(max_assignment - min_assignment <= 1,
+                     "%s:%d: Assignment not balanced: min %d, max %d", function,
+                     line, min_assignment, max_assignment);
+
+        return 0;
+}
+
 
 /**
  * @brief Unittest for assignors
@@ -909,11 +1274,20 @@ static int ut_assignors(void) {
                 memset(metadata.topics, 0,
                        sizeof(*metadata.topics) * metadata.topic_cnt);
                 for (it = 0; it < metadata.topic_cnt; it++) {
+                        int pt;
                         metadata.topics[it].topic =
                             (char *)tests[i].topics[it].name;
                         metadata.topics[it].partition_cnt =
                             tests[i].topics[it].partition_cnt;
-                        metadata.topics[it].partitions = NULL; /* Not used */
+                        metadata.topics[it].partitions =
+                            rd_alloca(metadata.topics[it].partition_cnt *
+                                      sizeof(rd_kafka_metadata_partition_t));
+                        for (pt = 0; pt < metadata.topics[it].partition_cnt;
+                             pt++) {
+                                metadata.topics[it].partitions[pt].id = pt;
+                                metadata.topics[it].partitions[pt].replica_cnt =
+                                    0;
+                        }
                 }
 
                 /* Create members */

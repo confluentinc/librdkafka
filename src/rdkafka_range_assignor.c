@@ -735,7 +735,7 @@ static char *ALL_RACKS[7] =
 static int RACKS_INITIAL[]  = {0, 1, 2};
 static int RACKS_NULL[]     = {6, 6, 6};
 static int RACKS_FINAL[]    = {4, 5, 6};
-static int RACKS_ONE_NULL[] = {7, 5, 6};
+static int RACKS_ONE_NULL[] = {6, 4, 5};
 
 /* Helper to compute rd_kafka_metadata_broker_internal_t* to pass the assignor in the internal metadata.
  * Passing num_broker_racks = 0 will return NULL racks. */

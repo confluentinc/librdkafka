@@ -680,7 +680,7 @@ void ut_print_toppar_list(const rd_kafka_topic_partition_list_t *partitions) {
 }
 
 
-/* Implementation for ut_init_member and ut_init_member_with_rackv =*/
+/* Implementation for ut_init_member and ut_init_member_with_rackv. */
 static void ut_init_member_internal(rd_kafka_group_member_t *rkgm,
                                     const char *member_id,
                                     const rd_kafkap_str_t *rack_id,

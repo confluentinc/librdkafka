@@ -354,7 +354,9 @@ done:
 
 /**
  * @brief Consumer should be able to rejoin the group just by polling after
- * leaving due to a max.poll.interval.ms timeout.
+ * leaving due to a max.poll.interval.ms timeout. The poll does not need to
+ * go through any special function, any queue containing consumer messages
+ * should suffice.
  */
 static void do_test_rejoin_after_interval_expire(void) {
         const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);

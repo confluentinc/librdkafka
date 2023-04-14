@@ -76,6 +76,12 @@ struct rd_kafka_q_s {
              * but without having to enqueue                                   \
              * an op. */
 
+        /* Set to 1 for queues which contain consumer messages, and 0 otherwise.
+         * If a queue A forwards its messages to a queue B, B.rkq_consumer_cnt
+         * +=  A.rkq_consumer_cnt. When queue A is set to forward to NULL, this
+         * is reverted. */
+        int rkq_consumer_cnt;
+
         rd_kafka_t *rkq_rk;
         struct rd_kafka_q_io *rkq_qio; /* FD-based application signalling */
 
@@ -123,12 +129,18 @@ static RD_INLINE RD_UNUSED int rd_kafka_q_ready(rd_kafka_q_t *rkq) {
 
 void rd_kafka_q_init0(rd_kafka_q_t *rkq,
                       rd_kafka_t *rk,
+                      int is_consume,
                       const char *func,
                       int line);
 #define rd_kafka_q_init(rkq, rk)                                               \
-        rd_kafka_q_init0(rkq, rk, __FUNCTION__, __LINE__)
-rd_kafka_q_t *rd_kafka_q_new0(rd_kafka_t *rk, const char *func, int line);
-#define rd_kafka_q_new(rk) rd_kafka_q_new0(rk, __FUNCTION__, __LINE__)
+        rd_kafka_q_init0(rkq, rk, 0, __FUNCTION__, __LINE__)
+#define rd_kafka_q_init_consume(rkq, rk)                                       \
+        rd_kafka_q_init0(rkq, rk, 1, __FUNCTION__, __LINE__)
+rd_kafka_q_t *
+rd_kafka_q_new0(rd_kafka_t *rk, int is_consume, const char *func, int line);
+#define rd_kafka_q_new(rk) rd_kafka_q_new0(rk, 0, __FUNCTION__, __LINE__)
+#define rd_kafka_q_new_consume(rk)                                             \
+        rd_kafka_q_new0(rk, 1, __FUNCTION__, __LINE__)
 void rd_kafka_q_destroy_final(rd_kafka_q_t *rkq);
 
 #define rd_kafka_q_lock(rkqu)   mtx_lock(&(rkqu)->rkq_lock)
@@ -1162,6 +1174,22 @@ rd_kafka_enq_once_disable(rd_kafka_enq_once_t *eonce) {
         }
 
         return rko;
+}
+
+/**
+ * @brief Returns the rkq's rkq_consumer_cnt.
+ *
+ * @locks rd_kafka_q_lock(rkq) if do_lock is set.
+ */
+static RD_INLINE RD_UNUSED int rd_kafka_q_consumer_cnt(rd_kafka_q_t *rkq,
+                                                       int do_lock) {
+        int cnt;
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+        cnt = rkq->rkq_consumer_cnt;
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
+        return cnt;
 }
 
 

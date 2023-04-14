@@ -351,8 +351,79 @@ done:
         SUB_TEST_PASS();
 }
 
+
+/**
+ * @brief Consumer should be able to rejoin the group just by polling after
+ * leaving due to a max.poll.interval.ms timeout.
+ */
+static void do_test_rejoin_after_interval_expire(void) {
+        const char *topic = test_mk_topic_name("0089_max_poll_interval", 1);
+        rd_kafka_conf_t *conf;
+        int i;
+        char groupid[64];
+        rd_kafka_t *rk                   = NULL;
+        rd_kafka_queue_t *consumer_queue = NULL;
+        rd_kafka_event_t *event          = NULL;
+
+        SUB_TEST();
+
+        test_create_topic(NULL, topic, 1, 1);
+
+        test_str_id_generate(groupid, sizeof(groupid));
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms", "10000" /*10s*/);
+        test_conf_set(conf, "partition.assignment.strategy", "range");
+
+        /* We need to specify a non-NULL rebalance CB to get events of type
+         * RD_KAFKA_EVENT_REBALANCE. */
+        rk = test_create_consumer(groupid, test_rebalance_cb, conf, NULL);
+
+        consumer_queue = rd_kafka_queue_get_consumer(rk);
+        test_consumer_subscribe(rk, topic);
+
+        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+                                (int)(test_timeout_multiplier * 10000));
+        TEST_ASSERT(event,
+                    "Did not get a rebalance event for initial group join");
+        TEST_ASSERT(rd_kafka_event_error(event) ==
+                        RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
+                    "Group join should assign partitions");
+        rd_kafka_assign(rk, rd_kafka_event_topic_partition_list(event));
+        rd_kafka_event_destroy(event);
+
+        rd_sleep(10 + 1); /* Exceed max.poll.interval.ms. */
+
+        /* Note that by polling for the group leave, we're also polling the
+         * consumer queue, and hence it should trigger a rejoin. */
+        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+                                (int)(test_timeout_multiplier * 10000));
+        TEST_ASSERT(event, "Did not get a rebalance event for the group leave");
+        TEST_ASSERT(rd_kafka_event_error(event) ==
+                        RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+                    "Group leave should revoke partitions");
+        rd_kafka_assign(rk, NULL);
+        rd_kafka_event_destroy(event);
+
+        event = test_wait_event(consumer_queue, RD_KAFKA_EVENT_REBALANCE,
+                                (int)(test_timeout_multiplier * 10000));
+        TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
+        TEST_ASSERT(rd_kafka_event_error(event) ==
+                        RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
+                    "Group rejoin should assign partitions");
+        rd_kafka_assign(rk, rd_kafka_event_topic_partition_list(event));
+        rd_kafka_event_destroy(event);
+
+        rd_kafka_queue_destroy(consumer_queue);
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0089_max_poll_interval(int argc, char **argv) {
         do_test();
         do_test_with_log_queue();
+        do_test_rejoin_after_interval_expire();
         return 0;
 }

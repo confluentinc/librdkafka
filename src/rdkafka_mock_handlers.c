@@ -1029,9 +1029,6 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
-        rd_kafka_buf_skip_tags(rkbuf);
-        rd_kafka_buf_write_tags(resp);
-
         if (requested_topics)
                 rd_kafka_topic_partition_list_destroy(requested_topics);
 

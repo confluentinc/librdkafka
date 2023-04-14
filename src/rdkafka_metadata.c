@@ -590,8 +590,6 @@ rd_kafka_resp_err_t rd_kafka_parse_Metadata(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_i32(rkbuf, &ClusterAuthorizedOperations);
         }
 
-        rd_kafka_buf_skip_tags(rkbuf);
-
         /* Entire Metadata response now parsed without errors:
          * update our internal state according to the response. */
 

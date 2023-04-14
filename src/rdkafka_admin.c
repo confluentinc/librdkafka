@@ -5821,7 +5821,6 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 group_state = NULL;
                 proto_type  = NULL;
         }
-        rd_kafka_buf_skip_tags(reply);
 
 err_parse:
         if (group_id)

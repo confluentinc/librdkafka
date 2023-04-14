@@ -129,6 +129,7 @@ set(
     0136-resolve_cb.c
     0137-barrier_batch_consume.c
     0138-admin_mock.c
+    0139-protocol_flexver.c
     8000-idle.cpp
     test.c
     testcpp.cpp

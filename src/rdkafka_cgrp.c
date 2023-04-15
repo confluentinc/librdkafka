@@ -415,7 +415,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_wait_coord_q             = rd_kafka_q_new(rk);
         rkcg->rkcg_wait_coord_q->rkq_serve  = rkcg->rkcg_ops->rkq_serve;
         rkcg->rkcg_wait_coord_q->rkq_opaque = rkcg->rkcg_ops->rkq_opaque;
-        rkcg->rkcg_q                        = rd_kafka_q_new(rk);
+        rkcg->rkcg_q                        = rd_kafka_q_new_consume(rk);
         rkcg->rkcg_group_instance_id =
             rd_kafkap_str_new(rk->rk_conf.group_instance_id, -1);
 

@@ -1,3 +1,10 @@
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a bugfix release:
+
+* Fix documentation for request timeout incorrectly stating -1 for infinte
+  timeout. Request timeout can't be infinite.
+
 # librdkafka v2.1.0
 
 librdkafka v2.1.0 is a feature release:

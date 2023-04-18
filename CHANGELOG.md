@@ -1,3 +1,20 @@
+# librdkafka v2.1.1
+
+librdkafka v2.1.1 is a bugfix release:
+
+ * Avoid a duplicate message when a fetch response is received
+   in the middle of an offset validation request (#4261).
+
+## Fixes
+
+### Consumer fixes
+
+  * A duplicate message can be emitted when a fetch response is received
+    in the middle of an offset validation request. Solved by discarding
+    the fetched message if the state is not `ACTIVE`.
+
+
+
 # librdkafka v2.1.0
 
 librdkafka v2.1.0 is a feature release:
@@ -63,6 +80,11 @@ librdkafka v2.1.0 is a feature release:
  * When `rd_kafka_consume_batch()` and `rd_kafka_consume_batch_queue()` APIs are used with
    any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
    interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
+
+### Consume API
+
+  * A duplicate message can be emitted when a fetch response is received
+    in the middle of an offset validation request.
 
 
 

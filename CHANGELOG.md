@@ -1,6 +1,6 @@
 # librdkafka v2.1.1
 
-librdkafka v2.1.1 is a bugfix release:
+librdkafka v2.1.1 is a maintenance release:
 
  * Fix segmentation fault when subscribing to a non-existent topic and
    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
@@ -80,7 +80,7 @@ librdkafka v2.1.0 is a feature release:
 
 # librdkafka v2.0.2
 
-librdkafka v2.0.2 is a bugfix release:
+librdkafka v2.0.2 is a maintenance release:
 
 * Fix OpenSSL version in Win32 nuget package (#4152).
 
@@ -88,7 +88,7 @@ librdkafka v2.0.2 is a bugfix release:
 
 # librdkafka v2.0.1
 
-librdkafka v2.0.1 is a bugfix release:
+librdkafka v2.0.1 is a maintenance release:
 
 * Fixed nuget package for Linux ARM64 release (#4150).
 

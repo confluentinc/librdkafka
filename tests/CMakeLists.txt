@@ -130,6 +130,7 @@ set(
     0137-barrier_batch_consume.c
     0138-admin_mock.c
     8000-idle.cpp
+    8001-fetch_from_follower_mock_manual.c
     test.c
     testcpp.cpp
     rusage.c

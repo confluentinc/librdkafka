@@ -4,6 +4,21 @@ librdkafka v2.1.1 is a maintenance release:
 
  * Fix segmentation fault when subscribing to a non-existent topic and
    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
+ * Fix a segmentation fault when fetching from follower and the partition lease
+   expires while waiting for the result of a list offsets operation (#4254).
+
+
+## Fixes
+
+### Consumer fixes
+
+ * When fetching from follower, if the partition lease expires after 5 minutes,
+   and a list offsets operation was requested to retrieve the earliest
+   or latest offset, it resulted in segmentation fault. This was fixed by
+   allowing threads different from the main one to call
+   the `rd_kafka_toppar_set_fetch_state` function, given they hold
+   the lock on the `rktp`.
+
 
 
 # librdkafka v2.1.0

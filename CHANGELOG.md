@@ -1,7 +1,9 @@
 # librdkafka v2.1.1
 
-librdkafka v2.1.1 is a bugfix release:
+librdkafka v2.1.1 is a maintenance release:
 
+ * Fix segmentation fault when subscribing to a non-existent topic and
+   calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage` (#4245).
  * Fix a segmentation fault when fetching from follower and the partition lease
    expires while waiting for the result of a list offsets operation (#4254).
 
@@ -85,11 +87,15 @@ librdkafka v2.1.0 is a feature release:
    any of the **seek**, **pause**, **resume** or **rebalancing** operation, `on_consume`
    interceptors might be called incorrectly (maybe multiple times) for not consumed messages.
 
+### Consume API
+  * Segmentation fault when subscribing to a non-existent topic and
+    calling `rd_kafka_message_leader_epoch()` on the polled `rkmessage`.
+
 
 
 # librdkafka v2.0.2
 
-librdkafka v2.0.2 is a bugfix release:
+librdkafka v2.0.2 is a maintenance release:
 
 * Fix OpenSSL version in Win32 nuget package (#4152).
 
@@ -97,7 +103,7 @@ librdkafka v2.0.2 is a bugfix release:
 
 # librdkafka v2.0.1
 
-librdkafka v2.0.1 is a bugfix release:
+librdkafka v2.0.1 is a maintenance release:
 
 * Fixed nuget package for Linux ARM64 release (#4150).
 
